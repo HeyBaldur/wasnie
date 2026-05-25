@@ -1,0 +1,30 @@
+using Microsoft.EntityFrameworkCore;
+using Wasnie.Domain.Compensation.Assignments;
+using Wasnie.Domain.Compensation.Credits;
+using Wasnie.Domain.Compensation.Payouts;
+using Wasnie.Domain.Compensation.Quotas;
+using Wasnie.Domain.Compensation.Transactions;
+using Wasnie.Domain.Entities;
+using Wasnie.Domain.Identity;
+using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
+
+namespace Wasnie.Application.Common.Interfaces;
+
+public interface IApplicationDbContext
+{
+    DbSet<Tenant> Tenants { get; }
+    DbSet<Payee> Payees { get; }
+    DbSet<Plan> Plans { get; }
+    DbSet<Transaction> Transactions { get; }
+    DbSet<Payout> Payouts { get; }
+    DbSet<RefreshToken> RefreshTokens { get; }
+
+    DbSet<CompensationPlan> CompensationPlans { get; }
+    DbSet<Quota> Quotas { get; }
+    DbSet<PlanAssignment> PlanAssignments { get; }
+    DbSet<CompensationTransaction> CompensationTransactions { get; }
+    DbSet<Credit> Credits { get; }
+    DbSet<CompensationPayout> CompensationPayouts { get; }
+
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+}

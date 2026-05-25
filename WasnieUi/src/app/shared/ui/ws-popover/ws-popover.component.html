@@ -1,0 +1,11 @@
+<div class="ws-pop" (click)="stopProp($event)">
+  <div class="ws-pop__trigger" (click)="toggle()">
+    <ng-content select="[slot=trigger]" />
+  </div>
+
+  @if (isOpen()) {
+    <div #popover [class]="'ws-pop__panel ws-pop__panel--' + placement()">
+      <ng-content />
+    </div>
+  }
+</div>

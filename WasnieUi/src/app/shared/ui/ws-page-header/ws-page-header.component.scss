@@ -1,0 +1,66 @@
+@reference "../../../../styles.scss";
+
+:host {
+  display: block;
+}
+
+.ws-ph {
+  @apply flex flex-col;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+
+.ws-ph__back {
+  @apply inline-flex items-center;
+  gap: var(--space-1);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  margin-bottom: var(--space-2);
+  width: fit-content;
+  transition: color var(--transition-base);
+
+  &:hover {
+    color: var(--color-text-primary);
+  }
+}
+
+.ws-ph__row {
+  @apply flex items-start justify-between;
+  gap: var(--space-4);
+}
+
+.ws-ph__meta {
+  @apply flex flex-col;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ws-ph__title {
+  margin: 0;
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.ws-ph__subtitle {
+  margin: 0;
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+}
+
+.ws-ph__actions {
+  @apply flex items-center shrink-0;
+  gap: var(--space-2);
+}
+
+.ws-ph__kpis {
+  @apply flex flex-wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+
+  &:empty {
+    display: none;
+  }
+}

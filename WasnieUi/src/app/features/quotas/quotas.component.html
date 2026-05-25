@@ -1,0 +1,14 @@
+<app-shell>
+  <ws-page-header [title]="'NAV.QUOTAS' | translate">
+    <div slot="actions">
+      <ws-button variant="primary">{{ 'COMMON.NEW' | translate }} {{ 'NAV.QUOTAS' | translate }}</ws-button>
+    </div>
+  </ws-page-header>
+  <ws-empty-state
+    illustration="quotas-empty"
+    titleKey="EMPTY_STATE.QUOTAS_TITLE"
+    descKey="EMPTY_STATE.QUOTAS_DESC"
+    actionKey="EMPTY_STATE.QUOTAS_ACTION"
+    actionRoute="/quotas"
+  />
+</app-shell>

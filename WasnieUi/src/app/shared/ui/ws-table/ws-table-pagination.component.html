@@ -1,0 +1,35 @@
+<div class="ws-pagination">
+  <span class="ws-pagination__info">
+    {{ infoKey() | translate:{ from: from, to: to, total: totalCount() } }}
+  </span>
+
+  <div class="ws-pagination__controls">
+    <button
+      class="ws-pagination__btn"
+      [disabled]="page() <= 1"
+      (click)="goTo(page() - 1)"
+      aria-label="Previous page"
+    >
+      <app-icon name="chevron-left" [size]="16" />
+    </button>
+
+    @for (p of pages; track p) {
+      <button
+        class="ws-pagination__btn"
+        [class.ws-pagination__btn--active]="page() === p"
+        (click)="goTo(p)"
+      >
+        {{ p }}
+      </button>
+    }
+
+    <button
+      class="ws-pagination__btn"
+      [disabled]="page() >= totalPages"
+      (click)="goTo(page() + 1)"
+      aria-label="Next page"
+    >
+      <app-icon name="chevron-right" [size]="16" />
+    </button>
+  </div>
+</div>

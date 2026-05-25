@@ -1,0 +1,14 @@
+<app-shell>
+  <ws-page-header [title]="'NAV.ASSIGNMENTS' | translate">
+    <div slot="actions">
+      <ws-button variant="primary">{{ 'COMMON.NEW' | translate }} {{ 'NAV.ASSIGNMENTS' | translate }}</ws-button>
+    </div>
+  </ws-page-header>
+  <ws-empty-state
+    illustration="assignments-empty"
+    titleKey="EMPTY_STATE.ASSIGNMENTS_TITLE"
+    descKey="EMPTY_STATE.ASSIGNMENTS_DESC"
+    actionKey="EMPTY_STATE.ASSIGNMENTS_ACTION"
+    actionRoute="/assignments"
+  />
+</app-shell>

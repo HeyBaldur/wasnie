@@ -1,0 +1,81 @@
+<nav class="sidebar" [class.sidebar--collapsed]="!sidebarState.isExpanded()">
+
+  <div class="sidebar__header">
+    <div class="sidebar__brand">
+      <span class="sidebar__brand-monogram">W</span>
+      @if (sidebarState.isExpanded()) {
+        <span class="sidebar__brand-name">{{ 'APP.NAME' | translate }}</span>
+        <span class="sidebar__status-dot" [title]="'TOPBAR.STATUS_OPERATIONAL' | translate"></span>
+      }
+    </div>
+    <button
+      class="sidebar__toggle"
+      (click)="sidebarState.toggle()"
+      [attr.aria-label]="'NAV.TOGGLE' | translate"
+    >
+      <app-icon [name]="sidebarState.isExpanded() ? 'chevron-left' : 'chevron-right'" [size]="16" />
+    </button>
+  </div>
+
+  <div class="sidebar__body">
+    @for (section of navSections; track section.sectionKey) {
+      <div class="sidebar__section">
+        @if (sidebarState.isExpanded()) {
+          <span class="sidebar__section-label">{{ section.sectionKey | translate }}</span>
+        }
+        <ul class="sidebar__nav">
+          @for (item of section.items; track item.path) {
+            <li class="sidebar__nav-item">
+              <a
+                [routerLink]="item.path"
+                routerLinkActive="sidebar__nav-link--active"
+                class="sidebar__nav-link"
+                [title]="!sidebarState.isExpanded() ? (item.labelKey | translate) : ''"
+              >
+                <app-icon [name]="item.icon" [size]="18" />
+                @if (sidebarState.isExpanded()) {
+                  <span class="sidebar__nav-label">{{ item.labelKey | translate }}</span>
+                }
+              </a>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </div>
+
+  <div class="sidebar__footer">
+    <div class="sidebar__section">
+      @if (sidebarState.isExpanded()) {
+        <span class="sidebar__section-label">{{ 'NAV.SECTION_SETTINGS' | translate }}</span>
+      }
+      <ul class="sidebar__nav">
+        <li class="sidebar__nav-item">
+          <a
+            [routerLink]="settingsItem.path"
+            routerLinkActive="sidebar__nav-link--active"
+            class="sidebar__nav-link"
+            [title]="!sidebarState.isExpanded() ? (settingsItem.labelKey | translate) : ''"
+          >
+            <app-icon [name]="settingsItem.icon" [size]="18" />
+            @if (sidebarState.isExpanded()) {
+              <span class="sidebar__nav-label">{{ settingsItem.labelKey | translate }}</span>
+            }
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <button
+      class="sidebar__logout"
+      (click)="logout()"
+      [title]="!sidebarState.isExpanded() ? ('AUTH.LOGOUT' | translate) : ''"
+    >
+      <app-icon name="log-out" [size]="18" />
+      @if (sidebarState.isExpanded()) {
+        <span>{{ 'AUTH.LOGOUT' | translate }}</span>
+      }
+    </button>
+  </div>
+
+</nav>

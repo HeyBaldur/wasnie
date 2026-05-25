@@ -1,0 +1,60 @@
+<div [class]="hostClasses()">
+  @if (label()) {
+    <label class="ws-input__label" [for]="inputId()">
+      {{ label() | translate }}
+    </label>
+  }
+
+  <div class="ws-input__field" [class.ws-input__field--focused]="isFocused()">
+    @if (prefixIcon()) {
+      <span class="ws-input__prefix-icon">
+        <app-icon [name]="prefixIcon()" [size]="16" />
+      </span>
+    }
+
+    <input
+      class="ws-input__native"
+      [id]="inputId()"
+      [type]="inputType()"
+      [value]="value()"
+      [placeholder]="placeholder() | translate"
+      [disabled]="isDisabled()"
+      [autocomplete]="autocomplete()"
+      [class.ws-input__native--prefix]="prefixIcon()"
+      [class.ws-input__native--suffix]="hasSuffix()"
+      (input)="onInput($event)"
+      (focus)="onFocus()"
+      (blur)="onBlur()"
+    />
+
+    @if (suffixText()) {
+      <span class="ws-input__suffix-text">{{ suffixText() }}</span>
+    }
+
+    @if (clearable() && value()) {
+      <button
+        class="ws-input__icon-btn"
+        type="button"
+        (click)="clear()"
+        aria-label="Clear"
+      >
+        <app-icon name="x" [size]="14" />
+      </button>
+    }
+
+    @if (type() === 'password') {
+      <button
+        class="ws-input__icon-btn"
+        type="button"
+        (click)="togglePassword()"
+        [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+      >
+        <app-icon name="eye" [size]="16" />
+      </button>
+    }
+  </div>
+
+  @if (error()) {
+    <span class="ws-input__error">{{ error() | translate }}</span>
+  }
+</div>

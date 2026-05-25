@@ -1,0 +1,47 @@
+@reference "../../../styles.scss";
+
+.ds-page {
+  padding: var(--space-8);
+  max-width: 1200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.ds-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ds-section__title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin: 0;
+}
+
+.ds-row {
+  @apply flex flex-wrap items-center;
+  gap: var(--space-3);
+}
+
+.ds-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+.ds-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+.ds-note {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+}

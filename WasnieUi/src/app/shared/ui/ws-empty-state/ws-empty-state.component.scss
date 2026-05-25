@@ -1,0 +1,52 @@
+@reference "../../../../styles.scss";
+
+:host {
+  display: block;
+}
+
+.ws-es {
+  @apply flex flex-col items-center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.ws-es__illustration {
+  width: 160px;
+  height: 120px;
+  margin-bottom: var(--space-2);
+  opacity: 0.85;
+  color: var(--color-text-tertiary);
+}
+
+.ws-es__icon-wrap {
+  @apply flex items-center justify-center;
+  width: 64px;
+  height: 64px;
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-full);
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+.ws-es__title {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ws-es__desc {
+  margin: 0;
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  max-width: 380px;
+  line-height: 1.5;
+}
+
+.ws-es__actions {
+  @apply flex items-center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

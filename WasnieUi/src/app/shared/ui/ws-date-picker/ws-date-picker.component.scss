@@ -1,0 +1,212 @@
+@reference "../../../../styles.scss";
+
+:host {
+  display: block;
+  position: relative;
+}
+
+.ws-dp {
+  @apply flex flex-col;
+  gap: var(--space-1);
+  position: relative;
+}
+
+.ws-dp__label {
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.ws-dp__trigger {
+  @apply flex items-center;
+  gap: var(--space-2);
+  height: var(--height-control-md);
+  padding: 0 var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  &:hover:not(.ws-dp__trigger--open):not(.ws-dp__trigger--disabled) {
+    border-color: var(--color-border-strong);
+  }
+}
+
+.ws-dp__trigger--open {
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.ws-dp__trigger--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ws-dp__cal-icon {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.ws-dp__display {
+  flex: 1;
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-dp__display--placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.ws-dp__chevron {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  transition: transform var(--transition-base);
+  transform: rotate(90deg);
+}
+
+.ws-dp__chevron--open {
+  transform: rotate(-90deg);
+}
+
+.ws-dp__popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 500;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  padding: var(--space-4);
+  min-width: 280px;
+  animation: ws-dp-in var(--transition-base) ease;
+}
+
+.ws-dp__nav {
+  @apply flex items-center justify-between;
+  margin-bottom: var(--space-3);
+}
+
+.ws-dp__nav-btn {
+  @apply flex items-center justify-center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.ws-dp__nav-label {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ws-dp__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.ws-dp__day-head {
+  font-size: var(--font-size-11);
+  font-weight: 500;
+  text-align: center;
+  color: var(--color-text-tertiary);
+  padding: 4px 0;
+}
+
+.ws-dp__cell {
+  @apply flex items-center justify-center;
+  width: 32px;
+  height: 32px;
+  font-size: var(--font-size-13);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover:not(:disabled):not(.ws-dp__cell--selected) {
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.ws-dp__cell--today:not(.ws-dp__cell--selected) {
+  color: var(--color-brand);
+  font-weight: 600;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: var(--color-brand);
+  }
+}
+
+.ws-dp__cell--selected {
+  background: var(--color-brand);
+  color: var(--color-brand-contrast);
+  font-weight: 600;
+}
+
+.ws-dp__cell--empty,
+.ws-dp__cell--disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ws-dp__footer {
+  @apply flex justify-center;
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.ws-dp__today-btn {
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  color: var(--color-brand);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-brand-hover);
+    text-decoration: underline;
+  }
+}
+
+.ws-dp__error {
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
+}
+
+@keyframes ws-dp-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

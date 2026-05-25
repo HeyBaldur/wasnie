@@ -1,0 +1,62 @@
+<div class="dp" (click)="stopProp($event)">
+  <div
+    class="dp__trigger"
+    [class.dp__trigger--open]="isOpen()"
+    [class.dp__trigger--disabled]="isDisabled()"
+    [class.dp__trigger--has-value]="!!selectedDate()"
+    (click)="open($event)"
+  >
+    <app-icon name="calendar" [size]="15" class="dp__trigger-icon" />
+    <span class="dp__trigger-value">
+      @if (displayValue()) {
+        {{ displayValue() }}
+      } @else {
+        <span class="dp__trigger-placeholder">{{ placeholder() }}</span>
+      }
+    </span>
+    @if (selectedDate()) {
+      <app-icon name="chevron-right" [size]="14" class="dp__trigger-chevron" />
+    }
+  </div>
+
+  @if (isOpen()) {
+    <div class="dp__popover">
+      <div class="dp__nav">
+        <button type="button" class="dp__nav-btn" (click)="prevMonth()">
+          <app-icon name="chevron-left" [size]="16" />
+        </button>
+        <span class="dp__nav-label">{{ monthLabel() }} {{ viewYear() }}</span>
+        <button type="button" class="dp__nav-btn" (click)="nextMonth()">
+          <app-icon name="chevron-right" [size]="16" />
+        </button>
+      </div>
+
+      <div class="dp__grid">
+        @for (day of dayLabels; track day) {
+          <span class="dp__day-head">{{ day | translate }}</span>
+        }
+        @for (cell of calendarDays(); track $index) {
+          <button
+            type="button"
+            class="dp__cell"
+            [class.dp__cell--today]="cell.isToday"
+            [class.dp__cell--selected]="cell.isSelected"
+            [class.dp__cell--empty]="cell.isOtherMonth"
+            [disabled]="cell.isOtherMonth || !cell.date"
+            (click)="selectDate(cell)"
+          >
+            @if (!cell.isOtherMonth && cell.date) {
+              {{ cell.dayNum }}
+            }
+          </button>
+        }
+      </div>
+
+      <div class="dp__footer">
+        <button type="button" class="dp__today-btn" (click)="selectToday()">
+          {{ 'DATEPICKER.TODAY' | translate }}
+        </button>
+      </div>
+    </div>
+  }
+</div>

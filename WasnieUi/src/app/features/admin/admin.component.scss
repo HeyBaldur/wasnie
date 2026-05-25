@@ -1,0 +1,8 @@
+@reference "../../../styles.scss";
+
+.admin-placeholder {
+  @apply flex flex-col items-center justify-center gap-4;
+  padding: 80px 24px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-14);
+}

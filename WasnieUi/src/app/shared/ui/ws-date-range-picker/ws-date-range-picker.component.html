@@ -1,0 +1,94 @@
+<div class="ws-drp" (click)="stopProp($event)">
+  @if (label()) {
+    <label class="ws-drp__label">{{ label() | translate }}</label>
+  }
+
+  <div
+    class="ws-drp__trigger"
+    [class.ws-drp__trigger--open]="isOpen()"
+    [class.ws-drp__trigger--disabled]="isDisabled()"
+    (click)="open($event)"
+  >
+    <app-icon name="calendar" [size]="15" class="ws-drp__cal-icon" />
+    <span class="ws-drp__display" [class.ws-drp__display--placeholder]="!displayValue()">
+      {{ displayValue() || (placeholder() | translate) }}
+    </span>
+    <app-icon name="chevron-right" [size]="14" class="ws-drp__chevron" [class.ws-drp__chevron--open]="isOpen()" />
+  </div>
+
+  @if (isOpen()) {
+    <div class="ws-drp__popover">
+      <div class="ws-drp__months">
+        <div class="ws-drp__month">
+          <div class="ws-drp__nav">
+            <button type="button" class="ws-drp__nav-btn" (click)="prevMonth()">
+              <app-icon name="chevron-left" [size]="16" />
+            </button>
+            <span class="ws-drp__nav-label">{{ leftMonthLabel() }} {{ leftYear() }}</span>
+            <span></span>
+          </div>
+          <div class="ws-drp__grid">
+            @for (key of dayKeys; track key) {
+              <span class="ws-drp__day-head">{{ key | translate }}</span>
+            }
+            @for (cell of leftDays(); track $index) {
+              <button
+                type="button"
+                class="ws-drp__cell"
+                [class.ws-drp__cell--today]="cell.isToday"
+                [class.ws-drp__cell--start]="isStart(cell.date)"
+                [class.ws-drp__cell--end]="isEnd(cell.date)"
+                [class.ws-drp__cell--in-range]="isInRange(cell.date)"
+                [class.ws-drp__cell--empty]="cell.isOtherMonth"
+                [disabled]="cell.isDisabled"
+                (click)="selectDate(cell)"
+                (mouseenter)="onCellHover(cell)"
+              >
+                @if (!cell.isOtherMonth && cell.date) {
+                  {{ cell.dayNum }}
+                }
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="ws-drp__month">
+          <div class="ws-drp__nav">
+            <span></span>
+            <span class="ws-drp__nav-label">{{ rightMonthLabel() }} {{ rightYear() }}</span>
+            <button type="button" class="ws-drp__nav-btn" (click)="nextMonth()">
+              <app-icon name="chevron-right" [size]="16" />
+            </button>
+          </div>
+          <div class="ws-drp__grid">
+            @for (key of dayKeys; track key) {
+              <span class="ws-drp__day-head">{{ key | translate }}</span>
+            }
+            @for (cell of rightDays(); track $index) {
+              <button
+                type="button"
+                class="ws-drp__cell"
+                [class.ws-drp__cell--today]="cell.isToday"
+                [class.ws-drp__cell--start]="isStart(cell.date)"
+                [class.ws-drp__cell--end]="isEnd(cell.date)"
+                [class.ws-drp__cell--in-range]="isInRange(cell.date)"
+                [class.ws-drp__cell--empty]="cell.isOtherMonth"
+                [disabled]="cell.isDisabled"
+                (click)="selectDate(cell)"
+                (mouseenter)="onCellHover(cell)"
+              >
+                @if (!cell.isOtherMonth && cell.date) {
+                  {{ cell.dayNum }}
+                }
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (error()) {
+    <span class="ws-drp__error">{{ error() | translate }}</span>
+  }
+</div>

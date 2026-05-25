@@ -1,0 +1,79 @@
+<app-shell>
+  <div class="page">
+    <ws-page-header
+      title="DASHBOARD.TITLE"
+      subtitle="DASHBOARD.SUBTITLE"
+    />
+
+    <div class="kpi-grid">
+      @for (kpi of kpis; track kpi.labelKey) {
+        <ws-card variant="default" padding="md">
+          <div class="kpi-card">
+            <div class="kpi-card__header">
+              <span class="kpi-card__label">{{ kpi.labelKey | translate }}</span>
+              <div class="kpi-card__icon-wrap">
+                <app-icon [name]="kpi.icon" [size]="17" />
+              </div>
+            </div>
+            <div class="kpi-card__value">{{ kpi.value }}</div>
+            <div
+              class="kpi-card__trend"
+              [class.kpi-card__trend--positive]="kpi.positive === true"
+              [class.kpi-card__trend--negative]="kpi.positive === false"
+            >
+              <app-icon
+                [name]="kpi.positive === true ? 'trend-up' : kpi.positive === false ? 'trend-up' : 'trend-neutral'"
+                [size]="13"
+              />
+              {{ kpi.trend }} vs last period
+            </div>
+          </div>
+        </ws-card>
+      }
+    </div>
+
+    <div class="dashboard-body">
+      <div class="cards-grid">
+        @for (card of cards; track card.titleKey) {
+          <ws-card variant="interactive" padding="md" [accent]="card.accent">
+            <a [routerLink]="card.route" class="metric-card">
+              <div class="metric-card__header">
+                <div class="metric-card__icon">
+                  <app-icon [name]="card.icon" [size]="16" />
+                </div>
+                <span class="metric-card__title">{{ card.titleKey | translate }}</span>
+              </div>
+              <div class="metric-card__count">{{ card.count }}</div>
+              <div class="metric-card__sub">{{ card.subtitle }}</div>
+              <span class="metric-card__link">
+                {{ 'DASHBOARD.VIEW_ALL' | translate }}
+                <app-icon name="external-link" [size]="11" />
+              </span>
+            </a>
+          </ws-card>
+        }
+      </div>
+
+      <ws-card variant="flat" padding="none" class="activity-panel">
+        <div class="activity-panel__header">
+          <h3 class="activity-panel__title">
+            <app-icon name="activity" [size]="16" />
+            {{ 'DASHBOARD.ACTIVITY_FEED' | translate }}
+          </h3>
+        </div>
+        <ul class="activity-list">
+          @for (item of activity; track item.textKey) {
+            <li class="activity-item">
+              <div class="activity-item__avatar">{{ item.initials }}</div>
+              <div class="activity-item__body">
+                <p class="activity-item__text">{{ item.textKey | translate }}</p>
+              </div>
+              <span class="activity-item__time">{{ item.time }}</span>
+            </li>
+          }
+        </ul>
+      </ws-card>
+    </div>
+
+  </div>
+</app-shell>

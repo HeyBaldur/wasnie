@@ -1,0 +1,32 @@
+<div class="empty-state">
+  @if (illustrationHtml()) {
+    <div class="empty-state__illustration" [innerHTML]="illustrationHtml()"></div>
+  } @else if (icon()) {
+    <div class="empty-state__icon-wrap">
+      <app-icon [name]="icon()" [size]="36" />
+    </div>
+  }
+
+  <h3 class="empty-state__title">{{ titleKey() | translate }}</h3>
+  <p class="empty-state__desc">{{ descKey() | translate }}</p>
+
+  <div class="empty-state__actions">
+    @if (actionKey() && actionRoute()) {
+      <a [routerLink]="actionRoute()" class="btn-action btn-action--primary empty-state__action">
+        <app-icon name="plus" [size]="15" />
+        {{ actionKey() | translate }}
+      </a>
+    } @else if (actionKey()) {
+      <button class="btn-action btn-action--primary empty-state__action" (click)="actionClick.emit()">
+        <app-icon name="plus" [size]="15" />
+        {{ actionKey() | translate }}
+      </button>
+    }
+
+    @if (secondaryActionKey() && secondaryActionRoute()) {
+      <a [routerLink]="secondaryActionRoute()" class="btn-action btn-action--ghost">
+        {{ secondaryActionKey() | translate }}
+      </a>
+    }
+  </div>
+</div>

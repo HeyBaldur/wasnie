@@ -1,0 +1,126 @@
+# ============================================================
+# Wasnie — .gitignore
+# Covers: .NET 8, Angular 20, VS 2022, Rider, VS Code, Docker
+# ============================================================
+
+# ─── .NET build artifacts ───────────────────────────────────
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.rsuser
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# Publish output
+[Pp]ublish/
+
+# MSBuild binary logs
+*.binlog
+
+# Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.cobertura.xml
+
+# ─── ASP.NET Core secrets ───────────────────────────────────
+# CRITICAL: appsettings.Development.json contains the JWT secret
+# and the local SQL Server name. It must NEVER be committed.
+# appsettings.Production.json will contain production credentials.
+# Use *.template.json versions (committed) as setup reference.
+WasnieApi/src/Wasnie.Api/appsettings.Development.json
+WasnieApi/src/Wasnie.Api/appsettings.Production.json
+WasnieApi/src/Wasnie.Api/appsettings.Staging.json
+WasnieApi/src/Wasnie.Api/appsettings.Local.json
+appsettings.*.local.json
+
+# .NET user secrets — stored outside repo by design, but guard anyway
+**/secrets.json
+
+# Certificates and keys
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+*.cer
+
+# ─── launchSettings.json ────────────────────────────────────
+# Contains machine-specific port configuration. Excluded to
+# prevent conflicts between developers. See README for defaults.
+WasnieApi/src/Wasnie.Api/Properties/launchSettings.json
+
+# ─── Angular / Node ─────────────────────────────────────────
+WasnieUi/node_modules/
+WasnieUi/dist/
+WasnieUi/.angular/
+WasnieUi/.cache/
+WasnieUi/server/
+npm-debug.log*
+yarn-error.log
+*.tgz
+
+# ─── IDE — Visual Studio ────────────────────────────────────
+.vs/
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+*.pidb
+*.svr
+*.sap
+
+# ─── IDE — JetBrains Rider ──────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# ─── IDE — VS Code ──────────────────────────────────────────
+# extensions.json, tasks.json, and launch.json are committed
+# (shared team config). Only personal settings are excluded.
+.vscode/settings.json
+.vscode/*.code-snippets
+.history/
+
+# ─── OS artifacts ───────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ─── Docker ─────────────────────────────────────────────────
+docker-compose.override.yml
+.env
+.env.*
+!.env.example
+
+# ─── Logs ───────────────────────────────────────────────────
+logs/
+*.log
+Serilog/
+
+# ─── Temporary / scratch ────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+*~

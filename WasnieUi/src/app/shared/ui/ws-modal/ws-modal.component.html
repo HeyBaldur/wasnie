@@ -1,0 +1,41 @@
+@if (isOpen()) {
+  <div class="ws-modal" role="dialog" aria-modal="true">
+    <div class="ws-modal__overlay" (click)="onBackdropClick()"></div>
+
+    <div #dialog [class]="dialogClass()">
+      <div class="ws-modal__header">
+        @if (title()) {
+          <div class="ws-modal__titles">
+            <h2 class="ws-modal__title">{{ title() }}</h2>
+            @if (description()) {
+              <p class="ws-modal__description">{{ description() }}</p>
+            }
+          </div>
+        } @else {
+          <ng-content select="[slot=header]" />
+        }
+        @if (closable()) {
+          <button type="button" class="ws-modal__close" (click)="close()" aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        }
+      </div>
+
+      @if (!title()) {
+        <div class="ws-modal__body">
+          <ng-content />
+        </div>
+      } @else {
+        <div class="ws-modal__body ws-modal__body--titled">
+          <ng-content />
+        </div>
+      }
+
+      <div class="ws-modal__footer">
+        <ng-content select="[slot=footer]" />
+      </div>
+    </div>
+  </div>
+}

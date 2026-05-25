@@ -1,0 +1,11 @@
+<div class="shell">
+  <app-sidebar />
+  <div class="shell__main" [class.shell__main--collapsed]="!sidebarState.isExpanded()">
+    <app-topbar />
+    <main class="shell__content">
+      <ng-content />
+    </main>
+  </div>
+</div>
+<ws-toast-container />
+<app-confirm-modal />

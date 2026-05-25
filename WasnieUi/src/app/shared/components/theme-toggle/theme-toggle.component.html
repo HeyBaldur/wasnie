@@ -1,0 +1,33 @@
+<div class="theme-toggle">
+  <button
+    class="theme-toggle__trigger btn-action btn-action--ghost"
+    [attr.aria-label]="'THEME.LABEL' | translate"
+    [attr.aria-expanded]="isOpen()"
+    aria-haspopup="listbox"
+    (click)="toggle()"
+  >
+    <span class="theme-toggle__icon" aria-hidden="true">{{ currentIcon() }}</span>
+  </button>
+
+  @if (isOpen()) {
+    <div
+      class="theme-toggle__popover"
+      role="listbox"
+      [attr.aria-label]="'THEME.LABEL' | translate"
+    >
+      @for (option of options; track option.mode; let i = $index) {
+        <button
+          class="theme-toggle__option"
+          role="option"
+          [class.is-active]="currentMode() === option.mode"
+          [class.is-focused]="focusedIndex() === i"
+          [attr.aria-selected]="currentMode() === option.mode"
+          (click)="select(option.mode)"
+        >
+          <span class="theme-toggle__option-icon" aria-hidden="true">{{ option.icon }}</span>
+          <span class="theme-toggle__option-label">{{ option.labelKey | translate }}</span>
+        </button>
+      }
+    </div>
+  }
+</div>

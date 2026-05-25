@@ -1,0 +1,51 @@
+@reference "../../../../styles.scss";
+
+.empty-state {
+  @apply flex flex-col items-center text-center;
+  padding: 64px 24px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.empty-state__illustration {
+  width: 240px;
+  max-height: 160px;
+  margin-bottom: 28px;
+  color: var(--color-fg-muted);
+
+  svg {
+    width: 100%;
+    height: auto;
+  }
+}
+
+.empty-state__icon-wrap {
+  @apply flex items-center justify-center rounded-2xl mb-6;
+  width: 72px;
+  height: 72px;
+  background-color: var(--color-brand-muted);
+  color: var(--color-brand);
+}
+
+.empty-state__title {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0 0 10px;
+  color: var(--color-fg-primary);
+}
+
+.empty-state__desc {
+  @apply text-sm;
+  color: var(--color-fg-secondary);
+  line-height: 1.65;
+  margin: 0 0 28px;
+  max-width: 380px;
+}
+
+.empty-state__actions {
+  @apply flex items-center gap-3;
+}
+
+.empty-state__action {
+  @apply no-underline;
+}

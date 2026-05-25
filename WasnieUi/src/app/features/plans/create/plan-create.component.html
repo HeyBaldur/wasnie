@@ -1,0 +1,62 @@
+<app-shell>
+  <div class="plan-create-page">
+    <ws-page-header
+      title="PLANS.CREATE_TITLE"
+      subtitle="PLANS.CREATE_SUBTITLE"
+      backRoute="/plans"
+      backLabel="PLANS.TITLE"
+    />
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="plan-create-form">
+
+      <div class="form-section">
+        <h3 class="form-section__title">{{ 'PLANS.SECTION_DETAILS' | translate }}</h3>
+
+        <ws-input
+          label="PLANS.FIELD_NAME"
+          inputId="plan-name"
+          [placeholder]="'PLANS.FIELD_NAME_PLACEHOLDER'"
+          formControlName="name"
+          [error]="hasError('name', 'required') ? 'VALIDATION.REQUIRED' : hasError('name', 'maxlength') ? 'PLANS.FIELD_NAME_MAX' : ''"
+        />
+
+        <div class="form-field">
+          <label class="form-label" for="plan-desc">{{ 'PLANS.FIELD_DESCRIPTION' | translate }}</label>
+          <textarea
+            id="plan-desc"
+            class="form-textarea"
+            formControlName="description"
+            [placeholder]="'PLANS.FIELD_DESCRIPTION_PLACEHOLDER' | translate"
+            rows="3"
+          ></textarea>
+        </div>
+
+        <ws-select
+          label="PLANS.FIELD_CURRENCY"
+          formControlName="currency"
+          [options]="currencies"
+        />
+      </div>
+
+      <div class="form-section">
+        <h3 class="form-section__title">{{ 'PLANS.SECTION_PERIOD' | translate }}</h3>
+
+        <ws-date-range-picker
+          label="PLANS.FIELD_START"
+          formControlName="dateRange"
+          [error]="rangeError"
+        />
+      </div>
+
+      <div class="form-actions">
+        <ws-button variant="ghost" [routerLink]="'/plans'">
+          {{ 'COMMON.CANCEL' | translate }}
+        </ws-button>
+        <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">
+          {{ 'PLANS.ACTION_CREATE' | translate }}
+        </ws-button>
+      </div>
+
+    </form>
+  </div>
+</app-shell>

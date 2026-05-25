@@ -1,0 +1,24 @@
+<div class="ws-seg" role="group">
+  <span
+    #indicator
+    class="ws-seg__indicator"
+    aria-hidden="true"
+  ></span>
+
+  @for (opt of options(); track opt.value) {
+    <button
+      #segment
+      class="ws-seg__btn"
+      [class.ws-seg__btn--active]="value() === opt.value"
+      type="button"
+      (click)="select(opt.value)"
+      (keydown)="onKeydown($event, opt.value)"
+    >
+      @if (translateLabels()) {
+        {{ opt.label | translate }}
+      } @else {
+        {{ opt.label }}
+      }
+    </button>
+  }
+</div>

@@ -1,0 +1,21 @@
+@reference "../../../../styles.scss";
+
+.shell {
+  @apply flex h-screen overflow-hidden;
+  background-color: var(--color-base);
+}
+
+.shell__main {
+  @apply flex flex-col flex-1 overflow-hidden;
+  margin-left: 240px;
+  transition: margin-left 200ms ease;
+
+  &--collapsed {
+    margin-left: 64px;
+  }
+}
+
+.shell__content {
+  @apply flex-1 overflow-y-auto;
+  background-color: var(--color-base);
+}

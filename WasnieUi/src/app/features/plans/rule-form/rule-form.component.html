@@ -1,0 +1,348 @@
+<app-shell>
+  <div class="rule-form-page">
+    <ws-page-header
+      [title]="(readOnly() ? 'PLANS.RULE_VIEW_TITLE' : isEdit ? 'PLANS.EDIT_RULE_TITLE' : 'PLANS.ADD_RULE_TITLE') | translate"
+      [backRoute]="'/plans/' + planId"
+      backLabel="PLANS.BACK_TO_PLAN"
+    />
+
+    @if (readOnly()) {
+      <div class="readonly-banner">
+        <app-icon name="info" [size]="16" />
+        <span>{{ 'PLANS.RULE_READONLY_NOTICE' | translate }}</span>
+      </div>
+    }
+
+    <div class="rule-form-layout">
+      <form class="rule-form" [formGroup]="form" (ngSubmit)="onSubmit()">
+
+        <div class="form-card">
+          <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_BASIC' | translate }}</h2>
+          <div class="form-row-2">
+            <ws-input
+              formControlName="name"
+              [label]="'PLANS.FIELD_RULE_NAME' | translate"
+              [error]="form.get('name')?.touched && form.get('name')?.hasError('required') ? 'VALIDATION.REQUIRED' : ''"
+              [placeholder]="'PLANS.FIELD_RULE_NAME_PLACEHOLDER' | translate"
+            />
+            <ws-input
+              formControlName="sortOrder"
+              type="number"
+              [label]="'PLANS.FIELD_SORT_ORDER' | translate"
+            />
+          </div>
+        </div>
+
+        <div class="form-card" formGroupName="measurement">
+          <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</h2>
+          <div class="form-row-3">
+            <ws-select
+              formControlName="type"
+              [label]="'PLANS.FIELD_MEASUREMENT_TYPE' | translate"
+              [options]="measurementTypeOptions"
+            />
+            <ws-input
+              formControlName="sourceField"
+              [label]="'PLANS.FIELD_SOURCE_FIELD' | translate"
+              placeholder="amount"
+            />
+            <ws-select
+              formControlName="aggregation"
+              [label]="'PLANS.FIELD_AGGREGATION' | translate"
+              [options]="aggregationOptions"
+            />
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</h2>
+          <div formGroupName="rateTable">
+            <div class="form-field-group">
+              <span class="form-field-label">{{ 'PLANS.FIELD_RATE_TABLE_TYPE' | translate }}</span>
+              <div class="type-selector">
+                @for (t of rateTableTypes; track t.value) {
+                  <button type="button" class="type-btn"
+                    [class.type-btn--active]="rateTableType() == t.value"
+                    [disabled]="readOnly()"
+                    (click)="!readOnly() && form.get('rateTable.type')?.setValue(t.value)">
+                    {{ t.label | translate }}
+                  </button>
+                }
+              </div>
+            </div>
+
+            @if (rateTableType() == RateTableType.Flat) {
+              <div class="form-field-group mt-4">
+                <span class="form-field-label">{{ 'PLANS.FIELD_FLAT_RATE' | translate }}</span>
+                <div class="input-with-suffix">
+                  <ws-input
+                    formControlName="flatRate"
+                    type="number"
+                  />
+                  <span class="input-suffix">%×100</span>
+                </div>
+                <span class="form-hint">{{ 'PLANS.HINT_RATE' | translate }}</span>
+              </div>
+            }
+
+            @if (rateTableType() == RateTableType.Tiered) {
+              <div class="tier-table mt-4">
+                <div class="tier-table__head">
+                  <span>{{ 'PLANS.TIER_FROM' | translate }}</span>
+                  <span>{{ 'PLANS.TIER_TO' | translate }}</span>
+                  <span>{{ 'PLANS.TIER_RATE' | translate }}</span>
+                  <span></span>
+                </div>
+                @for (tier of tiersArray.controls; track $index; let i = $index) {
+                  <div class="tier-table__row" [formGroup]="asFormGroup(tier)">
+                    <input class="form-input form-input--sm" type="number" formControlName="from" [readonly]="readOnly()" />
+                    <input class="form-input form-input--sm" type="number" formControlName="to"
+                      [placeholder]="'PLANS.TIER_TO_OPEN' | translate" [readonly]="readOnly()" />
+                    <input class="form-input form-input--sm" type="number" step="0.001" formControlName="rate" [readonly]="readOnly()" />
+                    @if (!readOnly()) {
+                      <button type="button" class="tier-remove" (click)="removeTier(i)">
+                        <app-icon name="x" [size]="14" />
+                      </button>
+                    } @else {
+                      <span></span>
+                    }
+                  </div>
+                }
+                @if (!readOnly()) {
+                  <ws-button type="button" variant="ghost" size="sm" (click)="addTier()">
+                    <app-icon name="plus" [size]="14" />
+                    {{ 'PLANS.ADD_TIER' | translate }}
+                  </ws-button>
+                }
+              </div>
+            }
+
+            @if (rateTableType() == RateTableType.AttainmentBased) {
+              <div class="tier-table mt-4">
+                <div class="tier-table__head">
+                  <span>{{ 'PLANS.ATT_FROM' | translate }}</span>
+                  <span>{{ 'PLANS.ATT_TO' | translate }}</span>
+                  <span>{{ 'PLANS.TIER_RATE' | translate }}</span>
+                  <span></span>
+                </div>
+                @for (tier of attainmentTiersArray.controls; track $index; let i = $index) {
+                  <div class="tier-table__row" [formGroup]="asFormGroup(tier)">
+                    <input class="form-input form-input--sm" type="number" formControlName="attainmentFrom" [readonly]="readOnly()" />
+                    <input class="form-input form-input--sm" type="number" formControlName="attainmentTo"
+                      [placeholder]="'PLANS.TIER_TO_OPEN' | translate" [readonly]="readOnly()" />
+                    <input class="form-input form-input--sm" type="number" step="0.001" formControlName="rate" [readonly]="readOnly()" />
+                    @if (!readOnly()) {
+                      <button type="button" class="tier-remove" (click)="removeAttainmentTier(i)">
+                        <app-icon name="x" [size]="14" />
+                      </button>
+                    } @else {
+                      <span></span>
+                    }
+                  </div>
+                }
+                @if (!readOnly()) {
+                  <ws-button type="button" variant="ghost" size="sm" (click)="addAttainmentTier()">
+                    <app-icon name="plus" [size]="14" />
+                    {{ 'PLANS.ADD_TIER' | translate }}
+                  </ws-button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="form-card">
+          <div class="collapsible-header"
+            [class.collapsible-header--readonly]="readOnly()"
+            (click)="!readOnly() && form.get('hasTrigger')?.setValue(!form.get('hasTrigger')?.value)">
+            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</h2>
+            <div class="toggle-switch" [class.toggle-switch--on]="hasTrigger()"></div>
+          </div>
+          @if (hasTrigger()) {
+            <div class="mt-4" formGroupName="trigger">
+              <div class="form-field-group">
+                <span class="form-field-label">{{ 'PLANS.FIELD_LOGICAL_OP' | translate }}</span>
+                <div class="type-selector">
+                  <button type="button" class="type-btn"
+                    [class.type-btn--active]="form.get('trigger.logicalOperator')?.value == LogicalOperator.And"
+                    [disabled]="readOnly()"
+                    (click)="!readOnly() && form.get('trigger.logicalOperator')?.setValue(LogicalOperator.And)">
+                    {{ 'PLANS.LOGIC_AND' | translate }}
+                  </button>
+                  <button type="button" class="type-btn"
+                    [class.type-btn--active]="form.get('trigger.logicalOperator')?.value == LogicalOperator.Or"
+                    [disabled]="readOnly()"
+                    (click)="!readOnly() && form.get('trigger.logicalOperator')?.setValue(LogicalOperator.Or)">
+                    {{ 'PLANS.LOGIC_OR' | translate }}
+                  </button>
+                </div>
+              </div>
+              <div class="conditions-list mt-3" formArrayName="conditions">
+                @for (cond of conditionsArray.controls; track $index; let i = $index) {
+                  <div class="condition-row" [formGroupName]="i">
+                    <input class="form-input form-input--sm" type="text" formControlName="field"
+                      [placeholder]="'PLANS.COND_FIELD_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    <ws-select
+                      formControlName="operator"
+                      [options]="conditionOperatorOptions"
+                            />
+                    <input class="form-input form-input--sm" type="text" formControlName="valueRaw"
+                      [placeholder]="'PLANS.COND_VALUE_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    @if (!readOnly()) {
+                      <button type="button" class="tier-remove" (click)="removeCondition(i)">
+                        <app-icon name="x" [size]="14" />
+                      </button>
+                    } @else {
+                      <span></span>
+                    }
+                  </div>
+                }
+              </div>
+              @if (!readOnly()) {
+                <ws-button type="button" variant="ghost" size="sm" class="mt-2" (click)="addCondition()">
+                  <app-icon name="plus" [size]="14" />
+                  {{ 'PLANS.ADD_CONDITION' | translate }}
+                </ws-button>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="form-card">
+          <div class="collapsible-header"
+            [class.collapsible-header--readonly]="readOnly()"
+            (click)="!readOnly() && form.get('hasModifier')?.setValue(!form.get('hasModifier')?.value)">
+            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</h2>
+            <div class="toggle-switch" [class.toggle-switch--on]="hasModifier()"></div>
+          </div>
+          @if (hasModifier()) {
+            <div class="form-row-3 mt-4" formGroupName="modifier">
+              <ws-input
+                formControlName="name"
+                [label]="'PLANS.FIELD_MODIFIER_NAME' | translate"
+              />
+              <ws-select
+                formControlName="type"
+                [label]="'PLANS.FIELD_MODIFIER_TYPE' | translate"
+                [options]="modifierTypeOptions"
+                />
+              <ws-input
+                formControlName="factor"
+                type="number"
+                [label]="'PLANS.FIELD_MODIFIER_FACTOR' | translate"
+              />
+            </div>
+          }
+        </div>
+
+        <div class="form-card">
+          <div class="collapsible-header"
+            [class.collapsible-header--readonly]="readOnly()"
+            (click)="!readOnly() && form.get('hasCap')?.setValue(!form.get('hasCap')?.value)">
+            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</h2>
+            <div class="toggle-switch" [class.toggle-switch--on]="hasCap()"></div>
+          </div>
+          @if (hasCap()) {
+            <div class="form-row-2 mt-4" formGroupName="cap">
+              <ws-input
+                formControlName="amount"
+                type="number"
+                [label]="'PLANS.FIELD_CAP_AMOUNT' | translate"
+              />
+              <ws-select
+                formControlName="scope"
+                [label]="'PLANS.FIELD_CAP_SCOPE' | translate"
+                [options]="capScopeOptions"
+                />
+            </div>
+          }
+        </div>
+
+        <div class="form-card">
+          <div class="collapsible-header"
+            [class.collapsible-header--readonly]="readOnly()"
+            (click)="!readOnly() && form.get('hasFloor')?.setValue(!form.get('hasFloor')?.value)">
+            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</h2>
+            <div class="toggle-switch" [class.toggle-switch--on]="hasFloor()"></div>
+          </div>
+          @if (hasFloor()) {
+            <div class="form-row-2 mt-4" formGroupName="floor">
+              <ws-input
+                formControlName="amount"
+                type="number"
+                [label]="'PLANS.FIELD_FLOOR_AMOUNT' | translate"
+              />
+            </div>
+          }
+        </div>
+
+        <div class="form-actions">
+          <ws-button variant="ghost" [routerLink]="['/plans', planId]">
+            {{ (readOnly() ? 'PLANS.BACK_TO_PLAN' : 'COMMON.CANCEL') | translate }}
+          </ws-button>
+          @if (!readOnly()) {
+            <ws-button variant="primary" type="submit" [loading]="saving()">
+              {{ (isEdit ? 'PLANS.ACTION_UPDATE_RULE' : 'PLANS.ACTION_SAVE_RULE') | translate }}
+            </ws-button>
+          }
+        </div>
+      </form>
+
+      <aside class="rule-preview">
+        <div class="rule-preview__header">
+          <app-icon name="eye" [size]="16" />
+          <span>{{ 'PLANS.PREVIEW_TITLE' | translate }}</span>
+        </div>
+        <div class="rule-preview__body">
+          <div class="preview-section">
+            <span class="preview-label">{{ 'PLANS.FIELD_RULE_NAME' | translate }}</span>
+            <span class="preview-value">{{ form.get('name')?.value || '—' }}</span>
+          </div>
+          <div class="preview-section">
+            <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
+            <span class="preview-value">
+              {{ 'PLANS.MEASUREMENT_' + $any(MeasurementType)[$any(form.get('measurement.type'))?.value]?.toUpperCase() | translate }}
+              · {{ 'PLANS.AGGREGATION_' + $any(MeasurementAggregation)[$any(form.get('measurement.aggregation'))?.value]?.toUpperCase() | translate }}
+            </span>
+          </div>
+          <div class="preview-section">
+            <span class="preview-label">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</span>
+            <span class="preview-value">
+              @if (rateTableType() == RateTableType.Flat) {
+                {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
+              } @else if (rateTableType() == RateTableType.Tiered) {
+                {{ 'PLANS.RATE_TABLE_TIERED' | translate }} · {{ tiersArray.length }} {{ 'PLANS.TIERS' | translate }}
+              } @else {
+                {{ 'PLANS.RATE_TABLE_ATTAINMENTBASED' | translate }} · {{ attainmentTiersArray.length }} {{ 'PLANS.TIERS' | translate }}
+              }
+            </span>
+          </div>
+          @if (hasTrigger()) {
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</span>
+              <span class="preview-value">{{ conditionsArray.length }} {{ 'PLANS.CONDITIONS' | translate }}</span>
+            </div>
+          }
+          @if (hasModifier()) {
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</span>
+              <span class="preview-value">× {{ form.get('modifier.factor')?.value }}</span>
+            </div>
+          }
+          @if (hasCap()) {
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</span>
+              <span class="preview-value">{{ form.get('cap.amount')?.value }}</span>
+            </div>
+          }
+          @if (hasFloor()) {
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</span>
+              <span class="preview-value">{{ form.get('floor.amount')?.value }}</span>
+            </div>
+          }
+        </div>
+      </aside>
+    </div>
+  </div>
+</app-shell>

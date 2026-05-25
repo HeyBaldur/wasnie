@@ -1,0 +1,14 @@
+<app-shell>
+  <ws-page-header [title]="'NAV.PAYEES' | translate">
+    <div slot="actions">
+      <ws-button variant="primary">{{ 'COMMON.NEW' | translate }} {{ 'NAV.PAYEES' | translate }}</ws-button>
+    </div>
+  </ws-page-header>
+  <ws-empty-state
+    illustration="payees-empty"
+    titleKey="EMPTY_STATE.PAYEES_TITLE"
+    descKey="EMPTY_STATE.PAYEES_DESC"
+    actionKey="EMPTY_STATE.PAYEES_ACTION"
+    actionRoute="/payees"
+  />
+</app-shell>

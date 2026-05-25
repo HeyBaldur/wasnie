@@ -1,0 +1,247 @@
+<app-shell>
+  @if (store.loading() && !store.selectedPlan()) {
+    <div class="plan-detail plan-detail--loading">
+      <div class="skeleton-header">
+        <span class="skeleton skeleton--title"></span>
+        <span class="skeleton skeleton--badge"></span>
+      </div>
+      <div class="skeleton-meta">
+        @for (i of [1,2,3]; track i) {
+          <span class="skeleton skeleton--meta"></span>
+        }
+      </div>
+    </div>
+  } @else if (store.error()) {
+    <div class="plan-detail plan-detail--error">
+      <app-icon name="alert-circle" [size]="32" />
+      <span>{{ store.error()! | translate }}</span>
+    </div>
+  } @else if (store.selectedPlan(); as plan) {
+    <div class="plan-detail">
+      <div class="plan-detail__header">
+        <ws-page-header
+          [title]="plan.name"
+          backRoute="/plans"
+          backLabel="PLANS.TITLE"
+        >
+          <div slot="actions" class="plan-detail__actions">
+            @if (permissions().canActivate) {
+              <ws-button variant="primary" size="sm" (click)="onActivate()">
+                <app-icon name="check-circle" [size]="14" />
+                {{ 'PLANS.ACTION_ACTIVATE' | translate }}
+              </ws-button>
+            }
+            @if (permissions().canArchive) {
+              <ws-button variant="danger" size="sm" (click)="onArchive()">
+                <app-icon name="archive" [size]="14" />
+                {{ 'PLANS.ACTION_ARCHIVE' | translate }}
+              </ws-button>
+            }
+            @if (permissions().canClone) {
+              <ws-button variant="secondary" size="sm" (click)="onClone()">
+                <app-icon name="copy" [size]="14" />
+                {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
+              </ws-button>
+            }
+            @if (permissions().canAddRule) {
+              <ws-button variant="primary" size="sm" (click)="goToNewRule()">
+                <app-icon name="plus" [size]="14" />
+                {{ 'PLANS.ACTION_ADD_RULE' | translate }}
+              </ws-button>
+            }
+          </div>
+          <div slot="kpis" class="plan-detail__meta">
+            <div class="plan-header__badges">
+              <ws-badge [variant]="statusVariant(plan.status)">
+                {{ 'PLANS.STATUS_' + plan.status.toUpperCase() | translate }}
+              </ws-badge>
+              <span class="version-chip">v{{ plan.version }}</span>
+              <button
+                class="plan-id-btn"
+                type="button"
+                [wsTooltip]="idCopied() ? ('COMMON.COPIED' | translate) : plan.id"
+                tooltipPlacement="bottom"
+                (click)="copyPlanId(plan.id)"
+                [attr.aria-label]="'COMMON.COPY_ID' | translate"
+              >
+                <app-icon [name]="idCopied() ? 'check-circle' : 'info'" [size]="13" />
+              </button>
+            </div>
+            @if (plan.description) {
+              <p class="plan-detail__desc">{{ plan.description }}</p>
+            }
+            <div class="plan-detail__meta-chips">
+              <span class="meta-chip">
+                <app-icon name="calendar" [size]="13" />
+                {{ plan.effectiveStart | dateFormat }} – {{ plan.effectiveEnd | dateFormat }}
+              </span>
+              <span class="meta-chip">
+                <app-icon name="currency" [size]="13" />
+                {{ plan.currency }}
+              </span>
+              <span class="meta-chip">
+                <app-icon name="user" [size]="13" />
+                {{ plan.createdBy }}
+              </span>
+            </div>
+          </div>
+        </ws-page-header>
+      </div>
+
+      <div class="plan-detail__tabs">
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'rules'"
+          (click)="setTab('rules')"
+        >
+          <app-icon name="list" [size]="15" />
+          {{ 'PLANS.TAB_RULES' | translate }}
+          <span class="tab-count">{{ plan.rules.length }}</span>
+        </button>
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'versions'"
+          (click)="setTab('versions')"
+        >
+          <app-icon name="tag" [size]="15" />
+          {{ 'PLANS.TAB_VERSIONS' | translate }}
+        </button>
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'assignments'"
+          (click)="setTab('assignments')"
+        >
+          <app-icon name="user-check" [size]="15" />
+          {{ 'PLANS.TAB_ASSIGNMENTS' | translate }}
+        </button>
+      </div>
+
+      <div class="plan-detail__tab-content">
+        @if (activeTab() === 'rules') {
+          @if (sortedRules().length === 0) {
+            <div class="rules-empty">
+              <ws-empty-state
+                illustration="plans-empty"
+                titleKey="PLANS.RULES_EMPTY_TITLE"
+                descKey="PLANS.RULES_EMPTY_DESC"
+              />
+              @if (permissions().canAddRule) {
+                <ws-button variant="primary" (click)="goToNewRule()">
+                  <app-icon name="plus" [size]="14" />
+                  {{ 'PLANS.ACTION_ADD_RULE' | translate }}
+                </ws-button>
+              } @else {
+                <p class="rules-empty__note">{{ 'PLANS.DETAIL_NO_RULES_READONLY' | translate }}</p>
+              }
+            </div>
+          } @else {
+            <div class="rules-list">
+              @for (rule of sortedRules(); track rule.id) {
+                <div class="rule-card" [class.rule-card--inactive]="!rule.isActive">
+                  <div class="rule-card__header">
+                    <div class="rule-card__title-group">
+                      <span class="rule-card__order">#{{ rule.sortOrder }}</span>
+                      <span class="rule-card__name">{{ rule.name }}</span>
+                      @if (!rule.isActive) {
+                        <ws-badge variant="neutral" size="sm">{{ 'PLANS.RULE_INACTIVE' | translate }}</ws-badge>
+                      }
+                    </div>
+                    <div class="rule-card__actions">
+                      @if (permissions().canEditRule) {
+                        <ws-button variant="ghost" size="sm" [routerLink]="['rules', rule.id]">
+                          <app-icon name="edit" [size]="13" />
+                          {{ 'COMMON.EDIT' | translate }}
+                        </ws-button>
+                        <ws-button variant="danger" size="sm" (click)="onDeleteRule(rule)">
+                          <app-icon name="x" [size]="13" />
+                          {{ 'COMMON.DELETE' | translate }}
+                        </ws-button>
+                      } @else if (permissions().canViewRule) {
+                        <ws-button variant="ghost" size="sm" [routerLink]="['rules', rule.id]">
+                          <app-icon name="eye" [size]="13" />
+                          {{ 'COMMON.VIEW' | translate }}
+                        </ws-button>
+                      }
+                    </div>
+                  </div>
+                  <div class="rule-card__chips">
+                    <span class="rule-chip">
+                      <app-icon name="activity" [size]="12" />
+                      {{ measurementLabel(rule.measurement.type) | translate }}
+                    </span>
+                    <span class="rule-chip">
+                      <app-icon name="coin" [size]="12" />
+                      {{ rateTableLabel(rule.rateTable.type) | translate }}
+                    </span>
+                    @if (rule.trigger) {
+                      <span class="rule-chip">
+                        <app-icon name="target" [size]="12" />
+                        {{ 'PLANS.HAS_TRIGGER' | translate }}
+                      </span>
+                    }
+                    @if (rule.modifier) {
+                      <span class="rule-chip">
+                        <app-icon name="trend-up" [size]="12" />
+                        {{ 'PLANS.HAS_MODIFIER' | translate }}
+                      </span>
+                    }
+                    @if (rule.cap) {
+                      <span class="rule-chip">
+                        <app-icon name="alert-circle" [size]="12" />
+                        {{ 'PLANS.HAS_CAP' | translate }}
+                      </span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        }
+
+        @if (activeTab() === 'versions') {
+          @if (store.versions().length === 0) {
+            <ws-empty-state
+              illustration="plans-empty"
+              titleKey="PLANS.VERSIONS_EMPTY"
+            />
+          } @else {
+            <ws-table>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ 'PLANS.COL_VERSION' | translate }}</th>
+                    <th>{{ 'PLANS.COL_STATUS' | translate }}</th>
+                    <th>{{ 'PLANS.COL_EFFECTIVE' | translate }}</th>
+                    <th>{{ 'PLANS.COL_RULES' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (v of store.versions(); track v.id) {
+                    <tr [class.current-version]="v.id === plan.id">
+                      <td class="col-mono">v{{ v.version }}</td>
+                      <td>
+                        <ws-badge [variant]="statusVariant(v.status)">
+                          {{ 'PLANS.STATUS_' + v.status.toUpperCase() | translate }}
+                        </ws-badge>
+                      </td>
+                      <td>{{ v.effectiveStart | dateFormat }} – {{ v.effectiveEnd | dateFormat }}</td>
+                      <td class="col-mono">{{ v.activeRuleCount }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </ws-table>
+          }
+        }
+
+        @if (activeTab() === 'assignments') {
+          <ws-empty-state
+            illustration="assignments-empty"
+            titleKey="PLANS.ASSIGNMENTS_EMPTY_TITLE"
+            descKey="PLANS.ASSIGNMENTS_EMPTY_DESC"
+          />
+        }
+      </div>
+    </div>
+  }
+</app-shell>

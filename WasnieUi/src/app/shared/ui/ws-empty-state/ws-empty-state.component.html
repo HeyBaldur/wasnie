@@ -1,0 +1,34 @@
+<div class="ws-es">
+  @if (illustrationHtml()) {
+    <div class="ws-es__illustration" [innerHTML]="illustrationHtml()"></div>
+  } @else if (icon()) {
+    <div class="ws-es__icon-wrap">
+      <app-icon [name]="icon()" [size]="36" />
+    </div>
+  }
+
+  <h3 class="ws-es__title">{{ titleKey() | translate }}</h3>
+  @if (descKey()) {
+    <p class="ws-es__desc">{{ descKey() | translate }}</p>
+  }
+
+  <div class="ws-es__actions">
+    @if (actionKey() && actionRoute()) {
+      <ws-button variant="primary" [routerLink]="actionRoute()">
+        <app-icon name="plus" [size]="15" />
+        {{ actionKey() | translate }}
+      </ws-button>
+    } @else if (actionKey()) {
+      <ws-button variant="primary" (click)="actionClick.emit()">
+        <app-icon name="plus" [size]="15" />
+        {{ actionKey() | translate }}
+      </ws-button>
+    }
+
+    @if (secondaryActionKey() && secondaryActionRoute()) {
+      <ws-button variant="ghost" [routerLink]="secondaryActionRoute()">
+        {{ secondaryActionKey() | translate }}
+      </ws-button>
+    }
+  </div>
+</div>

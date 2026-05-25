@@ -1,0 +1,25 @@
+<div class="ws-ph">
+  @if (backRoute()) {
+    <a class="ws-ph__back" [routerLink]="backRoute()">
+      <app-icon name="chevron-left" [size]="16" />
+      {{ backLabel() | translate }}
+    </a>
+  }
+
+  <div class="ws-ph__row">
+    <div class="ws-ph__meta">
+      <h1 class="ws-ph__title">{{ title() | translate }}</h1>
+      @if (subtitle()) {
+        <p class="ws-ph__subtitle">{{ subtitle() | translate }}</p>
+      }
+    </div>
+
+    <div class="ws-ph__actions">
+      <ng-content select="[slot=actions]" />
+    </div>
+  </div>
+
+  <div class="ws-ph__kpis">
+    <ng-content select="[slot=kpis]" />
+  </div>
+</div>

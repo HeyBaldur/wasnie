@@ -1,0 +1,369 @@
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  AbstractControl,
+  FormArray,
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  Validators,
+} from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { extractApiError } from '../../../shared/utils/api-error';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { DecimalPipe } from '@angular/common';
+import { TranslateModule, TranslatePipe } from '@ngx-translate/core';
+import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { PlansStore } from '../state/plans.store';
+import { ToastService } from '../../../shared/services/toast.service';
+import { getPlanPermissions } from '../services/plan-permissions';
+import {
+  CapScope,
+  ConditionOperator,
+  ConditionValueType,
+  LogicalOperator,
+  MeasurementAggregation,
+  MeasurementType,
+  ModifierType,
+  RateTableType,
+} from '../models/rule.model';
+import { AddRuleRequest, UpdateRuleRequest } from '../models/rule.model';
+import {
+  WsPageHeaderComponent,
+  WsButtonComponent,
+  WsInputComponent,
+  WsSelectComponent,
+  type SelectOption,
+} from '../../../shared/ui';
+
+@Component({
+  selector: 'app-rule-form',
+  standalone: true,
+  imports: [
+    AppShellComponent,
+    IconComponent,
+    RouterLink,
+    ReactiveFormsModule,
+    TranslateModule,
+    TranslatePipe,
+    DecimalPipe,
+    WsPageHeaderComponent,
+    WsButtonComponent,
+    WsInputComponent,
+    WsSelectComponent,
+  ],
+  templateUrl: './rule-form.component.html',
+  styleUrl: './rule-form.component.scss',
+})
+export class RuleFormComponent implements OnInit {
+  private readonly fb = inject(FormBuilder);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  readonly store = inject(PlansStore);
+  private readonly toast = inject(ToastService);
+
+  readonly planId = this.route.snapshot.paramMap.get('planId')!;
+  readonly ruleId = this.route.snapshot.paramMap.get('ruleId') ?? null;
+  readonly isEdit = !!this.ruleId;
+  readonly saving = signal(false);
+  readonly readOnly = signal(false);
+
+  readonly MeasurementType = MeasurementType;
+  readonly MeasurementAggregation = MeasurementAggregation;
+  readonly RateTableType = RateTableType;
+  readonly ModifierType = ModifierType;
+  readonly CapScope = CapScope;
+  readonly LogicalOperator = LogicalOperator;
+  readonly ConditionOperator = ConditionOperator;
+  readonly ConditionValueType = ConditionValueType;
+
+  readonly measurementTypeOptions: SelectOption[] = Object.entries(MeasurementType)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({ label: `PLANS.MEASUREMENT_${k.toUpperCase()}`, value: v as number }));
+
+  readonly aggregationOptions: SelectOption[] = Object.entries(MeasurementAggregation)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({ label: `PLANS.AGGREGATION_${k.toUpperCase()}`, value: v as number }));
+
+  readonly rateTableTypes = Object.entries(RateTableType)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({ label: `PLANS.RATE_TABLE_${k.toUpperCase()}`, value: v as number }));
+
+  readonly modifierTypeOptions: SelectOption[] = Object.entries(ModifierType)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({ label: `PLANS.MODIFIER_${k.toUpperCase()}`, value: v as number }));
+
+  readonly capScopeOptions: SelectOption[] = Object.entries(CapScope)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({ label: `PLANS.CAP_SCOPE_${k.toUpperCase()}`, value: v as number }));
+
+  readonly conditionOperatorOptions: SelectOption[] = Object.entries(ConditionOperator)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => ({ label: `PLANS.COND_OP_${k.toUpperCase()}`, value: v as number }));
+
+  readonly form = this.fb.nonNullable.group({
+    name: ['', [Validators.required, Validators.maxLength(120)]],
+    sortOrder: [1, [Validators.required, Validators.min(1)]],
+    measurement: this.fb.nonNullable.group({
+      type: [MeasurementType.Revenue as number, Validators.required],
+      sourceField: ['amount', Validators.required],
+      aggregation: [MeasurementAggregation.Sum as number, Validators.required],
+    }),
+    rateTable: this.fb.nonNullable.group({
+      type: [RateTableType.Flat as number, Validators.required],
+      flatRate: [0.05],
+      tiers: this.fb.array<FormGroup>([]),
+      attainmentTiers: this.fb.array<FormGroup>([]),
+    }),
+    hasTrigger: [false],
+    trigger: this.fb.nonNullable.group({
+      logicalOperator: [LogicalOperator.And as number],
+      conditions: this.fb.array<FormGroup>([]),
+    }),
+    hasModifier: [false],
+    modifier: this.fb.nonNullable.group({
+      name: [''],
+      type: [ModifierType.Accelerator as number],
+      factor: [1.5],
+    }),
+    hasCap: [false],
+    cap: this.fb.nonNullable.group({
+      amount: [0, Validators.min(0)],
+      scope: [CapScope.PerPeriod as number],
+    }),
+    hasFloor: [false],
+    floor: this.fb.nonNullable.group({
+      amount: [0, Validators.min(0)],
+    }),
+  });
+
+  readonly formValue = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+
+  readonly rateTableType = computed(() => {
+    const v = this.formValue();
+    return Number(v.rateTable?.type ?? RateTableType.Flat) as RateTableType;
+  });
+
+  readonly hasTrigger = computed(() => !!this.formValue()?.hasTrigger);
+  readonly hasModifier = computed(() => !!this.formValue()?.hasModifier);
+  readonly hasCap = computed(() => !!this.formValue()?.hasCap);
+  readonly hasFloor = computed(() => !!this.formValue()?.hasFloor);
+
+  get tiersArray(): FormArray {
+    return this.form.get('rateTable.tiers') as FormArray;
+  }
+
+  get attainmentTiersArray(): FormArray {
+    return this.form.get('rateTable.attainmentTiers') as FormArray;
+  }
+
+  get conditionsArray(): FormArray {
+    return this.form.get('trigger.conditions') as FormArray;
+  }
+
+  ngOnInit(): void {
+    const loadPromise = (!this.store.selectedPlan() || this.store.selectedPlan()?.id !== this.planId)
+      ? this.store.loadPlan(this.planId)
+      : Promise.resolve();
+
+    loadPromise.then(() => {
+      const perms = getPlanPermissions(this.store.selectedPlan()?.status);
+      if (!perms.canEditRule) {
+        this.form.disable();
+        this.readOnly.set(true);
+      }
+
+      if (this.isEdit) {
+        this._loadExistingRule();
+      } else {
+        this._addTier();
+      }
+    });
+  }
+
+  private _loadExistingRule(): void {
+    const plan = this.store.selectedPlan();
+    const rule = plan?.rules.find((r) => r.id === this.ruleId);
+    if (!rule) return;
+
+    this.form.patchValue({
+      name: rule.name,
+      sortOrder: rule.sortOrder,
+      measurement: {
+        type: rule.measurement.type,
+        sourceField: rule.measurement.sourceField,
+        aggregation: rule.measurement.aggregation,
+      },
+      rateTable: {
+        type: rule.rateTable.type,
+        flatRate: rule.rateTable.flatRate ?? 0.05,
+      },
+      hasTrigger: !!rule.trigger,
+      hasModifier: !!rule.modifier,
+      hasCap: !!rule.cap,
+      hasFloor: !!rule.floor,
+    });
+
+    if (rule.trigger) {
+      this.form.patchValue({ trigger: { logicalOperator: rule.trigger.logicalOperator } });
+      rule.trigger.conditions.forEach((c) => {
+        this.conditionsArray.push(
+          this.fb.nonNullable.group({
+            field: [c.field, Validators.required],
+            operator: [c.operator],
+            valueType: [c.value.type],
+            valueRaw: [c.value.raw],
+          })
+        );
+      });
+    }
+
+    if (rule.modifier) {
+      this.form.patchValue({
+        modifier: { name: rule.modifier.name, type: rule.modifier.type, factor: rule.modifier.factor },
+      });
+    }
+
+    if (rule.cap) {
+      this.form.patchValue({ cap: { amount: rule.cap.amount.amount, scope: rule.cap.scope } });
+    }
+
+    if (rule.floor) {
+      this.form.patchValue({ floor: { amount: rule.floor.amount.amount } });
+    }
+
+    if (rule.rateTable.type === RateTableType.Tiered && rule.rateTable.tiers) {
+      rule.rateTable.tiers.forEach((t) => {
+        this.tiersArray.push(
+          this.fb.nonNullable.group({ from: [t.from], to: [t.to], rate: [t.rate] })
+        );
+      });
+    } else if (rule.rateTable.type === RateTableType.AttainmentBased && rule.rateTable.attainmentTiers) {
+      rule.rateTable.attainmentTiers.forEach((t) => {
+        this.attainmentTiersArray.push(
+          this.fb.nonNullable.group({ attainmentFrom: [t.attainmentFrom], attainmentTo: [t.attainmentTo], rate: [t.rate] })
+        );
+      });
+    }
+  }
+
+  addTier(): void { this._addTier(); }
+  removeTier(i: number): void { this.tiersArray.removeAt(i); }
+
+  addAttainmentTier(): void { this._addAttainmentTier(); }
+  removeAttainmentTier(i: number): void { this.attainmentTiersArray.removeAt(i); }
+
+  addCondition(): void {
+    this.conditionsArray.push(
+      this.fb.nonNullable.group({
+        field: ['', Validators.required],
+        operator: [ConditionOperator.Equal],
+        valueType: [ConditionValueType.String],
+        valueRaw: [''],
+      })
+    );
+  }
+
+  removeCondition(i: number): void { this.conditionsArray.removeAt(i); }
+
+  private _addTier(): void {
+    const last = this.tiersArray.controls.at(-1)?.value;
+    const from = last ? (last.to ?? 0) : 0;
+    this.tiersArray.push(
+      this.fb.nonNullable.group({ from: [from], to: [null as number | null], rate: [0.05] })
+    );
+  }
+
+  private _addAttainmentTier(): void {
+    const last = this.attainmentTiersArray.controls.at(-1)?.value;
+    const from = last ? (last.attainmentTo ?? 0) : 0;
+    this.attainmentTiersArray.push(
+      this.fb.nonNullable.group({ attainmentFrom: [from], attainmentTo: [null as number | null], rate: [0.05] })
+    );
+  }
+
+  asFormGroup(ctrl: AbstractControl): FormGroup {
+    return ctrl as FormGroup;
+  }
+
+  async onSubmit(): Promise<void> {
+    if (this.readOnly()) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+    this.saving.set(true);
+    try {
+      const v = this.form.getRawValue();
+      const currency = this.store.selectedPlan()?.currency ?? 'USD';
+
+      const request: AddRuleRequest = {
+        planId: this.planId,
+        name: v.name,
+        sortOrder: v.sortOrder,
+        measurement: {
+          _schema: 1,
+          type: Number(v.measurement.type),
+          sourceField: v.measurement.sourceField,
+          aggregation: Number(v.measurement.aggregation),
+        },
+        rateTable: this._buildRateTable(v),
+        trigger: v.hasTrigger ? this._buildTrigger(v) : null,
+        modifier: v.hasModifier ? this._buildModifier(v) : null,
+        cap: v.hasCap ? { _schema: 1, amount: { amount: v.cap.amount, currency }, scope: Number(v.cap.scope) } : null,
+        floor: v.hasFloor ? { _schema: 1, amount: { amount: v.floor.amount, currency } } : null,
+      };
+
+      if (this.isEdit) {
+        await this.store.updateRule(this.planId, this.ruleId!, { ...request, ruleId: this.ruleId! } as UpdateRuleRequest);
+        this.toast.show('PLANS.TOAST_RULE_UPDATED', 'success');
+      } else {
+        await this.store.addRule(this.planId, request);
+        this.toast.show('PLANS.TOAST_RULE_ADDED', 'success');
+      }
+      this.router.navigate(['/plans', this.planId]);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  private _buildRateTable(v: ReturnType<typeof this.form.getRawValue>) {
+    const type = Number(v.rateTable.type) as RateTableType;
+    return {
+      _schema: 1 as const,
+      type,
+      flatRate: type === RateTableType.Flat ? v.rateTable.flatRate : null,
+      tiers: type === RateTableType.Tiered
+        ? v.rateTable.tiers.map((t) => ({ from: t['from'], to: t['to'], rate: t['rate'] }))
+        : null,
+      attainmentTiers: type === RateTableType.AttainmentBased
+        ? v.rateTable.attainmentTiers.map((t) => ({ attainmentFrom: t['attainmentFrom'], attainmentTo: t['attainmentTo'], rate: t['rate'] }))
+        : null,
+    };
+  }
+
+  private _buildTrigger(v: ReturnType<typeof this.form.getRawValue>) {
+    return {
+      _schema: 1 as const,
+      logicalOperator: v.trigger.logicalOperator,
+      conditions: v.trigger.conditions.map((c) => ({
+        field: c['field'],
+        operator: Number(c['operator']),
+        value: { type: Number(c['valueType']), raw: c['valueRaw'], set: null },
+      })),
+    };
+  }
+
+  private _buildModifier(v: ReturnType<typeof this.form.getRawValue>) {
+    return {
+      _schema: 1 as const,
+      id: this.isEdit ? (this.store.selectedPlan()?.rules.find((r) => r.id === this.ruleId)?.modifier?.id ?? crypto.randomUUID()) : crypto.randomUUID(),
+      name: v.modifier.name,
+      type: Number(v.modifier.type),
+      factor: v.modifier.factor,
+      trigger: null,
+    };
+  }
+}

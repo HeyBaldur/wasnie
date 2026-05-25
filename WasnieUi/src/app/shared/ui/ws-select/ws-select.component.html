@@ -1,0 +1,75 @@
+<div [class]="hostClasses()" (keydown)="onKeydown($event)">
+  @if (label()) {
+    <label class="ws-select__label">{{ label() | translate }}</label>
+  }
+
+  <div
+    class="ws-select__trigger"
+    [class.ws-select__trigger--open]="isOpen()"
+    tabindex="0"
+    role="combobox"
+    [attr.aria-expanded]="isOpen()"
+    (click)="toggleDropdown()"
+    (focus)="isFocused.set(true)"
+    (blur)="isFocused.set(false)"
+  >
+    <span class="ws-select__value" [class.ws-select__value--placeholder]="!selectedOption()">
+      @if (selectedOption()) {
+        {{ selectedOption()!.label | translate }}
+      } @else {
+        {{ placeholder() | translate }}
+      }
+    </span>
+    <app-icon
+      name="chevron-right"
+      [size]="14"
+      class="ws-select__chevron"
+      [class.ws-select__chevron--open]="isOpen()"
+    />
+  </div>
+
+  @if (isOpen()) {
+    <div class="ws-select__dropdown">
+      @if (searchable()) {
+        <div class="ws-select__search-wrap">
+          <input
+            #searchInput
+            class="ws-select__search"
+            type="text"
+            [value]="searchQuery()"
+            (input)="onSearch($event)"
+            (click)="$event.stopPropagation()"
+          />
+        </div>
+      }
+
+      <div class="ws-select__list" role="listbox">
+        @for (opt of filteredOptions(); track opt.value; let i = $index) {
+          <div
+            class="ws-select__option"
+            [class.ws-select__option--selected]="value() === opt.value"
+            [class.ws-select__option--active]="activeIndex() === i"
+            [class.ws-select__option--disabled]="opt.disabled"
+            role="option"
+            [attr.aria-selected]="value() === opt.value"
+            (click)="select(opt); $event.stopPropagation()"
+            (mouseenter)="activeIndex.set(i)"
+          >
+            {{ opt.label | translate }}
+            @if (value() === opt.value) {
+              <app-icon name="check-circle" [size]="14" class="ws-select__check" />
+            }
+          </div>
+        }
+
+        @if (filteredOptions().length === 0) {
+          <div class="ws-select__empty">—</div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (error()) {
+    <span class="ws-select__error">{{ error() | translate }}</span>
+  }
+</div>

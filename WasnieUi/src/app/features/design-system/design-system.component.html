@@ -1,0 +1,149 @@
+<div class="ds-page">
+  <ws-page-header title="Design System" subtitle="Wasnie UI Primitives — dev only" />
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Buttons</h2>
+    <div class="ds-row">
+      <ws-button variant="primary">Primary</ws-button>
+      <ws-button variant="secondary">Secondary</ws-button>
+      <ws-button variant="ghost">Ghost</ws-button>
+      <ws-button variant="danger">Danger</ws-button>
+      <ws-button variant="link">Link</ws-button>
+      <ws-button variant="primary" [loading]="true">Loading</ws-button>
+      <ws-button variant="primary" [disabled]="true">Disabled</ws-button>
+    </div>
+    <div class="ds-row">
+      <ws-button variant="primary" size="sm">Small</ws-button>
+      <ws-button variant="primary" size="md">Medium</ws-button>
+      <ws-button variant="primary" size="lg">Large</ws-button>
+      <ws-button variant="ghost" size="sm" [iconOnly]="true">
+        <app-icon name="plus" [size]="14" />
+      </ws-button>
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Badges</h2>
+    <div class="ds-row">
+      <ws-badge variant="neutral">Neutral</ws-badge>
+      <ws-badge variant="brand">Brand</ws-badge>
+      <ws-badge variant="success" [dot]="true">Success</ws-badge>
+      <ws-badge variant="warning">Warning</ws-badge>
+      <ws-badge variant="danger">Danger</ws-badge>
+      <ws-badge variant="info">Info</ws-badge>
+    </div>
+    <div class="ds-row">
+      <ws-badge variant="success" size="sm">Small</ws-badge>
+      <ws-badge variant="success" size="md">Medium</ws-badge>
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Cards</h2>
+    <div class="ds-grid-3">
+      <ws-card variant="default" padding="md">Default card</ws-card>
+      <ws-card variant="flat" padding="md">Flat card</ws-card>
+      <ws-card variant="interactive" padding="md">Interactive card (hover me)</ws-card>
+      <ws-card variant="default" padding="md" accent="brand">Brand accent</ws-card>
+      <ws-card variant="default" padding="md" accent="success">Success accent</ws-card>
+      <ws-card variant="default" padding="md" accent="danger">Danger accent</ws-card>
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Segmented Control</h2>
+    <ws-segmented-control
+      [options]="segOptions"
+      [(value)]="segValue"
+      [translateLabels]="false"
+    />
+    <p class="ds-note">Selected: {{ segValue() }}</p>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Inputs</h2>
+    <div class="ds-grid-2">
+      <ws-input label="Text input" placeholder="Enter text…" />
+      <ws-input label="Search" type="search" prefixIcon="search" placeholder="Search…" [clearable]="true" />
+      <ws-input label="With error" placeholder="Enter value" error="VALIDATION.REQUIRED" />
+      <ws-input label="Password" type="password" placeholder="Password…" />
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Select</h2>
+    <div class="ds-grid-2">
+      <ws-select label="Currency" [options]="selectOptions" placeholder="Select currency…" />
+      <ws-select label="Searchable" [options]="selectOptions" placeholder="Search…" [searchable]="true" />
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Date Pickers</h2>
+    <div class="ds-grid-2">
+      <ws-date-picker label="Date" placeholder="DATEPICKER.SELECT_DATE" />
+      <ws-date-range-picker label="Date Range" />
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Tooltip</h2>
+    <div class="ds-row">
+      <ws-button variant="ghost" wsTooltip="This is a tooltip">Hover me</ws-button>
+      <ws-button variant="ghost" wsTooltip="Below tooltip" tooltipPlacement="bottom">Below</ws-button>
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Modal</h2>
+    <ws-button variant="primary" (click)="modalOpen.set(true)">Open Modal</ws-button>
+    <ws-modal [(isOpen)]="modalOpen" size="md">
+      <span slot="header" style="font-weight:600;font-size:16px">Modal Title</span>
+      <p>Modal body content goes here.</p>
+      <div slot="footer">
+        <ws-button variant="ghost" (click)="modalOpen.set(false)">Cancel</ws-button>
+        <ws-button variant="primary" (click)="modalOpen.set(false)">Confirm</ws-button>
+      </div>
+    </ws-modal>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Empty State</h2>
+    <ws-card variant="flat" padding="none">
+      <ws-empty-state
+        illustration="plans-empty"
+        titleKey="EMPTY_STATE.PLANS_TITLE"
+        descKey="EMPTY_STATE.PLANS_DESC"
+        actionKey="EMPTY_STATE.PLANS_ACTION"
+      />
+    </ws-card>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Table</h2>
+    <ws-table>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Row One</td>
+            <td><ws-badge variant="success" [dot]="true">Active</ws-badge></td>
+            <td>$1,200</td>
+          </tr>
+          <tr>
+            <td>Row Two</td>
+            <td><ws-badge variant="neutral">Draft</ws-badge></td>
+            <td>$800</td>
+          </tr>
+        </tbody>
+      </table>
+      <ws-table-pagination [page]="1" [totalCount]="42" (pageChange)="$event" />
+    </ws-table>
+  </div>
+</div>

@@ -1,0 +1,14 @@
+<button
+  [class]="classes()"
+  [type]="type()"
+  [disabled]="isDisabled()"
+  [routerLink]="routerLink()"
+  [attr.aria-busy]="loading() ? 'true' : null"
+>
+  @if (loading()) {
+    <span class="ws-btn__spinner" aria-hidden="true"></span>
+  }
+  <span class="ws-btn__content" [class.ws-btn__content--hidden]="loading()">
+    <ng-content />
+  </span>
+</button>
