@@ -52,9 +52,9 @@ export enum ModifierType {
 }
 
 export enum CapScope {
-  PerPeriod = 0,
-  PerTransaction = 1,
-  Total = 2,
+  PerTransaction = 0,
+  PerPeriod = 1,
+  PerPayeePerPeriod = 2,
 }
 
 export interface ConditionValue {
@@ -127,7 +127,7 @@ export interface Rule {
   name: string;
   sortOrder: number;
   isActive: boolean;
-  trigger: Trigger;
+  trigger: Trigger | null;
   measurement: Measurement;
   rateTable: RateTable;
   modifier: Modifier | null;

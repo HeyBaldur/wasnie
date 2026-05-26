@@ -1,22 +1,31 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
+import { PlansApiService } from '../services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
-import { ModalService } from '../../../shared/modals/modal.service';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
-import { Rule, MeasurementType, RateTableType } from '../models/rule.model';
-import { getPlanPermissions } from '../services/plan-permissions';
 import {
-  WsPageHeaderComponent,
+  Rule,
+  MeasurementType,
+  RateTableType,
+} from '../models/rule.model';
+import { getPlanPermissions } from '../services/plan-permissions';
+import { Assignment } from '../../assignments/models/assignment.model';
+import { PagedResult } from '../../../shared/models/pagination.models';
+import {
+  WsPageLayoutComponent,
   WsBadgeComponent,
   WsButtonComponent,
   WsTableComponent,
   WsEmptyStateComponent,
+  WsConfirmationModalComponent,
   WsTooltipDirective,
+  WsPaginationComponent,
   type BadgeVariant,
 } from '../../../shared/ui';
 
@@ -31,12 +40,14 @@ type Tab = 'rules' | 'versions' | 'assignments';
     RouterLink,
     TranslateModule,
     DateFormatPipe,
-    WsPageHeaderComponent,
+    WsPageLayoutComponent,
     WsBadgeComponent,
     WsButtonComponent,
     WsTableComponent,
     WsEmptyStateComponent,
+    WsConfirmationModalComponent,
     WsTooltipDirective,
+    WsPaginationComponent,
   ],
   templateUrl: './plan-detail.component.html',
   styleUrl: './plan-detail.component.scss',
@@ -46,14 +57,22 @@ export class PlanDetailComponent implements OnInit {
   private readonly router = inject(Router);
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
-  private readonly modal = inject(ModalService);
+  private readonly plansApi = inject(PlansApiService);
 
   readonly activeTab = signal<Tab>('rules');
   readonly planId = this.route.snapshot.paramMap.get('planId')!;
   readonly idCopied = signal(false);
+  readonly planAssignmentsResult = signal<PagedResult<Assignment> | null>(null);
+  readonly assignmentsLoading = signal(false);
+  readonly assignmentsPage = signal(1);
 
-  readonly MeasurementType = MeasurementType;
-  readonly RateTableType = RateTableType;
+  readonly activateOpen = signal(false);
+  readonly activateSaving = signal(false);
+  readonly archiveOpen = signal(false);
+  readonly archiveSaving = signal(false);
+  readonly deleteRuleOpen = signal(false);
+  readonly deleteRuleSaving = signal(false);
+  readonly pendingRule = signal<Rule | null>(null);
 
   readonly permissions = computed(() => getPlanPermissions(this.store.selectedPlan()?.status));
 
@@ -72,6 +91,22 @@ export class PlanDetailComponent implements OnInit {
 
   setTab(tab: Tab): void {
     this.activeTab.set(tab);
+    if (tab === 'assignments' && !this.planAssignmentsResult()) {
+      this.loadPlanAssignments(1);
+    }
+  }
+
+  async loadPlanAssignments(page: number): Promise<void> {
+    this.assignmentsPage.set(page);
+    this.assignmentsLoading.set(true);
+    try {
+      const data = await firstValueFrom(this.plansApi.getPlanAssignments(this.planId, { page, pageSize: 10, sortBy: 'effectivestart', sortOrder: 'desc' }));
+      this.planAssignmentsResult.set(data);
+    } catch {
+      // non-critical — tab just shows empty
+    } finally {
+      this.assignmentsLoading.set(false);
+    }
   }
 
   statusVariant(status: string): BadgeVariant {
@@ -94,37 +129,37 @@ export class PlanDetailComponent implements OnInit {
     });
   }
 
-  async onActivate(): Promise<void> {
-    const confirmed = await this.modal.confirm({
-      title: 'PLANS.CONFIRM_ACTIVATE_TITLE',
-      message: 'PLANS.CONFIRM_ACTIVATE_MSG',
-      confirmLabel: 'PLANS.ACTION_ACTIVATE',
-      cancelLabel: 'COMMON.CANCEL',
-      variant: 'default',
-    });
-    if (!confirmed) return;
+  onActivate(): void {
+    this.activateOpen.set(true);
+  }
+
+  async onConfirmActivate(): Promise<void> {
+    this.activateSaving.set(true);
     try {
       await this.store.activatePlan(this.planId);
       this.toast.show('PLANS.TOAST_ACTIVATED', 'success');
+      this.activateOpen.set(false);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.activateSaving.set(false);
     }
   }
 
-  async onArchive(): Promise<void> {
-    const confirmed = await this.modal.confirm({
-      title: 'PLANS.CONFIRM_ARCHIVE_TITLE',
-      message: 'PLANS.CONFIRM_ARCHIVE_MSG',
-      confirmLabel: 'PLANS.ACTION_ARCHIVE',
-      cancelLabel: 'COMMON.CANCEL',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+  onArchive(): void {
+    this.archiveOpen.set(true);
+  }
+
+  async onConfirmArchive(): Promise<void> {
+    this.archiveSaving.set(true);
     try {
       await this.store.archivePlan(this.planId);
       this.toast.show('PLANS.TOAST_ARCHIVED', 'success');
+      this.archiveOpen.set(false);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.archiveSaving.set(false);
     }
   }
 
@@ -138,20 +173,24 @@ export class PlanDetailComponent implements OnInit {
     }
   }
 
-  async onDeleteRule(rule: Rule): Promise<void> {
-    const confirmed = await this.modal.confirm({
-      title: 'PLANS.CONFIRM_DELETE_RULE_TITLE',
-      message: 'PLANS.CONFIRM_DELETE_RULE_MSG',
-      confirmLabel: 'COMMON.DELETE',
-      cancelLabel: 'COMMON.CANCEL',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+  onDeleteRule(rule: Rule): void {
+    this.pendingRule.set(rule);
+    this.deleteRuleOpen.set(true);
+  }
+
+  async onConfirmDeleteRule(): Promise<void> {
+    const rule = this.pendingRule();
+    if (!rule) return;
+    this.deleteRuleSaving.set(true);
     try {
       await this.store.deleteRule(this.planId, rule.id);
       this.toast.show('PLANS.TOAST_RULE_DELETED', 'success');
+      this.deleteRuleOpen.set(false);
+      this.pendingRule.set(null);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.deleteRuleSaving.set(false);
     }
   }
 

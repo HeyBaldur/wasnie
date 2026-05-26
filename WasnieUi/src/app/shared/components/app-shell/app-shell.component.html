@@ -8,4 +8,15 @@
   </div>
 </div>
 <ws-toast-container />
-<app-confirm-modal />
+
+<ws-confirmation-modal
+  [isOpen]="inactivity.warningOpen()"
+  [title]="'SESSION.WARNING_TITLE' | translate"
+  [confirmLabel]="'SESSION.STAY_SIGNED_IN' | translate"
+  [cancelLabel]="'SESSION.SIGN_OUT_NOW' | translate"
+  (confirmed)="inactivity.staySignedIn()"
+  (cancelled)="inactivity.signOutNow()"
+>
+  <p class="session-warn__body">{{ 'SESSION.WARNING_BODY' | translate }}</p>
+  <p class="session-warn__countdown">{{ inactivity.countdownDisplay() }}</p>
+</ws-confirmation-modal>

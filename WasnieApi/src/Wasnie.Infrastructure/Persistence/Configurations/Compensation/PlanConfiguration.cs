@@ -36,5 +36,6 @@ public sealed class CompensationPlanConfiguration : IEntityTypeConfiguration<Pla
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(p => new { p.TenantId, p.Name });
+        builder.HasIndex(p => new { p.TenantId, p.Status });
     }
 }

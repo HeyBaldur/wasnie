@@ -1,13 +1,16 @@
 using MediatR;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Commands.Quotas;
 
 public sealed record CreateQuotaCommand(
     Guid PayeeId,
     Guid PlanId,
+    QuotaMeasurementType MeasurementType,
     decimal Amount,
     string Currency,
     DateOnly PeriodStart,
-    DateOnly PeriodEnd) : IRequest<Result<QuotaDto>>;
+    DateOnly PeriodEnd,
+    string? Notes = null) : IRequest<Result<QuotaSummaryDto>>;

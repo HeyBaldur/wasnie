@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Wasnie.IntegrationTests.Helpers;
 using Wasnie.IntegrationTests.Infrastructure;
 
 namespace Wasnie.IntegrationTests.Plans;
@@ -129,10 +130,9 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
         var response = await _clientA.GetAsync("/api/plans");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await response.Content.ReadFromJsonAsync<List<PlanSummaryResponse>>();
-        body.Should().NotBeNull();
-        body!.Should().ContainSingle(p => p.Name == "Tenant A Plan");
-        body.Should().NotContain(p => p.Name == "Tenant B Plan");
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().ContainSingle(p => p.Name == "Tenant A Plan");
+        result.Items.Should().NotContain(p => p.Name == "Tenant B Plan");
     }
 
     [Fact]
@@ -146,10 +146,91 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
         var response = await _clientA.GetAsync("/api/plans?status=Active");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await response.Content.ReadFromJsonAsync<List<PlanSummaryResponse>>();
-        body.Should().NotBeNull();
-        body!.Should().ContainSingle(p => p.Name == "To Activate");
-        body.Should().NotContain(p => p.Name == "Draft Plan");
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().ContainSingle(p => p.Name == "To Activate");
+        result.Items.Should().NotContain(p => p.Name == "Draft Plan");
+    }
+
+    // ── Pagination ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ListPlans_DefaultPagination_ReturnsUpTo25WithMetadata()
+    {
+        for (var i = 1; i <= 30; i++)
+            await CreatePlanAsync(_clientA, $"Plan {i:D2}");
+
+        var response = await _clientA.GetAsync("/api/plans");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().HaveCount(25);
+        result.TotalCount.Should().Be(30);
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(25);
+        result.TotalPages.Should().Be(2);
+        result.HasNextPage.Should().BeTrue();
+        result.HasPreviousPage.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ListPlans_Page2_ReturnsNextSet()
+    {
+        for (var i = 1; i <= 30; i++)
+            await CreatePlanAsync(_clientA, $"Plan {i:D2}");
+
+        var response = await _clientA.GetAsync("/api/plans?page=2&pageSize=10");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().HaveCount(10);
+        result.Page.Should().Be(2);
+        result.TotalCount.Should().Be(30);
+        result.HasPreviousPage.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ListPlans_WithSearch_FiltersResults()
+    {
+        await CreatePlanAsync(_clientA, "Q1 Sales Plan");
+        await CreatePlanAsync(_clientA, "Q2 Sales Plan");
+        await CreatePlanAsync(_clientA, "Annual Bonus");
+
+        var response = await _clientA.GetAsync("/api/plans?search=Q1");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().ContainSingle(p => p.Name == "Q1 Sales Plan");
+        result.Items.Should().NotContain(p => p.Name == "Annual Bonus");
+    }
+
+    [Fact]
+    public async Task ListPlans_WithSortByNameDesc_ReturnsInDescOrder()
+    {
+        await CreatePlanAsync(_clientA, "Alpha Plan");
+        await CreatePlanAsync(_clientA, "Zebra Plan");
+        await CreatePlanAsync(_clientA, "Middle Plan");
+
+        var response = await _clientA.GetAsync("/api/plans?sortBy=name&sortOrder=desc");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().HaveCountGreaterThan(0);
+        result.Items[0].Name.Should().Be("Zebra Plan");
+    }
+
+    [Fact]
+    public async Task ListPlans_InvalidSortField_FallsBackToDefault()
+    {
+        await CreatePlanAsync(_clientA, "Alpha Plan");
+        await CreatePlanAsync(_clientA, "Zebra Plan");
+
+        var response = await _clientA.GetAsync("/api/plans?sortBy=nonexistent_field");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Default sort is name asc, so Alpha comes first
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().HaveCountGreaterThan(0);
+        result.Items[0].Name.Should().StartWith("Alpha");
     }
 
     // ── Activate Plan ─────────────────────────────────────────────────────────
@@ -372,20 +453,17 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
         await CreatePlanAsync(_clientA, "A Only Plan");
         await CreatePlanAsync(_clientB, "B Only Plan");
 
-        var aPlans = await (await _clientA.GetAsync("/api/plans"))
-            .Content.ReadFromJsonAsync<List<PlanSummaryResponse>>();
-        var bPlans = await (await _clientB.GetAsync("/api/plans"))
-            .Content.ReadFromJsonAsync<List<PlanSummaryResponse>>();
-        var aPlansAgain = await (await _clientA.GetAsync("/api/plans"))
-            .Content.ReadFromJsonAsync<List<PlanSummaryResponse>>();
+        var aPlans = await (await _clientA.GetAsync("/api/plans")).Content.ReadPagedItemsAsync<PlanSummaryResponse>();
+        var bPlans = await (await _clientB.GetAsync("/api/plans")).Content.ReadPagedItemsAsync<PlanSummaryResponse>();
+        var aPlansAgain = await (await _clientA.GetAsync("/api/plans")).Content.ReadPagedItemsAsync<PlanSummaryResponse>();
 
-        aPlans!.Should().ContainSingle(p => p.Name == "A Only Plan");
+        aPlans.Should().ContainSingle(p => p.Name == "A Only Plan");
         aPlans.Should().NotContain(p => p.Name == "B Only Plan");
 
-        bPlans!.Should().ContainSingle(p => p.Name == "B Only Plan");
+        bPlans.Should().ContainSingle(p => p.Name == "B Only Plan");
         bPlans.Should().NotContain(p => p.Name == "A Only Plan");
 
-        aPlansAgain!.Should().ContainSingle(p => p.Name == "A Only Plan");
+        aPlansAgain.Should().ContainSingle(p => p.Name == "A Only Plan");
         aPlansAgain.Should().NotContain(p => p.Name == "B Only Plan");
     }
 

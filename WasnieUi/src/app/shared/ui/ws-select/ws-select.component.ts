@@ -48,6 +48,15 @@ export class WsSelectComponent implements ControlValueAccessor {
   readonly isFocused = signal(false);
   readonly searchQuery = signal('');
   readonly activeIndex = signal(0);
+  readonly dropdownUpward = signal(false);
+  readonly constrainedListHeight = signal<number | null>(null);
+
+  readonly listMaxHeight = computed(() => {
+    const h = this.constrainedListHeight();
+    if (h === null) return null;
+    const overhead = (this.searchable() ? 44 : 0) + 24;
+    return Math.max(60, h - overhead);
+  });
 
   private readonly host = inject(ElementRef);
 
@@ -76,6 +85,34 @@ export class WsSelectComponent implements ControlValueAccessor {
 
   openDropdown(): void {
     if (this.isDisabled()) return;
+    const triggerEl = this.host.nativeElement as HTMLElement;
+    const triggerRect = triggerEl.getBoundingClientRect();
+    const estimatedHeight = Math.min(280,
+      this.filteredOptions().length * 36 + (this.searchable() ? 44 : 0) + 16
+    );
+
+    const modalDialog = triggerEl.closest('.ws-modal__dialog') as HTMLElement | null;
+    const containerBottom = modalDialog
+      ? modalDialog.getBoundingClientRect().bottom - 8
+      : window.innerHeight - 8;
+    const containerTop = modalDialog
+      ? modalDialog.getBoundingClientRect().top + 8
+      : 8;
+
+    const spaceBelow = containerBottom - triggerRect.bottom;
+    const spaceAbove = triggerRect.top - containerTop;
+
+    if (spaceBelow >= estimatedHeight) {
+      this.dropdownUpward.set(false);
+      this.constrainedListHeight.set(null);
+    } else if (spaceAbove >= estimatedHeight) {
+      this.dropdownUpward.set(true);
+      this.constrainedListHeight.set(null);
+    } else {
+      this.dropdownUpward.set(spaceAbove > spaceBelow);
+      this.constrainedListHeight.set(Math.max(spaceBelow, spaceAbove) - 8);
+    }
+
     this.isOpen.set(true);
     this.searchQuery.set('');
     this.activeIndex.set(

@@ -1,27 +1,27 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Plan, PlanSummary, PlanVersion, CreatePlanRequest } from '../models/plan.model';
-import { PlanStatus } from '../models/plan.model';
+import { Plan, PlanSummary, CreatePlanRequest } from '../models/plan.model';
 import { AddRuleRequest, Rule, UpdateRuleRequest } from '../models/rule.model';
+import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
 @Injectable({ providedIn: 'root' })
 export class PlansApiService {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/plans';
 
-  getPlans(status?: PlanStatus): Observable<PlanSummary[]> {
-    let params = new HttpParams();
-    if (status) params = params.set('status', status);
-    return this.http.get<PlanSummary[]>(this.base, { params });
+  getPlans(params?: PaginationParams): Observable<PagedResult<PlanSummary>> {
+    return this.http.get<PagedResult<PlanSummary>>(this.base, { params: buildHttpParams(params) });
   }
 
   getPlan(planId: string): Observable<Plan> {
     return this.http.get<Plan>(`${this.base}/${planId}`);
   }
 
-  getPlanVersions(planName: string): Observable<PlanVersion[]> {
-    return this.http.get<PlanVersion[]>(`${this.base}/versions/${encodeURIComponent(planName)}`);
+  getPlanVersions(planName: string, params?: PaginationParams): Observable<PagedResult<PlanSummary>> {
+    return this.http.get<PagedResult<PlanSummary>>(
+      `${this.base}/versions/${encodeURIComponent(planName)}`, { params: buildHttpParams(params) });
   }
 
   createPlan(request: CreatePlanRequest): Observable<Plan> {
@@ -54,5 +54,10 @@ export class PlansApiService {
 
   deleteRule(planId: string, ruleId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/${planId}/rules/${ruleId}`);
+  }
+
+  getPlanAssignments(planId: string, params?: PaginationParams): Observable<PagedResult<import('../../assignments/models/assignment.model').Assignment>> {
+    return this.http.get<PagedResult<import('../../assignments/models/assignment.model').Assignment>>(
+      `/api/assignments/plan/${planId}`, { params: buildHttpParams(params) });
   }
 }

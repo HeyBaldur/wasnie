@@ -1,0 +1,98 @@
+<app-shell>
+  @if (store.loading() && !store.selectedQuota()) {
+    <div class="quota-detail quota-detail--loading">
+      <span class="skeleton skeleton--title"></span>
+      <span class="skeleton skeleton--badge"></span>
+    </div>
+  } @else if (store.error()) {
+    <div class="quota-detail quota-detail--error">
+      <app-icon name="alert-circle" [size]="32" />
+      <span>{{ store.error()! | translate }}</span>
+    </div>
+  } @else if (store.selectedQuota(); as quota) {
+    <div class="quota-detail">
+      <ws-page-header
+        [title]="quota.payeeName"
+        backRoute="/quotas"
+        backLabel="QUOTAS.TITLE"
+      >
+        <div slot="actions" class="quota-detail__actions">
+          @if (quota.status === 'Draft') {
+            <ws-button variant="primary" size="sm" (click)="onActivate()">
+              <app-icon name="check-circle" [size]="14" />
+              {{ 'QUOTAS.ACTION_ACTIVATE' | translate }}
+            </ws-button>
+          }
+          @if (quota.status === 'Active') {
+            <ws-button variant="danger" size="sm" (click)="onClose()">
+              <app-icon name="x-circle" [size]="14" />
+              {{ 'QUOTAS.ACTION_CLOSE' | translate }}
+            </ws-button>
+          }
+        </div>
+
+        <div slot="kpis" class="quota-detail__meta">
+          <div class="quota-meta__badges">
+            <ws-badge [variant]="statusVariant(quota.status)">
+              {{ 'QUOTAS.STATUS_' + quota.status.toUpperCase() | translate }}
+            </ws-badge>
+            <span class="quota-code">{{ quota.payeeEmployeeCode }}</span>
+          </div>
+          <div class="quota-meta__chips">
+            <span class="meta-chip">
+              <app-icon name="calendar" [size]="13" />
+              {{ quota.periodStart }} – {{ quota.periodEnd }}
+            </span>
+            <span class="meta-chip">
+              <app-icon name="coin" [size]="13" />
+              {{ quota.amount | currencyFormat: quota.currency }}
+            </span>
+          </div>
+        </div>
+      </ws-page-header>
+
+      <div class="quota-detail__fields">
+        <div class="field-group">
+          <span class="field-label">{{ 'QUOTAS.FIELD_PAYEE' | translate }}</span>
+          <span class="field-value">
+            <a class="field-link" [routerLink]="['/payees', quota.payeeId]">{{ quota.payeeName }}</a>
+          </span>
+        </div>
+        <div class="field-group">
+          <span class="field-label">{{ 'COMMON.STATUS' | translate }}</span>
+          <ws-badge [variant]="statusVariant(quota.status)">
+            {{ 'QUOTAS.STATUS_' + quota.status.toUpperCase() | translate }}
+          </ws-badge>
+        </div>
+        <div class="field-group">
+          <span class="field-label">{{ 'QUOTAS.FIELD_PERIOD' | translate }}</span>
+          <span class="field-value field-mono">{{ quota.periodStart }} – {{ quota.periodEnd }}</span>
+        </div>
+        <div class="field-group">
+          <span class="field-label">{{ 'QUOTAS.FIELD_AMOUNT' | translate }}</span>
+          <span class="field-value field-mono">{{ quota.amount | currencyFormat: quota.currency }}</span>
+        </div>
+        <div class="field-group">
+          <span class="field-label">{{ 'COMMON.CREATED_AT' | translate }}</span>
+          <span class="field-value">{{ quota.createdAt | dateFormat }}</span>
+        </div>
+        <div class="field-group">
+          <span class="field-label">{{ 'QUOTAS.FIELD_PLAN' | translate }}</span>
+          <span class="field-value field-mono">{{ quota.planId }}</span>
+        </div>
+      </div>
+    </div>
+  }
+</app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="closeOpen"
+  [title]="'QUOTAS.CONFIRM_CLOSE_TITLE' | translate"
+  [message]="'QUOTAS.CONFIRM_CLOSE_MSG' | translate"
+  [confirmLabel]="'QUOTAS.ACTION_CLOSE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="closeSaving()"
+  (confirmed)="onConfirmClose()"
+  (cancelled)="closeOpen.set(false)"
+/>

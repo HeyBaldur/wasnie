@@ -1,0 +1,133 @@
+<form [formGroup]="form" class="mapping-step">
+  <!-- Required fields -->
+  <div class="mapping-section">
+    <h3 class="mapping-section__title">{{ 'IMPORTS.PAYEES.MAP_REQUIRED' | translate }}</h3>
+    <div class="mapping-rows">
+
+      <!-- Full name — multi-column composition builder -->
+      <div class="mapping-row mapping-row--top">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_FULL_NAME' | translate }}</span>
+          <span class="mapping-row__required">*</span>
+        </div>
+        <div class="name-composer">
+          <div class="name-composer__chips">
+            @for (col of fullNameColumns(); track $index) {
+              <span class="name-chip">
+                {{ col }}
+                <button type="button" class="name-chip__remove" (click)="removeNameColumn($index)">×</button>
+              </span>
+            }
+            @if (fullNameColumns().length === 0) {
+              <span class="name-composer__empty">{{ 'IMPORTS.PAYEES.COMPOSE_PLACEHOLDER' | translate }}</span>
+            }
+          </div>
+          @if (availableHeadersForName().length > 0) {
+            <ws-select
+              [(ngModel)]="addColumnPickerValue"
+              [ngModelOptions]="{ standalone: true }"
+              (ngModelChange)="addNameColumn($event)"
+              [options]="availableHeadersForName()"
+            />
+          }
+          @if (fullNameColumns().length > 1 && composePreview()) {
+            <p class="name-composer__preview">
+              {{ 'IMPORTS.PAYEES.COMPOSE_PREVIEW' | translate }}: <strong>{{ composePreview() }}</strong>
+            </p>
+          }
+        </div>
+      </div>
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_EMPLOYEE_CODE' | translate }}</span>
+          <span class="mapping-row__required">*</span>
+        </div>
+        <ws-select formControlName="employeeCodeColumn" [options]="columnOptions()" />
+      </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_EMAIL' | translate }}</span>
+          <span class="mapping-row__required">*</span>
+        </div>
+        <ws-select formControlName="emailColumn" [options]="columnOptions()" />
+      </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
+          <span class="mapping-row__required">*</span>
+        </div>
+        <ws-select formControlName="hireDateColumn" [options]="columnOptions()" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Optional fields -->
+  <div class="mapping-section">
+    <h3 class="mapping-section__title">{{ 'IMPORTS.PAYEES.MAP_OPTIONAL' | translate }}</h3>
+    <div class="mapping-rows">
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_ROLE' | translate }}</span>
+        </div>
+        <ws-select formControlName="roleColumn" [options]="columnOptions()" />
+      </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.PAYEES.FIELD_MANAGER_CODE' | translate }}</span>
+        </div>
+        <ws-select formControlName="managerColumn" [options]="columnOptions()" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Sample preview -->
+  @if (previewRows.length > 0 && mappedPreviewHeaders.length > 0) {
+    <div class="preview-section">
+      <h3 class="preview-section__title">{{ 'IMPORTS.PAYEES.PREVIEW_SAMPLE' | translate }}</h3>
+      <div class="preview-table-wrap">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              @for (h of mappedPreviewHeaders; track h.label) {
+                <th>{{ h.label }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of previewRows; track $index) {
+              <tr>
+                @for (h of mappedPreviewHeaders; track h.label) {
+                  <td>{{ getCellValue(row, h.cols) }}</td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+
+  @if (error()) {
+    <p class="mapping-error">
+      <app-icon name="alert-circle" [size]="14" />
+      {{ error()! | translate }}
+    </p>
+  }
+
+  <div class="mapping-actions">
+    <ws-button variant="secondary" (click)="onBack()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'COMMON.BACK' | translate }}
+    </ws-button>
+    <ws-button
+      variant="primary"
+      [disabled]="!canContinue"
+      [loading]="loading()"
+      (click)="onContinue()"
+    >
+      {{ 'IMPORTS.PAYEES.BTN_VALIDATE' | translate }}
+      <app-icon name="arrow-right" [size]="14" />
+    </ws-button>
+  </div>
+</form>

@@ -234,6 +234,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<Guid>("PayeeId")
                         .HasColumnType("uniqueidentifier");
 
@@ -257,6 +261,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PayeeId");
+
+                    b.HasIndex("TenantId", "Status");
 
                     b.HasIndex("TenantId", "PlanId", "PayeeId");
 
@@ -306,6 +314,76 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "TransactionId", "PayeeId");
 
                     b.ToTable("Credits", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Payees.Payee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("EmployeeCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateOnly>("HireDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("ManagerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("TerminationDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ManagerId");
+
+                    b.HasIndex("TenantId", "Email");
+
+                    b.HasIndex("TenantId", "EmployeeCode")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "FullName");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("Payees", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Payouts.CompensationPayout", b =>
@@ -431,13 +509,14 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "Name");
 
+                    b.HasIndex("TenantId", "Status");
+
                     b.ToTable("CompensationPlans", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Plans.Rule", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Cap")
@@ -496,6 +575,13 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int>("MeasurementType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<Guid>("PayeeId")
                         .HasColumnType("uniqueidentifier");
 
@@ -519,6 +605,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PayeeId");
+
+                    b.HasIndex("TenantId", "Status");
 
                     b.HasIndex("TenantId", "PayeeId", "PlanId");
 
@@ -580,58 +670,57 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("CompensationTransactions", (string)null);
                 });
 
-            modelBuilder.Entity("Wasnie.Domain.Entities.Payee", b =>
+            modelBuilder.Entity("Wasnie.Domain.Entities.ImportAudit", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
+                    b.Property<DateTimeOffset>("CompletedAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("CreatedCount")
+                        .HasColumnType("int");
 
-                    b.Property<string>("Email")
+                    b.Property<string>("ImportedBy")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<string>("EmployeeCode")
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ResourceType")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("FirstName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<int>("SkippedCount")
+                        .HasColumnType("int");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("LastName")
+                    b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("UpdatedBy")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Email")
-                        .IsUnique();
+                    b.HasIndex("StartedAt");
 
-                    b.ToTable("Payees", (string)null);
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("ImportAudits", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Entities.Payout", b =>
@@ -1053,6 +1142,14 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Navigation("SplitPercentage")
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Payees.Payee", b =>
+                {
+                    b.HasOne("Wasnie.Domain.Compensation.Payees.Payee", null)
+                        .WithMany()
+                        .HasForeignKey("ManagerId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Payouts.CompensationPayout", b =>

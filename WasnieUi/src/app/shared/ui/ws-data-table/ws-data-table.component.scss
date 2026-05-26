@@ -1,0 +1,100 @@
+@reference "../../../../styles.scss";
+
+.ws-dt {
+  width: 100%;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+
+  &--scrollable {
+    overflow-y: auto;
+  }
+}
+
+.ws-dt__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--font-size-13);
+}
+
+.ws-dt__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ws-dt__th {
+  background: var(--color-bg-surface-sunken);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  border-bottom: 1px solid var(--color-border-default);
+  white-space: nowrap;
+}
+
+.ws-dt__th-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ws-dt__td {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border-subtle);
+  vertical-align: middle;
+
+  &--truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 0;
+  }
+}
+
+.ws-dt__cell--right  { text-align: right; }
+.ws-dt__cell--center { text-align: center; }
+
+.ws-dt__row {
+  &:last-child .ws-dt__td { border-bottom: none; }
+
+  &--clickable {
+    cursor: pointer;
+    &:hover .ws-dt__td { background: var(--color-bg-surface-raised); }
+  }
+
+  &--skeleton .ws-dt__td { padding: var(--space-3) var(--space-4); }
+}
+
+.ws-dt__skeleton {
+  display: block;
+  height: 14px;
+  width: 70%;
+  background: linear-gradient(90deg, var(--color-bg-surface-sunken) 25%, var(--color-bg-surface-hover) 50%, var(--color-bg-surface-sunken) 75%);
+  background-size: 200% 100%;
+  animation: ws-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes ws-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ws-dt__empty-cell {
+  padding: 0;
+}
+
+.ws-dt__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}

@@ -2,13 +2,11 @@
 
 :host {
   display: block;
-  position: relative;
 }
 
 .ws-dp {
   @apply flex flex-col;
   gap: var(--space-1);
-  position: relative;
 }
 
 .ws-dp__label {
@@ -17,75 +15,109 @@
   color: var(--color-text-secondary);
 }
 
+// Relative wrapper so the popover anchors to the trigger, not label/error
+.ws-dp__anchor {
+  position: relative;
+}
+
 .ws-dp__trigger {
   @apply flex items-center;
-  gap: var(--space-2);
   height: var(--height-control-md);
   padding: 0 var(--space-3);
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
   cursor: pointer;
-  user-select: none;
+  gap: var(--space-2);
   transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  user-select: none;
 
-  &:hover:not(.ws-dp__trigger--open):not(.ws-dp__trigger--disabled) {
+  &:hover:not(.ws-dp__trigger--open):not(.ws-dp__trigger--disabled):not(.ws-dp__trigger--error) {
     border-color: var(--color-border-strong);
+  }
+
+  &--open {
+    border-color: var(--color-border-focus);
+    box-shadow: var(--shadow-focus);
+  }
+
+  &--disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  &--error {
+    border-color: var(--color-danger);
   }
 }
 
-.ws-dp__trigger--open {
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus);
-}
-
-.ws-dp__trigger--disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.ws-dp__cal-icon {
-  color: var(--color-text-tertiary);
+.ws-dp__icon {
   flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  pointer-events: none;
 }
 
-.ws-dp__display {
+.ws-dp__input {
   flex: 1;
+  min-width: 0;
   font-size: var(--font-size-14);
+  font-family: inherit;
   color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
 
-.ws-dp__display--placeholder {
-  color: var(--color-text-placeholder);
+  &::placeholder {
+    color: var(--color-text-placeholder);
+  }
+
+  &:focus {
+    cursor: text;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+  }
 }
 
 .ws-dp__chevron {
-  color: var(--color-text-tertiary);
   flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  pointer-events: none;
   transition: transform var(--transition-base);
-  transform: rotate(90deg);
+
+  &--open {
+    transform: rotate(180deg);
+  }
 }
 
-.ws-dp__chevron--open {
-  transform: rotate(-90deg);
-}
+// ── Popover ──────────────────────────────────────────────
 
 .ws-dp__popover {
   position: absolute;
   top: calc(100% + var(--space-1));
+  bottom: auto;
   left: 0;
   z-index: 500;
+  width: 100%;
+  min-width: 280px;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover);
   padding: var(--space-4);
-  min-width: 280px;
   animation: ws-dp-in var(--transition-base) ease;
+
+  &--upward {
+    top: auto;
+    bottom: calc(100% + var(--space-1));
+    animation-name: ws-dp-in-up;
+  }
 }
+
+// ── Navigation row ───────────────────────────────────────
 
 .ws-dp__nav {
   @apply flex items-center justify-between;
@@ -98,6 +130,7 @@
   height: 28px;
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
+  flex-shrink: 0;
   transition: background var(--transition-fast), color var(--transition-fast);
 
   &:hover {
@@ -111,24 +144,49 @@
   }
 }
 
-.ws-dp__nav-label {
+.ws-dp__month-btn {
+  @apply flex items-center;
+  gap: var(--space-1);
   font-size: var(--font-size-14);
   font-weight: 600;
   color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
+  padding: 4px var(--space-2);
+  transition: background var(--transition-fast);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
 }
+
+// ── Weekday header ───────────────────────────────────────
+
+.ws-dp__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: var(--space-1);
+}
+
+.ws-dp__weekday {
+  font-size: var(--font-size-11);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  padding: 4px 0;
+}
+
+// ── Date grid ────────────────────────────────────────────
 
 .ws-dp__grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 2px;
-}
-
-.ws-dp__day-head {
-  font-size: var(--font-size-11);
-  font-weight: 500;
-  text-align: center;
-  color: var(--color-text-tertiary);
-  padding: 4px 0;
 }
 
 .ws-dp__cell {
@@ -149,6 +207,11 @@
     outline: none;
     box-shadow: var(--shadow-focus);
   }
+}
+
+.ws-dp__cell--empty {
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .ws-dp__cell--today:not(.ws-dp__cell--selected) {
@@ -175,31 +238,109 @@
   font-weight: 600;
 }
 
-.ws-dp__cell--empty,
 .ws-dp__cell--disabled {
-  opacity: 0;
+  color: var(--color-text-tertiary);
+  opacity: 0.4;
+  cursor: not-allowed;
   pointer-events: none;
 }
 
+// ── Footer ───────────────────────────────────────────────
+
 .ws-dp__footer {
-  @apply flex justify-center;
+  @apply flex items-center justify-between;
   border-top: 1px solid var(--color-border-subtle);
   margin-top: var(--space-3);
   padding-top: var(--space-2);
-}
 
-.ws-dp__today-btn {
-  font-size: var(--font-size-12);
-  font-weight: 500;
-  color: var(--color-brand);
-  cursor: pointer;
-  transition: color var(--transition-fast);
-
-  &:hover {
-    color: var(--color-brand-hover);
-    text-decoration: underline;
+  &--end {
+    justify-content: flex-end;
   }
 }
+
+// ── Month / Year selector ─────────────────────────────────
+
+.ws-dp__my-nav {
+  @apply flex items-center justify-between;
+  margin-bottom: var(--space-3);
+}
+
+.ws-dp__year-range {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ws-dp__year-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.ws-dp__year-btn {
+  @apply flex items-center justify-center;
+  height: 32px;
+  font-size: var(--font-size-13);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover:not(.ws-dp__year-btn--active) {
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &--active {
+    background: var(--color-brand);
+    color: var(--color-brand-contrast);
+    font-weight: 600;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.ws-dp__divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: var(--space-3) 0;
+}
+
+.ws-dp__month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
+}
+
+.ws-dp__month-opt {
+  @apply flex items-center justify-center;
+  height: 32px;
+  font-size: var(--font-size-13);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover:not(.ws-dp__month-opt--active) {
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &--active {
+    background: var(--color-brand);
+    color: var(--color-brand-contrast);
+    font-weight: 600;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+// ── Error ─────────────────────────────────────────────────
 
 .ws-dp__error {
   font-size: var(--font-size-12);
@@ -208,5 +349,10 @@
 
 @keyframes ws-dp-in {
   from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ws-dp-in-up {
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }

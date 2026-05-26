@@ -43,6 +43,26 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPlans");
     }
 
+    public async Task ResetPayeesAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        // Delete in dependency order
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+    }
+
+    public async Task ResetImportsAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM ImportAudits");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+    }
+
     public async Task DisposeAsync()
     {
         Factory.Dispose();

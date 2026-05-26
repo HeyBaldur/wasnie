@@ -1,60 +1,100 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { firstValueFrom, Subject } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { PlansApiService } from '../services/plans.api.service';
-import { Plan, PlanSummary, PlanVersion, PlanStatus, CreatePlanRequest } from '../models/plan.model';
+import { Plan, PlanSummary, PlanStatus, CreatePlanRequest } from '../models/plan.model';
 import { PlanListParams } from '../models/plan-list.params';
 import { AddRuleRequest, Rule, UpdateRuleRequest } from '../models/rule.model';
+import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 
 @Injectable({ providedIn: 'root' })
 export class PlansStore {
   private readonly api = inject(PlansApiService);
 
-  readonly plans = signal<PlanSummary[]>([]);
   readonly selectedPlan = signal<Plan | null>(null);
-  readonly versions = signal<PlanVersion[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
-  readonly listParams = signal<PlanListParams>({
-    page: 1,
-    pageSize: 15,
-    status: null,
-    search: '',
-  });
 
-  readonly filteredPlans = computed(() => {
-    const { status, search } = this.listParams();
-    let result = this.plans();
-    if (status) result = result.filter((p) => p.status === status);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      result = result.filter((p) => p.name.toLowerCase().includes(q));
-    }
-    return result;
-  });
+  readonly page = signal(1);
+  readonly pageSize = signal(25);
+  readonly sortBy = signal('name');
+  readonly sortOrder = signal<'asc' | 'desc'>('asc');
+  readonly status = signal<PlanStatus | null>(null);
 
-  readonly totalCount = computed(() => this.filteredPlans().length);
-
-  readonly pagedPlans = computed(() => {
-    const { page, pageSize } = this.listParams();
-    const start = (page - 1) * pageSize;
-    return this.filteredPlans().slice(start, start + pageSize);
-  });
-
-  readonly totalPages = computed(() =>
-    Math.max(1, Math.ceil(this.totalCount() / this.listParams().pageSize))
+  private readonly searchSubject$ = new Subject<string>();
+  readonly search = toSignal(
+    this.searchSubject$.pipe(debounceTime(300)),
+    { initialValue: '' }
   );
 
-  async loadPlans(): Promise<void> {
+  private _rawSearch = '';
+
+  readonly pagedResult = signal<PagedResult<PlanSummary> | null>(null);
+
+  readonly plans = computed(() => this.pagedResult()?.items ?? []);
+  readonly totalCount = computed(() => this.pagedResult()?.totalCount ?? 0);
+  readonly totalPages = computed(() => this.pagedResult()?.totalPages ?? 1);
+
+  // Legacy compat
+  readonly listParams = computed<PlanListParams>(() => ({
+    page: this.page(),
+    pageSize: this.pageSize(),
+    search: this._rawSearch,
+    status: this.status(),
+  }));
+
+  readonly pagedPlans = computed(() => this.plans());
+  readonly filteredPlans = computed(() => this.plans());
+
+  // versions are still loaded all at once (small list)
+  readonly versions = signal<PlanSummary[]>([]);
+
+  constructor() {
+    effect(() => {
+      const p = this.page();
+      const ps = this.pageSize();
+      const sb = this.sortBy();
+      const so = this.sortOrder();
+      const st = this.status();
+      const srch = this.search();
+      void this._loadInternal(p, ps, sb, so, st, srch);
+    });
+  }
+
+  private async _loadInternal(
+    page: number,
+    pageSize: number,
+    sortBy: string,
+    sortOrder: 'asc' | 'desc',
+    status: PlanStatus | null,
+    search: string,
+  ): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const data = await firstValueFrom(this.api.getPlans());
-      this.plans.set(data);
+      const params: PaginationParams = {
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+        search: search || undefined,
+        filters: status ? { status } : undefined,
+      };
+      const data = await firstValueFrom(this.api.getPlans(params));
+      this.pagedResult.set(data);
     } catch {
       this.error.set('ERRORS.GENERIC');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async loadPlans(): Promise<void> {
+    await this._loadInternal(
+      this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),
+      this.status(), this.search()
+    );
   }
 
   async loadPlan(planId: string): Promise<void> {
@@ -72,8 +112,8 @@ export class PlansStore {
 
   async loadVersions(planName: string): Promise<void> {
     try {
-      const data = await firstValueFrom(this.api.getPlanVersions(planName));
-      this.versions.set(data);
+      const data = await firstValueFrom(this.api.getPlanVersions(planName, { page: 1, pageSize: 100, sortBy: 'version', sortOrder: 'desc' }));
+      this.versions.set(data.items);
     } catch {
       this.versions.set([]);
     }
@@ -81,21 +121,18 @@ export class PlansStore {
 
   async createPlan(request: CreatePlanRequest): Promise<Plan> {
     const plan = await firstValueFrom(this.api.createPlan(request));
-    this.plans.update((list) => [
-      { ...plan, activeRuleCount: 0 },
-      ...list,
-    ]);
+    await this.loadPlans();
     return plan;
   }
 
   async deletePlan(planId: string): Promise<void> {
     await firstValueFrom(this.api.deletePlan(planId));
-    this.plans.update((list) => list.filter((p) => p.id !== planId));
+    await this.loadPlans();
   }
 
   async clonePlan(planId: string): Promise<Plan> {
     const plan = await firstValueFrom(this.api.clonePlan(planId));
-    this.plans.update((list) => [{ ...plan, activeRuleCount: 0 }, ...list]);
+    await this.loadPlans();
     return plan;
   }
 
@@ -132,12 +169,47 @@ export class PlansStore {
     );
   }
 
+  setSearch(value: string): void {
+    this._rawSearch = value;
+    this.page.set(1);
+    this.searchSubject$.next(value);
+  }
+
+  setStatus(value: PlanStatus | null): void {
+    this.status.set(value);
+    this.page.set(1);
+  }
+
+  setPage(value: number): void {
+    this.page.set(value);
+  }
+
+  setPageSize(value: number): void {
+    this.pageSize.set(value);
+    this.page.set(1);
+  }
+
   updateParams(partial: Partial<PlanListParams>): void {
-    this.listParams.update((p) => ({ ...p, ...partial, page: 'page' in partial ? (partial.page ?? 1) : 1 }));
+    if ('search' in partial && partial.search !== undefined) {
+      this.setSearch(partial.search);
+    }
+    if ('status' in partial) {
+      this.status.set(partial.status ?? null);
+    }
+    if ('pageSize' in partial && partial.pageSize !== undefined) {
+      this.setPageSize(partial.pageSize);
+    }
+    if ('page' in partial && partial.page !== undefined) {
+      this.page.set(partial.page);
+    } else if ('search' in partial || 'status' in partial || 'pageSize' in partial) {
+      this.page.set(1);
+    }
   }
 
   private _patchStatus(planId: string, status: PlanStatus): void {
-    this.plans.update(list => list.map(p => p.id === planId ? { ...p, status } : p));
-    this.selectedPlan.update(p => p?.id === planId ? { ...p, status } : p);
+    this.pagedResult.update((r) => r
+      ? { ...r, items: r.items.map((p) => p.id === planId ? { ...p, status } : p) }
+      : r);
+    this.selectedPlan.update((p) => p?.id === planId ? { ...p, status } : p);
   }
 }

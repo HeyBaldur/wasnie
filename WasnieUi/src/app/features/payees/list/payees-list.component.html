@@ -1,0 +1,158 @@
+<app-shell>
+  <ws-page-layout
+    icon="users"
+    [title]="'PAYEES.TITLE' | translate"
+    [subtitle]="'PAYEES.SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="secondary" routerLink="import">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'PAYEES.ACTION_IMPORT' | translate }}
+    </ws-button>
+    <ws-button slot="actions" variant="primary" routerLink="new">
+      <app-icon name="plus" [size]="16" />
+      {{ 'PAYEES.NEW' | translate }}
+    </ws-button>
+
+    <div class="payees-list__toolbar">
+      <ws-input
+        class="payees-list__search"
+        type="search"
+        prefixIcon="search"
+        [placeholder]="'PAYEES.SEARCH_PLACEHOLDER'"
+        (valueChange)="onSearch($event)"
+      />
+      <ws-segmented-control
+        [options]="statusOptions"
+        [(value)]="statusFilter"
+      />
+    </div>
+
+    @if (!store.loading() && store.pagedPayees().length === 0 && !store.listParams().search && store.listParams().status === null) {
+      <ws-empty-state
+        illustration="payees-empty"
+        titleKey="PAYEES.EMPTY_TITLE"
+        descKey="PAYEES.EMPTY_DESCRIPTION"
+        actionKey="PAYEES.EMPTY_ACTION"
+        actionRoute="new"
+      />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'PAYEES.COL_NAME' | translate }}</th>
+              <th>{{ 'PAYEES.COL_EMAIL' | translate }}</th>
+              <th>{{ 'PAYEES.COL_STATUS' | translate }}</th>
+              <th class="col-num">{{ 'PAYEES.COL_ASSIGNMENTS' | translate }}</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (store.loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--badge"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
+                  <td></td>
+                </tr>
+              }
+            } @else if (store.pagedPayees().length === 0) {
+              <tr>
+                <td colspan="5">
+                  <ws-table-empty messageKey="PAYEES.EMPTY_FILTER_TITLE" />
+                </td>
+              </tr>
+            } @else {
+              @for (payee of store.pagedPayees(); track payee.id) {
+                <tr [routerLink]="[payee.id]">
+                  <td class="col-name">
+                    <div class="payee-identity">
+                      <span class="payee-avatar">{{ initialsFor(payee.fullName) }}</span>
+                      <div class="payee-identity__text">
+                        <span class="payee-name">{{ payee.fullName }}</span>
+                        <span class="payee-code">{{ payee.employeeCode }}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="col-secondary">{{ payee.email }}</td>
+                  <td>
+                    <ws-badge [variant]="payeeStatusVariant(payee.status)" [dot]="payee.status === PayeeStatus.Active">
+                      {{ payeeStatusKey(payee.status) | translate }}
+                    </ws-badge>
+                  </td>
+                  <td class="col-num">{{ payee.activeAssignmentCount }}</td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <div class="row-menu">
+                      <button
+                        class="row-menu__trigger"
+                        [class.row-menu__trigger--open]="openMenuId() === payee.id"
+                        type="button"
+                        (click)="toggleMenu(payee.id, $event)"
+                      >
+                        <app-icon name="more-vertical" [size]="16" />
+                      </button>
+                      @if (openMenuId() === payee.id) {
+                        <div class="row-menu__dropdown"
+                          [style.top.px]="menuPosition()!.top"
+                          [style.right.px]="menuPosition()!.right"
+                        >
+                          <a class="row-menu__item" [routerLink]="[payee.id]">
+                            <app-icon name="eye" [size]="14" />
+                            {{ 'COMMON.VIEW' | translate }}
+                          </a>
+                          @if (payee.status !== PayeeStatus.Active) {
+                            <button class="row-menu__item" type="button" (click)="onMarkActive(payee.id)">
+                              <app-icon name="check-circle" [size]="14" />
+                              {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+                            </button>
+                          }
+                          @if (payee.status === PayeeStatus.Active) {
+                            <button class="row-menu__item" type="button" (click)="onMarkOnLeave(payee.id)">
+                              <app-icon name="pause-circle" [size]="14" />
+                              {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
+                            </button>
+                          }
+                          @if (payee.status !== PayeeStatus.Terminated) {
+                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onTerminate(payee.id)">
+                              <app-icon name="x-circle" [size]="14" />
+                              {{ 'PAYEES.ACTION_TERMINATE' | translate }}
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+
+      </ws-table>
+      @if (!store.loading() && store.totalCount() > 0) {
+        <ws-pagination
+          [currentPage]="store.page()"
+          [totalPages]="store.totalPages()"
+          [totalCount]="store.totalCount()"
+          [pageSize]="store.pageSize()"
+          (pageChange)="goToPage($event)"
+          (pageSizeChange)="goToPageSize($event)"
+        />
+      }
+    }
+  </ws-page-layout>
+</app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="terminateOpen"
+  [title]="'PAYEES.TERMINATE_TITLE' | translate"
+  [message]="'PAYEES.TERMINATE_MSG' | translate"
+  [confirmLabel]="'PAYEES.ACTION_TERMINATE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="terminateSaving()"
+  (confirmed)="onConfirmTerminate()"
+  (cancelled)="terminateOpen.set(false)"
+/>

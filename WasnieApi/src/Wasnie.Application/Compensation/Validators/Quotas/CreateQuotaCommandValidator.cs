@@ -13,5 +13,6 @@ public sealed class CreateQuotaCommandValidator : AbstractValidator<CreateQuotaC
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.PeriodEnd).GreaterThanOrEqualTo(x => x.PeriodStart)
             .WithMessage("PeriodEnd must be on or after PeriodStart.");
+        RuleFor(x => x.Notes).MaximumLength(500).When(x => x.Notes is not null);
     }
 }

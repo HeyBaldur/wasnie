@@ -8,4 +8,5 @@ public sealed record AssignPlanToPayeeCommand(
     Guid PlanId,
     Guid PayeeId,
     DateOnly EffectiveStart,
-    DateOnly EffectiveEnd) : IRequest<Result<PlanAssignmentDto>>;
+    DateOnly EffectiveEnd,
+    string? Notes = null) : IRequest<Result<PlanAssignmentDto>>;

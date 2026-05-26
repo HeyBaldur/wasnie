@@ -1,0 +1,74 @@
+@if (totalCount() > 0) {
+  <div class="ws-pagination">
+    <div class="ws-pagination__info">
+      <span class="ws-pagination__range">
+        Showing {{ rangeStart() | number }}&ndash;{{ rangeEnd() | number }} of {{ totalCount() | number }}
+      </span>
+      <div class="ws-pagination__page-sizes">
+        @for (size of pageSizeOptions(); track size) {
+          <button
+            type="button"
+            class="ws-pagination__size-pill"
+            [class.ws-pagination__size-pill--active]="size === pageSize()"
+            (click)="onPageSizeChange(size)"
+          >{{ size }}</button>
+        }
+      </div>
+    </div>
+
+    @if (totalPages() > 1) {
+      <div class="ws-pagination__nav">
+        <button
+          type="button"
+          class="ws-pagination__btn"
+          [class.ws-pagination__btn--disabled]="currentPage() === 1"
+          [disabled]="currentPage() === 1"
+          (click)="goToPage(1)"
+          aria-label="First page"
+        >«</button>
+
+        <button
+          type="button"
+          class="ws-pagination__btn"
+          [class.ws-pagination__btn--disabled]="currentPage() === 1"
+          [disabled]="currentPage() === 1"
+          (click)="goToPage(currentPage() - 1)"
+          aria-label="Previous page"
+        >‹</button>
+
+        @for (item of pageNumbers(); track $index) {
+          @if (isEllipsis(item)) {
+            <span class="ws-pagination__ellipsis">…</span>
+          } @else {
+            <button
+              type="button"
+              class="ws-pagination__btn"
+              [class.ws-pagination__btn--active]="item === currentPage()"
+              (click)="goToPage(item)"
+              [attr.aria-label]="'Page ' + item"
+              [attr.aria-current]="item === currentPage() ? 'page' : null"
+            >{{ item }}</button>
+          }
+        }
+
+        <button
+          type="button"
+          class="ws-pagination__btn"
+          [class.ws-pagination__btn--disabled]="currentPage() === totalPages()"
+          [disabled]="currentPage() === totalPages()"
+          (click)="goToPage(currentPage() + 1)"
+          aria-label="Next page"
+        >›</button>
+
+        <button
+          type="button"
+          class="ws-pagination__btn"
+          [class.ws-pagination__btn--disabled]="currentPage() === totalPages()"
+          [disabled]="currentPage() === totalPages()"
+          (click)="goToPage(totalPages())"
+          aria-label="Last page"
+        >»</button>
+      </div>
+    }
+  </div>
+}

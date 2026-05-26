@@ -1,0 +1,50 @@
+@reference "../../../../styles.scss";
+
+.quota-create-page {
+  padding: var(--space-8);
+  max-width: 720px;
+}
+
+.quota-create-form {
+  @apply flex flex-col;
+  gap: var(--space-6);
+}
+
+.ws-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
+
+  &__full {
+    grid-column: 1 / -1;
+  }
+}
+
+.amount-pair {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .ws-form-grid {
+    grid-template-columns: 1fr;
+
+    &__full {
+      grid-column: 1;
+    }
+  }
+
+  .amount-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-actions {
+  @apply flex items-center justify-end;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}

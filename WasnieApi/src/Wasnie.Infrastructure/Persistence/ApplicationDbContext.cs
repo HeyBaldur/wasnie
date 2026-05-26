@@ -6,6 +6,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
+using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Quotas;
@@ -28,7 +29,8 @@ public sealed class ApplicationDbContext(
 {
     public Guid CurrentTenantId { get; } = tenantContext.TenantId;
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.Tenant> Tenants => Set<Wasnie.Domain.Entities.Tenant>();
-    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.Payee> Payees => Set<Wasnie.Domain.Entities.Payee>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.ImportAudit> ImportAudits => Set<Wasnie.Domain.Entities.ImportAudit>();
+    public Microsoft.EntityFrameworkCore.DbSet<Payee> Payees => Set<Payee>();
     public Microsoft.EntityFrameworkCore.DbSet<LegacyPlan> Plans => Set<LegacyPlan>();
     public Microsoft.EntityFrameworkCore.DbSet<LegacyTransaction> Transactions => Set<LegacyTransaction>();
     public Microsoft.EntityFrameworkCore.DbSet<LegacyPayout> Payouts => Set<LegacyPayout>();
@@ -60,8 +62,9 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new CreditConfiguration());
         builder.ApplyConfiguration(new CompensationPayoutConfiguration());
         builder.ApplyConfiguration(new PayoutLineConfiguration());
+        builder.ApplyConfiguration(new ImportAuditConfiguration());
 
-        builder.Entity<Wasnie.Domain.Entities.Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyPlan>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyTransaction>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

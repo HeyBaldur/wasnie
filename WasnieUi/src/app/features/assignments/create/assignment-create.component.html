@@ -1,0 +1,50 @@
+<app-shell>
+  <div class="assignment-create-page">
+    <ws-page-header
+      title="ASSIGNMENTS.CREATE_TITLE"
+      subtitle="ASSIGNMENTS.CREATE_SUBTITLE"
+      backRoute="/assignments"
+      backLabel="ASSIGNMENTS.TITLE"
+    />
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="assignment-create-form">
+
+      <div class="ws-form-grid">
+        <ws-select
+          class="ws-form-grid__full"
+          label="ASSIGNMENTS.FIELD_PAYEE"
+          formControlName="payeeId"
+          [options]="payeeOptions()"
+          [searchable]="true"
+          [error]="hasError('payeeId', 'required') ? 'VALIDATION.REQUIRED' : ''"
+        />
+
+        <ws-select
+          class="ws-form-grid__full"
+          label="ASSIGNMENTS.FIELD_PLAN"
+          formControlName="planId"
+          [options]="planOptions()"
+          [searchable]="true"
+          [error]="hasError('planId', 'required') ? 'VALIDATION.REQUIRED' : ''"
+        />
+
+        <ws-date-range-picker
+          class="ws-form-grid__full"
+          label="ASSIGNMENTS.FIELD_PERIOD"
+          formControlName="dateRange"
+          [error]="rangeError"
+        />
+      </div>
+
+      <div class="form-actions">
+        <ws-button variant="ghost" [routerLink]="'/assignments'">
+          {{ 'COMMON.CANCEL' | translate }}
+        </ws-button>
+        <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">
+          {{ 'ASSIGNMENTS.ACTION_CREATE' | translate }}
+        </ws-button>
+      </div>
+
+    </form>
+  </div>
+</app-shell>

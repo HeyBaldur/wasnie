@@ -47,19 +47,6 @@ public static class CompensationMapper
             rule.Cap,
             rule.Floor);
 
-    public static QuotaDto ToQuotaDto(Quota quota) =>
-        new(
-            quota.Id,
-            quota.TenantId,
-            quota.PayeeId,
-            quota.PlanId,
-            quota.Amount.Amount,
-            quota.Amount.Currency,
-            quota.Period.Start,
-            quota.Period.End,
-            quota.Status.ToString(),
-            quota.CreatedAt);
-
     public static PlanAssignmentDto ToPlanAssignmentDto(PlanAssignment assignment) =>
         new(
             assignment.Id,
@@ -71,5 +58,6 @@ public static class CompensationMapper
             assignment.EffectivePeriod.Start,
             assignment.EffectivePeriod.End,
             assignment.Status.ToString(),
+            assignment.Notes,
             assignment.CreatedAt);
 }

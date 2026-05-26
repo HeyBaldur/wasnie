@@ -1,0 +1,39 @@
+@reference "../../../../../styles.scss";
+
+.complete-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) 0;
+  text-align: center;
+}
+
+.complete-icon {
+  color: var(--color-success);
+}
+
+.complete-title {
+  font-size: var(--font-size-22);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.complete-desc {
+  font-size: var(--font-size-15);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.complete-skipped {
+  @apply flex items-center gap-2;
+  font-size: var(--font-size-14);
+  color: var(--color-warning);
+  margin: 0;
+}
+
+.complete-actions {
+  @apply flex items-center gap-3;
+  margin-top: var(--space-4);
+}

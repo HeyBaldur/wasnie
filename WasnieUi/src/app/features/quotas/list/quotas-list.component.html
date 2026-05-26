@@ -1,0 +1,148 @@
+<app-shell>
+  <ws-page-layout
+    icon="dollar-sign"
+    [title]="'QUOTAS.TITLE' | translate"
+    [subtitle]="'QUOTAS.SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="primary" routerLink="new">
+      <app-icon name="plus" [size]="16" />
+      {{ 'QUOTAS.NEW' | translate }}
+    </ws-button>
+
+    <div class="quotas-list__toolbar">
+      <ws-input
+        class="quotas-list__search"
+        type="search"
+        prefixIcon="search"
+        [placeholder]="'QUOTAS.SEARCH_PLACEHOLDER'"
+        (valueChange)="onSearch($event)"
+      />
+      <ws-segmented-control
+        [options]="statusOptions"
+        [(value)]="statusFilter"
+      />
+    </div>
+
+    @if (!store.loading() && store.pagedQuotas().length === 0 && !store.listParams().search && store.listParams().status === null) {
+      <ws-empty-state
+        illustration="quotas-empty"
+        titleKey="QUOTAS.EMPTY_TITLE"
+        descKey="QUOTAS.EMPTY_DESCRIPTION"
+        actionKey="QUOTAS.EMPTY_ACTION"
+        actionRoute="new"
+      />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'QUOTAS.COL_PAYEE' | translate }}</th>
+              <th>{{ 'QUOTAS.COL_PERIOD' | translate }}</th>
+              <th class="col-num">{{ 'QUOTAS.COL_TARGET' | translate }}</th>
+              <th>{{ 'QUOTAS.COL_STATUS' | translate }}</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (store.loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--badge"></span></td>
+                  <td></td>
+                </tr>
+              }
+            } @else if (store.pagedQuotas().length === 0) {
+              <tr>
+                <td colspan="5">
+                  <ws-table-empty messageKey="QUOTAS.EMPTY_FILTER_TITLE" />
+                </td>
+              </tr>
+            } @else {
+              @for (quota of store.pagedQuotas(); track quota.id) {
+                <tr [routerLink]="[quota.id]">
+                  <td class="col-name">
+                    <div class="payee-identity">
+                      <span class="payee-avatar">{{ initialsFor(quota.payeeName) }}</span>
+                      <div class="payee-identity__text">
+                        <span class="payee-name">{{ quota.payeeName }}</span>
+                        <span class="payee-code">{{ quota.payeeEmployeeCode }}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="col-secondary">{{ quota.periodStart | dateFormat:'short' }} – {{ quota.periodEnd | dateFormat:'short' }}</td>
+                  <td class="col-num">{{ quota.amount | currencyFormat: quota.currency }}</td>
+                  <td>
+                    <ws-badge [variant]="statusVariant(quota.status)">
+                      {{ 'QUOTAS.STATUS_' + quota.status.toUpperCase() | translate }}
+                    </ws-badge>
+                  </td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <div class="row-menu">
+                      <button
+                        class="row-menu__trigger"
+                        [class.row-menu__trigger--open]="openMenuId() === quota.id"
+                        type="button"
+                        (click)="toggleMenu(quota.id, $event)"
+                      >
+                        <app-icon name="more-vertical" [size]="16" />
+                      </button>
+                      @if (openMenuId() === quota.id) {
+                        <div class="row-menu__dropdown"
+                          [style.top.px]="menuPosition()!.top"
+                          [style.right.px]="menuPosition()!.right"
+                        >
+                          <a class="row-menu__item" [routerLink]="[quota.id]">
+                            <app-icon name="eye" [size]="14" />
+                            {{ 'COMMON.VIEW' | translate }}
+                          </a>
+                          @if (quota.status === 'Draft') {
+                            <button class="row-menu__item" type="button" (click)="onActivate(quota.id)">
+                              <app-icon name="check-circle" [size]="14" />
+                              {{ 'QUOTAS.ACTION_ACTIVATE' | translate }}
+                            </button>
+                          }
+                          @if (quota.status === 'Active') {
+                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onClose(quota.id)">
+                              <app-icon name="x-circle" [size]="14" />
+                              {{ 'QUOTAS.ACTION_CLOSE' | translate }}
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+
+      </ws-table>
+      @if (!store.loading() && store.totalCount() > 0) {
+        <ws-pagination
+          [currentPage]="store.page()"
+          [totalPages]="store.totalPages()"
+          [totalCount]="store.totalCount()"
+          [pageSize]="store.pageSize()"
+          (pageChange)="goToPage($event)"
+          (pageSizeChange)="goToPageSize($event)"
+        />
+      }
+    }
+  </ws-page-layout>
+</app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="closeOpen"
+  [title]="'QUOTAS.CONFIRM_CLOSE_TITLE' | translate"
+  [message]="'QUOTAS.CONFIRM_CLOSE_MSG' | translate"
+  [confirmLabel]="'QUOTAS.ACTION_CLOSE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="closeSaving()"
+  (confirmed)="onConfirmClose()"
+  (cancelled)="closeOpen.set(false)"
+/>

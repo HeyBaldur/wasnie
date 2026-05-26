@@ -52,6 +52,16 @@ export class AuthService {
     localStorage.removeItem('wasnie_session');
   }
 
+  forceLogout(preserveState = true): void {
+    if (preserveState) {
+      const returnUrl = window.location.pathname + window.location.search;
+      if (returnUrl.length > 1 && !returnUrl.startsWith('/auth')) {
+        sessionStorage.setItem('wasnie:return-url', returnUrl);
+      }
+    }
+    this.logout();
+  }
+
   getAccessToken(): string | null {
     return this._currentUser()?.tokens.accessToken ?? null;
   }

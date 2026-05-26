@@ -143,6 +143,7 @@
 
 .ws-btn__content {
   display: contents;
+  @apply font-semibold;
 }
 
 .ws-btn__content--hidden {

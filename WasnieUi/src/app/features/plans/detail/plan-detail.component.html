@@ -17,75 +17,71 @@
       <span>{{ store.error()! | translate }}</span>
     </div>
   } @else if (store.selectedPlan(); as plan) {
-    <div class="plan-detail">
-      <div class="plan-detail__header">
-        <ws-page-header
-          [title]="plan.name"
-          backRoute="/plans"
-          backLabel="PLANS.TITLE"
-        >
-          <div slot="actions" class="plan-detail__actions">
-            @if (permissions().canActivate) {
-              <ws-button variant="primary" size="sm" (click)="onActivate()">
-                <app-icon name="check-circle" [size]="14" />
-                {{ 'PLANS.ACTION_ACTIVATE' | translate }}
-              </ws-button>
-            }
-            @if (permissions().canArchive) {
-              <ws-button variant="danger" size="sm" (click)="onArchive()">
-                <app-icon name="archive" [size]="14" />
-                {{ 'PLANS.ACTION_ARCHIVE' | translate }}
-              </ws-button>
-            }
-            @if (permissions().canClone) {
-              <ws-button variant="secondary" size="sm" (click)="onClone()">
-                <app-icon name="copy" [size]="14" />
-                {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
-              </ws-button>
-            }
-            @if (permissions().canAddRule) {
-              <ws-button variant="primary" size="sm" (click)="goToNewRule()">
-                <app-icon name="plus" [size]="14" />
-                {{ 'PLANS.ACTION_ADD_RULE' | translate }}
-              </ws-button>
-            }
-          </div>
-          <div slot="kpis" class="plan-detail__meta">
-            <div class="plan-header__badges">
-              <ws-badge [variant]="statusVariant(plan.status)">
-                {{ 'PLANS.STATUS_' + plan.status.toUpperCase() | translate }}
-              </ws-badge>
-              <span class="version-chip">v{{ plan.version }}</span>
-              <button
-                class="plan-id-btn"
-                type="button"
-                [wsTooltip]="idCopied() ? ('COMMON.COPIED' | translate) : plan.id"
-                tooltipPlacement="bottom"
-                (click)="copyPlanId(plan.id)"
-                [attr.aria-label]="'COMMON.COPY_ID' | translate"
-              >
-                <app-icon [name]="idCopied() ? 'check-circle' : 'info'" [size]="13" />
-              </button>
-            </div>
-            @if (plan.description) {
-              <p class="plan-detail__desc">{{ plan.description }}</p>
-            }
-            <div class="plan-detail__meta-chips">
-              <span class="meta-chip">
-                <app-icon name="calendar" [size]="13" />
-                {{ plan.effectiveStart | dateFormat }} – {{ plan.effectiveEnd | dateFormat }}
-              </span>
-              <span class="meta-chip">
-                <app-icon name="currency" [size]="13" />
-                {{ plan.currency }}
-              </span>
-              <span class="meta-chip">
-                <app-icon name="user" [size]="13" />
-                {{ plan.createdBy }}
-              </span>
-            </div>
-          </div>
-        </ws-page-header>
+    <ws-page-layout
+      icon="file-text"
+      [title]="plan.name"
+      [subtitle]="plan.description || ''"
+      backLink="/plans"
+      [backLabel]="'PLANS.TITLE' | translate"
+    >
+      <div slot="actions" class="plan-detail__actions">
+        @if (permissions().canActivate) {
+          <ws-button variant="primary" size="sm" (click)="onActivate()">
+            <app-icon name="check-circle" [size]="14" />
+            {{ 'PLANS.ACTION_ACTIVATE' | translate }}
+          </ws-button>
+        }
+        @if (permissions().canArchive) {
+          <ws-button variant="danger" size="sm" (click)="onArchive()">
+            <app-icon name="archive" [size]="14" />
+            {{ 'PLANS.ACTION_ARCHIVE' | translate }}
+          </ws-button>
+        }
+        @if (permissions().canClone) {
+          <ws-button variant="secondary" size="sm" (click)="onClone()">
+            <app-icon name="copy" [size]="14" />
+            {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
+          </ws-button>
+        }
+        @if (permissions().canAddRule) {
+          <ws-button variant="primary" size="sm" (click)="goToNewRule()">
+            <app-icon name="plus" [size]="14" />
+            {{ 'PLANS.ACTION_ADD_RULE' | translate }}
+          </ws-button>
+        }
+      </div>
+
+      <div class="plan-detail__meta">
+        <div class="plan-header__badges">
+          <ws-badge [variant]="statusVariant(plan.status)">
+            {{ 'PLANS.STATUS_' + plan.status.toUpperCase() | translate }}
+          </ws-badge>
+          <span class="version-chip">v{{ plan.version }}</span>
+          <button
+            class="plan-id-btn"
+            type="button"
+            [wsTooltip]="idCopied() ? ('COMMON.COPIED' | translate) : plan.id"
+            tooltipPlacement="bottom"
+            (click)="copyPlanId(plan.id)"
+            [attr.aria-label]="'COMMON.COPY_ID' | translate"
+          >
+            <app-icon [name]="idCopied() ? 'check-circle' : 'info'" [size]="13" />
+          </button>
+        </div>
+        <div class="plan-detail__meta-chips">
+          <span class="meta-chip">
+            <app-icon name="calendar" [size]="13" />
+            {{ plan.effectiveStart | dateFormat }} – {{ plan.effectiveEnd | dateFormat }}
+          </span>
+          <span class="meta-chip">
+            <app-icon name="currency" [size]="13" />
+            {{ plan.currency }}
+          </span>
+          <span class="meta-chip">
+            <app-icon name="user" [size]="13" />
+            {{ plan.createdBy }}
+          </span>
+        </div>
       </div>
 
       <div class="plan-detail__tabs">
@@ -148,8 +144,8 @@
                     </div>
                     <div class="rule-card__actions">
                       @if (permissions().canEditRule) {
-                        <ws-button variant="ghost" size="sm" [routerLink]="['rules', rule.id]">
-                          <app-icon name="edit" [size]="13" />
+                        <ws-button variant="secondary" size="sm" [routerLink]="['rules', rule.id]">
+                          <app-icon name="pencil" [size]="13" />
                           {{ 'COMMON.EDIT' | translate }}
                         </ws-button>
                         <ws-button variant="danger" size="sm" (click)="onDeleteRule(rule)">
@@ -164,32 +160,20 @@
                       }
                     </div>
                   </div>
-                  <div class="rule-card__chips">
-                    <span class="rule-chip">
-                      <app-icon name="activity" [size]="12" />
-                      {{ measurementLabel(rule.measurement.type) | translate }}
-                    </span>
-                    <span class="rule-chip">
-                      <app-icon name="coin" [size]="12" />
-                      {{ rateTableLabel(rule.rateTable.type) | translate }}
-                    </span>
-                    @if (rule.trigger) {
-                      <span class="rule-chip">
-                        <app-icon name="target" [size]="12" />
-                        {{ 'PLANS.HAS_TRIGGER' | translate }}
-                      </span>
+                  <div class="rule-card__tags">
+                    <span class="rule-tag">{{ measurementLabel(rule.measurement.type) | translate }}</span>
+                    <span class="rule-tag">{{ rateTableLabel(rule.rateTable.type) | translate }}</span>
+                    @if (rule.trigger?.conditions?.length) {
+                      <span class="rule-tag">{{ 'PLANS.LABEL_TRIGGER' | translate }}</span>
                     }
                     @if (rule.modifier) {
-                      <span class="rule-chip">
-                        <app-icon name="trend-up" [size]="12" />
-                        {{ 'PLANS.HAS_MODIFIER' | translate }}
-                      </span>
+                      <span class="rule-tag">{{ 'PLANS.LABEL_MODIFIER' | translate }}</span>
                     }
                     @if (rule.cap) {
-                      <span class="rule-chip">
-                        <app-icon name="alert-circle" [size]="12" />
-                        {{ 'PLANS.HAS_CAP' | translate }}
-                      </span>
+                      <span class="rule-tag">{{ 'PLANS.LABEL_CAP' | translate }}</span>
+                    }
+                    @if (rule.floor && rule.floor.amount.amount > 0) {
+                      <span class="rule-tag">{{ 'PLANS.LABEL_FLOOR' | translate }}</span>
                     }
                   </div>
                 </div>
@@ -235,13 +219,98 @@
         }
 
         @if (activeTab() === 'assignments') {
-          <ws-empty-state
-            illustration="assignments-empty"
-            titleKey="PLANS.ASSIGNMENTS_EMPTY_TITLE"
-            descKey="PLANS.ASSIGNMENTS_EMPTY_DESC"
-          />
+          <div class="assignments-tab-header">
+            <ws-button variant="primary" size="sm" [routerLink]="['/assignments', 'new']" [queryParams]="{ planId: plan.id }">
+              <app-icon name="plus" [size]="14" />
+              {{ 'PLANS.ACTION_ASSIGN_PAYEE' | translate }}
+            </ws-button>
+          </div>
+          @if (assignmentsLoading()) {
+            <ws-empty-state illustration="assignments-empty" titleKey="COMMON.LOADING" />
+          } @else if ((planAssignmentsResult()?.items?.length ?? 0) === 0) {
+            <ws-empty-state
+              illustration="assignments-empty"
+              titleKey="PLANS.ASSIGNMENTS_EMPTY_TITLE"
+              descKey="PLANS.ASSIGNMENTS_EMPTY_DESC"
+            />
+          } @else {
+            <ws-table>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ 'ASSIGNMENTS.COL_PAYEE' | translate }}</th>
+                    <th>{{ 'ASSIGNMENTS.COL_PERIOD' | translate }}</th>
+                    <th>{{ 'ASSIGNMENTS.COL_STATUS' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (a of planAssignmentsResult()!.items; track a.id) {
+                    <tr>
+                      <td>
+                        <a class="payee-link" [routerLink]="['/payees', a.payeeId]">
+                          {{ a.payeeFullName }}
+                          <span class="payee-code-chip">{{ a.payeeEmployeeCode }}</span>
+                        </a>
+                      </td>
+                      <td class="col-mono">{{ a.effectiveStart }} – {{ a.effectiveEnd }}</td>
+                      <td>
+                        <ws-badge [variant]="a.status === 'Active' ? 'success' : 'neutral'">
+                          {{ 'ASSIGNMENTS.STATUS_' + a.status.toUpperCase() | translate }}
+                        </ws-badge>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </ws-table>
+            @if (planAssignmentsResult()!.totalPages > 1) {
+              <ws-pagination
+                [currentPage]="assignmentsPage()"
+                [totalPages]="planAssignmentsResult()!.totalPages"
+                [totalCount]="planAssignmentsResult()!.totalCount"
+                [pageSize]="10"
+                (pageChange)="loadPlanAssignments($event)"
+              />
+            }
+          }
         }
       </div>
-    </div>
+    </ws-page-layout>
   }
 </app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="activateOpen"
+  [title]="'PLANS.CONFIRM_ACTIVATE_TITLE' | translate"
+  [message]="'PLANS.CONFIRM_ACTIVATE_MSG' | translate"
+  [confirmLabel]="'PLANS.ACTION_ACTIVATE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="default"
+  [loading]="activateSaving()"
+  (confirmed)="onConfirmActivate()"
+  (cancelled)="activateOpen.set(false)"
+/>
+
+<ws-confirmation-modal
+  [(isOpen)]="archiveOpen"
+  [title]="'PLANS.CONFIRM_ARCHIVE_TITLE' | translate"
+  [message]="'PLANS.CONFIRM_ARCHIVE_MSG' | translate"
+  [confirmLabel]="'PLANS.ACTION_ARCHIVE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="archiveSaving()"
+  (confirmed)="onConfirmArchive()"
+  (cancelled)="archiveOpen.set(false)"
+/>
+
+<ws-confirmation-modal
+  [(isOpen)]="deleteRuleOpen"
+  [title]="'PLANS.CONFIRM_DELETE_RULE_TITLE' | translate"
+  [message]="'PLANS.CONFIRM_DELETE_RULE_MSG' | translate"
+  [confirmLabel]="'COMMON.DELETE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="deleteRuleSaving()"
+  (confirmed)="onConfirmDeleteRule()"
+  (cancelled)="deleteRuleOpen.set(false)"
+/>

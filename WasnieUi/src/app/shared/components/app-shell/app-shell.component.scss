@@ -19,3 +19,19 @@
   @apply flex-1 overflow-y-auto;
   background-color: var(--color-base);
 }
+
+.session-warn__body {
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+  line-height: 1.5;
+}
+
+.session-warn__countdown {
+  font-size: 2rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: center;
+  letter-spacing: 0.05em;
+}

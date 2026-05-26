@@ -23,15 +23,9 @@
         }
       </div>
 
-      @if (!title()) {
-        <div class="ws-modal__body">
-          <ng-content />
-        </div>
-      } @else {
-        <div class="ws-modal__body ws-modal__body--titled">
-          <ng-content />
-        </div>
-      }
+      <div class="ws-modal__body" [class.ws-modal__body--titled]="title()">
+        <ng-content />
+      </div>
 
       <div class="ws-modal__footer">
         <ng-content select="[slot=footer]" />

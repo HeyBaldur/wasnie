@@ -6,7 +6,6 @@ import { AppShellComponent } from '../../../shared/components/app-shell/app-shel
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
-import { ModalService } from '../../../shared/modals/modal.service';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { PlanStatus } from '../models/plan.model';
 import {
@@ -14,11 +13,12 @@ import {
   WsInputComponent,
   WsBadgeComponent,
   WsSegmentedControlComponent,
-  WsPageHeaderComponent,
+  WsPageLayoutComponent,
   WsTableComponent,
-  WsTablePaginationComponent,
   WsTableEmptyComponent,
   WsEmptyStateComponent,
+  WsConfirmationModalComponent,
+  WsPaginationComponent,
   type SegOption,
 } from '../../../shared/ui';
 
@@ -35,11 +35,12 @@ import {
     WsInputComponent,
     WsBadgeComponent,
     WsSegmentedControlComponent,
-    WsPageHeaderComponent,
+    WsPageLayoutComponent,
     WsTableComponent,
-    WsTablePaginationComponent,
     WsTableEmptyComponent,
     WsEmptyStateComponent,
+    WsConfirmationModalComponent,
+    WsPaginationComponent,
   ],
   templateUrl: './plans-list.component.html',
   styleUrl: './plans-list.component.scss',
@@ -47,10 +48,21 @@ import {
 export class PlansListComponent implements OnInit {
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
-  private readonly modal = inject(ModalService);
 
   readonly openMenuId = signal<string | null>(null);
   readonly menuPosition = signal<{ top: number; right: number } | null>(null);
+
+  readonly deleteOpen = signal(false);
+  readonly deleteSaving = signal(false);
+  readonly pendingDeleteId = signal<string | null>(null);
+
+  readonly activateOpen = signal(false);
+  readonly activateSaving = signal(false);
+  readonly pendingActivateId = signal<string | null>(null);
+
+  readonly archiveOpen = signal(false);
+  readonly archiveSaving = signal(false);
+  readonly pendingArchiveId = signal<string | null>(null);
 
   readonly statusOptions: SegOption[] = [
     { value: '', label: 'PLANS.FILTER_ALL' },
@@ -72,15 +84,19 @@ export class PlansListComponent implements OnInit {
   }
 
   onSearch(value: string): void {
-    this.store.updateParams({ search: value, page: 1 });
+    this.store.setSearch(value);
   }
 
   onStatusFilter(status: PlanStatus | null): void {
-    this.store.updateParams({ status, page: 1 });
+    this.store.setStatus(status);
   }
 
   goToPage(page: number): void {
-    this.store.updateParams({ page });
+    this.store.setPage(page);
+  }
+
+  goToPageSize(size: number): void {
+    this.store.setPageSize(size);
   }
 
   toggleMenu(id: string, event: Event): void {
@@ -106,21 +122,25 @@ export class PlansListComponent implements OnInit {
     this.closeMenu();
   }
 
-  async onDelete(planId: string): Promise<void> {
+  onDelete(planId: string): void {
     this.closeMenu();
-    const confirmed = await this.modal.confirm({
-      title: 'PLANS.CONFIRM_DELETE_TITLE',
-      message: 'PLANS.CONFIRM_DELETE_MSG',
-      confirmLabel: 'COMMON.DELETE',
-      cancelLabel: 'COMMON.CANCEL',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+    this.pendingDeleteId.set(planId);
+    this.deleteOpen.set(true);
+  }
+
+  async onConfirmDelete(): Promise<void> {
+    const id = this.pendingDeleteId();
+    if (!id) return;
+    this.deleteSaving.set(true);
     try {
-      await this.store.deletePlan(planId);
+      await this.store.deletePlan(id);
       this.toast.show('PLANS.TOAST_DELETED', 'success');
+      this.deleteOpen.set(false);
+      this.pendingDeleteId.set(null);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.deleteSaving.set(false);
     }
   }
 
@@ -134,39 +154,47 @@ export class PlansListComponent implements OnInit {
     }
   }
 
-  async onActivate(planId: string): Promise<void> {
+  onActivate(planId: string): void {
     this.closeMenu();
-    const confirmed = await this.modal.confirm({
-      title: 'PLANS.CONFIRM_ACTIVATE_TITLE',
-      message: 'PLANS.CONFIRM_ACTIVATE_MSG',
-      confirmLabel: 'PLANS.ACTION_ACTIVATE',
-      cancelLabel: 'COMMON.CANCEL',
-      variant: 'default',
-    });
-    if (!confirmed) return;
+    this.pendingActivateId.set(planId);
+    this.activateOpen.set(true);
+  }
+
+  async onConfirmActivate(): Promise<void> {
+    const id = this.pendingActivateId();
+    if (!id) return;
+    this.activateSaving.set(true);
     try {
-      await this.store.activatePlan(planId);
+      await this.store.activatePlan(id);
       this.toast.show('PLANS.TOAST_ACTIVATED', 'success');
+      this.activateOpen.set(false);
+      this.pendingActivateId.set(null);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.activateSaving.set(false);
     }
   }
 
-  async onArchive(planId: string): Promise<void> {
+  onArchive(planId: string): void {
     this.closeMenu();
-    const confirmed = await this.modal.confirm({
-      title: 'PLANS.CONFIRM_ARCHIVE_TITLE',
-      message: 'PLANS.CONFIRM_ARCHIVE_MSG',
-      confirmLabel: 'PLANS.ACTION_ARCHIVE',
-      cancelLabel: 'COMMON.CANCEL',
-      variant: 'danger',
-    });
-    if (!confirmed) return;
+    this.pendingArchiveId.set(planId);
+    this.archiveOpen.set(true);
+  }
+
+  async onConfirmArchive(): Promise<void> {
+    const id = this.pendingArchiveId();
+    if (!id) return;
+    this.archiveSaving.set(true);
     try {
-      await this.store.archivePlan(planId);
+      await this.store.archivePlan(id);
       this.toast.show('PLANS.TOAST_ARCHIVED', 'success');
+      this.archiveOpen.set(false);
+      this.pendingArchiveId.set(null);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.archiveSaving.set(false);
     }
   }
 

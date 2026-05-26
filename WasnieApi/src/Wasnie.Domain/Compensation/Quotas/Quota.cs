@@ -14,6 +14,8 @@ public sealed class Quota : AggregateRoot
     public Money Amount { get; private set; } = null!;
     public DateRange Period { get; private set; } = null!;
     public QuotaStatus Status { get; private set; } = QuotaStatus.Draft;
+    public QuotaMeasurementType MeasurementType { get; private set; } = QuotaMeasurementType.Revenue;
+    public string? Notes { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public string CreatedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -27,8 +29,14 @@ public sealed class Quota : AggregateRoot
         Guid planId,
         Money amount,
         DateRange period,
-        string createdBy) =>
-        new()
+        QuotaMeasurementType measurementType,
+        string createdBy,
+        string? notes = null)
+    {
+        if (notes is not null && notes.Length > 500)
+            throw new DomainException("Notes must not exceed 500 characters.");
+
+        return new Quota
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -36,12 +44,30 @@ public sealed class Quota : AggregateRoot
             PlanId = planId,
             Amount = amount,
             Period = period,
+            MeasurementType = measurementType,
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             Status = QuotaStatus.Draft,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = createdBy,
             UpdatedAt = DateTimeOffset.UtcNow,
             UpdatedBy = createdBy
         };
+    }
+
+    public void UpdateDraft(Money amount, DateRange period, QuotaMeasurementType measurementType, string? notes, string updatedBy)
+    {
+        if (Status != QuotaStatus.Draft)
+            throw new DomainException("Only Draft quotas can be updated.");
+        if (notes is not null && notes.Length > 500)
+            throw new DomainException("Notes must not exceed 500 characters.");
+
+        Amount = amount;
+        Period = period;
+        MeasurementType = measurementType;
+        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedBy = updatedBy;
+    }
 
     public void Activate(string updatedBy)
     {

@@ -1,62 +1,142 @@
-<div class="ws-dp" (click)="stopProp($event)">
+<div class="ws-dp">
   @if (label()) {
     <label class="ws-dp__label">{{ label() | translate }}</label>
   }
 
-  <div
-    class="ws-dp__trigger"
-    [class.ws-dp__trigger--open]="isOpen()"
-    [class.ws-dp__trigger--disabled]="isDisabled()"
-    (click)="open($event)"
-  >
-    <app-icon name="calendar" [size]="15" class="ws-dp__cal-icon" />
-    <span class="ws-dp__display" [class.ws-dp__display--placeholder]="!displayValue()">
-      {{ displayValue() || (placeholder() | translate) }}
-    </span>
-    <app-icon name="chevron-right" [size]="14" class="ws-dp__chevron" [class.ws-dp__chevron--open]="isOpen()" />
-  </div>
+  <div class="ws-dp__anchor">
+    <!-- Trigger row -->
+    <div
+      class="ws-dp__trigger"
+      [class.ws-dp__trigger--open]="isOpen()"
+      [class.ws-dp__trigger--disabled]="isDisabled()"
+      [class.ws-dp__trigger--error]="error() || hasInputError()"
+      (click)="onTriggerClick()"
+    >
+      <app-icon name="calendar" [size]="14" class="ws-dp__icon" />
 
-  @if (isOpen()) {
-    <div class="ws-dp__popover">
-      <div class="ws-dp__nav">
-        <button type="button" class="ws-dp__nav-btn" (click)="prevMonth()">
-          <app-icon name="chevron-left" [size]="16" />
-        </button>
-        <span class="ws-dp__nav-label">{{ monthLabel() }} {{ viewYear() }}</span>
-        <button type="button" class="ws-dp__nav-btn" (click)="nextMonth()">
-          <app-icon name="chevron-right" [size]="16" />
-        </button>
-      </div>
+      <input
+        #inputEl
+        class="ws-dp__input"
+        type="text"
+        [placeholder]="'DATEPICKER.SELECT_DATE' | translate"
+        [disabled]="isDisabled()"
+        (input)="onUserTyping()"
+        (keydown)="onInputKeydown($event)"
+        (blur)="onInputBlur()"
+        (click)="$event.stopPropagation(); onTriggerClick()"
+        autocomplete="off"
+      />
 
-      <div class="ws-dp__grid">
-        @for (key of dayKeys; track key) {
-          <span class="ws-dp__day-head">{{ key | translate }}</span>
-        }
-        @for (cell of calendarDays(); track $index) {
-          <button
-            type="button"
-            class="ws-dp__cell"
-            [class.ws-dp__cell--today]="cell.isToday"
-            [class.ws-dp__cell--selected]="cell.isSelected"
-            [class.ws-dp__cell--empty]="cell.isOtherMonth"
-            [class.ws-dp__cell--disabled]="cell.isDisabled"
-            [disabled]="cell.isDisabled"
-            (click)="selectDate(cell)"
-          >
-            @if (!cell.isOtherMonth && cell.date) {
-              {{ cell.dayNum }}
-            }
-          </button>
-        }
-      </div>
-
-      <div class="ws-dp__footer">
-        <button type="button" class="ws-dp__today-btn" (click)="selectToday()">
-          {{ 'DATEPICKER.TODAY' | translate }}
-        </button>
-      </div>
+      <app-icon
+        name="chevron-down"
+        [size]="14"
+        class="ws-dp__chevron"
+        [class.ws-dp__chevron--open]="isOpen()"
+      />
     </div>
-  }
+
+    <!-- Calendar popover -->
+    @if (isOpen()) {
+      <div
+        class="ws-dp__popover"
+        [class.ws-dp__popover--upward]="openUpward()"
+        [style]="popoverStyle()"
+        (click)="stopProp($event)"
+      >
+        <!-- ── Date grid view ── -->
+        @if (viewMode() === 'date') {
+          <div class="ws-dp__nav">
+            <button type="button" class="ws-dp__nav-btn" (click)="prevMonth()">
+              <app-icon name="chevron-left" [size]="14" />
+            </button>
+            <button type="button" class="ws-dp__month-btn" (click)="switchToMonthYear()">
+              {{ monthYearLabel() }}
+              <app-icon name="chevron-down" [size]="11" />
+            </button>
+            <button type="button" class="ws-dp__nav-btn" (click)="nextMonth()">
+              <app-icon name="chevron-right" [size]="14" />
+            </button>
+          </div>
+
+          <div class="ws-dp__weekdays">
+            @for (day of weekdayLabels(); track day) {
+              <div class="ws-dp__weekday">{{ day }}</div>
+            }
+          </div>
+
+          <div class="ws-dp__grid">
+            @for (cell of calendarDays(); track cell.key) {
+              @if (cell.isEmpty) {
+                <div class="ws-dp__cell ws-dp__cell--empty"></div>
+              } @else {
+                <button
+                  type="button"
+                  class="ws-dp__cell"
+                  [class.ws-dp__cell--today]="cell.isToday"
+                  [class.ws-dp__cell--selected]="cell.isSelected"
+                  [class.ws-dp__cell--disabled]="cell.isDisabled"
+                  [disabled]="cell.isDisabled"
+                  (click)="onDayClick(cell)"
+                >{{ cell.dayNum }}</button>
+              }
+            }
+          </div>
+
+          <div class="ws-dp__footer">
+            <ws-button variant="ghost" size="sm" (click)="selectToday()">
+              {{ 'DATEPICKER.TODAY' | translate }}
+            </ws-button>
+            <ws-button variant="ghost" size="sm" (click)="clearDate()">
+              {{ 'DATEPICKER.CLEAR' | translate }}
+            </ws-button>
+          </div>
+        }
+
+        <!-- ── Month / Year selector view ── -->
+        @if (viewMode() === 'monthYear') {
+          <div class="ws-dp__my-nav">
+            <button type="button" class="ws-dp__nav-btn" (click)="prevYearRange()">
+              <app-icon name="chevron-left" [size]="14" />
+            </button>
+            <span class="ws-dp__year-range">{{ yearRangeLabel() }}</span>
+            <button type="button" class="ws-dp__nav-btn" (click)="nextYearRange()">
+              <app-icon name="chevron-right" [size]="14" />
+            </button>
+          </div>
+
+          <div class="ws-dp__year-grid">
+            @for (year of yearGrid(); track year) {
+              <button
+                type="button"
+                class="ws-dp__year-btn"
+                [class.ws-dp__year-btn--active]="year === viewYear()"
+                (click)="selectYear(year)"
+              >{{ year }}</button>
+            }
+          </div>
+
+          <div class="ws-dp__divider"></div>
+
+          <div class="ws-dp__month-grid">
+            @for (month of monthLabels(); track $index; let i = $index) {
+              <button
+                type="button"
+                class="ws-dp__month-opt"
+                [class.ws-dp__month-opt--active]="i === viewMonth()"
+                (click)="selectMonth(i)"
+              >{{ month }}</button>
+            }
+          </div>
+
+          <div class="ws-dp__footer ws-dp__footer--end">
+            <ws-button variant="ghost" size="sm" (click)="switchToDate()">
+              {{ 'DATEPICKER.BACK' | translate }}
+            </ws-button>
+          </div>
+        }
+      </div>
+    }
+  </div>
 
   @if (error()) {
     <span class="ws-dp__error">{{ error() | translate }}</span>

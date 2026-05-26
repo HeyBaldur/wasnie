@@ -1,0 +1,25 @@
+@if (showIndicator()) {
+  <nav class="ws-wz__steps" aria-label="Progress">
+    @for (step of stepsWithState(); track step.name; let last = $last) {
+      <div class="ws-wz__step ws-wz__step--{{ step.state }}">
+        <div class="ws-wz__circle">
+          @if (step.state === 'done') {
+            <app-icon name="check" [size]="14" />
+          } @else if (step.icon) {
+            <app-icon [name]="step.icon" [size]="14" />
+          } @else {
+            {{ $index + 1 }}
+          }
+        </div>
+        <span class="ws-wz__label">{{ step.title }}</span>
+      </div>
+      @if (!last) {
+        <div class="ws-wz__line ws-wz__line--{{ step.state === 'done' ? 'done' : 'pending' }}"></div>
+      }
+    }
+  </nav>
+}
+
+<div class="ws-wz__content">
+  <ng-content />
+</div>

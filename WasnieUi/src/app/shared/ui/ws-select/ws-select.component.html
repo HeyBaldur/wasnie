@@ -29,7 +29,7 @@
   </div>
 
   @if (isOpen()) {
-    <div class="ws-select__dropdown">
+    <div class="ws-select__dropdown" [class.ws-select__dropdown--upward]="dropdownUpward()">
       @if (searchable()) {
         <div class="ws-select__search-wrap">
           <input
@@ -43,7 +43,7 @@
         </div>
       }
 
-      <div class="ws-select__list" role="listbox">
+      <div class="ws-select__list" role="listbox" [style.max-height.px]="listMaxHeight()">
         @for (opt of filteredOptions(); track opt.value; let i = $index) {
           <div
             class="ws-select__option"

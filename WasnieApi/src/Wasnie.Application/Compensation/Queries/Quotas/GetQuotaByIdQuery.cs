@@ -4,4 +4,4 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Compensation.Queries.Quotas;
 
-public sealed record GetQuotaByIdQuery(Guid QuotaId) : IRequest<Result<QuotaDto>>;
+public sealed record GetQuotaByIdQuery(Guid QuotaId) : IRequest<Result<QuotaSummaryDto>>;

@@ -3,9 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Services.Imports;
 using Wasnie.Infrastructure.Identity;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
+using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
 
@@ -29,6 +31,12 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
+
+        services.AddMemoryCache();
+        services.AddSingleton<IImportCacheService, ImportCacheService>();
+        services.AddScoped<IFileParserService, FileParserService>();
+        services.AddScoped<IPayeeImportValidationService, PayeeImportValidationService>();
+        services.AddScoped<IPayeeImportExecutionService, PayeeImportExecutionService>();
 
         services.AddIdentity<IdentityUser, IdentityRole>(options =>
             {

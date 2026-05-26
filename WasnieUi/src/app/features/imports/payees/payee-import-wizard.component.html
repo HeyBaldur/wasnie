@@ -1,0 +1,65 @@
+<app-shell>
+  <ws-page-layout
+    icon="upload"
+    title="{{ 'IMPORTS.PAYEES.TITLE' | translate }}"
+    subtitle="{{ 'IMPORTS.PAYEES.SUBTITLE' | translate }}"
+    backLink="/payees"
+    [backLabel]="'PAYEES.TITLE' | translate"
+  >
+    <ws-wizard
+      [currentStep]="currentStep()"
+      hideOnComplete="complete"
+    >
+      <ws-wizard-step
+        name="upload"
+        [title]="'IMPORTS.PAYEES.STEP_UPLOAD' | translate"
+        icon="upload"
+      />
+      <ws-wizard-step
+        name="map"
+        [title]="'IMPORTS.PAYEES.STEP_MAP' | translate"
+        icon="arrow-right-left"
+      />
+      <ws-wizard-step
+        name="preview"
+        [title]="'IMPORTS.PAYEES.STEP_PREVIEW' | translate"
+        icon="eye"
+      />
+      <ws-wizard-step
+        name="complete"
+        [title]="'IMPORTS.PAYEES.STEP_COMPLETE' | translate"
+        icon="check-circle"
+      />
+
+      @if (currentStep() === 'upload') {
+        <app-upload-step (parsed)="onParsed($event)" />
+      }
+
+      @if (currentStep() === 'map' && parseResult()) {
+        <app-mapping-step
+          [parseResult]="parseResult()!"
+          [initialMapping]="columnMapping()"
+          (validated)="onValidated($event)"
+          (back)="onBackToUpload()"
+        />
+      }
+
+      @if (currentStep() === 'preview' && parseResult() && columnMapping() && validateResponse()) {
+        <app-preview-step
+          [fileId]="parseResult()!.fileId"
+          [columnMapping]="columnMapping()!"
+          [validateResponse]="validateResponse()!"
+          (imported)="onImported($event)"
+          (back)="onBackToMap()"
+        />
+      }
+
+      @if (currentStep() === 'complete' && importResult()) {
+        <app-complete-step
+          [result]="importResult()!"
+          (importMore)="onImportMore()"
+        />
+      }
+    </ws-wizard>
+  </ws-page-layout>
+</app-shell>

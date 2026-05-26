@@ -1,0 +1,29 @@
+<div class="ws-pl" [ngClass]="'ws-pl--' + maxWidth()">
+  @if (backLink()) {
+    <a class="ws-pl__back" [routerLink]="backLink()">
+      <app-icon name="chevron-left" [size]="14" />
+      <span>{{ backLabel() }}</span>
+    </a>
+  }
+
+  <div class="ws-pl__header">
+    <div class="ws-pl__title-group">
+      <span class="ws-pl__icon">
+        <app-icon [name]="icon()" [size]="24" />
+      </span>
+      <div class="ws-pl__title-text">
+        <h1 class="ws-pl__title">{{ title() }}</h1>
+        @if (subtitle()) {
+          <p class="ws-pl__subtitle">{{ subtitle() }}</p>
+        }
+      </div>
+    </div>
+    <div class="ws-pl__actions">
+      <ng-content select="[slot=actions]" />
+    </div>
+  </div>
+
+  <div class="ws-pl__content">
+    <ng-content />
+  </div>
+</div>

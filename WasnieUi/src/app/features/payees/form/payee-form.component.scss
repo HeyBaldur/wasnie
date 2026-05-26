@@ -1,0 +1,31 @@
+@reference "../../../../styles.scss";
+
+.payee-form {
+  @apply flex flex-col gap-5;
+}
+
+.ws-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
+
+  &__full {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .ws-form-grid {
+    grid-template-columns: 1fr;
+
+    &__full {
+      grid-column: 1;
+    }
+  }
+}
+
+.form-actions {
+  @apply flex items-center justify-end gap-3;
+  padding-top: var(--space-2);
+}
