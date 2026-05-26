@@ -1,8 +1,9 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Payee, CreatePayeeRequest, UpdatePayeeRequest } from '../models/payee.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
 @Injectable({ providedIn: 'root' })
 export class PayeesApiService {
@@ -10,20 +11,7 @@ export class PayeesApiService {
   private readonly base = '/api/payees';
 
   getPayees(params?: PaginationParams): Observable<PagedResult<Payee>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.search) httpParams = httpParams.set('search', params.search);
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
-    return this.http.get<PagedResult<Payee>>(this.base, { params: httpParams });
+    return this.http.get<PagedResult<Payee>>(this.base, { params: buildHttpParams(params) });
   }
 
   getPayee(payeeId: string): Observable<Payee> {
@@ -51,36 +39,12 @@ export class PayeesApiService {
   }
 
   getPayeeAssignments(payeeId: string, params?: PaginationParams): Observable<PagedResult<import('../../assignments/models/assignment.model').Assignment>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
     return this.http.get<PagedResult<import('../../assignments/models/assignment.model').Assignment>>(
-      `${this.base}/${payeeId}/assignments`, { params: httpParams });
+      `${this.base}/${payeeId}/assignments`, { params: buildHttpParams(params) });
   }
 
   getPayeeQuotas(payeeId: string, params?: PaginationParams): Observable<PagedResult<import('../../quotas/models/quota.model').QuotaSummary>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
     return this.http.get<PagedResult<import('../../quotas/models/quota.model').QuotaSummary>>(
-      `${this.base}/${payeeId}/quotas`, { params: httpParams });
+      `${this.base}/${payeeId}/quotas`, { params: buildHttpParams(params) });
   }
 }

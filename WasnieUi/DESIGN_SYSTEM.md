@@ -4,6 +4,50 @@ Stripe-quality component library for the Wasnie SPM platform. All primitives liv
 
 ---
 
+## Surface elevation system
+
+Wasnie uses a 4-level surface elevation system to convey hierarchy:
+
+| Level | Token | Light | Dark | Usage |
+|---|---|---|---|---|
+| 0 | `--color-bg-page` | `#f6f8fb` | `#11161f` | Page canvas — set on `.shell__content` |
+| 1 | `--color-bg-surface-sunken` | `#f1f5f9` | `#0a0e15` | Inputs, internal dividers, sunken areas |
+| 2 | `--color-bg-surface` | `#ffffff` | `#161c28` | Cards, tables — primary content containers |
+| 2b | `--color-bg-surface-deep` | `#e8ecf2` | `#141b2a` | Outer container cards that hold other surface elements (tables, sub-cards). Sits visually below `--color-bg-surface-raised` so contained elements pop. |
+| 3 | `--color-bg-surface-raised` | `#f8fafc` | `#1d2432` | Modals, select dropdowns, table headers, hover states |
+
+### Rules
+
+- **Never** use `--color-bg-base` for the page background — that's for the raw HTML root; use `--color-bg-page`
+- **Never** apply `--color-bg-page` to a card or modal
+- **Cards and tables** use `--color-bg-surface` with `border: 1px solid var(--color-border-default)` + `box-shadow: var(--shadow-card)`
+- **Inputs are sunken** relative to their containing card — always use `--color-bg-surface-sunken`
+- **Modals and dropdowns** use `--color-bg-surface-raised` — in dark themes this makes them visibly higher; in light themes the shadow conveys elevation
+- **Table headers** inside card-like containers use `--color-bg-surface-sunken` for a sunken stripe
+
+### Named elevation shadows
+
+| Token | Maps to | Usage |
+|---|---|---|
+| `--shadow-card` | `--shadow-sm` | Cards, ws-table wrappers |
+| `--shadow-modal` | `--shadow-xl` | Modal dialogs |
+| `--shadow-dropdown` | `--shadow-popover` | Select dropdowns, popovers |
+
+### Theme-specific notes
+
+- **Light theme:** elevation is primarily conveyed by background (`#f6f8fb` page → `#ffffff` card) plus shadow
+- **Dark theme:** elevation is conveyed by luminance steps (deeper = darker); shadows are less effective
+- **Soft theme:** same pattern as light, with warm tan palette (`#f3eee2` page → `#fffaf0` card)
+
+### Forbidden patterns
+
+- Hardcoded color values for backgrounds in component SCSS
+- Cards visually identical to page background
+- Using `--color-bg-page` or `--color-bg-base` inside cards/modals
+- Using `--color-bg-surface` for inputs (they should be sunken, not same level as card)
+
+---
+
 ## Tokens
 
 ### Radii
@@ -900,9 +944,34 @@ store.listParams()  // { status, search, page, pageSize, ... }
 
 ### Backend contract
 
-Handlers accept `PaginationQuery` (from `Wasnie.Application.Common.Models`) via the controller's `[FromQuery] PaginationQuery pagination` parameter. Each handler maintains a **sort whitelist** and falls back to a default column for unknown `SortBy` values. Search is a case-insensitive `Contains` across designated text columns. Filters are applied via the `Filters` dictionary (e.g., `filters[status]=Active`).
+Handlers accept `PaginationQuery` (from `Wasnie.Application.Common.Models`) via the controller's `[FromQuery] PaginationQuery pagination` parameter. Each handler maintains a **sort whitelist** and falls back to a default column for unknown `SortBy` values. Search is a case-insensitive `Contains` across designated text columns. Filters use **flat query params** (e.g., `?status=Active`, `?payeeId=<guid>`).
 
 `ToPagedResultAsync()` lives in `Wasnie.Application.Common.Extensions.QueryableExtensions` and applies `Skip`/`Take` + `CountAsync` in a single async pair.
+
+### Query param format (locked — do not change)
+
+All paginated endpoints use **flat query params**. Never use nested bracket syntax.
+
+| Param | Example | Notes |
+|-------|---------|-------|
+| `page` | `?page=2` | 1-based |
+| `pageSize` | `?pageSize=25` | Default 25, max 100 |
+| `search` | `?search=alice` | Case-insensitive contains |
+| `sortBy` | `?sortBy=fullname` | Handler-specific whitelist |
+| `sortOrder` | `?sortOrder=desc` | `asc` or `desc` |
+| `status` | `?status=Active` | Enum name or integer |
+
+**Frontend:** all services import `buildHttpParams` from `src/app/shared/utils/build-http-params.ts`. Callers pass filters via `PaginationParams.filters` as a flat `Record<string, string>` — the helper serializes each key directly (e.g., `{ status: 'Active' }` → `?status=Active`).
+
+```ts
+// Correct
+getPayees({ page: 1, pageSize: 25, filters: { status: '1' } })
+// → GET /api/payees?page=1&pageSize=25&status=1
+
+// Wrong — never do this
+httpParams.set(`filters[status]`, '1')
+// → GET /api/payees?filters%5Bstatus%5D=1  ← backend ignores this
+```
 
 ---
 

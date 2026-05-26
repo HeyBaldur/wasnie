@@ -33,16 +33,12 @@ public sealed class ListPayeesHandler(IApplicationDbContext db)
         }
 
         // Filters
-        if (p.Filters != null)
-        {
-            if (p.Filters.TryGetValue("status", out var statusStr) &&
-                int.TryParse(statusStr, out var statusInt))
-                query = query.Where(x => x.Status == (PayeeStatus)statusInt);
+        if (!string.IsNullOrWhiteSpace(p.Status) &&
+            int.TryParse(p.Status, out var statusInt))
+            query = query.Where(x => x.Status == (PayeeStatus)statusInt);
 
-            if (p.Filters.TryGetValue("managerid", out var mgrIdStr) &&
-                Guid.TryParse(mgrIdStr, out var mgrId))
-                query = query.Where(x => x.ManagerId == mgrId);
-        }
+        if (p.ManagerId.HasValue)
+            query = query.Where(x => x.ManagerId == p.ManagerId);
 
         // Sort
         var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "fullname";

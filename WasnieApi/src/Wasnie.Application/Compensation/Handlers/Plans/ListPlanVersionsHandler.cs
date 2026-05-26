@@ -25,12 +25,9 @@ public sealed class ListPlanVersionsHandler(IApplicationDbContext db)
             .AsQueryable();
 
         // Filters
-        if (p.Filters != null)
-        {
-            if (p.Filters.TryGetValue("status", out var statusStr) &&
-                Enum.TryParse<Wasnie.Domain.Compensation.Plans.PlanStatus>(statusStr, ignoreCase: true, out var status))
-                query = query.Where(x => x.Status == status);
-        }
+        if (!string.IsNullOrWhiteSpace(p.Status) &&
+            Enum.TryParse<Wasnie.Domain.Compensation.Plans.PlanStatus>(p.Status, ignoreCase: true, out var status))
+            query = query.Where(x => x.Status == status);
 
         // Sort
         var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "version";

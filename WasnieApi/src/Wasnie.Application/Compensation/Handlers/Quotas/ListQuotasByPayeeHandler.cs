@@ -24,12 +24,9 @@ public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db)
             .AsQueryable();
 
         // Filters
-        if (p.Filters != null)
-        {
-            if (p.Filters.TryGetValue("status", out var statusStr) &&
-                Enum.TryParse<QuotaStatus>(statusStr, ignoreCase: true, out var status))
-                query = query.Where(x => x.Status == status);
-        }
+        if (!string.IsNullOrWhiteSpace(p.Status) &&
+            Enum.TryParse<QuotaStatus>(p.Status, ignoreCase: true, out var status))
+            query = query.Where(x => x.Status == status);
 
         // Sort
         var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);

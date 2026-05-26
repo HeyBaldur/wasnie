@@ -1,9 +1,10 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Plan, PlanSummary, CreatePlanRequest } from '../models/plan.model';
 import { AddRuleRequest, Rule, UpdateRuleRequest } from '../models/rule.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
 @Injectable({ providedIn: 'root' })
 export class PlansApiService {
@@ -11,20 +12,7 @@ export class PlansApiService {
   private readonly base = '/api/plans';
 
   getPlans(params?: PaginationParams): Observable<PagedResult<PlanSummary>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.search) httpParams = httpParams.set('search', params.search);
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
-    return this.http.get<PagedResult<PlanSummary>>(this.base, { params: httpParams });
+    return this.http.get<PagedResult<PlanSummary>>(this.base, { params: buildHttpParams(params) });
   }
 
   getPlan(planId: string): Observable<Plan> {
@@ -32,14 +20,8 @@ export class PlansApiService {
   }
 
   getPlanVersions(planName: string, params?: PaginationParams): Observable<PagedResult<PlanSummary>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-    }
-    return this.http.get<PagedResult<PlanSummary>>(`${this.base}/versions/${encodeURIComponent(planName)}`, { params: httpParams });
+    return this.http.get<PagedResult<PlanSummary>>(
+      `${this.base}/versions/${encodeURIComponent(planName)}`, { params: buildHttpParams(params) });
   }
 
   createPlan(request: CreatePlanRequest): Observable<Plan> {
@@ -75,19 +57,7 @@ export class PlansApiService {
   }
 
   getPlanAssignments(planId: string, params?: PaginationParams): Observable<PagedResult<import('../../assignments/models/assignment.model').Assignment>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
     return this.http.get<PagedResult<import('../../assignments/models/assignment.model').Assignment>>(
-      `/api/assignments/plan/${planId}`, { params: httpParams });
+      `/api/assignments/plan/${planId}`, { params: buildHttpParams(params) });
   }
 }

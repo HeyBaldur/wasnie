@@ -1,8 +1,9 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Assignment, CreateAssignmentRequest } from '../models/assignment.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
 @Injectable({ providedIn: 'root' })
 export class AssignmentsApiService {
@@ -10,52 +11,17 @@ export class AssignmentsApiService {
   private readonly base = '/api/assignments';
 
   getAssignments(params?: PaginationParams): Observable<PagedResult<Assignment>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.search) httpParams = httpParams.set('search', params.search);
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
-    return this.http.get<PagedResult<Assignment>>(this.base, { params: httpParams });
+    return this.http.get<PagedResult<Assignment>>(this.base, { params: buildHttpParams(params) });
   }
 
   getAssignmentsByPlan(planId: string, params?: PaginationParams): Observable<PagedResult<Assignment>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
-    return this.http.get<PagedResult<Assignment>>(`${this.base}/plan/${planId}`, { params: httpParams });
+    return this.http.get<PagedResult<Assignment>>(
+      `${this.base}/plan/${planId}`, { params: buildHttpParams(params) });
   }
 
   getAssignmentsByPayee(payeeId: string, params?: PaginationParams): Observable<PagedResult<Assignment>> {
-    let httpParams = new HttpParams();
-    if (params) {
-      httpParams = httpParams.set('page', String(params.page));
-      httpParams = httpParams.set('pageSize', String(params.pageSize));
-      if (params.sortBy) httpParams = httpParams.set('sortBy', params.sortBy);
-      if (params.sortOrder) httpParams = httpParams.set('sortOrder', params.sortOrder);
-      if (params.filters) {
-        Object.entries(params.filters).forEach(([key, value]) => {
-          httpParams = httpParams.set(`filters[${key}]`, value);
-        });
-      }
-    }
-    return this.http.get<PagedResult<Assignment>>(`${this.base}/payee/${payeeId}`, { params: httpParams });
+    return this.http.get<PagedResult<Assignment>>(
+      `${this.base}/payee/${payeeId}`, { params: buildHttpParams(params) });
   }
 
   createAssignment(request: CreateAssignmentRequest): Observable<Assignment> {

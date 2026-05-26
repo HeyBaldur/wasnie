@@ -27,12 +27,9 @@ public sealed class ListPayeesByPlanHandler(IApplicationDbContext db)
             .AsQueryable();
 
         // Filters
-        if (p.Filters != null)
-        {
-            if (p.Filters.TryGetValue("status", out var statusStr) &&
-                Enum.TryParse<AssignmentStatus>(statusStr, ignoreCase: true, out var status))
-                query = query.Where(x => x.Status == status);
-        }
+        if (!string.IsNullOrWhiteSpace(p.Status) &&
+            Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
+            query = query.Where(x => x.Status == status);
 
         // Sort
         var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "effectivestart";

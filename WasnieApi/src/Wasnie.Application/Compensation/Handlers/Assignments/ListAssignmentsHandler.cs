@@ -23,12 +23,9 @@ public sealed class ListAssignmentsHandler(IApplicationDbContext db)
         var query = db.PlanAssignments.AsQueryable();
 
         // Filters
-        if (p.Filters != null)
-        {
-            if (p.Filters.TryGetValue("status", out var statusStr) &&
-                Enum.TryParse<AssignmentStatus>(statusStr, ignoreCase: true, out var status))
-                query = query.Where(x => x.Status == status);
-        }
+        if (!string.IsNullOrWhiteSpace(p.Status) &&
+            Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
+            query = query.Where(x => x.Status == status);
 
         // Join with plans for planName sorting
         var joined = query.Join(

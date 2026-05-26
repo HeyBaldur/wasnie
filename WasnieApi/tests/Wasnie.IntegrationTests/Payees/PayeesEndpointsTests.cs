@@ -97,7 +97,7 @@ public sealed class PayeesEndpointsTests : IAsyncLifetime
         await _clientA.PostAsync($"/api/payees/{payee.Id}/mark-on-leave", null);
 
         // Filter for status=1 (OnLeave)
-        var response = await _clientA.GetAsync("/api/payees?filters[status]=1");
+        var response = await _clientA.GetAsync("/api/payees?status=1");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<PagedResponse<PayeeResponse>>();

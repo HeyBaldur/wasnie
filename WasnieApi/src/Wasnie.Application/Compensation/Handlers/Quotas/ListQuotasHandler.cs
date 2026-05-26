@@ -21,16 +21,12 @@ public sealed class ListQuotasHandler(IApplicationDbContext db)
         var query = db.Quotas.AsQueryable();
 
         // Filters
-        if (p.Filters != null)
-        {
-            if (p.Filters.TryGetValue("status", out var statusStr) &&
-                Enum.TryParse<QuotaStatus>(statusStr, ignoreCase: true, out var status))
-                query = query.Where(x => x.Status == status);
+        if (!string.IsNullOrWhiteSpace(p.Status) &&
+            Enum.TryParse<QuotaStatus>(p.Status, ignoreCase: true, out var status))
+            query = query.Where(x => x.Status == status);
 
-            if (p.Filters.TryGetValue("payeeid", out var payeeIdStr) &&
-                Guid.TryParse(payeeIdStr, out var payeeId))
-                query = query.Where(x => x.PayeeId == payeeId);
-        }
+        if (p.PayeeId.HasValue)
+            query = query.Where(x => x.PayeeId == p.PayeeId);
 
         // Join with payees for search / sort
         var joined = query.Join(
