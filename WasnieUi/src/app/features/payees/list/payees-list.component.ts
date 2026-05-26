@@ -1,0 +1,189 @@
+import { Component, HostListener, inject, OnInit, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { TranslateModule } from '@ngx-translate/core';
+import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { PayeesStore } from '../state/payees.store';
+import { ToastService } from '../../../shared/services/toast.service';
+import { extractApiError } from '../../../shared/utils/api-error';
+import { PayeeStatus } from '../models/payee.model';
+import {
+  WsButtonComponent,
+  WsInputComponent,
+  WsBadgeComponent,
+  WsSegmentedControlComponent,
+  WsPageLayoutComponent,
+  WsTableComponent,
+  WsTableEmptyComponent,
+  WsEmptyStateComponent,
+  WsConfirmationModalComponent,
+  WsPaginationComponent,
+  type SegOption,
+  type BadgeVariant,
+} from '../../../shared/ui';
+
+@Component({
+  selector: 'app-payees-list',
+  standalone: true,
+  imports: [
+    AppShellComponent,
+    IconComponent,
+    RouterLink,
+    TranslateModule,
+    WsButtonComponent,
+    WsInputComponent,
+    WsBadgeComponent,
+    WsSegmentedControlComponent,
+    WsPageLayoutComponent,
+    WsTableComponent,
+    WsTableEmptyComponent,
+    WsEmptyStateComponent,
+    WsConfirmationModalComponent,
+    WsPaginationComponent,
+  ],
+  templateUrl: './payees-list.component.html',
+  styleUrl: './payees-list.component.scss',
+})
+export class PayeesListComponent implements OnInit {
+  readonly store = inject(PayeesStore);
+  private readonly toast = inject(ToastService);
+
+  readonly PayeeStatus = PayeeStatus;
+  readonly openMenuId = signal<string | null>(null);
+  readonly menuPosition = signal<{ top: number; right: number } | null>(null);
+
+  readonly terminateOpen = signal(false);
+  readonly terminateSaving = signal(false);
+  readonly pendingTerminateId = signal<string | null>(null);
+
+  readonly statusOptions: SegOption[] = [
+    { value: '', label: 'PAYEES.FILTER_ALL' },
+    { value: String(PayeeStatus.Active), label: 'PAYEES.STATUS_ACTIVE' },
+    { value: String(PayeeStatus.OnLeave), label: 'PAYEES.STATUS_ON_LEAVE' },
+    { value: String(PayeeStatus.Terminated), label: 'PAYEES.STATUS_TERMINATED' },
+  ];
+
+  get statusFilter(): string {
+    const s = this.store.listParams().status;
+    return s === null ? '' : String(s);
+  }
+
+  set statusFilter(value: string) {
+    this.onStatusFilter(value === '' ? null : (Number(value) as PayeeStatus));
+  }
+
+  ngOnInit(): void {
+    this.store.loadPayees();
+  }
+
+  onSearch(value: string): void {
+    this.store.setSearch(value);
+  }
+
+  onStatusFilter(status: PayeeStatus | null): void {
+    this.store.setStatus(status);
+  }
+
+  goToPage(page: number): void {
+    this.store.setPage(page);
+  }
+
+  goToPageSize(size: number): void {
+    this.store.setPageSize(size);
+  }
+
+  toggleMenu(id: string, event: Event): void {
+    event.stopPropagation();
+    const isOpening = this.openMenuId() !== id;
+    this.openMenuId.update((cur) => (cur === id ? null : id));
+    if (isOpening) {
+      const btn = event.currentTarget as HTMLElement;
+      const rect = btn.getBoundingClientRect();
+      this.menuPosition.set({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    } else {
+      this.menuPosition.set(null);
+    }
+  }
+
+  closeMenu(): void {
+    this.openMenuId.set(null);
+    this.menuPosition.set(null);
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.closeMenu();
+  }
+
+  async onMarkActive(payeeId: string): Promise<void> {
+    this.closeMenu();
+    try {
+      await this.store.markAsActive(payeeId);
+      this.toast.show('PAYEES.TOAST_MARKED_ACTIVE', 'success');
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    }
+  }
+
+  async onMarkOnLeave(payeeId: string): Promise<void> {
+    this.closeMenu();
+    try {
+      await this.store.markAsOnLeave(payeeId);
+      this.toast.show('PAYEES.TOAST_MARKED_ON_LEAVE', 'success');
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    }
+  }
+
+  onTerminate(payeeId: string): void {
+    this.closeMenu();
+    this.pendingTerminateId.set(payeeId);
+    this.terminateOpen.set(true);
+  }
+
+  async onConfirmTerminate(): Promise<void> {
+    const id = this.pendingTerminateId();
+    if (!id) return;
+    this.terminateSaving.set(true);
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      await this.store.markAsTerminated(id, today);
+      this.toast.show('PAYEES.TOAST_TERMINATED', 'success');
+      this.terminateOpen.set(false);
+      this.pendingTerminateId.set(null);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.terminateSaving.set(false);
+    }
+  }
+
+  payeeStatusVariant(status: PayeeStatus): BadgeVariant {
+    switch (status) {
+      case PayeeStatus.Active: return 'success';
+      case PayeeStatus.OnLeave: return 'warning';
+      case PayeeStatus.Terminated: return 'neutral';
+    }
+  }
+
+  payeeStatusKey(status: PayeeStatus): string {
+    switch (status) {
+      case PayeeStatus.Active: return 'PAYEES.STATUS_ACTIVE';
+      case PayeeStatus.OnLeave: return 'PAYEES.STATUS_ON_LEAVE';
+      case PayeeStatus.Terminated: return 'PAYEES.STATUS_TERMINATED';
+    }
+  }
+
+  get skeletonRows(): number[] {
+    return Array.from({ length: 8 }, (_, i) => i);
+  }
+
+  initialsFor(name: string): string {
+    return name
+      .split(' ')
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase();
+  }
+}

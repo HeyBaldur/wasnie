@@ -1,0 +1,54 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="payee-form">
+
+  <div class="ws-form-grid">
+    <ws-input
+      class="ws-form-grid__full"
+      label="PAYEES.FIELD_FULL_NAME"
+      formControlName="fullName"
+      [error]="fullNameError"
+    />
+
+    <ws-input
+      label="PAYEES.FIELD_EMPLOYEE_CODE"
+      formControlName="employeeCode"
+      [error]="hasError('employeeCode', 'required') ? 'VALIDATION.REQUIRED' : ''"
+    />
+
+    <ws-input
+      type="email"
+      label="PAYEES.FIELD_EMAIL"
+      formControlName="email"
+      [error]="hasError('email', 'required') ? 'VALIDATION.REQUIRED' : hasError('email', 'email') ? 'VALIDATION.EMAIL' : ''"
+    />
+
+    <ws-input
+      label="PAYEES.FIELD_ROLE"
+      formControlName="role"
+    />
+
+    <ws-date-picker
+      [label]="'PAYEES.FIELD_HIRE_DATE'"
+      formControlName="hireDate"
+      [error]="hasError('hireDate', 'required') ? 'VALIDATION.REQUIRED' : ''"
+    />
+
+    <ws-select
+      class="ws-form-grid__full"
+      label="PAYEES.FIELD_MANAGER"
+      formControlName="managerId"
+      [options]="managerOptions()"
+      [searchable]="true"
+      [placeholder]="'PAYEES.FIELD_MANAGER_PLACEHOLDER'"
+    />
+  </div>
+
+  <div class="form-actions">
+    <ws-button variant="ghost" type="button" (click)="onCancel()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">
+      {{ (isEditMode() ? 'COMMON.SAVE' : 'PAYEES.ACTION_CREATE') | translate }}
+    </ws-button>
+  </div>
+
+</form>

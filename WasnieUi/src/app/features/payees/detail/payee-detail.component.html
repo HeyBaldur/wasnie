@@ -1,0 +1,288 @@
+<app-shell>
+  @if (store.loading() && !store.selectedPayee()) {
+    <div class="payee-detail payee-detail--loading">
+      <span class="skeleton skeleton--title"></span>
+    </div>
+  } @else if (store.error()) {
+    <div class="payee-detail payee-detail--error">
+      <app-icon name="alert-circle" [size]="32" />
+      <span>{{ store.error()! | translate }}</span>
+    </div>
+  } @else if (store.selectedPayee(); as payee) {
+    <ws-page-layout
+      icon="user"
+      [title]="payee.fullName"
+      [subtitle]="payee.role || payee.employeeCode"
+      backLink="/payees"
+      [backLabel]="'PAYEES.TITLE' | translate"
+    >
+      <div slot="actions" class="payee-detail__actions">
+        <ws-badge [variant]="payeeStatusVariant(payee.status)" [dot]="payee.status === PayeeStatus.Active">
+          {{ payeeStatusKey(payee.status) | translate }}
+        </ws-badge>
+        <ws-button variant="secondary" size="sm" (click)="openEdit()">
+          <app-icon name="edit" [size]="14" />
+          {{ 'COMMON.EDIT' | translate }}
+        </ws-button>
+        @if (payee.status !== PayeeStatus.Active) {
+          <ws-button variant="primary" size="sm" (click)="onMarkActive()">
+            <app-icon name="check-circle" [size]="14" />
+            {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+          </ws-button>
+        }
+        @if (payee.status === PayeeStatus.Active) {
+          <ws-button variant="secondary" size="sm" (click)="onMarkOnLeave()">
+            <app-icon name="pause-circle" [size]="14" />
+            {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
+          </ws-button>
+        }
+        @if (payee.status !== PayeeStatus.Terminated) {
+          <ws-button variant="danger" size="sm" (click)="openTerminate()">
+            <app-icon name="x-circle" [size]="14" />
+            {{ 'PAYEES.ACTION_TERMINATE' | translate }}
+          </ws-button>
+        }
+      </div>
+
+      <div class="payee-detail__tabs">
+        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'profile'" (click)="setTab('profile')">
+          {{ 'PAYEES.DETAIL_TAB_PROFILE' | translate }}
+        </button>
+        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'assignments'" (click)="setTab('assignments')">
+          {{ 'PAYEES.DETAIL_TAB_ASSIGNMENTS' | translate }}
+        </button>
+        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'quotas'" (click)="setTab('quotas')">
+          {{ 'PAYEES.DETAIL_TAB_QUOTAS' | translate }}
+        </button>
+        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'activity'" (click)="setTab('activity')">
+          {{ 'PAYEES.DETAIL_TAB_ACTIVITY' | translate }}
+        </button>
+      </div>
+
+      <div class="payee-detail__body">
+
+        @if (activeTab() === 'profile') {
+          <div class="profile-grid">
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_EMPLOYEE_CODE' | translate }}</span>
+              <span class="profile-field__value mono">{{ payee.employeeCode }}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_EMAIL' | translate }}</span>
+              <span class="profile-field__value">{{ payee.email }}</span>
+            </div>
+            @if (payee.role) {
+              <div class="profile-field">
+                <span class="profile-field__label">{{ 'PAYEES.FIELD_ROLE' | translate }}</span>
+                <span class="profile-field__value">{{ payee.role }}</span>
+              </div>
+            }
+            @if (payee.managerName) {
+              <div class="profile-field">
+                <span class="profile-field__label">{{ 'PAYEES.FIELD_MANAGER' | translate }}</span>
+                <span class="profile-field__value">{{ payee.managerName }}</span>
+              </div>
+            }
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
+              <span class="profile-field__value">{{ payee.hireDate | dateFormat }}</span>
+            </div>
+            @if (payee.terminationDate) {
+              <div class="profile-field">
+                <span class="profile-field__label">{{ 'PAYEES.FIELD_TERMINATION_DATE' | translate }}</span>
+                <span class="profile-field__value">{{ payee.terminationDate | dateFormat }}</span>
+              </div>
+            }
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'COMMON.STATUS' | translate }}</span>
+              <span class="profile-field__value">
+                <ws-badge [variant]="payeeStatusVariant(payee.status)">
+                  {{ payeeStatusKey(payee.status) | translate }}
+                </ws-badge>
+              </span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.COL_ASSIGNMENTS' | translate }}</span>
+              <span class="profile-field__value mono">{{ payee.activeAssignmentCount }}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'COMMON.CREATED_AT' | translate }}</span>
+              <span class="profile-field__value">{{ payee.createdAt | dateFormat }}</span>
+            </div>
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'COMMON.UPDATED_AT' | translate }}</span>
+              <span class="profile-field__value">{{ payee.updatedAt | dateFormat }}</span>
+            </div>
+          </div>
+        }
+
+        @if (activeTab() === 'assignments') {
+          <div class="tab-content">
+            <div class="tab-content__header">
+              <ws-button variant="primary" size="sm" [routerLink]="['/assignments/new']" [queryParams]="{ payeeId: payee.id }">
+                {{ 'ASSIGNMENTS.NEW' | translate }}
+              </ws-button>
+            </div>
+            <ws-table>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ 'ASSIGNMENTS.COL_PLAN' | translate }}</th>
+                    <th>{{ 'ASSIGNMENTS.COL_PERIOD' | translate }}</th>
+                    <th>{{ 'ASSIGNMENTS.COL_STATUS' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (assignmentsLoading()) {
+                    @for (row of [0,1,2]; track row) {
+                      <tr class="skeleton-row">
+                        <td><span class="skeleton skeleton--text-wide"></span></td>
+                        <td><span class="skeleton skeleton--text"></span></td>
+                        <td><span class="skeleton skeleton--badge"></span></td>
+                      </tr>
+                    }
+                  } @else if ((payeeAssignmentsResult()?.items?.length ?? 0) === 0) {
+                    <tr>
+                      <td colspan="3">
+                        <ws-table-empty messageKey="PAYEES.ASSIGNMENTS_TAB_HINT" />
+                      </td>
+                    </tr>
+                  } @else {
+                    @for (a of payeeAssignmentsResult()!.items; track a.id) {
+                      <tr>
+                        <td>
+                          <a class="plan-link" [routerLink]="['/plans', a.planId]">
+                            {{ a.planName }}
+                            <span class="plan-version">v{{ a.planVersion }}</span>
+                          </a>
+                        </td>
+                        <td class="col-secondary">{{ a.effectiveStart | dateFormat }} – {{ a.effectiveEnd | dateFormat }}</td>
+                        <td>
+                          <ws-badge [variant]="assignmentStatusVariant(a.status)">
+                            {{ 'ASSIGNMENTS.STATUS_' + a.status.toUpperCase() | translate }}
+                          </ws-badge>
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </ws-table>
+            @if (payeeAssignmentsResult() && payeeAssignmentsResult()!.totalPages > 1) {
+              <ws-pagination
+                [currentPage]="assignmentsPage()"
+                [totalPages]="payeeAssignmentsResult()!.totalPages"
+                [totalCount]="payeeAssignmentsResult()!.totalCount"
+                [pageSize]="10"
+                (pageChange)="loadPayeeAssignments($event)"
+              />
+            }
+          </div>
+        }
+
+        @if (activeTab() === 'quotas') {
+          <div class="tab-content">
+            <div class="tab-content__header">
+              <ws-button variant="primary" size="sm" [routerLink]="['/quotas/new']" [queryParams]="{ payeeId: payee.id }">
+                {{ 'QUOTAS.NEW' | translate }}
+              </ws-button>
+            </div>
+            <ws-table>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ 'QUOTAS.COL_PERIOD' | translate }}</th>
+                    <th class="col-num">{{ 'QUOTAS.COL_TARGET' | translate }}</th>
+                    <th>{{ 'QUOTAS.COL_STATUS' | translate }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (quotasLoading()) {
+                    @for (row of [0,1,2]; track row) {
+                      <tr class="skeleton-row">
+                        <td><span class="skeleton skeleton--text"></span></td>
+                        <td><span class="skeleton skeleton--text"></span></td>
+                        <td><span class="skeleton skeleton--badge"></span></td>
+                      </tr>
+                    }
+                  } @else if ((payeeQuotasResult()?.items?.length ?? 0) === 0) {
+                    <tr>
+                      <td colspan="3">
+                        <ws-table-empty messageKey="PAYEES.QUOTAS_TAB_HINT" />
+                      </td>
+                    </tr>
+                  } @else {
+                    @for (q of payeeQuotasResult()!.items; track q.id) {
+                      <tr [routerLink]="['/quotas', q.id]">
+                        <td class="col-secondary">{{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}</td>
+                        <td class="col-num">{{ q.amount | currencyFormat: q.currency }}</td>
+                        <td>
+                          <ws-badge [variant]="quotaStatusVariant(q.status)">
+                            {{ 'QUOTAS.STATUS_' + q.status.toUpperCase() | translate }}
+                          </ws-badge>
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </ws-table>
+            @if (payeeQuotasResult() && payeeQuotasResult()!.totalPages > 1) {
+              <ws-pagination
+                [currentPage]="quotasPage()"
+                [totalPages]="payeeQuotasResult()!.totalPages"
+                [totalCount]="payeeQuotasResult()!.totalCount"
+                [pageSize]="10"
+                (pageChange)="loadPayeeQuotas($event)"
+              />
+            }
+          </div>
+        }
+
+        @if (activeTab() === 'activity') {
+          <div class="tab-placeholder">
+            <app-icon name="activity" [size]="32" />
+            <p>{{ 'COMMON.COMING_SOON' | translate }}</p>
+          </div>
+        }
+
+      </div>
+
+      <!-- Edit modal — shared PayeeFormComponent; lg size fits 6 fields without scroll -->
+      <ws-modal
+        [(isOpen)]="editModalOpen"
+        size="lg"
+        [title]="'PAYEES.EDIT_TITLE' | translate"
+      >
+        <app-payee-form
+          [payee]="store.selectedPayee()"
+          (saved)="onEditSaved($event)"
+          (cancelled)="editModalOpen.set(false)"
+        />
+      </ws-modal>
+
+      <!-- Terminate modal -->
+      <ws-confirmation-modal
+        [(isOpen)]="terminateModalOpen"
+        [title]="'PAYEES.TERMINATE_TITLE' | translate"
+        [message]="'PAYEES.TERMINATE_MSG' | translate"
+        [confirmLabel]="'PAYEES.ACTION_TERMINATE' | translate"
+        [cancelLabel]="'COMMON.CANCEL' | translate"
+        variant="danger"
+        [loading]="saving()"
+        (confirmed)="onConfirmTerminate()"
+        (cancelled)="terminateModalOpen.set(false)"
+      >
+        <form [formGroup]="terminateForm" class="terminate-form">
+          <div class="terminate-field-wrap">
+            <ws-date-picker
+              [label]="'PAYEES.FIELD_TERMINATION_DATE'"
+              formControlName="terminationDate"
+              [error]="hasTerminateError('terminationDate', 'required') ? 'VALIDATION.REQUIRED' : ''"
+            />
+          </div>
+        </form>
+      </ws-confirmation-modal>
+    </ws-page-layout>
+  }
+</app-shell>

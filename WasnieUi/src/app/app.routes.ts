@@ -30,10 +30,8 @@ export const routes: Routes = [
   {
     path: 'payees',
     canActivate: [authGuard],
-    loadComponent: () =>
-      import('./features/payees/payees.component').then(
-        (m) => m.PayeesComponent
-      ),
+    loadChildren: () =>
+      import('./features/payees/payees.routes').then((m) => m.payeesRoutes),
   },
   {
     path: 'transactions',
@@ -54,18 +52,14 @@ export const routes: Routes = [
   {
     path: 'quotas',
     canActivate: [authGuard],
-    loadComponent: () =>
-      import('./features/quotas/quotas.component').then(
-        (m) => m.QuotasComponent
-      ),
+    loadChildren: () =>
+      import('./features/quotas/quotas.routes').then((m) => m.quotasRoutes),
   },
   {
     path: 'assignments',
     canActivate: [authGuard],
-    loadComponent: () =>
-      import('./features/assignments/assignments.component').then(
-        (m) => m.AssignmentsComponent
-      ),
+    loadChildren: () =>
+      import('./features/assignments/assignments.routes').then((m) => m.assignmentsRoutes),
   },
   {
     path: 'admin',

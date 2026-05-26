@@ -1,14 +1,13 @@
 <app-shell>
-  <div class="plans-list">
-    <ws-page-header
-      [title]="'PLANS.TITLE'"
-      [subtitle]="'PLANS.SUBTITLE'"
-    >
-      <ws-button slot="actions" variant="primary" routerLink="new">
-        <app-icon name="plus" [size]="16" />
-        {{ 'PLANS.ACTION_NEW' | translate }}
-      </ws-button>
-    </ws-page-header>
+  <ws-page-layout
+    icon="file-text"
+    [title]="'PLANS.TITLE' | translate"
+    [subtitle]="'PLANS.SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="primary" routerLink="new">
+      <app-icon name="plus" [size]="16" />
+      {{ 'PLANS.ACTION_NEW' | translate }}
+    </ws-button>
 
     <div class="plans-list__toolbar">
       <ws-input
@@ -151,15 +150,53 @@
           </tbody>
         </table>
 
-        @if (!store.loading() && store.totalPages() > 1) {
-          <ws-table-pagination
-            [page]="store.listParams().page"
-            [pageSize]="store.listParams().pageSize"
-            [totalCount]="store.totalCount()"
-            (pageChange)="goToPage($event)"
-          />
-        }
       </ws-table>
+      @if (!store.loading() && store.totalCount() > 0) {
+        <ws-pagination
+          [currentPage]="store.page()"
+          [totalPages]="store.totalPages()"
+          [totalCount]="store.totalCount()"
+          [pageSize]="store.pageSize()"
+          (pageChange)="goToPage($event)"
+          (pageSizeChange)="goToPageSize($event)"
+        />
+      }
     }
-  </div>
+  </ws-page-layout>
 </app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="deleteOpen"
+  [title]="'PLANS.CONFIRM_DELETE_TITLE' | translate"
+  [message]="'PLANS.CONFIRM_DELETE_MSG' | translate"
+  [confirmLabel]="'COMMON.DELETE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="deleteSaving()"
+  (confirmed)="onConfirmDelete()"
+  (cancelled)="deleteOpen.set(false)"
+/>
+
+<ws-confirmation-modal
+  [(isOpen)]="activateOpen"
+  [title]="'PLANS.CONFIRM_ACTIVATE_TITLE' | translate"
+  [message]="'PLANS.CONFIRM_ACTIVATE_MSG' | translate"
+  [confirmLabel]="'PLANS.ACTION_ACTIVATE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="default"
+  [loading]="activateSaving()"
+  (confirmed)="onConfirmActivate()"
+  (cancelled)="activateOpen.set(false)"
+/>
+
+<ws-confirmation-modal
+  [(isOpen)]="archiveOpen"
+  [title]="'PLANS.CONFIRM_ARCHIVE_TITLE' | translate"
+  [message]="'PLANS.CONFIRM_ARCHIVE_MSG' | translate"
+  [confirmLabel]="'PLANS.ACTION_ARCHIVE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="archiveSaving()"
+  (confirmed)="onConfirmArchive()"
+  (cancelled)="archiveOpen.set(false)"
+/>

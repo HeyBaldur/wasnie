@@ -44,7 +44,11 @@ export class LoginComponent {
     this.error.set(null);
 
     this.authService.login(this.form.getRawValue()).subscribe({
-      next: () => this.router.navigateByUrl('/dashboard'),
+      next: () => {
+        const returnUrl = sessionStorage.getItem('wasnie:return-url') ?? '/dashboard';
+        sessionStorage.removeItem('wasnie:return-url');
+        this.router.navigateByUrl(returnUrl);
+      },
       error: (err: HttpErrorResponse) => {
         this.error.set(err?.error?.message ?? this.translate.instant('AUTH.INVALID_CREDENTIALS'));
         this.isSubmitting.set(false);

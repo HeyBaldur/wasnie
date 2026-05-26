@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Assignments;
 using Wasnie.Application.Compensation.DTOs;
-using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -24,17 +23,13 @@ public sealed class AssignPlanToPayeeHandler(
             .FirstOrDefaultAsync(p => p.Id == request.PayeeId, cancellationToken);
 
         if (payee is null)
-        {
             return Result<PlanAssignmentDto>.Failure("Payee not found.");
-        }
 
         var plan = await db.CompensationPlans
             .FirstOrDefaultAsync(p => p.Id == request.PlanId, cancellationToken);
 
         if (plan is null)
-        {
             return Result<PlanAssignmentDto>.Failure("Plan not found.");
-        }
 
         var payeeSnapshot = PayeeReference.Snapshot(payee.Id, payee.FullName, payee.EmployeeCode);
         var period = DateRange.Of(request.EffectiveStart, request.EffectiveEnd);
@@ -45,11 +40,23 @@ public sealed class AssignPlanToPayeeHandler(
             request.PayeeId,
             payeeSnapshot,
             period,
-            currentUser.UserId ?? "system");
+            currentUser.UserId ?? "system",
+            request.Notes);
 
         db.PlanAssignments.Add(assignment);
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result<PlanAssignmentDto>.Success(CompensationMapper.ToPlanAssignmentDto(assignment));
+        return Result<PlanAssignmentDto>.Success(new PlanAssignmentDto(
+            assignment.Id,
+            assignment.TenantId,
+            assignment.PlanId,
+            assignment.PayeeId,
+            assignment.PayeeSnapshot.FullName,
+            assignment.PayeeSnapshot.EmployeeCode,
+            assignment.EffectivePeriod.Start,
+            assignment.EffectivePeriod.End,
+            assignment.Status.ToString(),
+            assignment.Notes,
+            assignment.CreatedAt));
     }
 }

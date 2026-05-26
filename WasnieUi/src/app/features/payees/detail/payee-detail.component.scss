@@ -1,0 +1,147 @@
+@reference "../../../../styles.scss";
+
+.payee-detail {
+  padding: var(--space-8);
+  max-width: 900px;
+  margin: 0 auto;
+
+  &--loading, &--error {
+    @apply flex flex-col items-center justify-center gap-4;
+    padding: var(--space-16);
+    color: var(--color-text-secondary);
+  }
+}
+
+.payee-detail__actions {
+  @apply flex items-center gap-2;
+}
+
+.payee-detail__tabs {
+  @apply flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.tab-btn {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  margin-bottom: -1px;
+
+  &:hover { color: var(--color-text-primary); }
+
+  &--active {
+    color: var(--color-brand);
+    border-bottom-color: var(--color-brand);
+  }
+}
+
+.payee-detail__body {
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.profile-grid {
+  @apply grid gap-5;
+  grid-template-columns: 1fr 1fr;
+}
+
+.profile-field {
+  @apply flex flex-col gap-1;
+
+  &__label {
+    font-size: var(--font-size-12);
+    font-weight: 500;
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__value {
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+
+    &.mono { font-family: ui-monospace, monospace; font-size: var(--font-size-13); }
+  }
+}
+
+.tab-placeholder {
+  @apply flex flex-col items-center gap-4;
+  padding: var(--space-10);
+  color: var(--color-text-tertiary);
+
+  p {
+    font-size: var(--font-size-14);
+    color: var(--color-text-secondary);
+    text-align: center;
+  }
+}
+
+.tab-content {
+  @apply flex flex-col gap-4;
+
+  &__header {
+    @apply flex justify-end;
+  }
+}
+
+.plan-link {
+  color: var(--color-brand);
+  font-weight: 500;
+  text-decoration: none;
+  @apply flex items-center gap-1;
+
+  &:hover { text-decoration: underline; }
+}
+
+.plan-version {
+  font-size: var(--font-size-11);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+}
+
+.col-secondary {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.skeleton {
+  display: block;
+  height: 32px;
+  width: 200px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface-sunken);
+  animation: shimmer 1.4s ease infinite;
+
+  &--title { width: 240px; height: 32px; }
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.terminate-form {
+  padding-top: var(--space-2);
+}
+
+// Ensures the modal body is tall enough that the datepicker calendar
+// (≈300px) can open downward within the dialog panel without being clipped.
+.terminate-field-wrap {
+  min-height: 340px;
+}

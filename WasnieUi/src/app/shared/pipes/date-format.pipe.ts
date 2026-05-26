@@ -11,7 +11,7 @@ export class DateFormatPipe implements PipeTransform {
   ): string {
     if (!value) return '';
     const locale = this.translate.currentLang ?? 'en';
-    const date = new Date(value + 'T00:00:00');
+    const date = new Date(value.includes('T') ? value : value + 'T00:00:00');
     return new Intl.DateTimeFormat(locale, { dateStyle }).format(date);
   }
 }

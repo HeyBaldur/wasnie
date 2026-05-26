@@ -10,4 +10,5 @@ public sealed record PlanAssignmentDto(
     DateOnly EffectiveStart,
     DateOnly EffectiveEnd,
     string Status,
+    string? Notes,
     DateTimeOffset CreatedAt);

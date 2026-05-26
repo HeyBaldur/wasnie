@@ -1,0 +1,65 @@
+<div class="ws-dt" [style.maxHeight]="maxHeight() || null" [class.ws-dt--scrollable]="!!maxHeight()">
+  <table class="ws-dt__table">
+    <colgroup>
+      @for (col of columns(); track col.key) {
+        <col [style.width]="col.width || null" />
+      }
+    </colgroup>
+    <thead class="ws-dt__head">
+      <tr>
+        @for (col of columns(); track col.key) {
+          <th class="ws-dt__th" [ngClass]="'ws-dt__cell--' + (col.align || 'left')">
+            <span class="ws-dt__th-inner">
+              @if (col.icon) {
+                <app-icon [name]="col.icon" [size]="13" />
+              }
+              {{ col.header | translate }}
+            </span>
+          </th>
+        }
+      </tr>
+    </thead>
+    <tbody class="ws-dt__body">
+      @if (isLoading()) {
+        @for (row of skeletonRows(); track $index) {
+          <tr class="ws-dt__row ws-dt__row--skeleton">
+            @for (col of columns(); track col.key) {
+              <td class="ws-dt__td"><span class="ws-dt__skeleton"></span></td>
+            }
+          </tr>
+        }
+      } @else if (data().length === 0) {
+        <tr>
+          <td [attr.colspan]="columns().length" class="ws-dt__empty-cell">
+            <div class="ws-dt__empty">
+              <app-icon name="inbox" [size]="32" />
+              <span>{{ emptyKey() | translate }}</span>
+            </div>
+          </td>
+        </tr>
+      } @else {
+        @for (row of data(); track $index) {
+          <tr
+            class="ws-dt__row"
+            (click)="onRowClick(row)"
+          >
+            @for (col of columns(); track col.key) {
+              <td
+                class="ws-dt__td"
+                [ngClass]="'ws-dt__cell--' + (col.align || 'left')"
+                [class.ws-dt__td--truncate]="shouldTruncate(col)"
+                [title]="shouldTruncate(col) ? getCellValue(row, col.key) : ''"
+              >
+                @if (col.cellTemplate) {
+                  <ng-template [ngTemplateOutlet]="col.cellTemplate" [ngTemplateOutletContext]="{ $implicit: row, index: $index }" />
+                } @else {
+                  {{ getCellValue(row, col.key) }}
+                }
+              </td>
+            }
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+</div>

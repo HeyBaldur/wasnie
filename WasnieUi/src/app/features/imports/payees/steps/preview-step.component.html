@@ -1,0 +1,145 @@
+<div class="preview-step">
+
+  <!-- Summary cards -->
+  <div class="preview-step__stats">
+    <ws-stat-card [value]="validateResponse().totalRows"   [label]="'IMPORTS.PAYEES.SUMMARY_TOTAL' | translate"       icon="list"           variant="default"  />
+    <ws-stat-card [value]="willImportCount"                [label]="'IMPORTS.PAYEES.SUMMARY_WILL_IMPORT' | translate" icon="check-circle"   variant="success"  />
+    <ws-stat-card [value]="validateResponse().errorCount"  [label]="'IMPORTS.PAYEES.SUMMARY_ERRORS' | translate"      icon="x-circle"       variant="danger"   />
+    <ws-stat-card [value]="validateResponse().warningCount"[label]="'IMPORTS.PAYEES.SUMMARY_WARNINGS' | translate"    icon="alert-triangle" variant="warning"  />
+  </div>
+
+  <!-- Row filter tabs -->
+  <div class="row-filter">
+    @for (f of ['all', 'errors', 'warnings']; track f) {
+      <button type="button" class="row-filter__btn" [class.row-filter__btn--active]="rowFilter() === f" (click)="rowFilter.set($any(f))">
+        {{ 'IMPORTS.PAYEES.FILTER_' + f.toUpperCase() | translate }}
+        @if (f === 'errors')   { <span class="row-filter__count">({{ validateResponse().errorCount }})</span> }
+        @if (f === 'warnings') { <span class="row-filter__count">({{ validateResponse().warningCount }})</span> }
+      </button>
+    }
+  </div>
+
+  <!-- Rows table -->
+  <div class="preview-table-wrap">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th class="preview-table__th preview-table__th--num">#</th>
+
+          <!-- Full Name (filterable) -->
+          <th class="preview-table__th">
+            <div class="col-header">
+              <span>{{ 'PAYEES.FIELD_FULL_NAME' | translate }}</span>
+              <button class="col-filter-btn" [class.col-filter-btn--active]="colFilterName()" (click)="toggleColFilter('fullName', $event)" title="Filter">
+                <app-icon name="filter" [size]="10" />
+              </button>
+            </div>
+          </th>
+
+          <!-- Employee Code (no filter) -->
+          <th class="preview-table__th">{{ 'PAYEES.FIELD_EMPLOYEE_CODE' | translate }}</th>
+
+          <!-- Email (filterable) -->
+          <th class="preview-table__th">
+            <div class="col-header">
+              <span>{{ 'PAYEES.FIELD_EMAIL' | translate }}</span>
+              <button class="col-filter-btn" [class.col-filter-btn--active]="colFilterEmail()" (click)="toggleColFilter('email', $event)" title="Filter">
+                <app-icon name="filter" [size]="10" />
+              </button>
+            </div>
+          </th>
+
+          <!-- Hire Date (no filter) -->
+          <th class="preview-table__th">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</th>
+
+          <!-- Status (filterable) -->
+          <th class="preview-table__th">
+            <div class="col-header">
+              <span>{{ 'IMPORTS.PAYEES.COL_STATUS' | translate }}</span>
+              <button class="col-filter-btn" [class.col-filter-btn--active]="isStatusFilterActive()" (click)="toggleColFilter('status', $event)" title="Filter">
+                <app-icon name="filter" [size]="10" />
+              </button>
+            </div>
+          </th>
+
+          <th class="preview-table__th preview-table__th--issues">{{ 'IMPORTS.PAYEES.COL_ISSUES' | translate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (filteredRows().length === 0) {
+          <tr>
+            <td colspan="7" class="preview-table__empty">{{ 'IMPORTS.PAYEES.FILTER_EMPTY' | translate }}</td>
+          </tr>
+        }
+        @for (row of filteredRows(); track row.rowNumber) {
+          <tr class="preview-table__row">
+            <td class="preview-table__td preview-table__td--num">{{ row.rowNumber }}</td>
+            <td class="preview-table__td">{{ getCell(row, 'fullNameColumns') }}</td>
+            <td class="preview-table__td">{{ getCell(row, 'employeeCodeColumn') }}</td>
+            <td class="preview-table__td">{{ getCell(row, 'emailColumn') }}</td>
+            <td class="preview-table__td">{{ getCell(row, 'hireDateColumn') }}</td>
+            <td class="preview-table__td preview-table__td--status">
+              <ws-badge [variant]="rowBadgeVariant(row)" size="sm">
+                {{ rowBadgeKey(row) | translate }}
+              </ws-badge>
+            </td>
+            <td class="preview-table__td preview-table__td--issues">
+              @if (row.issues.length > 0) {
+                <ul class="preview-issues">
+                  @for (issue of row.issues; track issue.message) {
+                    <li>{{ issue.message }}</li>
+                  }
+                </ul>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Column filter dropdown (fixed, escapes table overflow) -->
+  @if (openFilterCol() && filterDropdownPos()) {
+    <div class="col-filter-dropdown" [style.top.px]="filterDropdownPos()!.top" [style.left.px]="filterDropdownPos()!.left" (click)="$event.stopPropagation()">
+      @if (openFilterCol() === 'status') {
+        @for (opt of statusFilterOptions; track opt.value) {
+          <label class="col-filter-check">
+            <input type="checkbox" [checked]="colFilterStatus().has(opt.value)" (change)="toggleStatusFilter(opt.value)" />
+            <ws-badge [variant]="opt.variant" size="sm">{{ opt.label | translate }}</ws-badge>
+          </label>
+        }
+      }
+      @if (openFilterCol() === 'fullName') {
+        <input class="col-filter-input" type="text" [value]="colFilterName()" (input)="colFilterName.set($any($event.target).value)" placeholder="Search name…" autofocus />
+      }
+      @if (openFilterCol() === 'email') {
+        <input class="col-filter-input" type="text" [value]="colFilterEmail()" (input)="colFilterEmail.set($any($event.target).value)" placeholder="Search email…" autofocus />
+      }
+    </div>
+  }
+
+  <!-- Options -->
+  <label class="skip-warnings-opt">
+    <input type="checkbox" [(ngModel)]="skipWarnings" />
+    {{ 'IMPORTS.PAYEES.SKIP_WARNINGS' | translate }}
+  </label>
+
+  @if (error()) {
+    <p class="preview-error">
+      <app-icon name="alert-circle" [size]="14" />
+      {{ error()! | translate }}
+    </p>
+  }
+
+  <div class="preview-actions">
+    <ws-button variant="secondary" (click)="onBack()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'COMMON.BACK' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="willImportCount === 0" [loading]="loading()" (click)="onImport()">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'IMPORTS.PAYEES.BTN_IMPORT' | translate : { count: willImportCount } }}
+    </ws-button>
+  </div>
+
+</div>

@@ -1,0 +1,23 @@
+<ws-modal
+  [(isOpen)]="isOpen"
+  [title]="title()"
+  size="sm"
+  [closable]="true"
+  [closeOnBackdrop]="false"
+>
+  @if (message()) {
+    <p class="ws-confirm__message">{{ message() }}</p>
+  }
+  <ng-content />
+
+  <div slot="footer" class="ws-confirm__footer">
+    <ws-button variant="secondary" (click)="onCancel()">{{ cancelLabel() }}</ws-button>
+    <ws-button
+      [variant]="variant() === 'danger' ? 'danger' : 'primary'"
+      [loading]="loading()"
+      (click)="onConfirm()"
+    >
+      {{ confirmLabel() }}
+    </ws-button>
+  </div>
+</ws-modal>

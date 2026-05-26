@@ -33,6 +33,11 @@ public sealed class QuotaConfiguration : IEntityTypeConfiguration<Quota>
             dr.Property(d => d.End).HasColumnName("PeriodEnd").IsRequired();
         });
 
+        builder.Property(q => q.MeasurementType).HasConversion<int>().IsRequired();
+        builder.Property(q => q.Notes).HasMaxLength(500);
+
         builder.HasIndex(q => new { q.TenantId, q.PayeeId, q.PlanId });
+        builder.HasIndex(q => new { q.TenantId, q.Status });
+        builder.HasIndex(q => new { q.TenantId, q.PayeeId });
     }
 }

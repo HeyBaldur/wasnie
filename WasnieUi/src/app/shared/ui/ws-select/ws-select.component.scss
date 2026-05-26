@@ -81,6 +81,7 @@
 .ws-select__dropdown {
   position: absolute;
   top: calc(100% + var(--space-1));
+  bottom: auto;
   left: 0;
   right: 0;
   z-index: 500;
@@ -90,6 +91,11 @@
   box-shadow: var(--shadow-popover);
   overflow: hidden;
   animation: ws-select-open var(--transition-base) ease;
+
+  &--upward {
+    top: auto;
+    bottom: calc(100% + var(--space-1));
+  }
 }
 
 .ws-select__search-wrap {

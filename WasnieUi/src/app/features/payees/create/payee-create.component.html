@@ -1,0 +1,17 @@
+<app-shell>
+  <div class="payee-create-page">
+    <ws-page-header
+      title="PAYEES.CREATE_TITLE"
+      backRoute="/payees"
+      backLabel="PAYEES.TITLE"
+    />
+
+    <div class="form-card">
+      <app-payee-form
+        [payee]="null"
+        (saved)="onSaved($event)"
+        (cancelled)="onCancelled()"
+      />
+    </div>
+  </div>
+</app-shell>

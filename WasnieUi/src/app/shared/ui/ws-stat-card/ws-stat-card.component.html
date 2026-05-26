@@ -1,0 +1,7 @@
+<div class="ws-sc" [ngClass]="'ws-sc--' + variant()">
+  @if (icon()) {
+    <span class="ws-sc__icon"><app-icon [name]="icon()" [size]="18" /></span>
+  }
+  <span class="ws-sc__value">{{ value() }}</span>
+  <span class="ws-sc__label">{{ label() }}</span>
+</div>

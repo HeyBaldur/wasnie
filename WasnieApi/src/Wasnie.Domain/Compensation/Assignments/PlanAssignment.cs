@@ -21,13 +21,16 @@ public sealed class PlanAssignment : AggregateRoot
 
     private PlanAssignment() { }
 
+    public string? Notes { get; private set; }
+
     public static PlanAssignment Create(
         Guid tenantId,
         Guid planId,
         Guid payeeId,
         PayeeReference payeeSnapshot,
         DateRange effectivePeriod,
-        string createdBy)
+        string createdBy,
+        string? notes = null)
     {
         var assignment = new PlanAssignment
         {
@@ -37,6 +40,7 @@ public sealed class PlanAssignment : AggregateRoot
             PayeeId = payeeId,
             PayeeSnapshot = payeeSnapshot,
             EffectivePeriod = effectivePeriod,
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             Status = AssignmentStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = createdBy,
@@ -48,6 +52,13 @@ public sealed class PlanAssignment : AggregateRoot
             Guid.NewGuid(), DateTimeOffset.UtcNow, assignment.Id, planId, payeeId, tenantId));
 
         return assignment;
+    }
+
+    public void UpdateNotes(string? notes, string updatedBy)
+    {
+        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedBy = updatedBy;
     }
 
     public void Deactivate(string updatedBy)

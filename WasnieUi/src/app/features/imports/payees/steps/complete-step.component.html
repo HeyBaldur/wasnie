@@ -1,0 +1,29 @@
+<div class="complete-step">
+  <div class="complete-icon">
+    <app-icon name="check-circle" [size]="56" />
+  </div>
+
+  <h2 class="complete-title">{{ 'IMPORTS.PAYEES.COMPLETE_TITLE' | translate }}</h2>
+
+  <p class="complete-desc">
+    {{ 'IMPORTS.PAYEES.COMPLETE_CREATED' | translate : { count: result().createdCount } }}
+  </p>
+
+  @if (result().skippedCount > 0) {
+    <p class="complete-skipped">
+      <app-icon name="alert-triangle" [size]="14" />
+      {{ 'IMPORTS.PAYEES.COMPLETE_SKIPPED' | translate : { count: result().skippedCount } }}
+    </p>
+  }
+
+  <div class="complete-actions">
+    <ws-button variant="secondary" (click)="onImportMore()">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'IMPORTS.PAYEES.BTN_IMPORT_MORE' | translate }}
+    </ws-button>
+    <ws-button variant="primary" (click)="goToPayees()">
+      {{ 'IMPORTS.PAYEES.BTN_VIEW_PAYEES' | translate }}
+      <app-icon name="arrow-right" [size]="14" />
+    </ws-button>
+  </div>
+</div>

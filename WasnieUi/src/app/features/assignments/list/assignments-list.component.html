@@ -1,0 +1,144 @@
+<app-shell>
+  <ws-page-layout
+    icon="link-2"
+    [title]="'ASSIGNMENTS.TITLE' | translate"
+    [subtitle]="'ASSIGNMENTS.SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="primary" routerLink="new">
+      <app-icon name="plus" [size]="16" />
+      {{ 'ASSIGNMENTS.NEW' | translate }}
+    </ws-button>
+
+    <div class="assignments-list__toolbar">
+      <ws-input
+        class="assignments-list__search"
+        type="search"
+        prefixIcon="search"
+        [placeholder]="'ASSIGNMENTS.SEARCH_PLACEHOLDER'"
+        (valueChange)="onSearch($event)"
+      />
+      <ws-segmented-control
+        [options]="statusOptions"
+        [(value)]="statusFilter"
+      />
+    </div>
+
+    @if (!store.loading() && store.pagedAssignments().length === 0 && !store.listParams().search && store.listParams().status === null) {
+      <ws-empty-state
+        illustration="assignments-empty"
+        titleKey="ASSIGNMENTS.EMPTY_TITLE"
+        descKey="ASSIGNMENTS.EMPTY_DESCRIPTION"
+        actionKey="ASSIGNMENTS.EMPTY_ACTION"
+        actionRoute="new"
+      />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'ASSIGNMENTS.COL_PAYEE' | translate }}</th>
+              <th>{{ 'ASSIGNMENTS.COL_PLAN' | translate }}</th>
+              <th>{{ 'ASSIGNMENTS.COL_PERIOD' | translate }}</th>
+              <th>{{ 'ASSIGNMENTS.COL_STATUS' | translate }}</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (store.loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--badge"></span></td>
+                  <td></td>
+                </tr>
+              }
+            } @else if (store.pagedAssignments().length === 0) {
+              <tr>
+                <td colspan="5">
+                  <ws-table-empty messageKey="ASSIGNMENTS.EMPTY_FILTER_TITLE" />
+                </td>
+              </tr>
+            } @else {
+              @for (assignment of store.pagedAssignments(); track assignment.id) {
+                <tr>
+                  <td class="col-name">
+                    <div class="payee-identity">
+                      <span class="payee-avatar">{{ initialsFor(assignment.payeeFullName) }}</span>
+                      <div class="payee-identity__text">
+                        <a class="payee-name" [routerLink]="['/payees', assignment.payeeId]">{{ assignment.payeeFullName }}</a>
+                        <span class="payee-code">{{ assignment.payeeEmployeeCode }}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="col-secondary">
+                    <a class="plan-link" [routerLink]="['/plans', assignment.planId]">
+                      {{ assignment.planName }}
+                      <span class="plan-version">v{{ assignment.planVersion }}</span>
+                    </a>
+                  </td>
+                  <td class="col-secondary">{{ assignment.effectiveStart | dateFormat:'short' }} – {{ assignment.effectiveEnd | dateFormat:'short' }}</td>
+                  <td>
+                    <ws-badge [variant]="statusVariant(assignment.status)">
+                      {{ 'ASSIGNMENTS.STATUS_' + assignment.status.toUpperCase() | translate }}
+                    </ws-badge>
+
+                  </td>
+                  <td class="col-actions" (click)="$event.stopPropagation()">
+                    <div class="row-menu">
+                      <button
+                        class="row-menu__trigger"
+                        [class.row-menu__trigger--open]="openMenuId() === assignment.id"
+                        type="button"
+                        (click)="toggleMenu(assignment.id, $event)"
+                      >
+                        <app-icon name="more-vertical" [size]="16" />
+                      </button>
+                      @if (openMenuId() === assignment.id) {
+                        <div class="row-menu__dropdown"
+                          [style.top.px]="menuPosition()!.top"
+                          [style.right.px]="menuPosition()!.right"
+                        >
+                          @if (assignment.status === 'Active') {
+                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onDeactivate(assignment.id)">
+                              <app-icon name="x-circle" [size]="14" />
+                              {{ 'COMMON.DEACTIVATE' | translate }}
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+
+      </ws-table>
+      @if (!store.loading() && store.totalCount() > 0) {
+        <ws-pagination
+          [currentPage]="store.page()"
+          [totalPages]="store.totalPages()"
+          [totalCount]="store.totalCount()"
+          [pageSize]="store.pageSize()"
+          (pageChange)="goToPage($event)"
+          (pageSizeChange)="goToPageSize($event)"
+        />
+      }
+    }
+  </ws-page-layout>
+</app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="deactivateOpen"
+  [title]="'ASSIGNMENTS.CONFIRM_DEACTIVATE_TITLE' | translate"
+  [message]="'ASSIGNMENTS.CONFIRM_DEACTIVATE_MSG' | translate"
+  [confirmLabel]="'COMMON.DEACTIVATE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="deactivateSaving()"
+  (confirmed)="onConfirmDeactivate()"
+  (cancelled)="deactivateOpen.set(false)"
+/>

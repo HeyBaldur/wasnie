@@ -167,16 +167,16 @@ export class RuleFormComponent implements OnInit {
       : Promise.resolve();
 
     loadPromise.then(() => {
-      const perms = getPlanPermissions(this.store.selectedPlan()?.status);
-      if (!perms.canEditRule) {
-        this.form.disable();
-        this.readOnly.set(true);
-      }
-
       if (this.isEdit) {
-        this._loadExistingRule();
+        this._loadExistingRule();  // populate signals while form is still enabled
       } else {
         this._addTier();
+      }
+
+      const perms = getPlanPermissions(this.store.selectedPlan()?.status);
+      if (!perms.canEditRule) {
+        this.form.disable({ emitEvent: false });  // disable after load, no extra emission
+        this.readOnly.set(true);
       }
     });
   }

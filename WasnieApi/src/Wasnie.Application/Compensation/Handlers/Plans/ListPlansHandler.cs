@@ -1,32 +1,62 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
 public sealed class ListPlansHandler(IApplicationDbContext db)
-    : IRequestHandler<ListPlansQuery, Result<IList<PlanSummaryDto>>>
+    : IRequestHandler<ListPlansQuery, Result<PagedResult<PlanSummaryDto>>>
 {
-    public async Task<Result<IList<PlanSummaryDto>>> Handle(ListPlansQuery request, CancellationToken cancellationToken)
-    {
-        var query = db.CompensationPlans.Include(p => p.Rules).AsQueryable();
+    private static readonly HashSet<string> AllowedSortFields =
+        new(StringComparer.OrdinalIgnoreCase) { "name", "version", "effectivestart", "effectiveend" };
 
-        if (!string.IsNullOrWhiteSpace(request.StatusFilter) &&
-            Enum.TryParse<PlanStatus>(request.StatusFilter, ignoreCase: true, out var status))
+    public async Task<Result<PagedResult<PlanSummaryDto>>> Handle(ListPlansQuery request, CancellationToken cancellationToken)
+    {
+        var p = request.Pagination;
+        var query = db.CompensationPlans.Include(x => x.Rules).AsQueryable();
+
+        // Search
+        if (!string.IsNullOrWhiteSpace(p.Search))
         {
-            query = query.Where(p => p.Status == status);
+            var q = p.Search.Trim().ToLower();
+            query = query.Where(x => x.Name.ToLower().Contains(q));
         }
 
-        var plans = await query
-            .OrderByDescending(p => p.CreatedAt)
-            .ToListAsync(cancellationToken);
+        // Filters
+        if (p.Filters != null)
+        {
+            if (p.Filters.TryGetValue("status", out var statusStr) &&
+                Enum.TryParse<PlanStatus>(statusStr, ignoreCase: true, out var status))
+                query = query.Where(x => x.Status == status);
+        }
 
-        return Result<IList<PlanSummaryDto>>.Success(
-            plans.Select(CompensationMapper.ToPlanSummaryDto).ToList());
+        // Sort
+        var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "name";
+        var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+        query = sortBy switch
+        {
+            "version"       => desc ? query.OrderByDescending(x => x.Version)                    : query.OrderBy(x => x.Version),
+            "effectivestart"=> desc ? query.OrderByDescending(x => x.EffectivePeriod.Start)     : query.OrderBy(x => x.EffectivePeriod.Start),
+            "effectiveend"  => desc ? query.OrderByDescending(x => x.EffectivePeriod.End)       : query.OrderBy(x => x.EffectivePeriod.End),
+            _               => desc ? query.OrderByDescending(x => x.Name)                      : query.OrderBy(x => x.Name),
+        };
+
+        var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
+
+        return Result<PagedResult<PlanSummaryDto>>.Success(new PagedResult<PlanSummaryDto>
+        {
+            Items = paged.Items.Select(CompensationMapper.ToPlanSummaryDto).ToList(),
+            TotalCount = paged.TotalCount,
+            Page = paged.Page,
+            PageSize = paged.PageSize,
+        });
     }
 }

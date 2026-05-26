@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.Commands.Plans;
 using Wasnie.Application.Compensation.Queries.Plans;
 
@@ -12,9 +13,9 @@ namespace Wasnie.Api.Controllers;
 public sealed class PlansController(IMediator mediator) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string? status, CancellationToken cancellationToken)
+    public async Task<IActionResult> List([FromQuery] PaginationQuery pagination, CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new ListPlansQuery(status), cancellationToken);
+        var result = await mediator.Send(new ListPlansQuery(pagination), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
@@ -26,9 +27,9 @@ public sealed class PlansController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("versions/{planName}")]
-    public async Task<IActionResult> Versions(string planName, CancellationToken cancellationToken)
+    public async Task<IActionResult> Versions(string planName, [FromQuery] PaginationQuery pagination, CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new ListPlanVersionsQuery(planName), cancellationToken);
+        var result = await mediator.Send(new ListPlanVersionsQuery(planName, pagination), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 

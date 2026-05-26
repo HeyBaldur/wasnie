@@ -34,6 +34,10 @@ public sealed class PlanAssignmentConfiguration : IEntityTypeConfiguration<PlanA
             dr.Property(d => d.End).HasColumnName("EffectiveEnd").IsRequired();
         });
 
+        builder.Property(a => a.Notes).HasMaxLength(500);
+
         builder.HasIndex(a => new { a.TenantId, a.PlanId, a.PayeeId });
+        builder.HasIndex(a => new { a.TenantId, a.Status });
+        builder.HasIndex(a => new { a.TenantId, a.PayeeId });
     }
 }

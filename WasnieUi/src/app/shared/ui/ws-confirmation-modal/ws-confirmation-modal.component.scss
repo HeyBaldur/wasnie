@@ -1,0 +1,14 @@
+@reference "../../../../styles.scss";
+
+.ws-confirm__message {
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+  margin: 0 0 var(--space-4) 0;
+}
+
+.ws-confirm__footer {
+  @apply flex items-center justify-end;
+  gap: var(--space-2);
+  width: 100%;
+}
