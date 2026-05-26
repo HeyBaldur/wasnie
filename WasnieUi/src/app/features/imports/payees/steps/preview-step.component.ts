@@ -12,6 +12,7 @@ import {
   ValidateResponse,
 } from '../models/payee-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
+import { composeFullName } from '../helpers/fullname-composer';
 
 type RowFilter = 'all' | 'errors' | 'warnings';
 
@@ -92,8 +93,7 @@ export class PreviewStepComponent {
   getCell(row: PayeeRowValidationResult, colKey: keyof PayeeImportColumnMapping): string {
     const mapping = this.columnMapping();
     if (colKey === 'fullNameColumns') {
-      const cols = mapping.fullNameColumns ?? [];
-      return cols.map(c => row.originalData[c] || '').filter(Boolean).join(' ') || '';
+      return composeFullName(row.originalData, mapping.fullNameColumns ?? []);
     }
     const col = mapping[colKey] as string | null | undefined;
     if (!col) return '';
