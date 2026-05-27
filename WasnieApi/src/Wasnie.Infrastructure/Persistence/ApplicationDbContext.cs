@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Domain.Audit;
 using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
@@ -30,6 +31,7 @@ public sealed class ApplicationDbContext(
     public Guid CurrentTenantId { get; } = tenantContext.TenantId;
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.Tenant> Tenants => Set<Wasnie.Domain.Entities.Tenant>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.ImportAudit> ImportAudits => Set<Wasnie.Domain.Entities.ImportAudit>();
+    public Microsoft.EntityFrameworkCore.DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public Microsoft.EntityFrameworkCore.DbSet<Payee> Payees => Set<Payee>();
     public Microsoft.EntityFrameworkCore.DbSet<LegacyPlan> Plans => Set<LegacyPlan>();
     public Microsoft.EntityFrameworkCore.DbSet<LegacyTransaction> Transactions => Set<LegacyTransaction>();
@@ -63,6 +65,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new CompensationPayoutConfiguration());
         builder.ApplyConfiguration(new PayoutLineConfiguration());
         builder.ApplyConfiguration(new ImportAuditConfiguration());
+        builder.ApplyConfiguration(new AuditLogConfiguration());
 
         builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyPlan>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
@@ -74,6 +77,8 @@ public sealed class ApplicationDbContext(
         builder.Entity<CompensationTransaction>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Credit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<CompensationPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

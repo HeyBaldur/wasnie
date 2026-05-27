@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Assignments;
 using Wasnie.Application.Compensation.DTOs;
@@ -12,7 +13,9 @@ namespace Wasnie.Application.Compensation.Handlers.Assignments;
 public sealed class AssignPlanToPayeeHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
-    ICurrentUserService currentUser)
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid)
     : IRequestHandler<AssignPlanToPayeeCommand, Result<PlanAssignmentDto>>
 {
     public async Task<Result<PlanAssignmentDto>> Handle(
@@ -41,6 +44,9 @@ public sealed class AssignPlanToPayeeHandler(
             payeeSnapshot,
             period,
             currentUser.UserId ?? "system",
+            guid.NewGuid(),
+            clock.UtcNowOffset,
+            guid.NewGuid(),
             request.Notes);
 
         db.PlanAssignments.Add(assignment);

@@ -51,7 +51,7 @@ public sealed class PlanTests
     public void AddRule_OnActive_ThrowsDomainException()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
         var act = () => plan.AddRule("New Rule", 2, DefaultMeasurement, RateTable.Flat(0.1m));
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
@@ -61,8 +61,8 @@ public sealed class PlanTests
     public void AddRule_OnArchived_ThrowsDomainException()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
-        plan.Archive("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
+        plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
         var act = () => plan.AddRule("New Rule", 2, DefaultMeasurement, RateTable.Flat(0.1m));
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
@@ -86,7 +86,7 @@ public sealed class PlanTests
     {
         var plan = new PlanBuilder().BuildWithOneRule();
         var ruleId = plan.Rules[0].Id;
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
         var act = () => plan.RemoveRule(ruleId);
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
@@ -120,7 +120,7 @@ public sealed class PlanTests
     {
         var plan = new PlanBuilder().BuildWithOneRule();
         var ruleId = plan.Rules[0].Id;
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
         var act = () => plan.UpdateRule(ruleId, "New Name", 1, DefaultMeasurement, RateTable.Flat(0.1m));
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
@@ -132,7 +132,7 @@ public sealed class PlanTests
     public void Activate_DraftWithActiveRule_Succeeds()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         plan.Status.Should().Be(PlanStatus.Active);
     }
 
@@ -140,7 +140,7 @@ public sealed class PlanTests
     public void Activate_DraftWithNoRules_ThrowsDomainException()
     {
         var plan = new PlanBuilder().Build();
-        var act = () => plan.Activate("user");
+        var act = () => plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         act.Should().Throw<DomainException>().WithMessage("*at least one active rule*");
     }
 
@@ -151,7 +151,7 @@ public sealed class PlanTests
         var rule = plan.AddRule("Commission", 1, DefaultMeasurement, RateTable.Flat(0.05m));
         plan.RemoveRule(rule.Id);
 
-        var act = () => plan.Activate("user");
+        var act = () => plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         act.Should().Throw<DomainException>().WithMessage("*at least one active rule*");
     }
 
@@ -159,9 +159,9 @@ public sealed class PlanTests
     public void Activate_AlreadyActive_ThrowsDomainException()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
-        var act = () => plan.Activate("user");
+        var act = () => plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
     }
 
@@ -169,10 +169,10 @@ public sealed class PlanTests
     public void Activate_Archived_ThrowsDomainException()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
-        plan.Archive("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
+        plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
-        var act = () => plan.Activate("user");
+        var act = () => plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
     }
 
@@ -182,7 +182,7 @@ public sealed class PlanTests
         var plan = new PlanBuilder().BuildWithOneRule();
         plan.ClearDomainEvents();
 
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
         plan.DomainEvents.Should().ContainSingle(e => e is PlanActivatedEvent);
     }
@@ -193,8 +193,8 @@ public sealed class PlanTests
     public void Archive_ActivePlan_SetsArchivedStatus()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
-        plan.Archive("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
+        plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         plan.Status.Should().Be(PlanStatus.Archived);
     }
 
@@ -202,10 +202,10 @@ public sealed class PlanTests
     public void Archive_AlreadyArchived_ThrowsDomainException()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
-        plan.Archive("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
+        plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
-        var act = () => plan.Archive("user");
+        var act = () => plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         act.Should().Throw<DomainException>().WithMessage("*Active*");
     }
 
@@ -213,7 +213,7 @@ public sealed class PlanTests
     public void Archive_DraftPlan_ThrowsDomainException()
     {
         var plan = new PlanBuilder().Build();
-        var act = () => plan.Archive("user");
+        var act = () => plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         act.Should().Throw<DomainException>().WithMessage("*Active*");
     }
 
@@ -221,10 +221,10 @@ public sealed class PlanTests
     public void Archive_RaisesPlanArchivedEvent()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         plan.ClearDomainEvents();
 
-        plan.Archive("user");
+        plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
         plan.DomainEvents.Should().ContainSingle(e => e is PlanArchivedEvent);
     }
@@ -235,9 +235,9 @@ public sealed class PlanTests
     public void CloneAsNewVersion_CopiesPropertiesAndIncrementsVersion()
     {
         var plan = new PlanBuilder().WithName("Sales Plan").BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
-        var clone = plan.CloneAsNewVersion("user");
+        var clone = plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
 
         clone.Name.Should().Be("Sales Plan");
         clone.Version.Should().Be(2);
@@ -253,9 +253,9 @@ public sealed class PlanTests
         var kept = plan.AddRule("Kept", 1, DefaultMeasurement, RateTable.Flat(0.05m));
         var removed = plan.AddRule("Removed", 2, DefaultMeasurement, RateTable.Flat(0.1m));
         plan.RemoveRule(removed.Id);
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
-        var clone = plan.CloneAsNewVersion("user");
+        var clone = plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
 
         clone.Rules.Should().ContainSingle(r => r.Name == "Kept" && r.IsActive);
         clone.Rules.Should().NotContain(r => r.Name == "Removed");
@@ -265,10 +265,10 @@ public sealed class PlanTests
     public void CloneAsNewVersion_ClonesGetNewRuleIds()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         var originalRuleId = plan.Rules[0].Id;
 
-        var clone = plan.CloneAsNewVersion("user");
+        var clone = plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
 
         clone.Rules[0].Id.Should().NotBe(originalRuleId);
     }
@@ -277,10 +277,10 @@ public sealed class PlanTests
     public void CloneAsNewVersion_RaisesPlanVersionClonedEvent()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        plan.Activate("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
         plan.ClearDomainEvents();
 
-        var clone = plan.CloneAsNewVersion("user");
+        var clone = plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
 
         clone.DomainEvents.Should().ContainSingle(e => e is PlanVersionClonedEvent);
     }
@@ -289,7 +289,7 @@ public sealed class PlanTests
     public void CloneAsNewVersion_FromDraft_ThrowsDomainException()
     {
         var plan = new PlanBuilder().BuildWithOneRule();
-        var act = () => plan.CloneAsNewVersion("user");
+        var act = () => plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
         act.Should().Throw<DomainException>().WithMessage("*Draft*");
     }
 
@@ -297,10 +297,10 @@ public sealed class PlanTests
     public void CloneAsNewVersion_FromArchived_Succeeds()
     {
         var plan = new PlanBuilder().WithName("Sales Plan").BuildWithOneRule();
-        plan.Activate("user");
-        plan.Archive("user");
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
+        plan.Archive("user", DateTimeOffset.UtcNow, Guid.NewGuid());
 
-        var clone = plan.CloneAsNewVersion("user");
+        var clone = plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
 
         clone.Status.Should().Be(PlanStatus.Draft);
         clone.Version.Should().Be(2);

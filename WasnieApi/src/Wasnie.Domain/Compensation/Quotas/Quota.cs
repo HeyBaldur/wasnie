@@ -31,6 +31,8 @@ public sealed class Quota : AggregateRoot
         DateRange period,
         QuotaMeasurementType measurementType,
         string createdBy,
+        Guid id,
+        DateTimeOffset now,
         string? notes = null)
     {
         if (notes is not null && notes.Length > 500)
@@ -38,7 +40,7 @@ public sealed class Quota : AggregateRoot
 
         return new Quota
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             TenantId = tenantId,
             PayeeId = payeeId,
             PlanId = planId,
@@ -47,14 +49,14 @@ public sealed class Quota : AggregateRoot
             MeasurementType = measurementType,
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             Status = QuotaStatus.Draft,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
             CreatedBy = createdBy,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
     }
 
-    public void UpdateDraft(Money amount, DateRange period, QuotaMeasurementType measurementType, string? notes, string updatedBy)
+    public void UpdateDraft(Money amount, DateRange period, QuotaMeasurementType measurementType, string? notes, string updatedBy, DateTimeOffset now)
     {
         if (Status != QuotaStatus.Draft)
             throw new DomainException("Only Draft quotas can be updated.");
@@ -65,11 +67,11 @@ public sealed class Quota : AggregateRoot
         Period = period;
         MeasurementType = measurementType;
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 
-    public void Activate(string updatedBy)
+    public void Activate(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status != QuotaStatus.Draft)
         {
@@ -77,13 +79,13 @@ public sealed class Quota : AggregateRoot
         }
 
         Status = QuotaStatus.Active;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
 
-        RaiseDomainEvent(new QuotaActivatedEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+        RaiseDomainEvent(new QuotaActivatedEvent(eventId, now, Id, TenantId));
     }
 
-    public void Close(string updatedBy)
+    public void Close(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status != QuotaStatus.Active)
         {
@@ -91,9 +93,9 @@ public sealed class Quota : AggregateRoot
         }
 
         Status = QuotaStatus.Closed;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
 
-        RaiseDomainEvent(new QuotaClosedEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+        RaiseDomainEvent(new QuotaClosedEvent(eventId, now, Id, TenantId));
     }
 }

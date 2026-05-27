@@ -33,11 +33,14 @@ public sealed class Credit : AggregateRoot
         Money creditedAmount,
         Percentage splitPercentage,
         CreditRole role,
-        string allocatedBy)
+        string allocatedBy,
+        Guid id,
+        DateTimeOffset now,
+        Guid eventId)
     {
         var credit = new Credit
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             TenantId = tenantId,
             TransactionId = transactionId,
             PayeeId = payeeId,
@@ -48,12 +51,12 @@ public sealed class Credit : AggregateRoot
             CreditedAmount = creditedAmount,
             SplitPercentage = splitPercentage,
             Role = role,
-            AllocatedAt = DateTimeOffset.UtcNow,
+            AllocatedAt = now,
             AllocatedBy = allocatedBy
         };
 
         credit.RaiseDomainEvent(new CreditAllocatedEvent(
-            Guid.NewGuid(), DateTimeOffset.UtcNow, credit.Id, transactionId, payeeId, tenantId));
+            eventId, now, credit.Id, transactionId, payeeId, tenantId));
 
         return credit;
     }

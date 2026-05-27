@@ -18,6 +18,10 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             await WriteErrorResponse(context, HttpStatusCode.BadRequest, "Validation failed.",
                 ex.Errors.Select(e => e.ErrorMessage));
         }
+        catch (UnauthorizedAccessException)
+        {
+            await WriteErrorResponse(context, HttpStatusCode.Unauthorized, "Unauthorized.", null);
+        }
         catch (DomainException ex)
         {
             await WriteErrorResponse(context, HttpStatusCode.UnprocessableEntity, ex.Message, null);

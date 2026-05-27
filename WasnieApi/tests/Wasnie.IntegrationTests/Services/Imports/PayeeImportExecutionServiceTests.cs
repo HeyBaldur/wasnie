@@ -9,6 +9,7 @@ using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services.Imports;
 using Wasnie.IntegrationTests.Infrastructure;
+using Wasnie.IntegrationTests.TestDoubles;
 
 namespace Wasnie.IntegrationTests.Services.Imports;
 
@@ -32,7 +33,7 @@ public sealed class PayeeImportExecutionServiceTests
     private static PayeeImportExecutionService CreateSut(ApplicationDbContext db, Guid tenantId)
     {
         var logger = Substitute.For<ILogger<PayeeImportExecutionService>>();
-        return new PayeeImportExecutionService(db, new FixedTenantContext(tenantId), logger);
+        return new PayeeImportExecutionService(db, new FixedTenantContext(tenantId), logger, new FakeClock(), new FakeGuidGenerator());
     }
 
     private static PayeeImportColumnMapping DefaultMapping() => new()
@@ -254,7 +255,7 @@ public sealed class PayeeImportExecutionServiceTests
         await using var db = CreateDb(TenantA);
         // Pre-insert the manager
         var existingMgr = Payee.Create(TenantA, "DB Manager", "DBMGR001", "dbmgr@co.com",
-            new DateOnly(2015, 1, 1), "system");
+            new DateOnly(2015, 1, 1), "system", Guid.NewGuid(), DateTimeOffset.UtcNow);
         db.Payees.Add(existingMgr);
         await db.SaveChangesAsync();
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
@@ -11,7 +12,9 @@ namespace Wasnie.Infrastructure.Services.Imports;
 public sealed class PayeeImportExecutionService(
     IApplicationDbContext db,
     ITenantContext tenantContext,
-    ILogger<PayeeImportExecutionService> logger) : IPayeeImportExecutionService
+    ILogger<PayeeImportExecutionService> logger,
+    IClock clock,
+    IGuidGenerator guid) : IPayeeImportExecutionService
 {
     public async Task<PayeeImportResult> ExecuteAsync(
         List<Dictionary<string, string>> rows,
@@ -22,8 +25,8 @@ public sealed class PayeeImportExecutionService(
         string originalFileName,
         CancellationToken cancellationToken = default)
     {
-        var startedAt = DateTimeOffset.UtcNow;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var startedAt = clock.UtcNowOffset;
+        var today = DateOnly.FromDateTime(clock.UtcNow);
 
         var skipped = new List<PayeeRowValidationResult>();
         var toImport = new List<(int Index, Dictionary<string, string> Row)>();
@@ -60,6 +63,8 @@ public sealed class PayeeImportExecutionService(
                 email,
                 hireDate,
                 importedBy,
+                guid.NewGuid(),
+                startedAt,
                 string.IsNullOrWhiteSpace(role) ? null : role,
                 managerId: null);
 
@@ -88,7 +93,7 @@ public sealed class PayeeImportExecutionService(
 
                 if (managerId.HasValue && newPayees.TryGetValue(code, out var payee))
                 {
-                    payee.Update(payee.FullName, payee.EmployeeCode, payee.Email, payee.HireDate, payee.Role, managerId, importedBy);
+                    payee.Update(payee.FullName, payee.EmployeeCode, payee.Email, payee.HireDate, payee.Role, managerId, importedBy, clock.UtcNowOffset);
                     hasManagerUpdates = true;
                 }
             }
@@ -108,12 +113,13 @@ public sealed class PayeeImportExecutionService(
         // Audit record — failure is non-fatal: payees are already committed.
         try
         {
-            var completedAt = DateTimeOffset.UtcNow;
+            var completedAt = clock.UtcNowOffset;
             var auditStatus = skipped.Count == 0 ? "Success"
                 : toImport.Count == 0 ? "Failed"
                 : "PartialSuccess";
 
             var audit = ImportAudit.Create(
+                guid.NewGuid(),
                 tenantContext.TenantId,
                 importedBy,
                 startedAt,

@@ -2,7 +2,7 @@ namespace Wasnie.Domain.Entities;
 
 public sealed class ImportAudit
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
+    public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public string ImportedBy { get; private set; } = string.Empty;
     public DateTimeOffset StartedAt { get; private set; }
@@ -17,6 +17,7 @@ public sealed class ImportAudit
     private ImportAudit() { }
 
     public static ImportAudit Create(
+        Guid id,
         Guid tenantId,
         string importedBy,
         DateTimeOffset startedAt,
@@ -29,6 +30,7 @@ public sealed class ImportAudit
         string status) =>
         new()
         {
+            Id = id,
             TenantId = tenantId,
             ImportedBy = importedBy,
             StartedAt = startedAt,

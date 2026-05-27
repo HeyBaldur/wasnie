@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Assignments;
 using Wasnie.Domain.Common.Results;
@@ -9,7 +10,9 @@ namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
 public sealed class DeactivateAssignmentHandler(
     IApplicationDbContext db,
-    ICurrentUserService currentUser)
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid)
     : IRequestHandler<DeactivateAssignmentCommand, Result>
 {
     public async Task<Result> Handle(DeactivateAssignmentCommand request, CancellationToken cancellationToken)
@@ -24,7 +27,7 @@ public sealed class DeactivateAssignmentHandler(
 
         try
         {
-            assignment.Deactivate(currentUser.UserId ?? "system");
+            assignment.Deactivate(currentUser.UserId ?? "system", clock.UtcNowOffset, guid.NewGuid());
             await db.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }

@@ -1,12 +1,13 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
-public sealed class PayeeImportValidationService(IApplicationDbContext db) : IPayeeImportValidationService
+public sealed class PayeeImportValidationService(IApplicationDbContext db, IClock clock) : IPayeeImportValidationService
 {
     private static readonly Regex EmailRegex = new(
         @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
@@ -39,7 +40,7 @@ public sealed class PayeeImportValidationService(IApplicationDbContext db) : IPa
             .Where(c => c.Length > 0)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(clock.UtcNow);
         var thirtyDaysAgo = today.AddDays(-30);
         var minDate = new DateOnly(1950, 1, 1);
 

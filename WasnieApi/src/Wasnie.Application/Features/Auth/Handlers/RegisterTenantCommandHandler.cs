@@ -1,4 +1,5 @@
-﻿using MediatR;
+using MediatR;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Application.Features.Auth.Commands;
@@ -11,7 +12,9 @@ namespace Wasnie.Application.Features.Auth.Handlers;
 public sealed class RegisterTenantCommandHandler(
     IApplicationDbContext dbContext,
     IIdentityService identityService,
-    ITokenService tokenService)
+    ITokenService tokenService,
+    IClock clock,
+    IGuidGenerator guid)
     : IRequestHandler<RegisterTenantCommand, Result<AuthResultDto>>
 {
     public async Task<Result<AuthResultDto>> Handle(
@@ -26,7 +29,7 @@ public sealed class RegisterTenantCommandHandler(
             return Result<AuthResultDto>.Failure("Tenant slug is already taken.");
         }
 
-        var tenant = Tenant.Create(request.TenantName, request.TenantSlug);
+        var tenant = Tenant.Create(request.TenantName, request.TenantSlug, guid.NewGuid(), clock.UtcNowOffset);
         dbContext.Tenants.Add(tenant);
         await dbContext.SaveChangesAsync(cancellationToken);
 

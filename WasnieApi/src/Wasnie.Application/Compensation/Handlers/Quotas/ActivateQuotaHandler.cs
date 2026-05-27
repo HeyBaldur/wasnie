@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
 using Wasnie.Domain.Common.Results;
@@ -9,7 +10,9 @@ namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
 public sealed class ActivateQuotaHandler(
     IApplicationDbContext db,
-    ICurrentUserService currentUser)
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid)
     : IRequestHandler<ActivateQuotaCommand, Result>
 {
     public async Task<Result> Handle(ActivateQuotaCommand request, CancellationToken cancellationToken)
@@ -24,7 +27,7 @@ public sealed class ActivateQuotaHandler(
 
         try
         {
-            quota.Activate(currentUser.UserId ?? "system");
+            quota.Activate(currentUser.UserId ?? "system", clock.UtcNowOffset, guid.NewGuid());
             await db.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }

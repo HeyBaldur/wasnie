@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
 using Wasnie.Application.Compensation.DTOs;
@@ -12,7 +13,9 @@ namespace Wasnie.Application.Compensation.Handlers.Quotas;
 public sealed class CreateQuotaHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
-    ICurrentUserService currentUser)
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid)
     : IRequestHandler<CreateQuotaCommand, Result<QuotaSummaryDto>>
 {
     public async Task<Result<QuotaSummaryDto>> Handle(CreateQuotaCommand request, CancellationToken cancellationToken)
@@ -28,6 +31,8 @@ public sealed class CreateQuotaHandler(
             period,
             request.MeasurementType,
             currentUser.UserId ?? "system",
+            guid.NewGuid(),
+            clock.UtcNowOffset,
             request.Notes);
 
         db.Quotas.Add(quota);

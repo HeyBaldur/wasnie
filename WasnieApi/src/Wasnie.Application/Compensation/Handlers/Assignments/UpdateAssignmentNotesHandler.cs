@@ -1,12 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Assignments;
 using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
-public sealed class UpdateAssignmentNotesHandler(IApplicationDbContext db, ICurrentUserService currentUser)
+public sealed class UpdateAssignmentNotesHandler(IApplicationDbContext db, ICurrentUserService currentUser, IClock clock)
     : IRequestHandler<UpdateAssignmentNotesCommand, Result>
 {
     public async Task<Result> Handle(UpdateAssignmentNotesCommand request, CancellationToken cancellationToken)
@@ -17,7 +18,7 @@ public sealed class UpdateAssignmentNotesHandler(IApplicationDbContext db, ICurr
         if (assignment is null)
             return Result.Failure("Assignment not found.");
 
-        assignment.UpdateNotes(request.Notes, currentUser.UserId ?? "system");
+        assignment.UpdateNotes(request.Notes, currentUser.UserId ?? "system", clock.UtcNowOffset);
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

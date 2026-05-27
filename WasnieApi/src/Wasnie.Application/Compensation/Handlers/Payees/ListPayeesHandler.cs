@@ -11,7 +11,7 @@ using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
 
-public sealed class ListPayeesHandler(IApplicationDbContext db)
+public sealed class ListPayeesHandler(IApplicationDbContext db, ITenantContext tenantContext)
     : IRequestHandler<ListPayeesQuery, Result<PagedResult<PayeeDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -62,9 +62,10 @@ public sealed class ListPayeesHandler(IApplicationDbContext db)
             .ToDictionaryAsync(x => x.PayeeId, x => x.Count, cancellationToken);
 
         var managerIds = paged.Items.Where(x => x.ManagerId.HasValue).Select(x => x.ManagerId!.Value).Distinct().ToList();
+        var currentTenantId = tenantContext.TenantId;
         var managers = managerIds.Count > 0
             ? await db.Payees.IgnoreQueryFilters()
-                .Where(x => managerIds.Contains(x.Id))
+                .Where(x => x.TenantId == currentTenantId && managerIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, x => x, cancellationToken)
             : new Dictionary<Guid, Payee>();
 

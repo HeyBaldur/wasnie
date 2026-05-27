@@ -22,10 +22,11 @@ public sealed class PayoutLine : Entity
         string ruleName,
         Money baseAmount,
         Money commissionAmount,
-        IReadOnlyList<ModifierApplication> appliedModifiers) =>
+        IReadOnlyList<ModifierApplication> appliedModifiers,
+        Guid id) =>
         new()
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             PayoutId = payoutId,
             CreditId = creditId,
             RuleId = ruleId,

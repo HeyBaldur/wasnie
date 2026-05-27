@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Caching.Memory;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
-public sealed class ImportCacheService(IMemoryCache cache) : IImportCacheService
+public sealed class ImportCacheService(IMemoryCache cache, ITenantContext tenantContext) : IImportCacheService
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(15);
 
@@ -24,5 +25,11 @@ public sealed class ImportCacheService(IMemoryCache cache) : IImportCacheService
 
     public void Remove(string fileId) => cache.Remove(CacheKey(fileId));
 
-    private static string CacheKey(string fileId) => $"import:payees:{fileId}";
+    private string CacheKey(string fileId)
+    {
+        var tenantId = tenantContext.TenantId;
+        if (tenantId == Guid.Empty)
+            throw new InvalidOperationException("Cannot access import cache without a tenant context.");
+        return $"import:payees:{tenantId}:{fileId}";
+    }
 }

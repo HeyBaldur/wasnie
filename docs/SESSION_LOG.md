@@ -10,6 +10,120 @@
 
 ---
 
+## 2026-05-27 (evening) — Phase C Wave 4 + Wave 5 Execution (IClock + Audit Trail)
+
+**Duration:** ~4-6 hours
+**Phase:** C (Wave 4 complete + Wave 5 complete; Wave 3 deferred)
+
+### What we did
+
+- WI-06 deferred: Strict Clean Architecture refactor not justified at current scale; EF Core in Application accepted as pragmatic compromise with documented rationale
+- WI-07 executed: IClock and IGuidGenerator abstractions introduced. 14+ Domain entities refactored to factory pattern. 14 handlers and 3 services updated. RefreshToken.IsValid → IsValidAt(now). Two pragmatic exceptions documented (Rule.cs aggregate child, Modifier.cs value object). 222/222 tests pass.
+- WI-08 executed: Complete audit trail infrastructure built. AuditLog entity with BIGINT identity, immutability SQL trigger, EF mapping with 3 composite indexes. IAuditService + IAuditDispatcher + IAuditableCommand + AuditBehavior pipeline. SyncAuditDispatcher writes within transaction for consistency. 7 handlers retrofit with audit (5 explicit, 2 via pipeline marker). 8 new tests covering unit (EntityDiff), integration (AuditService), and HTTP-level (full flow). 230/230 tests pass.
+
+### Key decisions
+
+- WI-06 deferred: strict purity refactor postponed. ARCHITECTURE.md §1.2 violations documented but unfixed. Revisit when team grows or compliance demands.
+- AuditLog uses BIGINT (long) Id instead of GUID — better for high-cardinality, write-only audit table. Decided by Claude Code during WI-08, approved as good engineering.
+- Audit pipeline swallows dispatcher failures per Rule 5.3.3 — acceptable for Phase 1; MUST become transactional rollback when Phase 2 money operations arrive.
+- Audit pattern is hybrid: explicit IAuditService.LogAsync(...) for some handlers, IAuditableCommand marker + AuditBehavior for others. Both valid, choose per command.
+- WI-07 two pragmatic exceptions: Rule.cs (child entity in Plan aggregate uses internal factory) and Modifier.cs (value object). Both DDD-correct.
+
+### Files produced/modified this session
+
+WI-07:
+- Created in src/Wasnie.Application/Common/Abstractions/: IClock.cs, IGuidGenerator.cs
+- Created in src/Wasnie.Infrastructure/Common/: SystemClock.cs, SystemGuidGenerator.cs
+- Created in tests projects: FakeClock.cs, FakeGuidGenerator.cs (unit + integration)
+- Modified: 14+ Domain entities (factory pattern), 14 Application handlers, 3 Infrastructure services, DependencyInjection.cs
+
+WI-08:
+- Created in src/Wasnie.Domain/Audit/: AuditLog.cs, AuditActions.cs, ResourceTypes.cs
+- Created in src/Wasnie.Application/Common/: Interfaces/IAuditService.cs, IAuditDispatcher.cs, IAuditableCommand.cs, Behaviors/AuditBehavior.cs, DTOs/AuditEntry.cs, Helpers/EntityDiff.cs
+- Created in src/Wasnie.Infrastructure/Services/Audit/: AuditService.cs, SyncAuditDispatcher.cs
+- Created in src/Wasnie.Infrastructure/Persistence/Configurations/: AuditLogConfiguration.cs
+- Created migration: src/Wasnie.Infrastructure/Persistence/Migrations/20260527000000_AddAuditLog.cs
+- Modified: ApplicationDbContext.cs, IApplicationDbContext.cs, Application/DependencyInjection.cs, Infrastructure/DependencyInjection.cs
+- Modified handlers: LoginCommandHandler, LogoutCommandHandler, CreatePayeeHandler, UpdatePayeeHandler, CreatePlanHandler, ActivatePlanCommand, ArchivePlanCommand
+- New tests: EntityDiffTests.cs, AuditServiceTests.cs, AuditTrailIntegrationTests.cs
+
+### What's next
+
+- WI-09 (RBAC + tier limits) — gating item for monetization. Largest single WI (12-16h). Decisions pending: split backend/frontend? scope of tier limits?
+- Subsequent waves: WI-10 (validators + tests), WI-11 (security middleware), WI-12 (observability), WI-13 (cleanup)
+
+### Notes / lessons learned
+
+- Claude Code's autonomous design decisions (e.g., BIGINT for AuditLog Id) have been consistently good. The pattern of giving high-level constraints and letting implementation details emerge is working well.
+- Audit trail infrastructure was the most complex WI to date and completed cleanly in one pass — strong validation that the prompt-driven workflow with ARCHITECTURE.md as authority scales to larger refactors.
+- IClock refactor (WI-07) touched many files but the systematic pattern (Domain factories → Application handlers → Infrastructure services → tests) executed without regressions. Build green throughout.
+- Multi-tenant compliance, time/Id determinism, and audit trail now in place. Wasnie is significantly closer to "production-grade financial SaaS" than at the start of the day.
+
+---
+
+## 2026-05-27 (afternoon) — Phase C Wave 1 + Wave 2 Execution
+
+**Duration:** ~6-8 hours
+**Phase:** C (Wave 1 partial + Wave 2 complete)
+
+### What we did
+
+- Executed WI-01 — Tightened JWT access token (60→15 min) and refresh token (30→7 days) lifetimes across all configs and code defaults. 210/210 tests pass.
+- Reformulated WI-02 — Email verification deferred. Email provider integration moved to Phase 5-6. Architectural pattern preserved for future trivial integration. Updated Audit_Backlog.md with new "Deferred Decisions" section.
+- Executed WI-03 — Logout now revokes refresh tokens server-side; RefreshTokenCommandValidator created. 6 new integration tests. 216/216 tests pass.
+- Executed WI-04 — Import cache key now tenant-scoped. Codebase audit confirmed no other cache usages with the same issue. 217/217 tests pass.
+- Executed WI-05 — Three multi-tenant defense fixes in parallel (ListPayeesHandler explicit filter, ImportAudit global query filter, TenantContext enforcement with middleware translation). Codebase audit confirmed full multi-tenant compliance. 222/222 tests pass.
+
+### Key decisions
+
+- Email provider deferred to Phase 5-6 when first paying customer requires it (WI-02 scope updated)
+- TenantContext returns Guid.Empty for null HttpContext (background services / test fixtures), throws only when authenticated user lacks tenant claim
+- Cross-tenant 400 vs 404: NOT fixed in WI-04; candidate for future API standardization (potential F-028, not yet added to findings)
+- All 11 tenant-scoped entities confirmed to have global query filters; multi-tenant isolation fully compliant after WI-05
+
+### Files produced/modified this session
+
+Backend source files modified:
+- src/Wasnie.Api/appsettings.json, appsettings.Development.json, appsettings.Production.json, appsettings.Development.template.json
+- src/Wasnie.Infrastructure/Services/TokenService.cs
+- src/Wasnie.Application/Common/Interfaces/ITokenService.cs
+- src/Wasnie.Api/Controllers/AuthController.cs
+- src/Wasnie.Infrastructure/Services/Imports/ImportCacheService.cs
+- src/Wasnie.Infrastructure/DependencyInjection.cs (ImportCacheService lifetime: Singleton → Scoped)
+- src/Wasnie.Application/Compensation/Handlers/Payees/ListPayeesHandler.cs
+- src/Wasnie.Infrastructure/Persistence/ApplicationDbContext.cs
+- src/Wasnie.Infrastructure/Identity/TenantContext.cs
+- src/Wasnie.Api/Middleware/ExceptionHandlingMiddleware.cs
+
+Backend test files modified or created:
+- tests/Wasnie.IntegrationTests/Infrastructure/TestDatabaseFixture.cs (modified)
+- tests/Wasnie.IntegrationTests/Integration/Imports/PayeeImportEndpointsTests.cs (modified twice)
+- tests/Wasnie.IntegrationTests/Auth/AuthEndpointsTests.cs (created)
+- tests/Wasnie.IntegrationTests/MultiTenant/MultiTenantDefenseTests.cs (created)
+
+New backend application files:
+- src/Wasnie.Application/Features/Auth/Commands/LogoutCommand.cs
+- src/Wasnie.Application/Features/Auth/Handlers/LogoutCommandHandler.cs
+- src/Wasnie.Application/Features/Auth/Validators/RefreshTokenCommandValidator.cs
+
+Documentation:
+- docs/audit/Audit_Backlog.md (updated with Deferred Decisions section + revised WI-02)
+
+### What's next
+
+- WI-06 — Clean Architecture fixes (F-001, F-002): remove MediatR from Domain, remove EF Core from Application. Largest single WI in backlog (6-8h). Strict purity vs pragmatic amendment decision pending.
+- Wave 4: WI-07 (IClock, IGuidGenerator)
+- Wave 5: WI-08 (audit trail foundation)
+- Wave 6: WI-09 (RBAC + tier limits)
+
+### Notes / lessons learned
+
+- Claude Code's ability to perform codebase audit alongside fixes is valuable (WI-05 confirmed only one IgnoreQueryFilters() in source — eliminates uncertainty about other latent issues)
+- Test fixture interaction with global query filters: DI scopes without HTTP context need IgnoreQueryFilters() on queries — this is a known pattern, not a regression
+- Multi-tenant isolation can now be claimed as production-grade compliant; this is a meaningful milestone for a financial SaaS
+
+---
+
 ## 2026-05-27 — B2 Codebase Audit + Continuity Strategy
 
 **Duration:** ~2 hours

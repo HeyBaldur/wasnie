@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Fixtures;
@@ -224,23 +225,39 @@ public sealed class PayeeImportEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Validate_FileIdFromOtherTenant_Returns200()
+    public async Task Validate_FileIdFromOtherTenant_Returns400()
     {
-        // KNOWN LIMITATION: The in-memory cache is process-wide and NOT tenant-scoped.
-        // TenantB can access a fileId created by TenantA, and the controller returns 200.
-        // This documents the current behavior. A future work item (A3) should add
-        // tenant validation to the cache key to prevent cross-tenant cache access.
+        // Cache keys are tenant-scoped: import:payees:{tenantId}:{fileId}.
+        // TenantB cannot access a file uploaded by TenantA — the key does not exist in TenantB's namespace.
         using var form = BuildFileContent(Path.Combine(FixtureDir, "valid_10_payees.csv"));
         var parseResp = await _clientA.PostAsync("/api/imports/payees/parse", form);
         var parseBody = await ReadJson(parseResp);
         var fileId = parseBody.GetProperty("fileId").GetString()!;
 
         var validateBody = JsonBody(new { fileId, columnMapping = DefaultMappingObject() });
-        // TenantB client using TenantA's fileId
         var response = await _clientB.PostAsync("/api/imports/payees/validate", validateBody);
 
-        // Documents current behavior: cache is not tenant-scoped, so 200 is returned
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Execute_FileIdFromOtherTenant_Returns400()
+    {
+        // Cache keys are tenant-scoped: TenantB cannot execute an import uploaded by TenantA.
+        using var form = BuildFileContent(Path.Combine(FixtureDir, "valid_10_payees.csv"));
+        var parseResp = await _clientA.PostAsync("/api/imports/payees/parse", form);
+        var parseBody = await ReadJson(parseResp);
+        var fileId = parseBody.GetProperty("fileId").GetString()!;
+
+        var executeBody = JsonBody(new
+        {
+            fileId,
+            columnMapping = DefaultMappingObject(),
+            options = new { skipRowsWithWarnings = false },
+        });
+        var response = await _clientB.PostAsync("/api/imports/payees/execute", executeBody);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -369,7 +386,7 @@ public sealed class PayeeImportEndpointsTests : IAsyncLifetime
 
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var audits = db.ImportAudits.ToList();
+        var audits = db.ImportAudits.IgnoreQueryFilters().ToList();
         audits.Should().HaveCountGreaterThanOrEqualTo(1);
     }
 
@@ -391,7 +408,7 @@ public sealed class PayeeImportEndpointsTests : IAsyncLifetime
 
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var audit = db.ImportAudits.OrderByDescending(a => a.StartedAt).First();
+        var audit = db.ImportAudits.IgnoreQueryFilters().OrderByDescending(a => a.StartedAt).First();
         audit.TenantId.Should().Be(TestConstants.TenantA);
         audit.OriginalFileName.Should().Be("valid_10_payees.csv");
     }

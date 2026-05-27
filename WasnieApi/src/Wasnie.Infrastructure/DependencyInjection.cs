@@ -2,11 +2,14 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Services.Imports;
+using Wasnie.Infrastructure.Common;
 using Wasnie.Infrastructure.Identity;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
+using Wasnie.Infrastructure.Services.Audit;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -18,6 +21,9 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddHttpContextAccessor();
+
+        services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<IGuidGenerator, SystemGuidGenerator>();
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(
@@ -33,7 +39,10 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
 
         services.AddMemoryCache();
-        services.AddSingleton<IImportCacheService, ImportCacheService>();
+        services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();
+        services.AddScoped<IAuditService, AuditService>();
+
+        services.AddScoped<IImportCacheService, ImportCacheService>();
         services.AddScoped<IFileParserService, FileParserService>();
         services.AddScoped<IPayeeImportValidationService, PayeeImportValidationService>();
         services.AddScoped<IPayeeImportExecutionService, PayeeImportExecutionService>();

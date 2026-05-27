@@ -32,8 +32,9 @@ public sealed class ModifierApplication : ValueObject
         string modifierName,
         decimal factorApplied,
         Money amountBefore,
-        Money amountAfter) =>
-        new(modifierId, modifierName, factorApplied, amountBefore, amountAfter, DateTimeOffset.UtcNow);
+        Money amountAfter,
+        DateTimeOffset now) =>
+        new(modifierId, modifierName, factorApplied, amountBefore, amountAfter, now);
 
     protected override IEnumerable<object> GetEqualityComponents()
     {

@@ -20,7 +20,9 @@ internal sealed class PlanBuilder
     internal PlanBuilder WithCurrency(string currency) { _currency = currency; return this; }
     internal PlanBuilder WithPeriod(DateOnly start, DateOnly end) { _start = start; _end = end; return this; }
 
-    internal Plan Build() => Plan.Create(_tenantId, _name, _description, DateRange.Of(_start, _end), _currency, _createdBy);
+    internal Plan Build() => Plan.Create(
+        _tenantId, _name, _description, DateRange.Of(_start, _end), _currency, _createdBy,
+        Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid());
 
     internal Plan BuildWithOneRule()
     {

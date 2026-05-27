@@ -27,10 +27,11 @@ public sealed class Rule : Entity
         RateTable rateTable,
         Modifier? modifier,
         Cap? cap,
-        Floor? floor) =>
+        Floor? floor,
+        Guid id = default) =>
         new()
         {
-            Id = Guid.NewGuid(),
+            Id = id == default ? Guid.NewGuid() : id,
             PlanId = planId,
             Name = name,
             SortOrder = sortOrder,

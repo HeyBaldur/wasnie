@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
 **Last updated:** 2026-05-27
-**Updated by:** Rodolfo Calvo (post-audit session)
+**Updated by:** Rodolfo Calvo (post-WI-07 + WI-08 session)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -38,16 +38,22 @@ PHASE B — Architecture & Quality Standards
 ✅ B0 — Product docs (User Personas + Business Brief, done 2026-05-26)
 ✅ B1 — ARCHITECTURE.md + 14 section files (done 2026-05-26)
 ✅ B2 — Codebase audit (done 2026-05-27) — see docs/audit/Audit_Findings.md
-⏭️ B3 — Prioritized backlog for Phase C (NEXT)
+✅ B3 — Prioritized backlog (Audit_Backlog.md, done 2026-05-27)
 
 PHASE C — Critical Quality Gaps (3-4 weeks estimated)
-⏭️ C1 — Server-side pagination (✅ DONE in Phase A via prompts 39-43)
-⏭️ C2 — Claims & Authorization (RBAC + tier limits)
-⏭️ C3 — Audit Trail standardized
-⏭️ C4 — Security Hardening
-⏭️ C5 — CI/CD Quality Gates
-⏭️ C6 — Observability
-⏭️ C7 — Clean Architecture + DIP fixes (NEW — proposed from B2 audit)
+✅ C1 — Server-side pagination (done in Phase A via prompts 39-43)
+⏳ Wave 1 (Security Hardening):
+     WI-01 ✅ JWT lifetimes tightened
+     WI-02 ⏭️ Email verification (deferred to Phase 5-6, scope documented)
+     WI-03 ✅ Logout token invalidation + Refresh validator
+✅ Wave 2 (Multi-tenant):
+     WI-04 ✅ Tenant-scoped import cache
+     WI-05 ✅ Multi-tenant defense hardening (global filters, IgnoreQueryFilters guard, TenantContext enforcement)
+⏭️ Wave 3: WI-06 Clean Architecture fixes (F-001, F-002) — DEFERRED (architectural pragma; see decisions)
+✅ Wave 4: WI-07 IClock + IGuidGenerator (F-003, F-004) ✅
+✅ Wave 5: WI-08 Audit trail foundation (F-014) ✅
+⏭️ Wave 6: WI-09 RBAC + tier limits (F-009) ← NEXT
+⏭️ Wave 7–10: pending
 
 PHASE D — Phase 1 officially closed (~1 week)
 ⏭️ D1 — Backend coverage > 80%
@@ -65,48 +71,50 @@ For full plan details: `docs/Wasnie_Master_Plan_Phase_1_Closure.md`
 
 ## Audit findings summary (B2 results, 2026-05-27)
 
-27 total findings across the codebase:
+27 total findings. **12 closed as of 2026-05-27** (F-003, F-004, F-005, F-006, F-007, F-012, F-014, F-015, F-018, F-019, F-022, F-008 partial via deferral documentation).
 
-| Severity | Count | Examples |
-|---|---|---|
-| 🔴 Critical | 8 | MediatR in Domain (F-001), DateTime.UtcNow in entities (F-003), JWT lifetimes too long (F-005/006), import cache cross-tenant (F-007), email verification disabled (F-008) |
-| 🟠 High | 7 | No RBAC/tier limits (F-009), no security headers (F-010), no rate limiting (F-011), no audit trail (F-014) |
-| 🟡 Medium | 8 | Missing validators (F-016), no cross-tenant tests for some endpoints (F-017), IgnoreQueryFilters without guard (F-018) |
-| 🟢 Low | 4 | Dev secret in git (F-024), legacy entity (F-026), Serilog cloud sink missing (F-027) |
+| Severity | Count | Open | Closed |
+|---|---|---|---|
+| 🔴 Critical | 8 | 3 | 5 (F-003, F-004, F-005, F-006, F-007; F-008 partial) |
+| 🟠 High | 7 | 5 | 2 (F-012, F-014) |
+| 🟡 Medium | 8 | 5 | 3 (F-015, F-018, F-019) |
+| 🟢 Low | 4 | 3 | 1 (F-022) |
 
-Top 5 critical to fix first:
-1. **F-007** — Import cache keys without TenantId (real cross-tenant leak vector)
-2. **F-005 / F-006** — JWT lifetimes 4x longer than allowed (config change, 5 min fix)
-3. **F-008** — Email verification disabled
-4. **F-003 / F-004** — IClock and IGuidGenerator abstractions needed
-5. **F-001 / F-002** — Clean Architecture layer violations
+Top 5 remaining priorities:
+1. **F-009** — No RBAC / tier limits (WI-09, NEXT — gating item for monetization)
+2. **F-001 / F-002** — Clean Architecture violations: MediatR in Domain, EF Core in Application (WI-06, deferred; revisit when team grows)
+3. **F-010 / F-011** — No security headers, no rate limiting (WI-10/11)
+4. **F-013** — Missing validators + cross-tenant tests for Quotas/Assignments (WI-10)
+5. **F-016 / F-017** — Observability foundation (WI-12)
 
 **Positive compliance areas** (no findings):
 - All controllers are thin MediatR delegates
 - Server-side pagination on every list endpoint
-- EF Core global query filters on tenant-scoped entities
+- EF Core global query filters on ALL 11 tenant-scoped entities (fully compliant after WI-05)
 - No HttpClient in components (frontend HTTP architecture clean)
 - No SQL injection (EF Core LINQ everywhere)
 - Integration tests use real Testcontainers MSSQL
 - No console.log in frontend
 - CORS not wildcarded
+- Multi-tenant isolation fully compliant (confirmed by WI-05 codebase audit)
 
-For full audit: `docs/audit/Audit_Findings.md`
+For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Backlog.md`
 
 ---
 
 ## Active work / current focus
 
-**Right now we are:** Generating B3 — converting the 27 audit findings into a prioritized backlog with dependencies and effort estimates. After B3, we start fixing Critical findings (Phase C).
+**Right now we are:** Ready to start WI-09 — RBAC + tier limits (F-009). Largest single WI in the backlog (12-16h estimated). Decision pending: split into WI-09a (backend) + WI-09b (frontend integration), or execute as a single WI? WI-09 is the gating item for monetization — the pricing model is unenforceable without it.
 
-**Most recent significant work:**
-- Created ARCHITECTURE.md + 14 section files (binding technical law for the project)
-- Created User Personas + Business Brief (product docs for external use)
-- Closed Phase A (Import feature with 144+ tests)
-- Completed B2 audit (27 findings identified, codebase otherwise solid)
+**Most recent significant work (2026-05-27 session):**
+- WI-07 completed: IClock + IGuidGenerator abstractions introduced across Domain/Application/Infrastructure/tests; 14+ entities refactored; 222/222 tests pass
+- WI-08 completed: Full audit trail infrastructure built (AuditLog entity, immutability SQL trigger, IAuditService/IAuditDispatcher/AuditBehavior, 7 handler retrofits, 8 new tests); 230/230 tests pass
+- WI-06 deferred: Strict Clean Architecture refactor not justified at current scale; documented as architectural pragma
+- 12 of 27 audit findings now closed
 
 **Not yet started:**
-- Phase C fixes (waiting for B3 prioritization)
+- WI-09 (RBAC + tier limits — Wave 6) ← next
+- WI-10 through WI-13+ (Waves 7–10)
 - Phase 2 (Transactions module — cannot start until Phase D)
 - Marketing / content strategy (planned for parallel work once Phase 1 fully closed)
 
@@ -123,6 +131,13 @@ For full audit: `docs/audit/Audit_Findings.md`
 7. **Subscription tiers:** Free / Starter (€300) / Growth (€800) / Scale (€1,800) / Enterprise (€2,500+).
 8. **Target markets in order:** Poland → Central & Eastern Europe → Iberian & LATAM markets.
 9. **Mobile responsive deferred to Phase 8.** Desktop-only until then (1280px+).
+10. **Email provider (WI-02) deferred to Phase 5-6.** Real email service (Postmark/SendGrid/AWS SES) integrated when first paying customer is identified. `IEmailService` abstraction + DI swap requires only infrastructure changes when ready. (2026-05-27)
+11. **Multi-tenant isolation confirmed fully compliant** after WI-05. All 11 tenant-scoped entities have global query filters; only 1 `IgnoreQueryFilters()` in source (now guarded). (2026-05-27)
+12. **TenantContext null-HttpContext behavior:** Returns `Guid.Empty` for null `HttpContext` (background services, test fixture cleanup scopes). Throws `UnauthorizedAccessException` only when authenticated request lacks valid `tenant_id` claim. Revisit when observability (WI-12) provides alerts on suspicious empty-result queries. (2026-05-27)
+13. **WI-06 strict Clean Architecture refactor deferred:** EF Core in Application and MediatR in Domain remain as documented pragmatic compromises. Violations documented in ARCHITECTURE.md §1.2. Revisit when team grows or when external compliance requires stricter purity. (2026-05-27)
+14. **Audit trail pattern is hybrid:** Explicit `IAuditService.LogAsync(...)` calls for handlers where before/after diff or post-save resource ID is needed (5 handlers); `IAuditableCommand` marker + `AuditBehavior` pipeline for commands where resource ID is in the command (2 handlers). Both patterns are valid and co-exist intentionally. (2026-05-27)
+15. **`AuditLog.Id` uses BIGINT (long) instead of GUID:** Better for high-cardinality, write-only audit table — improved index performance, smaller storage. UUID distribution not needed for a sequential write table. (2026-05-27)
+16. **Audit dispatcher swallows failures in Phase 1:** Acceptable per Rule 5.3.3 for non-money operations. When Phase 2 (Transactions) starts, audit failures on money operations MUST cause transactional rollback. Flagged for Phase 2 pre-work. (2026-05-27)
 
 ---
 
@@ -150,7 +165,11 @@ For full audit: `docs/audit/Audit_Findings.md`
 
 (Update this section as questions emerge that need answers before proceeding)
 
-- **None currently open** as of 2026-05-27.
+- **WI-09 split:** RBAC + tier limits is estimated 12-16h. Recommend splitting into WI-09a (backend: policy engine, tier enforcement) and WI-09b (frontend: UI gating). Decision needed before Wave 6.
+- **WI-09 scope of tier limits:** Count-based limits only (max payees, max plans per tier) or also feature-based gating (advanced reports, CSV export gated by tier)? Decision needed before WI-09 starts.
+- **WI-06 approach:** Strict purity refactor (remove MediatR from Domain, EF Core from Application) deferred. If revisited, must update ARCHITECTURE.md §1.2 and run full regression suite. Note: this is a 6-8h investment with no user-visible value — justify against backlog priority at that time.
+- **F-028 (400 vs 404 cross-tenant):** Current cross-tenant resource access returns 400 (should be 404 per ARCHITECTURE.md §9.3.3). Functionally equivalent for security. Candidate for Low finding addition to `Audit_Findings.md` when next audit refresh runs.
+- **Phase 2 audit hardening:** When Phase 2 (Transactions) starts, `SyncAuditDispatcher` failure handling must change — audit write failure on money operations must roll back the transaction. Currently dispatcher swallows all failures (acceptable for Phase 1 non-money operations).
 
 ---
 
