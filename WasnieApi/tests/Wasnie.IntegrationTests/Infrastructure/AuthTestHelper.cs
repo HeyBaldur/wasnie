@@ -8,7 +8,10 @@ namespace Wasnie.IntegrationTests.Infrastructure;
 
 internal static class AuthTestHelper
 {
-    internal static string GenerateToken(Guid tenantId, string userId = TestConstants.UserAId)
+    internal static string GenerateToken(
+        Guid tenantId,
+        string userId = TestConstants.UserAId,
+        string role = "TenantAdmin")
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestConstants.JwtSecret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -19,6 +22,7 @@ internal static class AuthTestHelper
             new Claim(JwtRegisteredClaimNames.Email, $"{userId}@test.com"),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim("tenant_id", tenantId.ToString()),
+            new Claim(ClaimTypes.Role, role),
         };
 
         var token = new JwtSecurityToken(
@@ -32,9 +36,13 @@ internal static class AuthTestHelper
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    internal static HttpClient WithAuth(this HttpClient client, Guid tenantId, string userId = TestConstants.UserAId)
+    internal static HttpClient WithAuth(
+        this HttpClient client,
+        Guid tenantId,
+        string userId = TestConstants.UserAId,
+        string role = "TenantAdmin")
     {
-        var token = GenerateToken(tenantId, userId);
+        var token = GenerateToken(tenantId, userId, role);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }

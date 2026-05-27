@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Exceptions;
 
@@ -12,11 +13,13 @@ public sealed class ActivateQuotaHandler(
     IApplicationDbContext db,
     ICurrentUserService currentUser,
     IClock clock,
-    IGuidGenerator guid)
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
     : IRequestHandler<ActivateQuotaCommand, Result>
 {
     public async Task<Result> Handle(ActivateQuotaCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasSet, cancellationToken);
         var quota = await db.Quotas
             .FirstOrDefaultAsync(q => q.Id == request.QuotaId, cancellationToken);
 

@@ -4,15 +4,17 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
-public sealed class GetPlanByIdHandler(IApplicationDbContext db)
+public sealed class GetPlanByIdHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<GetPlanByIdQuery, Result<PlanDto>>
 {
     public async Task<Result<PlanDto>> Handle(GetPlanByIdQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PlansRead, cancellationToken);
         var plan = await db.CompensationPlans
             .Include(p => p.Rules)
             .FirstOrDefaultAsync(p => p.Id == request.PlanId, cancellationToken);

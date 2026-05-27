@@ -7,6 +7,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Payees;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 
@@ -17,11 +18,14 @@ public sealed class UpdatePayeeHandler(
     ICurrentUserService currentUser,
     IClock clock,
     ITenantContext tenantContext,
-    IAuditService auditService)
+    IAuditService auditService,
+    IAuthorizationService authorizationService)
     : IRequestHandler<UpdatePayeeCommand, Result<PayeeDto>>
 {
     public async Task<Result<PayeeDto>> Handle(UpdatePayeeCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PayeesUpdate, cancellationToken);
+
         var payee = await db.Payees
             .FirstOrDefaultAsync(p => p.Id == request.PayeeId, cancellationToken);
 

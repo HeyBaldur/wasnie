@@ -35,6 +35,9 @@ public static class DependencyInjection
 
         services.AddScoped<ITenantContext, TenantContext>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IClaimsService, ClaimsService>();
+        services.AddScoped<IAuthorizationService, AuthorizationService>();
+        services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
 

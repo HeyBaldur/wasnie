@@ -7,6 +7,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Payees;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
@@ -19,11 +20,16 @@ public sealed class CreatePayeeHandler(
     ICurrentUserService currentUser,
     IClock clock,
     IGuidGenerator guid,
-    IAuditService auditService)
+    IAuditService auditService,
+    IAuthorizationService authorizationService,
+    ITierLimitChecker tierLimitChecker)
     : IRequestHandler<CreatePayeeCommand, Result<PayeeDto>>
 {
     public async Task<Result<PayeeDto>> Handle(CreatePayeeCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PayeesCreate, cancellationToken);
+        await tierLimitChecker.EnsurePayeeLimitAsync(cancellationToken);
+
         var codeExists = await db.Payees
             .AnyAsync(p => p.EmployeeCode == request.EmployeeCode, cancellationToken);
 

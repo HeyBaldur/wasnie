@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { hasPermissionGuard } from './core/auth/guards/has-permission.guard';
 import { environment } from '../environments/environment';
 
 export const routes: Routes = [
@@ -23,19 +24,19 @@ export const routes: Routes = [
   },
   {
     path: 'plans',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Plans.Read')],
     loadChildren: () =>
       import('./features/plans/plans.routes').then((m) => m.plansRoutes),
   },
   {
     path: 'payees',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Payees.Read')],
     loadChildren: () =>
       import('./features/payees/payees.routes').then((m) => m.payeesRoutes),
   },
   {
     path: 'transactions',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Reports.ViewAll')],
     loadComponent: () =>
       import('./features/transactions/transactions.component').then(
         (m) => m.TransactionsComponent
@@ -43,7 +44,7 @@ export const routes: Routes = [
   },
   {
     path: 'payouts',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Reports.ViewAll')],
     loadComponent: () =>
       import('./features/payouts/payouts.component').then(
         (m) => m.PayoutsComponent
@@ -51,22 +52,30 @@ export const routes: Routes = [
   },
   {
     path: 'quotas',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Quotas.Read')],
     loadChildren: () =>
       import('./features/quotas/quotas.routes').then((m) => m.quotasRoutes),
   },
   {
     path: 'assignments',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Assignments.Read')],
     loadChildren: () =>
       import('./features/assignments/assignments.routes').then((m) => m.assignmentsRoutes),
   },
   {
     path: 'admin',
-    canActivate: [authGuard],
+    canActivate: [authGuard, hasPermissionGuard('Subscription.Manage')],
     loadComponent: () =>
       import('./features/admin/admin.component').then(
         (m) => m.AdminComponent
+      ),
+  },
+  {
+    path: 'forbidden',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/forbidden/forbidden.component').then(
+        (m) => m.ForbiddenComponent
       ),
   },
   ...(!environment.production

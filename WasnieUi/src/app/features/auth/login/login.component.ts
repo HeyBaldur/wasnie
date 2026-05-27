@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
 
@@ -17,6 +18,7 @@ import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
 export class LoginComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
+  private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
 
@@ -45,9 +47,11 @@ export class LoginComponent {
 
     this.authService.login(this.form.getRawValue()).subscribe({
       next: () => {
-        const returnUrl = sessionStorage.getItem('wasnie:return-url') ?? '/dashboard';
-        sessionStorage.removeItem('wasnie:return-url');
-        this.router.navigateByUrl(returnUrl);
+        this.currentUser.refresh().subscribe(() => {
+          const returnUrl = sessionStorage.getItem('wasnie:return-url') ?? '/dashboard';
+          sessionStorage.removeItem('wasnie:return-url');
+          this.router.navigateByUrl(returnUrl);
+        });
       },
       error: (err: HttpErrorResponse) => {
         this.error.set(err?.error?.message ?? this.translate.instant('AUTH.INVALID_CREDENTIALS'));

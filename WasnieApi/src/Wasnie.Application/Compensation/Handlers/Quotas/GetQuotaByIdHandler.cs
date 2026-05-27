@@ -3,15 +3,17 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Quotas;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
-public sealed class GetQuotaByIdHandler(IApplicationDbContext db)
+public sealed class GetQuotaByIdHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<GetQuotaByIdQuery, Result<QuotaSummaryDto>>
 {
     public async Task<Result<QuotaSummaryDto>> Handle(GetQuotaByIdQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
         var quota = await db.Quotas
             .FirstOrDefaultAsync(q => q.Id == request.QuotaId, cancellationToken);
 

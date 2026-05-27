@@ -13,7 +13,10 @@ import { firstValueFrom } from 'rxjs';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
+import { forbiddenResponseInterceptor } from './core/interceptors/forbidden-response.interceptor';
 import { ThemeService } from './core/theme/theme.service';
+import { AuthService } from './core/services/auth.service';
+import { CurrentUserService } from './core/auth/current-user.service';
 
 const SUPPORTED_LANGS = ['en', 'es', 'pl'];
 
@@ -22,7 +25,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, forbiddenResponseInterceptor])),
     provideTranslateService({ defaultLanguage: 'en' }),
     provideTranslateHttpLoader({ prefix: './assets/i18n/', suffix: '.json' }),
     provideAppInitializer(() => {
@@ -32,6 +35,14 @@ export const appConfig: ApplicationConfig = {
       const browserLang = translate.getBrowserLang() ?? 'en';
       const lang = SUPPORTED_LANGS.includes(browserLang) ? browserLang : 'en';
       return firstValueFrom(translate.use(lang));
+    }),
+    provideAppInitializer(() => {
+      const authService = inject(AuthService);
+      const currentUser = inject(CurrentUserService);
+      if (authService.isAuthenticated()) {
+        return firstValueFrom(currentUser.refresh());
+      }
+      return Promise.resolve();
     }),
   ],
 };

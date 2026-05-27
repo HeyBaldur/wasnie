@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
 
@@ -25,6 +26,7 @@ function passwordStrength(ctrl: AbstractControl): ValidationErrors | null {
 export class RegisterTenantComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
+  private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
 
@@ -60,7 +62,9 @@ export class RegisterTenantComponent {
     this.error.set(null);
 
     this.authService.registerTenant(this.form.getRawValue()).subscribe({
-      next: () => this.router.navigateByUrl('/dashboard'),
+      next: () => {
+        this.currentUser.refresh().subscribe(() => this.router.navigateByUrl('/dashboard'));
+      },
       error: (err: HttpErrorResponse) => {
         this.error.set(err?.error?.message ?? this.translate.instant('ERRORS.GENERIC'));
         this.isSubmitting.set(false);

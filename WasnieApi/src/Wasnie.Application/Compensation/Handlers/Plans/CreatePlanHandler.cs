@@ -6,6 +6,7 @@ using Wasnie.Application.Compensation.Commands.Plans;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -18,11 +19,15 @@ public sealed class CreatePlanHandler(
     ICurrentUserService currentUser,
     IClock clock,
     IGuidGenerator guid,
-    IAuditService auditService)
+    IAuditService auditService,
+    IAuthorizationService authorizationService,
+    ITierLimitChecker tierLimitChecker)
     : IRequestHandler<CreatePlanCommand, Result<PlanDto>>
 {
     public async Task<Result<PlanDto>> Handle(CreatePlanCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PlansCreate, cancellationToken);
+        await tierLimitChecker.EnsurePlanLimitAsync(cancellationToken);
         var period = DateRange.Of(request.EffectiveStart, request.EffectiveEnd);
 
         var plan = Plan.Create(

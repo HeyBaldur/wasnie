@@ -5,6 +5,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Plans;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Exceptions;
 
@@ -14,11 +15,13 @@ public sealed class ClonePlanVersionHandler(
     IApplicationDbContext db,
     ICurrentUserService currentUser,
     IClock clock,
-    IGuidGenerator guid)
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
     : IRequestHandler<ClonePlanVersionCommand, Result<PlanDto>>
 {
     public async Task<Result<PlanDto>> Handle(ClonePlanVersionCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PlansCreate, cancellationToken);
         var source = await db.CompensationPlans
             .Include(p => p.Rules)
             .FirstOrDefaultAsync(p => p.Id == request.PlanId, cancellationToken);

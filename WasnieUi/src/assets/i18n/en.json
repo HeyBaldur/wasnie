@@ -166,7 +166,17 @@
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
-    "UNAUTHORIZED": "Your session has expired. Please sign in again."
+    "UNAUTHORIZED": "Your session has expired. Please sign in again.",
+    "FORBIDDEN": "You don't have permission to perform this action.",
+    "FORBIDDEN_TITLE": "Access Denied",
+    "FORBIDDEN_MESSAGE": "You don't have permission to view this page. Contact your administrator if you think this is an error.",
+    "FORBIDDEN_BACK": "Back to Dashboard"
+  },
+  "TIER_LIMIT": {
+    "TITLE": "Plan Limit Reached",
+    "MESSAGE": "Your {{ tier }} plan allows up to {{ limit }} records. Upgrade to add more.",
+    "UPGRADE_HINT": "Upgrade your subscription to unlock higher limits.",
+    "UPGRADE": "Upgrade Plan"
   },
   "PLANS": {
     "TITLE": "Plans",

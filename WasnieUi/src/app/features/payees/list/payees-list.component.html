@@ -4,14 +4,18 @@
     [title]="'PAYEES.TITLE' | translate"
     [subtitle]="'PAYEES.SUBTITLE' | translate"
   >
-    <ws-button slot="actions" variant="secondary" routerLink="import">
-      <app-icon name="upload-cloud" [size]="14" />
-      {{ 'PAYEES.ACTION_IMPORT' | translate }}
-    </ws-button>
-    <ws-button slot="actions" variant="primary" routerLink="new">
-      <app-icon name="plus" [size]="16" />
-      {{ 'PAYEES.NEW' | translate }}
-    </ws-button>
+    <ng-container *hasPermission="'Imports.Execute'">
+      <ws-button slot="actions" variant="secondary" routerLink="import">
+        <app-icon name="upload-cloud" [size]="14" />
+        {{ 'PAYEES.ACTION_IMPORT' | translate }}
+      </ws-button>
+    </ng-container>
+    <ng-container *hasPermission="'Payees.Create'">
+      <ws-button slot="actions" variant="primary" routerLink="new">
+        <app-icon name="plus" [size]="16" />
+        {{ 'PAYEES.NEW' | translate }}
+      </ws-button>
+    </ng-container>
 
     <div class="payees-list__toolbar">
       <ws-input
@@ -103,19 +107,19 @@
                             {{ 'COMMON.VIEW' | translate }}
                           </a>
                           @if (payee.status !== PayeeStatus.Active) {
-                            <button class="row-menu__item" type="button" (click)="onMarkActive(payee.id)">
+                            <button *hasPermission="'Payees.Update'" class="row-menu__item" type="button" (click)="onMarkActive(payee.id)">
                               <app-icon name="check-circle" [size]="14" />
                               {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
                             </button>
                           }
                           @if (payee.status === PayeeStatus.Active) {
-                            <button class="row-menu__item" type="button" (click)="onMarkOnLeave(payee.id)">
+                            <button *hasPermission="'Payees.Update'" class="row-menu__item" type="button" (click)="onMarkOnLeave(payee.id)">
                               <app-icon name="pause-circle" [size]="14" />
                               {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
                             </button>
                           }
                           @if (payee.status !== PayeeStatus.Terminated) {
-                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onTerminate(payee.id)">
+                            <button *hasPermission="'Payees.Terminate'" class="row-menu__item row-menu__item--danger" type="button" (click)="onTerminate(payee.id)">
                               <app-icon name="x-circle" [size]="14" />
                               {{ 'PAYEES.ACTION_TERMINATE' | translate }}
                             </button>

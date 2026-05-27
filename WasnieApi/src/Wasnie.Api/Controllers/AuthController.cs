@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Features.Auth.Commands;
+using Wasnie.Application.Features.Auth.Queries;
 
 namespace Wasnie.Api.Controllers;
 
@@ -10,6 +11,15 @@ namespace Wasnie.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(IMediator mediator) : ControllerBase
 {
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetCurrentUserQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+
     [HttpPost("register-tenant")]
     [AllowAnonymous]
     public async Task<IActionResult> RegisterTenant(

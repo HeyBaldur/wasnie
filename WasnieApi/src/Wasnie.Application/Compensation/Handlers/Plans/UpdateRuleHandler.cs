@@ -4,16 +4,18 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Plans;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Exceptions;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
-public sealed class UpdateRuleHandler(IApplicationDbContext db)
+public sealed class UpdateRuleHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<UpdateRuleCommand, Result<RuleDto>>
 {
     public async Task<Result<RuleDto>> Handle(UpdateRuleCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PlansUpdate, cancellationToken);
         var plan = await db.CompensationPlans
             .Include(p => p.Rules)
             .FirstOrDefaultAsync(p => p.Id == request.PlanId, cancellationToken);

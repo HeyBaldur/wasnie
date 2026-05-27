@@ -166,7 +166,17 @@
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
-    "UNAUTHORIZED": "Twoja sesja wygasła. Zaloguj się ponownie."
+    "UNAUTHORIZED": "Twoja sesja wygasła. Zaloguj się ponownie.",
+    "FORBIDDEN": "Nie masz uprawnień do wykonania tej czynności.",
+    "FORBIDDEN_TITLE": "Brak dostępu",
+    "FORBIDDEN_MESSAGE": "Nie masz uprawnień do wyświetlenia tej strony. Skontaktuj się z administratorem, jeśli uważasz, że to błąd.",
+    "FORBIDDEN_BACK": "Wróć do panelu"
+  },
+  "TIER_LIMIT": {
+    "TITLE": "Osiągnięto limit planu",
+    "MESSAGE": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} rekordów. Ulepsz, aby dodać więcej.",
+    "UPGRADE_HINT": "Ulepsz subskrypcję, aby odblokować wyższe limity.",
+    "UPGRADE": "Ulepsz plan"
   },
   "PLANS": {
     "TITLE": "Plany",

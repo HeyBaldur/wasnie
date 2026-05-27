@@ -5,7 +5,7 @@ namespace Wasnie.Infrastructure.Persistence;
 
 public static class DbSeeder
 {
-    private static readonly string[] Roles = ["TenantAdmin", "Manager", "Payee"];
+    private static readonly string[] Roles = ["TenantAdmin", "CompManager", "Manager", "Rep"];
 
     public static async Task SeedAsync(IServiceProvider services)
     {

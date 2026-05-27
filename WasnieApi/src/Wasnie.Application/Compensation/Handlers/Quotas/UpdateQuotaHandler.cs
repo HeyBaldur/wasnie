@@ -4,16 +4,22 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
 using Wasnie.Application.Compensation.DTOs;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
-public sealed class UpdateQuotaHandler(IApplicationDbContext db, ICurrentUserService currentUser, IClock clock)
+public sealed class UpdateQuotaHandler(
+    IApplicationDbContext db,
+    ICurrentUserService currentUser,
+    IClock clock,
+    IAuthorizationService authorizationService)
     : IRequestHandler<UpdateQuotaCommand, Result<QuotaSummaryDto>>
 {
     public async Task<Result<QuotaSummaryDto>> Handle(UpdateQuotaCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasUpdate, cancellationToken);
         var quota = await db.Quotas.FirstOrDefaultAsync(q => q.Id == request.QuotaId, cancellationToken);
         if (quota is null)
             return Result<QuotaSummaryDto>.Failure("Quota not found.");

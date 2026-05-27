@@ -4,6 +4,7 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Assignments;
 using Wasnie.Application.Compensation.DTOs;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -15,13 +16,15 @@ public sealed class AssignPlanToPayeeHandler(
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
     IClock clock,
-    IGuidGenerator guid)
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
     : IRequestHandler<AssignPlanToPayeeCommand, Result<PlanAssignmentDto>>
 {
     public async Task<Result<PlanAssignmentDto>> Handle(
         AssignPlanToPayeeCommand request,
         CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.AssignmentsCreate, cancellationToken);
         var payee = await db.Payees
             .FirstOrDefaultAsync(p => p.Id == request.PayeeId, cancellationToken);
 

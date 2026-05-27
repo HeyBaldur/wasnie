@@ -4,6 +4,7 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
 using Wasnie.Application.Compensation.DTOs;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -15,11 +16,13 @@ public sealed class CreateQuotaHandler(
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
     IClock clock,
-    IGuidGenerator guid)
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
     : IRequestHandler<CreateQuotaCommand, Result<QuotaSummaryDto>>
 {
     public async Task<Result<QuotaSummaryDto>> Handle(CreateQuotaCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasSet, cancellationToken);
         var amount = Money.OfNonNegative(request.Amount, request.Currency);
         var period = DateRange.Of(request.PeriodStart, request.PeriodEnd);
 

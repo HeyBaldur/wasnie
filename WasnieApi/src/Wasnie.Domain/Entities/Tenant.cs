@@ -1,3 +1,4 @@
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common;
 
 namespace Wasnie.Domain.Entities;
@@ -8,6 +9,7 @@ public sealed class Tenant : AggregateRoot
     public string Slug { get; private set; } = string.Empty;
     public bool IsActive { get; private set; } = true;
     public DateTimeOffset CreatedAt { get; private set; }
+    public Tier Tier { get; private set; } = Tier.Growth;
 
     private Tenant() { }
 
@@ -18,9 +20,12 @@ public sealed class Tenant : AggregateRoot
             Id = id,
             Name = name,
             Slug = slug,
-            CreatedAt = now
+            CreatedAt = now,
+            Tier = Tier.Growth,
         };
     }
 
     public void Deactivate() => IsActive = false;
+
+    public void SetTier(Tier tier) => Tier = tier;
 }

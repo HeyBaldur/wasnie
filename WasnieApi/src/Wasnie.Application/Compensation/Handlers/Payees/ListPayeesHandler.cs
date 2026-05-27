@@ -4,6 +4,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payees;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
@@ -11,7 +12,10 @@ using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
 
-public sealed class ListPayeesHandler(IApplicationDbContext db, ITenantContext tenantContext)
+public sealed class ListPayeesHandler(
+    IApplicationDbContext db,
+    ITenantContext tenantContext,
+    IAuthorizationService authorizationService)
     : IRequestHandler<ListPayeesQuery, Result<PagedResult<PayeeDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -19,6 +23,7 @@ public sealed class ListPayeesHandler(IApplicationDbContext db, ITenantContext t
 
     public async Task<Result<PagedResult<PayeeDto>>> Handle(ListPayeesQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PayeesRead, cancellationToken);
         var p = request.Pagination;
         var query = db.Payees.AsQueryable();
 

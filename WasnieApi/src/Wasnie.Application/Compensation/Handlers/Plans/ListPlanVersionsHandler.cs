@@ -5,12 +5,13 @@ using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
-public sealed class ListPlanVersionsHandler(IApplicationDbContext db)
+public sealed class ListPlanVersionsHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<ListPlanVersionsQuery, Result<PagedResult<PlanSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -18,6 +19,7 @@ public sealed class ListPlanVersionsHandler(IApplicationDbContext db)
 
     public async Task<Result<PagedResult<PlanSummaryDto>>> Handle(ListPlanVersionsQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PlansRead, cancellationToken);
         var p = request.Pagination;
         var query = db.CompensationPlans
             .Include(x => x.Rules)

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Assignments;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Exceptions;
 
@@ -12,11 +13,13 @@ public sealed class DeactivateAssignmentHandler(
     IApplicationDbContext db,
     ICurrentUserService currentUser,
     IClock clock,
-    IGuidGenerator guid)
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
     : IRequestHandler<DeactivateAssignmentCommand, Result>
 {
     public async Task<Result> Handle(DeactivateAssignmentCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.AssignmentsUpdate, cancellationToken);
         var assignment = await db.PlanAssignments
             .FirstOrDefaultAsync(a => a.Id == request.AssignmentId, cancellationToken);
 

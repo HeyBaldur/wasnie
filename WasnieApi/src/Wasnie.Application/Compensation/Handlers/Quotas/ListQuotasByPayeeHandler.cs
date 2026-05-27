@@ -4,13 +4,14 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Quotas;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
-public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db)
+public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<ListQuotasByPayeeQuery, Result<PagedResult<QuotaSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -18,6 +19,7 @@ public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db)
 
     public async Task<Result<PagedResult<QuotaSummaryDto>>> Handle(ListQuotasByPayeeQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
         var p = request.Pagination;
         var query = db.Quotas
             .Where(q => q.PayeeId == request.PayeeId)
