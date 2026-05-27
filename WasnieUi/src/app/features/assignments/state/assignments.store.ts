@@ -14,7 +14,7 @@ export class AssignmentsStore {
   readonly error = signal<string | null>(null);
 
   readonly page = signal(1);
-  readonly pageSize = signal(25);
+  readonly pageSize = signal(10);
   readonly sortBy = signal('effectivestart');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly status = signal<AssignmentStatus | null>(null);

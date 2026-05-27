@@ -53,6 +53,13 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
     }
 
+    public async Task ResetRefreshTokensAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM RefreshTokens");
+    }
+
     public async Task ResetImportsAsync()
     {
         using var scope = Factory.Services.CreateScope();

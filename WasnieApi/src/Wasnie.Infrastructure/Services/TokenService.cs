@@ -13,7 +13,7 @@ namespace Wasnie.Infrastructure.Services;
 
 public sealed class TokenService(IConfiguration configuration, IApplicationDbContext db) : ITokenService
 {
-    private const int RefreshTokenLifetimeDays = 30;
+    private const int RefreshTokenLifetimeDays = 7;
 
     public async Task<TokenPairDto> GenerateTokenPairAsync(
         string userId,
@@ -25,7 +25,7 @@ public sealed class TokenService(IConfiguration configuration, IApplicationDbCon
         var secret = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret not configured.");
         var issuer = jwtSettings["Issuer"] ?? "WasnieApi";
         var audience = jwtSettings["Audience"] ?? "WasnieUi";
-        var expiryMinutes = int.TryParse(jwtSettings["ExpiryMinutes"], out var m) ? m : 60;
+        var expiryMinutes = int.TryParse(jwtSettings["ExpiryMinutes"], out var m) ? m : 15;
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -91,5 +91,24 @@ public sealed class TokenService(IConfiguration configuration, IApplicationDbCon
 
         entry.Revoke();
         await db.SaveChangesAsync();
+    }
+
+    public async Task<int> RevokeUserRefreshTokensAsync(string userId)
+    {
+        var tokens = await db.RefreshTokens
+            .Where(r => r.UserId == userId && !r.IsRevoked)
+            .ToListAsync();
+
+        foreach (var token in tokens)
+        {
+            token.Revoke();
+        }
+
+        if (tokens.Count > 0)
+        {
+            await db.SaveChangesAsync();
+        }
+
+        return tokens.Count;
     }
 }
