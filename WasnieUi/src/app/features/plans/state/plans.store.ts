@@ -17,7 +17,7 @@ export class PlansStore {
   readonly error = signal<string | null>(null);
 
   readonly page = signal(1);
-  readonly pageSize = signal(25);
+  readonly pageSize = signal(10);
   readonly sortBy = signal('name');
   readonly sortOrder = signal<'asc' | 'desc'>('asc');
   readonly status = signal<PlanStatus | null>(null);

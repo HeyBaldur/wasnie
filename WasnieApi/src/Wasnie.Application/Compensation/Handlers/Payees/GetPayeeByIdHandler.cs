@@ -3,16 +3,18 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payees;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
 
-public sealed class GetPayeeByIdHandler(IApplicationDbContext db)
+public sealed class GetPayeeByIdHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<GetPayeeByIdQuery, Result<PayeeDto>>
 {
     public async Task<Result<PayeeDto>> Handle(GetPayeeByIdQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PayeesRead, cancellationToken);
         var payee = await db.Payees
             .FirstOrDefaultAsync(p => p.Id == request.PayeeId, cancellationToken);
 

@@ -4,7 +4,7 @@
     [title]="'PLANS.TITLE' | translate"
     [subtitle]="'PLANS.SUBTITLE' | translate"
   >
-    <ws-button slot="actions" variant="primary" routerLink="new">
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Plans.Create' | hasPermission)">
       <app-icon name="plus" [size]="16" />
       {{ 'PLANS.ACTION_NEW' | translate }}
     </ws-button>
@@ -102,21 +102,21 @@
                           </a>
 
                           @if (plan.status === 'Draft') {
-                            <a class="row-menu__item" [routerLink]="[plan.id]">
+                            <a *hasPermission="'Plans.Update'" class="row-menu__item" [routerLink]="[plan.id]">
                               <app-icon name="edit" [size]="14" />
                               {{ 'PLANS.ACTION_EDIT_DETAILS' | translate }}
                             </a>
-                            <button class="row-menu__item" type="button" (click)="onActivate(plan.id)">
+                            <button *hasPermission="'Plans.Activate'" class="row-menu__item" type="button" (click)="onActivate(plan.id)">
                               <app-icon name="check-circle" [size]="14" />
                               {{ 'PLANS.ACTION_ACTIVATE' | translate }}
                             </button>
                             @if (plan.activeRuleCount === 0) {
-                              <button class="row-menu__item row-menu__item--danger" type="button" (click)="onDelete(plan.id)">
+                              <button *hasPermission="'Plans.Delete'" class="row-menu__item row-menu__item--danger" type="button" (click)="onDelete(plan.id)">
                                 <app-icon name="trash" [size]="14" />
                                 {{ 'COMMON.DELETE' | translate }}
                               </button>
                             } @else {
-                              <button class="row-menu__item row-menu__item--danger" type="button" (click)="onArchive(plan.id)">
+                              <button *hasPermission="'Plans.Archive'" class="row-menu__item row-menu__item--danger" type="button" (click)="onArchive(plan.id)">
                                 <app-icon name="archive" [size]="14" />
                                 {{ 'PLANS.ACTION_ARCHIVE' | translate }}
                               </button>
@@ -124,18 +124,18 @@
                           }
 
                           @if (plan.status === 'Active') {
-                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onArchive(plan.id)">
+                            <button *hasPermission="'Plans.Archive'" class="row-menu__item row-menu__item--danger" type="button" (click)="onArchive(plan.id)">
                               <app-icon name="archive" [size]="14" />
                               {{ 'PLANS.ACTION_ARCHIVE' | translate }}
                             </button>
-                            <button class="row-menu__item" type="button" (click)="onClone(plan.id)">
+                            <button *hasPermission="'Plans.Create'" class="row-menu__item" type="button" (click)="onClone(plan.id)">
                               <app-icon name="copy" [size]="14" />
                               {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
                             </button>
                           }
 
                           @if (plan.status === 'Archived') {
-                            <button class="row-menu__item" type="button" (click)="onClone(plan.id)">
+                            <button *hasPermission="'Plans.Create'" class="row-menu__item" type="button" (click)="onClone(plan.id)">
                               <app-icon name="copy" [size]="14" />
                               {{ 'PLANS.ACTION_CLONE_VERSION' | translate }}
                             </button>

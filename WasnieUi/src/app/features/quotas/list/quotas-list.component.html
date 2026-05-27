@@ -4,7 +4,7 @@
     [title]="'QUOTAS.TITLE' | translate"
     [subtitle]="'QUOTAS.SUBTITLE' | translate"
   >
-    <ws-button slot="actions" variant="primary" routerLink="new">
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Quotas.Set' | hasPermission)">
       <app-icon name="plus" [size]="16" />
       {{ 'QUOTAS.NEW' | translate }}
     </ws-button>
@@ -99,13 +99,13 @@
                             {{ 'COMMON.VIEW' | translate }}
                           </a>
                           @if (quota.status === 'Draft') {
-                            <button class="row-menu__item" type="button" (click)="onActivate(quota.id)">
+                            <button *hasPermission="'Quotas.Update'" class="row-menu__item" type="button" (click)="onActivate(quota.id)">
                               <app-icon name="check-circle" [size]="14" />
                               {{ 'QUOTAS.ACTION_ACTIVATE' | translate }}
                             </button>
                           }
                           @if (quota.status === 'Active') {
-                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onClose(quota.id)">
+                            <button *hasPermission="'Quotas.Update'" class="row-menu__item row-menu__item--danger" type="button" (click)="onClose(quota.id)">
                               <app-icon name="x-circle" [size]="14" />
                               {{ 'QUOTAS.ACTION_CLOSE' | translate }}
                             </button>

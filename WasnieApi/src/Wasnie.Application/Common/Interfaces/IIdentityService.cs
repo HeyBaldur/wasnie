@@ -1,5 +1,3 @@
-using Wasnie.Application.Features.Auth.DTOs;
-
 namespace Wasnie.Application.Common.Interfaces;
 
 public interface IIdentityService

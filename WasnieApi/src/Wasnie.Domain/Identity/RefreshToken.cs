@@ -12,25 +12,25 @@ public sealed class RefreshToken : Entity
     public DateTimeOffset? RevokedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
-    public bool IsValid => !IsRevoked && DateTimeOffset.UtcNow < ExpiresAt;
+    public bool IsValidAt(DateTimeOffset now) => !IsRevoked && now < ExpiresAt;
 
     private RefreshToken() { }
 
-    public static RefreshToken Create(string token, string userId, Guid tenantId, DateTimeOffset expiresAt) =>
+    public static RefreshToken Create(string token, string userId, Guid tenantId, DateTimeOffset expiresAt, Guid id, DateTimeOffset now) =>
         new()
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             Token = token,
             UserId = userId,
             TenantId = tenantId,
             ExpiresAt = expiresAt,
             IsRevoked = false,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = now
         };
 
-    public void Revoke()
+    public void Revoke(DateTimeOffset now)
     {
         IsRevoked = true;
-        RevokedAt = DateTimeOffset.UtcNow;
+        RevokedAt = now;
     }
 }

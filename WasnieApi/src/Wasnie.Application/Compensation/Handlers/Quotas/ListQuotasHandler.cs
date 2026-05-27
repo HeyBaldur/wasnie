@@ -4,12 +4,13 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Quotas;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
-public sealed class ListQuotasHandler(IApplicationDbContext db)
+public sealed class ListQuotasHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<ListQuotasQuery, Result<PagedResult<QuotaSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -17,6 +18,7 @@ public sealed class ListQuotasHandler(IApplicationDbContext db)
 
     public async Task<Result<PagedResult<QuotaSummaryDto>>> Handle(ListQuotasQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
         var p = request.Pagination;
         var query = db.Quotas.AsQueryable();
 
@@ -56,8 +58,8 @@ public sealed class ListQuotasHandler(IApplicationDbContext db)
         var sorted = sortBy switch
         {
             "payeefullname" => desc ? joined.OrderByDescending(x => x.PayeeFullName) : joined.OrderBy(x => x.PayeeFullName),
-            "amount"        => desc ? joined.OrderByDescending(x => x.Quota.Amount.Amount) : joined.OrderBy(x => x.Quota.Amount.Amount),
-            _               => desc ? joined.OrderByDescending(x => x.Quota.Period.Start) : joined.OrderBy(x => x.Quota.Period.Start),
+            "amount" => desc ? joined.OrderByDescending(x => x.Quota.Amount.Amount) : joined.OrderBy(x => x.Quota.Amount.Amount),
+            _ => desc ? joined.OrderByDescending(x => x.Quota.Period.Start) : joined.OrderBy(x => x.Quota.Period.Start),
         };
 
         var totalCount = await sorted.CountAsync(cancellationToken);

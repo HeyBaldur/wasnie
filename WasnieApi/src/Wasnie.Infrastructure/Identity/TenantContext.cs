@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Wasnie.Application.Common.Interfaces;
 
@@ -10,13 +9,17 @@ public sealed class TenantContext(IHttpContextAccessor httpContextAccessor) : IT
     {
         get
         {
-            var claim = httpContextAccessor.HttpContext?.User
-                .FindFirst("tenant_id");
+            var httpContext = httpContextAccessor.HttpContext;
+
+            // No HTTP context (background/test scope) or unauthenticated request — return sentinel.
+            if (httpContext?.User.Identity?.IsAuthenticated != true)
+                return Guid.Empty;
+
+            // Authenticated request must carry a valid tenant_id claim.
+            var claim = httpContext.User.FindFirst("tenant_id");
 
             if (claim is null || !Guid.TryParse(claim.Value, out var tenantId))
-            {
-                return Guid.Empty;
-            }
+                throw new UnauthorizedAccessException("Request is missing a valid tenant_id claim.");
 
             return tenantId;
         }

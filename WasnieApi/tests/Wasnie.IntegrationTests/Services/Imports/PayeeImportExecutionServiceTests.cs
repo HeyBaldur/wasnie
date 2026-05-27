@@ -9,6 +9,7 @@ using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services.Imports;
 using Wasnie.IntegrationTests.Infrastructure;
+using Wasnie.IntegrationTests.TestDoubles;
 
 namespace Wasnie.IntegrationTests.Services.Imports;
 
@@ -32,7 +33,7 @@ public sealed class PayeeImportExecutionServiceTests
     private static PayeeImportExecutionService CreateSut(ApplicationDbContext db, Guid tenantId)
     {
         var logger = Substitute.For<ILogger<PayeeImportExecutionService>>();
-        return new PayeeImportExecutionService(db, new FixedTenantContext(tenantId), logger);
+        return new PayeeImportExecutionService(db, new FixedTenantContext(tenantId), logger, new FakeClock(), new FakeGuidGenerator());
     }
 
     private static PayeeImportColumnMapping DefaultMapping() => new()
@@ -220,18 +221,28 @@ public sealed class PayeeImportExecutionServiceTests
 
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
 
         var managerRow = new Dictionary<string, string>
         {
-            ["Name"] = "Boss", ["Code"] = "MGR001", ["Email"] = "boss@co.com", ["Date"] = "2018-01-10", ["Mgr"] = "",
+            ["Name"] = "Boss",
+            ["Code"] = "MGR001",
+            ["Email"] = "boss@co.com",
+            ["Date"] = "2018-01-10",
+            ["Mgr"] = "",
         };
         var reportRow = new Dictionary<string, string>
         {
-            ["Name"] = "Report", ["Code"] = "REP001", ["Email"] = "rep@co.com", ["Date"] = "2020-03-01", ["Mgr"] = "MGR001",
+            ["Name"] = "Report",
+            ["Code"] = "REP001",
+            ["Email"] = "rep@co.com",
+            ["Date"] = "2020-03-01",
+            ["Mgr"] = "MGR001",
         };
 
         var rows = new List<Dictionary<string, string>> { managerRow, reportRow };
@@ -254,22 +265,27 @@ public sealed class PayeeImportExecutionServiceTests
         await using var db = CreateDb(TenantA);
         // Pre-insert the manager
         var existingMgr = Payee.Create(TenantA, "DB Manager", "DBMGR001", "dbmgr@co.com",
-            new DateOnly(2015, 1, 1), "system");
+            new DateOnly(2015, 1, 1), "system", Guid.NewGuid(), DateTimeOffset.UtcNow);
         db.Payees.Add(existingMgr);
         await db.SaveChangesAsync();
 
         var sut = CreateSut(db, TenantA);
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
 
         var reportRow = new Dictionary<string, string>
         {
-            ["Name"] = "New Report", ["Code"] = "NEWREP001", ["Email"] = "newrep@co.com",
-            ["Date"] = "2022-01-01", ["Mgr"] = "DBMGR001",
+            ["Name"] = "New Report",
+            ["Code"] = "NEWREP001",
+            ["Email"] = "newrep@co.com",
+            ["Date"] = "2022-01-01",
+            ["Mgr"] = "DBMGR001",
         };
         var rows = new List<Dictionary<string, string>> { reportRow };
         var vrs = new List<PayeeRowValidationResult> { OkResult(1, reportRow) };

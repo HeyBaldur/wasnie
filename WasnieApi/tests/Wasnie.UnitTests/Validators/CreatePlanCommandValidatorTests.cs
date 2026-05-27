@@ -1,4 +1,3 @@
-using FluentAssertions;
 using FluentValidation.TestHelper;
 using Wasnie.Application.Compensation.Commands.Plans;
 using Wasnie.Application.Compensation.Validators.Plans;

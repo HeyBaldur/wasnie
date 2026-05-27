@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Payees;
@@ -15,6 +16,7 @@ public interface IApplicationDbContext
 {
     DbSet<Tenant> Tenants { get; }
     DbSet<ImportAudit> ImportAudits { get; }
+    DbSet<AuditLog> AuditLogs { get; }
     DbSet<Payee> Payees { get; }
     DbSet<Plan> Plans { get; }
     DbSet<Transaction> Transactions { get; }

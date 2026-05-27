@@ -19,18 +19,21 @@ public sealed class Plan : BaseAuditableEntity
         string description,
         DateOnly effectiveFrom,
         DateOnly effectiveTo,
-        string createdBy)
+        string createdBy,
+        Guid id,
+        DateTimeOffset now)
     {
         return new Plan
         {
+            Id = id,
             TenantId = tenantId,
             Name = name,
             Description = description,
             EffectiveFrom = effectiveFrom,
             EffectiveTo = effectiveTo,
             CreatedBy = createdBy,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
     }

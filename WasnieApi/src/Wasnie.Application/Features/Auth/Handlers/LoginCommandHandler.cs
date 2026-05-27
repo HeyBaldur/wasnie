@@ -1,16 +1,19 @@
 ﻿using MediatR;
+using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
-using Wasnie.Domain.Common.Results;
 using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.DTOs;
 using Wasnie.Application.Features.Auth.Mappings;
+using Wasnie.Domain.Audit;
+using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Features.Auth.Handlers;
 
 public sealed class LoginCommandHandler(
     IIdentityService identityService,
     ITokenService tokenService,
-    IApplicationDbContext dbContext)
+    IApplicationDbContext dbContext,
+    IAuditService auditService)
     : IRequestHandler<LoginCommand, Result<AuthResultDto>>
 {
     public async Task<Result<AuthResultDto>> Handle(
@@ -40,6 +43,19 @@ public sealed class LoginCommandHandler(
 
         var roles = await identityService.GetUserRolesAsync(userId);
         var tokens = await tokenService.GenerateTokenPairAsync(userId, email, tenantId, roles);
+
+        try
+        {
+            await auditService.LogAsync(new AuditEntry(
+                TenantId: tenantId,
+                Action: AuditActions.LoginSuccess,
+                ResourceType: ResourceTypes.Auth,
+                ResourceId: userId,
+                ActorUserId: userId,
+                ActorEmail: email,
+                DisplayName: email), cancellationToken);
+        }
+        catch { /* audit failures must not block login */ }
 
         return Result<AuthResultDto>.Success(
             AuthMapper.ToAuthResultDto(userId, email, tenantId, tenant.Slug, roles, tokens));

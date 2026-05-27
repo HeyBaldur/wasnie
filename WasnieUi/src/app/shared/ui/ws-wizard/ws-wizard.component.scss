@@ -45,7 +45,7 @@
 
   .ws-wz__step--done & {
     background: var(--color-success);
-    color: #fff;
+    color: var(--color-text-inverse);
   }
 }
 

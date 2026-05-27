@@ -31,11 +31,14 @@ public sealed class Plan : AggregateRoot
         string description,
         DateRange effectivePeriod,
         string currency,
-        string createdBy)
+        string createdBy,
+        Guid id,
+        DateTimeOffset now,
+        Guid eventId)
     {
         var plan = new Plan
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             TenantId = tenantId,
             Name = name,
             Description = description,
@@ -43,13 +46,13 @@ public sealed class Plan : AggregateRoot
             Currency = currency,
             Version = 1,
             Status = PlanStatus.Draft,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
             CreatedBy = createdBy,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
 
-        plan.RaiseDomainEvent(new PlanCreatedEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, plan.Id, tenantId));
+        plan.RaiseDomainEvent(new PlanCreatedEvent(eventId, now, plan.Id, tenantId));
         return plan;
     }
 
@@ -108,7 +111,7 @@ public sealed class Plan : AggregateRoot
         rule.Update(name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor);
     }
 
-    public void Activate(string updatedBy)
+    public void Activate(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status != PlanStatus.Draft)
         {
@@ -121,13 +124,13 @@ public sealed class Plan : AggregateRoot
         }
 
         Status = PlanStatus.Active;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
 
-        RaiseDomainEvent(new PlanActivatedEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+        RaiseDomainEvent(new PlanActivatedEvent(eventId, now, Id, TenantId));
     }
 
-    public void Archive(string updatedBy)
+    public void Archive(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status != PlanStatus.Active)
         {
@@ -135,10 +138,10 @@ public sealed class Plan : AggregateRoot
         }
 
         Status = PlanStatus.Archived;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
 
-        RaiseDomainEvent(new PlanArchivedEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+        RaiseDomainEvent(new PlanArchivedEvent(eventId, now, Id, TenantId));
     }
 
     public void CheckDeletable()
@@ -150,7 +153,7 @@ public sealed class Plan : AggregateRoot
             throw new DomainException("Draft plans with active rules cannot be deleted. Archive the plan instead.");
     }
 
-    public Plan CloneAsNewVersion(string createdBy)
+    public Plan CloneAsNewVersion(string createdBy, DateTimeOffset now, Func<Guid> newId)
     {
         if (Status == PlanStatus.Draft)
         {
@@ -159,7 +162,7 @@ public sealed class Plan : AggregateRoot
 
         var clone = new Plan
         {
-            Id = Guid.NewGuid(),
+            Id = newId(),
             TenantId = TenantId,
             Name = Name,
             Description = Description,
@@ -167,9 +170,9 @@ public sealed class Plan : AggregateRoot
             Currency = Currency,
             Version = Version + 1,
             Status = PlanStatus.Draft,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
             CreatedBy = createdBy,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
 
@@ -184,11 +187,12 @@ public sealed class Plan : AggregateRoot
                 rule.RateTable,
                 rule.Modifier,
                 rule.Cap,
-                rule.Floor));
+                rule.Floor,
+                id: newId()));
         }
 
         clone.RaiseDomainEvent(new PlanVersionClonedEvent(
-            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, clone.Id, clone.Version, TenantId));
+            newId(), now, Id, clone.Id, clone.Version, TenantId));
 
         return clone;
     }

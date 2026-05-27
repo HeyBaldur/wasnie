@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Exceptions;
 
@@ -9,11 +11,15 @@ namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
 public sealed class CloseQuotaHandler(
     IApplicationDbContext db,
-    ICurrentUserService currentUser)
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
     : IRequestHandler<CloseQuotaCommand, Result>
 {
     public async Task<Result> Handle(CloseQuotaCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.QuotasSet, cancellationToken);
         var quota = await db.Quotas
             .FirstOrDefaultAsync(q => q.Id == request.QuotaId, cancellationToken);
 
@@ -24,7 +30,7 @@ public sealed class CloseQuotaHandler(
 
         try
         {
-            quota.Close(currentUser.UserId ?? "system");
+            quota.Close(currentUser.UserId ?? "system", clock.UtcNowOffset, guid.NewGuid());
             await db.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }

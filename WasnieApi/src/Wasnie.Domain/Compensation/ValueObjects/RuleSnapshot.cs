@@ -19,7 +19,8 @@ public sealed class RuleSnapshot : ValueObject
         int planVersion,
         string ruleName,
         RateTable rateTable,
-        Trigger trigger)
+        Trigger trigger,
+        DateTimeOffset frozenAt)
     {
         RuleId = ruleId;
         PlanId = planId;
@@ -27,7 +28,7 @@ public sealed class RuleSnapshot : ValueObject
         RuleName = ruleName;
         RateTable = rateTable;
         Trigger = trigger;
-        FrozenAt = DateTimeOffset.UtcNow;
+        FrozenAt = frozenAt;
     }
 
     public static RuleSnapshot Freeze(
@@ -36,8 +37,9 @@ public sealed class RuleSnapshot : ValueObject
         int planVersion,
         string ruleName,
         RateTable rateTable,
-        Trigger trigger) =>
-        new(ruleId, planId, planVersion, ruleName, rateTable, trigger);
+        Trigger trigger,
+        DateTimeOffset now) =>
+        new(ruleId, planId, planVersion, ruleName, rateTable, trigger, now);
 
     protected override IEnumerable<object> GetEqualityComponents()
     {

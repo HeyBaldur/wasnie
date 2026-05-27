@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.MsSql;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Entities;
 using Wasnie.Infrastructure.Persistence;
 
 namespace Wasnie.IntegrationTests.Infrastructure;
@@ -29,11 +31,28 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await using (var db = new ApplicationDbContext(options, NoOpTenantContext.Instance, NoOpPublisher.Instance))
         {
             await db.Database.MigrateAsync();
+            await SeedTestTenantsAsync(db);
         }
 
         // Factory startup (triggered by .Services) will call DbSeeder — tables exist now.
         Factory = new TestWebApplicationFactory(_container.GetConnectionString());
         _ = Factory.Services; // force startup
+    }
+
+    // Seed TenantA and TenantB as Enterprise tier so tier limits never block regular tests.
+    private static async Task SeedTestTenantsAsync(ApplicationDbContext db)
+    {
+        var tenantIds = new[] { TestConstants.TenantA, TestConstants.TenantB };
+        foreach (var id in tenantIds)
+        {
+            if (!await db.Tenants.AnyAsync(t => t.Id == id))
+            {
+                var tenant = Tenant.Create($"Test Tenant {id}", id.ToString("N")[..20], id, DateTimeOffset.UtcNow);
+                tenant.SetTier(Tier.Enterprise);
+                db.Tenants.Add(tenant);
+            }
+        }
+        await db.SaveChangesAsync();
     }
 
     public async Task ResetAsync()
@@ -51,6 +70,23 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+    }
+
+    public async Task ResetRefreshTokensAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM RefreshTokens");
+    }
+
+    public async Task ResetCompensationDataAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPlans");
     }
 
     public async Task ResetImportsAsync()

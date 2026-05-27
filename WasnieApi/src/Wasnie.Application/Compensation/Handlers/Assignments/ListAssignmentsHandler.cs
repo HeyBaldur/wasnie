@@ -4,12 +4,13 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Assignments;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
-public sealed class ListAssignmentsHandler(IApplicationDbContext db)
+public sealed class ListAssignmentsHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
     : IRequestHandler<ListAssignmentsQuery, Result<PagedResult<PlanAssignmentSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -19,6 +20,7 @@ public sealed class ListAssignmentsHandler(IApplicationDbContext db)
         ListAssignmentsQuery request,
         CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
         var query = db.PlanAssignments.AsQueryable();
 
@@ -55,8 +57,8 @@ public sealed class ListAssignmentsHandler(IApplicationDbContext db)
         var sorted = sortBy switch
         {
             "payeefullname" => desc ? joined.OrderByDescending(x => x.Assignment.PayeeSnapshot.FullName) : joined.OrderBy(x => x.Assignment.PayeeSnapshot.FullName),
-            "planname"      => desc ? joined.OrderByDescending(x => x.PlanName)                         : joined.OrderBy(x => x.PlanName),
-            _               => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start)  : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
+            "planname" => desc ? joined.OrderByDescending(x => x.PlanName) : joined.OrderBy(x => x.PlanName),
+            _ => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start) : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
         };
 
         var totalCount = await sorted.CountAsync(cancellationToken);

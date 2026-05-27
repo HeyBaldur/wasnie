@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
+using Wasnie.Application.Common.Exceptions;
 using Wasnie.Domain.Exceptions;
 
 namespace Wasnie.Api.Middleware;
@@ -17,6 +18,34 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         {
             await WriteErrorResponse(context, HttpStatusCode.BadRequest, "Validation failed.",
                 ex.Errors.Select(e => e.ErrorMessage));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            await WriteErrorResponse(context, HttpStatusCode.Unauthorized, "Unauthorized.", null);
+        }
+        catch (ForbiddenException ex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                error = "Forbidden",
+                message = ex.Message,
+            }));
+        }
+        catch (TierLimitExceededException ex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                error = "TierLimitExceeded",
+                message = ex.Message,
+                tier = ex.Tier,
+                currentCount = ex.CurrentCount,
+                limit = ex.Limit,
+                upgradePath = "/account/subscription",
+            }));
         }
         catch (DomainException ex)
         {

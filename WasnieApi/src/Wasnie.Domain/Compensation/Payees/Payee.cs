@@ -23,6 +23,8 @@ public sealed class Payee : BaseAuditableEntity
         string email,
         DateOnly hireDate,
         string createdBy,
+        Guid id,
+        DateTimeOffset now,
         string? role = null,
         Guid? managerId = null)
     {
@@ -32,12 +34,12 @@ public sealed class Payee : BaseAuditableEntity
             throw new DomainException("Employee code is required.");
         if (string.IsNullOrWhiteSpace(email))
             throw new DomainException("Email is required.");
-        if (hireDate > DateOnly.FromDateTime(DateTime.UtcNow))
+        if (hireDate > DateOnly.FromDateTime(now.UtcDateTime))
             throw new DomainException("Hire date cannot be in the future.");
 
-        var now = DateTimeOffset.UtcNow;
         return new Payee
         {
+            Id = id,
             TenantId = tenantId,
             FullName = fullName.Trim(),
             EmployeeCode = employeeCode.Trim(),
@@ -60,7 +62,8 @@ public sealed class Payee : BaseAuditableEntity
         DateOnly hireDate,
         string? role,
         Guid? managerId,
-        string updatedBy)
+        string updatedBy,
+        DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Full name is required.");
@@ -75,38 +78,38 @@ public sealed class Payee : BaseAuditableEntity
         Role = string.IsNullOrWhiteSpace(role) ? null : role.Trim();
         ManagerId = managerId;
         HireDate = hireDate;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 
-    public void MarkAsActive(string updatedBy)
+    public void MarkAsActive(string updatedBy, DateTimeOffset now)
     {
         if (Status == PayeeStatus.Active) return;
 
         Status = PayeeStatus.Active;
         TerminationDate = null;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 
-    public void MarkAsOnLeave(string updatedBy)
+    public void MarkAsOnLeave(string updatedBy, DateTimeOffset now)
     {
         if (Status == PayeeStatus.Terminated)
             throw new DomainException("Terminated payees cannot be set to On Leave directly. Mark as Active first.");
         if (Status == PayeeStatus.OnLeave) return;
 
         Status = PayeeStatus.OnLeave;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 
-    public void MarkAsTerminated(DateOnly terminationDate, string updatedBy)
+    public void MarkAsTerminated(DateOnly terminationDate, string updatedBy, DateTimeOffset now)
     {
         if (Status == PayeeStatus.Terminated) return;
 
         Status = PayeeStatus.Terminated;
         TerminationDate = terminationDate;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 }

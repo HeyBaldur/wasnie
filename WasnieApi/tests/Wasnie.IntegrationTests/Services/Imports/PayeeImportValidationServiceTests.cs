@@ -7,6 +7,7 @@ using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services.Imports;
 using Wasnie.IntegrationTests.Infrastructure;
+using Wasnie.IntegrationTests.TestDoubles;
 
 namespace Wasnie.IntegrationTests.Services.Imports;
 
@@ -50,7 +51,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_MissingFullName_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(name: "");
         var mapping = DefaultMapping();
 
@@ -64,7 +65,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_MissingEmployeeCode_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(code: "");
         var mapping = DefaultMapping();
 
@@ -78,7 +79,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_MissingEmail_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(email: "");
         var mapping = DefaultMapping();
 
@@ -92,7 +93,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_MissingHireDate_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(date: "");
         var mapping = DefaultMapping();
 
@@ -114,7 +115,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_InvalidEmailFormats_ReturnError(string badEmail)
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(email: badEmail);
         var mapping = DefaultMapping();
 
@@ -132,7 +133,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_FutureHireDate_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var futureDate = DateTime.UtcNow.AddDays(10).ToString("yyyy-MM-dd");
         var row = ValidRow(date: futureDate);
         var mapping = DefaultMapping();
@@ -147,7 +148,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_HireDateBefore1950_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(date: "1949-12-31");
         var mapping = DefaultMapping();
 
@@ -164,7 +165,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_ValidDateFormats_NoDateError(string dateStr)
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(date: dateStr);
         var mapping = DefaultMapping();
 
@@ -181,7 +182,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_DuplicateCodeWithinFile_SecondRowGetsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row1 = ValidRow(code: "EMP001", email: "alice@company.com");
         var row2 = ValidRow(code: "EMP001", email: "bob@company.com");
         var mapping = DefaultMapping();
@@ -197,7 +198,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_DuplicateEmailWithinFile_SecondRowGetsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row1 = ValidRow(code: "EMP001", email: "same@company.com");
         var row2 = ValidRow(code: "EMP002", email: "same@company.com");
         var mapping = DefaultMapping();
@@ -215,10 +216,10 @@ public sealed class PayeeImportValidationServiceTests
         await using var db = CreateDb(TenantA);
         // Pre-insert a payee with EMP001
         db.Payees.Add(Payee.Create(TenantA, "Existing Person", "EMP001", "existing@company.com",
-            new DateOnly(2021, 1, 1), "system"));
+            new DateOnly(2021, 1, 1), "system", Guid.NewGuid(), DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(code: "EMP001", email: "newemail@company.com");
         var mapping = DefaultMapping();
 
@@ -233,10 +234,10 @@ public sealed class PayeeImportValidationServiceTests
     {
         await using var db = CreateDb(TenantA);
         db.Payees.Add(Payee.Create(TenantA, "Existing Person", "EMP999", "alice@company.com",
-            new DateOnly(2021, 1, 1), "system"));
+            new DateOnly(2021, 1, 1), "system", Guid.NewGuid(), DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(code: "EMP001", email: "alice@company.com");
         var mapping = DefaultMapping();
 
@@ -252,12 +253,12 @@ public sealed class PayeeImportValidationServiceTests
         // Insert EMP001 in TenantB
         await using var dbB = CreateDb(TenantB);
         dbB.Payees.Add(Payee.Create(TenantB, "TenantB Person", "EMP001", "alice@company.com",
-            new DateOnly(2021, 1, 1), "system"));
+            new DateOnly(2021, 1, 1), "system", Guid.NewGuid(), DateTimeOffset.UtcNow));
         await dbB.SaveChangesAsync();
 
         // Validate with TenantA context — global filter means TenantB data is invisible
         await using var dbA = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(dbA);
+        var sut = new PayeeImportValidationService(dbA, new FakeClock());
         var row = ValidRow(code: "EMP001", email: "alice@company.com");
         var mapping = DefaultMapping();
 
@@ -276,23 +277,31 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_CrossRowManagerReference_NoError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
 
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
         var manager = new Dictionary<string, string>
         {
-            ["Name"] = "The Manager", ["Code"] = "MGR001",
-            ["Email"] = "mgr@company.com", ["Date"] = "2018-01-10", ["Mgr"] = "",
+            ["Name"] = "The Manager",
+            ["Code"] = "MGR001",
+            ["Email"] = "mgr@company.com",
+            ["Date"] = "2018-01-10",
+            ["Mgr"] = "",
         };
         var report = new Dictionary<string, string>
         {
-            ["Name"] = "Report One", ["Code"] = "REP001",
-            ["Email"] = "rep1@company.com", ["Date"] = "2020-03-01", ["Mgr"] = "MGR001",
+            ["Name"] = "Report One",
+            ["Code"] = "REP001",
+            ["Email"] = "rep1@company.com",
+            ["Date"] = "2020-03-01",
+            ["Mgr"] = "MGR001",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { manager, report }, mapping);
@@ -304,18 +313,23 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_ManagerCodeNotInFileOrDb_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
 
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
         var row = new Dictionary<string, string>
         {
-            ["Name"] = "Some Person", ["Code"] = "EMP001",
-            ["Email"] = "person@company.com", ["Date"] = "2022-01-01", ["Mgr"] = "NONEXISTENT",
+            ["Name"] = "Some Person",
+            ["Code"] = "EMP001",
+            ["Email"] = "person@company.com",
+            ["Date"] = "2022-01-01",
+            ["Mgr"] = "NONEXISTENT",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
@@ -329,20 +343,25 @@ public sealed class PayeeImportValidationServiceTests
     {
         await using var db = CreateDb(TenantA);
         db.Payees.Add(Payee.Create(TenantA, "DB Manager", "MGR999", "mgr999@company.com",
-            new DateOnly(2018, 1, 1), "system"));
+            new DateOnly(2018, 1, 1), "system", Guid.NewGuid(), DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
         var row = new Dictionary<string, string>
         {
-            ["Name"] = "New Report", ["Code"] = "REP001",
-            ["Email"] = "rep@company.com", ["Date"] = "2022-01-01", ["Mgr"] = "MGR999",
+            ["Name"] = "New Report",
+            ["Code"] = "REP001",
+            ["Email"] = "rep@company.com",
+            ["Date"] = "2022-01-01",
+            ["Mgr"] = "MGR999",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
@@ -358,7 +377,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_PersonalEmailDomain_ReturnsWarning()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(email: "test@gmail.com");
         var mapping = DefaultMapping();
 
@@ -373,8 +392,9 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_HireDateWithinLast30Days_ReturnsWarning()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
-        var recentDate = DateTime.UtcNow.AddDays(-5).ToString("yyyy-MM-dd");
+        var clock = new FakeClock();
+        var sut = new PayeeImportValidationService(db, clock);
+        var recentDate = clock.UtcNow.AddDays(-5).ToString("yyyy-MM-dd");
         var row = ValidRow(date: recentDate);
         var mapping = DefaultMapping();
 
@@ -389,13 +409,15 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_EmptyRole_ReturnsWarning()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow();
         row["Role"] = "";  // empty role column present
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             RoleColumn = "Role",
         };
 
@@ -413,7 +435,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_NameWithAccents_NoError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var row = ValidRow(name: "García López");
         var mapping = DefaultMapping();
 
@@ -430,7 +452,7 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_10ValidRows_ReturnsZeroErrors()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db);
+        var sut = new PayeeImportValidationService(db, new FakeClock());
         var mapping = DefaultMapping();
 
         var rows = Enumerable.Range(1, 10)

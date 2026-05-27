@@ -30,7 +30,11 @@ public sealed class CompensationPayout : AggregateRoot
         PayeeReference payeeSnapshot,
         DateRange period,
         IReadOnlyList<PayoutLine> lines,
-        string calculatedBy)
+        string calculatedBy,
+        Guid id,
+        DateTimeOffset now,
+        Guid eventId,
+        Func<Guid> newId)
     {
         var totalCommission = lines.Count > 0
             ? lines.Skip(1).Aggregate(lines[0].CommissionAmount, (acc, l) => acc.Add(l.CommissionAmount))
@@ -38,16 +42,16 @@ public sealed class CompensationPayout : AggregateRoot
 
         var payout = new CompensationPayout
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             TenantId = tenantId,
             PayeeId = payeeId,
             PayeeSnapshot = payeeSnapshot,
             Period = period,
             TotalCommission = totalCommission,
             Status = CompensationPayoutStatus.Calculated,
-            CalculatedAt = DateTimeOffset.UtcNow,
+            CalculatedAt = now,
             CalculatedBy = calculatedBy,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = now,
             UpdatedBy = calculatedBy
         };
 
@@ -60,16 +64,17 @@ public sealed class CompensationPayout : AggregateRoot
                 line.RuleName,
                 line.BaseAmount,
                 line.CommissionAmount,
-                line.AppliedModifiers));
+                line.AppliedModifiers,
+                newId()));
         }
 
         payout.RaiseDomainEvent(new PayoutCalculatedEvent(
-            Guid.NewGuid(), DateTimeOffset.UtcNow, payout.Id, payeeId, tenantId));
+            eventId, now, payout.Id, payeeId, tenantId));
 
         return payout;
     }
 
-    public void Approve(string updatedBy)
+    public void Approve(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status != CompensationPayoutStatus.Calculated)
         {
@@ -77,13 +82,13 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Approved;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
 
-        RaiseDomainEvent(new PayoutApprovedEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+        RaiseDomainEvent(new PayoutApprovedEvent(eventId, now, Id, TenantId));
     }
 
-    public void MarkPaid(string updatedBy)
+    public void MarkPaid(string updatedBy, DateTimeOffset now)
     {
         if (Status != CompensationPayoutStatus.Approved)
         {
@@ -91,11 +96,11 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Paid;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 
-    public void Dispute(string updatedBy)
+    public void Dispute(string updatedBy, DateTimeOffset now)
     {
         if (Status == CompensationPayoutStatus.Paid)
         {
@@ -103,7 +108,7 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Disputed;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 }

@@ -5,7 +5,7 @@
 }
 
 .ws-btn {
-  @apply inline-flex items-center justify-center gap-2 font-semibold;
+  @apply inline-flex items-center justify-center gap-2 font-bold;
   position: relative;
   letter-spacing: -0.005em;
   border: 1px solid transparent;
@@ -143,7 +143,6 @@
 
 .ws-btn__content {
   display: contents;
-  @apply font-semibold;
 }
 
 .ws-btn__content--hidden {

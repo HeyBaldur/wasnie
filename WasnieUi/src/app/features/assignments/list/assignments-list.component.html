@@ -4,7 +4,7 @@
     [title]="'ASSIGNMENTS.TITLE' | translate"
     [subtitle]="'ASSIGNMENTS.SUBTITLE' | translate"
   >
-    <ws-button slot="actions" variant="primary" routerLink="new">
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Assignments.Create' | hasPermission)">
       <app-icon name="plus" [size]="16" />
       {{ 'ASSIGNMENTS.NEW' | translate }}
     </ws-button>
@@ -101,7 +101,7 @@
                           [style.right.px]="menuPosition()!.right"
                         >
                           @if (assignment.status === 'Active') {
-                            <button class="row-menu__item row-menu__item--danger" type="button" (click)="onDeactivate(assignment.id)">
+                            <button *hasPermission="'Assignments.Update'" class="row-menu__item row-menu__item--danger" type="button" (click)="onDeactivate(assignment.id)">
                               <app-icon name="x-circle" [size]="14" />
                               {{ 'COMMON.DEACTIVATE' | translate }}
                             </button>

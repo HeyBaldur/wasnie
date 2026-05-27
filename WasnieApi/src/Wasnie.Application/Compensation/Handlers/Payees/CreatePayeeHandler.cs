@@ -1,10 +1,14 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.DTOs;
+using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Payees;
 using Wasnie.Application.Compensation.DTOs;
+using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
-using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
@@ -12,11 +16,19 @@ namespace Wasnie.Application.Compensation.Handlers.Payees;
 public sealed class CreatePayeeHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
-    ICurrentUserService currentUser)
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid,
+    IAuditService auditService,
+    IAuthorizationService authorizationService,
+    ITierLimitChecker tierLimitChecker)
     : IRequestHandler<CreatePayeeCommand, Result<PayeeDto>>
 {
     public async Task<Result<PayeeDto>> Handle(CreatePayeeCommand request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PayeesCreate, cancellationToken);
+        await tierLimitChecker.EnsurePayeeLimitAsync(cancellationToken);
+
         var codeExists = await db.Payees
             .AnyAsync(p => p.EmployeeCode == request.EmployeeCode, cancellationToken);
 
@@ -38,6 +50,8 @@ public sealed class CreatePayeeHandler(
             request.Email,
             request.HireDate,
             currentUser.UserId ?? "system",
+            guid.NewGuid(),
+            clock.UtcNowOffset,
             request.Role,
             request.ManagerId);
 
@@ -53,7 +67,23 @@ public sealed class CreatePayeeHandler(
             managerCode = manager?.EmployeeCode;
         }
 
-        return Result<PayeeDto>.Success(ToDto(payee, 0, managerName, managerCode));
+        var dto = ToDto(payee, 0, managerName, managerCode);
+
+        try
+        {
+            await auditService.LogAsync(new AuditEntry(
+                TenantId: tenantContext.TenantId,
+                Action: AuditActions.PayeeCreated,
+                ResourceType: ResourceTypes.Payee,
+                ResourceId: payee.Id.ToString(),
+                ActorUserId: currentUser.UserId ?? "system",
+                ActorEmail: currentUser.Email ?? string.Empty,
+                DisplayName: payee.FullName,
+                After: EntityDiff.Serialize(dto)), cancellationToken);
+        }
+        catch { /* audit failures must not block the user operation */ }
+
+        return Result<PayeeDto>.Success(dto);
     }
 
     internal static PayeeDto ToDto(Payee payee, int activeAssignmentCount, string? managerName, string? managerCode) =>

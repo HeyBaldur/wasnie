@@ -17,8 +17,8 @@ public sealed class FileParserService : IFileParserService
         return ext switch
         {
             ".xlsx" => Task.FromResult(ParseXlsx(stream)),
-            ".csv"  => Task.FromResult(ParseCsv(stream)),
-            _       => throw new InvalidOperationException($"Unsupported file format '{ext}'. Only .csv and .xlsx are accepted."),
+            ".csv" => Task.FromResult(ParseCsv(stream)),
+            _ => throw new InvalidOperationException($"Unsupported file format '{ext}'. Only .csv and .xlsx are accepted."),
         };
     }
 

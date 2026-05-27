@@ -23,10 +23,13 @@ public sealed class Transaction : BaseAuditableEntity
         decimal amount,
         string currency,
         DateOnly transactionDate,
-        string createdBy)
+        string createdBy,
+        Guid id,
+        DateTimeOffset now)
     {
         return new Transaction
         {
+            Id = id,
             TenantId = tenantId,
             ReferenceNumber = referenceNumber,
             PayeeId = payeeId,
@@ -35,8 +38,8 @@ public sealed class Transaction : BaseAuditableEntity
             Currency = currency,
             TransactionDate = transactionDate,
             CreatedBy = createdBy,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
     }

@@ -4,6 +4,8 @@ import { extractApiError } from '../../../shared/utils/api-error';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
@@ -31,6 +33,8 @@ import {
     RouterLink,
     TranslateModule,
     DateFormatPipe,
+    HasPermissionDirective,
+    HasPermissionPipe,
     WsButtonComponent,
     WsInputComponent,
     WsBadgeComponent,

@@ -1,17 +1,21 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payees;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
-using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
 
-public sealed class ListPayeesHandler(IApplicationDbContext db)
+public sealed class ListPayeesHandler(
+    IApplicationDbContext db,
+    ITenantContext tenantContext,
+    IAuthorizationService authorizationService)
     : IRequestHandler<ListPayeesQuery, Result<PagedResult<PayeeDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -19,6 +23,7 @@ public sealed class ListPayeesHandler(IApplicationDbContext db)
 
     public async Task<Result<PagedResult<PayeeDto>>> Handle(ListPayeesQuery request, CancellationToken cancellationToken)
     {
+        await authorizationService.RequireAsync(Permission.PayeesRead, cancellationToken);
         var p = request.Pagination;
         var query = db.Payees.AsQueryable();
 
@@ -47,9 +52,9 @@ public sealed class ListPayeesHandler(IApplicationDbContext db)
         query = sortBy switch
         {
             "employeecode" => desc ? query.OrderByDescending(x => x.EmployeeCode) : query.OrderBy(x => x.EmployeeCode),
-            "hiredate"     => desc ? query.OrderByDescending(x => x.HireDate)     : query.OrderBy(x => x.HireDate),
-            "role"         => desc ? query.OrderByDescending(x => x.Role)          : query.OrderBy(x => x.Role),
-            _              => desc ? query.OrderByDescending(x => x.FullName)      : query.OrderBy(x => x.FullName),
+            "hiredate" => desc ? query.OrderByDescending(x => x.HireDate) : query.OrderBy(x => x.HireDate),
+            "role" => desc ? query.OrderByDescending(x => x.Role) : query.OrderBy(x => x.Role),
+            _ => desc ? query.OrderByDescending(x => x.FullName) : query.OrderBy(x => x.FullName),
         };
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
@@ -62,9 +67,10 @@ public sealed class ListPayeesHandler(IApplicationDbContext db)
             .ToDictionaryAsync(x => x.PayeeId, x => x.Count, cancellationToken);
 
         var managerIds = paged.Items.Where(x => x.ManagerId.HasValue).Select(x => x.ManagerId!.Value).Distinct().ToList();
+        var currentTenantId = tenantContext.TenantId;
         var managers = managerIds.Count > 0
             ? await db.Payees.IgnoreQueryFilters()
-                .Where(x => managerIds.Contains(x.Id))
+                .Where(x => x.TenantId == currentTenantId && managerIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, x => x, cancellationToken)
             : new Dictionary<Guid, Payee>();
 

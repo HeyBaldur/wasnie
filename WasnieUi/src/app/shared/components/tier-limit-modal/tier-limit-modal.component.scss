@@ -1,0 +1,46 @@
+.tier-limit-modal {
+  &__body {
+    padding: 0 1.5rem 1rem;
+  }
+
+  &__message {
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+  }
+
+  &__stats {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 0.75rem;
+  }
+
+  &__sep {
+    font-size: 1.25rem;
+    font-weight: 400;
+    color: var(--color-text-tertiary);
+  }
+
+  &__limit {
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--color-text-secondary);
+  }
+
+  &__upgrade-hint {
+    font-size: 0.8125rem;
+    color: var(--color-text-tertiary);
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+}

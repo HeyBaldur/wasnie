@@ -1,5 +1,5 @@
-using ClosedXML.Excel;
 using System.Text;
+using ClosedXML.Excel;
 
 namespace Wasnie.IntegrationTests.Fixtures;
 

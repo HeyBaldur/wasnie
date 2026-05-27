@@ -166,7 +166,17 @@
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",
-    "UNAUTHORIZED": "Tu sesión ha expirado. Por favor, inicia sesión de nuevo."
+    "UNAUTHORIZED": "Tu sesión ha expirado. Por favor, inicia sesión de nuevo.",
+    "FORBIDDEN": "No tienes permiso para realizar esta acción.",
+    "FORBIDDEN_TITLE": "Acceso denegado",
+    "FORBIDDEN_MESSAGE": "No tienes permiso para ver esta página. Contacta con tu administrador si crees que es un error.",
+    "FORBIDDEN_BACK": "Volver al Panel"
+  },
+  "TIER_LIMIT": {
+    "TITLE": "Límite del plan alcanzado",
+    "MESSAGE": "Tu plan {{ tier }} permite hasta {{ limit }} registros. Actualiza para añadir más.",
+    "UPGRADE_HINT": "Actualiza tu suscripción para desbloquear límites más altos.",
+    "UPGRADE": "Actualizar plan"
   },
   "PLANS": {
     "TITLE": "Planes",

@@ -1,8 +1,8 @@
-﻿using MediatR;
+using MediatR;
 using Wasnie.Application.Common.Interfaces;
-using Wasnie.Domain.Common.Results;
 using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.DTOs;
+using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Features.Auth.Handlers;
 

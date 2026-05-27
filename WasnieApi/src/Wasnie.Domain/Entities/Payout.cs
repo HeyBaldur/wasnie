@@ -25,10 +25,13 @@ public sealed class Payout : BaseAuditableEntity
         string currency,
         int periodYear,
         int periodMonth,
-        string createdBy)
+        string createdBy,
+        Guid id,
+        DateTimeOffset now)
     {
         return new Payout
         {
+            Id = id,
             TenantId = tenantId,
             PayeeId = payeeId,
             PlanId = planId,
@@ -38,8 +41,8 @@ public sealed class Payout : BaseAuditableEntity
             PeriodYear = periodYear,
             PeriodMonth = periodMonth,
             CreatedBy = createdBy,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
     }

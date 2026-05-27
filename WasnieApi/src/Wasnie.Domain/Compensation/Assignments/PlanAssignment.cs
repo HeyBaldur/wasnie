@@ -30,11 +30,14 @@ public sealed class PlanAssignment : AggregateRoot
         PayeeReference payeeSnapshot,
         DateRange effectivePeriod,
         string createdBy,
+        Guid id,
+        DateTimeOffset now,
+        Guid eventId,
         string? notes = null)
     {
         var assignment = new PlanAssignment
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             TenantId = tenantId,
             PlanId = planId,
             PayeeId = payeeId,
@@ -42,26 +45,26 @@ public sealed class PlanAssignment : AggregateRoot
             EffectivePeriod = effectivePeriod,
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             Status = AssignmentStatus.Active,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
             CreatedBy = createdBy,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = now,
             UpdatedBy = createdBy
         };
 
         assignment.RaiseDomainEvent(new PlanAssignmentActivatedEvent(
-            Guid.NewGuid(), DateTimeOffset.UtcNow, assignment.Id, planId, payeeId, tenantId));
+            eventId, now, assignment.Id, planId, payeeId, tenantId));
 
         return assignment;
     }
 
-    public void UpdateNotes(string? notes, string updatedBy)
+    public void UpdateNotes(string? notes, string updatedBy, DateTimeOffset now)
     {
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
 
-    public void Deactivate(string updatedBy)
+    public void Deactivate(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status == AssignmentStatus.Deactivated)
         {
@@ -69,10 +72,10 @@ public sealed class PlanAssignment : AggregateRoot
         }
 
         Status = AssignmentStatus.Deactivated;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
         UpdatedBy = updatedBy;
 
         RaiseDomainEvent(new PlanAssignmentDeactivatedEvent(
-            Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+            eventId, now, Id, TenantId));
     }
 }

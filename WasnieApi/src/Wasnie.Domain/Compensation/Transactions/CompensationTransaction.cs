@@ -30,11 +30,14 @@ public sealed class CompensationTransaction : AggregateRoot
         DateOnly transactionDate,
         TransactionSource source,
         string ingestedBy,
+        Guid id,
+        DateTimeOffset now,
+        Guid eventId,
         string? externalReference = null)
     {
         var tx = new CompensationTransaction
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             TenantId = tenantId,
             ReferenceNumber = referenceNumber,
             PayeeId = payeeId,
@@ -43,18 +46,18 @@ public sealed class CompensationTransaction : AggregateRoot
             Source = source,
             Status = CompensationTransactionStatus.Pending,
             ExternalReference = externalReference,
-            IngestedAt = DateTimeOffset.UtcNow,
+            IngestedAt = now,
             IngestedBy = ingestedBy,
-            UpdatedAt = DateTimeOffset.UtcNow
+            UpdatedAt = now
         };
 
         tx.RaiseDomainEvent(new TransactionIngestedEvent(
-            Guid.NewGuid(), DateTimeOffset.UtcNow, tx.Id, tenantId, referenceNumber));
+            eventId, now, tx.Id, tenantId, referenceNumber));
 
         return tx;
     }
 
-    public void Cancel(string updatedBy)
+    public void Cancel(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status == CompensationTransactionStatus.Cancelled)
         {
@@ -67,12 +70,12 @@ public sealed class CompensationTransaction : AggregateRoot
         }
 
         Status = CompensationTransactionStatus.Cancelled;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
 
-        RaiseDomainEvent(new TransactionCancelledEvent(Guid.NewGuid(), DateTimeOffset.UtcNow, Id, TenantId));
+        RaiseDomainEvent(new TransactionCancelledEvent(eventId, now, Id, TenantId));
     }
 
-    public void MarkCredited()
+    public void MarkCredited(DateTimeOffset now)
     {
         if (Status != CompensationTransactionStatus.Pending)
         {
@@ -80,6 +83,6 @@ public sealed class CompensationTransaction : AggregateRoot
         }
 
         Status = CompensationTransactionStatus.Credited;
-        UpdatedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = now;
     }
 }

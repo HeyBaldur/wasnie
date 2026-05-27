@@ -1,6 +1,5 @@
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Compensation.Assignments;
-using Wasnie.Domain.Compensation.Quotas;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
 using CompensationRule = Wasnie.Domain.Compensation.Plans.Rule;
 
