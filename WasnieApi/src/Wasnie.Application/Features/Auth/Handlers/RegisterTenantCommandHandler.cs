@@ -1,10 +1,10 @@
 using MediatR;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
-using Wasnie.Domain.Common.Results;
 using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.DTOs;
 using Wasnie.Application.Features.Auth.Mappings;
+using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Entities;
 
 namespace Wasnie.Application.Features.Auth.Handlers;

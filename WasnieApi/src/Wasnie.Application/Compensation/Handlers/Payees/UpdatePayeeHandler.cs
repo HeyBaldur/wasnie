@@ -48,8 +48,12 @@ public sealed class UpdatePayeeHandler(
 
         var beforeSnapshot = new
         {
-            payee.FullName, payee.EmployeeCode, payee.Email,
-            payee.HireDate, payee.Role, payee.ManagerId,
+            payee.FullName,
+            payee.EmployeeCode,
+            payee.Email,
+            payee.HireDate,
+            payee.Role,
+            payee.ManagerId,
         };
 
         payee.Update(

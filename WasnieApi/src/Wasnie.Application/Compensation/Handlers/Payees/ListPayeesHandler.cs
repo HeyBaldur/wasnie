@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -8,7 +9,6 @@ using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
-using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;
 
@@ -52,9 +52,9 @@ public sealed class ListPayeesHandler(
         query = sortBy switch
         {
             "employeecode" => desc ? query.OrderByDescending(x => x.EmployeeCode) : query.OrderBy(x => x.EmployeeCode),
-            "hiredate"     => desc ? query.OrderByDescending(x => x.HireDate)     : query.OrderBy(x => x.HireDate),
-            "role"         => desc ? query.OrderByDescending(x => x.Role)          : query.OrderBy(x => x.Role),
-            _              => desc ? query.OrderByDescending(x => x.FullName)      : query.OrderBy(x => x.FullName),
+            "hiredate" => desc ? query.OrderByDescending(x => x.HireDate) : query.OrderBy(x => x.HireDate),
+            "role" => desc ? query.OrderByDescending(x => x.Role) : query.OrderBy(x => x.Role),
+            _ => desc ? query.OrderByDescending(x => x.FullName) : query.OrderBy(x => x.FullName),
         };
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);

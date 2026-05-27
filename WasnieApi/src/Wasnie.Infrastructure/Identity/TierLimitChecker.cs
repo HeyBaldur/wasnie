@@ -19,12 +19,18 @@ public sealed class TierLimitChecker(
         var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
 
-        if (tenant is null) return;
+        if (tenant is null)
+        {
+            return;
+        }
 
         var tier = tenant.Tier;
         var limits = TierLimits.Limits[tier];
 
-        if (limits.MaxPayees == int.MaxValue) return;
+        if (limits.MaxPayees == int.MaxValue)
+        {
+            return;
+        }
 
         var count = await db.Payees.CountAsync(cancellationToken);
 
@@ -41,12 +47,18 @@ public sealed class TierLimitChecker(
         var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
 
-        if (tenant is null) return;
+        if (tenant is null)
+        {
+            return;
+        }
 
         var tier = tenant.Tier;
         var limits = TierLimits.Limits[tier];
 
-        if (limits.MaxPlans == int.MaxValue) return;
+        if (limits.MaxPlans == int.MaxValue)
+        {
+            return;
+        }
 
         var count = await db.CompensationPlans.CountAsync(cancellationToken);
 
@@ -77,10 +89,10 @@ public sealed class TierLimitChecker(
 
     private static string? GetUpgradeTier(Tier current) => current switch
     {
-        Tier.Free     => Tier.Starter.ToString(),
-        Tier.Starter  => Tier.Growth.ToString(),
-        Tier.Growth   => Tier.Scale.ToString(),
-        Tier.Scale    => Tier.Enterprise.ToString(),
-        _             => null,
+        Tier.Free => Tier.Starter.ToString(),
+        Tier.Starter => Tier.Growth.ToString(),
+        Tier.Growth => Tier.Scale.ToString(),
+        Tier.Scale => Tier.Enterprise.ToString(),
+        _ => null,
     };
 }

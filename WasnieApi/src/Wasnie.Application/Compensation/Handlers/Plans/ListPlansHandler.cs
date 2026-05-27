@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -8,7 +9,6 @@ using Wasnie.Application.Compensation.Queries.Plans;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Plans;
-using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
@@ -42,10 +42,10 @@ public sealed class ListPlansHandler(IApplicationDbContext db, IAuthorizationSer
 
         query = sortBy switch
         {
-            "version"       => desc ? query.OrderByDescending(x => x.Version)                    : query.OrderBy(x => x.Version),
-            "effectivestart"=> desc ? query.OrderByDescending(x => x.EffectivePeriod.Start)     : query.OrderBy(x => x.EffectivePeriod.Start),
-            "effectiveend"  => desc ? query.OrderByDescending(x => x.EffectivePeriod.End)       : query.OrderBy(x => x.EffectivePeriod.End),
-            _               => desc ? query.OrderByDescending(x => x.Name)                      : query.OrderBy(x => x.Name),
+            "version" => desc ? query.OrderByDescending(x => x.Version) : query.OrderBy(x => x.Version),
+            "effectivestart" => desc ? query.OrderByDescending(x => x.EffectivePeriod.Start) : query.OrderBy(x => x.EffectivePeriod.Start),
+            "effectiveend" => desc ? query.OrderByDescending(x => x.EffectivePeriod.End) : query.OrderBy(x => x.EffectivePeriod.End),
+            _ => desc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
         };
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);

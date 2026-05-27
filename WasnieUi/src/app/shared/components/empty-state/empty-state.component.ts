@@ -92,6 +92,16 @@ export class EmptyStateComponent {
   readonly secondaryActionRoute = input<string>('');
   readonly actionClick = output<void>();
 
+  /**
+   * SAFETY NOTE (ARCHITECTURE.md Rule 4.6.1):
+   * This bypassSecurityTrustHtml call is safe because:
+   * 1. The input (ILLUSTRATIONS[key]) is a compile-time constant dictionary defined in this file.
+   * 2. No user-provided content is ever passed to this method.
+   * 3. The SVG strings are hardcoded illustration graphics reviewed for safety.
+   *
+   * DO NOT modify this pattern to accept user input without first introducing
+   * DOMPurify sanitization. See WI-13 / F-020 audit finding.
+   */
   readonly illustrationHtml = (): SafeHtml | null => {
     const key = this.illustration();
     if (!key || !ILLUSTRATIONS[key]) return null;

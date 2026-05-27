@@ -7,6 +7,7 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Infrastructure.Common;
 using Wasnie.Infrastructure.Identity;
+using Wasnie.Infrastructure.Observability;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
@@ -24,6 +25,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IGuidGenerator, SystemGuidGenerator>();
+        services.AddScoped<ICorrelationIdAccessor, CorrelationIdAccessor>();
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(
@@ -55,10 +57,14 @@ public static class DependencyInjection
                 options.Password.RequireDigit = true;
                 options.Password.RequireLowercase = true;
                 options.Password.RequireUppercase = true;
-                options.Password.RequireNonAlphanumeric = false;
-                options.Password.RequiredLength = 8;
+                options.Password.RequireNonAlphanumeric = true;
+                options.Password.RequiredLength = 10;
                 options.User.RequireUniqueEmail = true;
                 options.SignIn.RequireConfirmedEmail = false;
+
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();

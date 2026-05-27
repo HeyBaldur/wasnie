@@ -58,8 +58,8 @@ public sealed class ListQuotasHandler(IApplicationDbContext db, IAuthorizationSe
         var sorted = sortBy switch
         {
             "payeefullname" => desc ? joined.OrderByDescending(x => x.PayeeFullName) : joined.OrderBy(x => x.PayeeFullName),
-            "amount"        => desc ? joined.OrderByDescending(x => x.Quota.Amount.Amount) : joined.OrderBy(x => x.Quota.Amount.Amount),
-            _               => desc ? joined.OrderByDescending(x => x.Quota.Period.Start) : joined.OrderBy(x => x.Quota.Period.Start),
+            "amount" => desc ? joined.OrderByDescending(x => x.Quota.Amount.Amount) : joined.OrderBy(x => x.Quota.Amount.Amount),
+            _ => desc ? joined.OrderByDescending(x => x.Quota.Period.Start) : joined.OrderBy(x => x.Quota.Period.Start),
         };
 
         var totalCount = await sorted.CountAsync(cancellationToken);

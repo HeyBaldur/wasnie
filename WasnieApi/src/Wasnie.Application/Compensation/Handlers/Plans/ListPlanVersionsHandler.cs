@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -7,7 +8,6 @@ using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
-using Wasnie.Application.Common.Extensions;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
@@ -38,7 +38,7 @@ public sealed class ListPlanVersionsHandler(IApplicationDbContext db, IAuthoriza
         query = sortBy switch
         {
             "effectivestart" => desc ? query.OrderByDescending(x => x.EffectivePeriod.Start) : query.OrderBy(x => x.EffectivePeriod.Start),
-            _                => desc ? query.OrderByDescending(x => x.Version)               : query.OrderBy(x => x.Version),
+            _ => desc ? query.OrderByDescending(x => x.Version) : query.OrderBy(x => x.Version),
         };
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);

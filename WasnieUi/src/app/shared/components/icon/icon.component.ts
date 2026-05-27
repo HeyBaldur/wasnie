@@ -116,6 +116,16 @@ export class IconComponent {
   private readonly sanitizer = inject(DomSanitizer);
   readonly name = input.required<string>();
   readonly size = input<number>(20);
+  /**
+   * SAFETY NOTE (ARCHITECTURE.md Rule 4.6.1):
+   * This bypassSecurityTrustHtml call is safe because:
+   * 1. The input (ICONS[name]) is a compile-time constant dictionary defined in this file.
+   * 2. No user-provided content is ever passed to this method.
+   * 3. The SVG strings have been reviewed for safety — they are path/shape data only.
+   *
+   * DO NOT modify this pattern to accept user input without first introducing
+   * DOMPurify sanitization. See WI-13 / F-020 audit finding.
+   */
   readonly svgContent = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(ICONS[this.name()] ?? '')
   );

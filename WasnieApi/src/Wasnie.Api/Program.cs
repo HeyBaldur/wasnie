@@ -1,9 +1,14 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using Serilog.Core;
 using Wasnie.Api.Extensions;
 using Wasnie.Api.Middleware;
+using Wasnie.Api.Observability;
 using Wasnie.Application;
 using Wasnie.Infrastructure;
 
@@ -18,15 +23,14 @@ try
     builder.Host.UseSerilog((context, services, configuration) =>
         configuration
             .ReadFrom.Configuration(context.Configuration)
-            .ReadFrom.Services(services)
-            .WriteTo.Console()
-            .WriteTo.File(
-                "logs/wasnie-.log",
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 30));
+            .ReadFrom.Services(services));
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+
+    // Register DI-aware Serilog enricher; picked up automatically by ReadFrom.Services()
+    builder.Services.AddSingleton<ILogEventEnricher>(sp =>
+        new TenantUserCorrelationEnricher(sp.GetRequiredService<IHttpContextAccessor>()));
 
     var jwtSettings = builder.Configuration.GetSection("JwtSettings");
     var secret = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret not configured.");
@@ -55,6 +59,60 @@ try
     builder.Services.AddControllers();
     builder.Services.AddSwaggerWithJwt();
 
+    if (!builder.Environment.IsDevelopment())
+    {
+        builder.Services.AddHsts(options =>
+        {
+            options.MaxAge = TimeSpan.FromDays(365);
+            options.IncludeSubDomains = true;
+        });
+    }
+
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        options.AddFixedWindowLimiter("auth-login", o =>
+        {
+            o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:PermitLimit", 5);
+            o.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:WindowSeconds", 60));
+            o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            o.QueueLimit = 0;
+        });
+
+        options.AddFixedWindowLimiter("auth-register", o =>
+        {
+            o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthRegister:PermitLimit", 3);
+            o.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthRegister:WindowSeconds", 60));
+            o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            o.QueueLimit = 0;
+        });
+
+        options.AddFixedWindowLimiter("auth-refresh", o =>
+        {
+            o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthRefresh:PermitLimit", 10);
+            o.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthRefresh:WindowSeconds", 60));
+            o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+            o.QueueLimit = 0;
+        });
+
+        var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);
+        var globalWindowSeconds = builder.Configuration.GetValue<int>("RateLimiting:Global:WindowSeconds", 60);
+
+        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        {
+            var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var key = userId ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+            return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = globalPermitLimit,
+                Window = TimeSpan.FromSeconds(globalWindowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            });
+        });
+    });
+
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("WasnieUi", policy =>
@@ -74,7 +132,16 @@ try
         await Wasnie.Infrastructure.Persistence.DbSeeder.SeedAsync(scope.ServiceProvider);
     }
 
+    app.UseMiddleware<CorrelationIdMiddleware>();
+
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHsts();
+        app.UseHttpsRedirection();
+    }
+
     app.UseMiddleware<ExceptionHandlingMiddleware>();
+    app.UseMiddleware<SecurityHeadersMiddleware>();
 
     if (app.Environment.IsDevelopment())
     {
@@ -85,6 +152,7 @@ try
     app.UseCors("WasnieUi");
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseRateLimiter();
     app.MapControllers();
 
     app.Run();

@@ -47,8 +47,8 @@ public static class RolePermissions
         {
             ["TenantAdmin"] = TenantAdminPermissions,
             ["CompManager"] = CompManagerPermissions,
-            ["Manager"]     = ManagerPermissions,
-            ["Rep"]         = RepPermissions,
+            ["Manager"] = ManagerPermissions,
+            ["Rep"] = RepPermissions,
         };
 
     public static bool HasPermission(string roleName, string permission) =>

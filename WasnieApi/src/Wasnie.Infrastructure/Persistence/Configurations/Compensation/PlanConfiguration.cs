@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Wasnie.Domain.Compensation.Plans;
-using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.Infrastructure.Persistence.Configurations.Compensation;
 

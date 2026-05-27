@@ -16,9 +16,9 @@ using Wasnie.Domain.Identity;
 using Wasnie.Infrastructure.Persistence.Configurations;
 using Wasnie.Infrastructure.Persistence.Configurations.Compensation;
 using Wasnie.Infrastructure.Persistence.Configurations.Identity;
+using LegacyPayout = Wasnie.Domain.Entities.Payout;
 using LegacyPlan = Wasnie.Domain.Entities.Plan;
 using LegacyTransaction = Wasnie.Domain.Entities.Transaction;
-using LegacyPayout = Wasnie.Domain.Entities.Payout;
 
 namespace Wasnie.Infrastructure.Persistence;
 

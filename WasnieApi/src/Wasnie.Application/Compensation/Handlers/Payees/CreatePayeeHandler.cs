@@ -9,7 +9,6 @@ using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
-using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
 
 namespace Wasnie.Application.Compensation.Handlers.Payees;

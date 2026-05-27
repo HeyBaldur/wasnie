@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Wasnie.Infrastructure.Persistence;
 
@@ -15,6 +15,21 @@ public sealed class TestWebApplicationFactory(string connectionString) : WebAppl
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        builder.ConfigureAppConfiguration(config =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RateLimiting:AuthLogin:PermitLimit"] = "10000",
+                ["RateLimiting:AuthLogin:WindowSeconds"] = "60",
+                ["RateLimiting:AuthRegister:PermitLimit"] = "10000",
+                ["RateLimiting:AuthRegister:WindowSeconds"] = "60",
+                ["RateLimiting:AuthRefresh:PermitLimit"] = "10000",
+                ["RateLimiting:AuthRefresh:WindowSeconds"] = "60",
+                ["RateLimiting:Global:PermitLimit"] = "10000",
+                ["RateLimiting:Global:WindowSeconds"] = "60",
+            });
+        });
 
         builder.ConfigureServices(services =>
         {

@@ -281,19 +281,27 @@ public sealed class PayeeImportValidationServiceTests
 
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
         var manager = new Dictionary<string, string>
         {
-            ["Name"] = "The Manager", ["Code"] = "MGR001",
-            ["Email"] = "mgr@company.com", ["Date"] = "2018-01-10", ["Mgr"] = "",
+            ["Name"] = "The Manager",
+            ["Code"] = "MGR001",
+            ["Email"] = "mgr@company.com",
+            ["Date"] = "2018-01-10",
+            ["Mgr"] = "",
         };
         var report = new Dictionary<string, string>
         {
-            ["Name"] = "Report One", ["Code"] = "REP001",
-            ["Email"] = "rep1@company.com", ["Date"] = "2020-03-01", ["Mgr"] = "MGR001",
+            ["Name"] = "Report One",
+            ["Code"] = "REP001",
+            ["Email"] = "rep1@company.com",
+            ["Date"] = "2020-03-01",
+            ["Mgr"] = "MGR001",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { manager, report }, mapping);
@@ -309,14 +317,19 @@ public sealed class PayeeImportValidationServiceTests
 
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
         var row = new Dictionary<string, string>
         {
-            ["Name"] = "Some Person", ["Code"] = "EMP001",
-            ["Email"] = "person@company.com", ["Date"] = "2022-01-01", ["Mgr"] = "NONEXISTENT",
+            ["Name"] = "Some Person",
+            ["Code"] = "EMP001",
+            ["Email"] = "person@company.com",
+            ["Date"] = "2022-01-01",
+            ["Mgr"] = "NONEXISTENT",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
@@ -336,14 +349,19 @@ public sealed class PayeeImportValidationServiceTests
         var sut = new PayeeImportValidationService(db, new FakeClock());
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             ManagerEmployeeCodeColumn = "Mgr",
         };
         var row = new Dictionary<string, string>
         {
-            ["Name"] = "New Report", ["Code"] = "REP001",
-            ["Email"] = "rep@company.com", ["Date"] = "2022-01-01", ["Mgr"] = "MGR999",
+            ["Name"] = "New Report",
+            ["Code"] = "REP001",
+            ["Email"] = "rep@company.com",
+            ["Date"] = "2022-01-01",
+            ["Mgr"] = "MGR999",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
@@ -396,8 +414,10 @@ public sealed class PayeeImportValidationServiceTests
         row["Role"] = "";  // empty role column present
         var mapping = new PayeeImportColumnMapping
         {
-            FullNameColumn = "Name", EmployeeCodeColumn = "Code",
-            EmailColumn = "Email", HireDateColumn = "Date",
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
             RoleColumn = "Role",
         };
 

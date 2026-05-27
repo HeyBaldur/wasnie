@@ -57,8 +57,8 @@ public sealed class ListAssignmentsHandler(IApplicationDbContext db, IAuthorizat
         var sorted = sortBy switch
         {
             "payeefullname" => desc ? joined.OrderByDescending(x => x.Assignment.PayeeSnapshot.FullName) : joined.OrderBy(x => x.Assignment.PayeeSnapshot.FullName),
-            "planname"      => desc ? joined.OrderByDescending(x => x.PlanName)                         : joined.OrderBy(x => x.PlanName),
-            _               => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start)  : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
+            "planname" => desc ? joined.OrderByDescending(x => x.PlanName) : joined.OrderBy(x => x.PlanName),
+            _ => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start) : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
         };
 
         var totalCount = await sorted.CountAsync(cancellationToken);

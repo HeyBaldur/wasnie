@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.Queries;
 
@@ -22,6 +23,7 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
 
     [HttpPost("register-tenant")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-register")]
     public async Task<IActionResult> RegisterTenant(
         [FromBody] RegisterTenantCommand command,
         CancellationToken cancellationToken)
@@ -38,6 +40,7 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     public async Task<IActionResult> Login(
         [FromBody] LoginCommand command,
         CancellationToken cancellationToken)
@@ -54,6 +57,7 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-refresh")]
     public async Task<IActionResult> Refresh(
         [FromBody] RefreshTokenCommand command,
         CancellationToken cancellationToken)
