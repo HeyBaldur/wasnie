@@ -1,95 +1,101 @@
-<div class="auth-layout">
-  <div class="auth-brand">
-    <div class="auth-brand__inner">
-      <div class="auth-brand__top">
-        <div class="auth-brand__logo">
-          <span class="auth-brand__monogram">W</span>
-          <span class="auth-brand__wordmark">{{ 'APP.NAME' | translate }}</span>
-        </div>
-      </div>
-      <div class="auth-brand__center">
-        <h2 class="auth-brand__headline">{{ 'AUTH.HERO_TITLE' | translate }}</h2>
-        <p class="auth-brand__subline">{{ 'AUTH.HERO_SUBTITLE' | translate }}</p>
-      </div>
-      <div class="auth-brand__bottom">
-        <span class="auth-brand__footer">{{ 'AUTH.FOOTER_RIGHTS' | translate }}</span>
-      </div>
-    </div>
-    <div class="auth-brand__pattern" aria-hidden="true"></div>
-  </div>
-
-  <div class="auth-form-col">
-    <div class="auth-form-col__controls">
+<div class="auth-page">
+  <!-- LEFT: form panel -->
+  <div class="auth-page__form">
+    <div class="auth-page__form-top">
       <app-theme-toggle />
     </div>
 
-    <div class="auth-form-wrap">
-      <h1 class="auth-form__title">{{ 'AUTH.REGISTER_TITLE' | translate }}</h1>
-      <p class="auth-form__subtitle">{{ 'APP.TAGLINE' | translate }}</p>
+    <div class="auth-page__form-body">
+      <div class="auth-page__brand">
+        <span class="auth-page__monogram">W</span>
+        <span class="auth-page__wordmark">{{ 'APP.NAME' | translate }}</span>
+      </div>
 
-      <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
-        @if (error()) {
-          <div class="auth-form__error">{{ error() }}</div>
-        }
+      <div class="auth-page__card">
+        <h1 class="auth-page__card-title">{{ 'AUTH.REGISTER_TITLE' | translate }}</h1>
+        <p class="auth-page__card-subtitle">{{ 'APP.TAGLINE' | translate }}</p>
 
-        <ws-input
-          formControlName="tenantName"
-          [label]="'AUTH.TENANT_NAME' | translate"
-          [error]="fieldError('tenantName')"
-          placeholder="Acme Corp"
-        />
+        <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+          @if (error()) {
+            <div class="auth-form__error">{{ error() }}</div>
+          }
 
-        <ws-input
-          formControlName="tenantSlug"
-          [label]="'AUTH.TENANT_SLUG' | translate"
-          [error]="fieldError('tenantSlug')"
-          placeholder="acme-corp"
-        />
-
-        <div class="form-row">
           <ws-input
-            formControlName="adminFirstName"
-            [label]="'AUTH.FIRST_NAME' | translate"
-            [error]="fieldError('adminFirstName')"
-            placeholder="John"
+            formControlName="tenantName"
+            [label]="'AUTH.TENANT_NAME' | translate"
+            [error]="fieldError('tenantName')"
+            placeholder="Acme Corp"
           />
+
           <ws-input
-            formControlName="adminLastName"
-            [label]="'AUTH.LAST_NAME' | translate"
-            [error]="fieldError('adminLastName')"
-            placeholder="Doe"
+            formControlName="tenantSlug"
+            [label]="'AUTH.TENANT_SLUG' | translate"
+            [error]="fieldError('tenantSlug')"
+            placeholder="acme-corp"
           />
+
+          <div class="form-row">
+            <ws-input
+              formControlName="adminFirstName"
+              [label]="'AUTH.FIRST_NAME' | translate"
+              [error]="fieldError('adminFirstName')"
+              placeholder="John"
+            />
+            <ws-input
+              formControlName="adminLastName"
+              [label]="'AUTH.LAST_NAME' | translate"
+              [error]="fieldError('adminLastName')"
+              placeholder="Doe"
+            />
+          </div>
+
+          <ws-input
+            formControlName="adminEmail"
+            [label]="'AUTH.EMAIL' | translate"
+            type="email"
+            [error]="fieldError('adminEmail')"
+            placeholder="you@example.com"
+          />
+
+          <ws-input
+            formControlName="adminPassword"
+            [label]="'AUTH.PASSWORD' | translate"
+            type="password"
+            [error]="fieldError('adminPassword')"
+            placeholder="••••••••"
+          />
+
+          <ws-button
+            type="submit"
+            variant="primary"
+            [fullWidth]="true"
+            [loading]="isSubmitting()"
+            class="auth-form__submit"
+          >
+            {{ 'AUTH.SUBMIT' | translate }}
+          </ws-button>
+        </form>
+
+        <div class="auth-page__card-footer">
+          <a routerLink="/auth/login">{{ 'AUTH.ALREADY_REGISTERED' | translate }}</a>
         </div>
+      </div>
+    </div>
 
-        <ws-input
-          formControlName="adminEmail"
-          [label]="'AUTH.EMAIL' | translate"
-          type="email"
-          [error]="fieldError('adminEmail')"
-          placeholder="you@example.com"
-        />
+    <div class="auth-page__form-bottom">
+      <span class="auth-page__copyright">{{ 'AUTH.FOOTER_RIGHTS' | translate }}</span>
+    </div>
+  </div>
 
-        <ws-input
-          formControlName="adminPassword"
-          [label]="'AUTH.PASSWORD' | translate"
-          type="password"
-          [error]="fieldError('adminPassword')"
-          placeholder="••••••••"
-        />
-
-        <ws-button
-          type="submit"
-          variant="primary"
-          [fullWidth]="true"
-          [loading]="isSubmitting()"
-          class="auth-form__submit"
-        >
-          {{ 'AUTH.SUBMIT' | translate }}
-        </ws-button>
-      </form>
-
-      <div class="auth-form__footer">
-        <a routerLink="/auth/login">{{ 'AUTH.ALREADY_REGISTERED' | translate }}</a>
+  <!-- RIGHT: hero panel -->
+  <div class="auth-page__hero">
+    <div class="auth-page__hero-inner">
+      <div class="auth-page__hero-content">
+        <h2 class="auth-page__headline">{{ 'AUTH.HERO_TITLE' | translate }}</h2>
+        <p class="auth-page__subline">{{ 'AUTH.HERO_SUBTITLE' | translate }}</p>
+      </div>
+      <div class="auth-page__hero-image">
+        <img src="/auth/sign-up.jpg" alt="" aria-hidden="true" />
       </div>
     </div>
   </div>

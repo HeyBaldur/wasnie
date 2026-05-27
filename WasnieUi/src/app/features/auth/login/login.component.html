@@ -1,67 +1,73 @@
-<div class="auth-layout">
-  <div class="auth-brand">
-    <div class="auth-brand__inner">
-      <div class="auth-brand__top">
-        <div class="auth-brand__logo">
-          <span class="auth-brand__monogram">W</span>
-          <span class="auth-brand__wordmark">{{ 'APP.NAME' | translate }}</span>
-        </div>
-      </div>
-      <div class="auth-brand__center">
-        <h2 class="auth-brand__headline">{{ 'AUTH.HERO_TITLE' | translate }}</h2>
-        <p class="auth-brand__subline">{{ 'AUTH.HERO_SUBTITLE' | translate }}</p>
-      </div>
-      <div class="auth-brand__bottom">
-        <span class="auth-brand__footer">{{ 'AUTH.FOOTER_RIGHTS' | translate }}</span>
-      </div>
-    </div>
-    <div class="auth-brand__pattern" aria-hidden="true"></div>
-  </div>
-
-  <div class="auth-form-col">
-    <div class="auth-form-col__controls">
+<div class="auth-page">
+  <!-- LEFT: form panel -->
+  <div class="auth-page__form">
+    <div class="auth-page__form-top">
       <app-theme-toggle />
     </div>
 
-    <div class="auth-form-wrap">
-      <h1 class="auth-form__title">{{ 'AUTH.LOGIN_TITLE' | translate }}</h1>
-      <p class="auth-form__subtitle">{{ 'APP.TAGLINE' | translate }}</p>
+    <div class="auth-page__form-body">
+      <div class="auth-page__brand">
+        <span class="auth-page__monogram">W</span>
+        <span class="auth-page__wordmark">{{ 'APP.NAME' | translate }}</span>
+      </div>
 
-      <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
-        @if (error()) {
-          <div class="auth-form__error">{{ error() }}</div>
-        }
+      <div class="auth-page__card">
+        <h1 class="auth-page__card-title">{{ 'AUTH.LOGIN_TITLE' | translate }}</h1>
+        <p class="auth-page__card-subtitle">{{ 'APP.TAGLINE' | translate }}</p>
 
-        <ws-input
-          formControlName="email"
-          [label]="'AUTH.EMAIL' | translate"
-          type="email"
-          [error]="fieldError('email')"
-          placeholder="you@example.com"
-        />
+        <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+          @if (error()) {
+            <div class="auth-form__error">{{ error() }}</div>
+          }
 
-        <ws-input
-          formControlName="password"
-          [label]="'AUTH.PASSWORD' | translate"
-          type="password"
-          [error]="fieldError('password')"
-          placeholder="••••••••"
-        />
+          <ws-input
+            formControlName="email"
+            [label]="'AUTH.EMAIL' | translate"
+            type="email"
+            [error]="fieldError('email')"
+            placeholder="you@example.com"
+          />
 
-        <ws-button
-          type="submit"
-          variant="primary"
-          [fullWidth]="true"
-          [loading]="isSubmitting()"
-          class="auth-form__submit"
-        >
-          {{ 'AUTH.LOGIN' | translate }}
-        </ws-button>
-      </form>
+          <ws-input
+            formControlName="password"
+            [label]="'AUTH.PASSWORD' | translate"
+            type="password"
+            [error]="fieldError('password')"
+            placeholder="••••••••"
+          />
 
-      <div class="auth-form__footer">
-        {{ 'AUTH.NO_ACCOUNT' | translate }}
-        <a routerLink="/auth/register">{{ 'AUTH.REGISTER' | translate }}</a>
+          <ws-button
+            type="submit"
+            variant="primary"
+            [fullWidth]="true"
+            [loading]="isSubmitting()"
+            class="auth-form__submit"
+          >
+            {{ 'AUTH.LOGIN' | translate }}
+          </ws-button>
+        </form>
+
+        <div class="auth-page__card-footer">
+          {{ 'AUTH.NO_ACCOUNT' | translate }}
+          <a routerLink="/auth/register">{{ 'AUTH.REGISTER' | translate }}</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-page__form-bottom">
+      <span class="auth-page__copyright">{{ 'AUTH.FOOTER_RIGHTS' | translate }}</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: hero panel -->
+  <div class="auth-page__hero">
+    <div class="auth-page__hero-inner">
+      <div class="auth-page__hero-content">
+        <h2 class="auth-page__headline">{{ 'AUTH.HERO_TITLE' | translate }}</h2>
+        <p class="auth-page__subline">{{ 'AUTH.HERO_SUBTITLE' | translate }}</p>
+      </div>
+      <div class="auth-page__hero-image">
+        <img src="/auth/sign-in.jpg" alt="" aria-hidden="true" />
       </div>
     </div>
   </div>
