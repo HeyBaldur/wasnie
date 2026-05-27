@@ -4,12 +4,10 @@
     [title]="'PLANS.TITLE' | translate"
     [subtitle]="'PLANS.SUBTITLE' | translate"
   >
-    <ng-container *hasPermission="'Plans.Create'">
-      <ws-button slot="actions" variant="primary" routerLink="new">
-        <app-icon name="plus" [size]="16" />
-        {{ 'PLANS.ACTION_NEW' | translate }}
-      </ws-button>
-    </ng-container>
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Plans.Create' | hasPermission)">
+      <app-icon name="plus" [size]="16" />
+      {{ 'PLANS.ACTION_NEW' | translate }}
+    </ws-button>
 
     <div class="plans-list__toolbar">
       <ws-input

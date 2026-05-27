@@ -4,18 +4,14 @@
     [title]="'PAYEES.TITLE' | translate"
     [subtitle]="'PAYEES.SUBTITLE' | translate"
   >
-    <ng-container *hasPermission="'Imports.Execute'">
-      <ws-button slot="actions" variant="secondary" routerLink="import">
-        <app-icon name="upload-cloud" [size]="14" />
-        {{ 'PAYEES.ACTION_IMPORT' | translate }}
-      </ws-button>
-    </ng-container>
-    <ng-container *hasPermission="'Payees.Create'">
-      <ws-button slot="actions" variant="primary" routerLink="new">
-        <app-icon name="plus" [size]="16" />
-        {{ 'PAYEES.NEW' | translate }}
-      </ws-button>
-    </ng-container>
+    <ws-button slot="actions" variant="secondary" routerLink="import" [hidden]="!('Imports.Execute' | hasPermission)">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'PAYEES.ACTION_IMPORT' | translate }}
+    </ws-button>
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Payees.Create' | hasPermission)">
+      <app-icon name="plus" [size]="16" />
+      {{ 'PAYEES.NEW' | translate }}
+    </ws-button>
 
     <div class="payees-list__toolbar">
       <ws-input

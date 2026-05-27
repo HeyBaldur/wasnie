@@ -4,12 +4,10 @@
     [title]="'ASSIGNMENTS.TITLE' | translate"
     [subtitle]="'ASSIGNMENTS.SUBTITLE' | translate"
   >
-    <ng-container *hasPermission="'Assignments.Create'">
-      <ws-button slot="actions" variant="primary" routerLink="new">
-        <app-icon name="plus" [size]="16" />
-        {{ 'ASSIGNMENTS.NEW' | translate }}
-      </ws-button>
-    </ng-container>
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Assignments.Create' | hasPermission)">
+      <app-icon name="plus" [size]="16" />
+      {{ 'ASSIGNMENTS.NEW' | translate }}
+    </ws-button>
 
     <div class="assignments-list__toolbar">
       <ws-input

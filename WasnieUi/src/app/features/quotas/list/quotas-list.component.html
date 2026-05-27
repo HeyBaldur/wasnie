@@ -4,12 +4,10 @@
     [title]="'QUOTAS.TITLE' | translate"
     [subtitle]="'QUOTAS.SUBTITLE' | translate"
   >
-    <ng-container *hasPermission="'Quotas.Set'">
-      <ws-button slot="actions" variant="primary" routerLink="new">
-        <app-icon name="plus" [size]="16" />
-        {{ 'QUOTAS.NEW' | translate }}
-      </ws-button>
-    </ng-container>
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Quotas.Set' | hasPermission)">
+      <app-icon name="plus" [size]="16" />
+      {{ 'QUOTAS.NEW' | translate }}
+    </ws-button>
 
     <div class="quotas-list__toolbar">
       <ws-input
