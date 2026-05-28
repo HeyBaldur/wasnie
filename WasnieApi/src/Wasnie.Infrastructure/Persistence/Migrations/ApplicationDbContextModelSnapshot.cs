@@ -295,7 +295,7 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "ResourceType", "ResourceId", "TimestampUtc")
                         .HasDatabaseName("IX_AuditLogs_TenantId_ResourceType_ResourceId_TimestampUtc");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Assignments.PlanAssignment", b =>
@@ -699,7 +699,7 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("ExternalReference")
+                    b.Property<string>("ExternalId")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
@@ -740,10 +740,26 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "PayeeId");
+                    b.HasIndex("TenantId", "IngestedAt")
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_IngestedAt");
+
+                    b.HasIndex("TenantId", "PayeeId")
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_PayeeId");
 
                     b.HasIndex("TenantId", "ReferenceNumber")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_ReferenceNumber");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_Status");
+
+                    b.HasIndex("TenantId", "TransactionDate")
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_TransactionDate");
+
+                    b.HasIndex("TenantId", "Source", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_Source_ExternalId")
+                        .HasFilter("[ExternalId] IS NOT NULL");
 
                     b.ToTable("CompensationTransactions", (string)null);
                 });
@@ -931,9 +947,7 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("Tier")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(2);
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 

@@ -50,7 +50,7 @@ export class SidebarComponent {
       sectionKey: 'NAV.SECTION_OPERATIONS',
       items: [
         { path: '/payees', labelKey: 'NAV.PAYEES', icon: 'users', permission: 'Payees.Read' },
-        { path: '/transactions', labelKey: 'NAV.TRANSACTIONS', icon: 'arrows-exchange', permission: 'Reports.ViewAll' },
+        { path: '/transactions', labelKey: 'NAV.TRANSACTIONS', icon: 'arrows-exchange', permission: 'Transactions.Read' },
         { path: '/payouts', labelKey: 'NAV.PAYOUTS', icon: 'coin', permission: 'Reports.ViewAll' },
       ],
     },

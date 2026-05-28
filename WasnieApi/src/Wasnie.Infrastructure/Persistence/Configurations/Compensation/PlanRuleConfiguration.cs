@@ -4,12 +4,20 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
+using Wasnie.Infrastructure.Persistence.Serialization;
 
 namespace Wasnie.Infrastructure.Persistence.Configurations.Compensation;
 
 public sealed class PlanRuleConfiguration : IEntityTypeConfiguration<Rule>
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = BuildJsonOptions();
+
+    private static JsonSerializerOptions BuildJsonOptions()
+    {
+        var opts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        opts.Converters.Add(new MoneyJsonConverter());
+        return opts;
+    }
 
     public void Configure(EntityTypeBuilder<Rule> builder)
     {

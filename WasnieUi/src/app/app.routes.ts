@@ -36,11 +36,9 @@ export const routes: Routes = [
   },
   {
     path: 'transactions',
-    canActivate: [authGuard, hasPermissionGuard('Reports.ViewAll')],
-    loadComponent: () =>
-      import('./features/transactions/transactions.component').then(
-        (m) => m.TransactionsComponent
-      ),
+    canActivate: [authGuard, hasPermissionGuard('Transactions.Read')],
+    loadChildren: () =>
+      import('./features/transactions/transactions.routes').then((m) => m.transactionsRoutes),
   },
   {
     path: 'payouts',

@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Entities;
 
 namespace Wasnie.Infrastructure.Persistence.Configurations;
@@ -32,7 +31,6 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .IsRequired();
 
         builder.Property(t => t.Tier)
-            .IsRequired()
-            .HasDefaultValue(Tier.Growth);
+            .IsRequired();
     }
 }

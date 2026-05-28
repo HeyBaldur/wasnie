@@ -139,10 +139,31 @@ Outputs: `valueChange` (for use without reactive forms)
 
 ### WsSelect `<ws-select>`
 CVA. Options type: `SelectOption { value: string; label: string; disabled?: boolean }`. Labels are run through `| translate` automatically.  
-Inputs: `options` · `label` · `placeholder` · `searchable` · `error`
+Inputs: `options` · `label` · `placeholder` · `searchable` · `error` · `searchFn` · `initialOption`
 
 ```html
+<!-- Client-side (static list): -->
 <ws-select formControlName="currency" label="Currency" [options]="currencyOptions" />
+
+<!-- Async mode (server-side typeahead, large datasets): -->
+<ws-select formControlName="payeeId" label="Payee" [searchFn]="payeeSearchFn" [initialOption]="preselectedPayee()" />
+```
+
+#### Async mode
+
+Pass a `searchFn` input (`(query: string) => Observable<SelectOption[]>`) instead of `[options]`. The component handles debounce (300 ms), in-flight cancellation (`switchMap`), loading indicator, and empty state automatically.
+
+- The search input appears automatically — do not also set `[searchable]="true"`.
+- On dropdown open, the component fires an empty-string query to pre-populate the first server page.
+- `[initialOption]` (`SelectOption | null`) — supply the pre-known label when the form is patched with a value that is not yet in `asyncOptions` (edit mode, query-param preselection). The component falls back to `initialOption` when it cannot find the value in `asyncOptions`.
+- Status filtering in async mode: the backend `search` param is the primary filter. Client-side status filtering is not applied. Add a `filters` param to `PaginationParams` when backend filtering by status is required.
+
+```typescript
+// In the component class:
+readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
+  this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
+    map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
+  );
 ```
 
 ### WsDatePicker `<ws-date-picker>` — canonical pattern

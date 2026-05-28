@@ -12,6 +12,7 @@ public static class RolePermissions
             Permission.PlansDelete, Permission.PlansActivate, Permission.PlansArchive,
             Permission.QuotasRead, Permission.QuotasSet, Permission.QuotasUpdate,
             Permission.AssignmentsRead, Permission.AssignmentsCreate, Permission.AssignmentsUpdate,
+            Permission.TransactionsCreate, Permission.TransactionsRead,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
         };
 
@@ -23,6 +24,7 @@ public static class RolePermissions
             Permission.PlansDelete, Permission.PlansActivate, Permission.PlansArchive,
             Permission.QuotasRead, Permission.QuotasSet, Permission.QuotasUpdate,
             Permission.AssignmentsRead, Permission.AssignmentsCreate, Permission.AssignmentsUpdate,
+            Permission.TransactionsCreate, Permission.TransactionsRead,
             Permission.ImportsExecute, Permission.ReportsViewAll,
         };
 

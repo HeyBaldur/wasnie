@@ -14,8 +14,8 @@
           class="ws-form-grid__full"
           label="QUOTAS.FIELD_PAYEE"
           formControlName="payeeId"
-          [options]="payeeOptions()"
-          [searchable]="true"
+          [searchFn]="payeeSearchFn"
+          [initialOption]="preselectedPayeeOption()"
           [error]="hasError('payeeId', 'required') ? 'VALIDATION.REQUIRED' : ''"
         />
 
@@ -23,8 +23,7 @@
           class="ws-form-grid__full"
           label="QUOTAS.FIELD_PLAN"
           formControlName="planId"
-          [options]="planOptions()"
-          [searchable]="true"
+          [searchFn]="planSearchFn"
           [error]="hasError('planId', 'required') ? 'VALIDATION.REQUIRED' : ''"
         />
 

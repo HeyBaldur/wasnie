@@ -273,4 +273,202 @@ public sealed class MoneyTests
         money.ToString().Should().Be("1.23 EUR");
         money.Amount.Should().Be(1.2345m);
     }
+
+    // ── Construction normalization to 4 decimals (§5b.5) ─────────────────────
+
+    [Fact]
+    public void Of_MoreThanFourDecimals_NormalizesToFourDecimals()
+    {
+        var money = Money.Of(1.123456m, "EUR");
+        money.Amount.Should().Be(1.1235m);
+    }
+
+    [Fact]
+    public void Of_ExactlyFourDecimals_StoredUnchanged()
+    {
+        var money = Money.Of(1.2345m, "EUR");
+        money.Amount.Should().Be(1.2345m);
+    }
+
+    [Fact]
+    public void Construction_BankersRounding_MidpointWhenFourthDecimalIsEven_RoundsDown()
+    {
+        // 1.00005: exactly midway; 4th decimal would be 0 (even) → rounds down → 1.0000
+        var money = Money.Of(1.00005m, "EUR");
+        money.Amount.Should().Be(1.0000m);
+    }
+
+    [Fact]
+    public void Construction_BankersRounding_MidpointWhenFourthDecimalIsOdd_RoundsUp()
+    {
+        // 1.00015: exactly midway; 4th decimal would be 1 (odd) → rounds up → 1.0002
+        var money = Money.Of(1.00015m, "EUR");
+        money.Amount.Should().Be(1.0002m);
+    }
+
+    // ── Multiply re-normalization (§5b.5) ─────────────────────────────────────
+
+    [Fact]
+    public void Multiply_ProductMidpointWhenFourthDecimalIsOdd_RoundsUp()
+    {
+        // 1m * 0.33335m = 0.33335; 4th decimal is 3 (odd) → rounds up → 0.3334
+        var result = Money.Of(1m, "EUR").Multiply(0.33335m);
+        result.Amount.Should().Be(0.3334m);
+    }
+
+    [Fact]
+    public void Multiply_ProductMidpointWhenFourthDecimalIsEven_RoundsDown()
+    {
+        // 1m * 0.33325m = 0.33325; 4th decimal is 2 (even) → rounds down → 0.3332
+        var result = Money.Of(1m, "EUR").Multiply(0.33325m);
+        result.Amount.Should().Be(0.3332m);
+    }
+
+    // ── Negate ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Negate_PositiveAmount_ReturnsNegative()
+    {
+        var result = Money.Of(100m, "EUR").Negate();
+        result.Amount.Should().Be(-100m);
+        result.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
+    public void Negate_NegativeAmount_ReturnsPositive()
+    {
+        var result = Money.Of(-50m, "EUR").Negate();
+        result.Amount.Should().Be(50m);
+    }
+
+    [Fact]
+    public void Negate_Zero_ReturnsZero()
+    {
+        var result = Money.Zero("EUR").Negate();
+        result.Amount.Should().Be(0m);
+    }
+
+    // ── Abs ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Abs_NegativeAmount_ReturnsPositive()
+    {
+        var result = Money.Of(-75m, "EUR").Abs();
+        result.Amount.Should().Be(75m);
+        result.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
+    public void Abs_PositiveAmount_ReturnsUnchanged()
+    {
+        var result = Money.Of(50m, "EUR").Abs();
+        result.Amount.Should().Be(50m);
+    }
+
+    [Fact]
+    public void Abs_Zero_ReturnsZero()
+    {
+        var result = Money.Zero("EUR").Abs();
+        result.Amount.Should().Be(0m);
+    }
+
+    // ── Comparison operators: same currency ───────────────────────────────────
+
+    [Fact]
+    public void GreaterThan_LargerLeftSide_ReturnsTrue()
+    {
+        (Money.Of(100m, "EUR") > Money.Of(50m, "EUR")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void GreaterThan_EqualAmounts_ReturnsFalse()
+    {
+        (Money.Of(100m, "EUR") > Money.Of(100m, "EUR")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void LessThan_SmallerLeftSide_ReturnsTrue()
+    {
+        (Money.Of(30m, "EUR") < Money.Of(80m, "EUR")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void LessThan_EqualAmounts_ReturnsFalse()
+    {
+        (Money.Of(100m, "EUR") < Money.Of(100m, "EUR")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void GreaterThanOrEqual_EqualAmounts_ReturnsTrue()
+    {
+        (Money.Of(100m, "EUR") >= Money.Of(100m, "EUR")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void GreaterThanOrEqual_SmallerLeftSide_ReturnsFalse()
+    {
+        (Money.Of(50m, "EUR") >= Money.Of(100m, "EUR")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void LessThanOrEqual_EqualAmounts_ReturnsTrue()
+    {
+        (Money.Of(100m, "EUR") <= Money.Of(100m, "EUR")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void LessThanOrEqual_LargerLeftSide_ReturnsFalse()
+    {
+        (Money.Of(150m, "EUR") <= Money.Of(100m, "EUR")).Should().BeFalse();
+    }
+
+    // ── Comparison operators: different currencies throw ──────────────────────
+
+    [Fact]
+    public void GreaterThan_DifferentCurrencies_ThrowsDomainException()
+    {
+        var eur = Money.Of(100m, "EUR");
+        var usd = Money.Of(100m, "USD");
+        var act = () => { var _ = eur > usd; };
+        act.Should().Throw<DomainException>().WithMessage("*different currencies*");
+    }
+
+    [Fact]
+    public void LessThan_DifferentCurrencies_ThrowsDomainException()
+    {
+        var eur = Money.Of(100m, "EUR");
+        var usd = Money.Of(100m, "USD");
+        var act = () => { var _ = eur < usd; };
+        act.Should().Throw<DomainException>();
+    }
+
+    [Fact]
+    public void GreaterThanOrEqual_DifferentCurrencies_ThrowsDomainException()
+    {
+        var eur = Money.Of(100m, "EUR");
+        var usd = Money.Of(100m, "USD");
+        var act = () => { var _ = eur >= usd; };
+        act.Should().Throw<DomainException>();
+    }
+
+    [Fact]
+    public void LessThanOrEqual_DifferentCurrencies_ThrowsDomainException()
+    {
+        var eur = Money.Of(100m, "EUR");
+        var usd = Money.Of(100m, "USD");
+        var act = () => { var _ = eur <= usd; };
+        act.Should().Throw<DomainException>();
+    }
+
+    // ── Equality regression guard: == must not throw on currency mismatch ─────
+
+    [Fact]
+    public void EqualityOperator_DifferentCurrencies_ReturnsFalse_NotThrows()
+    {
+        var eur = Money.Of(100m, "EUR");
+        var usd = Money.Of(100m, "USD");
+        var act = () => { var _ = eur == usd; };
+        act.Should().NotThrow();
+        (eur == usd).Should().BeFalse();
+    }
 }

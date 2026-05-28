@@ -1,14 +1,15 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { Observable, filter, firstValueFrom, map, switchMap } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { AssignmentsStore } from '../state/assignments.store';
-import { PayeesStore } from '../../payees/state/payees.store';
-import { PlansStore } from '../../plans/state/plans.store';
+import { PayeesApiService } from '../../payees/services/payees.api.service';
+import { PlansApiService } from '../../plans/services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
-import { PayeeStatus } from '../../payees/models/payee.model';
 import {
   WsButtonComponent,
   WsSelectComponent,
@@ -38,14 +39,28 @@ export class AssignmentCreateComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly store = inject(AssignmentsStore);
-  private readonly payeesStore = inject(PayeesStore);
-  private readonly plansStore = inject(PlansStore);
+  private readonly payeesApi = inject(PayeesApiService);
+  private readonly plansApi = inject(PlansApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly _destroyRef = inject(DestroyRef);
 
   readonly saving = signal(false);
-  readonly payeeOptions = signal<SelectOption[]>([]);
-  readonly planOptions = signal<SelectOption[]>([]);
+  readonly preselectedPayeeOption = signal<SelectOption | null>(null);
+  readonly preselectedPlanOption = signal<SelectOption | null>(null);
+
+  readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
+    this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
+      map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
+    );
+
+  readonly planSearchFn = (q: string): Observable<SelectOption[]> =>
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
+      map(r => r.items
+        .filter(p => p.status === 'Active')
+        .map(p => ({ value: p.id, label: `${p.name} v${p.version}` }))
+      )
+    );
 
   readonly form = this.fb.nonNullable.group({
     payeeId: ['', Validators.required],
@@ -53,42 +68,34 @@ export class AssignmentCreateComponent implements OnInit {
     dateRange: [null as DateRange | null, Validators.required],
   });
 
-  async ngOnInit(): Promise<void> {
-    await Promise.all([
-      this.payeesStore.loadPayees(),
-      this.plansStore.loadPlans(),
-    ]);
-
-    this.payeeOptions.set(
-      this.payeesStore.payees()
-        .filter((p) => p.status === PayeeStatus.Active)
-        .map((p) => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` }))
-    );
-
-    this.planOptions.set(
-      this.plansStore.plans()
-        .filter((p) => p.status === 'Active')
-        .map((p) => ({ value: p.id, label: `${p.name} v${p.version}` }))
-    );
-
-    this.form.get('planId')?.valueChanges.subscribe((planId) => {
-      if (!planId) return;
-      const plan = this.plansStore.plans().find((p) => p.id === planId);
-      if (plan) {
-        this.form.patchValue({ dateRange: { start: plan.effectiveStart, end: plan.effectiveEnd } });
-      }
+  constructor() {
+    // When planId changes, fetch the full plan to auto-fill the date range.
+    // switchMap cancels any prior in-flight request if the user picks again quickly.
+    this.form.get('planId')!.valueChanges.pipe(
+      filter(Boolean),
+      switchMap(id => this.plansApi.getPlan(id)),
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe(plan => {
+      this.form.patchValue({ dateRange: { start: plan.effectiveStart, end: plan.effectiveEnd } });
+      this.preselectedPlanOption.set({ value: plan.id, label: `${plan.name} v${plan.version}` });
     });
+  }
 
-    const preselectedPayeeId = this.route.snapshot.queryParamMap.get('payeeId');
-    if (preselectedPayeeId) this.form.patchValue({ payeeId: preselectedPayeeId });
+  async ngOnInit(): Promise<void> {
+    const payeeId = this.route.snapshot.queryParamMap.get('payeeId');
+    const planId = this.route.snapshot.queryParamMap.get('planId');
 
-    const preselectedPlanId = this.route.snapshot.queryParamMap.get('planId');
-    if (preselectedPlanId) {
-      this.form.patchValue({ planId: preselectedPlanId });
-      const plan = this.plansStore.plans().find((p) => p.id === preselectedPlanId);
-      if (plan) {
-        this.form.patchValue({ dateRange: { start: plan.effectiveStart, end: plan.effectiveEnd } });
-      }
+    if (payeeId) {
+      this.form.patchValue({ payeeId });
+      firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
+        this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
+      });
+    }
+
+    if (planId) {
+      // Patching planId triggers the constructor subscription which fetches the plan,
+      // sets dateRange, and sets preselectedPlanOption.
+      this.form.patchValue({ planId });
     }
   }
 

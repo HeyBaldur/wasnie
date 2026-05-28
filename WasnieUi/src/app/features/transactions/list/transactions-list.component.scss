@@ -1,0 +1,44 @@
+@reference "../../../../styles.scss";
+
+.transactions-list__toolbar {
+  @apply flex items-center flex-wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.col-ref {
+  font-size: var(--font-size-13);
+  font-family: ui-monospace, monospace;
+  font-weight: 500;
+}
+
+.col-secondary {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.col-num {
+  text-align: right;
+  font-size: var(--font-size-13);
+  font-family: ui-monospace, monospace;
+}
+
+.skeleton-row td { padding: 14px 16px; }
+
+.skeleton {
+  display: inline-block;
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-surface-sunken);
+  animation: shimmer 1.4s ease infinite;
+  height: 14px;
+
+  &--text { width: 140px; }
+  &--text-wide { width: 180px; }
+  &--badge { width: 72px; height: 20px; border-radius: var(--radius-full); }
+  &--short { width: 80px; }
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}

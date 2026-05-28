@@ -11,6 +11,7 @@ using Wasnie.Api.Middleware;
 using Wasnie.Api.Observability;
 using Wasnie.Application;
 using Wasnie.Infrastructure;
+using Wasnie.Infrastructure.Persistence.Serialization;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -56,7 +57,8 @@ try
         });
 
     builder.Services.AddAuthorization();
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        .AddJsonOptions(opts => opts.JsonSerializerOptions.Converters.Add(new MoneyJsonConverter()));
     builder.Services.AddSwaggerWithJwt();
 
     if (!builder.Environment.IsDevelopment())

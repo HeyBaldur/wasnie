@@ -36,6 +36,9 @@ public static class AuditActions
     public const string AssignmentUpdated = "ASSIGNMENT_UPDATED";
     public const string AssignmentRemoved = "ASSIGNMENT_REMOVED";
 
+    // Transactions (Phase 2)
+    public const string TransactionIngested = "TRANSACTION_INGESTED";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

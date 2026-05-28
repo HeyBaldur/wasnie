@@ -1,10 +1,12 @@
-import { Component, computed, effect, inject, input, OnInit, output, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
+import { Observable, map } from 'rxjs';
 import { PayeesStore } from '../state/payees.store';
+import { PayeesApiService } from '../services/payees.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
-import { Payee, PayeeStatus } from '../models/payee.model';
+import { Payee } from '../models/payee.model';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -27,9 +29,10 @@ import {
   templateUrl: './payee-form.component.html',
   styleUrl: './payee-form.component.scss',
 })
-export class PayeeFormComponent implements OnInit {
+export class PayeeFormComponent {
   private readonly fb = inject(FormBuilder);
   private readonly store = inject(PayeesStore);
+  private readonly payeesApi = inject(PayeesApiService);
   private readonly toast = inject(ToastService);
 
   readonly payee = input<Payee | null>(null);
@@ -38,7 +41,22 @@ export class PayeeFormComponent implements OnInit {
 
   readonly isEditMode = computed(() => this.payee() !== null);
   readonly saving = signal(false);
-  readonly managerOptions = signal<SelectOption[]>([]);
+
+  readonly managerSearchFn = (q: string): Observable<SelectOption[]> =>
+    this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
+      map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
+    );
+
+  readonly managerInitialOption = computed((): SelectOption | null => {
+    const p = this.payee();
+    if (!p?.managerId || !p.managerName) return null;
+    return {
+      value: p.managerId,
+      label: p.managerEmployeeCode
+        ? `${p.managerName} (${p.managerEmployeeCode})`
+        : p.managerName,
+    };
+  });
 
   readonly form = this.fb.nonNullable.group({
     fullName: ['', [Validators.required, Validators.maxLength(200)]],
@@ -62,15 +80,9 @@ export class PayeeFormComponent implements OnInit {
             role: p.role ?? '',
             managerId: p.managerId ?? '',
           });
-          this._rebuildManagerOptions(p.id);
         }
       });
     });
-  }
-
-  async ngOnInit(): Promise<void> {
-    await this.store.loadPayees();
-    this._rebuildManagerOptions(this.payee()?.id ?? null);
   }
 
   async onSubmit(): Promise<void> {
@@ -119,16 +131,5 @@ export class PayeeFormComponent implements OnInit {
     if (this.hasError('fullName', 'required')) return 'VALIDATION.REQUIRED';
     if (this.hasError('fullName', 'maxlength')) return 'VALIDATION.INVALID';
     return '';
-  }
-
-  private _rebuildManagerOptions(excludeId: string | null): void {
-    this.managerOptions.set(
-      this.store.payees()
-        .filter((p) =>
-          (p.status === PayeeStatus.Active || p.status === PayeeStatus.OnLeave) &&
-          p.id !== excludeId
-        )
-        .map((p) => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` }))
-    );
   }
 }

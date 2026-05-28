@@ -121,14 +121,13 @@ Even after data retention period passes, audit records are archived, not deleted
 
 Retention: minimum 7 years (financial compliance).
 
-### Rule 5.3.3 — NEVER block the user operation
+### Rule 5.3.3 — NEVER block the user operation (non-money); ALWAYS fail-hard (money)
 
-Audit log writes MUST NOT block the user's operation. Strategies:
-- Write asynchronously (background queue) — preferred
-- Write synchronously only if blocking is acceptable (very fast operations)
-- If write fails, log the error but DO NOT fail the user operation (caller already got their result)
+For non-money operations: audit write failures MUST be swallowed — the user operation already succeeded. Do NOT fail the user for an audit write failure on a non-money command.
 
-**Tradeoff:** if the audit write fails, we have a missing record. This is acceptable for some operations (logins) but NOT for money operations. Money operations MUST use a transactional outbox pattern (Phase 2+).
+For money operations: audit write failure MUST roll back the business transaction and propagate the exception to the caller. A money mutation without its audit record is a liability.
+
+**Implementation (Phase 2 pre-work, WI-P2-00, 2026-05-28):** `IMoneyCriticalCommand` marker interface (extends `IAuditableCommand`). `AuditBehavior` detects it and wraps the entire operation in `db.Database.BeginTransactionAsync()`. Both the business `SaveChangesAsync` and the audit `SaveChangesAsync` run within the same transaction; `CommitAsync()` commits both atomically. Any exception → auto-rollback. All Phase 2+ Transaction/Payout/Credit commands MUST implement `IMoneyCriticalCommand`.
 
 ### Rule 5.3.4 — NEVER store secrets
 
@@ -244,8 +243,13 @@ For money operations, use transactional outbox: audit record written in same DB 
 
 ### Transactions (Phase 2)
 
-- TRANSACTION_IMPORTED, TRANSACTION_RECALCULATED, TRANSACTION_ADJUSTED
-- COMMISSION_CALCULATED (every calculation, with full input + output)
+- TRANSACTION_IMPORTED (`TransactionIngestedEvent` → domain event, WI-P2-02 ✅)
+- TRANSACTION_MARKED_ELIGIBLE (`TransactionMarkedEligibleEvent` → domain event, WI-P2-02 ✅)
+- TRANSACTION_CANCELLED (`TransactionCancelledEvent` → domain event, WI-P2-02 ✅)
+- TRANSACTION_CALCULATED, TRANSACTION_PAID — Phase 3 stubs; events defined when calculation engine is built
+- TRANSACTION_RECALCULATED, TRANSACTION_ADJUSTED — Phase 3+
+
+**Binding rule (§5b.7, established WI-P2-02):** Every `CompensationTransaction` state-change method MUST raise a domain event. Stubs that throw `NotSupportedException` immediately are exempt. See `14-forbidden-patterns.md` Audit violations.
 
 ### Payouts (Phase 2)
 

@@ -18,7 +18,7 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.TransactionDate).IsRequired();
         builder.Property(t => t.Source).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
-        builder.Property(t => t.ExternalReference).HasMaxLength(500);
+        builder.Property(t => t.ExternalId).HasMaxLength(500);
         builder.Property(t => t.IngestedAt).IsRequired();
         builder.Property(t => t.IngestedBy).IsRequired().HasMaxLength(450);
         builder.Property(t => t.UpdatedAt).IsRequired();
@@ -29,7 +29,29 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
             m.Property(x => x.Currency).HasColumnName("Currency").HasMaxLength(3).IsRequired();
         });
 
-        builder.HasIndex(t => new { t.TenantId, t.ReferenceNumber }).IsUnique();
-        builder.HasIndex(t => new { t.TenantId, t.PayeeId });
+        // Internal reference uniqueness (unchanged).
+        builder.HasIndex(t => new { t.TenantId, t.ReferenceNumber })
+            .IsUnique()
+            .HasDatabaseName("IX_CompensationTransactions_TenantId_ReferenceNumber");
+
+        builder.HasIndex(t => new { t.TenantId, t.PayeeId })
+            .HasDatabaseName("IX_CompensationTransactions_TenantId_PayeeId");
+
+        // Idempotency: external systems cannot re-ingest the same transaction.
+        // Filtered so manual transactions (null ExternalId) are exempt.
+        builder.HasIndex(t => new { t.TenantId, t.Source, t.ExternalId })
+            .IsUnique()
+            .HasFilter("[ExternalId] IS NOT NULL")
+            .HasDatabaseName("IX_CompensationTransactions_TenantId_Source_ExternalId");
+
+        // Read-path indexes (Rule 3.2.2 — every ORDER BY / WHERE column must be indexed).
+        builder.HasIndex(t => new { t.TenantId, t.TransactionDate })
+            .HasDatabaseName("IX_CompensationTransactions_TenantId_TransactionDate");
+
+        builder.HasIndex(t => new { t.TenantId, t.Status })
+            .HasDatabaseName("IX_CompensationTransactions_TenantId_Status");
+
+        builder.HasIndex(t => new { t.TenantId, t.IngestedAt })
+            .HasDatabaseName("IX_CompensationTransactions_TenantId_IngestedAt");
     }
 }

@@ -14,4 +14,7 @@ public class PaginationQuery
     public string? Status { get; set; }
     public Guid? ManagerId { get; set; }
     public Guid? PayeeId { get; set; }
+    public string? Source { get; set; }
+    public DateOnly? DateFrom { get; set; }
+    public DateOnly? DateTo { get; set; }
 }

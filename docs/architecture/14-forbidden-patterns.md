@@ -139,6 +139,7 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ Money operation without audit log entry (file 05, R5.1.2)
 - ❌ `UPDATE` or `DELETE` on audit table (file 05, R5.3.1, R5.3.2)
 - ❌ Audit log entries containing secrets (file 05, R5.3.4)
+- ❌ Domain entity state-change method that does NOT raise a domain event (§5b.7). Every method that transitions an aggregate's status MUST call `RaiseDomainEvent(...)` before returning. Phase 3+ stubs that throw `NotSupportedException` immediately (and thus do not change state) are exempt; document them as stubs. (WI-P2-02, 2026-05-28)
 
 ---
 

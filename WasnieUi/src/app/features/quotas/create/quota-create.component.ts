@@ -2,13 +2,13 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { Observable, firstValueFrom, map } from 'rxjs';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { QuotasStore } from '../state/quotas.store';
-import { PayeesStore } from '../../payees/state/payees.store';
-import { PlansStore } from '../../plans/state/plans.store';
+import { PayeesApiService } from '../../payees/services/payees.api.service';
+import { PlansApiService } from '../../plans/services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
-import { PayeeStatus } from '../../payees/models/payee.model';
 import { QuotaMeasurementType } from '../models/quota.model';
 import {
   WsButtonComponent,
@@ -53,17 +53,28 @@ export class QuotaCreateComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly store = inject(QuotasStore);
-  private readonly payeesStore = inject(PayeesStore);
-  private readonly plansStore = inject(PlansStore);
+  private readonly payeesApi = inject(PayeesApiService);
+  private readonly plansApi = inject(PlansApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
 
   readonly saving = signal(false);
   readonly currencies = CURRENCIES;
   readonly measurementTypes = MEASUREMENT_TYPES;
+  readonly preselectedPayeeOption = signal<SelectOption | null>(null);
 
-  readonly payeeOptions = signal<SelectOption[]>([]);
-  readonly planOptions = signal<SelectOption[]>([]);
+  readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
+    this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
+      map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
+    );
+
+  readonly planSearchFn = (q: string): Observable<SelectOption[]> =>
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
+      map(r => r.items
+        .filter(p => p.status === 'Active' || p.status === 'Archived')
+        .map(p => ({ value: p.id, label: `${p.name} v${p.version}` }))
+      )
+    );
 
   readonly form = this.fb.nonNullable.group({
     payeeId: ['', Validators.required],
@@ -76,26 +87,12 @@ export class QuotaCreateComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([
-      this.payeesStore.loadPayees(),
-      this.plansStore.loadPlans(),
-    ]);
-
-    this.payeeOptions.set(
-      this.payeesStore.payees()
-        .filter((p) => p.status === PayeeStatus.Active)
-        .map((p) => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` }))
-    );
-
-    this.planOptions.set(
-      this.plansStore.plans()
-        .filter((p) => p.status === 'Active' || p.status === 'Archived')
-        .map((p) => ({ value: p.id, label: `${p.name} v${p.version}` }))
-    );
-
-    const preselectedPayeeId = this.route.snapshot.queryParamMap.get('payeeId');
-    if (preselectedPayeeId) {
-      this.form.patchValue({ payeeId: preselectedPayeeId });
+    const payeeId = this.route.snapshot.queryParamMap.get('payeeId');
+    if (payeeId) {
+      this.form.patchValue({ payeeId });
+      firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
+        this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
+      });
     }
   }
 

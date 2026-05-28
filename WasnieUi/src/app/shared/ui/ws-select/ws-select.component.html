@@ -30,7 +30,7 @@
 
   @if (isOpen()) {
     <div class="ws-select__dropdown" [class.ws-select__dropdown--upward]="dropdownUpward()">
-      @if (searchable()) {
+      @if (searchable() || searchFn()) {
         <div class="ws-select__search-wrap">
           <input
             #searchInput
@@ -62,7 +62,13 @@
           </div>
         }
 
-        @if (filteredOptions().length === 0) {
+        @if (asyncLoading()) {
+          <div class="ws-select__loading" aria-live="polite">
+            <span></span><span></span><span></span>
+          </div>
+        }
+
+        @if (filteredOptions().length === 0 && !asyncLoading()) {
           <div class="ws-select__empty">—</div>
         }
       </div>
