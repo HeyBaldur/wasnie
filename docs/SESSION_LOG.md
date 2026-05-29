@@ -10,6 +10,85 @@
 
 ---
 
+## 2026-05-29 — WI-P2-BG-a verification + architecture doc gap closed
+
+**Duration:** ~30 min
+**Phase:** Phase 2
+
+### What we did
+
+Verified WI-P2-BG-a (Hangfire background job foundation) which was implemented in the 2026-05-28 session but left with one mandatory doc item missing.
+
+**Build:** `dotnet build --configuration Release` — clean, 0 warnings, 0 errors.
+
+**Test count: 494 passing (217 unit + 277 integration), 2 intentionally skipped. 0 regressions.**
+- Previous baseline (before WI-P2-BG-a): 460 passing
+- Added by WI-P2-BG-a: `BackgroundJobTenantContextTests` (5 unit) + `PingJobIntegrationTests` (1 integration)
+
+**Step 0 confirmation:**
+- `TenantContext` (HTTP path) reads `IHttpContextAccessor` → JWT claim `tenant_id`. Returns `Guid.Empty` for unauthenticated; throws `UnauthorizedAccessException` for authenticated-with-missing-claim. Registered Scoped.
+- `CurrentUserService` reads `IHttpContextAccessor`. Registered Scoped.
+- `AuditBehavior` consumes both via constructor injection in a Scoped pipeline.
+- `BackgroundJobTenantContext` (job path): mutable, throws if `TenantId` read before `SetTenant()`. DI factory selects HTTP vs job implementation based on presence of `IHttpContextAccessor.HttpContext`. HTTP path behavior unchanged — regression tests green.
+- Hangfire target framework: .NET 8 (packages `Hangfire.Core/SqlServer/AspNetCore` 1.8.14, LGPLv3).
+- SQL connection: `DefaultConnection` from `IConfiguration` (same string used by EF Core + Hangfire SQL storage).
+
+**Architecture doc gap closed:**
+- `docs/architecture/14-forbidden-patterns.md`: added "Background job violations" section — 5 rules covering `SetTenant` before DB access, no swallowing the throw-before-set exception, dashboard auth guard, Hangfire in Application/Domain = forbidden, no silent Guid.Empty.
+
+### Open / deferred
+
+Same as 2026-05-28 entry. No new deferrals.
+
+---
+
+## 2026-05-28 — WI-P2-BG-a: Hangfire background job foundation
+
+**Duration:** ~2 hours
+**Phase:** Phase 2
+**Tests before → after:** 460 passing → 494 passing (217 unit + 277 integration). 0 regressions.
+
+### What we did
+
+Built the generic, reusable background job infrastructure. This is the prerequisite for WI-P2-04a (transaction import), which runs rows in background to avoid HTTP timeouts on large CSV files.
+
+**Key decisions:**
+- **Hangfire** (LGPLv3 — correction: the step-0 inspection mislabeled it as MIT) over hand-rolled SQL jobs. Recommended because it handles retries, state persistence, and dashboard out-of-the-box.
+- **Azure F1 plan**: no Always On; app unloads after ~20 min idle. Hangfire jobs are durable in SQL — they survive recycles. Timing is non-deterministic but not money-safety risk. **B1 upgrade ($13/month, Always On) deferred to first paying customer** — this is the explicit trigger.
+- **BackgroundJobTenantContext**: throws `InvalidOperationException` if `TenantId` read before `SetTenant()`. Never silently returns `Guid.Empty` (Rule 9.4.3). `HangfireJobDispatcher` sets tenant from job payload as first action.
+- **Hangfire dashboard at `/jobs`**: dev-only (blocked in Production) until a global SystemAdmin role/claim is implemented. Cross-tenant job data exposure risk documented.
+- **`ApplicationDbContext.CurrentTenantId`**: changed from eager (`{ get; } = tenantContext.TenantId`) to lazy (`=> tenantContext.TenantId`). Required so background job scopes can construct `ApplicationDbContext` before `SetTenant` is called (EF evaluates query filters per-query, not at construction).
+
+**Regression found and fixed:**
+`AuthorizationService.RequireAsync` had a `catch { }` that swallowed `UnauthorizedAccessException` from `tenantContext.TenantId` (missing/invalid claim). With the lazy change, the exception now fired inside the audit block rather than at DbContext construction, making it get swallowed and replaced with `ForbiddenException` → 403. Fixed by adding `catch (UnauthorizedAccessException) { throw; }`.
+
+**Files created/modified:**
+- `Domain/BackgroundJobs/JobState.cs` + `BackgroundJobRecord.cs` (entity with `MarkRunning/UpdateProgress/MarkCompleted/MarkFailed`)
+- `Application/Common/Interfaces/IBackgroundJobService.cs`, `IJobHandler.cs`
+- `Application/Common/Models/JobStatusDto.cs`, `JobContext.cs`
+- `Application/BackgroundJobs/JobHandlerBase.cs` (abstract), `Queries/GetJobStatusQuery.cs`
+- `Application/Common/Interfaces/IApplicationDbContext.cs` (+`BackgroundJobRecords` DbSet)
+- `Infrastructure/Identity/BackgroundJobTenantContext.cs`
+- `Infrastructure/BackgroundJobs/HangfireJobDispatcher.cs`, `HangfireBackgroundJobService.cs`, `PingJobHandler.cs`, `HangfireDashboardAuthorizationFilter.cs`
+- `Infrastructure/Persistence/Configurations/BackgroundJobs/BackgroundJobRecordConfiguration.cs`
+- `Infrastructure/Persistence/ApplicationDbContext.cs` (lazy `CurrentTenantId`, +BackgroundJobRecords DbSet + config + query filter)
+- `Infrastructure/DependencyInjection.cs` (factory-based `ITenantContext`, Hangfire registration, `PingJobHandler` handler registration)
+- `Infrastructure/Identity/AuthorizationService.cs` (re-throw `UnauthorizedAccessException`)
+- `Infrastructure/Wasnie.Infrastructure.csproj` (Hangfire.Core/SqlServer/AspNetCore 1.8.14)
+- `Api/Controllers/JobsController.cs` (`GET /api/jobs/{id}`)
+- `Api/Program.cs` (Hangfire dashboard middleware + `JsonStringEnumConverter`)
+- `tests/.../Infrastructure/TestWebApplicationFactory.cs` (`ConnectionStrings:DefaultConnection` override for Hangfire)
+- EF migration: `20260528135529_AddBackgroundJobs`
+- Tests: `BackgroundJobs/BackgroundJobTenantContextTests.cs` (5 tests), `BackgroundJobs/PingJobIntegrationTests.cs` (1 end-to-end test)
+
+### Open / deferred
+
+- **B1 upgrade trigger**: When first paying customer is onboarded, upgrade to Azure App Service B1 (Always On) so Hangfire processes jobs without idle-sleep delays.
+- **SystemAdmin role for dashboard**: `HangfireDashboardAuthorizationFilter` blocks dashboard in Production until a global SystemAdmin role/claim is defined (separate WI).
+- **WI-P2-04a**: Transaction import backend — now unblocked. Uses `IBackgroundJobService.EnqueueAsync` + `IJobHandler<ImportPayload>`.
+
+---
+
 ## 2026-05-28 — WI-P2-FIX-select: ws-select async server-side typeahead
 
 **Duration:** ~90 min (split across two context windows)

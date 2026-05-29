@@ -195,10 +195,10 @@ export class PlanDetailComponent implements OnInit {
   }
 
   measurementLabel(type: MeasurementType): string {
-    return `PLANS.MEASUREMENT_${MeasurementType[type].toUpperCase()}`;
+    return `PLANS.MEASUREMENT_${String(type).toUpperCase()}`;
   }
 
   rateTableLabel(type: RateTableType): string {
-    return `PLANS.RATE_TABLE_${RateTableType[type].toUpperCase()}`;
+    return `PLANS.RATE_TABLE_${String(type).toUpperCase()}`;
   }
 }

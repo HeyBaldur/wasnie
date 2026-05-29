@@ -13,6 +13,7 @@ export { WsTooltipDirective } from './ws-tooltip/ws-tooltip.directive';
 export { WsTableComponent } from './ws-table/ws-table.component';
 export { WsTablePaginationComponent } from './ws-table/ws-table-pagination.component';
 export { WsTableEmptyComponent } from './ws-table/ws-table-empty.component';
+export { WsClickableRowDirective } from './ws-table/ws-clickable-row.directive';
 export { WsEmptyStateComponent } from './ws-empty-state/ws-empty-state.component';
 export { WsToastContainerComponent } from './ws-toast/ws-toast-container.component';
 export { WsToastService, type WsToastType, type WsToastItem } from './ws-toast/ws-toast.service';

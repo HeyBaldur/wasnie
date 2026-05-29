@@ -78,7 +78,9 @@
         </div>
         <div class="field-group">
           <span class="field-label">{{ 'QUOTAS.FIELD_PLAN' | translate }}</span>
-          <span class="field-value field-mono">{{ quota.planId }}</span>
+          <span class="field-value">
+            <a class="field-link" [routerLink]="['/plans', quota.planId]">{{ quota.planName }}</a>
+          </span>
         </div>
       </div>
     </div>

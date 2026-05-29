@@ -20,6 +20,7 @@ public sealed class TestWebApplicationFactory(string connectionString) : WebAppl
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["ConnectionStrings:DefaultConnection"] = connectionString, // used by EF + Hangfire
                 ["RateLimiting:AuthLogin:PermitLimit"] = "10000",
                 ["RateLimiting:AuthLogin:WindowSeconds"] = "60",
                 ["RateLimiting:AuthRegister:PermitLimit"] = "10000",

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.BackgroundJobs;
 using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
@@ -14,6 +15,7 @@ using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Identity;
 using Wasnie.Infrastructure.Persistence.Configurations;
+using Wasnie.Infrastructure.Persistence.Configurations.BackgroundJobs;
 using Wasnie.Infrastructure.Persistence.Configurations.Compensation;
 using Wasnie.Infrastructure.Persistence.Configurations.Identity;
 using LegacyPayout = Wasnie.Domain.Entities.Payout;
@@ -28,7 +30,10 @@ public sealed class ApplicationDbContext(
     IPublisher publisher)
     : IdentityDbContext<IdentityUser>(options), IApplicationDbContext
 {
-    public Guid CurrentTenantId { get; } = tenantContext.TenantId;
+    // Evaluated per-query (not at construction) so background jobs can set tenant before first DB access.
+    public Guid CurrentTenantId => tenantContext.TenantId;
+
+    public Microsoft.EntityFrameworkCore.DbSet<BackgroundJobRecord> BackgroundJobRecords => Set<BackgroundJobRecord>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.Tenant> Tenants => Set<Wasnie.Domain.Entities.Tenant>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.ImportAudit> ImportAudits => Set<Wasnie.Domain.Entities.ImportAudit>();
     public Microsoft.EntityFrameworkCore.DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -66,6 +71,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new PayoutLineConfiguration());
         builder.ApplyConfiguration(new ImportAuditConfiguration());
         builder.ApplyConfiguration(new AuditLogConfiguration());
+        builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
 
         builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyPlan>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
@@ -79,6 +85,7 @@ public sealed class ApplicationDbContext(
         builder.Entity<CompensationPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

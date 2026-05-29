@@ -15,6 +15,7 @@ export interface QuotaSummary {
   payeeName: string;
   payeeEmployeeCode: string;
   planId: string;
+  planName: string;
   measurementType: QuotaMeasurementType;
   amount: number;
   currency: string;

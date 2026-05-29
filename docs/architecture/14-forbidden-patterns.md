@@ -186,6 +186,16 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Background job violations
+
+- ❌ Background job that accesses the database WITHOUT calling `SetTenant(tenantId)` first (file 09, R9.4.3). The Hangfire dispatcher MUST call `tenantCtx.SetTenant(payload.TenantId)` as its very first action before resolving any service that touches EF Core.
+- ❌ Catching or swallowing the `InvalidOperationException` thrown by `BackgroundJobTenantContext.TenantId` when `SetTenant()` has not been called (R9.4.3). It throws by design — suppressing it would let Guid.Empty pass silently through query filters.
+- ❌ Hangfire dashboard exposed without an authorization filter (file 04, security). The dashboard shows cross-tenant job data. In Production it MUST be blocked until a global SystemAdmin role/claim is in place.
+- ❌ Hangfire (or any background-job library) referenced in Application or Domain layer (file 01, R1.1/R1.4). Hangfire is an Infrastructure concern; Application defines `IBackgroundJobService` + `IJobHandler<T>` abstractions only.
+- ❌ Background job that silently returns `Guid.Empty` from a tenant-context instead of throwing (R9.4.3). Every multi-tenant query filter would match zero rows, creating ghost-data bugs. `BackgroundJobTenantContext` exists precisely to prevent this.
+
+---
+
 ## Claude Code autonomy violations
 
 - ❌ Claude Code performing ANY git operation (file 13, R13.2)

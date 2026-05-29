@@ -1,5 +1,5 @@
 using MediatR;
-using Wasnie.Application.Common.Extensions;
+using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -23,32 +23,44 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
     {
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
-        var query = db.PlanAssignments
+
+        var joined = db.PlanAssignments
             .Where(a => a.PayeeId == request.PayeeId)
-            .AsQueryable();
+            .Join(
+                db.CompensationPlans,
+                a => a.PlanId,
+                pl => pl.Id,
+                (a, pl) => new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version });
 
         // Filters
         if (!string.IsNullOrWhiteSpace(p.Status) &&
             Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
-            query = query.Where(x => x.Status == status);
+            joined = joined.Where(x => x.Assignment.Status == status);
 
         // Sort
         var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "effectivestart";
         var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
 
-        query = sortBy switch
+        var sorted = sortBy switch
         {
-            _ => desc ? query.OrderByDescending(x => x.EffectivePeriod.Start) : query.OrderBy(x => x.EffectivePeriod.Start),
+            "planname" => desc ? joined.OrderByDescending(x => x.PlanName) : joined.OrderBy(x => x.PlanName),
+            _ => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start) : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
         };
 
-        var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
+        var totalCount = await sorted.CountAsync(cancellationToken);
+        var items = await sorted
+            .Skip((p.Page - 1) * p.PageSize)
+            .Take(p.PageSize)
+            .ToListAsync(cancellationToken);
+
+        var dtos = items.Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion)).ToList();
 
         return Result<PagedResult<PlanAssignmentDto>>.Success(new PagedResult<PlanAssignmentDto>
         {
-            Items = paged.Items.Select(CompensationMapper.ToPlanAssignmentDto).ToList(),
-            TotalCount = paged.TotalCount,
-            Page = paged.Page,
-            PageSize = paged.PageSize,
+            Items = dtos,
+            TotalCount = totalCount,
+            Page = p.Page,
+            PageSize = p.PageSize,
         });
     }
 }

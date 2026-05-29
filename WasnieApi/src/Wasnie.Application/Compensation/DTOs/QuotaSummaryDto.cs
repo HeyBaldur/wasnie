@@ -9,6 +9,7 @@ public sealed record QuotaSummaryDto(
     string PayeeName,
     string PayeeEmployeeCode,
     Guid PlanId,
+    string PlanName,
     QuotaMeasurementType MeasurementType,
     decimal Amount,
     string Currency,

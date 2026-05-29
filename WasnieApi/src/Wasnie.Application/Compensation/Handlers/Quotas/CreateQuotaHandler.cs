@@ -41,15 +41,18 @@ public sealed class CreateQuotaHandler(
         db.Quotas.Add(quota);
         await db.SaveChangesAsync(cancellationToken);
 
-        var payee = await db.Payees.FirstOrDefaultAsync(p => p.Id == quota.PayeeId, cancellationToken);
+        var payeeTask = db.Payees.FirstOrDefaultAsync(p => p.Id == quota.PayeeId, cancellationToken);
+        var planTask = db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
+        await Task.WhenAll(payeeTask, planTask);
 
         return Result<QuotaSummaryDto>.Success(new QuotaSummaryDto(
             quota.Id,
             quota.TenantId,
             quota.PayeeId,
-            payee?.FullName ?? string.Empty,
-            payee?.EmployeeCode ?? string.Empty,
+            payeeTask.Result?.FullName ?? string.Empty,
+            payeeTask.Result?.EmployeeCode ?? string.Empty,
             quota.PlanId,
+            planTask.Result?.Name ?? string.Empty,
             quota.MeasurementType,
             quota.Amount.Amount,
             quota.Amount.Currency,

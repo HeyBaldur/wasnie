@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-05-28
-**Updated by:** Rodolfo Calvo (WI-P2-FIX-select — ws-select async typeahead)
+**Last updated:** 2026-05-29
+**Updated by:** Rodolfo Calvo (WI-P2-BG-a doc gap — added background job rules to 14-forbidden-patterns.md)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,18 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** Phase 2 transaction CRUD complete (WI-P2-03a + WI-P2-03b + WI-P2-03c + WI-P2-FIX-select). `ws-select` now supports async server-side typeahead — all 6 consumers (Payee, Manager, Plan selects in transaction-form, payee-form, assignment-create, quota-create) migrated. 98 frontend tests pass. Next: WI-P2-04 (transaction calculation engine) or Phase D coverage.
+**Right now we are:** WI-P2-BG-a complete — Hangfire background job foundation shipped. `BackgroundJobRecord` entity + EF migration, `BackgroundJobTenantContext` (throw-before-set), factory-based `ITenantContext` DI (HTTP → TenantContext, no-HTTP → BackgroundJobTenantContext), `IBackgroundJobService` + `IJobHandler<T>` interfaces, `GET /api/jobs/{id}` endpoint, Hangfire dashboard at `/jobs` (dev-only). 494 tests pass (217 unit + 277 integration). Next: WI-P2-04a (transaction import backend) or WI-P2-04b (frontend).
+
+**Most recent significant work (2026-05-28 session — WI-P2-BG-a):**
+- **Architecture decision:** Hangfire 1.8.x (LGPLv3 — NOT MIT, correction from inspection) over hand-rolled SQL jobs. Azure F1 plan: no Always On, app unloads after ~20 min idle; Hangfire jobs survive recycle in SQL. B1 upgrade ($13/month, Always On) deferred to first paying customer.
+- **New Domain:** `BackgroundJobRecord` entity + `JobState` enum (`Wasnie.Domain.BackgroundJobs`). EF migration `20260528135529_AddBackgroundJobs` (table + 2 indexes). Query filter tenant-isolates the table.
+- **New Application interfaces:** `IBackgroundJobService`, `IJobHandler<TPayload>`, `IJobHandlerBase`, `JobHandlerBase<T>` abstract base, `JobStatusDto`, `JobContext`, `GetJobStatusQuery` (MediatR).
+- **Critical DI change:** `ApplicationDbContext.CurrentTenantId` changed from eager (`{ get; } = tenantContext.TenantId`) to lazy (`=> tenantContext.TenantId`). EF evaluates query filters per-query, not at construction — allows background job scopes to set tenant before first query. **Regression discovered and fixed:** `AuthorizationService` catch-all was swallowing `UnauthorizedAccessException` from `tenantContext.TenantId`, turning expected 401s into 403s. Fixed by adding `catch (UnauthorizedAccessException) { throw; }`.
+- **BackgroundJobTenantContext** (Infrastructure): Scoped, mutable, THROWS if `TenantId` is read before `SetTenant()`. Registered via factory: HTTP scope → `TenantContext`; no-HTTP scope → `BackgroundJobTenantContext`. `HangfireJobDispatcher` calls `SetTenant(tenantId)` from payload as FIRST action, before any DB access.
+- **Hangfire wiring:** `HangfireJobDispatcher` (non-generic entry point), `HangfireBackgroundJobService`, `PingJobHandler` (smoke test), `HangfireDashboardAuthorizationFilter` (dev-only, blocked in Production until SystemAdmin role added — cross-tenant data risk).
+- **API:** `GET /api/jobs/{id}` — authenticated, tenant-isolated (cross-tenant → 404). Dashboard at `/jobs` (dev-only, auth required).
+- **Tests:** 217 unit (unchanged) + 277 integration (+34 vs 243 baseline). `BackgroundJobTenantContextTests` (5): throw-before-set, empty guid rejected, happy path, SetTenant twice. `PingJobIntegrationTests` (1): end-to-end enqueue → execute → Succeeded, cross-tenant isolation. All regression tests green.
+- **TestWebApplicationFactory**: adds `ConnectionStrings:DefaultConnection` override so Hangfire uses the Testcontainers SQL Server in all integration tests.
 
 **Most recent significant work (2026-05-28 session — WI-P2-FIX-select):**
 - `ws-select.component.ts`: additive async mode — `searchFn` input (`(q: string) => Observable<SelectOption[]>`), `initialOption` input for edit-mode label resolution, `asyncOptions`/`asyncLoading` signals, `DestroyRef`-based `switchMap` pipeline with 300ms debounce + `takeUntilDestroyed`; `options` input changed from required to optional
