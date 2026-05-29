@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Infrastructure.BackgroundJobs;
 using Wasnie.Infrastructure.Common;
@@ -66,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<IFileParserService, FileParserService>();
         services.AddScoped<IPayeeImportValidationService, PayeeImportValidationService>();
         services.AddScoped<IPayeeImportExecutionService, PayeeImportExecutionService>();
+        services.AddScoped<ITransactionImportValidationService, TransactionImportValidationService>();
 
         // Background jobs — Hangfire (LGPLv3) backed by the existing Azure SQL database.
         // F1 plan has no Always On; the Hangfire server restarts on the next request after idle,
@@ -84,7 +86,8 @@ public static class DependencyInjection
                 QueuePollInterval = TimeSpan.Zero,
                 UseRecommendedIsolationLevel = true,
                 DisableGlobalLocks = true,
-            }));
+            })
+            .UseFilter(new Hangfire.AutomaticRetryAttribute { Attempts = 3 }));
 
         services.AddHangfireServer();
 
@@ -93,6 +96,7 @@ public static class DependencyInjection
 
         // Register job handlers so the dispatcher can resolve them by interface type.
         services.AddScoped<IJobHandler<PingPayload>, PingJobHandler>();
+        services.AddScoped<IJobHandler<TransactionImportPayload>, TransactionImportJobHandler>();
 
         services.AddIdentity<IdentityUser, IdentityRole>(options =>
             {

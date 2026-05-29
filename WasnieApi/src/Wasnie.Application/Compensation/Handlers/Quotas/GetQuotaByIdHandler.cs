@@ -20,18 +20,17 @@ public sealed class GetQuotaByIdHandler(IApplicationDbContext db, IAuthorization
         if (quota is null)
             return Result<QuotaSummaryDto>.Failure("Quota not found.");
 
-        var payeeTask = db.Payees.FirstOrDefaultAsync(p => p.Id == quota.PayeeId, cancellationToken);
-        var planTask = db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
-        await Task.WhenAll(payeeTask, planTask);
+        var payee = await db.Payees.FirstOrDefaultAsync(p => p.Id == quota.PayeeId, cancellationToken);
+        var plan = await db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
 
         return Result<QuotaSummaryDto>.Success(new QuotaSummaryDto(
             quota.Id,
             quota.TenantId,
             quota.PayeeId,
-            payeeTask.Result?.FullName ?? string.Empty,
-            payeeTask.Result?.EmployeeCode ?? string.Empty,
+            payee?.FullName ?? string.Empty,
+            payee?.EmployeeCode ?? string.Empty,
             quota.PlanId,
-            planTask.Result?.Name ?? string.Empty,
+            plan?.Name ?? string.Empty,
             quota.MeasurementType,
             quota.Amount.Amount,
             quota.Amount.Currency,

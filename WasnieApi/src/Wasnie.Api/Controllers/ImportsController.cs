@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
+using Wasnie.Domain.Authorization;
+using IWasnieAuthorizationService = Wasnie.Application.Common.Interfaces.IAuthorizationService;
 
 namespace Wasnie.Api.Controllers;
 
@@ -14,7 +16,11 @@ public sealed class ImportsController(
     IImportCacheService cache,
     IPayeeImportValidationService validator,
     IPayeeImportExecutionService executor,
-    ICurrentUserService currentUser) : ControllerBase
+    ICurrentUserService currentUser,
+    ITenantContext tenantContext,
+    ITransactionImportValidationService transactionValidator,
+    IBackgroundJobService backgroundJobService,
+    IWasnieAuthorizationService authorizationService) : ControllerBase
 {
     private const long MaxFileBytes = 5 * 1024 * 1024; // 5 MB
 
@@ -107,7 +113,109 @@ public sealed class ImportsController(
         return Ok(result);
     }
 
+    // POST /api/imports/transactions/parse
+    [HttpPost("transactions/parse")]
+    public async Task<IActionResult> ParseTransactions(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.TransactionsCreate, cancellationToken);
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "No file provided." });
+
+        if (file.Length > MaxFileBytes)
+            return BadRequest(new { message = "File exceeds the 5 MB limit." });
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not ".csv" and not ".xlsx")
+            return BadRequest(new { message = "Only .csv and .xlsx files are supported." });
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var parsed = await fileParser.ParseAsync(stream, file.FileName, cancellationToken);
+            var fileId = cache.Store(parsed, file.FileName, "transactions");
+
+            return Ok(new ParseResponse
+            {
+                FileId = fileId,
+                Headers = parsed.Headers,
+                RowCount = parsed.Rows.Count,
+                SampleRows = parsed.Rows.Take(5).ToList(),
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    // POST /api/imports/transactions/validate
+    [HttpPost("transactions/validate")]
+    public async Task<IActionResult> ValidateTransactions(
+        [FromBody] TransactionValidateRequest body,
+        CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.TransactionsCreate, cancellationToken);
+
+        var cached = cache.Retrieve(body.FileId, "transactions");
+        if (cached is null)
+            return BadRequest(new { message = "File session not found or has expired. Please upload the file again." });
+
+        var (parsed, _) = cached.Value;
+        var rowResults = await transactionValidator.ValidateAsync(parsed.Rows, body.ColumnMapping, cancellationToken);
+
+        return Ok(new TransactionValidateResponse
+        {
+            TotalRows = parsed.Rows.Count,
+            ErrorCount = rowResults.Count(r => r.HasErrors),
+            WarningCount = rowResults.Count(r => !r.HasErrors && r.HasWarnings),
+            ValidRowCount = rowResults.Count(r => !r.HasErrors),
+            RowResults = rowResults,
+        });
+    }
+
+    // POST /api/imports/transactions/execute
+    [HttpPost("transactions/execute")]
+    public async Task<IActionResult> ExecuteTransactions(
+        [FromBody] TransactionExecuteRequest body,
+        CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.TransactionsCreate, cancellationToken);
+
+        var cached = cache.Retrieve(body.FileId, "transactions");
+        if (cached is null)
+            return BadRequest(new { message = "File session not found or has expired. Please upload the file again." });
+
+        var (parsed, originalFileName) = cached.Value;
+
+        var txPayload = new TransactionImportPayload(
+            TenantId: tenantContext.TenantId,
+            RequestedByUserId: currentUser.UserId ?? "system",
+            RequestedByEmail: currentUser.Email ?? string.Empty,
+            OriginalFileName: originalFileName,
+            ColumnMapping: body.ColumnMapping,
+            Options: new TransactionImportOptions(body.Options.SkipRowsWithWarnings),
+            Rows: parsed.Rows);
+
+        var jobId = await backgroundJobService.EnqueueAsync(
+            txPayload,
+            tenantContext.TenantId,
+            currentUser.UserId ?? "system",
+            currentUser.Email ?? string.Empty,
+            cancellationToken);
+
+        cache.Remove(body.FileId, "transactions");
+
+        return StatusCode(202, new TransactionExecuteAccepted(jobId));
+    }
+
     public sealed record ValidateRequest(string FileId, PayeeImportColumnMapping ColumnMapping);
     public sealed record ExecuteRequest(string FileId, PayeeImportColumnMapping ColumnMapping, ExecuteOptions Options);
     public sealed record ExecuteOptions(bool SkipRowsWithWarnings);
+
+    public sealed record TransactionValidateRequest(string FileId, TransactionImportColumnMapping ColumnMapping);
+    public sealed record TransactionExecuteRequest(string FileId, TransactionImportColumnMapping ColumnMapping, TransactionExecuteOptions Options);
+    public sealed record TransactionExecuteOptions(bool SkipRowsWithWarnings);
 }
