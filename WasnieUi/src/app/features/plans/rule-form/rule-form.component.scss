@@ -100,6 +100,7 @@
 }
 
 .form-field-label {
+  @apply leading-none;
   font-size: var(--font-size-13);
   font-weight: 500;
   color: var(--color-text-primary);
@@ -194,6 +195,10 @@
   @apply flex flex-col gap-2;
 }
 
+.add-action {
+  margin-top: var(--space-4);
+}
+
 .condition-row {
   @apply grid items-center gap-2;
   grid-template-columns: 1fr 1fr 1fr 28px;
@@ -245,4 +250,33 @@
 .preview-value {
   font-size: var(--font-size-13);
   color: var(--color-text-primary);
+}
+
+.field-with-help {
+  @apply flex flex-col;
+  gap: var(--space-1);
+}
+
+.field-help-label {
+  @apply flex items-center;
+  gap: var(--space-1);
+}
+
+.section-title-with-help {
+  @apply flex items-center;
+  gap: var(--space-1);
+
+  .form-card__title {
+    @apply leading-none m-0;
+  }
+}
+
+.help-icon {
+  @apply flex items-center flex-shrink-0 cursor-help;
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-text-secondary);
+  }
 }

@@ -1,0 +1,59 @@
+export interface TransactionImportColumnMapping {
+  referenceNumberColumn: string;
+  payeeCodeColumn: string;
+  amountColumn: string;
+  currencyColumn: string;
+  transactionDateColumn: string;
+  externalIdColumn?: string | null;
+}
+
+export interface ParseResponse {
+  fileId: string;
+  headers: string[];
+  rowCount: number;
+  sampleRows: Record<string, string>[];
+}
+
+export interface ValidationIssue {
+  field: string;
+  message: string;
+  severity: 'Error' | 'Warning';
+}
+
+export interface TransactionRowValidationResult {
+  rowNumber: number;
+  originalData: Record<string, string>;
+  issues: ValidationIssue[];
+  hasErrors: boolean;
+  hasWarnings: boolean;
+}
+
+export interface TransactionValidateResponse {
+  totalRows: number;
+  errorCount: number;
+  warningCount: number;
+  validRowCount: number;
+  rowResults: TransactionRowValidationResult[];
+}
+
+export interface ExecuteAccepted {
+  jobId: string;
+}
+
+export type JobState = 'Pending' | 'Running' | 'Succeeded' | 'Failed';
+
+export interface ImportJobStatus {
+  id: string;
+  state: JobState;
+  progressCurrent: number;
+  progressTotal: number;
+  errorMessage: string | null;
+  enqueuedAtUtc: string;
+  startedAtUtc: string | null;
+  completedAtUtc: string | null;
+}
+
+export interface TransactionImportResult {
+  totalRows: number;
+  processedRows: number;
+}

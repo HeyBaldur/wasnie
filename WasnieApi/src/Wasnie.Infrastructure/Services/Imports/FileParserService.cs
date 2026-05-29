@@ -9,20 +9,18 @@ namespace Wasnie.Infrastructure.Services.Imports;
 
 public sealed class FileParserService : IFileParserService
 {
-    private const int MaxRows = 300;
-
-    public Task<ParsedFile> ParseAsync(Stream stream, string fileName, CancellationToken cancellationToken = default)
+    public Task<ParsedFile> ParseAsync(Stream stream, string fileName, int maxRows, CancellationToken cancellationToken = default)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         return ext switch
         {
-            ".xlsx" => Task.FromResult(ParseXlsx(stream)),
-            ".csv" => Task.FromResult(ParseCsv(stream)),
+            ".xlsx" => Task.FromResult(ParseXlsx(stream, maxRows)),
+            ".csv" => Task.FromResult(ParseCsv(stream, maxRows)),
             _ => throw new InvalidOperationException($"Unsupported file format '{ext}'. Only .csv and .xlsx are accepted."),
         };
     }
 
-    private static ParsedFile ParseXlsx(Stream stream)
+    private static ParsedFile ParseXlsx(Stream stream, int maxRows)
     {
         using var wb = new XLWorkbook(stream);
         var ws = wb.Worksheet(1);
@@ -35,8 +33,8 @@ public sealed class FileParserService : IFileParserService
             throw new InvalidOperationException("No column headers found in the first row.");
 
         var dataRows = rows.Skip(1).ToList();
-        if (dataRows.Count > MaxRows)
-            throw new InvalidOperationException($"The file contains {dataRows.Count} data rows. The maximum allowed is {MaxRows}. Please split the file and import in batches.");
+        if (dataRows.Count > maxRows)
+            throw new InvalidOperationException($"The file contains {dataRows.Count} data rows. The maximum allowed is {maxRows}. Please split the file and import in batches.");
 
         var result = new List<Dictionary<string, string>>(dataRows.Count);
         foreach (var row in dataRows)
@@ -45,7 +43,7 @@ public sealed class FileParserService : IFileParserService
             for (var i = 0; i < headers.Length; i++)
             {
                 var cell = row.Cell(i + 1);
-                dict[headers[i]] = cell.GetString().Trim();
+                dict[headers[i]] = ReadCellAsString(cell);
             }
             result.Add(dict);
         }
@@ -53,7 +51,22 @@ public sealed class FileParserService : IFileParserService
         return new ParsedFile { Headers = headers, Rows = result, Format = FileFormat.Xlsx };
     }
 
-    private static ParsedFile ParseCsv(Stream stream)
+    // Preserve native Excel cell types instead of using culture-dependent GetString().
+    // DateTime cells → ISO 8601 "yyyy-MM-dd" (drops time component; POS exports have HH:mm:ss).
+    // Number cells  → invariant decimal string (avoids currency/thousand-separator formatting).
+    // All others    → GetString() trimmed (text, blank, boolean, error).
+    private static string ReadCellAsString(IXLCell cell)
+    {
+        if (cell.DataType == XLDataType.DateTime && cell.TryGetValue<DateTime>(out var dt))
+            return dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        if (cell.DataType == XLDataType.Number && cell.TryGetValue<double>(out var d))
+            return d.ToString(CultureInfo.InvariantCulture);
+
+        return cell.GetString().Trim();
+    }
+
+    private static ParsedFile ParseCsv(Stream stream, int maxRows)
     {
         var config = new CsvConfiguration(CultureInfo.InvariantCulture)
         {
@@ -74,8 +87,8 @@ public sealed class FileParserService : IFileParserService
         var rows = new List<Dictionary<string, string>>();
         while (csv.Read())
         {
-            if (rows.Count >= MaxRows)
-                throw new InvalidOperationException($"The file contains more than {MaxRows} data rows. The maximum allowed is {MaxRows}. Please split the file and import in batches.");
+            if (rows.Count >= maxRows)
+                throw new InvalidOperationException($"The file contains more than {maxRows} data rows. The maximum allowed is {maxRows}. Please split the file and import in batches.");
 
             var dict = new Dictionary<string, string>(headers.Length, StringComparer.OrdinalIgnoreCase);
             foreach (var header in headers)

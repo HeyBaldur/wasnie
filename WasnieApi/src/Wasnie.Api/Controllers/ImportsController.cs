@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Common.Options;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Authorization;
@@ -20,9 +22,11 @@ public sealed class ImportsController(
     ITenantContext tenantContext,
     ITransactionImportValidationService transactionValidator,
     IBackgroundJobService backgroundJobService,
-    IWasnieAuthorizationService authorizationService) : ControllerBase
+    IWasnieAuthorizationService authorizationService,
+    IOptions<ImportOptions> importOptions) : ControllerBase
 {
     private const long MaxFileBytes = 5 * 1024 * 1024; // 5 MB
+    private ImportOptions Imports => importOptions.Value;
 
     // POST /api/imports/payees/parse
     [HttpPost("payees/parse")]
@@ -43,7 +47,7 @@ public sealed class ImportsController(
         try
         {
             await using var stream = file.OpenReadStream();
-            var parsed = await fileParser.ParseAsync(stream, file.FileName, cancellationToken);
+            var parsed = await fileParser.ParseAsync(stream, file.FileName, Imports.PayeeMaxRows, cancellationToken);
             var fileId = cache.Store(parsed, file.FileName);
 
             return Ok(new ParseResponse
@@ -134,7 +138,7 @@ public sealed class ImportsController(
         try
         {
             await using var stream = file.OpenReadStream();
-            var parsed = await fileParser.ParseAsync(stream, file.FileName, cancellationToken);
+            var parsed = await fileParser.ParseAsync(stream, file.FileName, Imports.TransactionMaxRows, cancellationToken);
             var fileId = cache.Store(parsed, file.FileName, "transactions");
 
             return Ok(new ParseResponse
@@ -209,6 +213,13 @@ public sealed class ImportsController(
         cache.Remove(body.FileId, "transactions");
 
         return StatusCode(202, new TransactionExecuteAccepted(jobId));
+    }
+
+    // GET /api/imports/transactions/limits
+    [HttpGet("transactions/limits")]
+    public IActionResult GetTransactionLimits()
+    {
+        return Ok(new { maxRows = Imports.TransactionMaxRows });
     }
 
     public sealed record ValidateRequest(string FileId, PayeeImportColumnMapping ColumnMapping);

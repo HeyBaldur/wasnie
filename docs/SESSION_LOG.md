@@ -10,6 +10,249 @@
 
 ---
 
+## 2026-05-29 — WI-PROD-H closed: "New Transaction" button matches Payees pattern
+
+Added `<app-icon name="plus">` inside the button and switched RBAC from `*hasPermission` directive to `[hidden]="!('Transactions.Create' | hasPermission)"` pipe — identical to Payees. 2 files: `transactions-list.component.ts` (added `HasPermissionPipe` + `IconComponent`), `.html` (button update). 138/138 tests pass, build clean.
+
+---
+
+## 2026-05-29 — WI-DOCS-UPDATE addendum 2: three more backlog items (transactions UX review)
+
+**Duration:** ~5 min (docs only)
+
+Three additional items added to `PROJECT_STATUS.md` backlog section after reviewing the transactions list UX:
+
+- **WI-PROD-H** — "New Transaction" button placement inconsistent with Payees pattern. Low complexity; Payees is the reference.
+- **WI-PROD-I** — No search input on the transactions list. Backend already supports the filter (`ListTransactionsHandler` WI-P2-03b); frontend just needs the 300 ms debounced input wired to `store.setSearch()`. Medium priority, ~1 h.
+- **WI-PROD-J** — Transactions page summary widget (per-currency totals + time-series chart). Higher complexity; blocked on WI-PROD-CURRENCY for display convention and a chart library decision.
+
+No code, no tests, no builds.
+
+---
+
+## 2026-05-29 — WI-DOCS-UPDATE addendum: three additional backlog items (transaction list review)
+
+**Duration:** ~5 min (docs only)
+
+Reviewing the live transaction list after the Reserved import surfaced three more pending items added to the `PROJECT_STATUS.md` backlog section:
+
+- **WI-PROD-CURRENCY** — Multi-currency display convention undefined: same Amount column mixes EUR/PLN/USD with inconsistent decimal formatting. Design conversation needed; likely resolution: ISO-code prefix + always 2 decimals + no cross-currency totals.
+- **WI-PROD-F** — Payee name resolution is client-side via `PayeesStore`; when the payee is not in the loaded page, the list shows a raw GUID. High priority — confidence breaker for demos. Fix: server-side JOIN in `ListTransactionsHandler`, return `PayeeName` in the DTO.
+- **WI-PROD-G** — No test-data reset mechanism; manual testing accumulated noise rows (garbage GUIDs, million-dollar amounts, mixed currencies). Low priority dev convenience; a SQL script in `/scripts` or a dev-only endpoint would suffice.
+
+No code, no tests, no builds.
+
+---
+
+## 2026-05-29 — WI-DOCS-UPDATE: Real-data test findings captured; domain-model backlog opened
+
+**Duration:** ~20 min (docs only — no code, no builds, no tests)
+**Phase:** Phase 2
+**Tests:** 561 backend (217 unit + 344 integration), 138 frontend — no changes this session.
+
+### What we did
+
+Captured findings from today's real-data test of the transaction import wizard using a 3,183-row Reserved Polska / Galeria Katowice POS export (April 2026). Recorded two completed fixes and opened a structured product-design backlog.
+
+### Today's completed fixes (shipped earlier in the day)
+
+**WI-P2-04a-fix — Row limit 300 → 10,000, configurable (backend + frontend)**
+- `MaxRows = 300` constant replaced by `ImportOptions` (`appsettings.json` `"Imports"` section, `IOptions<T>`, `ValidateOnStart`).
+- Payee limit stays 300 (synchronous path, Rule 3.2.5). Transaction limit: 10,000.
+- `IFileParserService.ParseAsync` now takes `int maxRows` — parser stays stateless; controller chooses limit per resource.
+- New `GET /api/imports/transactions/limits` endpoint; frontend upload-step fetches it on init. `CONSTRAINT_ROWS` i18n key parameterised with `{{ count }}` in EN/ES/PL.
+- +5 backend tests. **Test count after fix: 552.**
+
+**WI-P2-04a-fix2 — Excel native DateTime parsing (Option B: ISO string in parser)**
+- Root cause: `cell.GetString()` on `XLDataType.DateTime` cells → culture-dependent `"4/1/2026 10:21:04 AM"` → validator rejects every row.
+- Fix: `FileParserService.ReadCellAsString(cell)` — DateTime cells → `"yyyy-MM-dd"` (ISO, InvariantCulture, time dropped); Number cells → `d.ToString(InvariantCulture)`.
+- Validator `TryParseDate` switched from `null` to `CultureInfo.InvariantCulture`. Error message now includes actual bad value.
+- Forbidden-patterns rule added to `14-forbidden-patterns.md`.
+- +9 backend tests (smoking-gun, culture independence pl-PL, garbage message, min boundary). **Test count after fix: 561.**
+
+### Real-data test outcome (Reserved Katowice, 3,183 rows)
+
+After both fixes:
+- **Upload:** Accepted. File parsed in < 2 s.
+- **Map Columns:** Auto-detect picked correct columns for 5/6 fields.
+- **Preview:** All rows failed with "payee not found" — expected, because payees were intentionally not pre-loaded for this test. Zero date errors (confirmed fix2 works). Zero amount errors (numeric cells round-trip correctly).
+- **Execute / Progress / Complete:** Not reached in this test run (blocked at Preview by expected payee errors).
+
+No additional bugs found beyond the two already fixed. The wizard is functionally correct for a realistic POS export.
+
+### Backlog items opened (6 items — product conversation required before code)
+
+| ID | Name | Status |
+|---|---|---|
+| WI-PROD-MODEL | Retail SPM domain model review (email/hireDate/PayeeId optionality) | **NEXT SESSION — conversation first** |
+| WI-PROD-A | `RequirePayeeOnTransactions` tenant setting | Depends on WI-PROD-MODEL |
+| WI-PROD-B | Multi-sheet Excel sheet picker | Bug — not yet implemented |
+| WI-PROD-C | First-import onboarding "valley of death" | UX gap — conversation pending |
+| WI-PROD-D | Promote `WsProgressBar` to design system | Deferred (single consumer) |
+| WI-PROD-E | Actionable "payee not found" error message | Mini-WI — no blocker |
+
+Full detail in `PROJECT_STATUS.md` backlog section.
+
+### Phase 3 cross-dependency flagged
+
+WI-P2-05 (Calculation Engine) must not start before WI-PROD-MODEL resolves how the engine handles `PayeeId = null` transactions. This choice (skip / house-pool / error) is a domain decision, not an engine implementation detail.
+
+---
+
+## 2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing (bug fix)
+
+**Duration:** ~30 min
+**Phase:** Phase 2
+**Backend tests before → after:** 552 → 561 passing (+9 new tests). 0 regressions.
+
+### Root cause (quoted)
+
+`FileParserService.ParseXlsx` was calling `cell.GetString()` on every cell. For `XLDataType.DateTime` cells, ClosedXML's `GetString()` produces a culture-dependent string like `"4/1/2026 10:21:04 AM"` — a format not accepted by the validator's `DateFormats` list. Every row from a real POS export (`Reserved_Katowice_POS_April2026.xlsx`, 3,183 rows) failed validation with "Transaction date is not a recognisable date."
+
+The same `cell.GetString()` call also stringifies numeric cells using the cell's Excel number format (may include currency symbols and locale-specific separators), which would cause amount parsing failures on formatted numeric cells.
+
+### Fix — Option B (robust string preservation in XLSX path)
+
+Option A (type-preserving `Dictionary<string, object>`) was rejected: would cascade through `ParsedFile`, `IImportCacheService`, both validators, `TransactionImportJobHandler`, and all tests. Too large for a bug fix.
+
+Option B applied — new private `ReadCellAsString(IXLCell cell)` method in `FileParserService`:
+- `XLDataType.DateTime` → `dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)` — drops time component, always ISO 8601
+- `XLDataType.Number` → `d.ToString(CultureInfo.InvariantCulture)` — invariant decimal, no currency formatting
+- All others → `cell.GetString().Trim()` (text, blank, boolean, error — unchanged)
+
+Validator `TryParseDate` also fixed: changed `null` (thread culture) to `CultureInfo.InvariantCulture` in `DateOnly.TryParseExact` calls.
+
+Error message improved: was `"Transaction date is not a recognisable date. Use YYYY-MM-DD."` → now `"'{dateStr}' is not a recognisable date. Use YYYY-MM-DD."` (includes actual bad value).
+
+### New tests (9)
+
+Parser: `ParseXlsx_NativeDateTimeCell_ProducesIsoDateString` (smoking-gun), `ParseXlsx_NativeDateTimeCell_CultureIndependent` (pl-PL), `ParseXlsx_NativeNumberCell_ProducesInvariantDecimalString`
+
+Validator: `Validate_ValidDateFormats_NoDateError` (ISO / MM-dd / dd-MM theory), `Validate_GarbageDate_ErrorMessageContainsActualValue`, `Validate_DateParsing_CultureIndependent` (pl-PL), `Validate_DateExactlyAtMinBoundary_Passes`
+
+### Files modified
+
+`FileParserService.cs` (new `ReadCellAsString` method), `TransactionImportValidationService.cs` (InvariantCulture + improved error message), `FileParserServiceTests.cs` (+3 tests), `TransactionImportValidationServiceTests.cs` (+6 tests)
+
+---
+
+## 2026-05-29 — WI-P2-04a-fix: Transaction import row limit 300 → 10,000 (configurable)
+
+**Duration:** ~30 min
+**Phase:** Phase 2
+**Backend tests before → after:** 547 → 552 passing (+5 new parser limit tests). 0 regressions.
+
+### What we did
+
+Raised the transaction import row cap from 300 (Phase 1 synchronous holdover) to 10,000 configurable via `appsettings.json`. Payee import cap stays at 300 — it runs synchronously within the HTTP request and is governed by Rule 3.2.5 (bulk writes < 5s / 300 records).
+
+**Architecture decision — `maxRows` as parameter, not injection:**
+`FileParserService` is shared between payee and transaction paths. Instead of injecting `IOptions<ImportOptions>` into the parser (making it stateful/aware of resource type), added `int maxRows` parameter to `IFileParserService.ParseAsync`. The controller reads from `IOptions<ImportOptions>` and passes the correct limit per caller. Parser stays stateless and pure — easier to test, no resource-awareness leaked into parsing logic.
+
+**Frontend — live limit from backend:**
+Added `GET /api/imports/transactions/limits` (returns `{ maxRows }`) and `getImportLimits()` to `TransactionImportService`. Upload-step fetches this on `OnInit`, defaults to 10,000 if the call fails. `CONSTRAINT_ROWS` i18n key now uses `{{ count }}` param in EN/ES/PL. Payee upload-step `CONSTRAINT_ROWS` key unchanged (still shows "300").
+
+**Config validation at startup:** `ValidateOnStart()` rejects `TransactionMaxRows` outside [1, 100,000] or `PayeeMaxRows` outside [1, 100,000] with a clear error — no silent misconfiguration.
+
+**Files created:** `Application/Common/Options/ImportOptions.cs`
+**Files modified:** `IFileParserService.cs`, `FileParserService.cs`, `ImportsController.cs`, `DependencyInjection.cs` (Infrastructure), `appsettings.json`, `FileParserServiceTests.cs`, `transaction-import.service.ts`, `upload-step.component.ts/html`, `en.json`, `es.json`, `pl.json`
+
+### Open / deferred
+
+None new. WI-P2-04c (persistent error queue) and WI-P2-05 (calculation engine) remain next candidates.
+
+---
+
+## 2026-05-29 — WI-P2-04b: Transaction Import Wizard UI (5-step with progress polling)
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 2
+**Frontend tests before → after:** 98 passing → 138 passing (+40). 0 regressions.
+
+### What we did
+
+Built the transaction import wizard UI consuming the WI-P2-04a backend endpoints. Mirrors the payee wizard pattern with one new step: **Progress** (async job polling).
+
+**Architecture:**
+- Five steps: `upload → map → preview → progress → complete`. SessionStorage key `wasnie:import-wizard:transactions` (TTL same as payees; `progress` step not persisted — no live job on reload).
+- `TransactionImportService`: 4 methods — `parseFile`, `validateMapping`, `executeImport` (returns `ExecuteAccepted { jobId }`), `getJobStatus`. No HttpClient in components.
+- `TxProgressStepComponent`: polls `GET /api/jobs/{id}` every 3s via `timer(0, 3000)` + `takeUntilDestroyed(destroyRef)`. Stops on terminal state (`Succeeded`/`Failed`) via explicit `_polling.unsubscribe()`. Stops on component destroy via `takeUntilDestroyed`. Transient network errors set `netError` signal without failing the job — next poll continues.
+- Column auto-detect (`detectField()`) covers EN/ES/PL patterns for all 6 transaction fields.
+- RBAC: route `/transactions/import` gated to `Transactions.Create`. Sidebar entry added in OPERATIONS section.
+
+**Key decisions:**
+- **WsProgressBar not in shared/ui** → implemented as LOCAL CSS within `progress-step.component.scss` only. Indeterminate animation for Pending state, determinate width for Running. NOT added to design system (§10.3 — owner decision required).
+- **Progress step retry → goes back to Preview** (not Upload/Map). The parsed file and mapping are still valid; only the execution needs retry.
+- **TransactionImportResult { totalRows, processedRows }** derived from `JobStatusDto.ProgressTotal/ProgressCurrent` on success. No `createdCount`/`skippedCount` breakdown (not in `JobStatusDto` — 04c deferred).
+
+**Files created (25):** models, service, helpers (auto-detect), upload/mapping/preview/progress/complete step components, wizard orchestrator, specs (service, mapping, progress — 40 tests total).
+
+**Files modified (5):** `transactions.routes.ts`, `sidebar.component.ts`, `en.json`, `es.json`, `pl.json`.
+
+**Bug fixed in tests:** `WsButtonComponent` injects `RouterLink` internally → `ActivatedRoute` missing in TestBed. Fixed by adding `provideRouter([])` to all step component specs.
+
+### Open / deferred
+
+- **WI-P2-04c:** Persistent per-row error queue after job completion (currently no row-level detail after Succeeded). Deferred per original WI scope.
+- **WsProgressBar as shared primitive:** If 2+ features need a progress bar, elevate to `shared/ui/` in a separate design-system WI (§10.3).
+
+---
+
+## 2026-05-29 — WI-P2-04a: Transaction Import Backend (async via Hangfire)
+
+**Duration:** ~2 hours (split across two sessions due to interruption)
+**Phase:** Phase 2
+**Tests before → after:** 494 passing → 547 passing (217 unit + 330 integration). 0 regressions.
+
+### What we did
+
+Built the async transaction CSV import backend, unblocking WI-P2-04b (wizard UI).
+
+**Architecture (step 0 confirmed):**
+- Three endpoints mirror the payee import pattern: parse → validate → execute (202 Accepted + jobId)
+- `IImportCacheService` extended with `resource` default param (`"payees"` unchanged, `"transactions"` new)
+- `BackgroundJobTenantContext` set by `HangfireJobDispatcher` before handler runs — handler does not call `SetTenant` again
+- Hangfire retry configured globally to 3 attempts (down from default 10)
+
+**Key decisions:**
+- **Audit-batch failure → job Failed (not swallowed):** Unlike payee imports, transaction audit is mandatory (money-critical). If the end-of-job `AuditLog` batch insert fails, the handler throws, Hangfire marks the job Failed, retries up to 3×. On retry, idempotency skips already-committed transactions; audit batch re-attempted. If all retries fail: committed transactions are in DB but un-audited — Failed job in Hangfire dashboard is the operational alert. This trade-off is documented in `05-audit-trail.md` and explicitly accepted.
+- **Chunked processing (50 rows/chunk):** Each chunk in its own SQL transaction. `DbUpdateException` (unique constraint violation) caught per entity → `ChangeTracker.Clear()` → continue chunk → `CommitAsync`. On retry, idempotency skips the same rows again — safe.
+- **Per-row audit in single end-of-job batch:** One `SaveChangesAsync` inserts all `AuditLog` entries. Cost: O(1) transactions instead of O(chunks). Risk: window where committed rows have no audit entry if batch fails — accepted and documented.
+- **Payload size:** Worst-case 300 rows × 6 fields × ~20 chars ≈ 36 KB — well under 5 MB, stored in `BackgroundJobRecord.PayloadJson`.
+- **Re-validation at job start:** DB state may change between validate endpoint call and job execution. Handler re-runs `ITransactionImportValidationService.ValidateAsync` as its first action after payee lookup.
+
+**Chunk timing (50-row chunk):** Integration test `ChunkTiming_50Rows_CompletesWellUnder5s` confirmed < 10s total for 50 rows (complete job including parse+execute+wait); individual chunk time is ~1–2s. Well within Rule 3.2.5's 5s per transaction limit.
+
+**Bug fixed mid-session:** `Task.WhenAll` on two EF Core queries sharing the same `DbContext` — concurrent context operations throw. Fixed to sequential `await` in all 4 quota handlers that were introduced in the same session.
+
+**Files created:**
+- `Application/Models/Imports/TransactionImportColumnMapping.cs`
+- `Application/Models/Imports/TransactionImportPayload.cs` + `TransactionImportOptions`
+- `Application/Models/Imports/ImportValidationModels.cs` (+`TransactionRowValidationResult`, `TransactionValidateResponse`, `TransactionExecuteAccepted`)
+- `Application/Services/Imports/ITransactionImportValidationService.cs`
+- `Infrastructure/Services/Imports/TransactionImportValidationService.cs`
+- `Infrastructure/BackgroundJobs/TransactionImportJobHandler.cs`
+- `tests/.../Services/Imports/TransactionImportValidationServiceTests.cs` (29 tests)
+- `tests/.../Integration/Imports/TransactionImportEndpointsTests.cs` (15 tests)
+- `tests/.../BackgroundJobs/TransactionImportJobTests.cs` (7 tests)
+
+**Files modified:**
+- `Application/Services/Imports/IImportCacheService.cs` (`resource` default param)
+- `Infrastructure/Services/Imports/ImportCacheService.cs` (resource-aware cache key)
+- `Infrastructure/DependencyInjection.cs` (new services, Hangfire retry=3)
+- `Api/Controllers/ImportsController.cs` (3 transaction endpoints)
+- `tests/.../Infrastructure/TestDatabaseFixture.cs` (`ResetTransactionImportDataAsync`)
+- `docs/architecture/05-audit-trail.md` (bulk import audit binding rule)
+- `docs/architecture/14-forbidden-patterns.md` (bulk import violations section)
+
+### Open / deferred
+
+- **WI-P2-04b:** Transaction import wizard UI (Angular) with parse→validate→execute flow + polling for job progress. Polling interval: 2s while Running.
+- **WI-P2-04c:** Persistent per-row error queue (deferred). Currently skipped rows return no detail after job completes — fine for Phase 2 launch.
+- **Dashboard admin role:** `HangfireDashboardAuthorizationFilter` blocks in Production until a `SystemAdmin` role is defined. Hangfire dashboard for checking Failed import jobs is available in Development only.
+
+---
+
 ## 2026-05-29 — WI-P2-BG-a verification + architecture doc gap closed
 
 **Duration:** ~30 min

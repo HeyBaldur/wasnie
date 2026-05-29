@@ -243,13 +243,15 @@ For money operations, use transactional outbox: audit record written in same DB 
 
 ### Transactions (Phase 2)
 
-- TRANSACTION_IMPORTED (`TransactionIngestedEvent` → domain event, WI-P2-02 ✅)
+- TRANSACTION_INGESTED (`TransactionIngestedEvent` → domain event, WI-P2-02 ✅)
 - TRANSACTION_MARKED_ELIGIBLE (`TransactionMarkedEligibleEvent` → domain event, WI-P2-02 ✅)
 - TRANSACTION_CANCELLED (`TransactionCancelledEvent` → domain event, WI-P2-02 ✅)
 - TRANSACTION_CALCULATED, TRANSACTION_PAID — Phase 3 stubs; events defined when calculation engine is built
 - TRANSACTION_RECALCULATED, TRANSACTION_ADJUSTED — Phase 3+
 
 **Binding rule (§5b.7, established WI-P2-02):** Every `CompensationTransaction` state-change method MUST raise a domain event. Stubs that throw `NotSupportedException` immediately are exempt. See `14-forbidden-patterns.md` Audit violations.
+
+**Binding rule (WI-P2-04a — bulk import audit):** Bulk money operations (CSV transaction import) write per-row `AuditLog` entries in a **single batch at job completion**, not per-chunk. This is mandatory — unlike the payee import which swallows audit failures, a transaction import audit-batch failure MUST mark the job Failed and allow Hangfire to retry (max 3 attempts). On retry, idempotency skips already-committed transactions and the audit batch is re-attempted. If all retries fail, committed transactions are "in DB but un-audited" — a Failed job in the Hangfire dashboard is the operational alert; manual audit backfill is the recovery procedure. The trade-off is explicitly accepted: per-row audit per-chunk would be safer but significantly more expensive for large imports.
 
 ### Payouts (Phase 2)
 

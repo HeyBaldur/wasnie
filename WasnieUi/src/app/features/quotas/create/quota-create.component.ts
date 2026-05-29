@@ -62,6 +62,7 @@ export class QuotaCreateComponent implements OnInit {
   readonly currencies = CURRENCIES;
   readonly measurementTypes = MEASUREMENT_TYPES;
   readonly preselectedPayeeOption = signal<SelectOption | null>(null);
+  readonly returnTo = signal<string | null>(null);
 
   readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -87,12 +88,22 @@ export class QuotaCreateComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    const payeeId = this.route.snapshot.queryParamMap.get('payeeId');
+    const snap = this.route.snapshot.queryParamMap;
+    const payeeId   = snap.get('payeeId');
+    const payeeName = snap.get('payeeName');
+    const payeeCode = snap.get('payeeCode');
+    this.returnTo.set(snap.get('returnTo'));
+
     if (payeeId) {
       this.form.patchValue({ payeeId });
-      firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
-        this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
-      });
+      if (payeeName) {
+        const label = payeeCode ? `${payeeName} (${payeeCode})` : payeeName;
+        this.preselectedPayeeOption.set({ value: payeeId, label });
+      } else {
+        firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
+          this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
+        });
+      }
     }
   }
 
@@ -120,7 +131,7 @@ export class QuotaCreateComponent implements OnInit {
         notes: v.notes.trim() || null,
       });
       this.toast.show('QUOTAS.TOAST_CREATED', 'success');
-      this.router.navigate(['/quotas', quota.id]);
+      this.router.navigateByUrl(this.returnTo() ?? `/quotas/${quota.id}`);
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
     } finally {

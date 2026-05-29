@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Common.Options;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Infrastructure.BackgroundJobs;
@@ -58,6 +59,16 @@ public static class DependencyInjection
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
+
+        services.AddOptions<ImportOptions>()
+            .Bind(configuration.GetSection(ImportOptions.SectionName))
+            .Validate(
+                o => o.TransactionMaxRows is > 0 and <= 100_000,
+                "Imports:TransactionMaxRows must be between 1 and 100,000.")
+            .Validate(
+                o => o.PayeeMaxRows is > 0 and <= 100_000,
+                "Imports:PayeeMaxRows must be between 1 and 100,000.")
+            .ValidateOnStart();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

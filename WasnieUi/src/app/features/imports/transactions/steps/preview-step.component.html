@@ -1,0 +1,149 @@
+<div class="preview-step">
+
+  <!-- Summary cards -->
+  <div class="preview-step__stats">
+    <ws-stat-card [value]="validateResponse().totalRows"    [label]="'IMPORTS.TRANSACTIONS.SUMMARY_TOTAL' | translate"       icon="list"           variant="default"  />
+    <ws-stat-card [value]="willImportCount"                 [label]="'IMPORTS.TRANSACTIONS.SUMMARY_WILL_IMPORT' | translate" icon="check-circle"   variant="success"  />
+    <ws-stat-card [value]="validateResponse().errorCount"   [label]="'IMPORTS.TRANSACTIONS.SUMMARY_ERRORS' | translate"      icon="x-circle"       variant="danger"   />
+    <ws-stat-card [value]="validateResponse().warningCount" [label]="'IMPORTS.TRANSACTIONS.SUMMARY_WARNINGS' | translate"    icon="alert-triangle" variant="warning"  />
+  </div>
+
+  <!-- Row filter tabs -->
+  <div class="row-filter">
+    @for (f of ['all', 'errors', 'warnings']; track f) {
+      <button type="button" class="row-filter__btn" [class.row-filter__btn--active]="rowFilter() === f" (click)="rowFilter.set($any(f))">
+        {{ 'IMPORTS.TRANSACTIONS.FILTER_' + f.toUpperCase() | translate }}
+        @if (f === 'errors')   { <span class="row-filter__count">({{ validateResponse().errorCount }})</span> }
+        @if (f === 'warnings') { <span class="row-filter__count">({{ validateResponse().warningCount }})</span> }
+      </button>
+    }
+  </div>
+
+  <!-- Rows table -->
+  <div class="preview-table-wrap">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th class="preview-table__th preview-table__th--num">#</th>
+
+          <!-- Reference Number (filterable) -->
+          <th class="preview-table__th">
+            <div class="col-header">
+              <span>{{ 'IMPORTS.TRANSACTIONS.FIELD_REFERENCE_NUMBER' | translate }}</span>
+              <button class="col-filter-btn" [class.col-filter-btn--active]="colFilterReference()" (click)="toggleColFilter('reference', $event)" title="Filter">
+                <app-icon name="filter" [size]="10" />
+              </button>
+            </div>
+          </th>
+
+          <!-- Payee Code (filterable) -->
+          <th class="preview-table__th">
+            <div class="col-header">
+              <span>{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+              <button class="col-filter-btn" [class.col-filter-btn--active]="colFilterPayee()" (click)="toggleColFilter('payee', $event)" title="Filter">
+                <app-icon name="filter" [size]="10" />
+              </button>
+            </div>
+          </th>
+
+          <!-- Amount (no filter) -->
+          <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_AMOUNT' | translate }}</th>
+
+          <!-- Currency (no filter) -->
+          <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_CURRENCY' | translate }}</th>
+
+          <!-- Transaction Date (no filter) -->
+          <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_TRANSACTION_DATE' | translate }}</th>
+
+          <!-- Status (filterable) -->
+          <th class="preview-table__th">
+            <div class="col-header">
+              <span>{{ 'IMPORTS.TRANSACTIONS.COL_STATUS' | translate }}</span>
+              <button class="col-filter-btn" [class.col-filter-btn--active]="isStatusFilterActive()" (click)="toggleColFilter('status', $event)" title="Filter">
+                <app-icon name="filter" [size]="10" />
+              </button>
+            </div>
+          </th>
+
+          <th class="preview-table__th preview-table__th--issues">{{ 'IMPORTS.TRANSACTIONS.COL_ISSUES' | translate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (filteredRows().length === 0) {
+          <tr>
+            <td colspan="8" class="preview-table__empty">{{ 'IMPORTS.TRANSACTIONS.FILTER_EMPTY' | translate }}</td>
+          </tr>
+        }
+        @for (row of filteredRows(); track row.rowNumber) {
+          <tr class="preview-table__row">
+            <td class="preview-table__td preview-table__td--num">{{ row.rowNumber }}</td>
+            <td class="preview-table__td">{{ getCell(row, columnMapping().referenceNumberColumn) }}</td>
+            <td class="preview-table__td">{{ getCell(row, columnMapping().payeeCodeColumn) }}</td>
+            <td class="preview-table__td">{{ getCell(row, columnMapping().amountColumn) }}</td>
+            <td class="preview-table__td">{{ getCell(row, columnMapping().currencyColumn) }}</td>
+            <td class="preview-table__td">{{ getCell(row, columnMapping().transactionDateColumn) }}</td>
+            <td class="preview-table__td preview-table__td--status">
+              <ws-badge [variant]="rowBadgeVariant(row)" size="sm">
+                {{ rowBadgeKey(row) | translate }}
+              </ws-badge>
+            </td>
+            <td class="preview-table__td preview-table__td--issues">
+              @if (row.issues.length > 0) {
+                <ul class="preview-issues">
+                  @for (issue of row.issues; track issue.message) {
+                    <li>{{ issue.message }}</li>
+                  }
+                </ul>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Column filter dropdown (fixed, escapes table overflow) -->
+  @if (openFilterCol() && filterDropdownPos()) {
+    <div class="col-filter-dropdown" [style.top.px]="filterDropdownPos()!.top" [style.left.px]="filterDropdownPos()!.left" (click)="$event.stopPropagation()">
+      @if (openFilterCol() === 'status') {
+        @for (opt of statusFilterOptions; track opt.value) {
+          <label class="col-filter-check">
+            <input type="checkbox" [checked]="colFilterStatus().has(opt.value)" (change)="toggleStatusFilter(opt.value)" />
+            <ws-badge [variant]="opt.variant" size="sm">{{ opt.label | translate }}</ws-badge>
+          </label>
+        }
+      }
+      @if (openFilterCol() === 'reference') {
+        <input class="col-filter-input" type="text" [value]="colFilterReference()" (input)="colFilterReference.set($any($event.target).value)" placeholder="Search reference…" autofocus />
+      }
+      @if (openFilterCol() === 'payee') {
+        <input class="col-filter-input" type="text" [value]="colFilterPayee()" (input)="colFilterPayee.set($any($event.target).value)" placeholder="Search payee…" autofocus />
+      }
+    </div>
+  }
+
+  <!-- Options -->
+  <label class="skip-warnings-opt">
+    <input type="checkbox" [(ngModel)]="skipWarnings" />
+    {{ 'IMPORTS.TRANSACTIONS.SKIP_WARNINGS' | translate }}
+  </label>
+
+  @if (error()) {
+    <p class="preview-error">
+      <app-icon name="alert-circle" [size]="14" />
+      {{ error()! | translate }}
+    </p>
+  }
+
+  <div class="preview-actions">
+    <ws-button variant="secondary" (click)="onBack()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'COMMON.BACK' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="willImportCount === 0" [loading]="loading()" (click)="onImport()">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'IMPORTS.TRANSACTIONS.BTN_IMPORT' | translate : { count: willImportCount } }}
+    </ws-button>
+  </div>
+
+</div>

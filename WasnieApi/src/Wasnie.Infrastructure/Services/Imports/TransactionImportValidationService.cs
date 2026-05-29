@@ -103,7 +103,7 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
             var dateStr = GetField(row, mapping.TransactionDateColumn);
             if (!TryParseDate(dateStr, out var transactionDate))
             {
-                issues.Add(Error("transactionDate", "Transaction date is not a recognisable date. Use YYYY-MM-DD."));
+                issues.Add(Error("transactionDate", $"'{dateStr}' is not a recognisable date. Use YYYY-MM-DD."));
             }
             else if (transactionDate < MinDate)
             {
@@ -153,7 +153,8 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
     {
         foreach (var fmt in DateFormats)
         {
-            if (DateOnly.TryParseExact(s, fmt, null, System.Globalization.DateTimeStyles.None, out result))
+            if (DateOnly.TryParseExact(s, fmt, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out result))
                 return true;
         }
         result = default;

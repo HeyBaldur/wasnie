@@ -75,7 +75,7 @@ export class PayeesListComponent implements OnInit {
   }
 
   set statusFilter(value: string) {
-    this.onStatusFilter(value === '' ? null : (Number(value) as PayeeStatus));
+    this.onStatusFilter(value === '' ? null : value as PayeeStatus);
   }
 
   ngOnInit(): void {

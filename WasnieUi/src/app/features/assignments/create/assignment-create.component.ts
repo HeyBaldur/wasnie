@@ -48,6 +48,7 @@ export class AssignmentCreateComponent implements OnInit {
   readonly saving = signal(false);
   readonly preselectedPayeeOption = signal<SelectOption | null>(null);
   readonly preselectedPlanOption = signal<SelectOption | null>(null);
+  readonly returnTo = signal<string | null>(null);
 
   readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -82,19 +83,27 @@ export class AssignmentCreateComponent implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    const payeeId = this.route.snapshot.queryParamMap.get('payeeId');
-    const planId = this.route.snapshot.queryParamMap.get('planId');
+    const snap = this.route.snapshot.queryParamMap;
+    const payeeId   = snap.get('payeeId');
+    const payeeName = snap.get('payeeName');
+    const payeeCode = snap.get('payeeCode');
+    const planId    = snap.get('planId');
+    this.returnTo.set(snap.get('returnTo'));
 
     if (payeeId) {
       this.form.patchValue({ payeeId });
-      firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
-        this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
-      });
+      if (payeeName) {
+        // Label available immediately from queryParams — no async round-trip needed.
+        const label = payeeCode ? `${payeeName} (${payeeCode})` : payeeName;
+        this.preselectedPayeeOption.set({ value: payeeId, label });
+      } else {
+        firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
+          this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
+        });
+      }
     }
 
     if (planId) {
-      // Patching planId triggers the constructor subscription which fetches the plan,
-      // sets dateRange, and sets preselectedPlanOption.
       this.form.patchValue({ planId });
     }
   }
@@ -119,7 +128,7 @@ export class AssignmentCreateComponent implements OnInit {
         effectiveEnd: range.end,
       });
       this.toast.show('ASSIGNMENTS.TOAST_CREATED', 'success');
-      this.router.navigate(['/assignments']);
+      this.router.navigateByUrl(this.returnTo() ?? '/assignments');
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
     } finally {

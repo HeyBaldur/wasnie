@@ -3,6 +3,8 @@ import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { TransactionsStore } from '../state/transactions.store';
 import { PayeesStore } from '../../payees/state/payees.store';
@@ -28,6 +30,8 @@ import {
     RouterLink,
     TranslateModule,
     HasPermissionDirective,
+    HasPermissionPipe,
+    IconComponent,
     CurrencyFormatPipe,
     WsButtonComponent,
     WsBadgeComponent,

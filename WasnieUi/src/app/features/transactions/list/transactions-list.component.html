@@ -4,7 +4,12 @@
     [title]="'TRANSACTIONS.TITLE' | translate"
     [subtitle]="'TRANSACTIONS.SUBTITLE' | translate"
   >
-    <ws-button slot="actions" variant="primary" routerLink="new" *hasPermission="'Transactions.Create'">
+    <ws-button slot="actions" variant="secondary" routerLink="import" [hidden]="!('Transactions.Create' | hasPermission)">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'TRANSACTIONS.ACTION_IMPORT' | translate }}
+    </ws-button>
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Transactions.Create' | hasPermission)">
+      <app-icon name="plus" [size]="16" />
       {{ 'TRANSACTIONS.NEW' | translate }}
     </ws-button>
 

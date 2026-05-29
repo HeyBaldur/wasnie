@@ -3,7 +3,7 @@
     <ws-page-header
       title="QUOTAS.CREATE_TITLE"
       subtitle="QUOTAS.CREATE_SUBTITLE"
-      backRoute="/quotas"
+      [backRoute]="returnTo() ?? '/quotas'"
       backLabel="QUOTAS.TITLE"
     />
 
@@ -64,7 +64,7 @@
       </div>
 
       <div class="form-actions">
-        <ws-button variant="ghost" [routerLink]="'/quotas'">
+        <ws-button variant="ghost" [routerLink]="returnTo() ?? '/quotas'">
           {{ 'COMMON.CANCEL' | translate }}
         </ws-button>
         <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">

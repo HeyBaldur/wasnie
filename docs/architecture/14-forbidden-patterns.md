@@ -186,6 +186,16 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Bulk import violations
+
+- ❌ **`cell.GetString()` on typed XLSX cells** (WI-P2-04a-fix2). For `XLDataType.DateTime` cells, `GetString()` produces a culture-dependent string (`"4/1/2026 10:21:04 AM"`) that downstream validators cannot parse. Use `ReadCellAsString(cell)` in `FileParserService` which handles `DateTime` → ISO 8601 and `Number` → `InvariantCulture` decimal string explicitly.
+- ❌ **`null` (thread culture) in `DateOnly.TryParseExact` calls** (WI-P2-04a-fix2). Always pass `CultureInfo.InvariantCulture` explicitly. `null` resolves to `CultureInfo.CurrentCulture` at runtime — parsing breaks on non-EN-US servers and in test runs with non-default cultures.
+- ❌ Bulk money import (transaction CSV) that swallows audit-batch failures (file 05, WI-P2-04a). Unlike payee imports, transaction import audit failures MUST throw — the job is marked Failed and Hangfire retries.
+- ❌ Transaction import job that writes per-row `AuditLog` entries inside each chunk transaction instead of in a single end-of-job batch (WI-P2-04a). Batch at the end; per-chunk writes multiply transaction cost by N chunks.
+- ❌ Transaction import that does NOT re-validate rows at job start (WI-P2-04a). DB state may change between the validate endpoint call and job execution; re-validation inside the handler is mandatory.
+
+---
+
 ## Background job violations
 
 - ❌ Background job that accesses the database WITHOUT calling `SetTenant(tenantId)` first (file 09, R9.4.3). The Hangfire dispatcher MUST call `tenantCtx.SetTenant(payload.TenantId)` as its very first action before resolving any service that touches EF Core.

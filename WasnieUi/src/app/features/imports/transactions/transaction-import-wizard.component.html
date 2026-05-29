@@ -1,0 +1,78 @@
+<app-shell>
+  <ws-page-layout
+    icon="upload"
+    title="{{ 'IMPORTS.TRANSACTIONS.TITLE' | translate }}"
+    subtitle="{{ 'IMPORTS.TRANSACTIONS.SUBTITLE' | translate }}"
+    backLink="/transactions"
+    [backLabel]="'TRANSACTIONS.TITLE' | translate"
+  >
+    <ws-wizard
+      [currentStep]="currentStep()"
+      hideOnComplete="complete"
+    >
+      <ws-wizard-step
+        name="upload"
+        [title]="'IMPORTS.TRANSACTIONS.STEP_UPLOAD' | translate"
+        icon="upload"
+      />
+      <ws-wizard-step
+        name="map"
+        [title]="'IMPORTS.TRANSACTIONS.STEP_MAP' | translate"
+        icon="arrow-right-left"
+      />
+      <ws-wizard-step
+        name="preview"
+        [title]="'IMPORTS.TRANSACTIONS.STEP_PREVIEW' | translate"
+        icon="eye"
+      />
+      <ws-wizard-step
+        name="progress"
+        [title]="'IMPORTS.TRANSACTIONS.STEP_PROGRESS' | translate"
+        icon="loader"
+      />
+      <ws-wizard-step
+        name="complete"
+        [title]="'IMPORTS.TRANSACTIONS.STEP_COMPLETE' | translate"
+        icon="check-circle"
+      />
+
+      @if (currentStep() === 'upload') {
+        <app-tx-upload-step (parsed)="onParsed($event)" />
+      }
+
+      @if (currentStep() === 'map' && parseResult()) {
+        <app-tx-mapping-step
+          [parseResult]="parseResult()!"
+          [initialMapping]="columnMapping()"
+          (validated)="onValidated($event)"
+          (back)="onBackToUpload()"
+        />
+      }
+
+      @if (currentStep() === 'preview' && parseResult() && columnMapping() && validateResponse()) {
+        <app-tx-preview-step
+          [fileId]="parseResult()!.fileId"
+          [columnMapping]="columnMapping()!"
+          [validateResponse]="validateResponse()!"
+          (executed)="onExecuted($event)"
+          (back)="onBackToMap()"
+        />
+      }
+
+      @if (currentStep() === 'progress' && jobId()) {
+        <app-tx-progress-step
+          [jobId]="jobId()!"
+          (completed)="onCompleted($event)"
+          (retryRequested)="onRetryFromPreview()"
+        />
+      }
+
+      @if (currentStep() === 'complete' && importResult()) {
+        <app-tx-complete-step
+          [result]="importResult()!"
+          (importMore)="onImportMore()"
+        />
+      }
+    </ws-wizard>
+  </ws-page-layout>
+</app-shell>

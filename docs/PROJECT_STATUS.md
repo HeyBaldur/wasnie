@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
 **Last updated:** 2026-05-29
-**Updated by:** Rodolfo Calvo (WI-P2-BG-a doc gap — added background job rules to 14-forbidden-patterns.md)
+**Updated by:** Rodolfo Calvo (WI-DOCS-UPDATE — real-data test findings captured; domain-model backlog opened)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,34 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** WI-P2-BG-a complete — Hangfire background job foundation shipped. `BackgroundJobRecord` entity + EF migration, `BackgroundJobTenantContext` (throw-before-set), factory-based `ITenantContext` DI (HTTP → TenantContext, no-HTTP → BackgroundJobTenantContext), `IBackgroundJobService` + `IJobHandler<T>` interfaces, `GET /api/jobs/{id}` endpoint, Hangfire dashboard at `/jobs` (dev-only). 494 tests pass (217 unit + 277 integration). Next: WI-P2-04a (transaction import backend) or WI-P2-04b (frontend).
+**Right now we are:** Import pipeline complete and real-data tested (2026-05-29). **Next session MUST start with WI-PROD-MODEL conversation** — real-data testing with a 3,183-row retail POS export surfaced domain-model assumptions incompatible with the retail SPM target market (required email, required hire date, required PayeeId on transaction). All conversation items are in the new backlog section below. Only after WI-PROD-MODEL is resolved can further import or transaction WIs proceed without risk of rebuilding. Backend tests: 561 passing (217 unit + 344 integration). Frontend tests: 138 passing.
+
+**Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
+- **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
+- **Fix:** New `FileParserService.ReadCellAsString(cell)` — `DateTime` cells → ISO 8601 `"yyyy-MM-dd"` (InvariantCulture, time dropped); `Number` cells → `double.ToString(InvariantCulture)` (no currency formatting). Applies to all XLSX imports (payees and transactions).
+- **Validator fix:** `TransactionImportValidationService.TryParseDate` now uses `CultureInfo.InvariantCulture` instead of `null` (thread culture) in `DateOnly.TryParseExact`.
+- **Error message:** Bad date now shows the actual cell value: `"'hello' is not a recognisable date. Use YYYY-MM-DD."` (not the old misleading generic message).
+- **Binding rule added:** `14-forbidden-patterns.md` — `cell.GetString()` on typed cells forbidden; `TryParseExact` must use InvariantCulture.
+- **Tests:** +9 (3 parser: DateTime smoking-gun, culture independence pl-PL, Number invariant; 6 validator: formats theory, garbage message, culture independence, min boundary).
+- **Test count: 561 passing (217 unit + 344 integration), 0 regressions.**
+
+**Most recent significant work (2026-05-29 — WI-P2-04a-fix: row limit 300 → 10,000, configurable):**
+- `MaxRows = 300` hardcoded constant removed from `FileParserService`. Added `ImportOptions` (Application) bound via `IOptions<ImportOptions>` from `appsettings.json` section `"Imports": { "TransactionMaxRows": 10000, "PayeeMaxRows": 300 }`.
+- `IFileParserService.ParseAsync` signature updated: accepts `int maxRows` parameter. Controllers pass `Imports.TransactionMaxRows` or `Imports.PayeeMaxRows` per caller — parser stays stateless.
+- Startup validation: `ValidateOnStart()` rejects limits outside [1, 100,000].
+- **Payee import stays at 300** — synchronous path, Rule 3.2.5 applies.
+- New endpoint `GET /api/imports/transactions/limits` returns `{ maxRows }`. Frontend upload-step fetches it on init; `CONSTRAINT_ROWS` i18n key now parameterised with `{{ count }}` in EN/ES/PL.
+- **Tests:** +5 (boundary exact-at-limit CSV+XLSX, one-past-limit CSV+XLSX, transaction-limit-accepts-301-rows).
+- **Test count: 552 passing (217 unit + 335 integration)** (before fix2).
+
+**Most recent significant work (2026-05-29 — WI-P2-04b: Transaction import wizard UI):**
+- 5-step wizard (`upload → map → preview → progress → complete`) at `/transactions/import`. Mirrors payee wizard; the Progress step is new.
+- `TxProgressStepComponent`: polls `GET /api/jobs/{id}` every 3 s via `timer(0, 3000)` + `takeUntilDestroyed`. Stops on `Succeeded`/`Failed` (explicit `_polling.unsubscribe()`) AND on component destroy (`takeUntilDestroyed`). Transient network errors set `netError` signal without failing the job.
+- Column auto-detect (`detectField()`) covers EN/ES/PL patterns for 6 transaction fields.
+- Route `/transactions/import` gated to `Transactions.Create`. Sidebar entry added.
+- Progress bar: LOCAL CSS only in `progress-step.component.scss` (not shared `WsProgressBar` — pending elevation to design system when 2+ features use it, per §10.3).
+- **Frontend tests:** +40 (service HttpTestingController, progress step fakeAsync zombie-poll guard, mapping auto-detect).
+- DESIGN_SYSTEM.md updated with 5-step async wizard variant and polling pattern.
 
 **Most recent significant work (2026-05-28 session — WI-P2-BG-a):**
 - **Architecture decision:** Hangfire 1.8.x (LGPLv3 — NOT MIT, correction from inspection) over hand-rolled SQL jobs. Azure F1 plan: no Always On, app unloads after ~20 min idle; Hangfire jobs survive recycle in SQL. B1 upgrade ($13/month, Always On) deferred to first paying customer.
@@ -274,6 +301,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 24. **Operational logging in handlers: zero `_logger.` calls in src/:** The audit trail (WI-08) covers all business events. Structured operational logging in individual handlers is a candidate for a future WI but is not blocking Phase 2. (2026-05-27)
 25. **Serilog fully config-driven:** Hardcoded `.WriteTo.Console()` and `.WriteTo.File()` removed from `Program.cs`. All sinks, levels, and enrichers now read from `appsettings.json` / `appsettings.Production.json`. Adding Application Insights requires one sink entry in config — no code change. (2026-05-27)
 26. **Phase C completed in one day instead of estimated 3-4 weeks:** Disciplined ARCHITECTURE.md + WI prompt workflow + Claude Code autonomous execution collapsed 50-70h estimate to ~10-12 effective hours. Zero regressions, only documented justified deviations. (2026-05-27)
+34. **Real-data testing (2026-05-29) exposed retail SPM domain-model gaps.** A 3,183-row Reserved Polska / Galeria Katowice POS export surfaced multiple domain-model assumptions that hold for B2B-tech SPM but not for retail SPM, which is the actual target market: (a) `Payee.Email` required blocks seasonal/temporary workers with no corporate email; (b) `Payee.HireDate` required blocks migrating tenants who only have "period of plan activity," not historical hire date; (c) `CompensationTransaction.PayeeId` required blocks e-commerce / house-pool / system-processed-return rows. **WI-PROD-MODEL conversation is the next session's first topic.** Further import or transaction WIs must not proceed without resolving this — building on broken invariants multiplies rework. (2026-05-29)
 
 ---
 
@@ -301,6 +329,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 (Update this section as questions emerge that need answers before proceeding)
 
+- **⚠️ WI-PROD-MODEL — NEXT SESSION'S FIRST TOPIC (2026-05-29).** Real-data testing surfaced retail SPM domain gaps. See backlog section below. All further import and transaction WIs are soft-blocked until the required/optional field decisions are made.
 - **Phase D or Phase 2 next?** Phase D adds coverage and docs polish but does not unblock new features. Phase 2 is the core product (Transactions + Calculation Engine). Recommended: Phase 2 directly; Phase D items can land incrementally alongside Phase 2.
 - **WI-06 approach:** Strict purity refactor (remove MediatR from Domain, EF Core from Application) deferred. If revisited, must update ARCHITECTURE.md §1.2 and run full regression suite. This is a 6-8h investment with no user-visible value — justify against backlog priority at that time.
 - **F-028 standardization timing:** Cross-tenant mutations return 422 (not 404) across Quotas/Assignments/PlanRules/Imports. Deferred to a dedicated API contract standardization WI. Decision needed: standardize on 404 (ARCHITECTURE.md §9.3.3) or document 422 as intentional? Recommend 404 when the WI runs.
@@ -311,7 +340,162 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ---
 
-## Document index (where everything lives)
+## Backlog — Discovered during real-data testing (2026-05-29)
+
+Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. After the two parser/date bugs were fixed, Upload + Map + Preview completed. Preview was blocked by expected "payee not found" (payees were not pre-loaded — intentional test). No further bugs in the wizard itself. The following items are **product/domain design decisions**, not code bugs.
+
+---
+
+### WI-PROD-MODEL — Retail SPM domain model review ⚠️ NEXT TOPIC
+
+**Status:** Conversation pending. Blocks WI-PROD-A, and influences WI-P2-05 (calc engine).
+
+**Problem:** Current domain model encodes B2B-tech SPM assumptions that conflict with retail SPM (the actual target market):
+
+| Field | Current | Retail reality | Gap |
+|---|---|---|---|
+| `Payee.Email` | Required | Seasonal/temporary staff frequently have no corporate email | Blocks realistic payee import for retail |
+| `Payee.HireDate` | Required | Migrating tenants often only have plan-activity dates, not historical hire dates | Blocks onboarding of existing workforce |
+| `CompensationTransaction.PayeeId` | Required (FK, not nullable) | E-commerce self-service, house-pool sales, and system-processed returns are valid transactions with no salesperson | Blocks import of ~10-15% of a typical retail POS file |
+
+**Proposed direction (owner to confirm):**
+
+- `Email` → optional (nullable in DB, nullable in domain). Validation still enforces format if provided.
+- `HireDate` → optional OR renamed to `ActiveFrom` (plan-period start date, not historical HR date). Decision affects how the Calculation Engine scopes eligibility — must be decided together.
+- `PayeeId` on Transaction → configurable per tenant via a `RequirePayeeOnTransactions` boolean setting (default `true` for B2B-tech compat). Transactions with `PayeeId = null` when setting is `false` go to a house-pool or are skipped by the engine depending on Phase 3 design.
+
+**Phase 3 cross-dependency (DO NOT defer):** The Calculation Engine (WI-P2-05) must decide how it handles `PayeeId = null` transactions BEFORE engine design starts. Options: (a) skip silently, (b) attribute to a "house pool" payee entity, (c) fail the calculation run with a clear error. This choice is part of WI-PROD-MODEL, not a Phase 3 concern to discover mid-implementation.
+
+---
+
+### WI-PROD-A — `RequirePayeeOnTransactions` tenant setting
+
+**Depends on:** WI-PROD-MODEL decision on `PayeeId` optionality.
+
+**Scope:** Backend: add `RequirePayeeOnTransactions` boolean to tenant configuration. Default `true`. `IngestTransactionCommand` validator and `TransactionImportValidationService` both read this setting — if `false`, `PayeeId` missing is a Warning (skipped row attribution) not an Error. Frontend: checkbox in account settings page.
+
+---
+
+### WI-PROD-B — Multi-sheet Excel: user-driven sheet selection
+
+**Status:** Bug. Not yet implemented.
+
+**Problem:** Both import wizards silently use `wb.Worksheet(1)` — the first sheet. The Reserved test file has three sheets; if the data sheet had not been first, the wizard would have silently imported junk.
+
+**Proposed fix:** Between Upload and Map Columns, if the workbook has > 1 sheet, show a sheet-picker UI with the sheet names and a 3-row preview of each. Default to the first sheet but require explicit user confirmation. Applies to both Payee and Transaction wizards (same root — `FileParserService.ParseXlsx`).
+
+---
+
+### WI-PROD-C — First-import onboarding "valley of death"
+
+**Status:** UX gap. Conversation pending.
+
+**Problem:** A new comp manager uploads a transaction CSV before creating payees → 3,000+ "payee code not found" errors → product abandonment. The required order (payees first, transactions second) is invisible in the UI. During the Reserved test, the Import Transactions sidebar item was chosen instead of Import Payees; the wizard accepted the file and returned all errors.
+
+**Three candidate directions (owner to choose):**
+1. **Guided onboarding:** Detect empty-tenant state (zero payees). Redirect to payee wizard on first transaction import attempt with a clear message.
+2. **Combined import:** Excel template with two named sheets — "Employees" and "Transactions" — imported in one wizard flow (parse both, create payees first, then transactions).
+3. **"Create missing payees" in Preview:** At the transaction Preview step, if there are "payee not found" errors, offer an action to auto-create minimal payee records (code + name only) and re-validate. Simplest UX change; no pre-created payees required.
+
+**Also needed:** Sidebar disambiguation. "Import Payees" and "Import Transactions" have equal visual weight — misleads first-time users into picking the wrong wizard. Consider grouping or labeling them.
+
+---
+
+### WI-PROD-D — Promote `WsProgressBar` to design system
+
+**Status:** Deferred. Low urgency.
+
+**Current state:** Progress bar is LOCAL CSS inside `transaction-import-progress-step.component.scss`. Pattern documented in `DESIGN_SYSTEM.md` as a step to elevate.
+
+**Trigger for promotion:** When a second feature needs a progress bar (likely Phase 3 calculation engine runs, or payout processing). Promoting early adds design-system overhead for a single consumer.
+
+---
+
+### WI-PROD-E — Actionable "payee not found" error message
+
+**Status:** Minor UX improvement. Mini-WI.
+
+**Current:** `"Payee code not found."`
+
+**Better:** `"Payee code 'EMP005' not found in this tenant. Create the payee first or correct the code in your file."`
+
+**Scope:** 1-line change in `TransactionImportValidationService`. Add payee code to the error message. No model changes needed.
+
+---
+
+### WI-PROD-CURRENCY — Multi-currency UX design
+
+**Status:** Design conversation needed before code. Connected to WI-PROD-MODEL.
+
+**Problem:** Spec §5b.5 already decided no implicit currency conversion (cross-currency operations throw `DomainException`). However, the transaction list today mixes €, $, and PLN symbols inconsistently in the same Amount column — sometimes with two decimal places, sometimes without — because there is no enforced display convention for multi-currency rows.
+
+**What needs deciding:** How multi-currency amounts are grouped, presented, and totaled in the transaction list and future reports. Questions: Does the list show a total? If yes, grouped by currency or suppressed entirely when currencies mix? What is the canonical display format per row?
+
+**Likely resolution direction:** ISO-code prefix formatting per row (`PLN 376.99`, `EUR 8,500.00`), always two decimal places, no cross-currency totals in the list footer (total suppressed or replaced by per-currency breakdown). This matches Xactly / beqom conventions for multi-currency tenants.
+
+**Scope when decided:** Display pipe/helper update, list column formatting, possibly a `CurrencyDisplayPipe` shared primitive. No domain changes (the domain already enforces same-currency arithmetic).
+
+---
+
+### WI-PROD-F — Server-side payee name resolution in the transaction list
+
+**Status:** High priority. Visual confidence breaker for demos and customer trust.
+
+**Problem:** The transactions list currently resolves payee names client-side via `PayeesStore` in memory. When the payee is not in the currently loaded page of the store, the UI displays the raw GUID (e.g. `b2d8ab2b-92ec-4e25-98bd-d8bd651e2ea0`). This was flagged as a tech-debt risk during WI-P2-03c and has now manifested in real testing.
+
+**Fix direction:** Return a resolved `PayeeName` (or `PayeeDisplayName`) field in the `ListTransactionsHandler` DTO via an EF JOIN, not a client-side lookup. The client receives the display name directly and never needs to cross-reference the payee store. This is strictly a read-path DTO change — no domain or write-path changes required.
+
+**Scope:** `ListTransactionsHandler` (add JOIN on Payees, project `p.FullName`), `TransactionListItemDto` (add `PayeeName` field), `TransactionsApiService` model, `TransactionsListComponent` template (remove `PayeesStore` dependency). One integration test update.
+
+---
+
+### WI-PROD-G — Tenant test-data reset mechanism
+
+**Status:** Low priority. Developer convenience.
+
+**Problem:** Manual testing accumulated noise rows — garbage transactions, GUIDs used as payee codes, mixed-currency amounts in the millions — that complicate clean re-tests and make screenshots unusable for demos.
+
+**Proposed direction:** A developer/admin endpoint or seed-and-reset script scoped to a named test tenant. Options: (a) a `DELETE /api/dev/reset-tenant-data` endpoint (dev-only, behind environment guard), or (b) a standalone EF seeder script that wipes and re-seeds the test tenant to a known clean state. Not a migration — data-only operation.
+
+**Scope:** Dev-only surface; zero Production impact. Can be a simple SQL script in `/scripts` rather than application code.
+
+---
+
+### WI-PROD-H — "New Transaction" button placement consistency ✅ DONE (2026-05-29)
+
+**Status:** ~~Low complexity. Small UI polish.~~ **Closed.**
+
+**Problem:** The "New Transaction" button on the transactions list page is positioned inconsistently relative to the "Add Payee" button on the payees list page. The Payees pattern is the canonical reference (CLAUDE.md §5.1).
+
+**Fix:** Move the button to match the exact placement used on the Payees list. No UX design conversation needed — Payees is the model.
+
+---
+
+### WI-PROD-I — Search typeahead for the transactions list
+
+**Status:** Medium priority.
+
+**Problem:** The transactions list has no search input. Users cannot filter by reference number, payee name, or amount without scrolling through all rows. The payees list already implements the canonical pattern (debounced 300 ms, server-side filter, `WsInput` with `prefixIcon="search"`).
+
+**Fix direction:** Mirror the payees list search pattern exactly. `ListTransactionsHandler` already accepts a `search` filter parameter (added in WI-P2-03b); the frontend just needs the input wired up. No backend changes required.
+
+**Scope:** `TransactionsListComponent` — add search `WsInput`, debounce 300 ms via `Subject`, call `store.setSearch()`. `TransactionsStore` already has `setSearch`. Effort: ~1 h.
+
+---
+
+### WI-PROD-J — Transactions page summary widget: per-currency totals + time-series chart
+
+**Status:** Higher complexity. Deferred until WI-PROD-CURRENCY is resolved.
+
+**Problem:** The transactions list currently shows raw rows with no aggregate view. A comp manager needs to see at a glance: total revenue per currency in the selected period, and a trend over time.
+
+**Proposed direction:** Add a summary section above the list with (a) per-currency total cards (no implicit cross-currency conversion — per Spec §5b.5 and WI-PROD-CURRENCY), and (b) a time-series chart of transaction volume by date with date-range filtering. Currency grouping and display format must follow the convention decided in WI-PROD-CURRENCY.
+
+**Dependencies:** WI-PROD-CURRENCY (display convention must be decided first). Chart library not yet chosen — options include Chart.js (lightweight), Apache ECharts (richer), or ng2-charts wrapper. Library choice is a separate design decision.
+
+**Scope when ready:** New `GET /api/transactions/summary` endpoint (aggregates server-side, grouped by currency + date bucket); summary component above the list; chart primitive decision.
+
+---
 
 ```
 docs/

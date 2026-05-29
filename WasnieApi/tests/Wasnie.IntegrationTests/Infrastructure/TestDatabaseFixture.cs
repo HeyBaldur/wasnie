@@ -110,7 +110,7 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
     {
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM AuditLogs");
+        // AuditLogs cannot be deleted (immutability trigger). Tests filter by TenantId + ResourceId instead.
         await db.Database.ExecuteSqlRawAsync("DELETE FROM ImportAudits");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationTransactions");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM BackgroundJobRecords");
