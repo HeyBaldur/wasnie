@@ -1,13 +1,11 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
-import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { TransactionsStore } from '../state/transactions.store';
-import { PayeesStore } from '../../payees/state/payees.store';
 import { TransactionStatus } from '../models/transaction.model';
 import {
   WsButtonComponent,
@@ -29,7 +27,6 @@ import {
     AppShellComponent,
     RouterLink,
     TranslateModule,
-    HasPermissionDirective,
     HasPermissionPipe,
     IconComponent,
     CurrencyFormatPipe,
@@ -45,9 +42,8 @@ import {
   templateUrl: './transactions-list.component.html',
   styleUrl: './transactions-list.component.scss',
 })
-export class TransactionsListComponent implements OnInit {
+export class TransactionsListComponent {
   readonly store = inject(TransactionsStore);
-  private readonly payeesStore = inject(PayeesStore);
 
   readonly TransactionStatus = TransactionStatus;
 
@@ -66,15 +62,6 @@ export class TransactionsListComponent implements OnInit {
 
   set statusFilterValue(value: string) {
     this.store.setStatusFilter(value === '' ? null : value as TransactionStatus);
-  }
-
-  ngOnInit(): void {
-    this.store.loadTransactions();
-    this.payeesStore.loadPayees();
-  }
-
-  payeeName(payeeId: string): string {
-    return this.payeesStore.payees().find((p) => p.id === payeeId)?.fullName ?? payeeId;
   }
 
   goToPage(page: number): void {

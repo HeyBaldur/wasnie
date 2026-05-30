@@ -424,6 +424,36 @@ public sealed class TransactionReadEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // ── Payee name resolution ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task List_ReturnsPayeeNameAndCode_ForTransactionsWithPayee()
+    {
+        await CreateTransactionAsync(_clientA, _payeeAId, "TXN-NAME-001", 500m);
+
+        var response = await _clientA.GetAsync("/api/transactions");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<PagedResponse<TransactionResponse>>();
+        var item = body!.Items.Single(t => t.ReferenceNumber == "TXN-NAME-001");
+        item.PayeeName.Should().Be("Alpha Payee");
+        item.PayeeEmployeeCode.Should().Be("PA001");
+    }
+
+    [Fact]
+    public async Task List_PayeeName_NeverLeaksAcrossTenants()
+    {
+        await CreateTransactionAsync(_clientA, _payeeAId, "TXN-CT-NAME-A", 100m);
+        await CreateTransactionAsync(_clientB, _payeeBId, "TXN-CT-NAME-B", 200m);
+
+        var responseA = await _clientA.GetAsync("/api/transactions");
+        var bodyA = await responseA.Content.ReadFromJsonAsync<PagedResponse<TransactionResponse>>();
+
+        bodyA!.Items.Should().AllSatisfy(t =>
+            t.PayeeName.Should().NotBe("Beta Payee"));
+        bodyA.Items.Should().Contain(t => t.PayeeName == "Alpha Payee");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task<TransactionResponse> CreateTransactionAsync(
@@ -457,7 +487,8 @@ public sealed class TransactionReadEndpointsTests : IAsyncLifetime
     private sealed record PayeeResponse(Guid Id, string FullName);
     private sealed record TransactionResponse(
         Guid Id, Guid TenantId, string ReferenceNumber, Guid PayeeId,
-        decimal Amount, string Currency, string TransactionDate, string Source, string Status);
+        decimal Amount, string Currency, string TransactionDate, string Source, string Status,
+        string? PayeeName = null, string? PayeeEmployeeCode = null);
     private sealed record PagedResponse<T>(
         List<T> Items, int TotalCount, int Page, int PageSize,
         int TotalPages, bool HasNextPage, bool HasPreviousPage);

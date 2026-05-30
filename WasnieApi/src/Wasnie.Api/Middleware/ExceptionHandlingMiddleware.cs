@@ -1,8 +1,6 @@
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Domain.Exceptions;
 

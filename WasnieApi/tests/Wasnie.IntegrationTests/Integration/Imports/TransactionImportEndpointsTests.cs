@@ -5,8 +5,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
-using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
 
 namespace Wasnie.IntegrationTests.Integration.Imports;

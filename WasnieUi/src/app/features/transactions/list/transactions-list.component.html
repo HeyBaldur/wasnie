@@ -61,7 +61,7 @@
               @for (tx of store.transactions(); track tx.id) {
                 <tr>
                   <td class="col-ref">{{ tx.referenceNumber }}</td>
-                  <td class="col-secondary">{{ payeeName(tx.payeeId) }}</td>
+                  <td class="col-secondary">{{ tx.payeeName || ('TRANSACTIONS.UNASSIGNED' | translate) }}</td>
                   <td class="col-secondary">{{ tx.transactionDate }}</td>
                   <td class="col-num">{{ tx.amount | currencyFormat: tx.currency }}</td>
                   <td>

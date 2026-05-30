@@ -206,6 +206,13 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Frontend data-fetching violations
+
+- ❌ **Resolving referenced entities client-side from a paginated in-memory store** (WI-PROD-F, 2026-05-30). When a list endpoint is server-paginated, a client-side lookup via an in-memory store (e.g. `PayeesStore.payees().find(...)`) silently falls back to the raw foreign-key value (GUID) for any entity not present on the current page. This is a trust-destroying visual bug. **Rule:** Any entity name or display attribute referenced in a server-paginated list MUST be resolved server-side via a JOIN or batch-fetch in the handler and returned in the DTO. The client must never consult an in-memory store to resolve a field from a paginated dataset.
+- ❌ **Rendering a raw GUID or empty string as a user-visible fallback** (WI-PROD-F, 2026-05-30). When a nullable name field is absent (null or empty string), the UI MUST render a localized "Unassigned" / "Sin asignar" / "Bez przypisania" string — never the raw UUID, never an empty cell.
+
+---
+
 ## Claude Code autonomy violations
 
 - ❌ Claude Code performing ANY git operation (file 13, R13.2)

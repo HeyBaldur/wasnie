@@ -463,7 +463,8 @@
     "FIELD_CURRENCY": "Moneda",
     "SOURCE_INFO": "Fuente: Entrada manual",
     "ACTION_CREATE": "Registrar Transacción",
-    "TOAST_CREATED": "Transacción registrada correctamente."
+    "TOAST_CREATED": "Transacción registrada correctamente.",
+    "UNASSIGNED": "Sin asignar"
   },
   "ASSIGNMENTS": {
     "TITLE": "Asignaciones",

@@ -20,6 +20,8 @@ export interface Transaction {
   transactionDate: string;
   source: TransactionSource;
   status: TransactionStatus;
+  payeeName?: string | null;
+  payeeEmployeeCode?: string | null;
 }
 
 export interface CreateTransactionRequest {

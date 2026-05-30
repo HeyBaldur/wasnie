@@ -463,7 +463,8 @@
     "FIELD_CURRENCY": "Waluta",
     "SOURCE_INFO": "Źródło: Wpis ręczny",
     "ACTION_CREATE": "Zarejestruj Transakcję",
-    "TOAST_CREATED": "Transakcja została zarejestrowana."
+    "TOAST_CREATED": "Transakcja została zarejestrowana.",
+    "UNASSIGNED": "Bez przypisania"
   },
   "ASSIGNMENTS": {
     "TITLE": "Przypisania",

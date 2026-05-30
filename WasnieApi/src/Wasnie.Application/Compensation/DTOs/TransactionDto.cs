@@ -13,4 +13,6 @@ public sealed record TransactionDto(
     string? ExternalId,
     DateTimeOffset IngestedAt,
     string IngestedBy,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? PayeeName = null,
+    string? PayeeEmployeeCode = null);

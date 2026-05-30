@@ -1,9 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
-using Wasnie.Application.Compensation.Handlers.Transactions;
 using Wasnie.Application.Compensation.Queries.Transactions;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
@@ -54,15 +54,32 @@ public sealed class ListTransactionsHandler(
 
         query = sortBy switch
         {
-            "amount"          => desc ? query.OrderByDescending(t => t.Amount.Amount) : query.OrderBy(t => t.Amount.Amount),
-            "status"          => desc ? query.OrderByDescending(t => t.Status)        : query.OrderBy(t => t.Status),
-            "ingestedat"      => desc ? query.OrderByDescending(t => t.IngestedAt)    : query.OrderBy(t => t.IngestedAt),
+            "amount" => desc ? query.OrderByDescending(t => t.Amount.Amount) : query.OrderBy(t => t.Amount.Amount),
+            "status" => desc ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
+            "ingestedat" => desc ? query.OrderByDescending(t => t.IngestedAt) : query.OrderBy(t => t.IngestedAt),
             "referencenumber" => desc ? query.OrderByDescending(t => t.ReferenceNumber) : query.OrderBy(t => t.ReferenceNumber),
-            _                 => desc ? query.OrderByDescending(t => t.TransactionDate) : query.OrderBy(t => t.TransactionDate),
+            _ => desc ? query.OrderByDescending(t => t.TransactionDate) : query.OrderBy(t => t.TransactionDate),
         };
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
-        var dtos = paged.Items.Select(IngestTransactionHandler.ToDto).ToList();
+
+        // Batch-fetch payee names for this page in a single query — no N+1.
+        // Tenant-scoped automatically via the global query filter on Payees.
+        var payeeIds = paged.Items.Select(t => t.PayeeId).Distinct().ToList();
+        var payeeLookup = await db.Payees
+            .Where(p => payeeIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.FullName, p.EmployeeCode })
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        var dtos = paged.Items.Select(t =>
+        {
+            var payee = payeeLookup.GetValueOrDefault(t.PayeeId);
+            return IngestTransactionHandler.ToDto(t) with
+            {
+                PayeeName = payee?.FullName,
+                PayeeEmployeeCode = payee?.EmployeeCode,
+            };
+        }).ToList();
 
         return Result<PagedResult<TransactionDto>>.Success(new PagedResult<TransactionDto>
         {

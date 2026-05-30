@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.BackgroundJobs;
 using Wasnie.Application.Common.Abstractions;
-using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;

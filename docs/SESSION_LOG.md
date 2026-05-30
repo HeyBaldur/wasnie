@@ -10,6 +10,118 @@
 
 ---
 
+## 2026-05-30 — WI-PROD-F: Server-side payee name resolution (GUID bug eliminated)
+
+**Duration:** ~45 min
+**Phase:** Phase 2
+**Backend tests before → after:** 561 → 563 passing (+2 integration: payeeName populated, cross-tenant isolation). 217 unit + 346 integration. 0 regressions.
+**Frontend tests before → after:** 138 → 143 passing (+5 new component tests). 0 regressions.
+
+### Root cause
+
+`ListTransactionsHandler` fetched `CompensationTransaction` entities, then mapped them in-memory via `IngestTransactionHandler.ToDto`. No Payee data was included. The frontend resolved payee names via `PayeesStore.payees().find(p => p.id === payeeId)?.fullName ?? payeeId` — when the payee was not on the currently loaded page, it fell back to the raw GUID. First manifested in real testing with the Reserved Katowice import (3,183 rows).
+
+### Fix (backend)
+
+`TransactionDto` extended with `string? PayeeName = null` and `string? PayeeEmployeeCode = null` (default-null positional record params — zero breaking changes to existing call sites including `IngestTransactionHandler.ToDto`).
+
+`ListTransactionsHandler` now batch-fetches payee names after `ToPagedResultAsync`: extracts `PayeeId` values from the page, runs a single `WHERE Id IN (payeeIds)` query against `db.Payees`, builds a dictionary, and uses `with { PayeeName, PayeeEmployeeCode }` to enrich each DTO. Result: 3 queries per list request (COUNT + paginated SELECT + payee batch-fetch). No N+1 regardless of page size. Tenant isolation maintained automatically by the global query filter on `Payees`.
+
+`Payee` is NOT navigable from `CompensationTransaction` in EF (no nav property). Batch-fetch chosen over navigation property — avoids Clean Architecture violation and does not require schema changes.
+
+### Fix (frontend)
+
+- `Transaction` model: `payeeName?: string | null`, `payeeEmployeeCode?: string | null` added.
+- `TransactionsListComponent`: `PayeesStore` dependency removed; `payeeName()` method removed; `ngOnInit` removed (store auto-loads via `effect()`); `HasPermissionDirective` removed from imports (was unused — the template uses `HasPermissionPipe`).
+- Template: `{{ tx.payeeName || ('TRANSACTIONS.UNASSIGNED' | translate) }}`. Never renders GUID, never renders empty string.
+- i18n: `"UNASSIGNED"` key added to EN (`"Unassigned"`), ES (`"Sin asignar"`), PL (`"Bez przypisania"`).
+- New spec: `transactions-list.component.spec.ts` with 5 tests: renders without error, payeeName from DTO, null → "Unassigned" (no GUID), empty string → no GUID, PayeesStore not required.
+
+### Binding rule added
+
+`14-forbidden-patterns.md` — new "Frontend data-fetching violations" section: list endpoints MUST resolve referenced entities server-side in the DTO; raw GUIDs and empty strings are forbidden as user-visible fallbacks.
+
+---
+
+## 2026-05-30 — WI-PROD-MODEL Part 2: five firm decisions (E–I) recorded; WI-PROD-A and WI-PROD-CURRENCY scopes expanded
+
+**Duration:** ~20 min (docs only — no code, no tests, no builds, no migrations)
+**Phase:** Phase 2 (pre-implementation — product design, continuation of Part 1)
+**Tests:** 561 backend (217 unit + 344 integration), 138 frontend — no changes this session.
+
+### What we did
+
+Recorded five firm decisions from the Part 2 continuation of the WI-PROD-MODEL design conversation (Decision #36 in PROJECT_STATUS.md). Expanded WI-PROD-A scope with four new implementation items. Replaced the WI-PROD-CURRENCY entry with the substantially larger multi-currency system scope.
+
+### Five firm decisions taken (Decision #36 — Part 2)
+
+**Decision E — User and Payee are separate but linkable.** `User` and `Payee` are distinct entities. `User.PayeeId` is nullable. No separate rep portal — the existing RBAC identity system serves all logged-in roles. Vast majority of payees (store staff) will never have a login. MVP uses manual invite links; email-send (SendGrid) remains deferred per WI-02.
+
+**Decision F — `Payee.EmploymentType` added as configurable optional field.** Values: full-time, part-time, temporary, contractor. Nullable. Joins Decision B's configurable-fields list. Default Optional. Used by Phase 3 calculation rules that may treat employment categories differently.
+
+**Decision G — Payees are never deleted; activity state via `IsActive` + `DeactivatedAt`.** `IsActive` defaults true; `DeactivatedAt` (DateTimeOffset, nullable) is set automatically on deactivation and cleared on re-activation. Inactive payees preserved with full history; new transactions cannot be assigned to them. All transitions audit-logged. Re-import behavior on inactive payees: OPEN (Part 3).
+
+**Decision H — Location/CostCenter as optional string dimension, NOT a `Store` entity.** Sparse usage is fine; reporting and filtering must work when the field is populated. Also likely added to `CompensationTransaction` (to confirm during scoping). Joins configurable-fields list as Optional.
+
+**Decision I — Tenant account currency + explicit FX conversion.** Tenant has a TenantAdmin-configured account currency (payout currency). Transactions preserved in native currency (Spec §5b.5 intact). Explicit FX conversion uses a traceable exchange-rate source; both original and converted amounts are persisted — never overwritten. WI-PROD-CURRENCY is now a complete multi-currency handling system with four components: account-currency field on Tenant, exchange rate table, original+converted amount duality on transactions, and a conversion engine.
+
+### Three open questions deferred to Part 3
+
+- **Q1** — Audit/history of "transaction assigned to payee later": direct field update vs. assignment event log.
+- **Q2** — Default transaction status: confirm `Pending` is correct in context of eligibility lifecycle and calc engine.
+- **Q3** — Re-import behavior when payee is inactive: accept (historical correction), reject as error, or accept with warning.
+
+### WI-PROD-A scope additions (items 7–10)
+
+`Payee.EmploymentType` nullable (F); `Payee.IsActive`/`DeactivatedAt` with transition logic and audit (G, pending Q3); `Payee.Location` nullable string dimension (H); `User.PayeeId` nullable with manual invite-link MVP flow (E).
+
+### WI-PROD-CURRENCY scope replacement
+
+Old scope: display formatting only (pipe + column + footer). New scope: full multi-currency system — account-currency on Tenant, exchange rate table (rate source/date/retroactivity TBD during scoping), original+converted amount duality on transactions, conversion engine. Display formatting still included.
+
+**WI-PROD-MODEL is NOT yet closed.** Part 3 pending to resolve Q1–Q3.
+
+---
+
+## 2026-05-30 — WI-PROD-MODEL Part 1: four firm decisions recorded; WI-PROD-K added
+
+**Duration:** ~20 min (docs only — no code, no tests, no builds, no migrations)
+**Phase:** Phase 2 (pre-implementation — product design)
+**Tests:** 561 backend (217 unit + 344 integration), 138 frontend — no changes this session.
+
+### What we did
+
+Recorded the four firm decisions from the WI-PROD-MODEL product-design conversation (Decision #35 in PROJECT_STATUS.md). Added WI-PROD-K to the backlog. Updated WI-PROD-MODEL and WI-PROD-A entries with the new detail.
+
+### Four firm decisions taken (Decision #35 — Part 1)
+
+**Decision A — Field-level requirement configuration system per tenant.** Wasnie implements a TenantAdmin-only setting where specific fields are marked Required or Optional. Every change is audit-logged (Rule 5.1.5). No retroactive effect on existing data.
+
+**Decision B — Configurable fields (initial scope of WI-PROD-A):** `Payee.Email`, `Payee.HireDate`, `Payee.Role`, `Payee.ManagerId`, `CompensationTransaction.PayeeId`. All five default to **Optional** for new tenants (avoids onboarding "valley of death").
+
+**Decision C — Always-required fields (product law, not configurable):** `Payee.FullName`, `Payee.EmployeeCode`, `CompensationTransaction.ReferenceNumber / Amount / Currency / TransactionDate`, `TenantId` on both.
+
+**Decision D — `CompensationTransaction.PayeeId` becomes nullable.** Transactions without an assigned payee are legitimate. Users can assign a payee later. Cross-phase dependency: Calculation Engine MUST define its null-PayeeId policy (skip / house-pool / error) before Phase 3 engine design starts.
+
+### Schema implications recorded for WI-PROD-A
+
+`Payee.Email`, `HireDate`, `Role`, `ManagerId` → nullable. Unique index on `(TenantId, Email)` → filtered (`WHERE Email IS NOT NULL`). `CompensationTransaction.PayeeId` → nullable FK. Validation when value is present remains enforced.
+
+### WI-PROD-K added to backlog
+
+Books reconciliation tool: a dedicated screen for comparing Wasnie transaction totals against the client's General Ledger by period / currency / source / payee. Trust-critical for mid-market clients with formal audits. Relationship to WI-PROD-J to be resolved during scoping.
+
+### Still open — Part 2 pending
+
+- Rep portal / payee login: do payees log in to Wasnie?
+- Retail-specific fields possibly missing (employment type, termination date, cost center / store location, preferred currency).
+- History/audit of "transaction assigned to payee later" — direct update vs. audit log of the assignment event.
+- Default transaction status — currently `Pending`; review whether that default is right or if it should change.
+
+**WI-PROD-MODEL is NOT yet closed.** WI-PROD-A and further import/transaction WIs remain soft-blocked until Part 2 completes.
+
+---
+
 ## 2026-05-29 — WI-PROD-H closed: "New Transaction" button matches Payees pattern
 
 Added `<app-icon name="plus">` inside the button and switched RBAC from `*hasPermission` directive to `[hidden]="!('Transactions.Create' | hasPermission)"` pipe — identical to Payees. 2 files: `transactions-list.component.ts` (added `HasPermissionPipe` + `IconComponent`), `.html` (button update). 138/138 tests pass, build clean.

@@ -563,7 +563,8 @@
     "FIELD_CURRENCY": "Currency",
     "SOURCE_INFO": "Source: Manual entry",
     "ACTION_CREATE": "Record Transaction",
-    "TOAST_CREATED": "Transaction recorded successfully."
+    "TOAST_CREATED": "Transaction recorded successfully.",
+    "UNASSIGNED": "Unassigned"
   },
   "ASSIGNMENTS": {
     "TITLE": "Assignments",

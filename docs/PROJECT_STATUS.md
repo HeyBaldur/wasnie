@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-05-29
-**Updated by:** Rodolfo Calvo (WI-DOCS-UPDATE — real-data test findings captured; domain-model backlog opened)
+**Last updated:** 2026-05-30
+**Updated by:** Rodolfo Calvo (WI-PROD-F — server-side payee name resolution in transactions list; GUID bug eliminated)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** Import pipeline complete and real-data tested (2026-05-29). **Next session MUST start with WI-PROD-MODEL conversation** — real-data testing with a 3,183-row retail POS export surfaced domain-model assumptions incompatible with the retail SPM target market (required email, required hire date, required PayeeId on transaction). All conversation items are in the new backlog section below. Only after WI-PROD-MODEL is resolved can further import or transaction WIs proceed without risk of rebuilding. Backend tests: 561 passing (217 unit + 344 integration). Frontend tests: 138 passing.
+**Right now we are:** WI-PROD-MODEL design conversation in progress (2026-05-30). Nine firm decisions taken (A–I across Parts 1 and 2): field-level requirement config system, configurable fields list, always-required fields, nullable PayeeId, User/Payee separation, EmploymentType field, IsActive/DeactivatedAt, Location/CostCenter dimension, and tenant account currency with explicit FX. Three open questions deferred to Part 3 (PayeeId assignment audit, default transaction status, re-import behavior on inactive payees). WI-PROD-MODEL is NOT yet closed — Part 3 pending. Backend tests: 561 passing (217 unit + 344 integration). Frontend tests: 138 passing.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -302,6 +302,28 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 25. **Serilog fully config-driven:** Hardcoded `.WriteTo.Console()` and `.WriteTo.File()` removed from `Program.cs`. All sinks, levels, and enrichers now read from `appsettings.json` / `appsettings.Production.json`. Adding Application Insights requires one sink entry in config — no code change. (2026-05-27)
 26. **Phase C completed in one day instead of estimated 3-4 weeks:** Disciplined ARCHITECTURE.md + WI prompt workflow + Claude Code autonomous execution collapsed 50-70h estimate to ~10-12 effective hours. Zero regressions, only documented justified deviations. (2026-05-27)
 34. **Real-data testing (2026-05-29) exposed retail SPM domain-model gaps.** A 3,183-row Reserved Polska / Galeria Katowice POS export surfaced multiple domain-model assumptions that hold for B2B-tech SPM but not for retail SPM, which is the actual target market: (a) `Payee.Email` required blocks seasonal/temporary workers with no corporate email; (b) `Payee.HireDate` required blocks migrating tenants who only have "period of plan activity," not historical hire date; (c) `CompensationTransaction.PayeeId` required blocks e-commerce / house-pool / system-processed-return rows. **WI-PROD-MODEL conversation is the next session's first topic.** Further import or transaction WIs must not proceed without resolving this — building on broken invariants multiplies rework. (2026-05-29)
+35. **WI-PROD-MODEL design decisions — Part 1 (2026-05-30).** The Payee + Transaction domain model is being adjusted to fit the retail SPM target market (e.g. Reserved Polska, where store staff often lack corporate email and exact hire dates are unknown to the comp manager). Four firm decisions taken; remaining questions still open.
+
+   **Decision A — Field-level requirement configuration system per tenant.** Wasnie will implement a tenant-level setting where the TenantAdmin marks specific fields as Required or Optional. Only the TenantAdmin can change these settings. Every change is recorded in the audit trail (Rule 5.1.5). Changing a setting does NOT invalidate existing data — only applies to future creations.
+
+   **Decision B — Configurable fields list (initial scope of WI-PROD-A):** `Payee.Email`, `Payee.HireDate`, `Payee.Role`, `Payee.ManagerId`, `CompensationTransaction.PayeeId`. All five default to **Optional** for new tenants. Rationale: avoids the "valley of death" onboarding where a new comp manager hits a wall of required-field errors before they have configured anything. Admins can tighten later.
+
+   **Decision C — Always-required fields (product law, not configurable):** `Payee.FullName`, `Payee.EmployeeCode`, `CompensationTransaction.ReferenceNumber`, `CompensationTransaction.Amount`, `CompensationTransaction.Currency`, `CompensationTransaction.TransactionDate`, `TenantId` on both. These are never presented as configurable in the settings UI.
+
+   **Decision D — `CompensationTransaction.PayeeId` becomes nullable.** A transaction without an assigned payee is legitimate in the model (e-commerce self-service, system returns, sales pending later assignment). Users can assign a payee later. **Cross-phase dependency:** the Calculation Engine (Phase 3) MUST define its explicit policy on transactions with `PayeeId = null` (skip / house-pool / error). Engine design cannot defer this question — it must be decided as part of engine scoping.
+
+   **Schema implications recorded for WI-PROD-A:** `Payee.Email`, `HireDate`, `Role`, `ManagerId` become nullable in the entity. The unique index on `(TenantId, Email)` becomes filtered: `WHERE Email IS NOT NULL` (same pattern as the existing `(TenantId, Source, ExternalId)` filtered index from WI-P2-02). `CompensationTransaction.PayeeId` becomes nullable; existing FK to Payee is preserved but allows null. Validation when value is present remains enforced (e.g. email must be a valid email format if provided; hire date must not be in the future if provided). (2026-05-30)
+36. **WI-PROD-MODEL design decisions — Part 2 (2026-05-30).** Continuation of Part 1. Five firm decisions added to the model; three questions remain open (deferred to Part 3).
+
+   **Decision E — User and Payee are separate but linkable entities.** Wasnie keeps a single identity system. `User` and `Payee` are distinct entities. A `User` MAY be linked to a `Payee` via a nullable `User.PayeeId`. Users without a Payee exist (e.g. CEO, finance manager, IT admin). Payees without a User are the common case — the vast majority of payees (store sales staff) will never have a login. The TenantAdmin invites users explicitly and assigns them permissions via the existing RBAC system. There is NO separate "rep portal" module; the same identity system serves all logged-in roles. Mass-onboarding of payees as users is explicitly out of scope. Sending invites by email is a deferred dependency (SendGrid or equivalent). For MVP, an admin can generate an invite link and share manually.
+
+   **Decision F — `Payee.EmploymentType` added as a configurable optional field.** Values: full-time, part-time, temporary, contractor. Nullable. Joins the configurable-fields list (Decision B). Default Optional for new tenants. Used downstream by Phase 3 calculation rules that may treat employment categories differently.
+
+   **Decision G — Payees are never deleted; activity state via `IsActive` + `DeactivatedAt`.** `Payee.IsActive` (boolean, default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable, set automatically when `IsActive` transitions to false). Inactive payees are preserved with full history; new transactions cannot be assigned to inactive payees. Re-activation clears `DeactivatedAt` and sets `IsActive = true`. All transitions audit-logged. Behavior on re-import when payee is inactive: OPEN — see Part 3.
+
+   **Decision H — Location/CostCenter as an optional string dimension, NOT a rigid entity.** A `Payee.Location` (or `Payee.CostCenter` — final naming confirmed during implementation) optional string field on Payee, and likely on Transaction too (to be confirmed during WI-PROD-A scoping). NOT a separate `Store` entity. Rationale: rigid multi-tenant store hierarchy is overkill for boutique-style customers, but reporting and filtering by the dimension must work when the tenant uses the field. Sparse usage is fine. Joins the configurable-fields list as Optional.
+
+   **Decision I — Tenant has an account currency; FX conversion is explicit and traceable.** The tenant has an "account currency" configured by the TenantAdmin (the single currency the company pays out in — e.g. Reserved Polska = PLN). Transactions are preserved in their native currency (Spec §5b.5 unchanged — no implicit conversion). For reports, payouts, and reconciliation in the account currency, the system performs **explicit** FX conversion using a traceable exchange-rate source. Both the original amount/currency and the converted amount/currency are preserved on the transaction record — never overwritten. This substantially expands the scope of WI-PROD-CURRENCY: (a) account-currency configuration field on Tenant; (b) exchange rate table (open sub-questions: rate source — ECB / fixer.io / manual entry; rate date — transaction date / period close / payout date; retroactive rate changes — disallowed vs. allowed with audit); (c) original-amount / converted-amount duality on every transaction (or equivalent representation preserving audit traceability); (d) conversion engine that respects §5b.5 (the conversion is the explicit module §5b.5 already permits). WI-PROD-CURRENCY is now a complete multi-currency handling system, not a styling fix. (2026-05-30)
 
 ---
 
@@ -329,7 +351,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 (Update this section as questions emerge that need answers before proceeding)
 
-- **⚠️ WI-PROD-MODEL — NEXT SESSION'S FIRST TOPIC (2026-05-29).** Real-data testing surfaced retail SPM domain gaps. See backlog section below. All further import and transaction WIs are soft-blocked until the required/optional field decisions are made.
+- **⚠️ WI-PROD-MODEL — IN PROGRESS (2026-05-30).** Parts 1+2 decisions taken (A–I, Decisions #35–#36). Part 3 still open: PayeeId assignment audit/history, default transaction status review, re-import behavior on inactive payees. WI-PROD-A and further import/transaction WIs remain soft-blocked until WI-PROD-MODEL is fully closed.
 - **Phase D or Phase 2 next?** Phase D adds coverage and docs polish but does not unblock new features. Phase 2 is the core product (Transactions + Calculation Engine). Recommended: Phase 2 directly; Phase D items can land incrementally alongside Phase 2.
 - **WI-06 approach:** Strict purity refactor (remove MediatR from Domain, EF Core from Application) deferred. If revisited, must update ARCHITECTURE.md §1.2 and run full regression suite. This is a 6-8h investment with no user-visible value — justify against backlog priority at that time.
 - **F-028 standardization timing:** Cross-tenant mutations return 422 (not 404) across Quotas/Assignments/PlanRules/Imports. Deferred to a dedicated API contract standardization WI. Decision needed: standardize on 404 (ARCHITECTURE.md §9.3.3) or document 422 as intentional? Recommend 404 when the WI runs.
@@ -346,9 +368,9 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
-### WI-PROD-MODEL — Retail SPM domain model review ⚠️ NEXT TOPIC
+### WI-PROD-MODEL — Retail SPM domain model review ⚠️ IN PROGRESS
 
-**Status:** Conversation pending. Blocks WI-PROD-A, and influences WI-P2-05 (calc engine).
+**Status:** In progress (design conversation ongoing as of 2026-05-30). Blocks WI-PROD-A, and influences WI-P2-05 (calc engine). NOT yet closed — Part 3 pending.
 
 **Problem:** Current domain model encodes B2B-tech SPM assumptions that conflict with retail SPM (the actual target market):
 
@@ -358,21 +380,43 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 | `Payee.HireDate` | Required | Migrating tenants often only have plan-activity dates, not historical hire dates | Blocks onboarding of existing workforce |
 | `CompensationTransaction.PayeeId` | Required (FK, not nullable) | E-commerce self-service, house-pool sales, and system-processed returns are valid transactions with no salesperson | Blocks import of ~10-15% of a typical retail POS file |
 
-**Proposed direction (owner to confirm):**
+**Firm decisions taken — Part 1 (2026-05-30) → Decision #35:**
+- **A** — Field-level requirement configuration system per tenant (TenantAdmin only; audit-logged; no retroactive effect).
+- **B** — Configurable fields: `Payee.Email`, `HireDate`, `Role`, `ManagerId`, `CompensationTransaction.PayeeId`. All default Optional for new tenants.
+- **C** — Always-required (not configurable): `Payee.FullName`, `Payee.EmployeeCode`, `CompensationTransaction.ReferenceNumber / Amount / Currency / TransactionDate`, `TenantId` on both.
+- **D** — `CompensationTransaction.PayeeId` becomes nullable. Calc Engine MUST define null-PayeeId policy before Phase 3 design starts.
 
-- `Email` → optional (nullable in DB, nullable in domain). Validation still enforces format if provided.
-- `HireDate` → optional OR renamed to `ActiveFrom` (plan-period start date, not historical HR date). Decision affects how the Calculation Engine scopes eligibility — must be decided together.
-- `PayeeId` on Transaction → configurable per tenant via a `RequirePayeeOnTransactions` boolean setting (default `true` for B2B-tech compat). Transactions with `PayeeId = null` when setting is `false` go to a house-pool or are skipped by the engine depending on Phase 3 design.
+**Firm decisions taken — Part 2 (2026-05-30) → Decision #36:**
+- **E** — `User` and `Payee` are separate but linkable via nullable `User.PayeeId`. No rep portal; single RBAC identity system. MVP uses manual invite links (no email-send dependency yet).
+- **F** — `Payee.EmploymentType` (full-time / part-time / temporary / contractor) added; nullable; joins configurable-fields list.
+- **G** — Payees never deleted. `Payee.IsActive` + `Payee.DeactivatedAt`; inactive payees cannot receive new transactions; re-activation clears `DeactivatedAt`; audit-logged.
+- **H** — `Payee.Location` (or `CostCenter` — naming TBD at implementation) optional string dimension, NOT a `Store` entity. Also likely on Transaction (to confirm during scoping). Joins configurable-fields list.
+- **I** — Tenant account currency + explicit FX. Transactions preserved in native currency; explicit conversion with traceable exchange-rate source; original + converted amounts both persisted. Expands WI-PROD-CURRENCY to a full system (see that entry).
+
+**Still open (Part 3 — conversation pending):**
+- **Open Q1** — Audit/history of "transaction assigned to payee later": direct field update vs. event log of the assignment event. Decide before WI-PROD-A implemented.
+- **Open Q2** — Default status of newly imported transactions: confirm `Pending` is correct in context of eligibility lifecycle and calc engine.
+- **Open Q3** — Re-import behavior when payee is inactive: accept (historical correction), reject as error, or accept with warning.
 
 **Phase 3 cross-dependency (DO NOT defer):** The Calculation Engine (WI-P2-05) must decide how it handles `PayeeId = null` transactions BEFORE engine design starts. Options: (a) skip silently, (b) attribute to a "house pool" payee entity, (c) fail the calculation run with a clear error. This choice is part of WI-PROD-MODEL, not a Phase 3 concern to discover mid-implementation.
 
 ---
 
-### WI-PROD-A — `RequirePayeeOnTransactions` tenant setting
+### WI-PROD-A — Field-level requirement configuration system per tenant
 
-**Depends on:** WI-PROD-MODEL decision on `PayeeId` optionality.
+**Depends on:** WI-PROD-MODEL fully closed (Part 3 must complete before implementation starts).
 
-**Scope:** Backend: add `RequirePayeeOnTransactions` boolean to tenant configuration. Default `true`. `IngestTransactionCommand` validator and `TransactionImportValidationService` both read this setting — if `false`, `PayeeId` missing is a Warning (skipped row attribution) not an Error. Frontend: checkbox in account settings page.
+**Scope (concrete — derived from Decisions #35 and #36):**
+1. Implement the field-level requirement configuration system per tenant (TenantAdmin-only setting, audit-logged per Rule 5.1.5, no retroactive effect on existing data).
+2. Make the five configurable fields nullable in the entities: `Payee.Email`, `Payee.HireDate`, `Payee.Role`, `Payee.ManagerId`, `CompensationTransaction.PayeeId`.
+3. Convert the `(TenantId, Email)` unique index to a filtered index (`WHERE Email IS NOT NULL`) — same pattern as the `(TenantId, Source, ExternalId)` filtered index from WI-P2-02.
+4. Build the TenantAdmin settings UI for the field-requirement toggles.
+5. Audit-log every change to a requirement setting.
+6. Update `IngestTransactionCommand` validator and `TransactionImportValidationService` to respect per-tenant field requirements.
+7. `Payee.EmploymentType` nullable (Decision F); add to configurable-fields list with default Optional.
+8. `Payee.IsActive` (default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable); `IsActive → false` automatically sets `DeactivatedAt`; re-activation clears it; all transitions audit-logged; ingest validator blocks assignment to inactive payees (Decision G). Re-import behavior when payee is inactive (Open Q3) must be resolved before this item is implemented.
+9. `Payee.Location` (or `CostCenter` — finalize naming) nullable string; treated as filter/group dimension in reports; also add to `CompensationTransaction` if confirmed during scoping (Decision H); joins configurable-fields list with default Optional.
+10. `User.PayeeId` nullable FK; TenantAdmin invite flow uses existing RBAC; manual invite-link mechanism for MVP (no email-send dependency until first paying customer — consistent with WI-02 deferral, Decision E).
 
 ---
 
@@ -423,29 +467,34 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
-### WI-PROD-CURRENCY — Multi-currency UX design
+### WI-PROD-CURRENCY — Multi-currency handling system
 
-**Status:** Design conversation needed before code. Connected to WI-PROD-MODEL.
+**Status:** Scope substantially expanded by Decision I (2026-05-30). Design conversation needed before code. This is now a system, not a styling fix.
 
-**Problem:** Spec §5b.5 already decided no implicit currency conversion (cross-currency operations throw `DomainException`). However, the transaction list today mixes €, $, and PLN symbols inconsistently in the same Amount column — sometimes with two decimal places, sometimes without — because there is no enforced display convention for multi-currency rows.
+**Original problem (still applies):** The transaction list mixes €, $, and PLN inconsistently in the same Amount column. Display formatting still needs standardizing: ISO-code prefix (`PLN 376.99`, `EUR 8,500.00`), always two decimal places, no cross-currency totals in the list footer (suppressed or per-currency breakdown).
 
-**What needs deciding:** How multi-currency amounts are grouped, presented, and totaled in the transaction list and future reports. Questions: Does the list show a total? If yes, grouped by currency or suppressed entirely when currencies mix? What is the canonical display format per row?
+**Expanded scope (Decision I — 2026-05-30):** Spec §5b.5 already prohibited implicit FX conversion. Decision I now defines the explicit, traceable conversion system Wasnie will use for reports, payouts, and reconciliation in the tenant's account currency:
 
-**Likely resolution direction:** ISO-code prefix formatting per row (`PLN 376.99`, `EUR 8,500.00`), always two decimal places, no cross-currency totals in the list footer (total suppressed or replaced by per-currency breakdown). This matches Xactly / beqom conventions for multi-currency tenants.
+**System components to implement:**
+1. **Account-currency field on Tenant** — TenantAdmin-configured single payout currency (e.g. PLN for Reserved Polska).
+2. **Exchange rate table** — stores rates per (from-currency, to-currency, date). Open sub-questions to resolve during scoping:
+   - Rate source: ECB feed / fixer.io / manual TenantAdmin entry
+   - Rate date: transaction date, period-close date, or payout date
+   - Retroactive rate changes: disallowed (rates are immutable once set) vs. allowed (with full audit trail of what changed and when)
+3. **Original + converted amounts on every transaction** — the native `(Amount, Currency)` is never overwritten. A separate `(ConvertedAmount, ConvertedCurrency, ExchangeRate, ExchangeRateDate)` tuple is added when conversion occurs. Both are preserved for audit traceability.
+4. **Conversion engine** — applies explicit FX per Spec §5b.5. The conversion IS the explicit module that §5b.5 already permits; it does not violate the no-implicit-conversion rule.
 
-**Scope when decided:** Display pipe/helper update, list column formatting, possibly a `CurrencyDisplayPipe` shared primitive. No domain changes (the domain already enforces same-currency arithmetic).
+**Display scope (unchanged from original):** `CurrencyDisplayPipe`, list column formatting, per-currency breakdown in footers. No cross-currency implicit totals anywhere in the UI.
+
+**Dependencies:** WI-PROD-CURRENCY must precede WI-PROD-J (summary widget) and WI-PROD-K (reconciliation tool), since both display currency-converted aggregates.
 
 ---
 
-### WI-PROD-F — Server-side payee name resolution in the transaction list
+### WI-PROD-F — Server-side payee name resolution in the transaction list ✅ DONE (2026-05-30)
 
-**Status:** High priority. Visual confidence breaker for demos and customer trust.
+**Status:** **Closed.** JOIN-side payee resolution implemented; transactions list no longer shows raw GUIDs.
 
-**Problem:** The transactions list currently resolves payee names client-side via `PayeesStore` in memory. When the payee is not in the currently loaded page of the store, the UI displays the raw GUID (e.g. `b2d8ab2b-92ec-4e25-98bd-d8bd651e2ea0`). This was flagged as a tech-debt risk during WI-P2-03c and has now manifested in real testing.
-
-**Fix direction:** Return a resolved `PayeeName` (or `PayeeDisplayName`) field in the `ListTransactionsHandler` DTO via an EF JOIN, not a client-side lookup. The client receives the display name directly and never needs to cross-reference the payee store. This is strictly a read-path DTO change — no domain or write-path changes required.
-
-**Scope:** `ListTransactionsHandler` (add JOIN on Payees, project `p.FullName`), `TransactionListItemDto` (add `PayeeName` field), `TransactionsApiService` model, `TransactionsListComponent` template (remove `PayeesStore` dependency). One integration test update.
+**Fix:** `TransactionDto` extended with `PayeeName?` and `PayeeEmployeeCode?` (nullable, default null). `ListTransactionsHandler` batch-fetches payee names after pagination via `WHERE Id IN (pagePayeeIds)` — single additional query, no N+1. Frontend reads `tx.payeeName` directly from the DTO; null/empty renders localized "Unassigned" / "Sin asignar" / "Bez przypisania". `PayeesStore` dependency removed from `TransactionsListComponent`. New binding rule added to `14-forbidden-patterns.md`.
 
 ---
 
@@ -494,6 +543,20 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 **Dependencies:** WI-PROD-CURRENCY (display convention must be decided first). Chart library not yet chosen — options include Chart.js (lightweight), Apache ECharts (richer), or ng2-charts wrapper. Library choice is a separate design decision.
 
 **Scope when ready:** New `GET /api/transactions/summary` endpoint (aggregates server-side, grouped by currency + date bucket); summary component above the list; chart primitive decision.
+
+---
+
+### WI-PROD-K — Books reconciliation tool
+
+**Status:** Backlog. Added 2026-05-30.
+
+**Problem:** Without a reconciliation view, a comp manager who pays commissions on a wrong transaction base will not discover the discrepancy until an external auditor catches it — at which point trust and compliance credibility are both damaged. This is a critical trust gap for mid-market clients with formal audits.
+
+**Proposed direction:** A dedicated screen letting the comp manager view transaction totals aggregated by period, currency, channel/source, and payee — designed explicitly so the totals can be compared against the client's General Ledger / accounting books.
+
+**Relationship to WI-PROD-J:** WI-PROD-J covers a summary widget on the transactions list page (per-currency totals + time-series chart). WI-PROD-K is a dedicated reconciliation screen optimized for audit-readiness. There may be overlap; resolve the boundary between the two WIs during scoping.
+
+**Scope when ready:** Reconciliation screen with aggregation by period / currency / source / payee; export capability (CSV/XLSX) so the comp manager can cross-check against GL; back-end aggregation endpoint (server-side, tenant-isolated). Exact field set to be confirmed during scoping.
 
 ---
 
