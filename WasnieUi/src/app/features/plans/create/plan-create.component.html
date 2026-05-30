@@ -7,6 +7,7 @@
       backLabel="PLANS.TITLE"
     />
 
+    <div class="form-card">
     <form [formGroup]="form" (ngSubmit)="onSubmit()" class="plan-create-form">
 
       <div class="form-section">
@@ -25,10 +26,21 @@
           <textarea
             id="plan-desc"
             class="form-textarea"
+            [class.form-textarea--error]="hasError('description', 'maxlength')"
             formControlName="description"
             [placeholder]="'PLANS.FIELD_DESCRIPTION_PLACEHOLDER' | translate"
             rows="3"
           ></textarea>
+          <div class="form-field__footer">
+            @if (hasError('description', 'maxlength')) {
+              <span class="form-field__error">{{ 'PLANS.FIELD_DESCRIPTION_MAX' | translate }}</span>
+            } @else {
+              <span></span>
+            }
+            <span class="form-field__counter" [class.form-field__counter--over]="hasError('description', 'maxlength')">
+              {{ form.get('description')?.value?.length ?? 0 }} / 500
+            </span>
+          </div>
         </div>
 
         <ws-select
@@ -58,5 +70,6 @@
       </div>
 
     </form>
+    </div>
   </div>
 </app-shell>

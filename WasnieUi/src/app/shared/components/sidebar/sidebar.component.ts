@@ -1,12 +1,13 @@
 import { Component, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter, map, startWith } from 'rxjs/operators';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { SidebarStateService } from '../../../core/services/sidebar-state.service';
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
-import { Router } from '@angular/router';
 
 interface NavItem {
   path: string;
@@ -23,7 +24,7 @@ interface NavSection {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, TranslatePipe, IconComponent, HasPermissionDirective],
+  imports: [RouterLink, TranslatePipe, IconComponent, HasPermissionDirective],
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.scss',
 })
@@ -32,6 +33,24 @@ export class SidebarComponent {
   private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   readonly sidebarState = inject(SidebarStateService);
+
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter(e => e instanceof NavigationEnd),
+      map(() => this.router.url.split('?')[0]),
+      startWith(this.router.url.split('?')[0]),
+    ),
+    { initialValue: this.router.url.split('?')[0] },
+  );
+
+  isNavActive(path: string): boolean {
+    const url = this.currentUrl();
+    if (path === '/transactions') {
+      // Don't highlight Transactions when the import sub-route is active
+      return url.startsWith('/transactions') && !url.startsWith('/transactions/import');
+    }
+    return url === path || url.startsWith(path + '/');
+  }
 
   readonly navSections: NavSection[] = [
     {
@@ -50,7 +69,7 @@ export class SidebarComponent {
       sectionKey: 'NAV.SECTION_OPERATIONS',
       items: [
         { path: '/payees', labelKey: 'NAV.PAYEES', icon: 'users', permission: 'Payees.Read' },
-        { path: '/transactions', labelKey: 'NAV.TRANSACTIONS', icon: 'arrows-exchange', permission: 'Reports.ViewAll' },
+        { path: '/transactions', labelKey: 'NAV.TRANSACTIONS', icon: 'arrows-exchange', permission: 'Transactions.Read' },
         { path: '/payouts', labelKey: 'NAV.PAYOUTS', icon: 'coin', permission: 'Reports.ViewAll' },
       ],
     },

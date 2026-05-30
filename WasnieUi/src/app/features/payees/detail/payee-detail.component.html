@@ -119,7 +119,7 @@
         @if (activeTab() === 'assignments') {
           <div class="tab-content">
             <div class="tab-content__header">
-              <ws-button variant="primary" size="sm" [routerLink]="['/assignments/new']" [queryParams]="{ payeeId: payee.id }">
+              <ws-button variant="primary" size="sm" [routerLink]="['/assignments/new']" [queryParams]="{ payeeId: payee.id, payeeName: payee.fullName, payeeCode: payee.employeeCode, returnTo: '/payees/' + payee.id }">
                 {{ 'ASSIGNMENTS.NEW' | translate }}
               </ws-button>
             </div>
@@ -183,7 +183,7 @@
         @if (activeTab() === 'quotas') {
           <div class="tab-content">
             <div class="tab-content__header">
-              <ws-button variant="primary" size="sm" [routerLink]="['/quotas/new']" [queryParams]="{ payeeId: payee.id }">
+              <ws-button variant="primary" size="sm" [routerLink]="['/quotas/new']" [queryParams]="{ payeeId: payee.id, payeeName: payee.fullName, payeeCode: payee.employeeCode, returnTo: '/payees/' + payee.id }">
                 {{ 'QUOTAS.NEW' | translate }}
               </ws-button>
             </div>

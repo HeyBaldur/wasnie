@@ -4,5 +4,5 @@ namespace Wasnie.Application.Services.Imports;
 
 public interface IFileParserService
 {
-    Task<ParsedFile> ParseAsync(Stream stream, string fileName, CancellationToken cancellationToken = default);
+    Task<ParsedFile> ParseAsync(Stream stream, string fileName, int maxRows, CancellationToken cancellationToken = default);
 }

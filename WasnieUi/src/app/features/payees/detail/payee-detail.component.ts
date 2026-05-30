@@ -25,6 +25,7 @@ import {
   WsConfirmationModalComponent,
   WsTableComponent,
   WsTableEmptyComponent,
+  WsClickableRowDirective,
   WsPaginationComponent,
   type BadgeVariant,
 } from '../../../shared/ui';
@@ -51,6 +52,7 @@ type Tab = 'profile' | 'assignments' | 'quotas' | 'activity';
     WsConfirmationModalComponent,
     WsTableComponent,
     WsTableEmptyComponent,
+    WsClickableRowDirective,
     WsPaginationComponent,
   ],
   templateUrl: './payee-detail.component.html',

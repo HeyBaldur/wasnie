@@ -44,8 +44,8 @@ public sealed class MultiTenantDefenseTests : IAsyncLifetime
         // Use raw SQL to forge a cross-tenant ManagerId reference
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await db.Database.ExecuteSqlRawAsync(
-            $"UPDATE Payees SET ManagerId = '{managerB.Id}' WHERE Id = '{payeeA.Id}'");
+        await db.Database.ExecuteSqlAsync(
+            $"UPDATE Payees SET ManagerId = {managerB.Id} WHERE Id = {payeeA.Id}");
 
         // Fetch payees for tenant A — the manager from tenant B must not be resolved
         var response = await _clientA.GetAsync("/api/payees");

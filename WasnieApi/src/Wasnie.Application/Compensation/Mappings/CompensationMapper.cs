@@ -46,11 +46,13 @@ public static class CompensationMapper
             rule.Cap,
             rule.Floor);
 
-    public static PlanAssignmentDto ToPlanAssignmentDto(PlanAssignment assignment) =>
+    public static PlanAssignmentDto ToPlanAssignmentDto(PlanAssignment assignment, string planName, int planVersion) =>
         new(
             assignment.Id,
             assignment.TenantId,
             assignment.PlanId,
+            planName,
+            planVersion,
             assignment.PayeeId,
             assignment.PayeeSnapshot.FullName,
             assignment.PayeeSnapshot.EmployeeCode,

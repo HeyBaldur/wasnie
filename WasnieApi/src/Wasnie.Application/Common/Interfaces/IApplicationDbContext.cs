@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.BackgroundJobs;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Payees;
@@ -14,6 +16,7 @@ namespace Wasnie.Application.Common.Interfaces;
 
 public interface IApplicationDbContext
 {
+    DbSet<BackgroundJobRecord> BackgroundJobRecords { get; }
     DbSet<Tenant> Tenants { get; }
     DbSet<ImportAudit> ImportAudits { get; }
     DbSet<AuditLog> AuditLogs { get; }
@@ -29,6 +32,8 @@ public interface IApplicationDbContext
     DbSet<CompensationTransaction> CompensationTransactions { get; }
     DbSet<Credit> Credits { get; }
     DbSet<CompensationPayout> CompensationPayouts { get; }
+
+    DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

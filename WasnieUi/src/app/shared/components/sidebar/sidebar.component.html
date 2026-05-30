@@ -29,8 +29,8 @@
             <li *hasPermission="item.permission" class="sidebar__nav-item">
               <a
                 [routerLink]="item.path"
-                routerLinkActive="sidebar__nav-link--active"
                 class="sidebar__nav-link"
+                [class.sidebar__nav-link--active]="isNavActive(item.path)"
                 [title]="!sidebarState.isExpanded() ? (item.labelKey | translate) : ''"
               >
                 <app-icon [name]="item.icon" [size]="18" />
@@ -54,8 +54,8 @@
         <li *hasPermission="settingsItem.permission" class="sidebar__nav-item">
           <a
             [routerLink]="settingsItem.path"
-            routerLinkActive="sidebar__nav-link--active"
             class="sidebar__nav-link"
+            [class.sidebar__nav-link--active]="isNavActive(settingsItem.path)"
             [title]="!sidebarState.isExpanded() ? (settingsItem.labelKey | translate) : ''"
           >
             <app-icon [name]="settingsItem.icon" [size]="18" />

@@ -89,6 +89,13 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPlans");
     }
 
+    public async Task ResetTransactionsAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationTransactions");
+    }
+
     public async Task ResetImportsAsync()
     {
         using var scope = Factory.Services.CreateScope();
@@ -97,6 +104,19 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
         await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+    }
+
+    public async Task ResetTransactionImportDataAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        // AuditLogs cannot be deleted (immutability trigger). Tests filter by TenantId + ResourceId instead.
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM ImportAudits");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationTransactions");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM BackgroundJobRecords");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees WHERE EmployeeCode LIKE 'TEST-%' OR EmployeeCode LIKE 'EMP%'");
     }
 
     public async Task DisposeAsync()

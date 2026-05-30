@@ -36,8 +36,8 @@
       class="ws-form-grid__full"
       label="PAYEES.FIELD_MANAGER"
       formControlName="managerId"
-      [options]="managerOptions()"
-      [searchable]="true"
+      [searchFn]="managerSearchFn"
+      [initialOption]="managerInitialOption()"
       [placeholder]="'PAYEES.FIELD_MANAGER_PLACEHOLDER'"
     />
   </div>

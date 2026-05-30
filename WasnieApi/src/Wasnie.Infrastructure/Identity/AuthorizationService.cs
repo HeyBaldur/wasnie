@@ -32,7 +32,11 @@ public sealed class AuthorizationService(
                 ActorEmail: currentUser.Email ?? string.Empty,
                 DisplayName: permission), cancellationToken);
         }
-        catch { /* audit failures must not block */ }
+        catch (UnauthorizedAccessException)
+        {
+            throw; // Missing/invalid tenant claim — propagate so middleware returns 401.
+        }
+        catch { /* audit failures must not block (Rule 5.3.3) */ }
 
         throw new ForbiddenException(permission);
     }

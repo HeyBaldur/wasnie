@@ -22,7 +22,9 @@ export const errorInterceptor: HttpInterceptorFn = (
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (err.status !== 401 || !authService.isAuthenticated() || req.url.includes('/auth/')) {
+      // Skip refresh only for the refresh endpoint itself (prevents infinite loop).
+      // Other /auth/ endpoints (e.g. /auth/me) should go through the normal refresh cycle.
+      if (err.status !== 401 || !authService.isAuthenticated() || req.url.includes('/auth/refresh')) {
         return throwError(() => err);
       }
 

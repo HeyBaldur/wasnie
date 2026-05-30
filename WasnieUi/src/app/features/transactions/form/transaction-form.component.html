@@ -1,0 +1,53 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="transaction-form">
+
+  <div class="ws-form-grid">
+    <ws-select
+      class="ws-form-grid__full"
+      label="TRANSACTIONS.FIELD_PAYEE"
+      formControlName="payeeId"
+      [searchFn]="payeeSearchFn"
+      [error]="hasError('payeeId', 'required') ? 'VALIDATION.REQUIRED' : ''"
+    />
+
+    <ws-input
+      class="ws-form-grid__full"
+      label="TRANSACTIONS.FIELD_REFERENCE_NUMBER"
+      formControlName="referenceNumber"
+      [error]="hasError('referenceNumber', 'required') ? 'VALIDATION.REQUIRED' : hasError('referenceNumber', 'maxlength') ? 'VALIDATION.INVALID' : ''"
+    />
+
+    <ws-date-picker
+      [label]="'TRANSACTIONS.FIELD_DATE'"
+      formControlName="transactionDate"
+      [error]="hasError('transactionDate', 'required') ? 'VALIDATION.REQUIRED' : ''"
+    />
+
+    <div class="amount-pair">
+      <ws-input
+        label="TRANSACTIONS.FIELD_AMOUNT"
+        type="number"
+        formControlName="amount"
+        [error]="hasError('amount', 'required') ? 'VALIDATION.REQUIRED' : hasError('amount', 'min') ? 'TRANSACTIONS.FIELD_AMOUNT_MIN' : ''"
+      />
+      <ws-select
+        label="TRANSACTIONS.FIELD_CURRENCY"
+        formControlName="currency"
+        [options]="currencies"
+      />
+    </div>
+
+    <p class="source-info ws-form-grid__full">
+      {{ 'TRANSACTIONS.SOURCE_INFO' | translate }}
+    </p>
+  </div>
+
+  <div class="form-actions">
+    <ws-button variant="ghost" type="button" (click)="onCancel()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">
+      {{ 'TRANSACTIONS.ACTION_CREATE' | translate }}
+    </ws-button>
+  </div>
+
+</form>

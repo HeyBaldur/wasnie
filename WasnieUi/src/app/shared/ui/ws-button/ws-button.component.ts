@@ -14,6 +14,7 @@ export class WsButtonComponent {
   readonly loading = input(false);
   readonly disabled = input(false);
   readonly routerLink = input<string | string[] | null>(null);
+  readonly queryParams = input<Record<string, unknown> | null>(null);
   readonly iconOnly = input(false);
   readonly fullWidth = input(false);
   readonly type = input<'button' | 'submit' | 'reset'>('button');

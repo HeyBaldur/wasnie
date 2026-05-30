@@ -1,0 +1,24 @@
+<div class="progress-step">
+  @if (!failureMessage()) {
+    <div class="progress-step__title">{{ 'IMPORTS.TRANSACTIONS.PROGRESS_TITLE' | translate }}</div>
+    @if (!status() || status()!.state === 'Pending') {
+      <p class="progress-step__subtitle">{{ 'IMPORTS.TRANSACTIONS.PROGRESS_QUEUED' | translate }}</p>
+      <div class="progress-bar progress-bar--indeterminate"><div class="progress-bar__fill"></div></div>
+    } @else {
+      <div class="progress-bar"><div class="progress-bar__fill" [style.width.%]="progressPct"></div></div>
+      <p class="progress-step__subtitle">
+        {{ 'IMPORTS.TRANSACTIONS.PROGRESS_RUNNING' | translate : { processed: status()!.progressCurrent, total: status()!.progressTotal } }}
+      </p>
+    }
+    @if (netError()) {
+      <p class="progress-step__net-error"><app-icon name="wifi-off" [size]="13" /> {{ 'IMPORTS.TRANSACTIONS.PROGRESS_NET_ERROR' | translate }}</p>
+    }
+  } @else {
+    <div class="progress-step__failure">
+      <app-icon name="x-circle" [size]="40" class="progress-step__failure-icon" />
+      <h2>{{ 'IMPORTS.TRANSACTIONS.PROGRESS_FAILED_TITLE' | translate }}</h2>
+      <p>{{ failureMessage() || ('IMPORTS.TRANSACTIONS.PROGRESS_FAILED_MSG' | translate) }}</p>
+      <ws-button variant="secondary" (click)="onRetry()" data-testid="retry-btn">{{ 'IMPORTS.TRANSACTIONS.PROGRESS_RETRY' | translate }}</ws-button>
+    </div>
+  }
+</div>

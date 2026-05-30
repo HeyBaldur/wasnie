@@ -1,7 +1,7 @@
 export enum PayeeStatus {
-  Active = 0,
-  OnLeave = 1,
-  Terminated = 2,
+  Active = 'Active',
+  OnLeave = 'OnLeave',
+  Terminated = 'Terminated',
 }
 
 export interface Payee {

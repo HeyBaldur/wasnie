@@ -335,14 +335,16 @@
    WS-TOOLTIP — global because it's appended to <body>
    ═══════════════════════════════════════════════════════════════════ */
 .ws-tooltip {
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.45;
+  max-width: 240px;
+  white-space: normal;
   background: var(--color-text-primary);
   color: var(--color-text-inverse);
   border-radius: var(--radius-sm);
   pointer-events: none;
-  white-space: nowrap;
   box-shadow: var(--shadow-md);
   animation: ws-tooltip-in 100ms ease;
 }

@@ -59,6 +59,8 @@ public sealed class AssignPlanToPayeeHandler(
             assignment.Id,
             assignment.TenantId,
             assignment.PlanId,
+            plan.Name,
+            plan.Version,
             assignment.PayeeId,
             assignment.PayeeSnapshot.FullName,
             assignment.PayeeSnapshot.EmployeeCode,

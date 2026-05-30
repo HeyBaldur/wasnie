@@ -139,6 +139,7 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ Money operation without audit log entry (file 05, R5.1.2)
 - ❌ `UPDATE` or `DELETE` on audit table (file 05, R5.3.1, R5.3.2)
 - ❌ Audit log entries containing secrets (file 05, R5.3.4)
+- ❌ Domain entity state-change method that does NOT raise a domain event (§5b.7). Every method that transitions an aggregate's status MUST call `RaiseDomainEvent(...)` before returning. Phase 3+ stubs that throw `NotSupportedException` immediately (and thus do not change state) are exempt; document them as stubs. (WI-P2-02, 2026-05-28)
 
 ---
 
@@ -182,6 +183,33 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ Cards visually identical to page background (file 10, anti-patterns)
 - ❌ Horizontal scroll in tables (file 10, anti-patterns)
 - ❌ Multiple scrollbars in one container (file 10, anti-patterns)
+
+---
+
+## Bulk import violations
+
+- ❌ **`cell.GetString()` on typed XLSX cells** (WI-P2-04a-fix2). For `XLDataType.DateTime` cells, `GetString()` produces a culture-dependent string (`"4/1/2026 10:21:04 AM"`) that downstream validators cannot parse. Use `ReadCellAsString(cell)` in `FileParserService` which handles `DateTime` → ISO 8601 and `Number` → `InvariantCulture` decimal string explicitly.
+- ❌ **`null` (thread culture) in `DateOnly.TryParseExact` calls** (WI-P2-04a-fix2). Always pass `CultureInfo.InvariantCulture` explicitly. `null` resolves to `CultureInfo.CurrentCulture` at runtime — parsing breaks on non-EN-US servers and in test runs with non-default cultures.
+- ❌ Bulk money import (transaction CSV) that swallows audit-batch failures (file 05, WI-P2-04a). Unlike payee imports, transaction import audit failures MUST throw — the job is marked Failed and Hangfire retries.
+- ❌ Transaction import job that writes per-row `AuditLog` entries inside each chunk transaction instead of in a single end-of-job batch (WI-P2-04a). Batch at the end; per-chunk writes multiply transaction cost by N chunks.
+- ❌ Transaction import that does NOT re-validate rows at job start (WI-P2-04a). DB state may change between the validate endpoint call and job execution; re-validation inside the handler is mandatory.
+
+---
+
+## Background job violations
+
+- ❌ Background job that accesses the database WITHOUT calling `SetTenant(tenantId)` first (file 09, R9.4.3). The Hangfire dispatcher MUST call `tenantCtx.SetTenant(payload.TenantId)` as its very first action before resolving any service that touches EF Core.
+- ❌ Catching or swallowing the `InvalidOperationException` thrown by `BackgroundJobTenantContext.TenantId` when `SetTenant()` has not been called (R9.4.3). It throws by design — suppressing it would let Guid.Empty pass silently through query filters.
+- ❌ Hangfire dashboard exposed without an authorization filter (file 04, security). The dashboard shows cross-tenant job data. In Production it MUST be blocked until a global SystemAdmin role/claim is in place.
+- ❌ Hangfire (or any background-job library) referenced in Application or Domain layer (file 01, R1.1/R1.4). Hangfire is an Infrastructure concern; Application defines `IBackgroundJobService` + `IJobHandler<T>` abstractions only.
+- ❌ Background job that silently returns `Guid.Empty` from a tenant-context instead of throwing (R9.4.3). Every multi-tenant query filter would match zero rows, creating ghost-data bugs. `BackgroundJobTenantContext` exists precisely to prevent this.
+
+---
+
+## Frontend data-fetching violations
+
+- ❌ **Resolving referenced entities client-side from a paginated in-memory store** (WI-PROD-F, 2026-05-30). When a list endpoint is server-paginated, a client-side lookup via an in-memory store (e.g. `PayeesStore.payees().find(...)`) silently falls back to the raw foreign-key value (GUID) for any entity not present on the current page. This is a trust-destroying visual bug. **Rule:** Any entity name or display attribute referenced in a server-paginated list MUST be resolved server-side via a JOIN or batch-fetch in the handler and returned in the DTO. The client must never consult an in-memory store to resolve a field from a paginated dataset.
+- ❌ **Rendering a raw GUID or empty string as a user-visible fallback** (WI-PROD-F, 2026-05-30). When a nullable name field is absent (null or empty string), the UI MUST render a localized "Unassigned" / "Sin asignar" / "Bez przypisania" string — never the raw UUID, never an empty cell.
 
 ---
 

@@ -1,10 +1,16 @@
+using Hangfire;
+using Hangfire.SqlServer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Common.Options;
+using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
+using Wasnie.Infrastructure.BackgroundJobs;
 using Wasnie.Infrastructure.Common;
 using Wasnie.Infrastructure.Identity;
 using Wasnie.Infrastructure.Observability;
@@ -35,13 +41,34 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp =>
             sp.GetRequiredService<ApplicationDbContext>());
 
-        services.AddScoped<ITenantContext, TenantContext>();
+        // HTTP requests → TenantContext (reads JWT claims from HttpContext).
+        // Background job scopes (no HttpContext) → BackgroundJobTenantContext (SetTenant() must be
+        // called by the job dispatcher before any DB access).
+        services.AddScoped<TenantContext>();
+        services.AddScoped<BackgroundJobTenantContext>();
+        services.AddScoped<ITenantContext>(sp =>
+        {
+            var httpCtx = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
+            return httpCtx is not null
+                ? sp.GetRequiredService<TenantContext>()
+                : (ITenantContext)sp.GetRequiredService<BackgroundJobTenantContext>();
+        });
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IClaimsService, ClaimsService>();
         services.AddScoped<IAuthorizationService, AuthorizationService>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
+
+        services.AddOptions<ImportOptions>()
+            .Bind(configuration.GetSection(ImportOptions.SectionName))
+            .Validate(
+                o => o.TransactionMaxRows is > 0 and <= 100_000,
+                "Imports:TransactionMaxRows must be between 1 and 100,000.")
+            .Validate(
+                o => o.PayeeMaxRows is > 0 and <= 100_000,
+                "Imports:PayeeMaxRows must be between 1 and 100,000.")
+            .ValidateOnStart();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();
@@ -51,6 +78,36 @@ public static class DependencyInjection
         services.AddScoped<IFileParserService, FileParserService>();
         services.AddScoped<IPayeeImportValidationService, PayeeImportValidationService>();
         services.AddScoped<IPayeeImportExecutionService, PayeeImportExecutionService>();
+        services.AddScoped<ITransactionImportValidationService, TransactionImportValidationService>();
+
+        // Background jobs — Hangfire (LGPLv3) backed by the existing Azure SQL database.
+        // F1 plan has no Always On; the Hangfire server restarts on the next request after idle,
+        // and SQL-backed jobs survive the recycle. Upgrade to B1 on first paying customer.
+        var hangfireConnStr = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("DefaultConnection is required for Hangfire storage.");
+
+        services.AddHangfire(cfg => cfg
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(hangfireConnStr, new SqlServerStorageOptions
+            {
+                CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                QueuePollInterval = TimeSpan.Zero,
+                UseRecommendedIsolationLevel = true,
+                DisableGlobalLocks = true,
+            })
+            .UseFilter(new Hangfire.AutomaticRetryAttribute { Attempts = 3 }));
+
+        services.AddHangfireServer();
+
+        services.AddScoped<HangfireJobDispatcher>();
+        services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
+
+        // Register job handlers so the dispatcher can resolve them by interface type.
+        services.AddScoped<IJobHandler<PingPayload>, PingJobHandler>();
+        services.AddScoped<IJobHandler<TransactionImportPayload>, TransactionImportJobHandler>();
 
         services.AddIdentity<IdentityUser, IdentityRole>(options =>
             {

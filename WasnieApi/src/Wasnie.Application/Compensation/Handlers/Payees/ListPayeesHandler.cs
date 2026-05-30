@@ -39,8 +39,8 @@ public sealed class ListPayeesHandler(
 
         // Filters
         if (!string.IsNullOrWhiteSpace(p.Status) &&
-            int.TryParse(p.Status, out var statusInt))
-            query = query.Where(x => x.Status == (PayeeStatus)statusInt);
+            Enum.TryParse<PayeeStatus>(p.Status, ignoreCase: true, out var statusEnum))
+            query = query.Where(x => x.Status == statusEnum);
 
         if (p.ManagerId.HasValue)
             query = query.Where(x => x.ManagerId == p.ManagerId);

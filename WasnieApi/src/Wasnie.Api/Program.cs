@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +12,8 @@ using Wasnie.Api.Middleware;
 using Wasnie.Api.Observability;
 using Wasnie.Application;
 using Wasnie.Infrastructure;
+using Wasnie.Infrastructure.BackgroundJobs;
+using Wasnie.Infrastructure.Persistence.Serialization;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -56,7 +59,12 @@ try
         });
 
     builder.Services.AddAuthorization();
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        .AddJsonOptions(opts =>
+        {
+            opts.JsonSerializerOptions.Converters.Add(new MoneyJsonConverter());
+            opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
     builder.Services.AddSwaggerWithJwt();
 
     if (!builder.Environment.IsDevelopment())
@@ -153,6 +161,14 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.UseRateLimiter();
+
+    // Hangfire dashboard — admin-only. See HangfireDashboardAuthorizationFilter:
+    // development only until a global SystemAdmin role is added (cross-tenant data exposure risk).
+    app.UseHangfireDashboard("/jobs", new DashboardOptions
+    {
+        Authorization = [new HangfireDashboardAuthorizationFilter()],
+    });
+
     app.MapControllers();
 
     app.Run();

@@ -4,6 +4,8 @@ public sealed record PlanAssignmentDto(
     Guid Id,
     Guid TenantId,
     Guid PlanId,
+    string PlanName,
+    int PlanVersion,
     Guid PayeeId,
     string PayeeFullName,
     string PayeeEmployeeCode,

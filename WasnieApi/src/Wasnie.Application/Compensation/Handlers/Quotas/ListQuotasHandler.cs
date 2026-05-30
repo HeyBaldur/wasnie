@@ -30,17 +30,12 @@ public sealed class ListQuotasHandler(IApplicationDbContext db, IAuthorizationSe
         if (p.PayeeId.HasValue)
             query = query.Where(x => x.PayeeId == p.PayeeId);
 
-        // Join with payees for search / sort
-        var joined = query.Join(
-            db.Payees,
-            q => q.PayeeId,
-            p2 => p2.Id,
-            (q, p2) => new
-            {
-                Quota = q,
-                PayeeFullName = p2.FullName,
-                PayeeEmployeeCode = p2.EmployeeCode,
-            });
+        // Join with payees and plans for search / sort / display
+        var joined = query
+            .Join(db.Payees, q => q.PayeeId, p2 => p2.Id,
+                (q, p2) => new { Quota = q, PayeeFullName = p2.FullName, PayeeEmployeeCode = p2.EmployeeCode })
+            .Join(db.CompensationPlans, x => x.Quota.PlanId, pl => pl.Id,
+                (x, pl) => new { x.Quota, x.PayeeFullName, x.PayeeEmployeeCode, PlanName = pl.Name });
 
         // Search
         if (!string.IsNullOrWhiteSpace(p.Search))
@@ -75,6 +70,7 @@ public sealed class ListQuotasHandler(IApplicationDbContext db, IAuthorizationSe
             x.PayeeFullName,
             x.PayeeEmployeeCode,
             x.Quota.PlanId,
+            x.PlanName,
             x.Quota.MeasurementType,
             x.Quota.Amount.Amount,
             x.Quota.Amount.Currency,

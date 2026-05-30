@@ -1,0 +1,122 @@
+@reference "../../../../../styles.scss";
+
+.mapping-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.mapping-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.mapping-section {
+  &__title {
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-3);
+  }
+}
+
+.mapping-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  align-items: center;
+  gap: var(--space-4);
+
+  &--top {
+    align-items: flex-start;
+    padding-top: var(--space-1);
+  }
+
+  &__field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  &__label {
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+  }
+
+  &__required {
+    color: var(--color-danger);
+    font-weight: 700;
+    font-size: var(--font-size-13);
+  }
+}
+
+.preview-section {
+  &__title {
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-3);
+  }
+}
+
+.preview-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-13);
+
+  th {
+    background: var(--color-bg-surface-raised);
+    padding: var(--space-2) var(--space-4);
+    text-align: left;
+    font-weight: 600;
+    font-size: var(--font-size-11);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-tertiary);
+    border-bottom: 1px solid var(--color-border-default);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: var(--space-3) var(--space-4);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border-subtle);
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  tr:last-child td { border-bottom: none; }
+}
+
+.mapping-error {
+  @apply flex items-center gap-2;
+  font-size: var(--font-size-13);
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.mapping-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}

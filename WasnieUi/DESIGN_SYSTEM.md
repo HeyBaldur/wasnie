@@ -139,10 +139,31 @@ Outputs: `valueChange` (for use without reactive forms)
 
 ### WsSelect `<ws-select>`
 CVA. Options type: `SelectOption { value: string; label: string; disabled?: boolean }`. Labels are run through `| translate` automatically.  
-Inputs: `options` · `label` · `placeholder` · `searchable` · `error`
+Inputs: `options` · `label` · `placeholder` · `searchable` · `error` · `searchFn` · `initialOption`
 
 ```html
+<!-- Client-side (static list): -->
 <ws-select formControlName="currency" label="Currency" [options]="currencyOptions" />
+
+<!-- Async mode (server-side typeahead, large datasets): -->
+<ws-select formControlName="payeeId" label="Payee" [searchFn]="payeeSearchFn" [initialOption]="preselectedPayee()" />
+```
+
+#### Async mode
+
+Pass a `searchFn` input (`(query: string) => Observable<SelectOption[]>`) instead of `[options]`. The component handles debounce (300 ms), in-flight cancellation (`switchMap`), loading indicator, and empty state automatically.
+
+- The search input appears automatically — do not also set `[searchable]="true"`.
+- On dropdown open, the component fires an empty-string query to pre-populate the first server page.
+- `[initialOption]` (`SelectOption | null`) — supply the pre-known label when the form is patched with a value that is not yet in `asyncOptions` (edit mode, query-param preselection). The component falls back to `initialOption` when it cannot find the value in `asyncOptions`.
+- Status filtering in async mode: the backend `search` param is the primary filter. Client-side status filtering is not applied. Add a `filters` param to `PaginationParams` when backend filtering by status is required.
+
+```typescript
+// In the component class:
+readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
+  this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
+    map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
+  );
 ```
 
 ### WsDatePicker `<ws-date-picker>` — canonical pattern
@@ -814,6 +835,40 @@ Backend import flow MUST separate these concerns into distinct services:
 4. **PayeeImportExecutionService** — creates records in a transaction (DB writes only)
 
 This separation enables future migration to async/background job processing without rewriting business logic.
+
+### Five-step variant (async execute)
+
+When the execute endpoint is async (returns 202 + `{ jobId }` instead of a synchronous result), the wizard gains a **Progress** step between Preview and Complete:
+
+1. **Upload** — file selection (same as 3-step)
+2. **Map columns** — same as 3-step
+3. **Preview & Import** — on submit, calls execute → receives `{ jobId }` → transitions to Progress
+4. **Progress** *(new)* — polls `GET /api/jobs/{id}` every 3 seconds; shows indeterminate bar (Pending) or determinate bar (Running); stops polling on `Succeeded`/`Failed` OR on component destroy (zombie-poll prevention via `takeUntilDestroyed`)
+5. **Complete** — shows result
+
+**Polling pattern (canonical):**
+```typescript
+this._polling = timer(0, 3000).pipe(
+  takeUntilDestroyed(this.destroyRef),
+  switchMap(() => this.service.getJobStatus(jobId).pipe(
+    catchError(() => { this.netError.set(true); return of(null); })
+  )),
+).subscribe(s => {
+  if (!s) return;
+  this.netError.set(false);
+  this.status.set(s);
+  if (s.state === 'Succeeded' || s.state === 'Failed') {
+    this._polling?.unsubscribe(); // stop on terminal state
+    // emit completed or set failure message
+  }
+});
+```
+
+**Progress bar:** implemented as LOCAL CSS in the progress step component — NOT a shared `WsProgressBar` primitive. If ≥2 features need it, elevate to `shared/ui/` in a dedicated design-system WI (§10.3).
+
+**Retry on failure:** goes back to Preview (not Upload/Map). The parsed file and mapping are still valid.
+
+**SessionStorage:** does not persist the `progress` step. On page reload, falls back to the last non-progress step (Preview). The `jobId` is not persisted — a reloaded page cannot resume a running job.
 
 ### Three-endpoint API pattern
 

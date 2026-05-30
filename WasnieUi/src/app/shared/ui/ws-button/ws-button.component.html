@@ -3,6 +3,7 @@
   [type]="type()"
   [disabled]="isDisabled()"
   [routerLink]="routerLink()"
+  [queryParams]="queryParams()"
   [attr.aria-busy]="loading() ? 'true' : null"
 >
   @if (loading()) {

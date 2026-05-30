@@ -35,6 +35,7 @@ import {
   WsSelectComponent,
   type SelectOption,
 } from '../../../shared/ui';
+import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.directive';
 
 @Component({
   selector: 'app-rule-form',
@@ -51,6 +52,7 @@ import {
     WsButtonComponent,
     WsInputComponent,
     WsSelectComponent,
+    WsTooltipDirective,
   ],
   templateUrl: './rule-form.component.html',
   styleUrl: './rule-form.component.scss',
@@ -284,6 +286,22 @@ export class RuleFormComponent implements OnInit {
 
   asFormGroup(ctrl: AbstractControl): FormGroup {
     return ctrl as FormGroup;
+  }
+
+  // Form values can be numeric (on create) or string names (when patched from API).
+  // These helpers normalise to the enum name string so the i18n key is always correct.
+  measurementTypeKey(value: unknown): string {
+    if (value == null || value === '') return '';
+    const asNum = Number(value);
+    const name = !isNaN(asNum) ? (MeasurementType[asNum] ?? String(value)) : String(value);
+    return `PLANS.MEASUREMENT_${name.toUpperCase()}`;
+  }
+
+  measurementAggregationKey(value: unknown): string {
+    if (value == null || value === '') return '';
+    const asNum = Number(value);
+    const name = !isNaN(asNum) ? (MeasurementAggregation[asNum] ?? String(value)) : String(value);
+    return `PLANS.AGGREGATION_${name.toUpperCase()}`;
   }
 
   async onSubmit(): Promise<void> {

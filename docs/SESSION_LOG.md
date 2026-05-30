@@ -10,6 +10,830 @@
 
 ---
 
+## 2026-05-30 — WI-PROD-F: Server-side payee name resolution (GUID bug eliminated)
+
+**Duration:** ~45 min
+**Phase:** Phase 2
+**Backend tests before → after:** 561 → 563 passing (+2 integration: payeeName populated, cross-tenant isolation). 217 unit + 346 integration. 0 regressions.
+**Frontend tests before → after:** 138 → 143 passing (+5 new component tests). 0 regressions.
+
+### Root cause
+
+`ListTransactionsHandler` fetched `CompensationTransaction` entities, then mapped them in-memory via `IngestTransactionHandler.ToDto`. No Payee data was included. The frontend resolved payee names via `PayeesStore.payees().find(p => p.id === payeeId)?.fullName ?? payeeId` — when the payee was not on the currently loaded page, it fell back to the raw GUID. First manifested in real testing with the Reserved Katowice import (3,183 rows).
+
+### Fix (backend)
+
+`TransactionDto` extended with `string? PayeeName = null` and `string? PayeeEmployeeCode = null` (default-null positional record params — zero breaking changes to existing call sites including `IngestTransactionHandler.ToDto`).
+
+`ListTransactionsHandler` now batch-fetches payee names after `ToPagedResultAsync`: extracts `PayeeId` values from the page, runs a single `WHERE Id IN (payeeIds)` query against `db.Payees`, builds a dictionary, and uses `with { PayeeName, PayeeEmployeeCode }` to enrich each DTO. Result: 3 queries per list request (COUNT + paginated SELECT + payee batch-fetch). No N+1 regardless of page size. Tenant isolation maintained automatically by the global query filter on `Payees`.
+
+`Payee` is NOT navigable from `CompensationTransaction` in EF (no nav property). Batch-fetch chosen over navigation property — avoids Clean Architecture violation and does not require schema changes.
+
+### Fix (frontend)
+
+- `Transaction` model: `payeeName?: string | null`, `payeeEmployeeCode?: string | null` added.
+- `TransactionsListComponent`: `PayeesStore` dependency removed; `payeeName()` method removed; `ngOnInit` removed (store auto-loads via `effect()`); `HasPermissionDirective` removed from imports (was unused — the template uses `HasPermissionPipe`).
+- Template: `{{ tx.payeeName || ('TRANSACTIONS.UNASSIGNED' | translate) }}`. Never renders GUID, never renders empty string.
+- i18n: `"UNASSIGNED"` key added to EN (`"Unassigned"`), ES (`"Sin asignar"`), PL (`"Bez przypisania"`).
+- New spec: `transactions-list.component.spec.ts` with 5 tests: renders without error, payeeName from DTO, null → "Unassigned" (no GUID), empty string → no GUID, PayeesStore not required.
+
+### Binding rule added
+
+`14-forbidden-patterns.md` — new "Frontend data-fetching violations" section: list endpoints MUST resolve referenced entities server-side in the DTO; raw GUIDs and empty strings are forbidden as user-visible fallbacks.
+
+---
+
+## 2026-05-30 — WI-PROD-MODEL Part 2: five firm decisions (E–I) recorded; WI-PROD-A and WI-PROD-CURRENCY scopes expanded
+
+**Duration:** ~20 min (docs only — no code, no tests, no builds, no migrations)
+**Phase:** Phase 2 (pre-implementation — product design, continuation of Part 1)
+**Tests:** 561 backend (217 unit + 344 integration), 138 frontend — no changes this session.
+
+### What we did
+
+Recorded five firm decisions from the Part 2 continuation of the WI-PROD-MODEL design conversation (Decision #36 in PROJECT_STATUS.md). Expanded WI-PROD-A scope with four new implementation items. Replaced the WI-PROD-CURRENCY entry with the substantially larger multi-currency system scope.
+
+### Five firm decisions taken (Decision #36 — Part 2)
+
+**Decision E — User and Payee are separate but linkable.** `User` and `Payee` are distinct entities. `User.PayeeId` is nullable. No separate rep portal — the existing RBAC identity system serves all logged-in roles. Vast majority of payees (store staff) will never have a login. MVP uses manual invite links; email-send (SendGrid) remains deferred per WI-02.
+
+**Decision F — `Payee.EmploymentType` added as configurable optional field.** Values: full-time, part-time, temporary, contractor. Nullable. Joins Decision B's configurable-fields list. Default Optional. Used by Phase 3 calculation rules that may treat employment categories differently.
+
+**Decision G — Payees are never deleted; activity state via `IsActive` + `DeactivatedAt`.** `IsActive` defaults true; `DeactivatedAt` (DateTimeOffset, nullable) is set automatically on deactivation and cleared on re-activation. Inactive payees preserved with full history; new transactions cannot be assigned to them. All transitions audit-logged. Re-import behavior on inactive payees: OPEN (Part 3).
+
+**Decision H — Location/CostCenter as optional string dimension, NOT a `Store` entity.** Sparse usage is fine; reporting and filtering must work when the field is populated. Also likely added to `CompensationTransaction` (to confirm during scoping). Joins configurable-fields list as Optional.
+
+**Decision I — Tenant account currency + explicit FX conversion.** Tenant has a TenantAdmin-configured account currency (payout currency). Transactions preserved in native currency (Spec §5b.5 intact). Explicit FX conversion uses a traceable exchange-rate source; both original and converted amounts are persisted — never overwritten. WI-PROD-CURRENCY is now a complete multi-currency handling system with four components: account-currency field on Tenant, exchange rate table, original+converted amount duality on transactions, and a conversion engine.
+
+### Three open questions deferred to Part 3
+
+- **Q1** — Audit/history of "transaction assigned to payee later": direct field update vs. assignment event log.
+- **Q2** — Default transaction status: confirm `Pending` is correct in context of eligibility lifecycle and calc engine.
+- **Q3** — Re-import behavior when payee is inactive: accept (historical correction), reject as error, or accept with warning.
+
+### WI-PROD-A scope additions (items 7–10)
+
+`Payee.EmploymentType` nullable (F); `Payee.IsActive`/`DeactivatedAt` with transition logic and audit (G, pending Q3); `Payee.Location` nullable string dimension (H); `User.PayeeId` nullable with manual invite-link MVP flow (E).
+
+### WI-PROD-CURRENCY scope replacement
+
+Old scope: display formatting only (pipe + column + footer). New scope: full multi-currency system — account-currency on Tenant, exchange rate table (rate source/date/retroactivity TBD during scoping), original+converted amount duality on transactions, conversion engine. Display formatting still included.
+
+**WI-PROD-MODEL is NOT yet closed.** Part 3 pending to resolve Q1–Q3.
+
+---
+
+## 2026-05-30 — WI-PROD-MODEL Part 1: four firm decisions recorded; WI-PROD-K added
+
+**Duration:** ~20 min (docs only — no code, no tests, no builds, no migrations)
+**Phase:** Phase 2 (pre-implementation — product design)
+**Tests:** 561 backend (217 unit + 344 integration), 138 frontend — no changes this session.
+
+### What we did
+
+Recorded the four firm decisions from the WI-PROD-MODEL product-design conversation (Decision #35 in PROJECT_STATUS.md). Added WI-PROD-K to the backlog. Updated WI-PROD-MODEL and WI-PROD-A entries with the new detail.
+
+### Four firm decisions taken (Decision #35 — Part 1)
+
+**Decision A — Field-level requirement configuration system per tenant.** Wasnie implements a TenantAdmin-only setting where specific fields are marked Required or Optional. Every change is audit-logged (Rule 5.1.5). No retroactive effect on existing data.
+
+**Decision B — Configurable fields (initial scope of WI-PROD-A):** `Payee.Email`, `Payee.HireDate`, `Payee.Role`, `Payee.ManagerId`, `CompensationTransaction.PayeeId`. All five default to **Optional** for new tenants (avoids onboarding "valley of death").
+
+**Decision C — Always-required fields (product law, not configurable):** `Payee.FullName`, `Payee.EmployeeCode`, `CompensationTransaction.ReferenceNumber / Amount / Currency / TransactionDate`, `TenantId` on both.
+
+**Decision D — `CompensationTransaction.PayeeId` becomes nullable.** Transactions without an assigned payee are legitimate. Users can assign a payee later. Cross-phase dependency: Calculation Engine MUST define its null-PayeeId policy (skip / house-pool / error) before Phase 3 engine design starts.
+
+### Schema implications recorded for WI-PROD-A
+
+`Payee.Email`, `HireDate`, `Role`, `ManagerId` → nullable. Unique index on `(TenantId, Email)` → filtered (`WHERE Email IS NOT NULL`). `CompensationTransaction.PayeeId` → nullable FK. Validation when value is present remains enforced.
+
+### WI-PROD-K added to backlog
+
+Books reconciliation tool: a dedicated screen for comparing Wasnie transaction totals against the client's General Ledger by period / currency / source / payee. Trust-critical for mid-market clients with formal audits. Relationship to WI-PROD-J to be resolved during scoping.
+
+### Still open — Part 2 pending
+
+- Rep portal / payee login: do payees log in to Wasnie?
+- Retail-specific fields possibly missing (employment type, termination date, cost center / store location, preferred currency).
+- History/audit of "transaction assigned to payee later" — direct update vs. audit log of the assignment event.
+- Default transaction status — currently `Pending`; review whether that default is right or if it should change.
+
+**WI-PROD-MODEL is NOT yet closed.** WI-PROD-A and further import/transaction WIs remain soft-blocked until Part 2 completes.
+
+---
+
+## 2026-05-29 — WI-PROD-H closed: "New Transaction" button matches Payees pattern
+
+Added `<app-icon name="plus">` inside the button and switched RBAC from `*hasPermission` directive to `[hidden]="!('Transactions.Create' | hasPermission)"` pipe — identical to Payees. 2 files: `transactions-list.component.ts` (added `HasPermissionPipe` + `IconComponent`), `.html` (button update). 138/138 tests pass, build clean.
+
+---
+
+## 2026-05-29 — WI-DOCS-UPDATE addendum 2: three more backlog items (transactions UX review)
+
+**Duration:** ~5 min (docs only)
+
+Three additional items added to `PROJECT_STATUS.md` backlog section after reviewing the transactions list UX:
+
+- **WI-PROD-H** — "New Transaction" button placement inconsistent with Payees pattern. Low complexity; Payees is the reference.
+- **WI-PROD-I** — No search input on the transactions list. Backend already supports the filter (`ListTransactionsHandler` WI-P2-03b); frontend just needs the 300 ms debounced input wired to `store.setSearch()`. Medium priority, ~1 h.
+- **WI-PROD-J** — Transactions page summary widget (per-currency totals + time-series chart). Higher complexity; blocked on WI-PROD-CURRENCY for display convention and a chart library decision.
+
+No code, no tests, no builds.
+
+---
+
+## 2026-05-29 — WI-DOCS-UPDATE addendum: three additional backlog items (transaction list review)
+
+**Duration:** ~5 min (docs only)
+
+Reviewing the live transaction list after the Reserved import surfaced three more pending items added to the `PROJECT_STATUS.md` backlog section:
+
+- **WI-PROD-CURRENCY** — Multi-currency display convention undefined: same Amount column mixes EUR/PLN/USD with inconsistent decimal formatting. Design conversation needed; likely resolution: ISO-code prefix + always 2 decimals + no cross-currency totals.
+- **WI-PROD-F** — Payee name resolution is client-side via `PayeesStore`; when the payee is not in the loaded page, the list shows a raw GUID. High priority — confidence breaker for demos. Fix: server-side JOIN in `ListTransactionsHandler`, return `PayeeName` in the DTO.
+- **WI-PROD-G** — No test-data reset mechanism; manual testing accumulated noise rows (garbage GUIDs, million-dollar amounts, mixed currencies). Low priority dev convenience; a SQL script in `/scripts` or a dev-only endpoint would suffice.
+
+No code, no tests, no builds.
+
+---
+
+## 2026-05-29 — WI-DOCS-UPDATE: Real-data test findings captured; domain-model backlog opened
+
+**Duration:** ~20 min (docs only — no code, no builds, no tests)
+**Phase:** Phase 2
+**Tests:** 561 backend (217 unit + 344 integration), 138 frontend — no changes this session.
+
+### What we did
+
+Captured findings from today's real-data test of the transaction import wizard using a 3,183-row Reserved Polska / Galeria Katowice POS export (April 2026). Recorded two completed fixes and opened a structured product-design backlog.
+
+### Today's completed fixes (shipped earlier in the day)
+
+**WI-P2-04a-fix — Row limit 300 → 10,000, configurable (backend + frontend)**
+- `MaxRows = 300` constant replaced by `ImportOptions` (`appsettings.json` `"Imports"` section, `IOptions<T>`, `ValidateOnStart`).
+- Payee limit stays 300 (synchronous path, Rule 3.2.5). Transaction limit: 10,000.
+- `IFileParserService.ParseAsync` now takes `int maxRows` — parser stays stateless; controller chooses limit per resource.
+- New `GET /api/imports/transactions/limits` endpoint; frontend upload-step fetches it on init. `CONSTRAINT_ROWS` i18n key parameterised with `{{ count }}` in EN/ES/PL.
+- +5 backend tests. **Test count after fix: 552.**
+
+**WI-P2-04a-fix2 — Excel native DateTime parsing (Option B: ISO string in parser)**
+- Root cause: `cell.GetString()` on `XLDataType.DateTime` cells → culture-dependent `"4/1/2026 10:21:04 AM"` → validator rejects every row.
+- Fix: `FileParserService.ReadCellAsString(cell)` — DateTime cells → `"yyyy-MM-dd"` (ISO, InvariantCulture, time dropped); Number cells → `d.ToString(InvariantCulture)`.
+- Validator `TryParseDate` switched from `null` to `CultureInfo.InvariantCulture`. Error message now includes actual bad value.
+- Forbidden-patterns rule added to `14-forbidden-patterns.md`.
+- +9 backend tests (smoking-gun, culture independence pl-PL, garbage message, min boundary). **Test count after fix: 561.**
+
+### Real-data test outcome (Reserved Katowice, 3,183 rows)
+
+After both fixes:
+- **Upload:** Accepted. File parsed in < 2 s.
+- **Map Columns:** Auto-detect picked correct columns for 5/6 fields.
+- **Preview:** All rows failed with "payee not found" — expected, because payees were intentionally not pre-loaded for this test. Zero date errors (confirmed fix2 works). Zero amount errors (numeric cells round-trip correctly).
+- **Execute / Progress / Complete:** Not reached in this test run (blocked at Preview by expected payee errors).
+
+No additional bugs found beyond the two already fixed. The wizard is functionally correct for a realistic POS export.
+
+### Backlog items opened (6 items — product conversation required before code)
+
+| ID | Name | Status |
+|---|---|---|
+| WI-PROD-MODEL | Retail SPM domain model review (email/hireDate/PayeeId optionality) | **NEXT SESSION — conversation first** |
+| WI-PROD-A | `RequirePayeeOnTransactions` tenant setting | Depends on WI-PROD-MODEL |
+| WI-PROD-B | Multi-sheet Excel sheet picker | Bug — not yet implemented |
+| WI-PROD-C | First-import onboarding "valley of death" | UX gap — conversation pending |
+| WI-PROD-D | Promote `WsProgressBar` to design system | Deferred (single consumer) |
+| WI-PROD-E | Actionable "payee not found" error message | Mini-WI — no blocker |
+
+Full detail in `PROJECT_STATUS.md` backlog section.
+
+### Phase 3 cross-dependency flagged
+
+WI-P2-05 (Calculation Engine) must not start before WI-PROD-MODEL resolves how the engine handles `PayeeId = null` transactions. This choice (skip / house-pool / error) is a domain decision, not an engine implementation detail.
+
+---
+
+## 2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing (bug fix)
+
+**Duration:** ~30 min
+**Phase:** Phase 2
+**Backend tests before → after:** 552 → 561 passing (+9 new tests). 0 regressions.
+
+### Root cause (quoted)
+
+`FileParserService.ParseXlsx` was calling `cell.GetString()` on every cell. For `XLDataType.DateTime` cells, ClosedXML's `GetString()` produces a culture-dependent string like `"4/1/2026 10:21:04 AM"` — a format not accepted by the validator's `DateFormats` list. Every row from a real POS export (`Reserved_Katowice_POS_April2026.xlsx`, 3,183 rows) failed validation with "Transaction date is not a recognisable date."
+
+The same `cell.GetString()` call also stringifies numeric cells using the cell's Excel number format (may include currency symbols and locale-specific separators), which would cause amount parsing failures on formatted numeric cells.
+
+### Fix — Option B (robust string preservation in XLSX path)
+
+Option A (type-preserving `Dictionary<string, object>`) was rejected: would cascade through `ParsedFile`, `IImportCacheService`, both validators, `TransactionImportJobHandler`, and all tests. Too large for a bug fix.
+
+Option B applied — new private `ReadCellAsString(IXLCell cell)` method in `FileParserService`:
+- `XLDataType.DateTime` → `dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)` — drops time component, always ISO 8601
+- `XLDataType.Number` → `d.ToString(CultureInfo.InvariantCulture)` — invariant decimal, no currency formatting
+- All others → `cell.GetString().Trim()` (text, blank, boolean, error — unchanged)
+
+Validator `TryParseDate` also fixed: changed `null` (thread culture) to `CultureInfo.InvariantCulture` in `DateOnly.TryParseExact` calls.
+
+Error message improved: was `"Transaction date is not a recognisable date. Use YYYY-MM-DD."` → now `"'{dateStr}' is not a recognisable date. Use YYYY-MM-DD."` (includes actual bad value).
+
+### New tests (9)
+
+Parser: `ParseXlsx_NativeDateTimeCell_ProducesIsoDateString` (smoking-gun), `ParseXlsx_NativeDateTimeCell_CultureIndependent` (pl-PL), `ParseXlsx_NativeNumberCell_ProducesInvariantDecimalString`
+
+Validator: `Validate_ValidDateFormats_NoDateError` (ISO / MM-dd / dd-MM theory), `Validate_GarbageDate_ErrorMessageContainsActualValue`, `Validate_DateParsing_CultureIndependent` (pl-PL), `Validate_DateExactlyAtMinBoundary_Passes`
+
+### Files modified
+
+`FileParserService.cs` (new `ReadCellAsString` method), `TransactionImportValidationService.cs` (InvariantCulture + improved error message), `FileParserServiceTests.cs` (+3 tests), `TransactionImportValidationServiceTests.cs` (+6 tests)
+
+---
+
+## 2026-05-29 — WI-P2-04a-fix: Transaction import row limit 300 → 10,000 (configurable)
+
+**Duration:** ~30 min
+**Phase:** Phase 2
+**Backend tests before → after:** 547 → 552 passing (+5 new parser limit tests). 0 regressions.
+
+### What we did
+
+Raised the transaction import row cap from 300 (Phase 1 synchronous holdover) to 10,000 configurable via `appsettings.json`. Payee import cap stays at 300 — it runs synchronously within the HTTP request and is governed by Rule 3.2.5 (bulk writes < 5s / 300 records).
+
+**Architecture decision — `maxRows` as parameter, not injection:**
+`FileParserService` is shared between payee and transaction paths. Instead of injecting `IOptions<ImportOptions>` into the parser (making it stateful/aware of resource type), added `int maxRows` parameter to `IFileParserService.ParseAsync`. The controller reads from `IOptions<ImportOptions>` and passes the correct limit per caller. Parser stays stateless and pure — easier to test, no resource-awareness leaked into parsing logic.
+
+**Frontend — live limit from backend:**
+Added `GET /api/imports/transactions/limits` (returns `{ maxRows }`) and `getImportLimits()` to `TransactionImportService`. Upload-step fetches this on `OnInit`, defaults to 10,000 if the call fails. `CONSTRAINT_ROWS` i18n key now uses `{{ count }}` param in EN/ES/PL. Payee upload-step `CONSTRAINT_ROWS` key unchanged (still shows "300").
+
+**Config validation at startup:** `ValidateOnStart()` rejects `TransactionMaxRows` outside [1, 100,000] or `PayeeMaxRows` outside [1, 100,000] with a clear error — no silent misconfiguration.
+
+**Files created:** `Application/Common/Options/ImportOptions.cs`
+**Files modified:** `IFileParserService.cs`, `FileParserService.cs`, `ImportsController.cs`, `DependencyInjection.cs` (Infrastructure), `appsettings.json`, `FileParserServiceTests.cs`, `transaction-import.service.ts`, `upload-step.component.ts/html`, `en.json`, `es.json`, `pl.json`
+
+### Open / deferred
+
+None new. WI-P2-04c (persistent error queue) and WI-P2-05 (calculation engine) remain next candidates.
+
+---
+
+## 2026-05-29 — WI-P2-04b: Transaction Import Wizard UI (5-step with progress polling)
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 2
+**Frontend tests before → after:** 98 passing → 138 passing (+40). 0 regressions.
+
+### What we did
+
+Built the transaction import wizard UI consuming the WI-P2-04a backend endpoints. Mirrors the payee wizard pattern with one new step: **Progress** (async job polling).
+
+**Architecture:**
+- Five steps: `upload → map → preview → progress → complete`. SessionStorage key `wasnie:import-wizard:transactions` (TTL same as payees; `progress` step not persisted — no live job on reload).
+- `TransactionImportService`: 4 methods — `parseFile`, `validateMapping`, `executeImport` (returns `ExecuteAccepted { jobId }`), `getJobStatus`. No HttpClient in components.
+- `TxProgressStepComponent`: polls `GET /api/jobs/{id}` every 3s via `timer(0, 3000)` + `takeUntilDestroyed(destroyRef)`. Stops on terminal state (`Succeeded`/`Failed`) via explicit `_polling.unsubscribe()`. Stops on component destroy via `takeUntilDestroyed`. Transient network errors set `netError` signal without failing the job — next poll continues.
+- Column auto-detect (`detectField()`) covers EN/ES/PL patterns for all 6 transaction fields.
+- RBAC: route `/transactions/import` gated to `Transactions.Create`. Sidebar entry added in OPERATIONS section.
+
+**Key decisions:**
+- **WsProgressBar not in shared/ui** → implemented as LOCAL CSS within `progress-step.component.scss` only. Indeterminate animation for Pending state, determinate width for Running. NOT added to design system (§10.3 — owner decision required).
+- **Progress step retry → goes back to Preview** (not Upload/Map). The parsed file and mapping are still valid; only the execution needs retry.
+- **TransactionImportResult { totalRows, processedRows }** derived from `JobStatusDto.ProgressTotal/ProgressCurrent` on success. No `createdCount`/`skippedCount` breakdown (not in `JobStatusDto` — 04c deferred).
+
+**Files created (25):** models, service, helpers (auto-detect), upload/mapping/preview/progress/complete step components, wizard orchestrator, specs (service, mapping, progress — 40 tests total).
+
+**Files modified (5):** `transactions.routes.ts`, `sidebar.component.ts`, `en.json`, `es.json`, `pl.json`.
+
+**Bug fixed in tests:** `WsButtonComponent` injects `RouterLink` internally → `ActivatedRoute` missing in TestBed. Fixed by adding `provideRouter([])` to all step component specs.
+
+### Open / deferred
+
+- **WI-P2-04c:** Persistent per-row error queue after job completion (currently no row-level detail after Succeeded). Deferred per original WI scope.
+- **WsProgressBar as shared primitive:** If 2+ features need a progress bar, elevate to `shared/ui/` in a separate design-system WI (§10.3).
+
+---
+
+## 2026-05-29 — WI-P2-04a: Transaction Import Backend (async via Hangfire)
+
+**Duration:** ~2 hours (split across two sessions due to interruption)
+**Phase:** Phase 2
+**Tests before → after:** 494 passing → 547 passing (217 unit + 330 integration). 0 regressions.
+
+### What we did
+
+Built the async transaction CSV import backend, unblocking WI-P2-04b (wizard UI).
+
+**Architecture (step 0 confirmed):**
+- Three endpoints mirror the payee import pattern: parse → validate → execute (202 Accepted + jobId)
+- `IImportCacheService` extended with `resource` default param (`"payees"` unchanged, `"transactions"` new)
+- `BackgroundJobTenantContext` set by `HangfireJobDispatcher` before handler runs — handler does not call `SetTenant` again
+- Hangfire retry configured globally to 3 attempts (down from default 10)
+
+**Key decisions:**
+- **Audit-batch failure → job Failed (not swallowed):** Unlike payee imports, transaction audit is mandatory (money-critical). If the end-of-job `AuditLog` batch insert fails, the handler throws, Hangfire marks the job Failed, retries up to 3×. On retry, idempotency skips already-committed transactions; audit batch re-attempted. If all retries fail: committed transactions are in DB but un-audited — Failed job in Hangfire dashboard is the operational alert. This trade-off is documented in `05-audit-trail.md` and explicitly accepted.
+- **Chunked processing (50 rows/chunk):** Each chunk in its own SQL transaction. `DbUpdateException` (unique constraint violation) caught per entity → `ChangeTracker.Clear()` → continue chunk → `CommitAsync`. On retry, idempotency skips the same rows again — safe.
+- **Per-row audit in single end-of-job batch:** One `SaveChangesAsync` inserts all `AuditLog` entries. Cost: O(1) transactions instead of O(chunks). Risk: window where committed rows have no audit entry if batch fails — accepted and documented.
+- **Payload size:** Worst-case 300 rows × 6 fields × ~20 chars ≈ 36 KB — well under 5 MB, stored in `BackgroundJobRecord.PayloadJson`.
+- **Re-validation at job start:** DB state may change between validate endpoint call and job execution. Handler re-runs `ITransactionImportValidationService.ValidateAsync` as its first action after payee lookup.
+
+**Chunk timing (50-row chunk):** Integration test `ChunkTiming_50Rows_CompletesWellUnder5s` confirmed < 10s total for 50 rows (complete job including parse+execute+wait); individual chunk time is ~1–2s. Well within Rule 3.2.5's 5s per transaction limit.
+
+**Bug fixed mid-session:** `Task.WhenAll` on two EF Core queries sharing the same `DbContext` — concurrent context operations throw. Fixed to sequential `await` in all 4 quota handlers that were introduced in the same session.
+
+**Files created:**
+- `Application/Models/Imports/TransactionImportColumnMapping.cs`
+- `Application/Models/Imports/TransactionImportPayload.cs` + `TransactionImportOptions`
+- `Application/Models/Imports/ImportValidationModels.cs` (+`TransactionRowValidationResult`, `TransactionValidateResponse`, `TransactionExecuteAccepted`)
+- `Application/Services/Imports/ITransactionImportValidationService.cs`
+- `Infrastructure/Services/Imports/TransactionImportValidationService.cs`
+- `Infrastructure/BackgroundJobs/TransactionImportJobHandler.cs`
+- `tests/.../Services/Imports/TransactionImportValidationServiceTests.cs` (29 tests)
+- `tests/.../Integration/Imports/TransactionImportEndpointsTests.cs` (15 tests)
+- `tests/.../BackgroundJobs/TransactionImportJobTests.cs` (7 tests)
+
+**Files modified:**
+- `Application/Services/Imports/IImportCacheService.cs` (`resource` default param)
+- `Infrastructure/Services/Imports/ImportCacheService.cs` (resource-aware cache key)
+- `Infrastructure/DependencyInjection.cs` (new services, Hangfire retry=3)
+- `Api/Controllers/ImportsController.cs` (3 transaction endpoints)
+- `tests/.../Infrastructure/TestDatabaseFixture.cs` (`ResetTransactionImportDataAsync`)
+- `docs/architecture/05-audit-trail.md` (bulk import audit binding rule)
+- `docs/architecture/14-forbidden-patterns.md` (bulk import violations section)
+
+### Open / deferred
+
+- **WI-P2-04b:** Transaction import wizard UI (Angular) with parse→validate→execute flow + polling for job progress. Polling interval: 2s while Running.
+- **WI-P2-04c:** Persistent per-row error queue (deferred). Currently skipped rows return no detail after job completes — fine for Phase 2 launch.
+- **Dashboard admin role:** `HangfireDashboardAuthorizationFilter` blocks in Production until a `SystemAdmin` role is defined. Hangfire dashboard for checking Failed import jobs is available in Development only.
+
+---
+
+## 2026-05-29 — WI-P2-BG-a verification + architecture doc gap closed
+
+**Duration:** ~30 min
+**Phase:** Phase 2
+
+### What we did
+
+Verified WI-P2-BG-a (Hangfire background job foundation) which was implemented in the 2026-05-28 session but left with one mandatory doc item missing.
+
+**Build:** `dotnet build --configuration Release` — clean, 0 warnings, 0 errors.
+
+**Test count: 494 passing (217 unit + 277 integration), 2 intentionally skipped. 0 regressions.**
+- Previous baseline (before WI-P2-BG-a): 460 passing
+- Added by WI-P2-BG-a: `BackgroundJobTenantContextTests` (5 unit) + `PingJobIntegrationTests` (1 integration)
+
+**Step 0 confirmation:**
+- `TenantContext` (HTTP path) reads `IHttpContextAccessor` → JWT claim `tenant_id`. Returns `Guid.Empty` for unauthenticated; throws `UnauthorizedAccessException` for authenticated-with-missing-claim. Registered Scoped.
+- `CurrentUserService` reads `IHttpContextAccessor`. Registered Scoped.
+- `AuditBehavior` consumes both via constructor injection in a Scoped pipeline.
+- `BackgroundJobTenantContext` (job path): mutable, throws if `TenantId` read before `SetTenant()`. DI factory selects HTTP vs job implementation based on presence of `IHttpContextAccessor.HttpContext`. HTTP path behavior unchanged — regression tests green.
+- Hangfire target framework: .NET 8 (packages `Hangfire.Core/SqlServer/AspNetCore` 1.8.14, LGPLv3).
+- SQL connection: `DefaultConnection` from `IConfiguration` (same string used by EF Core + Hangfire SQL storage).
+
+**Architecture doc gap closed:**
+- `docs/architecture/14-forbidden-patterns.md`: added "Background job violations" section — 5 rules covering `SetTenant` before DB access, no swallowing the throw-before-set exception, dashboard auth guard, Hangfire in Application/Domain = forbidden, no silent Guid.Empty.
+
+### Open / deferred
+
+Same as 2026-05-28 entry. No new deferrals.
+
+---
+
+## 2026-05-28 — WI-P2-BG-a: Hangfire background job foundation
+
+**Duration:** ~2 hours
+**Phase:** Phase 2
+**Tests before → after:** 460 passing → 494 passing (217 unit + 277 integration). 0 regressions.
+
+### What we did
+
+Built the generic, reusable background job infrastructure. This is the prerequisite for WI-P2-04a (transaction import), which runs rows in background to avoid HTTP timeouts on large CSV files.
+
+**Key decisions:**
+- **Hangfire** (LGPLv3 — correction: the step-0 inspection mislabeled it as MIT) over hand-rolled SQL jobs. Recommended because it handles retries, state persistence, and dashboard out-of-the-box.
+- **Azure F1 plan**: no Always On; app unloads after ~20 min idle. Hangfire jobs are durable in SQL — they survive recycles. Timing is non-deterministic but not money-safety risk. **B1 upgrade ($13/month, Always On) deferred to first paying customer** — this is the explicit trigger.
+- **BackgroundJobTenantContext**: throws `InvalidOperationException` if `TenantId` read before `SetTenant()`. Never silently returns `Guid.Empty` (Rule 9.4.3). `HangfireJobDispatcher` sets tenant from job payload as first action.
+- **Hangfire dashboard at `/jobs`**: dev-only (blocked in Production) until a global SystemAdmin role/claim is implemented. Cross-tenant job data exposure risk documented.
+- **`ApplicationDbContext.CurrentTenantId`**: changed from eager (`{ get; } = tenantContext.TenantId`) to lazy (`=> tenantContext.TenantId`). Required so background job scopes can construct `ApplicationDbContext` before `SetTenant` is called (EF evaluates query filters per-query, not at construction).
+
+**Regression found and fixed:**
+`AuthorizationService.RequireAsync` had a `catch { }` that swallowed `UnauthorizedAccessException` from `tenantContext.TenantId` (missing/invalid claim). With the lazy change, the exception now fired inside the audit block rather than at DbContext construction, making it get swallowed and replaced with `ForbiddenException` → 403. Fixed by adding `catch (UnauthorizedAccessException) { throw; }`.
+
+**Files created/modified:**
+- `Domain/BackgroundJobs/JobState.cs` + `BackgroundJobRecord.cs` (entity with `MarkRunning/UpdateProgress/MarkCompleted/MarkFailed`)
+- `Application/Common/Interfaces/IBackgroundJobService.cs`, `IJobHandler.cs`
+- `Application/Common/Models/JobStatusDto.cs`, `JobContext.cs`
+- `Application/BackgroundJobs/JobHandlerBase.cs` (abstract), `Queries/GetJobStatusQuery.cs`
+- `Application/Common/Interfaces/IApplicationDbContext.cs` (+`BackgroundJobRecords` DbSet)
+- `Infrastructure/Identity/BackgroundJobTenantContext.cs`
+- `Infrastructure/BackgroundJobs/HangfireJobDispatcher.cs`, `HangfireBackgroundJobService.cs`, `PingJobHandler.cs`, `HangfireDashboardAuthorizationFilter.cs`
+- `Infrastructure/Persistence/Configurations/BackgroundJobs/BackgroundJobRecordConfiguration.cs`
+- `Infrastructure/Persistence/ApplicationDbContext.cs` (lazy `CurrentTenantId`, +BackgroundJobRecords DbSet + config + query filter)
+- `Infrastructure/DependencyInjection.cs` (factory-based `ITenantContext`, Hangfire registration, `PingJobHandler` handler registration)
+- `Infrastructure/Identity/AuthorizationService.cs` (re-throw `UnauthorizedAccessException`)
+- `Infrastructure/Wasnie.Infrastructure.csproj` (Hangfire.Core/SqlServer/AspNetCore 1.8.14)
+- `Api/Controllers/JobsController.cs` (`GET /api/jobs/{id}`)
+- `Api/Program.cs` (Hangfire dashboard middleware + `JsonStringEnumConverter`)
+- `tests/.../Infrastructure/TestWebApplicationFactory.cs` (`ConnectionStrings:DefaultConnection` override for Hangfire)
+- EF migration: `20260528135529_AddBackgroundJobs`
+- Tests: `BackgroundJobs/BackgroundJobTenantContextTests.cs` (5 tests), `BackgroundJobs/PingJobIntegrationTests.cs` (1 end-to-end test)
+
+### Open / deferred
+
+- **B1 upgrade trigger**: When first paying customer is onboarded, upgrade to Azure App Service B1 (Always On) so Hangfire processes jobs without idle-sleep delays.
+- **SystemAdmin role for dashboard**: `HangfireDashboardAuthorizationFilter` blocks dashboard in Production until a global SystemAdmin role/claim is defined (separate WI).
+- **WI-P2-04a**: Transaction import backend — now unblocked. Uses `IBackgroundJobService.EnqueueAsync` + `IJobHandler<ImportPayload>`.
+
+---
+
+## 2026-05-28 — WI-P2-FIX-select: ws-select async server-side typeahead
+
+**Duration:** ~90 min (split across two context windows)
+**Phase:** Phase 2
+
+### What we did
+
+Fixed a critical bug: `ws-select` was filtering typeahead client-side over only the rows already loaded (e.g. 10), while the data source is server-paginated (e.g. 1,250 payees). Searching "John" in a payee dropdown with 1,250 payees was finding 0 results if John was not in the first page.
+
+**Root cause fix:** Additive async mode added to `ws-select` — single component, no fork.
+
+**Changes:**
+- `ws-select.component.ts`: `searchFn` + `initialOption` inputs; `asyncOptions`/`asyncLoading` signals; `switchMap` pipeline with `debounceTime(300)` + `takeUntilDestroyed`; `options` changed from required to optional
+- `ws-select.component.html`: search input condition extended; animated loading indicator; empty state guarded by `!asyncLoading()`  
+- `ws-select.component.scss`: `.ws-select__loading` 3-dot animated indicator
+- 6 consumers migrated: `transaction-form`, `payee-form` (manager select), `assignment-create` (payee + plan), `quota-create` (payee + plan)
+- `assignment-create`: `planId.valueChanges → plansApi.getPlan() → patchValue(dateRange)` replaces store lookup; queryParam preselection via `firstValueFrom`
+- `payee-form`: `managerInitialOption` computed from `payee().managerId/managerName/managerEmployeeCode` (no extra API call needed — Payee DTO includes manager fields)
+- `ws-select.component.spec.ts` (16 tests, NEW): client-side + async behaviors + loading/empty state timing
+- `transaction-form.component.spec.ts`: updated to mock `PayeesApiService` instead of removed `PayeesStore`
+- `DESIGN_SYSTEM.md`: WsSelect async mode subsection
+
+### Tech debt noted
+
+- Manager "exclude self" limitation: backend has no `excludeId` filter param, so a payee can assign themselves as their own manager. No client-side status filter in async mode (backend `search` param is the primary filter).
+- No lightweight lookup DTOs: consumers use full DTOs at `pageSize=20` — acceptable at current scale.
+
+### Test count
+
+**98 frontend tests pass (build clean, no new warnings)**
+
+---
+
+## 2026-05-28 — WI-P2-03c-fix: Transaction form visual fix (surgical)
+
+**Duration:** ~15 min
+**Phase:** Phase 2
+
+### What we did
+
+Two root-cause bugs found and fixed (SCSS only, 2 files):
+
+1. `transaction-create.component.scss` `.form-card` used `var(--color-bg-surface)` — same token as the page background, making the card invisible (zero elevation differential). Fixed to `var(--color-bg-surface-raised)` to match the Payees pattern. Also aligned padding (`var(--space-5)`) and margin-top (`var(--space-6)`) and max-width (`640px`) to match Payees exactly.
+
+2. `transaction-form.component.scss` was missing the `.ws-form-grid` CSS definition. `ws-form-grid` is not a global class — each form component defines it locally (payees, quotas, assignments all do). Without it, the 2-column grid didn't render and fields stacked uncontained. Added the full grid definition matching the Payees/Quotas pattern. Also added `@apply flex flex-col gap-5` to `.transaction-form` (payee-form pattern). Also added responsive collapse at 640px.
+
+3. `.source-info` styled as an intentional read-only element: `background: var(--color-bg-surface-sunken)`, `border: 1px solid var(--color-border-subtle)`, `border-radius: var(--radius-sm)`, `padding: var(--space-2) var(--space-3)` — token-based, no precedent exists so kept minimal.
+
+### Files changed
+
+- `src/app/features/transactions/create/transaction-create.component.scss` (MODIFIED)
+- `src/app/features/transactions/form/transaction-form.component.scss` (MODIFIED)
+
+### Result
+
+Build: ✅ clean. Tests: 17/17 pass.
+
+---
+
+## 2026-05-28 — WI-P2-03c: Transaction UI — Create Form + Paginated List
+
+**Duration:** ~1 hour
+**Phase:** Phase 2
+
+### What we did
+
+- Step 0 inspection (previous session): confirmed Payees feature as pattern; confirmed `Transactions.Read`/`.Create` come from `/auth/me` (no frontend permission code needed); found route and sidebar bugs using `Reports.ViewAll`; planned payee name client-side lookup; established §5b.8 disclaimer NOT required (raw transactions = objective sales facts)
+- `transaction.model.ts`: `Transaction` interface, `TransactionStatus` string enum (Pending/Eligible/Calculated/Paid/Cancelled), `TransactionSource` enum, `CreateTransactionRequest`
+- `TransactionsApiService`: `list()`, `getById()`, `create()` using `buildHttpParams` — mirrors `PayeesApiService` exactly
+- `TransactionsStore`: signals-based with `effect()` auto-reload, status filter, no text search (backend doesn't support it), `createTransaction()` + `loadTransactions()`, `setStatusFilter()` / `setPage()` / `setPageSize()`
+- `TransactionsListComponent`: `WsPageLayout`, `WsSegmentedControl` for status filter (6 options), `WsTable` with skeleton rows, `WsBadge` with 5 status variants, `WsPagination`, payee name lookup via `PayeesStore`, `*hasPermission="'Transactions.Create'"` gates New button
+- `TransactionFormComponent`: 4-field form (Payee select searchable, Reference number, Transaction date, Amount+Currency amount-pair), source shown as read-only info paragraph, `isEditMode = computed(() => transaction() !== null)`
+- `TransactionCreateComponent`: thin wrapper, navigates to `/transactions` on saved/cancelled
+- `transactions.routes.ts`: `''` → `TransactionsListComponent`, `'new'` → `TransactionCreateComponent`
+- **Bug fixed in `app.routes.ts`:** transactions path changed from `loadComponent` + `Reports.ViewAll` to `loadChildren` (transactionsRoutes) + `Transactions.Read`
+- **Bug fixed in `sidebar.component.ts`:** transactions nav item permission changed from `Reports.ViewAll` to `Transactions.Read`
+- i18n: TRANSACTIONS namespace added to EN/ES/PL (29 keys: title, subtitle, status labels, column headers, form fields, toast, source info)
+- **17 new frontend tests:** 4 service (`HttpTestingController` — list flat params, status filter, getById, create body), 7 store (load, filter reset page, pageSize reset, createTransaction calls api + reloads, error signal), 6 form (invalid on empty, valid when filled, amount min validation, submit marks touched, submit calls store, hasError, onCancel)
+- Build: `ng build --configuration production` ✅ clean (pre-existing budget warning only)
+- Tests: 17/17 pass
+
+### Files produced/modified
+
+- `src/app/features/transactions/models/transaction.model.ts` (NEW)
+- `src/app/features/transactions/services/transactions.api.service.ts` (NEW)
+- `src/app/features/transactions/services/transactions.api.service.spec.ts` (NEW)
+- `src/app/features/transactions/state/transactions.store.ts` (NEW)
+- `src/app/features/transactions/state/transactions.store.spec.ts` (NEW)
+- `src/app/features/transactions/list/transactions-list.component.ts` (NEW)
+- `src/app/features/transactions/list/transactions-list.component.html` (NEW)
+- `src/app/features/transactions/list/transactions-list.component.scss` (NEW)
+- `src/app/features/transactions/form/transaction-form.component.ts` (NEW)
+- `src/app/features/transactions/form/transaction-form.component.html` (NEW)
+- `src/app/features/transactions/form/transaction-form.component.scss` (NEW)
+- `src/app/features/transactions/form/transaction-form.component.spec.ts` (NEW)
+- `src/app/features/transactions/create/transaction-create.component.ts` (NEW)
+- `src/app/features/transactions/create/transaction-create.component.html` (NEW)
+- `src/app/features/transactions/create/transaction-create.component.scss` (NEW)
+- `src/app/features/transactions/transactions.routes.ts` (NEW)
+- `src/app/app.routes.ts` (MODIFIED — loadChildren + Transactions.Read)
+- `src/app/shared/components/sidebar/sidebar.component.ts` (MODIFIED — Transactions.Read)
+- `src/assets/i18n/en.json` (MODIFIED — TRANSACTIONS namespace)
+- `src/assets/i18n/es.json` (MODIFIED — TRANSACTIONS namespace)
+- `src/assets/i18n/pl.json` (MODIFIED — TRANSACTIONS namespace)
+
+### Decisions / notes
+
+- **§5b.8 NOT required:** Transactions page shows raw sales facts (not estimated commission). Advisory disclaimer only applies to projected commission figures (Payouts page, future).
+- **Payee name lookup tech debt:** `TransactionDto` has only `PayeeId`. List component resolves name client-side via `PayeesStore`. Backend enhancement (add `PayeeName` to DTO) deferred.
+- **No text search on transaction list:** Backend `ListTransactionsHandler` has no reference-number search filter. Status filter only.
+- **Currencies:** USD, EUR, GBP, PLN, CAD, AUD — reused from quota form pattern.
+
+---
+
+## 2026-05-28 — WI-P2-03b: Transaction Read Endpoints — Backend
+
+**Duration:** ~1 hour
+**Phase:** Phase 2
+
+### What we did
+
+- Step 0 inspection: confirmed Payees list as reference pattern; default 25/max 100 pagination; get-by-id returns 404 (not 403) via global query filter + `FirstOrDefaultAsync`; `Transactions.Read` grant kept at TenantAdmin + CompManager (scoped access deferred per decision #18); 3 missing read-path indexes identified and added
+- Migration `P2_TransactionReadIndexes`: `(TenantId, TransactionDate)`, `(TenantId, Status)`, `(TenantId, IngestedAt)` — all narrow, targeted indexes per Rule 3.2.2. Amount sort flagged (no index, deferred to Scale tier)
+- `PaginationQuery` extended with `Source`, `DateFrom`, `DateTo` (backward compatible — existing handlers ignore new fields)
+- `ListTransactionsQuery` + `ListTransactionsHandler`: sort whitelist (`transactionDate`/default, `amount`, `status`, `ingestedAt`, `referenceNumber`), unknown field → safe fallback, 5 filters (status/payeeId/source/dateFrom/dateTo), `Enum.TryParse` (case-insensitive name parsing), `ToPagedResultAsync`, entity → DTO via `IngestTransactionHandler.ToDto`
+- `GetTransactionByIdQuery` + `GetTransactionByIdHandler`: RBAC first, `FirstOrDefaultAsync`, global filter handles tenant scoping, null → `Result.Failure` → 404
+- `TransactionsController` updated: `GET /api/transactions` and `GET /api/transactions/{id}` added
+- 27 integration tests in `TransactionReadEndpointsTests`
+
+### Files produced/modified
+
+- `src/Wasnie.Application/Common/Models/PaginationQuery.cs` (MODIFIED — Source, DateFrom, DateTo)
+- `src/Wasnie.Infrastructure/Persistence/Configurations/Compensation/CompensationTransactionConfiguration.cs` (MODIFIED — 3 new indexes)
+- `src/Wasnie.Infrastructure/Persistence/Migrations/[timestamp]_P2_TransactionReadIndexes.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Queries/Transactions/ListTransactionsQuery.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Queries/Transactions/GetTransactionByIdQuery.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Handlers/Transactions/ListTransactionsHandler.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Handlers/Transactions/GetTransactionByIdHandler.cs` (NEW)
+- `src/Wasnie.Api/Controllers/TransactionsController.cs` (MODIFIED — 2 new GET actions)
+- `tests/Wasnie.IntegrationTests/Transactions/TransactionReadEndpointsTests.cs` (NEW — 27 tests)
+
+### Key decisions
+
+- `Transactions.Read` stays TenantAdmin + CompManager only. Manager/Rep scoped access WI is the trigger to widen this grant.
+- `Enum.TryParse` (case-insensitive name) used for Status and Source filters — consistent with DTO output which returns enum names ("Pending", "Manual"), more readable API than integer strings.
+- Amount sort included in whitelist without index — performance acceptable at current scale; flagged for deferred index at Enterprise tier.
+- Sort by amount uses `t.Amount.Amount` (owned entity navigation) — EF Core handles the owned property projection correctly.
+
+### Test count
+
+460 → 488 (217 unit + 271 integration), 2 intentionally skipped — zero regressions.
+
+### What's next
+
+WI-P2-03c — Manual transaction entry UI. Requires reading `DESIGN_SYSTEM.md` before starting.
+
+---
+
+## 2026-05-28 — WI-P2-03a: Manual Transaction Ingestion — Backend
+
+**Duration:** ~2 hours (including stale-binary debug loop)
+**Phase:** Phase 2
+
+### What we did
+
+- `Permission.TransactionsCreate` + `Permission.TransactionsRead` added to `Permission.cs` (Domain) and granted to TenantAdmin + CompManager in `RolePermissions.cs` (Application)
+- `AuditActions.TransactionIngested = "TRANSACTION_INGESTED"` added to `AuditActions.cs`
+- `TransactionDto` record created in `Wasnie.Application/Compensation/DTOs/`
+- `IngestTransactionCommand` (implements `IMoneyCriticalCommand`): positional record with mutable `AuditResourceId { get; set; }` — handler sets it after `SaveChangesAsync` so `AuditBehavior.BuildEntry` picks up the real ID
+- `IngestTransactionCommandValidator`: sync FluentValidation — ReferenceNumber not-empty/≤200, PayeeId not-empty, Amount > 0, Currency exactly 3 chars, TransactionDate ≥ 2000-01-01
+- `IngestTransactionHandler`: RBAC check first, payee existence (EF Core `AnyAsync`), `Money.Of`, `CompensationTransaction.Ingest`, `db.SaveChangesAsync`, `request.AuditResourceId = tx.Id.ToString()`. Does NOT inject `IAuditService` — `AuditBehavior` handles audit atomically in the same EF Core transaction
+- `TransactionsController`: thin MediatR delegate, `POST /api/transactions`, returns 201 + Location on success, 400 + `{message}` on failure
+- `TestDatabaseFixture.ResetTransactionsAsync()` added
+- 16 unit tests in `IngestTransactionCommandValidatorTests` (valid, null/empty/whitespace/length ref, empty payeeId, zero/negative/positive amounts, invalid/valid currencies, date boundary)
+- 6 new `[InlineData]` cases in `RolePermissionsTests` (TransactionsCreate/Read granted, TransactionsCreate denied for Manager/Rep)
+- 14 integration tests in `TransactionsEndpointsTests`: 201 with body, Location header, 401, 403×2, 201 CompManager, 400×4 validation, payee-not-found, cross-tenant payee, cross-tenant isolation, TRANSACTION_INGESTED audit record
+
+### Bugs fixed during the run
+
+1. `AuditLog` global query filter (`TenantId == CurrentTenantId`) blocked audit queries in test background scopes (`CurrentTenantId == Guid.Empty`). Fixed by adding `IgnoreQueryFilters()` to the audit log query in the integration test.
+2. Persistent "Expected object not to be null" failures even after adding `IgnoreQueryFilters()`. Root cause: `dotnet test --no-build` was running against a stale binary from before the test file edits. Fixed by running `dotnet build` before `dotnet test --no-build`.
+
+### Files produced/modified
+
+- `src/Wasnie.Domain/Authorization/Permission.cs` (MODIFIED — TransactionsCreate, TransactionsRead)
+- `src/Wasnie.Domain/Audit/AuditActions.cs` (MODIFIED — TransactionIngested)
+- `src/Wasnie.Application/Authorization/RolePermissions.cs` (MODIFIED — TenantAdmin + CompManager grants)
+- `src/Wasnie.Application/Compensation/DTOs/TransactionDto.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Commands/Transactions/IngestTransactionCommand.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Validators/Transactions/IngestTransactionCommandValidator.cs` (NEW)
+- `src/Wasnie.Application/Compensation/Handlers/Transactions/IngestTransactionHandler.cs` (NEW)
+- `src/Wasnie.Api/Controllers/TransactionsController.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/Infrastructure/TestDatabaseFixture.cs` (MODIFIED — ResetTransactionsAsync)
+- `tests/Wasnie.UnitTests/Validators/IngestTransactionCommandValidatorTests.cs` (NEW — 16 tests)
+- `tests/Wasnie.UnitTests/Authorization/RolePermissionsTests.cs` (MODIFIED — 6 new inline cases)
+- `tests/Wasnie.IntegrationTests/Transactions/TransactionsEndpointsTests.cs` (NEW — 14 tests)
+
+### Key decisions
+
+- First `IMoneyCriticalCommand` in production use — `AuditBehavior` handles the full audit atomically; handler has no `IAuditService` dependency
+- `AuditResourceId` is mutable on the command record so the handler can write the DB-generated ID after `SaveChangesAsync`; `AuditBehavior.BuildEntry` reads it in the `after-next` step
+- Integration test audit check uses `IgnoreQueryFilters()` because the test's DI scope has no HTTP context (`TenantId == Guid.Empty`); this is the documented pattern for background scopes (see decision #12)
+- `Permission.TransactionsRead` added proactively alongside Create even though no GET endpoint exists yet — prevents a separate grant update when WI-P2-03b lands
+
+### Test count
+
+419 → 460 (217 unit + 243 integration), 2 intentionally skipped — zero regressions.
+
+### What's next
+
+`GET /api/transactions` (list with pagination + get-by-id) — WI-P2-03b.
+
+---
+
+## 2026-05-28 — WI-P2-02: CompensationTransaction Domain Surgery
+
+**Duration:** ~1.5 hours (including 3 bug-fix loops)
+**Phase:** Phase 2
+
+### What we did
+
+- Replaced `CompensationTransactionStatus` enum: removed `Credited` (not spec-equivalent); added spec lifecycle `Pending, Eligible, Calculated, Paid, Cancelled`. Table was write-orphan (confirmed) — destructive replacement safe per §8.4.1
+- Renamed `ExternalReference` → `ExternalId` in entity, EF config, and migration (aligns with spec §5.3.1 naming)
+- Migration `20260528083023_P2_TransactionDomainSurgery`: `sp_rename` column + filtered unique index + Tenant.Tier DefaultValue removal (pending from previous WI)
+- Filtered unique index SQL: `CREATE UNIQUE INDEX IX_CompensationTransactions_TenantId_Source_ExternalId ON CompensationTransactions (TenantId, Source, ExternalId) WHERE ExternalId IS NOT NULL`
+- Factory `Ingest(...)` now validates: `tenantId != Guid.Empty`, `payeeId != Guid.Empty`, `referenceNumber` not null/blank, `ingestedBy` not null/empty, `transactionDate >= 2000-01-01`; no `DateTime.UtcNow` introduced (Rule 2.5.3)
+- `MarkEligible(updatedBy, now, eventId)`: Pending → Eligible, raises `TransactionMarkedEligibleEvent`
+- `Cancel` updated: allows Pending and Eligible → Cancelled; blocks Calculated and Paid (Phase 3 clawback note)
+- `MarkCalculated` and `MarkPaid`: Phase 3 stubs throwing `NotSupportedException` (no callers → LSP not violated)
+- `MarkCredited` removed (Credited status replaced)
+- §5b.7 gap closed: every state-change method raises a domain event
+- EF1002 warning eliminated in `MultiTenantDefenseTests.cs:47` (Guid concatenation → `ExecuteSqlAsync(FormattableString)`)
+
+### Bugs fixed during the run
+
+1. `WithMessage("*[Rr]eference*")` — FluentAssertions wildcard does not support character classes; fixed to `"*Reference number*"`
+2. `WithInnerException` async chaining syntax — awaited the assertion object first, then chained
+3. Multiple `CompensationTransaction` instances sharing the same static `Money` instance in the same `DbContext` → EF Core lost owned-entity tracking → `NULL Amount` insert error; fixed by creating a fresh `Money.Of(...)` per call
+
+### Files produced/modified
+
+- `src/Wasnie.Domain/Compensation/Enums/CompensationTransactionStatus.cs` (MODIFIED — full spec lifecycle)
+- `src/Wasnie.Domain/Compensation/Transactions/CompensationTransaction.cs` (MODIFIED — rename, factory guards, MarkEligible, Cancel, stubs)
+- `src/Wasnie.Domain/Compensation/Events/TransactionMarkedEligibleEvent.cs` (NEW)
+- `src/Wasnie.Infrastructure/Persistence/Configurations/Compensation/CompensationTransactionConfiguration.cs` (MODIFIED — rename, idempotency index)
+- `src/Wasnie.Infrastructure/Persistence/Migrations/20260528083023_P2_TransactionDomainSurgery.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/MultiTenant/MultiTenantDefenseTests.cs` (MODIFIED — EF1002 fix)
+- `tests/Wasnie.UnitTests/Domain/CompensationTransactionTests.cs` (NEW — 27 tests)
+- `tests/Wasnie.IntegrationTests/Transactions/CompensationTransactionCollection.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/Transactions/CompensationTransactionFixture.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/Transactions/CompensationTransactionIdempotencyTests.cs` (NEW — 5 tests)
+
+### Key decisions
+
+- `Credited` replaced (not renamed): semantic mismatch with spec, write-orphan table = safe
+- Phase 3 stubs throw `NotSupportedException` — acceptable because no callers exist and the stubs clearly signal where Phase 3 picks up
+- Idempotency index is FILTERED (`WHERE ExternalId IS NOT NULL`): manual-entry transactions have no external ID; a non-filtered index would block inserting multiple manual transactions for the same source
+- `transactionDate` minimum is a hardcoded floor (`2000-01-01`), not a `now`-relative check — upper-bound policy (no future dates) belongs in the Application validator per division-of-labor boundary
+
+### Test count
+
+387 → 419 (190 unit + 229 integration), 2 intentionally skipped — zero regressions.
+
+### What's next
+
+Phase 2 ingestion handlers: `IngestTransactionCommand` + `IngestTransactionCommandHandler` (implements `IMoneyCriticalCommand`), `IngestTransactionCommandValidator` (payee existence, date-range policy), API endpoint, integration tests.
+
+---
+
+## 2026-05-28 — WI-P2-01b: Remove [JsonConstructor] from Domain Money (Rule 1.5 fix)
+
+**Duration:** ~1.5 hours (including two bug-fix loops)
+**Phase:** Phase 2 pre-work
+
+### What we did
+
+- Removed `[JsonConstructor]` and `using System.Text.Json.Serialization` from `Money.cs` — Rule 1.5 fully resolved; Domain layer now has zero serialization attributes
+- Created `MoneyJsonConverter : JsonConverter<Money>` in `Wasnie.Infrastructure.Persistence.Serialization`:
+  - Reads `amount` as number or string (backward compat with `AllowReadingFromString`)
+  - Case-insensitive property matching (`OrdinalIgnoreCase`)
+  - Wraps `DomainException` from `Money.Of()` as `JsonException` with inner exception (required for correct exception propagation from deserializer)
+  - Write path produces `{"amount":<decimal>,"currency":"<ISO3>"}` — byte-compatible with old `[JsonConstructor] + JsonSerializerDefaults.Web` output
+- Registered converter in `PlanRuleConfiguration` and `PayoutLineConfiguration` via per-config `BuildJsonOptions()` factory
+- Registered globally in `Program.cs` via `AddControllers().AddJsonOptions(...)` to cover HTTP deserialization of `AddRuleToPlanCommand.Cap/Floor`
+- 17 unit tests in `MoneyJsonConverterTests` (no DB)
+- 3 DB round-trip integration tests in `MoneyRoundTripTests` (own Testcontainers fixture); use `ExecuteSqlAsync(FormattableString)` to avoid EF Core treating JSON `{...}` as parameter placeholders
+- Docs path problem discovered: `docs/` is at `../docs/` relative to `WasnieApi/` — Glob searches scoped inside the repo dir miss them; confirmed root cause was wrong working directory assumption, not missing files
+
+### Bugs fixed during the run
+
+1. `MoneyJsonConverter.Read` initially let `DomainException` escape unwrapped → test `Deserialize_InvalidCurrency_ThrowsDomainException` failed. Fixed by catching `DomainException` and re-throwing as `new JsonException(ex.Message, ex)`.
+2. `INSERT INTO PlanRules ... (Trigger, ...)` failed with SQL Server syntax error → `Trigger` is a reserved keyword. Fixed by quoting as `[Trigger]`.
+
+### Files produced/modified
+
+- `src/Wasnie.Domain/Compensation/ValueObjects/Money.cs` (MODIFIED — removed `[JsonConstructor]` and using)
+- `src/Wasnie.Infrastructure/Persistence/Serialization/MoneyJsonConverter.cs` (NEW)
+- `src/Wasnie.Infrastructure/Persistence/Configurations/Compensation/PlanRuleConfiguration.cs` (MODIFIED — `BuildJsonOptions()` + converter)
+- `src/Wasnie.Infrastructure/Persistence/Configurations/Compensation/PayoutLineConfiguration.cs` (MODIFIED — `BuildJsonOptions()` + converter)
+- `src/Wasnie.Api/Program.cs` (MODIFIED — `AddJsonOptions` global registration)
+- `tests/Wasnie.IntegrationTests/Serialization/MoneyJsonConverterTests.cs` (NEW — 17 tests)
+- `tests/Wasnie.IntegrationTests/Serialization/MoneyRoundTripTests.cs` (NEW — 3 DB round-trip tests)
+- `tests/Wasnie.IntegrationTests/Serialization/MoneyRoundTripFixture.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/Serialization/MoneyRoundTripCollection.cs` (NEW)
+
+### Test count
+
+367 → 387 (163 unit + 224 integration), 2 intentionally skipped — zero regressions.
+
+### What's next
+
+Phase 2 proper — Transactions module + Calculation Engine. All pre-work complete. Domain is clean. First Phase 2 command handler implements `IMoneyCriticalCommand` and uses `Money.Of(...)` / `Money.OfNonNegative(...)`.
+
+---
+
+## 2026-05-28 — WI-P2-01: Money Value Object §5b.5 Refactor
+
+**Duration:** ~45 minutes
+**Phase:** Phase 2 pre-work
+
+### What we did
+
+- Audited existing `Money` value object — found it already existed but was missing several §5b.5 behaviors
+- Verified data safety: grepped all .cs and .json files for monetary values with >4 decimal places → zero matches; normalization confirmed safe
+- Added 4-decimal internal normalization with banker's rounding (`MidpointRounding.ToEven`) in private constructor — every code path (Of, Add, Subtract, Multiply, Divide, Negate, Abs) goes through this constructor
+- Added `Negate()` and `Abs()` methods
+- Added four comparison operators (`>`, `<`, `>=`, `<=`) — same-currency only, throw `DomainException` on mismatch
+- Refactored `GuardSameCurrency` from instance method to `private static` to support operator usage
+- 25 new unit tests: normalization (>4 decimal input), banker's rounding midpoint cases at 4-decimal boundary in both directions, Multiply re-normalization midpoints, Negate (zero/positive/negative), Abs (zero/positive/negative), all four comparison operators same-currency, all four throwing on currency mismatch, equality regression guard (`==` on different currencies returns false, does not throw)
+
+### Key decisions
+
+- `[JsonConstructor]` Rule 1.5 violation left in place; tracked in WI-P2-01b (`MoneyJsonConverter` in Infrastructure, update 3 EF Core configurations)
+- All arithmetic re-normalizes automatically via private constructor — no separate normalization call per method
+
+### Files produced/modified
+
+- `src/Wasnie.Domain/Compensation/ValueObjects/Money.cs` (MODIFIED — normalization, Negate, Abs, comparison operators, static GuardSameCurrency)
+- `tests/Wasnie.UnitTests/Domain/MoneyTests.cs` (MODIFIED — +25 tests)
+
+### Test count
+
+342 → 367 (163 unit + 204 integration), 2 intentionally skipped — zero regressions.
+
+### What's next
+
+Phase 2 proper — Transactions module + Calculation Engine. Both pre-work WIs complete. First Phase 2 command handler will implement `IMoneyCriticalCommand` and use `Money.Of(...)` / `Money.OfNonNegative(...)`.
+
+---
+
+## 2026-05-28 — WI-P2-00: Audit Dispatcher Fail-Hard for Money Operations
+
+**Duration:** ~1 hour
+**Phase:** Phase 2 pre-work
+
+### What we did
+
+- Implemented `IMoneyCriticalCommand` marker interface (extends `IAuditableCommand`) as the money-critical signal for `AuditBehavior`
+- Exposed `DatabaseFacade Database { get; }` on `IApplicationDbContext` to enable explicit transaction management from Application layer (consistent with F-001 deferral — EF Core already in Application)
+- Extended `AuditBehavior<TRequest, TResponse>` with a `HandleMoneyCriticalAsync` path: wraps `next()` + `DispatchAsync()` in `db.Database.BeginTransactionAsync()`. Both `SaveChangesAsync` calls participate in the same transaction; `CommitAsync()` commits both atomically. Any exception → `DisposeAsync()` → auto-rollback
+- Non-money behavior is byte-for-byte unchanged (swallows audit failures per Rule 5.3.3)
+- Created `MoneyAuditTestFixture` (self-contained, own Testcontainers MsSql instance, isolated from shared integration fixture) and `MoneyAuditCollection`
+- 3 new integration tests in `MoneyAuditTransactionTests` proving all three required scenarios
+
+### Key decisions
+
+- **Option A** (`IMoneyCriticalCommand` marker) chosen over Option B (dispatcher flag): visible at command definition site, consistent with existing `IAuditableCommand` pattern, doesn't bleed the concept through `IAuditService`/`IAuditDispatcher` signatures
+- No external outbox or message queue introduced — in-process EF Core transaction is sufficient and correct at current scale per WI requirements
+- `IApplicationDbContext.Database` addition is pragmatic (consistent with F-001 deferral)
+- Extension point clearly marked in test file: Phase 2 Transaction/Payout/Credit commands implement `IMoneyCriticalCommand` — no fake production handler created
+
+### Files produced/modified
+
+- `src/Wasnie.Application/Common/Interfaces/IMoneyCriticalCommand.cs` (NEW)
+- `src/Wasnie.Application/Common/Interfaces/IApplicationDbContext.cs` (MODIFIED — added `DatabaseFacade Database { get; }`)
+- `src/Wasnie.Application/Common/Behaviors/AuditBehavior.cs` (MODIFIED — added `db` parameter + `HandleMoneyCriticalAsync`)
+- `tests/Wasnie.IntegrationTests/Audit/MoneyAuditCollection.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/Audit/MoneyAuditTestFixture.cs` (NEW)
+- `tests/Wasnie.IntegrationTests/Audit/MoneyAuditTransactionTests.cs` (NEW)
+
+### Test count
+
+339 → 342 (138 unit + 204 integration), 2 intentionally skipped — zero regressions.
+
+### What's next
+
+Phase 2 proper — Transactions module + Calculation Engine. The first Phase 2 command that touches money implements `IMoneyCriticalCommand` directly; no further infrastructure changes needed.
+
+---
+
 ## 2026-05-27 (late evening) — Phase C OFFICIAL CLOSURE (Wave 6-10)
 
 **Duration:** ~6-8 hours

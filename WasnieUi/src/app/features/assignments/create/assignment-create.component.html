@@ -3,10 +3,11 @@
     <ws-page-header
       title="ASSIGNMENTS.CREATE_TITLE"
       subtitle="ASSIGNMENTS.CREATE_SUBTITLE"
-      backRoute="/assignments"
+      [backRoute]="returnTo() ?? '/assignments'"
       backLabel="ASSIGNMENTS.TITLE"
     />
 
+    <div class="form-card">
     <form [formGroup]="form" (ngSubmit)="onSubmit()" class="assignment-create-form">
 
       <div class="ws-form-grid">
@@ -14,8 +15,8 @@
           class="ws-form-grid__full"
           label="ASSIGNMENTS.FIELD_PAYEE"
           formControlName="payeeId"
-          [options]="payeeOptions()"
-          [searchable]="true"
+          [searchFn]="payeeSearchFn"
+          [initialOption]="preselectedPayeeOption()"
           [error]="hasError('payeeId', 'required') ? 'VALIDATION.REQUIRED' : ''"
         />
 
@@ -23,8 +24,8 @@
           class="ws-form-grid__full"
           label="ASSIGNMENTS.FIELD_PLAN"
           formControlName="planId"
-          [options]="planOptions()"
-          [searchable]="true"
+          [searchFn]="planSearchFn"
+          [initialOption]="preselectedPlanOption()"
           [error]="hasError('planId', 'required') ? 'VALIDATION.REQUIRED' : ''"
         />
 
@@ -37,7 +38,7 @@
       </div>
 
       <div class="form-actions">
-        <ws-button variant="ghost" [routerLink]="'/assignments'">
+        <ws-button variant="ghost" [routerLink]="returnTo() ?? '/assignments'">
           {{ 'COMMON.CANCEL' | translate }}
         </ws-button>
         <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">
@@ -46,5 +47,6 @@
       </div>
 
     </form>
+    </div>
   </div>
 </app-shell>

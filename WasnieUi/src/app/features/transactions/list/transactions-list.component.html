@@ -1,0 +1,91 @@
+<app-shell>
+  <ws-page-layout
+    icon="arrows-exchange"
+    [title]="'TRANSACTIONS.TITLE' | translate"
+    [subtitle]="'TRANSACTIONS.SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="secondary" routerLink="import" [hidden]="!('Transactions.Create' | hasPermission)">
+      <app-icon name="upload-cloud" [size]="14" />
+      {{ 'TRANSACTIONS.ACTION_IMPORT' | translate }}
+    </ws-button>
+    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Transactions.Create' | hasPermission)">
+      <app-icon name="plus" [size]="16" />
+      {{ 'TRANSACTIONS.NEW' | translate }}
+    </ws-button>
+
+    <div class="transactions-list__toolbar">
+      <ws-segmented-control
+        [options]="statusOptions"
+        [(value)]="statusFilterValue"
+      />
+    </div>
+
+    @if (!store.loading() && store.transactions().length === 0 && store.statusFilter() === null) {
+      <ws-empty-state
+        illustration="transactions-empty"
+        titleKey="TRANSACTIONS.EMPTY_TITLE"
+        descKey="TRANSACTIONS.EMPTY_DESCRIPTION"
+        actionKey="TRANSACTIONS.NEW"
+        actionRoute="new"
+      />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</th>
+              <th>{{ 'TRANSACTIONS.COL_PAYEE' | translate }}</th>
+              <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
+              <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
+              <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (store.loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
+                  <td><span class="skeleton skeleton--badge"></span></td>
+                </tr>
+              }
+            } @else if (store.transactions().length === 0) {
+              <tr>
+                <td colspan="5">
+                  <ws-table-empty messageKey="TRANSACTIONS.EMPTY_FILTER_TITLE" />
+                </td>
+              </tr>
+            } @else {
+              @for (tx of store.transactions(); track tx.id) {
+                <tr>
+                  <td class="col-ref">{{ tx.referenceNumber }}</td>
+                  <td class="col-secondary">{{ tx.payeeName || ('TRANSACTIONS.UNASSIGNED' | translate) }}</td>
+                  <td class="col-secondary">{{ tx.transactionDate }}</td>
+                  <td class="col-num">{{ tx.amount | currencyFormat: tx.currency }}</td>
+                  <td>
+                    <ws-badge [variant]="statusVariant(tx.status)">
+                      {{ statusKey(tx.status) | translate }}
+                    </ws-badge>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </ws-table>
+
+      @if (!store.loading() && store.totalCount() > 0) {
+        <ws-pagination
+          [currentPage]="store.page()"
+          [totalPages]="store.totalPages()"
+          [totalCount]="store.totalCount()"
+          [pageSize]="store.pageSize()"
+          (pageChange)="goToPage($event)"
+          (pageSizeChange)="goToPageSize($event)"
+        />
+      }
+    }
+  </ws-page-layout>
+</app-shell>

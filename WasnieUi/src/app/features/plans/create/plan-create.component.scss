@@ -3,6 +3,15 @@
 .plan-create-page {
   padding: var(--space-8);
   max-width: 640px;
+  margin: 0 auto;
+}
+
+.form-card {
+  margin-top: var(--space-6);
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
 }
 
 .plan-create-form {
@@ -36,6 +45,27 @@
   color: var(--color-text-secondary);
 }
 
+.form-field__footer {
+  @apply flex items-center justify-between;
+  margin-top: var(--space-1);
+}
+
+.form-field__error {
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
+}
+
+.form-field__counter {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  margin-left: auto;
+
+  &--over {
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+}
+
 .form-textarea {
   width: 100%;
   padding: var(--space-2) var(--space-3);
@@ -58,6 +88,11 @@
   &:focus {
     border-color: var(--color-border-focus);
     box-shadow: var(--shadow-focus);
+  }
+
+  &--error {
+    border-color: var(--color-danger);
+    &:focus { border-color: var(--color-danger); box-shadow: none; }
   }
 }
 

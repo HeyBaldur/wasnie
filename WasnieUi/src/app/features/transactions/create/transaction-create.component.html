@@ -1,0 +1,17 @@
+<app-shell>
+  <div class="transaction-create-page">
+    <ws-page-header
+      title="TRANSACTIONS.CREATE_TITLE"
+      backRoute="/transactions"
+      backLabel="TRANSACTIONS.TITLE"
+    />
+
+    <div class="form-card">
+      <app-transaction-form
+        [transaction]="null"
+        (saved)="onSaved($event)"
+        (cancelled)="onCancelled()"
+      />
+    </div>
+  </div>
+</app-shell>

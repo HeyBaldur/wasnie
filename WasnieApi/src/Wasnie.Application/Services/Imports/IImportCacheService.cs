@@ -4,7 +4,7 @@ namespace Wasnie.Application.Services.Imports;
 
 public interface IImportCacheService
 {
-    string Store(ParsedFile file, string originalFileName);
-    (ParsedFile File, string OriginalFileName)? Retrieve(string fileId);
-    void Remove(string fileId);
+    string Store(ParsedFile file, string originalFileName, string resource = "payees");
+    (ParsedFile File, string OriginalFileName)? Retrieve(string fileId, string resource = "payees");
+    void Remove(string fileId, string resource = "payees");
 }

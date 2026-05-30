@@ -25,32 +25,44 @@
               [error]="form.get('name')?.touched && form.get('name')?.hasError('required') ? 'VALIDATION.REQUIRED' : ''"
               [placeholder]="'PLANS.FIELD_RULE_NAME_PLACEHOLDER' | translate"
             />
-            <ws-input
-              formControlName="sortOrder"
-              type="number"
-              [label]="'PLANS.FIELD_SORT_ORDER' | translate"
-            />
+            <div class="field-with-help">
+              <div class="field-help-label">
+                <span class="form-field-label">{{ 'PLANS.FIELD_SORT_ORDER' | translate }}</span>
+                <app-icon name="info" [size]="13" class="help-icon"
+                  [wsTooltip]="'PLANS.TOOLTIP_SORT_ORDER' | translate" />
+              </div>
+              <ws-input formControlName="sortOrder" type="number" />
+            </div>
           </div>
         </div>
 
         <div class="form-card" formGroupName="measurement">
           <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</h2>
           <div class="form-row-3">
-            <ws-select
-              formControlName="type"
-              [label]="'PLANS.FIELD_MEASUREMENT_TYPE' | translate"
-              [options]="measurementTypeOptions"
-            />
-            <ws-input
-              formControlName="sourceField"
-              [label]="'PLANS.FIELD_SOURCE_FIELD' | translate"
-              placeholder="amount"
-            />
-            <ws-select
-              formControlName="aggregation"
-              [label]="'PLANS.FIELD_AGGREGATION' | translate"
-              [options]="aggregationOptions"
-            />
+            <div class="field-with-help">
+              <div class="field-help-label">
+                <span class="form-field-label">{{ 'PLANS.FIELD_MEASUREMENT_TYPE' | translate }}</span>
+                <app-icon name="info" [size]="13" class="help-icon"
+                  [wsTooltip]="'PLANS.TOOLTIP_MEASUREMENT_TYPE' | translate" />
+              </div>
+              <ws-select formControlName="type" [options]="measurementTypeOptions" />
+            </div>
+            <div class="field-with-help">
+              <div class="field-help-label">
+                <span class="form-field-label">{{ 'PLANS.FIELD_SOURCE_FIELD' | translate }}</span>
+                <app-icon name="info" [size]="13" class="help-icon"
+                  [wsTooltip]="'PLANS.TOOLTIP_SOURCE_FIELD' | translate" />
+              </div>
+              <ws-input formControlName="sourceField" placeholder="amount" />
+            </div>
+            <div class="field-with-help">
+              <div class="field-help-label">
+                <span class="form-field-label">{{ 'PLANS.FIELD_AGGREGATION' | translate }}</span>
+                <app-icon name="info" [size]="13" class="help-icon"
+                  [wsTooltip]="'PLANS.TOOLTIP_AGGREGATION' | translate" />
+              </div>
+              <ws-select formControlName="aggregation" [options]="aggregationOptions" />
+            </div>
           </div>
         </div>
 
@@ -58,7 +70,11 @@
           <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</h2>
           <div formGroupName="rateTable">
             <div class="form-field-group">
-              <span class="form-field-label">{{ 'PLANS.FIELD_RATE_TABLE_TYPE' | translate }}</span>
+              <div class="field-help-label">
+                <span class="form-field-label">{{ 'PLANS.FIELD_RATE_TABLE_TYPE' | translate }}</span>
+                <app-icon name="info" [size]="13" class="help-icon"
+                  [wsTooltip]="'PLANS.TOOLTIP_RATE_TABLE_TYPE' | translate" />
+              </div>
               <div class="type-selector">
                 @for (t of rateTableTypes; track t.value) {
                   <button type="button" class="type-btn"
@@ -73,7 +89,11 @@
 
             @if (rateTableType() == RateTableType.Flat) {
               <div class="form-field-group mt-4">
-                <span class="form-field-label">{{ 'PLANS.FIELD_FLAT_RATE' | translate }}</span>
+                <div class="field-help-label">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_FLAT_RATE' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_FLAT_RATE' | translate" />
+                </div>
                 <div class="input-with-suffix">
                   <ws-input
                     formControlName="flatRate"
@@ -155,13 +175,22 @@
           <div class="collapsible-header"
             [class.collapsible-header--readonly]="readOnly()"
             (click)="!readOnly() && form.get('hasTrigger')?.setValue(!form.get('hasTrigger')?.value)">
-            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</h2>
+            <div class="section-title-with-help">
+              <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</h2>
+              <app-icon name="info" [size]="13" class="help-icon"
+                [wsTooltip]="'PLANS.TOOLTIP_TRIGGER' | translate"
+                (click)="$event.stopPropagation()" />
+            </div>
             <div class="toggle-switch" [class.toggle-switch--on]="hasTrigger()"></div>
           </div>
           @if (hasTrigger()) {
             <div class="mt-4" formGroupName="trigger">
               <div class="form-field-group">
-                <span class="form-field-label">{{ 'PLANS.FIELD_LOGICAL_OP' | translate }}</span>
+                <div class="field-help-label">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_LOGICAL_OP' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_LOGICAL_OP' | translate" />
+                </div>
                 <div class="type-selector">
                   <button type="button" class="type-btn"
                     [class.type-btn--active]="form.get('trigger.logicalOperator')?.value == LogicalOperator.And"
@@ -199,10 +228,12 @@
                 }
               </div>
               @if (!readOnly()) {
-                <ws-button type="button" variant="ghost" size="sm" class="mt-2" (click)="addCondition()">
-                  <app-icon name="plus" [size]="14" />
-                  {{ 'PLANS.ADD_CONDITION' | translate }}
-                </ws-button>
+                <div class="add-action">
+                  <ws-button type="button" variant="ghost" size="sm" (click)="addCondition()">
+                    <app-icon name="plus" [size]="14" />
+                    {{ 'PLANS.ADD_CONDITION' | translate }}
+                  </ws-button>
+                </div>
               }
             </div>
           }
@@ -212,7 +243,12 @@
           <div class="collapsible-header"
             [class.collapsible-header--readonly]="readOnly()"
             (click)="!readOnly() && form.get('hasModifier')?.setValue(!form.get('hasModifier')?.value)">
-            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</h2>
+            <div class="section-title-with-help">
+              <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</h2>
+              <app-icon name="info" [size]="13" class="help-icon"
+                [wsTooltip]="'PLANS.TOOLTIP_MODIFIER' | translate"
+                (click)="$event.stopPropagation()" />
+            </div>
             <div class="toggle-switch" [class.toggle-switch--on]="hasModifier()"></div>
           </div>
           @if (hasModifier()) {
@@ -226,11 +262,14 @@
                 [label]="'PLANS.FIELD_MODIFIER_TYPE' | translate"
                 [options]="modifierTypeOptions"
                 />
-              <ws-input
-                formControlName="factor"
-                type="number"
-                [label]="'PLANS.FIELD_MODIFIER_FACTOR' | translate"
-              />
+              <div class="field-with-help">
+                <div class="field-help-label">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_MODIFIER_FACTOR' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_MODIFIER_FACTOR' | translate" />
+                </div>
+                <ws-input formControlName="factor" type="number" />
+              </div>
             </div>
           }
         </div>
@@ -239,21 +278,32 @@
           <div class="collapsible-header"
             [class.collapsible-header--readonly]="readOnly()"
             (click)="!readOnly() && form.get('hasCap')?.setValue(!form.get('hasCap')?.value)">
-            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</h2>
+            <div class="section-title-with-help">
+              <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</h2>
+              <app-icon name="info" [size]="13" class="help-icon"
+                [wsTooltip]="'PLANS.TOOLTIP_CAP_AMOUNT' | translate"
+                (click)="$event.stopPropagation()" />
+            </div>
             <div class="toggle-switch" [class.toggle-switch--on]="hasCap()"></div>
           </div>
           @if (hasCap()) {
             <div class="form-row-2 mt-4" formGroupName="cap">
-              <ws-input
-                formControlName="amount"
-                type="number"
-                [label]="'PLANS.FIELD_CAP_AMOUNT' | translate"
-              />
-              <ws-select
-                formControlName="scope"
-                [label]="'PLANS.FIELD_CAP_SCOPE' | translate"
-                [options]="capScopeOptions"
-                />
+              <div class="field-with-help">
+                <div class="field-help-label">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_CAP_AMOUNT' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_CAP_AMOUNT' | translate" />
+                </div>
+                <ws-input formControlName="amount" type="number" />
+              </div>
+              <div class="field-with-help">
+                <div class="field-help-label">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_CAP_SCOPE' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_CAP_SCOPE' | translate" />
+                </div>
+                <ws-select formControlName="scope" [options]="capScopeOptions" />
+              </div>
             </div>
           }
         </div>
@@ -262,16 +312,24 @@
           <div class="collapsible-header"
             [class.collapsible-header--readonly]="readOnly()"
             (click)="!readOnly() && form.get('hasFloor')?.setValue(!form.get('hasFloor')?.value)">
-            <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</h2>
+            <div class="section-title-with-help">
+              <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</h2>
+              <app-icon name="info" [size]="13" class="help-icon"
+                [wsTooltip]="'PLANS.TOOLTIP_FLOOR_AMOUNT' | translate"
+                (click)="$event.stopPropagation()" />
+            </div>
             <div class="toggle-switch" [class.toggle-switch--on]="hasFloor()"></div>
           </div>
           @if (hasFloor()) {
             <div class="form-row-2 mt-4" formGroupName="floor">
-              <ws-input
-                formControlName="amount"
-                type="number"
-                [label]="'PLANS.FIELD_FLOOR_AMOUNT' | translate"
-              />
+              <div class="field-with-help">
+                <div class="field-help-label">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_FLOOR_AMOUNT' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_FLOOR_AMOUNT' | translate" />
+                </div>
+                <ws-input formControlName="amount" type="number" />
+              </div>
             </div>
           }
         </div>
@@ -301,8 +359,8 @@
           <div class="preview-section">
             <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
             <span class="preview-value">
-              {{ 'PLANS.MEASUREMENT_' + $any(MeasurementType)[$any(form.get('measurement.type'))?.value]?.toUpperCase() | translate }}
-              · {{ 'PLANS.AGGREGATION_' + $any(MeasurementAggregation)[$any(form.get('measurement.aggregation'))?.value]?.toUpperCase() | translate }}
+              {{ measurementTypeKey(form.get('measurement.type')?.value) | translate }}
+              · {{ measurementAggregationKey(form.get('measurement.aggregation')?.value) | translate }}
             </span>
           </div>
           <div class="preview-section">

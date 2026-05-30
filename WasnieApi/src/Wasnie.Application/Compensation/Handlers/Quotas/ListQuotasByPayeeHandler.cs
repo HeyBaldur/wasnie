@@ -37,7 +37,15 @@ public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db, IAuthoriz
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
 
+        // Load payee name and plan names for the fetched page (sequential — EF Core forbids concurrent ops on one DbContext)
         var payee = await db.Payees.FirstOrDefaultAsync(x => x.Id == request.PayeeId, cancellationToken);
+        var planIds = paged.Items.Select(q => q.PlanId).Distinct().ToList();
+        var planNames = await db.CompensationPlans
+            .Where(pl => planIds.Contains(pl.Id))
+            .Select(pl => new { pl.Id, pl.Name })
+            .ToListAsync(cancellationToken);
+
+        var planNameById = planNames.ToDictionary(pl => pl.Id, pl => pl.Name);
 
         var dtos = paged.Items.Select(q => new QuotaSummaryDto(
             q.Id,
@@ -46,6 +54,7 @@ public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db, IAuthoriz
             payee?.FullName ?? string.Empty,
             payee?.EmployeeCode ?? string.Empty,
             q.PlanId,
+            planNameById.GetValueOrDefault(q.PlanId, string.Empty),
             q.MeasurementType,
             q.Amount.Amount,
             q.Amount.Currency,

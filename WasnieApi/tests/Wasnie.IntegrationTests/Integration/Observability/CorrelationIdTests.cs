@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using FluentAssertions;
 using Wasnie.IntegrationTests.Infrastructure;
 

@@ -6,7 +6,10 @@ using Wasnie.Domain.Exceptions;
 
 namespace Wasnie.Api.Middleware;
 
-public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+public sealed class ExceptionHandlingMiddleware(
+    RequestDelegate next,
+    ILogger<ExceptionHandlingMiddleware> logger,
+    IWebHostEnvironment env)
 {
     public async Task InvokeAsync(HttpContext context)
     {
@@ -53,8 +56,20 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled exception");
-            await WriteErrorResponse(context, HttpStatusCode.InternalServerError, "An unexpected error occurred.", null);
+            logger.LogError(ex, "Unhandled exception on {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+
+            // In Development: expose the actual exception so devs can diagnose without
+            // hunting through logs. In Production: generic message only (security).
+            var message = env.IsDevelopment()
+                ? $"[{ex.GetType().Name}] {ex.Message}"
+                : "An unexpected error occurred.";
+
+            var details = env.IsDevelopment() && ex.InnerException is not null
+                ? new[] { $"Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message}" }
+                : null;
+
+            await WriteErrorResponse(context, HttpStatusCode.InternalServerError, message, details);
         }
     }
 

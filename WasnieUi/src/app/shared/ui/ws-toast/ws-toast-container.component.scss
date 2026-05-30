@@ -2,8 +2,8 @@
 
 .ws-toast-stack {
   position: fixed;
-  bottom: var(--space-5);
-  right: var(--space-5);
+  bottom: var(--space-6);
+  right: var(--space-8);
   z-index: 2000;
   @apply flex flex-col;
   gap: var(--space-2);
