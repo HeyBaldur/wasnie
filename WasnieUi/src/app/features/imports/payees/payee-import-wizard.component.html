@@ -10,26 +10,11 @@
       [currentStep]="currentStep()"
       hideOnComplete="complete"
     >
-      <ws-wizard-step
-        name="upload"
-        [title]="'IMPORTS.PAYEES.STEP_UPLOAD' | translate"
-        icon="upload"
-      />
-      <ws-wizard-step
-        name="map"
-        [title]="'IMPORTS.PAYEES.STEP_MAP' | translate"
-        icon="arrow-right-left"
-      />
-      <ws-wizard-step
-        name="preview"
-        [title]="'IMPORTS.PAYEES.STEP_PREVIEW' | translate"
-        icon="eye"
-      />
-      <ws-wizard-step
-        name="complete"
-        [title]="'IMPORTS.PAYEES.STEP_COMPLETE' | translate"
-        icon="check-circle"
-      />
+      <ws-wizard-step name="upload"    [title]="'IMPORTS.PAYEES.STEP_UPLOAD'    | translate" icon="upload" />
+      <ws-wizard-step name="map"       [title]="'IMPORTS.PAYEES.STEP_MAP'       | translate" icon="arrow-right-left" />
+      <ws-wizard-step name="preview"   [title]="'IMPORTS.PAYEES.STEP_PREVIEW'   | translate" icon="eye" />
+      <ws-wizard-step name="importing" [title]="'IMPORTS.PAYEES.STEP_IMPORTING' | translate" icon="loader" />
+      <ws-wizard-step name="complete"  [title]="'IMPORTS.PAYEES.STEP_COMPLETE'  | translate" icon="check-circle" />
 
       @if (currentStep() === 'upload') {
         <app-upload-step (parsed)="onParsed($event)" />
@@ -49,8 +34,18 @@
           [fileId]="parseResult()!.fileId"
           [columnMapping]="columnMapping()!"
           [validateResponse]="validateResponse()!"
-          (imported)="onImported($event)"
+          (importRequested)="onImportRequested($event)"
           (back)="onBackToMap()"
+        />
+      }
+
+      @if (currentStep() === 'importing' && parseResult() && columnMapping()) {
+        <app-payee-importing-step
+          [fileId]="parseResult()!.fileId"
+          [columnMapping]="columnMapping()!"
+          [skipWarnings]="skipWarnings()"
+          (completed)="onImportCompleted($event)"
+          (retryRequested)="onImportRetry()"
         />
       }
 

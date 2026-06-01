@@ -437,7 +437,16 @@
       "COMPLETE_SKIPPED": "{{ count }} rows were skipped due to errors.",
       "BTN_IMPORT_MORE": "Import more",
       "BTN_VIEW_PAYEES": "View payees",
-      "STEP_COMPLETE": "Complete"
+      "STEP_IMPORTING": "Importing…",
+      "STEP_COMPLETE": "Complete",
+      "IMPORTING_TITLE": "Importing payees…",
+      "IMPORTING_SUBTITLE": "Please wait while your payees are being imported."
+    },
+    "SHARED": {
+      "NET_ERROR": "Network issue — retrying…",
+      "FAILED_TITLE": "Import failed",
+      "FAILED_MSG": "An unexpected error occurred. Please try again.",
+      "RETRY": "Back to preview"
     },
     "TRANSACTIONS": {
       "TITLE": "Import Transactions",

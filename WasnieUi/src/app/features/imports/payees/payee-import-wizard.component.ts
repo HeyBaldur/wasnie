@@ -5,6 +5,7 @@ import { WsPageLayoutComponent, WsWizardComponent, WsWizardStepComponent } from 
 import { UploadStepComponent } from './steps/upload-step.component';
 import { MappingStepComponent } from './steps/mapping-step.component';
 import { PreviewStepComponent } from './steps/preview-step.component';
+import { PayeeImportingStepComponent } from './steps/importing-step.component';
 import { CompleteStepComponent } from './steps/complete-step.component';
 import {
   PayeeImportColumnMapping,
@@ -13,7 +14,7 @@ import {
   ValidateResponse,
 } from './models/payee-import.models';
 
-type WizardStep = 'upload' | 'map' | 'preview' | 'complete';
+type WizardStep = 'upload' | 'map' | 'preview' | 'importing' | 'complete';
 
 const STORAGE_KEY = 'wasnie:import-wizard:payees';
 
@@ -36,6 +37,7 @@ interface PersistedWizardState {
     UploadStepComponent,
     MappingStepComponent,
     PreviewStepComponent,
+    PayeeImportingStepComponent,
     CompleteStepComponent,
   ],
   templateUrl: './payee-import-wizard.component.html',
@@ -48,15 +50,16 @@ export class PayeeImportWizardComponent implements OnInit {
   columnMapping = signal<PayeeImportColumnMapping | null>(null);
   validateResponse = signal<ValidateResponse | null>(null);
   importResult = signal<PayeeImportResult | null>(null);
+  skipWarnings = signal(false);
 
   readonly steps: { key: WizardStep; labelKey: string }[] = [
-    { key: 'upload', labelKey: 'IMPORTS.PAYEES.STEP_UPLOAD' },
-    { key: 'map', labelKey: 'IMPORTS.PAYEES.STEP_MAP' },
-    { key: 'preview', labelKey: 'IMPORTS.PAYEES.STEP_PREVIEW' },
+    { key: 'upload',    labelKey: 'IMPORTS.PAYEES.STEP_UPLOAD' },
+    { key: 'map',       labelKey: 'IMPORTS.PAYEES.STEP_MAP' },
+    { key: 'preview',   labelKey: 'IMPORTS.PAYEES.STEP_PREVIEW' },
+    { key: 'importing', labelKey: 'IMPORTS.PAYEES.STEP_IMPORTING' },
   ];
 
   constructor() {
-    // Persist state on every signal change so work survives a forced re-login
     effect(() => {
       const step = this.currentStep();
       if (step === 'complete') {
@@ -72,7 +75,7 @@ export class PayeeImportWizardComponent implements OnInit {
       try {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch {
-        // sessionStorage quota exceeded — ignore, not critical
+        // quota exceeded — not critical
       }
     });
   }
@@ -82,17 +85,21 @@ export class PayeeImportWizardComponent implements OnInit {
     if (!raw) return;
     try {
       const state = JSON.parse(raw) as PersistedWizardState;
-      if (state.parseResult) this.parseResult.set(state.parseResult);
-      if (state.columnMapping) this.columnMapping.set(state.columnMapping);
+      if (state.parseResult)    this.parseResult.set(state.parseResult);
+      if (state.columnMapping)  this.columnMapping.set(state.columnMapping);
       if (state.validateResponse) this.validateResponse.set(state.validateResponse);
-      if (state.step && state.step !== 'upload') this.currentStep.set(state.step);
+      // Never restore 'importing' step from session — the request is gone
+      const safeStep = state.step === 'importing' ? 'preview' : state.step;
+      if (safeStep && safeStep !== 'upload') this.currentStep.set(safeStep);
     } catch {
       sessionStorage.removeItem(STORAGE_KEY);
     }
   }
 
   stepIndex(step: WizardStep): number {
-    const map: Record<WizardStep, number> = { upload: 0, map: 1, preview: 2, complete: 3 };
+    const map: Record<WizardStep, number> = {
+      upload: 0, map: 1, preview: 2, importing: 3, complete: 4,
+    };
     return map[step];
   }
 
@@ -101,7 +108,8 @@ export class PayeeImportWizardComponent implements OnInit {
   }
 
   isStepActive(step: WizardStep): boolean {
-    return step === this.currentStep() || (step === 'preview' && this.currentStep() === 'complete');
+    return step === this.currentStep()
+      || (step === 'importing' && this.currentStep() === 'complete');
   }
 
   onParsed(result: ParseResponse & { fileName: string; fileSize: number }): void {
@@ -117,9 +125,18 @@ export class PayeeImportWizardComponent implements OnInit {
     this.currentStep.set('preview');
   }
 
-  onImported(result: PayeeImportResult): void {
+  onImportRequested(event: { skipWarnings: boolean }): void {
+    this.skipWarnings.set(event.skipWarnings);
+    this.currentStep.set('importing');
+  }
+
+  onImportCompleted(result: PayeeImportResult): void {
     this.importResult.set(result);
     this.currentStep.set('complete');
+  }
+
+  onImportRetry(): void {
+    this.currentStep.set('preview');
   }
 
   onBackToUpload(): void {
@@ -139,5 +156,6 @@ export class PayeeImportWizardComponent implements OnInit {
     this.columnMapping.set(null);
     this.validateResponse.set(null);
     this.importResult.set(null);
+    this.skipWarnings.set(false);
   }
 }

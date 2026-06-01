@@ -541,7 +541,16 @@
       "COMPLETE_SKIPPED": "{{ count }} filas fueron omitidas por errores.",
       "BTN_IMPORT_MORE": "Importar más",
       "BTN_VIEW_PAYEES": "Ver beneficiarios",
-      "STEP_COMPLETE": "Completado"
+      "STEP_IMPORTING": "Importando…",
+      "STEP_COMPLETE": "Completado",
+      "IMPORTING_TITLE": "Importando beneficiarios…",
+      "IMPORTING_SUBTITLE": "Espera mientras se importan tus beneficiarios."
+    },
+    "SHARED": {
+      "NET_ERROR": "Problema de red — reintentando…",
+      "FAILED_TITLE": "Error al importar",
+      "FAILED_MSG": "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
+      "RETRY": "Volver a la vista previa"
     },
     "TRANSACTIONS": {
       "TITLE": "Importar Transacciones",

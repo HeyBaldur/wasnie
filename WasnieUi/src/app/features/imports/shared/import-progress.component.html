@@ -1,0 +1,35 @@
+<div class="import-progress">
+  @if (!errorMessage()) {
+    <div class="import-progress__title">{{ title() }}</div>
+
+    @if (progress() === null) {
+      <div class="import-progress__bar import-progress__bar--indeterminate">
+        <div class="import-progress__fill"></div>
+      </div>
+    } @else {
+      <div class="import-progress__bar">
+        <div class="import-progress__fill" [style.width.%]="progress()"></div>
+      </div>
+    }
+
+    @if (subtitle()) {
+      <p class="import-progress__subtitle">{{ subtitle() }}</p>
+    }
+
+    @if (netError()) {
+      <p class="import-progress__net-error">
+        <app-icon name="wifi-off" [size]="13" />
+        {{ 'IMPORTS.SHARED.NET_ERROR' | translate }}
+      </p>
+    }
+  } @else {
+    <div class="import-progress__failure">
+      <app-icon name="x-circle" [size]="40" class="import-progress__failure-icon" />
+      <h2>{{ 'IMPORTS.SHARED.FAILED_TITLE' | translate }}</h2>
+      <p>{{ errorMessage() || ('IMPORTS.SHARED.FAILED_MSG' | translate) }}</p>
+      <ws-button variant="secondary" (click)="onRetry()" data-testid="retry-btn">
+        {{ 'IMPORTS.SHARED.RETRY' | translate }}
+      </ws-button>
+    </div>
+  }
+</div>

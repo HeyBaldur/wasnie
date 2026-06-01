@@ -124,19 +124,12 @@
     {{ 'IMPORTS.PAYEES.SKIP_WARNINGS' | translate }}
   </label>
 
-  @if (error()) {
-    <p class="preview-error">
-      <app-icon name="alert-circle" [size]="14" />
-      {{ error()! | translate }}
-    </p>
-  }
-
   <div class="preview-actions">
     <ws-button variant="secondary" (click)="onBack()">
       <app-icon name="arrow-left" [size]="14" />
       {{ 'COMMON.BACK' | translate }}
     </ws-button>
-    <ws-button variant="primary" [disabled]="willImportCount === 0" [loading]="loading()" (click)="onImport()">
+    <ws-button variant="primary" [disabled]="willImportCount === 0" (click)="onImport()">
       <app-icon name="upload-cloud" [size]="14" />
       {{ 'IMPORTS.PAYEES.BTN_IMPORT' | translate : { count: willImportCount } }}
     </ws-button>

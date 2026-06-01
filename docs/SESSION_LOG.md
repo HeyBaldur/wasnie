@@ -10,6 +10,53 @@
 
 ---
 
+## 2026-06-01 — Full day: WI-PROD-A.1 validated live; WI-PROD-D + WI-PROD-L done; 3 stores, ~12,500 txns
+
+**Duration:** Full day (morning + afternoon)
+**Phase:** Phase 2 (retail SPM domain model + UX improvements)
+**Tests at end of day:** 595 backend (238 unit + 357 integration), 143 frontend — no regressions.
+
+### Morning — WI-PROD-MODEL Part 3 + WI-PROD-A.1 implementation
+
+WI-PROD-MODEL was closed with three final decisions (10, 11, 12 — see Decision #37 in PROJECT_STATUS.md). WI-PROD-A.1 was then implemented and test-validated: `Payee.Email` and `Payee.HireDate` made nullable end-to-end, `FieldRequirementSetting` entity + settings system built, validators made conditional via `IFieldRequirementService`, and a Settings UI (TenantAdmin-only) built to toggle the two fields. `ValidationBehavior` was fixed from sync `Validate()` to async `ValidateAsync()` (critical bug that would have broken any future `MustAsync` validator). EF migration with filtered unique index, seed for existing tenants, and deduplication step. +32 backend tests, 0 regressions. See the WI-PROD-A.1 session entry below for full implementation details.
+
+### Afternoon — real-data validation + UX fixes
+
+**Real-data pass 1 — Warszawa / Galeria Mokotów (EMP201-EMP209, 4,232 txns):**
+- Owner toggled Email and HireDate to Optional in the new Settings → Field Requirements page.
+- Re-imported `Reserved_Warszawa_Employees_April2026.xlsx` (9 employees, 4 with no email) — all 9 imported with 0 errors. The original WI-PROD-A.1 blocker is dead.
+- Imported 4,232 Warszawa transaction rows — all successful. Payee name resolution (WI-PROD-F) correctly resolved all names server-side.
+
+**Payee import UX fix — WI-PROD-L (DONE):**
+Owner observed that the Payee import wizard lacked the progress screen and result feedback that the Transaction wizard had — clicking "Import" left the user on the preview table with only a spinning button. Claude Code implemented:
+- Shared `ImportProgressComponent` (`features/imports/shared/`) — visual component used by both wizards (indeterminate/determinate bar, error/retry state). This delivers WI-PROD-D (progress bar promoted when second consumer appeared).
+- New `PayeeImportingStepComponent` — 5th wizard step fires the HTTP import call on init, shows animated bar, transitions to complete or shows error with retry.
+- Transaction wizard refactored to use the shared component (behaviour unchanged, 6 existing tests pass).
+- Payee wizard extended: 4 steps → 5 steps; preview step now emits event to wizard rather than calling service directly.
+- 143/143 frontend tests pass, 0 regressions.
+
+**Real-data pass 2 — Silesia City Center Katowice (EMP301-EMP310, 5,066 txns):**
+- Owner generated a new store dataset (10 payees, 5,066 April 2026 transactions).
+- Imported all 10 payees via the updated wizard (new "Importing…" progress screen confirmed working).
+- Imported 5,066 transactions — all successful.
+- Tenant now has three stores coexisting: Galeria Katowice (8 payees, 3,183 txns), Galeria Mokotów Warszawa (9 payees, 4,232 txns), Silesia City Center Katowice (10 payees, 5,066 txns) — ~26 payees, ~12,500 transactions total. No regressions at this volume.
+
+### Items closed today
+
+- WI-PROD-MODEL — ✅ CLOSED (final decisions recorded)
+- WI-PROD-A.1 — ✅ DONE (implemented + real-data validated)
+- WI-PROD-D — ✅ DONE (delivered via WI-PROD-L)
+- WI-PROD-L — ✅ DONE (payee import UX: progress + result screens)
+
+### Items remaining (next sessions, priority TBD by owner)
+
+- WI-PROD-A.2 — additional configurable fields (Role, ManagerId, EmploymentType, Location)
+- WI-PROD-A.3 — assignment commands (AssignPayee / ReassignPayee state machine)
+- WI-PROD-CURRENCY — full multi-currency system (account currency + FX + original/converted duality)
+- WI-PROD-K — books reconciliation tool
+
+---
+
 ## 2026-06-01 — WI-PROD-A.1: Email + HireDate optional via FieldRequirementSettings system
 
 **Duration:** ~3 hours

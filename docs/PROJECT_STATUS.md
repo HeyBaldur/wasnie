@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-01
-**Updated by:** Rodolfo Calvo (WI-PROD-A.1 DONE — Email + HireDate optional via field requirement config system)
+**Last updated:** 2026-06-01 (end of day)
+**Updated by:** Rodolfo Calvo (WI-PROD-A.1 real-data validated; WI-PROD-D DONE; WI-PROD-L DONE — payee import UX + shared progress component; 3 stores, ~12,500 txns imported)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** WI-PROD-A.1 DONE (2026-06-01). Email and HireDate are now optional per-tenant via the new `FieldRequirementSettings` system. Real-data retail import blocker resolved. Next: WI-PROD-A.2 (additional configurable fields: Role, ManagerId, EmploymentType, Location) or WI-PROD-A.3 (assignment commands for payee reassignment). Backend tests: 595 passing (238 unit + 357 integration). Frontend tests: 143 passing.
+**Right now we are:** End-of-day 2026-06-01. WI-PROD-A.1 is validated live: three retail stores imported into the same tenant — Galeria Katowice (8 payees, 3,183 txns), Galeria Mokotów Warszawa (9 payees, 4,232 txns), Silesia City Center Katowice (10 payees, 5,066 txns). Total: ~26 payees, ~12,500 transactions, no regressions. WI-PROD-D DONE (progress bar promoted to shared component). WI-PROD-L DONE (payee import wizard now has progress + result screens, matching transactions). Next sessions: WI-PROD-A.2, WI-PROD-A.3, WI-PROD-CURRENCY, or WI-PROD-K. Backend tests: 595 (238 unit + 357 integration). Frontend tests: 143.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -386,6 +386,8 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. After the two parser/date bugs were fixed, Upload + Map + Preview completed. Preview was blocked by expected "payee not found" (payees were not pre-loaded — intentional test). No further bugs in the wizard itself. The following items are **product/domain design decisions**, not code bugs.
 
+> **Real-data validation status (as of 2026-06-01):** Three retail stores imported successfully into the same tenant — Galeria Katowice (EMP001-EMP008, 3,183 txns), Galeria Mokotów Warszawa (EMP201-EMP209, 4,232 txns), and Silesia City Center Katowice (EMP301-EMP310, 5,066 txns). Total: ~26 payees, ~12,500 transactions, all imported via the Hangfire async pipeline with the field-requirement system (email/hire date optional per WI-PROD-A.1) and server-side payee name resolution (WI-PROD-F) functioning end to end. The original blocker that motivated WI-PROD-A.1 is dead in real testing. **No regressions observed.**
+
 ---
 
 ### WI-PROD-MODEL — Retail SPM domain model review ✅ CLOSED (2026-06-01)
@@ -480,13 +482,11 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
-### WI-PROD-D — Promote `WsProgressBar` to design system
+### WI-PROD-D — Promote `WsProgressBar` to design system ✅ DONE (2026-06-01)
 
-**Status:** Deferred. Low urgency.
+**Status:** DONE. The trigger condition fired: payee import needed a progress screen, making it the second consumer. Delivered as part of WI-PROD-L (see below).
 
-**Current state:** Progress bar is LOCAL CSS inside `transaction-import-progress-step.component.scss`. Pattern documented in `DESIGN_SYSTEM.md` as a step to elevate.
-
-**Trigger for promotion:** When a second feature needs a progress bar (likely Phase 3 calculation engine runs, or payout processing). Promoting early adds design-system overhead for a single consumer.
+**What shipped:** Shared `ImportProgressComponent` (`features/imports/shared/import-progress.component`) replaces the local progress-bar CSS that was in the transaction wizard. Both import wizards now use this shared component. Progress bar animation (indeterminate sweep for sync imports, determinate fill for polled jobs), error/retry state, and net-error indicator are all in one place. See WI-PROD-L for full details.
 
 ---
 
@@ -592,6 +592,26 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 **Relationship to WI-PROD-J:** WI-PROD-J covers a summary widget on the transactions list page (per-currency totals + time-series chart). WI-PROD-K is a dedicated reconciliation screen optimized for audit-readiness. There may be overlap; resolve the boundary between the two WIs during scoping.
 
 **Scope when ready:** Reconciliation screen with aggregation by period / currency / source / payee; export capability (CSV/XLSX) so the comp manager can cross-check against GL; back-end aggregation endpoint (server-side, tenant-isolated). Exact field set to be confirmed during scoping.
+
+---
+
+### WI-PROD-L — Payee import wizard: progress indicator + result feedback ✅ DONE (2026-06-01)
+
+**Status:** DONE. Discovered and delivered during the Silesia City Center real-data test session (2026-06-01).
+
+**Problem observed:** The payee import wizard executed imports synchronously with no dedicated progress screen. While the import ran, the user remained on the preview step table with only a spinning button as feedback. No dedicated success or failure screen existed. In contrast, the transaction import wizard had a full "Importing…" progress step with an animated bar, a completion screen showing row counts, and a failure screen with error message and retry. This inconsistency was noticed during a real import of the Silesia City Center dataset.
+
+**What shipped (all frontend, no backend changes):**
+
+1. **Shared `ImportProgressComponent`** (`features/imports/shared/import-progress.component`) — pure visual component. Inputs: `title`, `subtitle`, `progress` (null = indeterminate sweep, 0–100 = determinate fill), `errorMessage`, `netError`. Output: `retry` event. Delivers WI-PROD-D (progress bar promoted to shared use when second consumer appeared). EN/ES/PL i18n in `IMPORTS.SHARED.*` namespace.
+
+2. **`PayeeImportingStepComponent`** (`features/imports/payees/steps/importing-step.component`) — new wizard step. Fires the import HTTP call on `ngOnInit()`, shows indeterminate progress bar, emits `completed(result)` on success or shows error + retry on failure. Session storage never restores this step (the request is gone on page refresh — restored to preview instead).
+
+3. **Transaction wizard refactored** — `TxProgressStepComponent` now delegates all visual rendering to `ImportProgressComponent`. Local progress-bar CSS (previously in `progress-step.component.scss`) moved to the shared component. Behaviour (polling, state machine) unchanged. All 6 existing progress-step tests pass.
+
+4. **Payee wizard updated** — 4 steps (upload → map → preview → complete) extended to 5 (+ importing). Preview step no longer calls the import service directly; it emits `importRequested` to the wizard, which transitions to the importing step. Wizard stores `skipWarnings` signal.
+
+**Validation:** Owner successfully imported the Silesia City Center dataset (10 payees, 5,066 transactions) via the updated wizard. No regressions in payee or transaction import flows. Test suite: 143/143 frontend tests pass.
 
 ---
 
