@@ -5,6 +5,10 @@
       [subtitle]="'EMPTY_STATE.ADMIN_DESC' | translate"
     />
 
+    <div class="settings-sections">
+      <app-appearance-card />
+    </div>
+
     <div class="settings-sections" *hasPermission="'Settings.Update'">
       <app-field-requirements />
     </div>

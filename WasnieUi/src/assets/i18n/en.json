@@ -654,6 +654,10 @@
     "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?"
   },
   "SETTINGS": {
+    "APPEARANCE_TITLE": "Appearance",
+    "APPEARANCE_DESC": "Customize the language and visual theme of your workspace.",
+    "LANGUAGE": "Language",
+    "THEME": "Theme",
     "FIELD_REQUIREMENTS_TITLE": "Field requirements",
     "FIELD_REQUIREMENTS_DESC": "Control which fields are required when creating or importing payees. Changes apply to new records only — existing data is not affected.",
     "FIELD_REQUIRED": "Required",

@@ -1,0 +1,114 @@
+@reference "../../../../styles.scss";
+
+.settings-card {
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.settings-section-title {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.settings-section-desc {
+  margin: 0 0 var(--space-6) 0;
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+}
+
+.appearance-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.appearance-row__label {
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.lang-switcher {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.lang-btn {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid transparent;
+  transition: background-color 100ms ease, color 100ms ease, border-color 100ms ease;
+
+  &:hover {
+    color: var(--color-brand);
+    background-color: var(--color-brand-muted);
+  }
+
+  &--active {
+    color: var(--color-brand);
+    background-color: var(--color-brand-muted);
+    border-color: var(--color-brand);
+  }
+}
+
+.theme-options {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.theme-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid transparent;
+  transition: background-color 100ms ease, color 100ms ease, border-color 100ms ease;
+
+  &:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-surface);
+    border-color: var(--color-border-default);
+  }
+
+  &--active {
+    color: var(--color-brand);
+    background-color: var(--color-brand-muted);
+    border-color: var(--color-brand);
+  }
+}
+
+.theme-btn__icon {
+  font-size: var(--font-size-14);
+  line-height: 1;
+}
+
+.theme-btn__label {
+  white-space: nowrap;
+}

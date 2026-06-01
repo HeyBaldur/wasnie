@@ -654,6 +654,10 @@
     }
   },
   "SETTINGS": {
+    "APPEARANCE_TITLE": "Wygląd",
+    "APPEARANCE_DESC": "Dostosuj język i motyw wizualny swojego obszaru roboczego.",
+    "LANGUAGE": "Język",
+    "THEME": "Motyw",
     "FIELD_REQUIREMENTS_TITLE": "Wymagania pól",
     "FIELD_REQUIREMENTS_DESC": "Kontroluj, które pola są wymagane przy tworzeniu lub importowaniu beneficjentów. Zmiany dotyczą tylko nowych rekordów — istniejące dane nie są zmieniane.",
     "FIELD_REQUIRED": "Wymagane",
