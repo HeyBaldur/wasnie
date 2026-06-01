@@ -21,6 +21,8 @@ export interface Payee {
   activeAssignmentCount: number;
   createdAt: string;
   updatedAt: string;
+  employmentType?: string | null;
+  location?: string | null;
 }
 
 export interface CreatePayeeRequest {
@@ -30,6 +32,8 @@ export interface CreatePayeeRequest {
   hireDate: string | null;
   role?: string | null;
   managerId?: string | null;
+  employmentType?: string | null;
+  location?: string | null;
 }
 
 export interface UpdatePayeeRequest {
@@ -40,6 +44,8 @@ export interface UpdatePayeeRequest {
   hireDate: string | null;
   role?: string | null;
   managerId?: string | null;
+  employmentType?: string | null;
+  location?: string | null;
 }
 
 export interface PayeeListParams {

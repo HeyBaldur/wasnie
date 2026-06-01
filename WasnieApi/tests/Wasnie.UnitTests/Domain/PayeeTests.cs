@@ -84,6 +84,71 @@ public sealed class PayeeTests
         act.Should().Throw<DomainException>();
     }
 
+    // ── EmploymentType ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Create_WithEmploymentType_StoresValue()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now, employmentType: EmploymentType.FullTime);
+        payee.EmploymentType.Should().Be(EmploymentType.FullTime);
+    }
+
+    [Fact]
+    public void Create_NoEmploymentType_StoresNull()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now);
+        payee.EmploymentType.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_EmploymentType_ChangesValue()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now, employmentType: EmploymentType.PartTime);
+        payee.Update("Test User", "EMP001", null, null, null, null, "admin", Now.AddHours(1),
+            employmentType: EmploymentType.Contractor);
+        payee.EmploymentType.Should().Be(EmploymentType.Contractor);
+    }
+
+    [Fact]
+    public void Update_NullEmploymentType_ClearsValue()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now, employmentType: EmploymentType.FullTime);
+        payee.Update("Test User", "EMP001", null, null, null, null, "admin", Now.AddHours(1));
+        payee.EmploymentType.Should().BeNull();
+    }
+
+    // ── Location ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Create_WithLocation_TrimsAndStores()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now, location: "  Warsaw  ");
+        payee.Location.Should().Be("Warsaw");
+    }
+
+    [Fact]
+    public void Create_WhitespaceLocation_StoresNull()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now, location: "   ");
+        payee.Location.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_Location_ChangesValue()
+    {
+        var payee = Payee.Create(TenantId, "Test User", "EMP001", null, null,
+            "admin", Guid.NewGuid(), Now, location: "Krakow");
+        payee.Update("Test User", "EMP001", null, null, null, null, "admin", Now.AddHours(1),
+            location: "Warsaw");
+        payee.Location.Should().Be("Warsaw");
+    }
+
     // ── Update ────────────────────────────────────────────────────────────────
 
     [Fact]

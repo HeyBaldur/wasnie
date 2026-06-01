@@ -5,6 +5,7 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
+using Wasnie.Domain.Compensation.Payees;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
@@ -40,8 +41,11 @@ public sealed class PayeeImportValidationService(
                 .ToListAsync(cancellationToken),
             StringComparer.OrdinalIgnoreCase);
 
-        var emailRequired = await fieldRequirements.IsRequiredAsync("Payee", "Email", cancellationToken);
-        var hireDateRequired = await fieldRequirements.IsRequiredAsync("Payee", "HireDate", cancellationToken);
+        var emailRequired          = await fieldRequirements.IsRequiredAsync("Payee", "Email",          cancellationToken);
+        var hireDateRequired       = await fieldRequirements.IsRequiredAsync("Payee", "HireDate",       cancellationToken);
+        var roleRequired           = await fieldRequirements.IsRequiredAsync("Payee", "Role",           cancellationToken);
+        var employmentTypeRequired = await fieldRequirements.IsRequiredAsync("Payee", "EmploymentType", cancellationToken);
+        var locationRequired       = await fieldRequirements.IsRequiredAsync("Payee", "Location",       cancellationToken);
 
         var fileCodesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fileEmailsInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -146,12 +150,48 @@ public sealed class PayeeImportValidationService(
                 }
             }
 
-            // ── Role (optional, warn if empty) ────────────────────────────
+            // ── Role ──────────────────────────────────────────────────────
             if (mapping.RoleColumn is not null)
             {
                 var role = GetField(row, mapping.RoleColumn);
                 if (string.IsNullOrWhiteSpace(role))
-                    issues.Add(Warn("Role", "Role is empty. Consider filling in the payee's role for better reporting."));
+                {
+                    if (roleRequired)
+                        issues.Add(Error("Role", "Role is required."));
+                    else
+                        issues.Add(Warn("Role", "Role is empty. Consider filling in the payee's role for better reporting."));
+                }
+            }
+
+            // ── EmploymentType ─────────────────────────────────────────────
+            if (mapping.EmploymentTypeColumn is not null)
+            {
+                var et = GetField(row, mapping.EmploymentTypeColumn);
+                if (string.IsNullOrWhiteSpace(et))
+                {
+                    if (employmentTypeRequired)
+                        issues.Add(Error("EmploymentType", "Employment type is required."));
+                }
+                else if (!Enum.TryParse<EmploymentType>(et, ignoreCase: true, out _))
+                {
+                    issues.Add(Error("EmploymentType",
+                        $"'{et}' is not a valid employment type. Expected one of: FullTime, PartTime, Temporary, Contractor."));
+                }
+            }
+
+            // ── Location ──────────────────────────────────────────────────
+            if (mapping.LocationColumn is not null)
+            {
+                var location = GetField(row, mapping.LocationColumn);
+                if (string.IsNullOrWhiteSpace(location))
+                {
+                    if (locationRequired)
+                        issues.Add(Error("Location", "Location is required."));
+                }
+                else if (location.Length > 200)
+                {
+                    issues.Add(Error("Location", "Location must be 200 characters or fewer."));
+                }
             }
 
             results.Add(new PayeeRowValidationResult

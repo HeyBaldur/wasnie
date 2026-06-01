@@ -52,6 +52,25 @@ export class PayeeFormComponent implements OnInit {
   readonly hireDateRequired = computed(() =>
     this.fieldRequirements().find(r => r.fieldName === 'HireDate')?.isRequired ?? true
   );
+  readonly roleRequired = computed(() =>
+    this.fieldRequirements().find(r => r.fieldName === 'Role')?.isRequired ?? false
+  );
+  readonly managerRequired = computed(() =>
+    this.fieldRequirements().find(r => r.fieldName === 'ManagerId')?.isRequired ?? false
+  );
+  readonly employmentTypeRequired = computed(() =>
+    this.fieldRequirements().find(r => r.fieldName === 'EmploymentType')?.isRequired ?? false
+  );
+  readonly locationRequired = computed(() =>
+    this.fieldRequirements().find(r => r.fieldName === 'Location')?.isRequired ?? false
+  );
+
+  readonly employmentTypeOptions: SelectOption[] = [
+    { value: 'FullTime',   label: 'PAYEES.EMPLOYMENT_TYPE_FULLTIME' },
+    { value: 'PartTime',   label: 'PAYEES.EMPLOYMENT_TYPE_PARTTIME' },
+    { value: 'Temporary',  label: 'PAYEES.EMPLOYMENT_TYPE_TEMPORARY' },
+    { value: 'Contractor', label: 'PAYEES.EMPLOYMENT_TYPE_CONTRACTOR' },
+  ];
 
   readonly managerSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -76,6 +95,8 @@ export class PayeeFormComponent implements OnInit {
     hireDate: [''],
     role: ['', Validators.maxLength(100)],
     managerId: [''],
+    employmentType: [''],
+    location: ['', Validators.maxLength(200)],
   });
 
   constructor() {
@@ -90,6 +111,8 @@ export class PayeeFormComponent implements OnInit {
             hireDate: p.hireDate ?? '',
             role: p.role ?? '',
             managerId: p.managerId ?? '',
+            employmentType: p.employmentType ?? '',
+            location: p.location ?? '',
           });
         }
       });
@@ -97,22 +120,22 @@ export class PayeeFormComponent implements OnInit {
 
     // Sync required validators with settings
     effect(() => {
-      const emailCtrl = this.form.controls.email;
-      const hireDateCtrl = this.form.controls.hireDate;
+      const syncRequired = (ctrl: ReturnType<typeof this.form.get>, required: boolean) => {
+        if (!ctrl) return;
+        if (required) {
+          ctrl.addValidators(Validators.required);
+        } else {
+          ctrl.removeValidators(Validators.required);
+        }
+        ctrl.updateValueAndValidity({ emitEvent: false });
+      };
 
-      if (this.emailRequired()) {
-        emailCtrl.addValidators(Validators.required);
-      } else {
-        emailCtrl.removeValidators(Validators.required);
-      }
-      emailCtrl.updateValueAndValidity({ emitEvent: false });
-
-      if (this.hireDateRequired()) {
-        hireDateCtrl.addValidators(Validators.required);
-      } else {
-        hireDateCtrl.removeValidators(Validators.required);
-      }
-      hireDateCtrl.updateValueAndValidity({ emitEvent: false });
+      syncRequired(this.form.controls.email,          this.emailRequired());
+      syncRequired(this.form.controls.hireDate,        this.hireDateRequired());
+      syncRequired(this.form.controls.role,            this.roleRequired());
+      syncRequired(this.form.controls.managerId,       this.managerRequired());
+      syncRequired(this.form.controls.employmentType,  this.employmentTypeRequired());
+      syncRequired(this.form.controls.location,        this.locationRequired());
     });
   }
 
@@ -135,6 +158,8 @@ export class PayeeFormComponent implements OnInit {
       hireDate: v.hireDate || null,
       role: v.role.trim() || null,
       managerId: v.managerId || null,
+      employmentType: v.employmentType || null,
+      location: v.location.trim() || null,
     };
     this.saving.set(true);
     try {

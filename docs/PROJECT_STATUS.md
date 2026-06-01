@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-01 (end of day)
-**Updated by:** Rodolfo Calvo (WI-PROD-A.1 real-data validated; WI-PROD-D DONE; WI-PROD-L DONE — payee import UX + shared progress component; 3 stores, ~12,500 txns imported)
+**Last updated:** 2026-06-01 (WI-PROD-A.2 smoke-tested and closed)
+**Updated by:** Rodolfo Calvo (WI-PROD-A.2 DONE + in-vivo validated — Settings shows 6 rows, Payee form persists EmploymentType + Location; catalog now 6 configurable fields)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-01. WI-PROD-A.1 is validated live: three retail stores imported into the same tenant — Galeria Katowice (8 payees, 3,183 txns), Galeria Mokotów Warszawa (9 payees, 4,232 txns), Silesia City Center Katowice (10 payees, 5,066 txns). Total: ~26 payees, ~12,500 transactions, no regressions. WI-PROD-D DONE (progress bar promoted to shared component). WI-PROD-L DONE (payee import wizard now has progress + result screens, matching transactions). Next sessions: WI-PROD-A.2, WI-PROD-A.3, WI-PROD-CURRENCY, or WI-PROD-K. Backend tests: 595 (238 unit + 357 integration). Frontend tests: 143.
+**Right now we are:** End-of-day 2026-06-01. WI-PROD-A.2 DONE and smoke-tested in vivo. Payee entity now has `EmploymentType` (nullable enum: FullTime/PartTime/Temporary/Contractor) and `Location` (nullable string). The field-requirement catalog has grown from 2 entries (Email, HireDate) to 6 (+ Role, ManagerId, EmploymentType, Location). Settings UI is fully data-driven — shows 6 rows automatically. Payee create/edit form shows all 4 new fields with conditional required markers. Import wizard maps/validates the 2 new columns (with auto-detect). Bundle budget overrun (561 kB vs 500 kB) is pre-existing — NOT introduced by this WI. Backend: 628 tests pass (259 unit + 369 integration). Frontend: 143 tests pass. Next: WI-PROD-A.3, WI-PROD-CURRENCY, or WI-PROD-K.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -345,6 +345,16 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
    **Decision 12 — Import against an inactive payee: accept with warning.** When a CSV/XLSX import row's `EmployeeCode` matches a payee whose `IsActive` is false, the validator emits `IssueSeverity.Warning` with message `"Payee X (code Y) is inactive — assignment will be historical"`. Rows are imported and assigned to the inactive payee. Rationale: historical assignments are a legitimate retail scenario — a transaction from April 28 can legitimately arrive in the May 5 import even if the payee was deactivated on April 30. The wizard's existing `skipRowsWithWarnings` toggle continues to work; the comp manager can exclude them if desired. (2026-06-01)
 
+38. **WI-PROD-A.2 Done — Catalog extended to 6 configurable Payee fields (2026-06-01).** `EmploymentType` (enum: FullTime, PartTime, Temporary, Contractor) and `Location` (nullable string, max 200 chars) added to the Payee entity as nullable. `Role` and `ManagerId` pre-existed as entity fields but are now also represented in the `FieldRequirementSettings` catalog. All four new entries default Optional for both existing and new tenants — no existing data invalidated, no validation errors on records that omit these fields.
+
+   Implementation completed across two sessions: the first session (crashed mid-flight due to Claude Code's 1M-context billing limit) delivered the full Application layer (entity, enum, DTO, commands, handlers, validators, constants). The second session resumed cleanly via a continuation prompt and added the EF migration, import service extensions, frontend form fields, i18n keys, and tests — without redoing any prior work. Smoke-tested in vivo with real tenant data: Settings UI renders six rows; Payee edit form accepts and persists both new fields correctly.
+
+   Test count: 595 → 628 (+33 — 7 domain unit, 10 validator unit, 13 import integration, 3 additional). Build clean.
+
+   **Architectural win:** A.1's data-driven Settings UI (renders one row per `FieldRequirementSetting` returned by the API) absorbed the four new catalog entries automatically. Zero UI template changes were needed — only new i18n keys for the field labels. This confirms the data-driven approach: future catalog additions follow the same pattern (constant in `PayeeFieldNames` + seed row in migration + i18n key).
+
+   **Implements:** Decision B (extended to 6 fields), Decision F (EmploymentType), Decision H (Location as optional string dimension, named `Location` not `CostCenter`). (2026-06-01)
+
 ---
 
 ## Key naming conventions
@@ -426,7 +436,7 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ### WI-PROD-A — Field-level requirement configuration system per tenant
 
-**Status:** IN PROGRESS — WI-PROD-A.1 DONE (2026-06-01). Sub-WI A.1 shipped. Remaining: A.2 (additional configurable fields) and A.3 (assignment commands + UI).
+**Status:** IN PROGRESS — WI-PROD-A.1 ✅ DONE (2026-06-01). WI-PROD-A.2 ✅ DONE (2026-06-01). Remaining: A.3 (IsActive/DeactivatedAt lifecycle + AssignPayee/ReassignPayee commands + UI).
 
 **Full scope (all 12 WI-PROD-MODEL decisions — #35, #36, #37):**
 
@@ -442,12 +452,16 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 9. Import validator: `IssueSeverity.Warning` when `EmployeeCode` matches an inactive payee — message `"Payee X (code Y) is inactive — assignment will be historical"`. Row is imported; `skipRowsWithWarnings` toggle available (Decision 12).
 10. `Payee.Location` (or `CostCenter` — finalize naming during scoping) nullable string; treated as filter/group dimension in reports; also add to `CompensationTransaction` if confirmed during scoping (Decision H); joins configurable-fields list with default Optional.
 
-*Sub-WI A2 — Assignment commands (Decision 11):*
+*Sub-WI A.2 ✅ DONE (2026-06-01) — EmploymentType + Location; Role + ManagerId catalog-configurable:*
+7. `Payee.EmploymentType` nullable enum (FullTime/PartTime/Temporary/Contractor); joins configurable-fields catalog with default Optional. ✅
+8–10 (partial — no IsActive yet). `Payee.Location` nullable string (up to 200 chars); joins configurable-fields catalog with default Optional. ✅ `Payee.Role` and `Payee.ManagerId` pre-existed in the entity; now added to the `FieldRequirementSettings` catalog (both default Optional). ✅ Shared `PayeeFieldNames` constants class introduced — validators reference constants, not string literals; future catalog additions require only a constant + a seed row. ✅ Settings UI absorbed the four new entries automatically (data-driven from A.1 — zero template changes). ✅ `PayeeImportValidationService` extended for EmploymentType (enum validation) and Location (max-length); Role is now catalog-driven (Error vs. Warning). ✅ `PayeeImportExecutionService` passes both new fields to `Payee.Create()`. ✅ Tests: 595 → 628 (+33). Smoke-tested in vivo — Settings shows 6 rows; Payee form accepts and persists both fields. ✅
+
+*Sub-WI A.3 — IsActive lifecycle + assignment commands + Frontend UI (Decisions G, 11, E):*
+8. `Payee.IsActive` (default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable); `IsActive → false` sets `DeactivatedAt`; re-activation clears it; all transitions audit-logged. Ingest validator blocks assignment to inactive payees.
+9. Import validator: `IssueSeverity.Warning` when `EmployeeCode` matches inactive payee — `"Payee X (code Y) is inactive — assignment will be historical"`. Row imported; `skipRowsWithWarnings` toggle available.
 11. `AssignPayeeCommand` (`IMoneyCriticalCommand`): assigns a payee to a transaction where `PayeeId IS NULL`. No reason required. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`.
 12. `ReassignPayeeCommand` (`IMoneyCriticalCommand`): changes payee from A to B. Reason field REQUIRED (≥ 10 chars), persisted in audit log event. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`.
 13. State machine enforcement in domain layer: Paid → domain exception; Calculated → return to Pending + mark commission line obsolete; Eligible → return to Pending; Cancelled → allowed. Backend throws on violation.
-
-*Sub-WI A3 — Frontend UI (Decisions E, 11, and display work):*
 14. `User.PayeeId` nullable FK; TenantAdmin invite flow uses existing RBAC; manual invite-link mechanism for MVP (no email-send dependency — consistent with WI-02 deferral, Decision E).
 15. Assign / Reassign UI on the transaction detail/list (action gated by status: Paid rows show disabled/hidden action per CLAUDE.md §5.8 RBAC rules).
 16. Reason field modal for reassignment (required input, ≥ 10 chars, client-side validation).

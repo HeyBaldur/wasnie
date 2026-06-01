@@ -27,6 +27,12 @@ public sealed class PayeeImportValidationServiceTests
             Task.FromResult(true);
     }
 
+    private sealed class AlwaysRequiredExceptService(string exemptField) : IFieldRequirementService
+    {
+        public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken ct = default) =>
+            Task.FromResult(fieldName != exemptField);
+    }
+
     private static ApplicationDbContext CreateDb(Guid tenantId)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
@@ -419,7 +425,9 @@ public sealed class PayeeImportValidationServiceTests
     public async Task Validate_EmptyRole_ReturnsWarning()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        // Role optional → warning; use a service that requires Email/HireDate but not Role
+        var sut = new PayeeImportValidationService(db, new FakeClock(),
+            new AlwaysRequiredExceptService("Role"));
         var row = ValidRow();
         row["Role"] = "";  // empty role column present
         var mapping = new PayeeImportColumnMapping
@@ -452,6 +460,202 @@ public sealed class PayeeImportValidationServiceTests
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
 
         results[0].Issues.Should().NotContain(i => i.Field == "FullName" && i.Severity == IssueSeverity.Error);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  EmploymentType validation
+    // ──────────────────────────────────────────────────────────
+
+    private sealed class SelectiveService(string requiredField) : IFieldRequirementService
+    {
+        public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken ct = default) =>
+            Task.FromResult(fieldName == requiredField);
+    }
+
+    [Fact]
+    public async Task Validate_ValidEmploymentType_NoError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow();
+        row["ContractType"] = "FullTime";
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            EmploymentTypeColumn = "ContractType",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].Issues.Should().NotContain(i => i.Field == "EmploymentType" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Theory]
+    [InlineData("FullTime")]
+    [InlineData("fulltime")]
+    [InlineData("CONTRACTOR")]
+    [InlineData("Temporary")]
+    [InlineData("PartTime")]
+    public async Task Validate_AllValidEmploymentTypes_NoError(string value)
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow();
+        row["ContractType"] = value;
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            EmploymentTypeColumn = "ContractType",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].Issues.Should().NotContain(i => i.Field == "EmploymentType" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Validate_InvalidEmploymentType_ReturnsError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow();
+        row["ContractType"] = "Freelance";
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            EmploymentTypeColumn = "ContractType",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].HasErrors.Should().BeTrue();
+        results[0].Issues.Should().Contain(i => i.Field == "EmploymentType" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Validate_EmptyEmploymentType_RequiredSetting_ReturnsError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), new SelectiveService("EmploymentType"));
+        var row = ValidRow();
+        row["ContractType"] = "";
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            EmploymentTypeColumn = "ContractType",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].HasErrors.Should().BeTrue();
+        results[0].Issues.Should().Contain(i => i.Field == "EmploymentType" && i.Severity == IssueSeverity.Error);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  Location validation
+    // ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Validate_ValidLocation_NoError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow();
+        row["Office"] = "Warsaw";
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            LocationColumn = "Office",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].Issues.Should().NotContain(i => i.Field == "Location" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Validate_EmptyLocation_RequiredSetting_ReturnsError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), new SelectiveService("Location"));
+        var row = ValidRow();
+        row["Office"] = "";
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            LocationColumn = "Office",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].HasErrors.Should().BeTrue();
+        results[0].Issues.Should().Contain(i => i.Field == "Location" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Validate_LocationTooLong_ReturnsError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow();
+        row["Office"] = new string('A', 201);
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            LocationColumn = "Office",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].HasErrors.Should().BeTrue();
+        results[0].Issues.Should().Contain(i => i.Field == "Location" && i.Severity == IssueSeverity.Error);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  Role: catalog-driven required
+    // ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Validate_EmptyRole_RequiredSetting_ReturnsError()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), new SelectiveService("Role"));
+        var row = ValidRow();
+        row["Role"] = "";
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            RoleColumn = "Role",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        results[0].HasErrors.Should().BeTrue();
+        results[0].Issues.Should().Contain(i => i.Field == "Role" && i.Severity == IssueSeverity.Error);
     }
 
     // ──────────────────────────────────────────────────────────

@@ -18,4 +18,6 @@ public sealed record PayeeDto(
     string StatusLabel,
     int ActiveAssignmentCount,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? EmploymentType = null,
+    string? Location = null);

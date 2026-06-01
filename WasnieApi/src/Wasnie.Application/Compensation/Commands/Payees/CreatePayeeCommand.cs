@@ -10,4 +10,6 @@ public sealed record CreatePayeeCommand(
     string? Email,
     DateOnly? HireDate,
     string? Role = null,
-    Guid? ManagerId = null) : IRequest<Result<PayeeDto>>;
+    Guid? ManagerId = null,
+    string? EmploymentType = null,
+    string? Location = null) : IRequest<Result<PayeeDto>>;

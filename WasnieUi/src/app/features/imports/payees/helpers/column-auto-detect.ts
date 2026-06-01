@@ -30,6 +30,16 @@ export const OTHER_FIELD_PATTERNS: Record<string, string[]> = {
   hireDateColumn: ['hire date', 'hiredate', 'hire_date', 'fecha ingreso', 'fecha de contratación', 'start date', 'data zatrudnienia'],
   roleColumn: ['role', 'position', 'cargo', 'puesto', 'stanowisko', 'rola'],
   managerColumn: ['manager employee code', 'manager code', 'manager id', 'manager', 'supervisor', 'jefe', 'przełożony', 'kod menedżera'],
+  employmentTypeColumn: [
+    'employment type', 'employmenttype', 'employment_type', 'contract type', 'contracttype',
+    'tipo de contrato', 'tipo contrato', 'typ umowy', 'rodzaj zatrudnienia',
+    'tipo di contratto', 'type de contrat', 'beschäftigungsart', 'tipo de empleo',
+  ],
+  locationColumn: [
+    'location', 'office', 'site', 'workplace', 'work location', 'office location',
+    'ubicación', 'ubicacion', 'lugar de trabajo', 'lokalizacja', 'miejsce pracy',
+    'sede', 'luogo di lavoro', 'lieu de travail', 'arbeitsort', 'standort',
+  ],
 };
 
 // For first/last/last2 patterns: single-word patterns use whole-word matching (prevents 'nom'

@@ -10,6 +10,83 @@
 
 ---
 
+## 2026-06-01 — WI-PROD-A.2 CLOSED: smoke-tested in vivo; Settings shows 6 rows; Payee form persists new fields
+
+**WI:** WI-PROD-A.2 — Extend field requirement catalog  
+**Status:** CLOSED ✅  
+**Session type:** Documentation + closure. Code was completed in the prior implementation session (see entry below). This session records the in-vivo validation and officially closes the WI.
+
+### Smoke test results (in vivo, real tenant data)
+
+- **Settings → Field Requirements page:** Shows 6 rows as expected — Email, Hire date, Role, Manager, Employment type, Location. Each toggles independently between Required and Optional.
+- **Payee edit form:** EmploymentType select renders with four localized options (Full-time, Part-time, Temporary, Contractor). Location text input renders. Both fields save correctly and persist on reload.
+- **No regressions observed** on the existing payee list, payee detail, or import flows.
+
+### Summary
+
+WI-PROD-A.2 completed across two Claude Code sessions:
+- **Session 1 (crashed mid-flight):** Full Application layer — `Payee.cs` entity with new fields, `EmploymentType` enum, `PayeeFieldNames` constants, commands/DTOs/handlers/validators.
+- **Session 2 (continuation prompt):** EF migration `P2_PayeeNewColumns` (adds columns + seeds 4 catalog rows per tenant), import service extensions, frontend form fields, auto-detect patterns (7 languages), i18n (EN/ES/PL), tests.
+
+**Test count: 595 → 628 (+33).** Build clean. Migration applied to live DB without incident.
+
+**Architectural win confirmed in vivo:** A.1's data-driven Settings UI (iterates over the API response, one row per `FieldRequirementSetting`) absorbed the four new catalog entries automatically. Zero UI template changes needed — only new i18n keys. Pattern holds for all future catalog additions.
+
+### Remaining backlog (next sessions)
+
+- **WI-PROD-A.3** — `Payee.IsActive` + `DeactivatedAt` lifecycle; `AssignPayeeCommand` + `ReassignPayeeCommand` (`IMoneyCriticalCommand`); state machine enforcement; Assign/Reassign UI on transaction detail. (Decisions G, 11, E)
+- **WI-PROD-CURRENCY** — Full multi-currency system: account currency on Tenant, FX rate table, original + converted amount duality on Transaction, conversion engine. (Decision I)
+- **WI-PROD-K** — Books reconciliation (payout line → bank export).
+- **WI-PROD-B/C/E/G/I/J** — Smaller items (multi-sheet Excel picker, onboarding UX, actionable errors, etc.)
+
+---
+
+## 2026-06-01 — WI-PROD-A.2: EmploymentType + Location on Payee; field requirement catalog → 6 entries
+
+**WI:** WI-PROD-A.2 — Extend field requirement catalog  
+**Status:** DONE  
+**Note:** Completed across two sessions. The previous session (crashed mid-flight due to billing) had done all backend Application layer work. This session added the EF migration, import services, frontend form, and tests.
+
+### What was done
+
+**Backend:**
+- `PayeeConfiguration.cs` — added `EmploymentType` (nullable int) and `Location` (nvarchar 200) property configs
+- `20260601111756_P2_PayeeNewColumns` migration — adds two nullable columns to `Payees` table; seeds 4 new `FieldRequirementSetting` rows per existing tenant (Role/ManagerId/EmploymentType/Location = Optional by default)
+- `PayeeImportColumnMapping.cs` — added `EmploymentTypeColumn` and `LocationColumn` optional properties
+- `PayeeImportValidationService.cs` — validates EmploymentType (enum check) and Location (max 200 chars); Role now catalog-driven (Error when required, Warning when optional)
+- `PayeeImportExecutionService.cs` — passes EmploymentType (parsed to enum) and Location to `Payee.Create()`
+
+**Tests (before: 595 → after: 628):**
+- `PayeeTests.cs` — 7 new domain unit tests for EmploymentType (Create/Update, null, trim) and Location
+- `CreatePayeeCommandValidatorTests.cs` — 10 new validator unit tests for Role, ManagerId, EmploymentType (including invalid/valid values), Location; `ConfigurableFieldService` added
+- `PayeeImportValidationServiceTests.cs` — 13 new integration tests for EmploymentType (valid types case-insensitive, invalid type error, required error), Location (valid, required error, too long), Role catalog-driven required; `AlwaysRequiredExceptService` helper added
+
+**Frontend:**
+- `payee.model.ts` — `Payee` interface + `CreatePayeeRequest` + `UpdatePayeeRequest` gain `employmentType?` and `location?`
+- `payee-form.component.ts` — 4 new computed required signals (roleRequired, managerRequired, employmentTypeRequired, locationRequired); `employmentTypeOptions` static SelectOption array; 2 new form controls; effect refactored to loop with `syncRequired` helper; patch and payload extended
+- `payee-form.component.html` — EmploymentType `ws-select` (static options) and Location `ws-input`; Role and Manager labels now conditional on required setting
+- `payee-import.models.ts` — `PayeeImportColumnMapping` gains `employmentTypeColumn?` and `locationColumn?`
+- `mapping-step.component.ts` — form group, auto-detect init, restore, `currentMapping()`, and preview extended for 2 new optional columns
+- `mapping-step.component.html` — 2 new optional mapping rows
+- `column-auto-detect.ts` — `OTHER_FIELD_PATTERNS` extended with `employmentTypeColumn` (EN/ES/PL/PT/FR/DE/IT patterns) and `locationColumn` (EN/ES/PL/FR/DE/IT patterns)
+
+**i18n (EN + ES + PL):**  
+New keys in `PAYEES.*`: FIELD_ROLE_OPTIONAL, FIELD_MANAGER_OPTIONAL, FIELD_EMPLOYMENT_TYPE, FIELD_EMPLOYMENT_TYPE_OPTIONAL, FIELD_EMPLOYMENT_TYPE_PLACEHOLDER, EMPLOYMENT_TYPE_FULLTIME/PARTTIME/TEMPORARY/CONTRACTOR, FIELD_LOCATION, FIELD_LOCATION_OPTIONAL  
+New keys in `SETTINGS.*`: FIELD_ROLE, FIELD_MANAGERID, FIELD_EMPLOYMENTTYPE, FIELD_LOCATION
+
+**Settings UI** — fully data-driven (was already data-driven from A.1); shows 6 rows automatically once new catalog rows are seeded.
+
+### Test counts
+- Backend: **628 passing** (259 unit + 369 integration, 2 skipped rate-limit tests unchanged)
+- Frontend: **143 passing**, build clean
+
+### Notes
+- Bundle budget overrun (561 kB vs 500 kB angular.json budget) is pre-existing; NOT introduced by this WI
+- Frontend coverage 47% is pre-existing; NOT reduced by this WI
+- Smoke test screenshots not captured (no running instance); manual verification against live data deferred to deployment
+
+---
+
 ## 2026-06-01 — Full day: WI-PROD-A.1 validated live; WI-PROD-D + WI-PROD-L done; 3 stores, ~12,500 txns
 
 **Duration:** Full day (morning + afternoon)

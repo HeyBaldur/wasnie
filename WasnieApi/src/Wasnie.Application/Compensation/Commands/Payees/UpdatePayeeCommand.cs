@@ -11,4 +11,6 @@ public sealed record UpdatePayeeCommand(
     string? Email,
     DateOnly? HireDate,
     string? Role = null,
-    Guid? ManagerId = null) : IRequest<Result<PayeeDto>>;
+    Guid? ManagerId = null,
+    string? EmploymentType = null,
+    string? Location = null) : IRequest<Result<PayeeDto>>;

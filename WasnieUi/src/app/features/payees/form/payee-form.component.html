@@ -22,8 +22,9 @@
     />
 
     <ws-input
-      label="PAYEES.FIELD_ROLE"
+      [label]="roleRequired() ? 'PAYEES.FIELD_ROLE' : 'PAYEES.FIELD_ROLE_OPTIONAL'"
       formControlName="role"
+      [error]="hasError('role', 'required') ? 'VALIDATION.REQUIRED' : ''"
     />
 
     <ws-date-picker
@@ -34,11 +35,26 @@
 
     <ws-select
       class="ws-form-grid__full"
-      label="PAYEES.FIELD_MANAGER"
+      [label]="managerRequired() ? 'PAYEES.FIELD_MANAGER' : 'PAYEES.FIELD_MANAGER_OPTIONAL'"
       formControlName="managerId"
       [searchFn]="managerSearchFn"
       [initialOption]="managerInitialOption()"
       [placeholder]="'PAYEES.FIELD_MANAGER_PLACEHOLDER'"
+      [error]="hasError('managerId', 'required') ? 'VALIDATION.REQUIRED' : ''"
+    />
+
+    <ws-select
+      [label]="employmentTypeRequired() ? 'PAYEES.FIELD_EMPLOYMENT_TYPE' : 'PAYEES.FIELD_EMPLOYMENT_TYPE_OPTIONAL'"
+      formControlName="employmentType"
+      [options]="employmentTypeOptions"
+      [placeholder]="'PAYEES.FIELD_EMPLOYMENT_TYPE_PLACEHOLDER'"
+      [error]="hasError('employmentType', 'required') ? 'VALIDATION.REQUIRED' : ''"
+    />
+
+    <ws-input
+      [label]="locationRequired() ? 'PAYEES.FIELD_LOCATION' : 'PAYEES.FIELD_LOCATION_OPTIONAL'"
+      formControlName="location"
+      [error]="hasError('location', 'required') ? 'VALIDATION.REQUIRED' : ''"
     />
   </div>
 

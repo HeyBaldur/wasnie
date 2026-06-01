@@ -13,6 +13,8 @@ public sealed class Payee : BaseAuditableEntity
     public DateOnly? HireDate { get; private set; }
     public DateOnly? TerminationDate { get; private set; }
     public PayeeStatus Status { get; private set; } = PayeeStatus.Active;
+    public EmploymentType? EmploymentType { get; private set; }
+    public string? Location { get; private set; }
 
     private Payee() { }
 
@@ -26,7 +28,9 @@ public sealed class Payee : BaseAuditableEntity
         Guid id,
         DateTimeOffset now,
         string? role = null,
-        Guid? managerId = null)
+        Guid? managerId = null,
+        EmploymentType? employmentType = null,
+        string? location = null)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Full name is required.");
@@ -45,6 +49,8 @@ public sealed class Payee : BaseAuditableEntity
             Role = string.IsNullOrWhiteSpace(role) ? null : role.Trim(),
             ManagerId = managerId,
             HireDate = hireDate,
+            EmploymentType = employmentType,
+            Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
             Status = PayeeStatus.Active,
             CreatedBy = createdBy,
             CreatedAt = now,
@@ -61,7 +67,9 @@ public sealed class Payee : BaseAuditableEntity
         string? role,
         Guid? managerId,
         string updatedBy,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        EmploymentType? employmentType = null,
+        string? location = null)
     {
         if (string.IsNullOrWhiteSpace(fullName))
             throw new DomainException("Full name is required.");
@@ -76,6 +84,8 @@ public sealed class Payee : BaseAuditableEntity
         Role = string.IsNullOrWhiteSpace(role) ? null : role.Trim();
         ManagerId = managerId;
         HireDate = hireDate;
+        EmploymentType = employmentType;
+        Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

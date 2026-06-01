@@ -20,6 +20,8 @@ public sealed class PayeeConfiguration : IEntityTypeConfiguration<Payee>
         builder.Property(p => p.HireDate);
         builder.Property(p => p.TerminationDate);
         builder.Property(p => p.Status).HasConversion<int>().IsRequired();
+        builder.Property(p => p.EmploymentType).HasConversion<int?>();
+        builder.Property(p => p.Location).HasMaxLength(200);
         builder.Property(p => p.TenantId).IsRequired();
 
         builder.HasIndex(p => new { p.TenantId, p.EmployeeCode }).IsUnique();

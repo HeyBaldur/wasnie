@@ -5,6 +5,8 @@ export interface PayeeImportColumnMapping {
   hireDateColumn: string;
   roleColumn?: string | null;
   managerEmployeeCodeColumn?: string | null;
+  employmentTypeColumn?: string | null;
+  locationColumn?: string | null;
 }
 
 export interface ParseResponse {
