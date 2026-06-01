@@ -659,6 +659,133 @@ public sealed class PayeeImportValidationServiceTests
     }
 
     // ──────────────────────────────────────────────────────────
+    //  IssueCategory — messages include offending values
+    // ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Validate_DuplicateCode_HasReferenceCategory()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(Payee.Create(TenantA, "Existing", "EMP001", null, null,
+            "system", Guid.NewGuid(), DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow(code: "EMP001", email: "new@company.com");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "EmployeeCode");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("EMP001");
+    }
+
+    [Fact]
+    public async Task Validate_MissingEmailRequired_HasRequiredCategory()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow(email: "");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "Email");
+        issue.Category.Should().Be(IssueCategory.Required);
+        issue.Message.Should().Contain("Settings");
+    }
+
+    [Fact]
+    public async Task Validate_BadHireDateFormat_HasFormatCategory()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow(date: "not-a-date");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "HireDate");
+        issue.Category.Should().Be(IssueCategory.Format);
+        issue.Message.Should().Contain("not-a-date");
+    }
+
+    [Fact]
+    public async Task Validate_FutureHireDate_MessageContainsActualDate()
+    {
+        await using var db = CreateDb(TenantA);
+        var clock = new FakeClock(new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc));
+        var sut = new PayeeImportValidationService(db, clock, AllRequiredFields());
+        var row = ValidRow(date: "2026-01-01");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "HireDate");
+        issue.Category.Should().Be(IssueCategory.Format);
+        issue.Message.Should().Contain("2026-01-01");
+    }
+
+    [Fact]
+    public async Task Validate_DuplicateEmail_MessageContainsEmail_CategoryReference()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row1 = ValidRow(code: "EMP001", email: "same@company.com");
+        var row2 = ValidRow(code: "EMP002", email: "same@company.com");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row1, row2 }, DefaultMapping());
+
+        var issue = results[1].Issues.First(i => i.Field == "Email");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("same@company.com");
+    }
+
+    [Fact]
+    public async Task Validate_InvalidEmailFormat_MessageContainsAddress_CategoryFormat()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow(email: "not-valid");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "Email");
+        issue.Category.Should().Be(IssueCategory.Format);
+        issue.Message.Should().Contain("not-valid");
+    }
+
+    [Fact]
+    public async Task Validate_MissingHireDateRequired_HasRequiredCategory()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var row = ValidRow(date: "");
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "HireDate");
+        issue.Category.Should().Be(IssueCategory.Required);
+        issue.Message.Should().Contain("Settings");
+    }
+
+    [Fact]
+    public async Task Validate_ManagerNotFound_MessageContainsCode_CategoryReference()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new PayeeImportValidationService(db, new FakeClock(), AllRequiredFields());
+        var mapping = new PayeeImportColumnMapping
+        {
+            FullNameColumn = "Name",
+            EmployeeCodeColumn = "Code",
+            EmailColumn = "Email",
+            HireDateColumn = "Date",
+            ManagerEmployeeCodeColumn = "Mgr",
+        };
+        var row = new Dictionary<string, string>
+        {
+            ["Name"] = "Alice", ["Code"] = "EMP001", ["Email"] = "alice@co.com",
+            ["Date"] = "2022-01-01", ["Mgr"] = "MGR_GHOST",
+        };
+
+        var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);
+
+        var issue = results[0].Issues.First(i => i.Field == "ManagerEmployeeCode");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("MGR_GHOST");
+    }
+
+    // ──────────────────────────────────────────────────────────
     //  Mixed / happy path
     // ──────────────────────────────────────────────────────────
 

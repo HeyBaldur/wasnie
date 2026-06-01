@@ -406,6 +406,10 @@
     "ACTION_IMPORT": "Import"
   },
   "IMPORTS": {
+    "ISSUE_CATEGORY_REFERENCE": "Reference",
+    "ISSUE_CATEGORY_FORMAT": "Format",
+    "ISSUE_CATEGORY_REQUIRED": "Required",
+    "ISSUE_CATEGORY_OTHER": "Error",
     "PAYEES": {
       "TITLE": "Import Payees",
       "SUBTITLE": "Upload your sales team from CSV or XLSX",

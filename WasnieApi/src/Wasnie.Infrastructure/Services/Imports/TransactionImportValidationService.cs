@@ -60,15 +60,15 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
             var referenceNumber = GetField(row, mapping.ReferenceNumberColumn);
             if (string.IsNullOrWhiteSpace(referenceNumber))
             {
-                issues.Add(Error("referenceNumber", "Reference number is required."));
+                issues.Add(Error("referenceNumber", "Reference number is required.", IssueCategory.Required));
             }
             else if (fileReferenceNumbers.Contains(referenceNumber))
             {
-                issues.Add(Error("referenceNumber", "Reference number already appears in this file."));
+                issues.Add(Error("referenceNumber", $"Reference number '{referenceNumber}' appears more than once in this file.", IssueCategory.Reference));
             }
             else if (existingReferenceNumbers.Contains(referenceNumber))
             {
-                issues.Add(Error("referenceNumber", "Reference number already exists."));
+                issues.Add(Error("referenceNumber", $"Reference number '{referenceNumber}' was already imported. This row will be skipped.", IssueCategory.Reference));
             }
             else
             {
@@ -78,40 +78,40 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
             // ── payeeCode ─────────────────────────────────────────────────────
             var payeeCode = GetField(row, mapping.PayeeCodeColumn);
             if (string.IsNullOrWhiteSpace(payeeCode))
-                issues.Add(Error("payeeCode", "Payee code is required."));
+                issues.Add(Error("payeeCode", "Payee code is required.", IssueCategory.Required));
             else if (!payeesByCode.ContainsKey(payeeCode))
-                issues.Add(Error("payeeCode", "Payee code not found."));
+                issues.Add(Error("payeeCode", $"Payee code '{payeeCode}' not found in this tenant. Create the payee first or correct the code in your file.", IssueCategory.Reference));
 
             // ── amount ────────────────────────────────────────────────────────
             var amountStr = GetField(row, mapping.AmountColumn);
             if (!decimal.TryParse(amountStr, System.Globalization.NumberStyles.Number,
                     System.Globalization.CultureInfo.InvariantCulture, out var amount))
             {
-                issues.Add(Error("amount", "Amount must be a number."));
+                issues.Add(Error("amount", $"Amount '{amountStr}' is not a valid number.", IssueCategory.Format));
             }
             else if (amount <= 0)
             {
-                issues.Add(Error("amount", "Amount must be greater than zero."));
+                issues.Add(Error("amount", $"Amount '{amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}' must be greater than zero.", IssueCategory.Format));
             }
 
             // ── currency ──────────────────────────────────────────────────────
             var currency = GetField(row, mapping.CurrencyColumn);
             if (!CurrencyRegex.IsMatch(currency))
-                issues.Add(Error("currency", "Currency must be a 3-letter ISO 4217 code."));
+                issues.Add(Error("currency", $"Currency '{currency}' must be a 3-letter ISO 4217 code (e.g. USD, EUR, PLN).", IssueCategory.Format));
 
             // ── transactionDate ───────────────────────────────────────────────
             var dateStr = GetField(row, mapping.TransactionDateColumn);
             if (!TryParseDate(dateStr, out var transactionDate))
             {
-                issues.Add(Error("transactionDate", $"'{dateStr}' is not a recognisable date. Use YYYY-MM-DD."));
+                issues.Add(Error("transactionDate", $"'{dateStr}' is not a recognisable date. Use YYYY-MM-DD.", IssueCategory.Format));
             }
             else if (transactionDate < MinDate)
             {
-                issues.Add(Error("transactionDate", "Transaction date cannot be before 2000-01-01."));
+                issues.Add(Error("transactionDate", $"Transaction date '{transactionDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}' is before the minimum date {MinDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}.", IssueCategory.Format));
             }
             else if (transactionDate > today)
             {
-                issues.Add(Error("transactionDate", "Transaction date cannot be in the future."));
+                issues.Add(Error("transactionDate", $"Transaction date '{transactionDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}' is in the future.", IssueCategory.Format));
             }
 
             // ── externalId (optional column) ──────────────────────────────────
@@ -122,11 +122,11 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
                 {
                     if (existingExternalIds.Contains(externalId))
                     {
-                        issues.Add(Warn("externalId", "External ID already imported — this row will be skipped."));
+                        issues.Add(Warn("externalId", $"External ID '{externalId}' was already imported — this row will be skipped.", IssueCategory.Reference));
                     }
                     else if (fileExternalIds.Contains(externalId))
                     {
-                        issues.Add(Warn("externalId", "External ID appears more than once in this file — duplicate rows will be skipped."));
+                        issues.Add(Warn("externalId", $"External ID '{externalId}' appears more than once in this file — duplicate rows will be skipped.", IssueCategory.Reference));
                     }
                     else
                     {
@@ -161,9 +161,9 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
         return false;
     }
 
-    private static ValidationIssue Error(string field, string msg) =>
-        new() { Field = field, Message = msg, Severity = IssueSeverity.Error };
+    private static ValidationIssue Error(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
+        new() { Field = field, Message = msg, Severity = IssueSeverity.Error, Category = cat };
 
-    private static ValidationIssue Warn(string field, string msg) =>
-        new() { Field = field, Message = msg, Severity = IssueSeverity.Warning };
+    private static ValidationIssue Warn(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
+        new() { Field = field, Message = msg, Severity = IssueSeverity.Warning, Category = cat };
 }

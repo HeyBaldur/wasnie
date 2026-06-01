@@ -2,11 +2,20 @@ namespace Wasnie.Application.Models.Imports;
 
 public enum IssueSeverity { Error, Warning }
 
+public enum IssueCategory
+{
+    Reference,  // identifier not found, duplicate, or conflict
+    Format,     // value is the wrong shape (bad date, bad number, etc.)
+    Required,   // field required by current tenant settings
+    Other,      // default / unclassified
+}
+
 public sealed class ValidationIssue
 {
     public required string Field { get; init; }
     public required string Message { get; init; }
     public required IssueSeverity Severity { get; init; }
+    public IssueCategory Category { get; init; } = IssueCategory.Other;
 }
 
 public sealed class PayeeRowValidationResult

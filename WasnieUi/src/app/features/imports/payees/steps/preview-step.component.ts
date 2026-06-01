@@ -7,6 +7,7 @@ import {
   PayeeImportColumnMapping,
   PayeeRowValidationResult,
   ValidateResponse,
+  ValidationIssue,
 } from '../models/payee-import.models';
 import { composeFullName } from '../helpers/fullname-composer';
 
@@ -123,6 +124,21 @@ export class PreviewStepComponent {
 
   onImport(): void {
     this.importRequested.emit({ skipWarnings: this.skipWarnings });
+  }
+
+  issueBadgeVariant(issue: ValidationIssue): BadgeVariant {
+    if (issue.severity === 'Warning') return 'warning';
+    switch (issue.category) {
+      case 'Reference': return 'warning';
+      case 'Format':    return 'danger';
+      case 'Required':  return 'info';
+      default:          return 'neutral';
+    }
+  }
+
+  issueCategoryKey(issue: ValidationIssue): string {
+    if (issue.severity === 'Warning') return '';
+    return `IMPORTS.ISSUE_CATEGORY_${issue.category.toUpperCase()}`;
   }
 
   onBack(): void { this.back.emit(); }

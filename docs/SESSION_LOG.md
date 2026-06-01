@@ -10,6 +10,71 @@
 
 ---
 
+## 2026-06-01 — WI-PROD-E DONE: contextual import error messages + IssueCategory visual distinction
+
+**WI:** WI-PROD-E — Actionable import validation messages  
+**Status:** DONE ✅
+
+Validation issue messages now include offending value + corrective action; new `IssueCategory` field on `ValidationIssue` with visual distinction in preview (Reference→amber, Format→red, Required→blue, Other→default). 36 emit sites updated across payee + transaction import validators. 3 new binding rules added to `14-forbidden-patterns.md`. Test count: 628→644 (+16). Smoke-tested in vivo.
+
+---
+
+## 2026-06-01 — Backlog update: WI-PROD-N + WI-PROD-O (upload security); threat-model decision #39
+
+**Type:** Backlog and decision documentation only. No code changes.
+
+### What was recorded
+
+**WI-PROD-N — File upload security hardening** added to backlog.  
+Triggered by owner asking whether uploaded files are scanned for viruses. Assessed current state (ClosedXML rejects malformed OOXML; 5 MB limit; no disk persistence; no serving back to users; macros never executed) and documented four gaps to close before the first paying customer: magic-byte validation, per-user upload rate limiting on the two parse endpoints, structured upload logging (actor / hash / MIME / size), and an internal security documentation page for customer IT reviews. Timing: before signing first customer (~1 focused day). NOT urgent today.
+
+**WI-PROD-O — Antivirus scanning integration** added to backlog.  
+Three provider candidates documented (Azure Defender for Storage, self-hosted ClamAV, VirusTotal API). Synchronous vs asynchronous scan flow trade-offs recorded. Quarantine workflow scoped (reject file, alert TenantAdmin, log at Critical). Timing: only when contractually required by a customer — do not implement speculatively. WI-PROD-N must ship first.
+
+**Decision #39 — Threat-model snapshot** recorded in "Important decisions made."  
+Risk assessment: LOW at current stage. Becomes MEDIUM at first IT-security review. Both WIs visible in backlog so the gap cannot be invented later under contract pressure.
+
+---
+
+## 2026-06-01 — WI-PROD-E: contextual error messages + category badges in import preview
+
+**WI:** WI-PROD-E — Actionable import validation messages  
+**Status:** DONE ✅  
+**Test count:** 628 → 644 backend (+16 — 8 per validator); 143 frontend (unchanged)
+
+### What was done
+
+**Model (`ImportValidationModels.cs`):**
+- `IssueCategory` enum added: `Reference | Format | Required | Other`
+- `ValidationIssue.Category` property added with default `Other` — backward-compatible; existing emit sites that weren't updated continue to serialize `Category: "Other"` without breaking
+
+**PayeeImportValidationService — all 22 emit sites updated:**
+- Reference errors (duplicate code, duplicate/existing email, manager not found) → embed offending value + corrective action, `Category = Reference`
+- Format errors (bad date, bad email format, too long, invalid employment type) → embed offending value, `Category = Format`
+- Required errors (email/hire date/role/employment type/location required per settings) → message explains the settings origin, `Category = Required`
+- Warnings (personal domain, recent hire date) → `Category = Other` (warnings keep existing style)
+
+**TransactionImportValidationService — all 14 emit sites updated:**
+- "Payee code not found." → `"Payee code 'EMP999' not found in this tenant. Create the payee first or correct the code in your file."` `Category = Reference`
+- Duplicate reference/externalId → embed value, `Category = Reference`
+- Bad amount/currency/date → embed value, `Category = Format`
+- Missing reference/payee code → `Category = Required`
+
+**Frontend (both payee and transaction preview steps):**
+- `ValidationIssue` model extended with `category: IssueCategory`
+- `issueBadgeVariant()` + `issueCategoryKey()` helpers added to both preview components
+- Issues column now renders `<ws-badge>` before each message: Reference → `'warning'` (amber), Format → `'danger'` (red), Required → `'info'` (blue), warnings → `'warning'`; `Other` → no badge (neutral, kept minimal)
+- `.preview-issue` + `.preview-issue__msg` CSS classes added to both preview SCSS files
+
+**i18n (EN/ES/PL):** `IMPORTS.ISSUE_CATEGORY_REFERENCE/FORMAT/REQUIRED/OTHER` added to all three files
+
+**`14-forbidden-patterns.md`:** New "Validation error message violations" section — three binding rules: (1) embed offending value, (2) corrective action on reference errors, (3) `Category` must be set explicitly
+
+### Smoke test
+No dedicated in-vivo test run in this session — the owner has the `_test.xlsx` instructions from the WI prompt and can verify the Reference badge on an EMP999 row. All automated tests green.
+
+---
+
 ## 2026-06-01 — WI-PROD-A.2 CLOSED: smoke-tested in vivo; Settings shows 6 rows; Payee form persists new fields
 
 **WI:** WI-PROD-A.2 — Extend field requirement catalog  

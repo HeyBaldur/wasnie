@@ -510,6 +510,10 @@
     "CONFIRM_DEACTIVATE_MSG": "Dezaktywacja tego przypisania uniemożliwi beneficjentowi naliczanie prowizji w ramach tego planu. Czy jesteś pewny?"
   },
   "IMPORTS": {
+    "ISSUE_CATEGORY_REFERENCE": "Odniesienie",
+    "ISSUE_CATEGORY_FORMAT": "Format",
+    "ISSUE_CATEGORY_REQUIRED": "Wymagane",
+    "ISSUE_CATEGORY_OTHER": "Błąd",
     "PAYEES": {
       "TITLE": "Importuj Beneficjentów",
       "SUBTITLE": "Prześlij swój zespół sprzedaży z pliku CSV lub XLSX",

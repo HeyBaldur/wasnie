@@ -87,7 +87,14 @@
               @if (row.issues.length > 0) {
                 <ul class="preview-issues">
                   @for (issue of row.issues; track issue.message) {
-                    <li>{{ issue.message }}</li>
+                    <li class="preview-issue">
+                      @if (issueCategoryKey(issue)) {
+                        <ws-badge [variant]="issueBadgeVariant(issue)" size="sm">
+                          {{ issueCategoryKey(issue) | translate }}
+                        </ws-badge>
+                      }
+                      <span class="preview-issue__msg">{{ issue.message }}</span>
+                    </li>
                   }
                 </ul>
               }

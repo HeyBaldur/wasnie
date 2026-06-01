@@ -510,6 +510,10 @@
     "CONFIRM_DEACTIVATE_MSG": "Desactivar esta asignación impedirá que el beneficiario gane comisiones bajo este plan. ¿Estás seguro?"
   },
   "IMPORTS": {
+    "ISSUE_CATEGORY_REFERENCE": "Referencia",
+    "ISSUE_CATEGORY_FORMAT": "Formato",
+    "ISSUE_CATEGORY_REQUIRED": "Obligatorio",
+    "ISSUE_CATEGORY_OTHER": "Error",
     "PAYEES": {
       "TITLE": "Importar Beneficiarios",
       "SUBTITLE": "Sube tu equipo de ventas desde CSV o XLSX",

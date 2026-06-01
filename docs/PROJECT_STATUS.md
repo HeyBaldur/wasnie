@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-01 (WI-PROD-A.2 smoke-tested and closed)
-**Updated by:** Rodolfo Calvo (WI-PROD-A.2 DONE + in-vivo validated — Settings shows 6 rows, Payee form persists EmploymentType + Location; catalog now 6 configurable fields)
+**Last updated:** 2026-06-01 (WI-PROD-E DONE — contextual error messages + IssueCategory visual distinction in import preview)
+**Updated by:** Rodolfo Calvo (WI-PROD-E smoke-tested in vivo; 628→644 tests; 3 binding rules added to 14-forbidden-patterns.md)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-01. WI-PROD-A.2 DONE and smoke-tested in vivo. Payee entity now has `EmploymentType` (nullable enum: FullTime/PartTime/Temporary/Contractor) and `Location` (nullable string). The field-requirement catalog has grown from 2 entries (Email, HireDate) to 6 (+ Role, ManagerId, EmploymentType, Location). Settings UI is fully data-driven — shows 6 rows automatically. Payee create/edit form shows all 4 new fields with conditional required markers. Import wizard maps/validates the 2 new columns (with auto-detect). Bundle budget overrun (561 kB vs 500 kB) is pre-existing — NOT introduced by this WI. Backend: 628 tests pass (259 unit + 369 integration). Frontend: 143 tests pass. Next: WI-PROD-A.3, WI-PROD-CURRENCY, or WI-PROD-K.
+**Right now we are:** End-of-day 2026-06-01. WI-PROD-E DONE. Import preview now shows contextual error messages (offending value embedded, corrective action suggested) and category badges (Reference/amber, Format/red, Required/blue) per issue in both payee and transaction wizards. `ValidationIssue.Category` enum added; all 36 emit sites across both validators updated. Backend: 644 tests pass (259 unit + 385 integration). Frontend: 143 tests pass. Binding rule added to `14-forbidden-patterns.md`. Next: WI-PROD-A.3, WI-PROD-CURRENCY, or WI-PROD-K.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -355,6 +355,12 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
    **Implements:** Decision B (extended to 6 fields), Decision F (EmploymentType), Decision H (Location as optional string dimension, named `Location` not `CostCenter`). (2026-06-01)
 
+39. **Threat-model snapshot — upload security (2026-06-01).** Current state assessed: ClosedXML parsing rejects malformed OOXML; 5 MB file-size limit enforced before the parser is invoked; macros never executed (ClosedXML reads cells only); uploaded files are NOT persisted to disk and NOT served back to other users; tenant isolation enforced by the global EF query filter downstream. The surface area for malware propagation is therefore narrow.
+
+   Documented gaps as of today: no magic-byte / file-signature validation; no per-user upload rate limiting beyond the global rate limiter; no exhaustive structured upload logging (actor, hash, detected MIME); no antivirus scanning; no internal security-documentation page for customer IT reviews.
+
+   Risk assessment: **LOW** at current stage (pre-revenue, controlled test tenants). Becomes **MEDIUM** when the first paying customer's IT-security questionnaire is conducted — mid-market retail customers rarely require AV scanning, but any financial-services or healthcare vertical will. WI-PROD-N closes the defensive baseline (magic-byte check, per-user upload rate limit, structured upload logging, internal security doc) before signing the first customer. WI-PROD-O adds active antivirus scanning only when a customer contract explicitly requires it — do not implement speculatively. (2026-06-01)
+
 ---
 
 ## Key naming conventions
@@ -504,15 +510,11 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
-### WI-PROD-E — Actionable "payee not found" error message
+### WI-PROD-E — Actionable "payee not found" error message ✅ DONE (2026-06-01)
 
-**Status:** Minor UX improvement. Mini-WI.
+**Status:** DONE (2026-06-01). Scope expanded from the original 1-line fix to cover all 36 emit sites in both import validators, plus the `IssueCategory` model and UI visual distinction.
 
-**Current:** `"Payee code not found."`
-
-**Better:** `"Payee code 'EMP005' not found in this tenant. Create the payee first or correct the code in your file."`
-
-**Scope:** 1-line change in `TransactionImportValidationService`. Add payee code to the error message. No model changes needed.
+**Summary:** Validation issue messages now include offending value + corrective action; new `IssueCategory` field on `ValidationIssue` with visual distinction in preview (Reference→amber, Format→red, Required→blue, Other→default). 36 emit sites updated across payee + transaction import validators. 3 new binding rules added to `14-forbidden-patterns.md`. Test count: 628→644 (+16). Smoke-tested in vivo.
 
 ---
 
@@ -626,6 +628,52 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 4. **Payee wizard updated** — 4 steps (upload → map → preview → complete) extended to 5 (+ importing). Preview step no longer calls the import service directly; it emits `importRequested` to the wizard, which transitions to the importing step. Wizard stores `skipWarnings` signal.
 
 **Validation:** Owner successfully imported the Silesia City Center dataset (10 payees, 5,066 transactions) via the updated wizard. No regressions in payee or transaction import flows. Test suite: 143/143 frontend tests pass.
+
+---
+
+### WI-PROD-N — File upload security hardening
+
+**Status:** Pending. **Recommended timing: before signing first paying customer.** (~1 focused day of work; not urgent today.)
+
+**Why:** Any mid-market customer IT-security questionnaire is likely to ask about file upload handling. Current gaps: no magic-byte validation, no per-user upload rate limiting, no exhaustive structured upload logging, no internal security documentation to show a reviewer. See decision #39 for the full threat-model snapshot.
+
+**Scope:**
+
+1. **Magic-byte / file-signature validation** — inspect the first bytes of every uploaded file BEFORE handing off to the parser library (ClosedXML for `.xlsx`, CsvHelper for `.csv`). Reject files whose declared extension (or MIME type) does not match their actual binary signature. Applies to both `POST /api/imports/payees/parse` and `POST /api/imports/transactions/parse`.
+
+2. **Per-user rate limiting on upload endpoints** — the global rate limiter (from WI-11) applies at the IP level. Add a per-authenticated-user limit on the two parse endpoints (e.g. N uploads per user per minute) to close the case where an authenticated user floods the parser with large files. Return 429 with a clear message. Configure the limit in `appsettings.json` alongside the existing `RateLimiting` section.
+
+3. **Structured upload logging** — on every upload attempt (success or rejection), emit a structured log event containing: actor `UserId`, `TenantId`, file size (bytes), declared MIME type, detected file signature, SHA-256 hash of the file content. Useful for forensics if a file is later flagged; required for an audit trail in regulated environments.
+
+4. **Internal security documentation** — a short document in `docs/security/` (new subfolder) summarising exactly what the system does and does not do with uploaded files. This is what the owner shows during a customer IT-security review. It should cover: parsing library (ClosedXML / CsvHelper), no disk persistence, no serving back to users, size limit, signature check, rate limiting, antivirus status, tenant isolation.
+
+**Out of scope:** Active antivirus scanning (that is WI-PROD-O).
+
+---
+
+### WI-PROD-O — Antivirus scanning integration
+
+**Status:** Pending. **Recommended timing: when contractually required by a customer.** Do NOT implement speculatively.
+
+**Why:** Active AV scanning is standard for financial-services and healthcare customers but rarely required by mid-market retail. Implementing it before a customer asks adds latency and operational cost for no current benefit. The backlog entry exists so the gap is visible and scoped when the time comes.
+
+**Scope:**
+
+1. **Provider selection** — three candidates to evaluate during scoping:
+   - *Azure Defender for Storage* — native Azure integration, suits the existing App Service hosting; cost is per-GB scanned; data stays in Azure region (good for GDPR).
+   - *Self-hosted ClamAV* — open source, zero per-scan cost, runs as a sidecar or separate container; operational overhead for keeping signatures updated.
+   - *External API (e.g. VirusTotal)* — simplest integration but files leave the tenant's data boundary; likely unacceptable for any regulated customer.
+   Decision on provider is deferred to scoping; record the choice in a new decision entry when made.
+
+2. **Scan flow design** — choose synchronous or asynchronous during scoping:
+   - *Synchronous* — block the upload response until scan completes; simpler error path but adds latency (typically 1–3 s for clean files, longer for flagged ones).
+   - *Asynchronous* — accept the upload immediately, scan in a Hangfire background job, reject via a follow-up notification if positive; better UX but requires a quarantine state and a notification channel (the IEmailService abstraction is ready for this per decision #10 deferral).
+
+3. **Quarantine workflow** — on positive detection: reject/delete the uploaded file, emit a `IssueSeverity.Error` validation result to the user, alert the TenantAdmin (via the notification channel once WI-02 / email is implemented), log the event at `LogLevel.Critical` with the file hash and actor details.
+
+4. **Interaction with WI-PROD-N** — WI-PROD-N must ship first; the magic-byte check and structured upload logging provide the forensic baseline that AV scanning sits on top of.
+
+**Out of scope:** General endpoint security hardening (already covered by WI-11 and WI-PROD-N).
 
 ---
 

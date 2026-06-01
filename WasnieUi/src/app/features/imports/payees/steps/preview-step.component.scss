@@ -126,10 +126,22 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   font-size: var(--font-size-11);
   font-weight: 600;
   color: var(--color-text-secondary);
+}
+
+.preview-issue {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+
+  &__msg {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 // ── Column header with filter button ────────────────────────────────────────

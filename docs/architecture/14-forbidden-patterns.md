@@ -213,6 +213,14 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Validation error message violations
+
+- ❌ **Generic validation error messages that omit the offending value** (WI-PROD-E, 2026-06-01). Every `ValidationIssue` emitted in an import validator MUST include the actual offending value when it is meaningfully displayable (e.g. the bad code, the duplicate email, the unparseable date string). "Payee code not found." is forbidden; `"Payee code 'EMP999' not found in this tenant."` is required. The user must be able to identify the cell to fix without cross-referencing row numbers.
+- ❌ **Validation error messages that omit the corrective action for reference errors** (WI-PROD-E, 2026-06-01). Reference errors (entity not found, duplicate) MUST suggest the corrective action: "Create the payee first or correct the code in your file." A message that only states the fact leaves the user guessing what to do.
+- ❌ **`ValidationIssue` emitted without a `Category`** (WI-PROD-E, 2026-06-01). The `Category` field on `ValidationIssue` (enum: `Reference`, `Format`, `Required`, `Other`) defaults to `Other` but every emit site SHOULD set an explicit category so the UI can render distinct visual treatment. "Other" is the fallback for truly unclassifiable issues only.
+
+---
+
 ## Field requirement configuration violations
 
 - ❌ **Hardcoding required/optional in validators for any field listed in the `FieldRequirementSettings` catalog** (WI-PROD-A.1, 2026-06-01). The catalog currently contains: `Payee.Email`, `Payee.HireDate`. Validators MUST consult `IFieldRequirementService.IsRequiredAsync(entityName, fieldName, ct)` for these fields instead of using `NotEmpty()` or `NotNull()` unconditionally. Format validation (email format, date range) is ALWAYS enforced when a value is present — only the presence check is configurable.

@@ -69,20 +69,20 @@ public sealed class PayeeImportValidationService(
             // ── FullName ──────────────────────────────────────────────────
             var fullName = ComposeFullName(row, mapping);
             if (string.IsNullOrWhiteSpace(fullName))
-                issues.Add(Error("FullName", "Full name is required."));
+                issues.Add(Error("FullName", "Full name is required.", IssueCategory.Required));
             else if (fullName.Length > 200)
-                issues.Add(Error("FullName", "Full name must be 200 characters or fewer."));
+                issues.Add(Error("FullName", "Full name must be 200 characters or fewer.", IssueCategory.Format));
 
             // ── EmployeeCode ──────────────────────────────────────────────
             var code = GetField(row, mapping.EmployeeCodeColumn);
             if (string.IsNullOrWhiteSpace(code))
-                issues.Add(Error("EmployeeCode", "Employee code is required."));
+                issues.Add(Error("EmployeeCode", "Employee code is required.", IssueCategory.Required));
             else if (code.Length > 50)
-                issues.Add(Error("EmployeeCode", "Employee code must be 50 characters or fewer."));
+                issues.Add(Error("EmployeeCode", "Employee code must be 50 characters or fewer.", IssueCategory.Format));
             else if (existingCodes.Contains(code))
-                issues.Add(Error("EmployeeCode", $"Employee code '{code}' already exists in the system."));
+                issues.Add(Error("EmployeeCode", $"Employee code '{code}' already belongs to another payee in this tenant.", IssueCategory.Reference));
             else if (fileCodesInFile.Contains(code))
-                issues.Add(Error("EmployeeCode", $"Employee code '{code}' appears more than once in this file."));
+                issues.Add(Error("EmployeeCode", $"Employee code '{code}' appears more than once in this file.", IssueCategory.Reference));
             else
                 fileCodesInFile.Add(code);
 
@@ -91,23 +91,23 @@ public sealed class PayeeImportValidationService(
             if (string.IsNullOrWhiteSpace(email))
             {
                 if (emailRequired)
-                    issues.Add(Error("Email", "Email is required."));
+                    issues.Add(Error("Email", "Email is required by your tenant's current settings. Add an email address or change the requirement in Settings.", IssueCategory.Required));
             }
             else if (email.Length > 255)
             {
-                issues.Add(Error("Email", "Email must be 255 characters or fewer."));
+                issues.Add(Error("Email", "Email must be 255 characters or fewer.", IssueCategory.Format));
             }
             else if (!EmailRegex.IsMatch(email))
             {
-                issues.Add(Error("Email", "Email address is not valid."));
+                issues.Add(Error("Email", $"'{email}' is not a valid email address.", IssueCategory.Format));
             }
             else if (existingEmails.Contains(email))
             {
-                issues.Add(Error("Email", $"Email '{email}' already exists in the system."));
+                issues.Add(Error("Email", $"Email '{email}' already belongs to another payee in this tenant.", IssueCategory.Reference));
             }
             else if (fileEmailsInFile.Contains(email))
             {
-                issues.Add(Error("Email", $"Email '{email}' appears more than once in this file."));
+                issues.Add(Error("Email", $"Email '{email}' appears more than once in this file.", IssueCategory.Reference));
             }
             else
             {
@@ -122,20 +122,20 @@ public sealed class PayeeImportValidationService(
             if (string.IsNullOrWhiteSpace(hireDateStr))
             {
                 if (hireDateRequired)
-                    issues.Add(Error("HireDate", "Hire date is required."));
+                    issues.Add(Error("HireDate", "Hire date is required by your tenant's current settings. Add a hire date or change the requirement in Settings.", IssueCategory.Required));
             }
             else if (!TryParseDate(hireDateStr, out var hireDate))
             {
-                issues.Add(Error("HireDate", $"'{hireDateStr}' is not a recognisable date. Use YYYY-MM-DD or MM/DD/YYYY."));
+                issues.Add(Error("HireDate", $"'{hireDateStr}' is not a recognisable date. Use YYYY-MM-DD or MM/DD/YYYY.", IssueCategory.Format));
             }
             else
             {
                 if (hireDate > today)
-                    issues.Add(Error("HireDate", "Hire date cannot be in the future."));
+                    issues.Add(Error("HireDate", $"Hire date '{hireDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}' is in the future.", IssueCategory.Format));
                 else if (hireDate < minDate)
-                    issues.Add(Error("HireDate", $"Hire date cannot be before {minDate:yyyy-MM-dd}."));
+                    issues.Add(Error("HireDate", $"Hire date '{hireDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}' is before the minimum date {minDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.", IssueCategory.Format));
                 else if (hireDate >= thirtyDaysAgo)
-                    issues.Add(Warn("HireDate", "Hire date is within the last 30 days — verify this is intentional."));
+                    issues.Add(Warn("HireDate", $"Hire date '{hireDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}' is within the last 30 days — verify this is intentional."));
             }
 
             // ── ManagerEmployeeCode (cross-row) ───────────────────────────
@@ -146,7 +146,7 @@ public sealed class PayeeImportValidationService(
                     && !existingCodes.Contains(managerCode)
                     && !allCodesInFile.Contains(managerCode))
                 {
-                    issues.Add(Error("ManagerEmployeeCode", $"Manager code '{managerCode}' does not match any existing payee or any other row in this file."));
+                    issues.Add(Error("ManagerEmployeeCode", $"Manager code '{managerCode}' not found in this tenant or in this file. Create the manager payee first or correct the code.", IssueCategory.Reference));
                 }
             }
 
@@ -157,7 +157,7 @@ public sealed class PayeeImportValidationService(
                 if (string.IsNullOrWhiteSpace(role))
                 {
                     if (roleRequired)
-                        issues.Add(Error("Role", "Role is required."));
+                        issues.Add(Error("Role", "Role is required by your tenant's current settings.", IssueCategory.Required));
                     else
                         issues.Add(Warn("Role", "Role is empty. Consider filling in the payee's role for better reporting."));
                 }
@@ -170,12 +170,12 @@ public sealed class PayeeImportValidationService(
                 if (string.IsNullOrWhiteSpace(et))
                 {
                     if (employmentTypeRequired)
-                        issues.Add(Error("EmploymentType", "Employment type is required."));
+                        issues.Add(Error("EmploymentType", "Employment type is required by your tenant's current settings.", IssueCategory.Required));
                 }
                 else if (!Enum.TryParse<EmploymentType>(et, ignoreCase: true, out _))
                 {
                     issues.Add(Error("EmploymentType",
-                        $"'{et}' is not a valid employment type. Expected one of: FullTime, PartTime, Temporary, Contractor."));
+                        $"'{et}' is not a valid employment type. Expected one of: FullTime, PartTime, Temporary, Contractor.", IssueCategory.Format));
                 }
             }
 
@@ -186,11 +186,11 @@ public sealed class PayeeImportValidationService(
                 if (string.IsNullOrWhiteSpace(location))
                 {
                     if (locationRequired)
-                        issues.Add(Error("Location", "Location is required."));
+                        issues.Add(Error("Location", "Location is required by your tenant's current settings.", IssueCategory.Required));
                 }
                 else if (location.Length > 200)
                 {
-                    issues.Add(Error("Location", "Location must be 200 characters or fewer."));
+                    issues.Add(Error("Location", "Location must be 200 characters or fewer.", IssueCategory.Format));
                 }
             }
 
@@ -227,9 +227,9 @@ public sealed class PayeeImportValidationService(
         return false;
     }
 
-    private static ValidationIssue Error(string field, string msg) =>
-        new() { Field = field, Message = msg, Severity = IssueSeverity.Error };
+    private static ValidationIssue Error(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
+        new() { Field = field, Message = msg, Severity = IssueSeverity.Error, Category = cat };
 
-    private static ValidationIssue Warn(string field, string msg) =>
-        new() { Field = field, Message = msg, Severity = IssueSeverity.Warning };
+    private static ValidationIssue Warn(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
+        new() { Field = field, Message = msg, Severity = IssueSeverity.Warning, Category = cat };
 }
