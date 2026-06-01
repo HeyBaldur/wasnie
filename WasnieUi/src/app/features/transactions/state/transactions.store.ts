@@ -1,7 +1,7 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { TransactionsApiService } from '../services/transactions.api.service';
-import { Transaction, TransactionStatus, CreateTransactionRequest } from '../models/transaction.model';
+import { Transaction, TransactionStatus, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 
 @Injectable({ providedIn: 'root' })
@@ -74,6 +74,18 @@ export class TransactionsStore {
 
   async createTransaction(request: CreateTransactionRequest): Promise<Transaction> {
     const tx = await firstValueFrom(this.api.create(request));
+    await this.loadTransactions();
+    return tx;
+  }
+
+  async assignPayee(transactionId: string, request: AssignPayeeRequest): Promise<Transaction> {
+    const tx = await firstValueFrom(this.api.assignPayee(transactionId, request));
+    await this.loadTransactions();
+    return tx;
+  }
+
+  async reassignPayee(transactionId: string, request: ReassignPayeeRequest): Promise<Transaction> {
+    const tx = await firstValueFrom(this.api.reassignPayee(transactionId, request));
     await this.loadTransactions();
     return tx;
   }

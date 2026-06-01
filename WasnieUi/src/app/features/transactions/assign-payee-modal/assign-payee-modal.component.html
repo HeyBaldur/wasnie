@@ -1,0 +1,57 @@
+<ws-modal
+  [isOpen]="isOpen()"
+  [title]="'TRANSACTIONS.ASSIGN_MODAL_TITLE' | translate"
+  size="md"
+  (closed)="onClose()"
+>
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+
+    <!-- Transaction context -->
+    <div class="assign-modal__context">
+      <div class="assign-modal__context-row">
+        <span class="assign-modal__context-label">{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</span>
+        <span class="assign-modal__context-value">{{ transaction().referenceNumber }}</span>
+      </div>
+      <div class="assign-modal__context-row">
+        <span class="assign-modal__context-label">{{ 'TRANSACTIONS.COL_DATE' | translate }}</span>
+        <span class="assign-modal__context-value">{{ transaction().transactionDate }}</span>
+      </div>
+      <div class="assign-modal__context-row">
+        <span class="assign-modal__context-label">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</span>
+        <span class="assign-modal__context-value assign-modal__context-value--amount">
+          {{ transaction().amount | currencyFormat: transaction().currency }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Payee picker -->
+    <div class="assign-modal__field">
+      <ws-select
+        formControlName="payeeId"
+        [label]="'TRANSACTIONS.ASSIGN_PAYEE_LABEL' | translate"
+        [placeholder]="'TRANSACTIONS.ASSIGN_PAYEE_PLACEHOLDER' | translate"
+        [searchFn]="payeeSearchFn"
+        [error]="form.controls.payeeId.touched && form.controls.payeeId.invalid ? ('TRANSACTIONS.ASSIGN_PAYEE_REQUIRED' | translate) : ''"
+      />
+    </div>
+
+    <!-- Optional comment -->
+    <div class="assign-modal__field">
+      <ws-input
+        formControlName="comment"
+        [label]="'TRANSACTIONS.ASSIGN_COMMENT_LABEL' | translate"
+        [placeholder]="'TRANSACTIONS.ASSIGN_COMMENT_PLACEHOLDER' | translate"
+      />
+    </div>
+
+  </form>
+
+  <div slot="footer" class="assign-modal__footer">
+    <ws-button type="button" variant="secondary" (click)="onClose()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button type="button" variant="primary" [loading]="saving()" (click)="onSubmit()">
+      {{ 'TRANSACTIONS.ASSIGN_SUBMIT' | translate }}
+    </ws-button>
+  </div>
+</ws-modal>

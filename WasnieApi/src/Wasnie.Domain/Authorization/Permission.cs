@@ -6,6 +6,7 @@ public static class Permission
     public const string PayeesCreate = "Payees.Create";
     public const string PayeesUpdate = "Payees.Update";
     public const string PayeesTerminate = "Payees.Terminate";
+    public const string PayeesDeactivate = "Payees.Deactivate";
 
     public const string PlansRead = "Plans.Read";
     public const string PlansCreate = "Plans.Create";
@@ -24,6 +25,7 @@ public static class Permission
 
     public const string TransactionsCreate = "Transactions.Create";
     public const string TransactionsRead = "Transactions.Read";
+    public const string TransactionsUpdate = "Transactions.Update";
 
     public const string ImportsExecute = "Imports.Execute";
     public const string ReportsViewAll = "Reports.ViewAll";

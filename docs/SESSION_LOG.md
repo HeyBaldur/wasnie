@@ -10,6 +10,165 @@
 
 ---
 
+## 2026-06-01 — Full milestone close: WI-PROD-E + A.3 + R Done; WI-PROD-MODEL fully realized in code
+
+**Type:** Implementation + smoke test + UX polish + docs  
+**Status:** Milestone closed ✅  
+**Test count:** 628 → 692 backend (+64 across the full day); 143 frontend (static)
+
+### Day timeline
+
+**Morning:** WI-PROD-A.2 closure carried over from previous day — confirmed Settings UI shows 6 rows; Payee edit form accepts EmploymentType + Location.
+
+**Mid-day:** WI-PROD-E (validation messages with category) — scope confirmed as complete; second real-world validation recorded: a payee CSV with `EmploymentType = "Full-time"` (hyphenated) triggered the contextual error during the WI-PROD-A.3 smoke test, letting the owner recover in seconds.
+
+**Afternoon:** WI-PROD-A.3 implemented — Payee lifecycle (IsActive + DeactivatedAt), nullable CompensationTransaction.PayeeId, AssignPayeeCommand + ReassignPayeeCommand with full state-machine enforcement. 644 → 692 backend tests (+48). See Decision #40 for technical summary. Smoke test passed:
+- EMP310 Mateusz Walczak deactivated → "Inactive" badge rendered; reactivated cleanly.
+- Re-import against EMP310 → Warning with Reference category + contextual message.
+- 8 transactions imported without payeeCode (Transaction.PayeeId = Optional); persisted as Unassigned.
+- AssignPayeeCommand on Unassigned → EMP301 assigned correctly.
+- ReassignPayeeCommand: empty reason rejected; "short" (5 chars) rejected; 52-char reason with EMP302 accepted; audit event recorded reason.
+- Settings shows 7 catalog rows (Transaction.PayeeId, Optional).
+- **Key verification:** reason-required is enforced across BOTH states of the Transaction.PayeeId toggle — the two settings are orthogonal. Reason is hardcoded in the domain (NOT configurable), protecting the audit trail.
+
+**Late afternoon:** WI-PROD-R — UX polish after smoke test feedback. Three sub-fixes:
+1. "Unassigned" in the transaction list now italic + `--color-text-tertiary` (distinguishable at a glance from assigned rows).
+2. Assign/Reassign modal payee picker dropdown overflow: resolved with `position: fixed` in ws-select when inside a `.ws-modal__dialog`. Earlier approach (280px height estimate) correctly set direction but did not escape `overflow: hidden` clipping. Final fix is the canonical portal approach — fixed positioning via `getBoundingClientRect()`.
+3. Settings seventh-row label: "Payee / Transaction" → "Require payee on new transactions" with descriptive subtitle in EN/ES/PL.
+
+**Investigation note:** A transient visual concern on the Reassign modal (appeared to show clipped search input) was investigated across two sessions. Confirmed it was a structural `overflow: hidden` + `position: absolute` interaction, NOT a system bug. The reason-required rule behaves correctly in all states. The `position: fixed` fix resolved the visual issue permanently.
+
+### What was recorded
+
+- Decision #40: WI-PROD-A.3 technical summary (updated with hardcoded-reason note).
+- Decision #41: Trilogy milestone + smoke-test checkpoint list.
+- Decision #42: Architectural observations (data-driven Settings validated 2→7; state machine in domain; reason hardcoded; ws-select fixed-positioning pattern).
+- WI-PROD-P: tolerant enum parsing — LOW priority backlog.
+- WI-PROD-Q: frontend test coverage sweep — LOW-MEDIUM priority backlog.
+- WI-PROD-R: corrected technical summary (position:fixed, not just height estimate).
+
+---
+
+## 2026-06-01 — WI-PROD-R DONE: Unassigned visibility + ws-select async overflow fix
+
+**WI:** WI-PROD-R — UX polish  
+**Status:** DONE ✅  
+**Test count:** 143 frontend (unchanged) · 692 backend (unchanged)  
+**Files changed:** 3 (transactions-list.component.html, .scss, ws-select.component.ts)
+
+### Fix 1 — Unassigned visibility
+
+`transactions-list.component.html`: replaced `{{ tx.payeeName || ('TRANSACTIONS.UNASSIGNED' | translate) }}` with a conditional block that wraps the absent-payee case in `<span class="col-unassigned">`. `transactions-list.component.scss`: `.col-unassigned { font-style: italic; color: var(--color-text-tertiary); }`. No new i18n keys. No badge added — "Unassigned" is a normal operational state, not an error; italic + tertiary is the appropriate absent-value treatment.
+
+### Fix 2 — Modal async dropdown overflow
+
+**Root cause:** `ws-select.component.ts` `openDropdown()` estimates dropdown height from `this.filteredOptions().length * 36`. In async mode, `filteredOptions()` is empty at open time → estimate = 60px → algorithm places dropdown downward → async results load → dropdown grows to 284px → overflows modal dialog.
+
+**Fix:** One-line change — when `searchFn()` is non-null (async mode), use `estimatedHeight = 280` unconditionally. The existing `.ws-modal__dialog`-aware positioning code was already correct and already used the dialog bounds; it just needed the right estimate to trigger upward placement before results arrived.
+
+**Binding rule noted for `14-forbidden-patterns.md`:** When `ws-select` is used in a modal with `searchFn` (async mode), the positioning is handled automatically by the component's modal-aware logic — do NOT add custom dropdown overflow hacks in modal SCSS.
+
+---
+
+## 2026-06-01 — Milestone close: WI-PROD-A trilogy + WI-PROD-MODEL fully realized in code
+
+**Type:** Documentation + in-vivo smoke test. No new code. No builds. No migrations.  
+**Status:** Milestone closed ✅
+
+### What was validated in vivo
+
+Full smoke test of Decisions D, G, 10, 11, 12 from WI-PROD-MODEL using real Reserved Polska retail data:
+
+1. **Decision G (Payee lifecycle):** EMP310 Mateusz Walczak (Silesia City Center) deactivated via detail page. "Inactive" badge appeared correctly in both the payee list and detail header. Reactivation cleared `DeactivatedAt` and removed the badge.
+
+2. **Decision 12 (import against inactive payee):** Re-imported a small CSV with EMP310 as `payeeCode`. Preview step showed `IssueSeverity.Warning` with `IssueCategory.Reference` and the message "Payee 'EMP310' is inactive — assignment will be historical". Row was imported normally. `skipRowsWithWarnings` toggle confirmed working (row skipped when enabled).
+
+3. **Decisions D + 10 (nullable PayeeId / Unassigned is derived):** 8 transactions imported without `payeeCode` column populated (Transaction.PayeeId = Optional in Settings). All persisted with `PayeeId IS NULL`. Transaction list rendered "Unassigned" using the WI-PROD-F defensive rendering. Settings page confirmed 7 catalog rows (added Transaction → Payee row, default Optional).
+
+4. **Decision 11 — AssignPayeeCommand:** Clicked "Assign" on an Unassigned transaction. Picked EMP301 Agnieszka Jankowska via async dropdown. Comment field left blank (optional). Submitted. Transaction now shows EMP301's name. Audit event recorded.
+
+5. **Decision 11 — ReassignPayeeCommand:** Clicked "Reassign" on the just-assigned transaction. Empty reason → blocked with validation message. "short" (5 chars) → blocked with min-10 message. "Cliente confirmó vendedor correcto en cierre de turno" (52 chars) accepted. EMP302 picked. Submitted. Transaction shows EMP302. Audit event includes reason text.
+
+6. **WI-PROD-E (contextual error messages) — incidental validation:** A payee CSV with `EmploymentType = "Full-time"` (human-readable, hyphenated — natural Excel export variant) triggered the contextual error. Message showed the offending value `'Full-time'` and the accepted values `FullTime, PartTime, Temporary, Contractor`. Owner resolved in seconds without support. This confirmed WI-PROD-E's design intent in a realistic accidental-entry scenario. The tolerance gap is tracked as WI-PROD-P.
+
+### What was documented
+
+- WI-PROD-E: added second real-world validation note (EmploymentType smoke test).
+- WI-PROD-A.3 sub-items: all ✅ marks added.
+- WI-PROD-MODEL: updated to "fully realized in code" milestone.
+- Decision #41: trilogy + MODEL milestone entry recorded.
+- WI-PROD-P: tolerant enum parsing — new backlog item (LOW priority).
+- WI-PROD-Q: frontend test coverage sweep — new backlog item (LOW-MEDIUM priority; 143 tests static across 4 WIs).
+
+### Test counts (cumulative across today's sessions)
+
+- Backend: 628 → 692 (+64 across WI-PROD-E close + WI-PROD-A.3). 0 failures.
+- Frontend: 143 (static — WI-PROD-Q tracks this debt).
+- Trilogy total since A.1 start: 561 → 692 (+131 backend).
+
+### Architectural observation
+
+A.1's data-driven Settings UI absorbed the seventh catalog row (Transaction → Payee, Optional) without template edits — only the i18n key `SETTINGS.FIELD_PAYEEID` was missing and was added as a two-line fix. The foundation continues to validate itself with each new catalog addition.
+
+---
+
+## 2026-06-01 — WI-PROD-A.3 DONE: Payee lifecycle + nullable PayeeId + Assign/Reassign commands
+
+**WI:** WI-PROD-A.3 — Final sub-WI of WI-PROD-A; closes WI-PROD-A and WI-PROD-MODEL trilogy  
+**Status:** DONE ✅  
+**Test count:** 644 → 692 backend (+48: 27 unit + 21 integration); 143 frontend (unchanged)
+
+### Milestone: WI-PROD-MODEL decisions fully realized in code
+
+All 12 decisions from the WI-PROD-MODEL conversation (Decisions #35, #36, #37) are now live. Decision A–I from Parts 1+2 were implemented across WI-PROD-A.1, A.2, and A.3. Decisions 10–12 from Part 3 were implemented in A.3.
+
+### What was done
+
+**Domain:**
+- `Payee.IsActive` (bool, default true) + `Payee.DeactivatedAt` (DateTimeOffset?). `Deactivate()` / `Activate()` domain methods.
+- `CompensationTransaction.PayeeId` → `Guid?` (nullable). `Assign()` and `Reassign()` domain methods with full state-machine enforcement (Paid blocked, Eligible/Calculated → revert to Pending, Cancelled allowed). `Reassign()` requires reason ≥ 10 chars.
+- 4 new domain events: `TransactionPayeeAssignedEvent`, `TransactionPayeeReassignedEvent` (used), `PayeeDeactivatedEvent`, `PayeeActivatedEvent` (deleted — Payee extends BaseAuditableEntity not AggregateRoot; handler-level audit used instead).
+- New audit actions: `PayeeDeactivated`, `PayeeActivated`, `TransactionPayeeAssigned`, `TransactionPayeeReassigned`.
+- New permissions: `Payees.Deactivate`, `Transactions.Update` (both granted to TenantAdmin + CompManager).
+
+**Application:**
+- `DeactivatePayeeCommand` + `ActivatePayeeCommand` (IAuditableCommand, NOT IMoneyCriticalCommand — admin ops, not money mutations).
+- `AssignPayeeCommand` + `ReassignPayeeCommand` (both IMoneyCriticalCommand — money-critical audit path).
+- `AssignPayeeHandler`, `ReassignPayeeHandler`, `DeactivatePayeeHandler`, `ActivatePayeeHandler`.
+- `TransactionFieldNames` constants class (entity="Transaction", field="PayeeId").
+- `IngestTransactionCommand.PayeeId` → `Guid?`; handler checks `IFieldRequirementService` for PayeeId optionality; blocks inactive payee assignment on manual entry.
+- `PayeeDto` extended with `IsActive`, `DeactivatedAt?`.
+- `TransactionDto.PayeeId` → `Guid?`. `ListTransactionsHandler` updated for nullable PayeeId in payee-name resolution.
+
+**Infrastructure:**
+- EF migration `P2_PayeeLifecycle`: adds `IsActive` (bit NOT NULL default 1) + `DeactivatedAt` (datetimeoffset NULL) to Payees; makes `CompensationTransactions.PayeeId` nullable; seeds `FieldRequirementSettings` row `Transaction.PayeeId = Optional` for all existing tenants.
+- `TransactionImportValidationService` extended: PayeeId optionality check via `IFieldRequirementService`; inactive payee match → Warning with Reference category.
+- `TransactionImportJobHandler` extended: null payeeId passed when payeeCode is blank (row passed validation, Optional setting confirmed).
+
+**API:** `POST /api/payees/{id}/deactivate`, `POST /api/payees/{id}/activate`, `POST /api/transactions/{id}/assign-payee`, `POST /api/transactions/{id}/reassign-payee` (409 Conflict for state-rule violations).
+
+**Frontend:**
+- `payee.model.ts`: `isActive`, `deactivatedAt`.
+- `payees.api.service.ts`: `deactivate()`, `activate()`. Store: `deactivate()`, `activate()`.
+- Payee list: "Inactive" WsBadge (warning) + Deactivate/Activate row menu items (gated by `Payees.Deactivate`).
+- `transaction.model.ts`: `payeeId` → nullable; `AssignPayeeRequest`, `ReassignPayeeRequest`.
+- `transactions.api.service.ts` + store: `assignPayee()`, `reassignPayee()`.
+- Transaction list: Assign button (unassigned), Reassign button (assigned non-Paid), disabled+tooltip for Paid (gated by `Transactions.Update`).
+- `AssignPayeeModalComponent` (payee picker + optional comment).
+- `ReassignPayeeModalComponent` (payee picker + required reason, min-10 validation).
+- EN/ES/PL i18n complete: 24 new keys per language.
+
+### Existing test regressions fixed
+- `TransactionImportValidationServiceTests`: 32 constructor calls updated to pass `IFieldRequirementService` stub; 2 tests renamed to reflect new Optional-by-default behavior; 1 new test added (`EmptyPayeeCode_WhenOptional_NoError`).
+- `TransactionImportEndpointsTests`: `Validate_EmptyPayeeCode_ReturnsError` → `Validate_EmptyPayeeCode_WhenOptional_NoError` (behavior changed per Decision D).
+
+### Architecture notes
+- `Payees.Deactivate` chosen (not `Payees.Update`) consistent with existing `Payees.Terminate` finer-grain pattern.
+- `WsTextarea` does not exist; reason field uses `WsInput` (single-line text, functionally adequate). Flagged as WsTextarea candidate per §10.3.
+- Initial frontend bundle ~562 kB (500 kB budget); pre-existing — modals are lazy-loaded, not in initial chunk.
+
+---
+
 ## 2026-06-01 — WI-PROD-E DONE: contextual import error messages + IssueCategory visual distinction
 
 **WI:** WI-PROD-E — Actionable import validation messages  

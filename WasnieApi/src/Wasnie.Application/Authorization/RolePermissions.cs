@@ -7,12 +7,13 @@ public static class RolePermissions
     private static readonly IReadOnlySet<string> TenantAdminPermissions =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            Permission.PayeesRead, Permission.PayeesCreate, Permission.PayeesUpdate, Permission.PayeesTerminate,
+            Permission.PayeesRead, Permission.PayeesCreate, Permission.PayeesUpdate,
+            Permission.PayeesTerminate, Permission.PayeesDeactivate,
             Permission.PlansRead, Permission.PlansCreate, Permission.PlansUpdate,
             Permission.PlansDelete, Permission.PlansActivate, Permission.PlansArchive,
             Permission.QuotasRead, Permission.QuotasSet, Permission.QuotasUpdate,
             Permission.AssignmentsRead, Permission.AssignmentsCreate, Permission.AssignmentsUpdate,
-            Permission.TransactionsCreate, Permission.TransactionsRead,
+            Permission.TransactionsCreate, Permission.TransactionsRead, Permission.TransactionsUpdate,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
             Permission.SettingsUpdate,
         };
@@ -20,12 +21,13 @@ public static class RolePermissions
     private static readonly IReadOnlySet<string> CompManagerPermissions =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            Permission.PayeesRead, Permission.PayeesCreate, Permission.PayeesUpdate, Permission.PayeesTerminate,
+            Permission.PayeesRead, Permission.PayeesCreate, Permission.PayeesUpdate,
+            Permission.PayeesTerminate, Permission.PayeesDeactivate,
             Permission.PlansRead, Permission.PlansCreate, Permission.PlansUpdate,
             Permission.PlansDelete, Permission.PlansActivate, Permission.PlansArchive,
             Permission.QuotasRead, Permission.QuotasSet, Permission.QuotasUpdate,
             Permission.AssignmentsRead, Permission.AssignmentsCreate, Permission.AssignmentsUpdate,
-            Permission.TransactionsCreate, Permission.TransactionsRead,
+            Permission.TransactionsCreate, Permission.TransactionsRead, Permission.TransactionsUpdate,
             Permission.ImportsExecute, Permission.ReportsViewAll,
         };
 

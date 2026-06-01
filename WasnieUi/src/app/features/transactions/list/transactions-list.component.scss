@@ -17,6 +17,11 @@
   color: var(--color-text-secondary);
 }
 
+.col-unassigned {
+  font-style: italic;
+  color: var(--color-text-tertiary);
+}
+
 .col-num {
   text-align: right;
   font-size: var(--font-size-13);

@@ -1,12 +1,15 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { TransactionsStore } from '../state/transactions.store';
-import { TransactionStatus } from '../models/transaction.model';
+import { Transaction, TransactionStatus } from '../models/transaction.model';
+import { AssignPayeeModalComponent } from '../assign-payee-modal/assign-payee-modal.component';
+import { ReassignPayeeModalComponent } from '../reassign-payee-modal/reassign-payee-modal.component';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -28,6 +31,7 @@ import {
     RouterLink,
     TranslateModule,
     HasPermissionPipe,
+    HasPermissionDirective,
     IconComponent,
     CurrencyFormatPipe,
     WsButtonComponent,
@@ -38,6 +42,8 @@ import {
     WsTableEmptyComponent,
     WsEmptyStateComponent,
     WsPaginationComponent,
+    AssignPayeeModalComponent,
+    ReassignPayeeModalComponent,
   ],
   templateUrl: './transactions-list.component.html',
   styleUrl: './transactions-list.component.scss',
@@ -46,6 +52,34 @@ export class TransactionsListComponent {
   readonly store = inject(TransactionsStore);
 
   readonly TransactionStatus = TransactionStatus;
+
+  readonly assignModalOpen = signal(false);
+  readonly reassignModalOpen = signal(false);
+  readonly selectedTransaction = signal<Transaction | null>(null);
+
+  openAssign(tx: Transaction): void {
+    this.selectedTransaction.set(tx);
+    this.assignModalOpen.set(true);
+  }
+
+  openReassign(tx: Transaction): void {
+    this.selectedTransaction.set(tx);
+    this.reassignModalOpen.set(true);
+  }
+
+  onModalClosed(): void {
+    this.assignModalOpen.set(false);
+    this.reassignModalOpen.set(false);
+    this.selectedTransaction.set(null);
+  }
+
+  isUnassigned(tx: Transaction): boolean {
+    return tx.payeeId === null;
+  }
+
+  canReassign(tx: Transaction): boolean {
+    return tx.payeeId !== null && tx.status !== TransactionStatus.Paid;
+  }
 
   readonly statusOptions: SegOption[] = [
     { value: '', label: 'TRANSACTIONS.FILTER_ALL' },

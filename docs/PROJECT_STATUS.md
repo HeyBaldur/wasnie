@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-01 (WI-PROD-E DONE — contextual error messages + IssueCategory visual distinction in import preview)
-**Updated by:** Rodolfo Calvo (WI-PROD-E smoke-tested in vivo; 628→644 tests; 3 binding rules added to 14-forbidden-patterns.md)
+**Last updated:** 2026-06-01 — Major milestone: WI-PROD-A trilogy + WI-PROD-MODEL decisions fully realized in code. WI-PROD-E + A.3 + R all Done and smoke-tested in vivo.
+**Updated by:** Rodolfo Calvo (full milestone close; 628→692 backend tests across today; architectural observations recorded in Decision #42)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-01. WI-PROD-E DONE. Import preview now shows contextual error messages (offending value embedded, corrective action suggested) and category badges (Reference/amber, Format/red, Required/blue) per issue in both payee and transaction wizards. `ValidationIssue.Category` enum added; all 36 emit sites across both validators updated. Backend: 644 tests pass (259 unit + 385 integration). Frontend: 143 tests pass. Binding rule added to `14-forbidden-patterns.md`. Next: WI-PROD-A.3, WI-PROD-CURRENCY, or WI-PROD-K.
+**Right now we are:** End-of-day 2026-06-01. WI-PROD-R DONE. "Unassigned" transactions now render italic + `--color-text-tertiary` in the transactions list — visually distinct from assigned rows at a glance. `ws-select` async dropdown overflow in modals fixed: `openDropdown()` now uses the full 280px height estimate in async mode so the modal-aware positioning algorithm fires correctly before results load. Backend: 692 tests (286 unit + 406 integration), 2 skipped. Frontend: 143 tests. 0 failures. Next: WI-PROD-CURRENCY (design conversation first) or WI-PROD-K.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -355,6 +355,30 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
    **Implements:** Decision B (extended to 6 fields), Decision F (EmploymentType), Decision H (Location as optional string dimension, named `Location` not `CostCenter`). (2026-06-01)
 
+40. **WI-PROD-A.3 Done — Payee lifecycle + nullable PayeeId + Assign/Reassign commands (2026-06-01).** Three capabilities delivered:
+
+   **Capability 1 (Payee lifecycle, Decision G):** `Payee.IsActive` (bool, default true) + `Payee.DeactivatedAt` (DateTimeOffset?). `Payee.Deactivate()` / `Payee.Activate()` domain methods. New commands `DeactivatePayeeCommand` and `ActivatePayeeCommand` (both `IAuditableCommand`, NOT `IMoneyCriticalCommand` — correct, as these are admin operations not money mutations). Permission: new `Payees.Deactivate` (separate from `Payees.Terminate`, consistent with existing finer-grain pattern). Granted to TenantAdmin + CompManager.
+
+   **Capability 2 (nullable PayeeId, Decisions D + 12):** `CompensationTransaction.PayeeId` → `Guid?`. `Transaction.PayeeId` catalog entry added (default Optional for all tenants, including existing ones). `TransactionImportValidationService` extended: blank payeeCode accepted when Optional; inactive payee match emits `IssueSeverity.Warning` with `IssueCategory.Reference` and message "Payee X is inactive — assignment will be historical". `TransactionImportJobHandler` extended to pass `null` payeeId when payeeCode is blank and validation passed. `IngestTransactionHandler` extended with `IFieldRequirementService` check for PayeeId optionality; blocks manual entry to inactive payees.
+
+   **Capability 3 (Assign/Reassign, Decision 11):** `AssignPayeeCommand` + `ReassignPayeeCommand`, both `IMoneyCriticalCommand`. State machine enforced in domain: Paid → `DomainException`; Eligible/Calculated → revert to `Pending`; Cancelled → allowed. Reason required on Reassign (≥ 10 chars, trimmed) — **hardcoded in the domain layer, NOT configurable via `FieldRequirementSettings`**. Making it optional would weaken the audit trail that distinguishes Wasnie from Excel; this was a deliberate architectural decision. Reason persisted in the audit event payload. Endpoints: `POST /api/transactions/{id}/assign-payee` and `/reassign-payee`. 409 Conflict for state-rule violations. Smoke test confirmed reason is enforced across BOTH states of the `Transaction.PayeeId` toggle — the two settings are orthogonal and independent.
+
+   **Frontend:** Payee list — Deactivate/Activate row actions + "Inactive" badge (WsBadge warning). Transaction list — Assign button (unassigned rows), Reassign button (assigned non-Paid rows), disabled Reassign with tooltip for Paid. Assign modal (payee picker + optional comment). Reassign modal (payee picker + required reason with min-10 validation). EN/ES/PL complete.
+
+   **Test count: 644 → 692 backend (+48); 143 frontend (unchanged).** Migration `P2_PayeeLifecycle` applied. Build clean. WI-PROD-A trilogy complete. WI-PROD-MODEL decisions A–I + 10–12 fully realized in code.
+
+41. **WI-PROD-A trilogy + WI-PROD-MODEL milestone — fully realized in code (2026-06-01).** WI-PROD-A.1 (Email + HireDate optional + `FieldRequirementSettings` system), WI-PROD-A.2 (catalog extended to 6 configurable Payee fields: Role, ManagerId, EmploymentType, Location), and WI-PROD-A.3 (Payee lifecycle + nullable PayeeId + Assign/Reassign commands) are all Done and smoke-tested in vivo. Combined backend test growth across the trilogy: 561 → 692 (+131). All 12 WI-PROD-MODEL decisions (A–I + 10–12) implemented and smoke-tested with real Reserved Polska retail data across three coexisting stores (Galeria Katowice EMP001–EMP008, Galeria Mokotów EMP201–EMP209, Silesia City Center EMP301–EMP310; 26 payees, ~12,500 transactions plus today's smoke-test additions). Specific validations in today's session: EMP310 deactivated → "Inactive" badge ✓; re-import against EMP310 → Warning with Reference category ✓; 8 Unassigned transactions (PayeeId null) imported and listed ✓; AssignPayeeCommand on Unassigned → EMP301 assigned ✓; ReassignPayeeCommand rejected empty reason ✓, rejected <10 chars ✓, accepted 40+ chars with EMP302 ✓; Settings shows 7 catalog rows (Transaction.PayeeId Optional) ✓. Mid-market retail SPM model contract complete. Phase 3 (Calculation Engine) is now unblocked — the data model it will consume has stabilized. (2026-06-01)
+
+42. **Architectural observations from the WI-PROD-A trilogy (2026-06-01).**
+
+   **Data-driven Settings UI validated at scale:** The Settings UI introduced in A.1 renders one row per `FieldRequirementSetting` returned by the API. Across A.1 (2 entries), A.2 (+4 entries), and A.3 (+1 entry: Transaction.PayeeId), the catalog grew from 2 → 7 entries with zero template edits on each addition. Only i18n keys and migration seed rows were needed. The mechanism validated itself across three WIs.
+
+   **State machine ownership:** The Assign/Reassign state rules (Paid=blocked, Calculated/Eligible=revert to Pending, Cancelled=allowed) live in `CompensationTransaction.Assign()` and `.Reassign()` domain methods, not in application handlers. Handlers call the domain method and catch `DomainException` — they never duplicate the rules. This is the pattern: business invariants in the domain, coordination in the application layer.
+
+   **Audit trail as a product differentiator:** The reason-required-on-reassign rule is hardcoded in `CompensationTransaction.Reassign()`. It was NOT added to the `FieldRequirementSettings` catalog despite requests to make it configurable. Rationale: the ability to trace WHY a transaction was reassigned (money moved from payee A to B) is a core product promise — it's what makes Wasnie's audit trail more reliable than a spreadsheet. Making it opt-out would undermine the compliance value proposition. Any future request to make the reason optional should be escalated as a product-level decision, not implemented as a settings toggle.
+
+   **`ws-select` in modals — portal pattern:** When `ws-select` is used inside a modal, its dropdown now uses `position: fixed` with coordinates from `getBoundingClientRect()`. This is the canonical solution for dropdowns in overflow-constrained containers, used by all major UI frameworks. The component detects `.ws-modal__dialog` and switches modes automatically — no consumer configuration required.
+
 39. **Threat-model snapshot — upload security (2026-06-01).** Current state assessed: ClosedXML parsing rejects malformed OOXML; 5 MB file-size limit enforced before the parser is invoked; macros never executed (ClosedXML reads cells only); uploaded files are NOT persisted to disk and NOT served back to other users; tenant isolation enforced by the global EF query filter downstream. The surface area for malware propagation is therefore narrow.
 
    Documented gaps as of today: no magic-byte / file-signature validation; no per-user upload rate limiting beyond the global rate limiter; no exhaustive structured upload logging (actor, hash, detected MIME); no antivirus scanning; no internal security-documentation page for customer IT reviews.
@@ -406,9 +430,9 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
-### WI-PROD-MODEL — Retail SPM domain model review ✅ CLOSED (2026-06-01)
+### WI-PROD-MODEL — Retail SPM domain model review ✅ CLOSED + FULLY REALIZED IN CODE (2026-06-01)
 
-**Status:** CLOSED. All 12 firm decisions taken across three parts (Decisions #35, #36, #37). WI-PROD-A is UNBLOCKED. The Calculation Engine (WI-P2-05) must respect Decision 10 (null-PayeeId filter) and Decision 11 (state machine) from the outset.
+**Status:** CLOSED. All 12 firm decisions taken across three parts (Decisions #35, #36, #37). **As of 2026-06-01 end-of-day, all 12 decisions are implemented and smoke-tested in vivo — the conversation and the codebase are in sync.** The Calculation Engine (Phase 3) is now unblocked; the retail SPM data model it consumes has stabilized (see Decision #41).
 
 **Problem:** Current domain model encodes B2B-tech SPM assumptions that conflict with retail SPM (the actual target market):
 
@@ -442,7 +466,7 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ### WI-PROD-A — Field-level requirement configuration system per tenant
 
-**Status:** IN PROGRESS — WI-PROD-A.1 ✅ DONE (2026-06-01). WI-PROD-A.2 ✅ DONE (2026-06-01). Remaining: A.3 (IsActive/DeactivatedAt lifecycle + AssignPayee/ReassignPayee commands + UI).
+**Status:** ✅ FULLY CLOSED (2026-06-01). WI-PROD-A.1 ✅, WI-PROD-A.2 ✅, WI-PROD-A.3 ✅. All WI-PROD-MODEL decisions (A–I, 10–12) are now live in code. WI-PROD-MODEL is CLOSED.
 
 **Full scope (all 12 WI-PROD-MODEL decisions — #35, #36, #37):**
 
@@ -462,12 +486,13 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 7. `Payee.EmploymentType` nullable enum (FullTime/PartTime/Temporary/Contractor); joins configurable-fields catalog with default Optional. ✅
 8–10 (partial — no IsActive yet). `Payee.Location` nullable string (up to 200 chars); joins configurable-fields catalog with default Optional. ✅ `Payee.Role` and `Payee.ManagerId` pre-existed in the entity; now added to the `FieldRequirementSettings` catalog (both default Optional). ✅ Shared `PayeeFieldNames` constants class introduced — validators reference constants, not string literals; future catalog additions require only a constant + a seed row. ✅ Settings UI absorbed the four new entries automatically (data-driven from A.1 — zero template changes). ✅ `PayeeImportValidationService` extended for EmploymentType (enum validation) and Location (max-length); Role is now catalog-driven (Error vs. Warning). ✅ `PayeeImportExecutionService` passes both new fields to `Payee.Create()`. ✅ Tests: 595 → 628 (+33). Smoke-tested in vivo — Settings shows 6 rows; Payee form accepts and persists both fields. ✅
 
-*Sub-WI A.3 — IsActive lifecycle + assignment commands + Frontend UI (Decisions G, 11, E):*
-8. `Payee.IsActive` (default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable); `IsActive → false` sets `DeactivatedAt`; re-activation clears it; all transitions audit-logged. Ingest validator blocks assignment to inactive payees.
-9. Import validator: `IssueSeverity.Warning` when `EmployeeCode` matches inactive payee — `"Payee X (code Y) is inactive — assignment will be historical"`. Row imported; `skipRowsWithWarnings` toggle available.
-11. `AssignPayeeCommand` (`IMoneyCriticalCommand`): assigns a payee to a transaction where `PayeeId IS NULL`. No reason required. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`.
-12. `ReassignPayeeCommand` (`IMoneyCriticalCommand`): changes payee from A to B. Reason field REQUIRED (≥ 10 chars), persisted in audit log event. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`.
-13. State machine enforcement in domain layer: Paid → domain exception; Calculated → return to Pending + mark commission line obsolete; Eligible → return to Pending; Cancelled → allowed. Backend throws on violation.
+*Sub-WI A.3 ✅ DONE (2026-06-01) — IsActive lifecycle + assignment commands + Frontend UI (Decisions G, 11, 12):*
+8. `Payee.IsActive` (default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable); `IsActive → false` sets `DeactivatedAt`; re-activation clears it; all transitions audit-logged. Ingest validator blocks assignment to inactive payees. ✅
+9. Import validator: `IssueSeverity.Warning` when `EmployeeCode` matches inactive payee — `"Payee X (code Y) is inactive — assignment will be historical"`. Row imported; `skipRowsWithWarnings` toggle available. ✅
+11. `AssignPayeeCommand` (`IMoneyCriticalCommand`): assigns a payee to a transaction where `PayeeId IS NULL`. No reason required. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`. ✅
+12. `ReassignPayeeCommand` (`IMoneyCriticalCommand`): changes payee from A to B. Reason field REQUIRED (≥ 10 chars), persisted in audit log event. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`. ✅
+13. State machine enforcement in domain layer: Paid → domain exception; Calculated → return to Pending + mark commission line obsolete; Eligible → return to Pending; Cancelled → allowed. Backend throws on violation. ✅
+15. Assign/Reassign UI on transaction list + detail; Deactivate/Activate in payee list and detail (with confirmation modals); IsActive badge; DeactivatedAt shown in profile tab. ✅
 14. `User.PayeeId` nullable FK; TenantAdmin invite flow uses existing RBAC; manual invite-link mechanism for MVP (no email-send dependency — consistent with WI-02 deferral, Decision E).
 15. Assign / Reassign UI on the transaction detail/list (action gated by status: Paid rows show disabled/hidden action per CLAUDE.md §5.8 RBAC rules).
 16. Reason field modal for reassignment (required input, ≥ 10 chars, client-side validation).
@@ -515,6 +540,8 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 **Status:** DONE (2026-06-01). Scope expanded from the original 1-line fix to cover all 36 emit sites in both import validators, plus the `IssueCategory` model and UI visual distinction.
 
 **Summary:** Validation issue messages now include offending value + corrective action; new `IssueCategory` field on `ValidationIssue` with visual distinction in preview (Reference→amber, Format→red, Required→blue, Other→default). 36 emit sites updated across payee + transaction import validators. 3 new binding rules added to `14-forbidden-patterns.md`. Test count: 628→644 (+16). Smoke-tested in vivo.
+
+**Second real-world validation (2026-06-01, during WI-PROD-A.3 smoke test):** A payee CSV with `EmploymentType = "Full-time"` (human-readable, hyphenated) triggered the new contextual error format. The message included the offending value (`'Full-time'`) and the accepted values (`FullTime, PartTime, Temporary, Contractor`), letting the owner resolve the issue in seconds without support. This confirmed WI-PROD-E's design intent in a realistic accidental-entry scenario. The underlying tolerance gap (enum variants vs. canonical values) is tracked separately as WI-PROD-P.
 
 ---
 
@@ -628,6 +655,40 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 4. **Payee wizard updated** — 4 steps (upload → map → preview → complete) extended to 5 (+ importing). Preview step no longer calls the import service directly; it emits `importRequested` to the wizard, which transitions to the importing step. Wizard stores `skipWarnings` signal.
 
 **Validation:** Owner successfully imported the Silesia City Center dataset (10 payees, 5,066 transactions) via the updated wizard. No regressions in payee or transaction import flows. Test suite: 143/143 frontend tests pass.
+
+---
+
+### WI-PROD-R — UX polish: Unassigned visibility + Assign/Reassign modal overflow ✅ DONE (2026-06-01)
+
+**Status:** DONE. Two-file frontend fix, no backend changes.
+
+**Fix 1 — Unassigned visibility:** "Unassigned" in the transaction list payee column now renders as italic + `--color-text-tertiary` instead of the same `col-secondary` style as real payee names. A comp manager scanning 50 rows can identify Unassigned transactions at a glance without them being garish (Unassigned is a normal operational state, not an error). No new i18n keys — the existing `TRANSACTIONS.UNASSIGNED` key was reused.
+
+**Fix 2 — Modal async dropdown overflow:** Two-phase fix. Phase 1 (height estimate): `openDropdown()` now uses `estimatedHeight = 280` in async mode so the direction/constraint algorithm fires with a realistic height before options load. Phase 2 (escape `overflow: hidden`): the final root cause was that `.ws-modal__dialog { overflow: hidden }` clips ALL absolutely-positioned descendants regardless of the ws-select calculation. The fix: when inside a `.ws-modal__dialog`, the dropdown uses `position: fixed` with coordinates set from `triggerRect.getBoundingClientRect()`. Fixed elements are positioned relative to the viewport and escape ALL overflow ancestors — the industry-standard approach used by Angular Material, React Select, and every other production-grade dropdown in a modal context. The existing modal-aware direction logic (`triggerEl.closest('.ws-modal__dialog')`) is preserved and now also sets the fixed coordinates.
+
+**Fix 3 — Settings catalog label:** Seventh Settings row (Transaction → PayeeId) relabelled from "Payee / Transaction" to "Require payee on new transactions" with a descriptive subtitle "If Optional, transactions can be created or imported without a payee (shown as Unassigned)." EN/ES/PL updated. The toggle's purpose (PayeeId required on creation/import) was always correct; only the label was opaque.
+
+---
+
+### WI-PROD-P — Tolerant enum value parsing in CSV import
+
+**Status:** Pending. **Priority: LOW.** Discovered during WI-PROD-A.3 smoke test (2026-06-01).
+
+**Problem:** `PayeeImportValidationService` accepts only canonical enum values (`FullTime`, `PartTime`, `Temporary`, `Contractor`) for the `EmploymentType` column and rejects natural human-readable variants (`Full-time`, `Part-time`, etc.) that any user editing an Excel export would actually write. The WI-PROD-E contextual error message correctly surfaces the problem and the accepted values, so users CAN recover without support — but the friction is real.
+
+**Scope:** Tolerant parsing layer in `PayeeImportValidationService` for enum-typed columns. Accept common variants (case-insensitive, hyphenated, spaced) and normalize to the canonical enum value before validation. Same approach for any future enum-typed import column. Canonical names remain as authored in the domain enum.
+
+**Note:** WI-PROD-E's contextual error message is a sufficient workaround for now. Pick this up in the next minor UX polish pass.
+
+---
+
+### WI-PROD-Q — Frontend test coverage sweep
+
+**Status:** Pending. **Priority: LOW-MEDIUM.** Accumulated across WI-PROD-A.1, A.2, A.3, and the payee-import UX fix.
+
+**Problem:** Frontend test count has been static at 143 through four WIs that added significant new components: `FieldRequirements` toggles, EmploymentType select, Location input, `AssignPayeeModalComponent`, `ReassignPayeeModalComponent`, IsActive state badges, and validation-message category badges. This is measurable test debt.
+
+**Scope:** Dedicated sweep adding unit/component tests for the above. Target: 60–70 new frontend tests, restoring a healthy coverage ratio. Priority before first paying customer.
 
 ---
 

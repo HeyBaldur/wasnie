@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
@@ -8,7 +9,10 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
-public sealed class TransactionImportValidationService(IApplicationDbContext db, IClock clock)
+public sealed class TransactionImportValidationService(
+    IApplicationDbContext db,
+    IClock clock,
+    IFieldRequirementService fieldRequirements)
     : ITransactionImportValidationService
 {
     private static readonly Regex CurrencyRegex = new(
@@ -26,9 +30,15 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
         TransactionImportColumnMapping mapping,
         CancellationToken ct = default)
     {
+        // Pre-load per-tenant field requirement for PayeeId (Decision D).
+        var payeeIdRequired = await fieldRequirements.IsRequiredAsync(
+            TransactionFieldNames.Entity, TransactionFieldNames.PayeeId, ct);
+
         // Pre-load all data up front to avoid N+1 queries.
+        // Include IsActive so we can warn on inactive payees (Decision 12).
         var payeesByCode = await db.Payees
-            .ToDictionaryAsync(p => p.EmployeeCode, p => p.Id, StringComparer.OrdinalIgnoreCase, ct);
+            .Select(p => new { p.EmployeeCode, p.Id, p.IsActive })
+            .ToDictionaryAsync(p => p.EmployeeCode, StringComparer.OrdinalIgnoreCase, ct);
 
         var existingReferenceNumbers = new HashSet<string>(
             await db.CompensationTransactions
@@ -78,9 +88,21 @@ public sealed class TransactionImportValidationService(IApplicationDbContext db,
             // ── payeeCode ─────────────────────────────────────────────────────
             var payeeCode = GetField(row, mapping.PayeeCodeColumn);
             if (string.IsNullOrWhiteSpace(payeeCode))
-                issues.Add(Error("payeeCode", "Payee code is required.", IssueCategory.Required));
-            else if (!payeesByCode.ContainsKey(payeeCode))
+            {
+                // Blank payeeCode: error if required, silent if Optional (Decision D).
+                if (payeeIdRequired)
+                    issues.Add(Error("payeeCode", "Payee code is required. Add it to your file or set Payee field to Optional in Settings.", IssueCategory.Required));
+                // If Optional, null PayeeId is accepted — no issue emitted.
+            }
+            else if (!payeesByCode.TryGetValue(payeeCode, out var matchedPayee))
+            {
                 issues.Add(Error("payeeCode", $"Payee code '{payeeCode}' not found in this tenant. Create the payee first or correct the code in your file.", IssueCategory.Reference));
+            }
+            else if (!matchedPayee.IsActive)
+            {
+                // Decision 12: inactive payee match → Warning; row is imported as historical assignment.
+                issues.Add(Warn("payeeCode", $"Payee '{payeeCode}' is inactive — assignment will be historical.", IssueCategory.Reference));
+            }
 
             // ── amount ────────────────────────────────────────────────────────
             var amountStr = GetField(row, mapping.AmountColumn);

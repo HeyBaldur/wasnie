@@ -227,6 +227,11 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ **Using the synchronous `ValidationBehavior.Validate()` with validators that contain `MustAsync` rules** (WI-PROD-A.1, 2026-06-01). FluentValidation throws `InvalidOperationException` when a validator with async rules is executed synchronously. `ValidationBehavior` MUST use `ValidateAsync()`. Any new MediatR pipeline behavior that runs validators must also use `ValidateAsync()`.
 - ❌ **Adding new fields to the `FieldRequirementSettings` catalog in the validator without also adding a migration seed entry** (WI-PROD-A.1, 2026-06-01). Every catalog field requires: (a) a migration that inserts a row per existing tenant with the appropriate default, and (b) a seed entry in `TestDatabaseFixture.SeedTestTenantsAsync` for integration tests. Missing seed entries cause integration tests to treat the field as Optional regardless of the intended default.
 
+## Frontend component overflow violations
+
+- ❌ **Custom `overflow` CSS on modal SCSS to work around `ws-select` dropdown clipping** (WI-PROD-R, 2026-06-01). `WsSelectComponent` is already modal-aware: `openDropdown()` detects the nearest `.ws-modal__dialog` via `Element.closest()` and uses its bounds for upward-flip and height-constraint logic. Adding `overflow-y: auto` or custom dropdown positioning in modal component SCSS is forbidden — it duplicates the logic already in `ws-select` and creates split-brain behaviour.
+- ❌ **Absent/null values in data table cells styled with the same color and weight as real values** (WI-PROD-R, 2026-06-01). When a table cell holds a placeholder for an absent value (e.g. "Unassigned"), it MUST be visually distinct from real values. Accepted treatment: `font-style: italic` + `color: var(--color-text-tertiary)`. Forbidden: rendering "Unassigned" or "None" in `col-secondary` or `col-primary` — a comp manager scanning a dense list cannot distinguish an action-required row from a populated one.
+
 ## Claude Code autonomy violations
 
 - ❌ Claude Code performing ANY git operation (file 13, R13.2)

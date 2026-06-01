@@ -16,6 +16,11 @@ public sealed class Payee : BaseAuditableEntity
     public EmploymentType? EmploymentType { get; private set; }
     public string? Location { get; private set; }
 
+    // Platform assignment eligibility (Decision G). Orthogonal to PayeeStatus (HR status).
+    // When false, new transactions cannot be assigned to this payee.
+    public bool IsActive { get; private set; } = true;
+    public DateTimeOffset? DeactivatedAt { get; private set; }
+
     private Payee() { }
 
     public static Payee Create(
@@ -52,6 +57,7 @@ public sealed class Payee : BaseAuditableEntity
             EmploymentType = employmentType,
             Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
             Status = PayeeStatus.Active,
+            IsActive = true,
             CreatedBy = createdBy,
             CreatedAt = now,
             UpdatedAt = now,
@@ -117,6 +123,28 @@ public sealed class Payee : BaseAuditableEntity
 
         Status = PayeeStatus.Terminated;
         TerminationDate = terminationDate;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    // Decision G: platform deactivation — blocks new transaction assignment.
+    // Does not change PayeeStatus (HR status). History corrections remain allowed.
+    public void Deactivate(string updatedBy, DateTimeOffset now)
+    {
+        if (!IsActive) return;
+
+        IsActive = false;
+        DeactivatedAt = now;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    public void Activate(string updatedBy, DateTimeOffset now)
+    {
+        if (IsActive) return;
+
+        IsActive = true;
+        DeactivatedAt = null;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

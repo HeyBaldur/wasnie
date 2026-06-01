@@ -461,6 +461,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Email")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -480,6 +483,11 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly?>("HireDate")
                         .HasColumnType("date");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Location")
                         .HasMaxLength(200)
@@ -773,7 +781,7 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<Guid>("PayeeId")
+                    b.Property<Guid?>("PayeeId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ReferenceNumber")

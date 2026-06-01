@@ -168,4 +168,63 @@ public sealed class PayeeTests
             null, null, "admin", Now.AddHours(1));
         payee.HireDate.Should().BeNull();
     }
+
+    // ── IsActive lifecycle (Decision G) ──────────────────────────────────────
+
+    [Fact]
+    public void Create_IsActive_DefaultsToTrue()
+    {
+        var payee = CreateValid();
+        payee.IsActive.Should().BeTrue();
+        payee.DeactivatedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void Deactivate_SetsIsActiveFalseAndStampsDeactivatedAt()
+    {
+        var payee = CreateValid();
+        var deactivatedAt = Now.AddDays(10);
+
+        payee.Deactivate("admin", deactivatedAt);
+
+        payee.IsActive.Should().BeFalse();
+        payee.DeactivatedAt.Should().Be(deactivatedAt);
+        payee.UpdatedAt.Should().Be(deactivatedAt);
+    }
+
+    [Fact]
+    public void Deactivate_WhenAlreadyInactive_IsIdempotent()
+    {
+        var payee = CreateValid();
+        payee.Deactivate("admin", Now.AddDays(1));
+        var firstDeactivatedAt = payee.DeactivatedAt;
+
+        payee.Deactivate("admin", Now.AddDays(2));
+
+        payee.DeactivatedAt.Should().Be(firstDeactivatedAt);
+    }
+
+    [Fact]
+    public void Activate_SetsIsActiveTrueAndClearsDeactivatedAt()
+    {
+        var payee = CreateValid();
+        payee.Deactivate("admin", Now.AddDays(1));
+
+        payee.Activate("admin", Now.AddDays(2));
+
+        payee.IsActive.Should().BeTrue();
+        payee.DeactivatedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void Activate_WhenAlreadyActive_IsIdempotent()
+    {
+        var payee = CreateValid();
+        var originalUpdatedAt = payee.UpdatedAt;
+
+        payee.Activate("admin", Now.AddHours(1));
+
+        payee.IsActive.Should().BeTrue();
+        payee.UpdatedAt.Should().Be(originalUpdatedAt);
+    }
 }

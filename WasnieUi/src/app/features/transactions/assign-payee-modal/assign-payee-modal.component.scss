@@ -1,0 +1,52 @@
+@reference "../../../../styles.scss";
+
+.assign-modal__context {
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.assign-modal__context-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.assign-modal__context-label {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.assign-modal__context-value {
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+  font-weight: 500;
+
+  &--amount {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.assign-modal__field {
+  margin-bottom: var(--space-4);
+
+  &:last-of-type {
+    margin-bottom: 0;
+  }
+}
+
+.assign-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}

@@ -10,7 +10,12 @@ public sealed class IngestTransactionCommandValidator : AbstractValidator<Ingest
     public IngestTransactionCommandValidator()
     {
         RuleFor(x => x.ReferenceNumber).NotEmpty().MaximumLength(200);
-        RuleFor(x => x.PayeeId).NotEmpty();
+        // PayeeId optionality is enforced by IngestTransactionHandler based on per-tenant field requirements.
+        // An explicitly-provided Guid.Empty is always invalid.
+        RuleFor(x => x.PayeeId)
+            .Must(id => id != Guid.Empty)
+            .When(x => x.PayeeId.HasValue)
+            .WithMessage("PayeeId must not be an empty GUID when provided.");
         RuleFor(x => x.Amount).GreaterThan(0m);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.TransactionDate)

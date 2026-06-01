@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Transaction, CreateTransactionRequest } from '../models/transaction.model';
+import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
@@ -20,5 +20,13 @@ export class TransactionsApiService {
 
   create(request: CreateTransactionRequest): Observable<Transaction> {
     return this.http.post<Transaction>(this.base, request);
+  }
+
+  assignPayee(transactionId: string, request: AssignPayeeRequest): Observable<Transaction> {
+    return this.http.post<Transaction>(`${this.base}/${transactionId}/assign-payee`, request);
+  }
+
+  reassignPayee(transactionId: string, request: ReassignPayeeRequest): Observable<Transaction> {
+    return this.http.post<Transaction>(`${this.base}/${transactionId}/reassign-payee`, request);
   }
 }
