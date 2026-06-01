@@ -5,6 +5,8 @@ export interface PayeeImportColumnMapping {
   hireDateColumn: string;
   roleColumn?: string | null;
   managerEmployeeCodeColumn?: string | null;
+  employmentTypeColumn?: string | null;
+  locationColumn?: string | null;
 }
 
 export interface ParseResponse {
@@ -14,10 +16,13 @@ export interface ParseResponse {
   sampleRows: Record<string, string>[];
 }
 
+export type IssueCategory = 'Reference' | 'Format' | 'Required' | 'Other';
+
 export interface ValidationIssue {
   field: string;
   message: string;
   severity: 'Error' | 'Warning';
+  category: IssueCategory;
 }
 
 export interface PayeeRowValidationResult {

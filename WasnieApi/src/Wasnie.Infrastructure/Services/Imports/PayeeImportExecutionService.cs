@@ -53,8 +53,15 @@ public sealed class PayeeImportExecutionService(
             var email = GetField(row, mapping.EmailColumn);
             var hireDateStr = GetField(row, mapping.HireDateColumn);
             var role = mapping.RoleColumn is not null ? GetField(row, mapping.RoleColumn) : null;
+            var etStr = mapping.EmploymentTypeColumn is not null ? GetField(row, mapping.EmploymentTypeColumn) : null;
+            var location = mapping.LocationColumn is not null ? GetField(row, mapping.LocationColumn) : null;
 
             TryParseDate(hireDateStr, out var hireDate);
+
+            EmploymentType? employmentType = null;
+            if (!string.IsNullOrWhiteSpace(etStr) &&
+                Enum.TryParse<EmploymentType>(etStr, ignoreCase: true, out var parsedEt))
+                employmentType = parsedEt;
 
             var payee = Payee.Create(
                 tenantContext.TenantId,
@@ -66,7 +73,9 @@ public sealed class PayeeImportExecutionService(
                 guid.NewGuid(),
                 startedAt,
                 string.IsNullOrWhiteSpace(role) ? null : role,
-                managerId: null);
+                managerId: null,
+                employmentType,
+                string.IsNullOrWhiteSpace(location) ? null : location);
 
             db.Payees.Add(payee);
             newPayees[code] = payee;

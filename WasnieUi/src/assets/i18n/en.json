@@ -370,11 +370,24 @@
     "ACTION_TERMINATE": "Terminate",
     "FIELD_FULL_NAME": "Full name",
     "FIELD_EMAIL": "Email",
+    "FIELD_EMAIL_OPTIONAL": "Email (optional)",
     "FIELD_EMPLOYEE_CODE": "Employee code",
     "FIELD_HIRE_DATE": "Hire date",
+    "FIELD_HIRE_DATE_OPTIONAL": "Hire date (optional)",
     "FIELD_ROLE": "Role",
+    "FIELD_ROLE_OPTIONAL": "Role (optional)",
     "FIELD_MANAGER": "Manager",
+    "FIELD_MANAGER_OPTIONAL": "Manager (optional)",
     "FIELD_MANAGER_PLACEHOLDER": "No manager (optional)",
+    "FIELD_EMPLOYMENT_TYPE": "Employment type",
+    "FIELD_EMPLOYMENT_TYPE_OPTIONAL": "Employment type (optional)",
+    "FIELD_EMPLOYMENT_TYPE_PLACEHOLDER": "Select employment type",
+    "EMPLOYMENT_TYPE_FULLTIME": "Full-time",
+    "EMPLOYMENT_TYPE_PARTTIME": "Part-time",
+    "EMPLOYMENT_TYPE_TEMPORARY": "Temporary",
+    "EMPLOYMENT_TYPE_CONTRACTOR": "Contractor",
+    "FIELD_LOCATION": "Location",
+    "FIELD_LOCATION_OPTIONAL": "Location (optional)",
     "FIELD_TERMINATION_DATE": "Termination date",
     "TOAST_CREATED": "Payee added successfully.",
     "TOAST_UPDATED": "Payee updated.",
@@ -393,6 +406,10 @@
     "ACTION_IMPORT": "Import"
   },
   "IMPORTS": {
+    "ISSUE_CATEGORY_REFERENCE": "Reference",
+    "ISSUE_CATEGORY_FORMAT": "Format",
+    "ISSUE_CATEGORY_REQUIRED": "Required",
+    "ISSUE_CATEGORY_OTHER": "Error",
     "PAYEES": {
       "TITLE": "Import Payees",
       "SUBTITLE": "Upload your sales team from CSV or XLSX",
@@ -435,7 +452,16 @@
       "COMPLETE_SKIPPED": "{{ count }} rows were skipped due to errors.",
       "BTN_IMPORT_MORE": "Import more",
       "BTN_VIEW_PAYEES": "View payees",
-      "STEP_COMPLETE": "Complete"
+      "STEP_IMPORTING": "Importing…",
+      "STEP_COMPLETE": "Complete",
+      "IMPORTING_TITLE": "Importing payees…",
+      "IMPORTING_SUBTITLE": "Please wait while your payees are being imported."
+    },
+    "SHARED": {
+      "NET_ERROR": "Network issue — retrying…",
+      "FAILED_TITLE": "Import failed",
+      "FAILED_MSG": "An unexpected error occurred. Please try again.",
+      "RETRY": "Back to preview"
     },
     "TRANSACTIONS": {
       "TITLE": "Import Transactions",
@@ -595,5 +621,18 @@
     "TOAST_NOTES_SAVED": "Notes saved.",
     "CONFIRM_DEACTIVATE_TITLE": "Deactivate Assignment",
     "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?"
+  },
+  "SETTINGS": {
+    "FIELD_REQUIREMENTS_TITLE": "Field requirements",
+    "FIELD_REQUIREMENTS_DESC": "Control which fields are required when creating or importing payees. Changes apply to new records only — existing data is not affected.",
+    "FIELD_REQUIRED": "Required",
+    "FIELD_OPTIONAL": "Optional",
+    "FIELD_EMAIL": "Email",
+    "FIELD_HIREDATE": "Hire date",
+    "FIELD_ROLE": "Role",
+    "FIELD_MANAGERID": "Manager",
+    "FIELD_EMPLOYMENTTYPE": "Employment type",
+    "FIELD_LOCATION": "Location",
+    "TOAST_SAVED": "Setting saved."
   }
 }

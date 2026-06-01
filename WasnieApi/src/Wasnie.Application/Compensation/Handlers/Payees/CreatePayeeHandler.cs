@@ -43,6 +43,11 @@ public sealed class CreatePayeeHandler(
                 return Result<PayeeDto>.Failure("Manager not found.");
         }
 
+        Domain.Compensation.Payees.EmploymentType? employmentType = null;
+        if (request.EmploymentType is not null &&
+            Enum.TryParse<Domain.Compensation.Payees.EmploymentType>(request.EmploymentType, ignoreCase: true, out var et))
+            employmentType = et;
+
         var payee = Payee.Create(
             tenantContext.TenantId,
             request.FullName,
@@ -53,7 +58,9 @@ public sealed class CreatePayeeHandler(
             guid.NewGuid(),
             clock.UtcNowOffset,
             request.Role,
-            request.ManagerId);
+            request.ManagerId,
+            employmentType,
+            request.Location);
 
         db.Payees.Add(payee);
         await db.SaveChangesAsync(cancellationToken);
@@ -103,5 +110,7 @@ public sealed class CreatePayeeHandler(
             payee.Status.ToString(),
             activeAssignmentCount,
             payee.CreatedAt,
-            payee.UpdatedAt);
+            payee.UpdatedAt,
+            payee.EmploymentType?.ToString(),
+            payee.Location);
 }

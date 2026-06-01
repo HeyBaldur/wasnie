@@ -5,6 +5,7 @@ using Testcontainers.MsSql;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Entities;
+using Wasnie.Domain.Settings;
 using Wasnie.Infrastructure.Persistence;
 
 namespace Wasnie.IntegrationTests.Infrastructure;
@@ -40,6 +41,8 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
     }
 
     // Seed TenantA and TenantB as Enterprise tier so tier limits never block regular tests.
+    // Also seeds FieldRequirementSettings with Required=true for Email and HireDate so tests
+    // that pass these fields work like before the WI-PROD-A.1 change.
     private static async Task SeedTestTenantsAsync(ApplicationDbContext db)
     {
         var tenantIds = new[] { TestConstants.TenantA, TestConstants.TenantB };
@@ -51,8 +54,29 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
                 tenant.SetTier(Tier.Enterprise);
                 db.Tenants.Add(tenant);
             }
+
+            foreach (var (entityName, fieldName) in new[] { ("Payee", "Email"), ("Payee", "HireDate") })
+            {
+                if (!await db.FieldRequirementSettings.IgnoreQueryFilters()
+                    .AnyAsync(s => s.TenantId == id && s.EntityName == entityName && s.FieldName == fieldName))
+                {
+                    db.FieldRequirementSettings.Add(
+                        FieldRequirementSetting.Create(Guid.NewGuid(), id, entityName, fieldName, isRequired: true));
+                }
+            }
         }
         await db.SaveChangesAsync();
+    }
+
+    public async Task ResetFieldRequirementSettingsAsync(Guid tenantId, bool emailRequired = true, bool hireDateRequired = true)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await db.Database.ExecuteSqlAsync(
+            $"UPDATE FieldRequirementSettings SET IsRequired = {(emailRequired ? 1 : 0)} WHERE TenantId = {tenantId} AND EntityName = 'Payee' AND FieldName = 'Email'");
+        await db.Database.ExecuteSqlAsync(
+            $"UPDATE FieldRequirementSettings SET IsRequired = {(hireDateRequired ? 1 : 0)} WHERE TenantId = {tenantId} AND EntityName = 'Payee' AND FieldName = 'HireDate'");
     }
 
     public async Task ResetAsync()

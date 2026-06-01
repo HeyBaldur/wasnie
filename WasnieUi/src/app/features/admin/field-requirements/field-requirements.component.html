@@ -1,0 +1,25 @@
+<div class="settings-card">
+  <h3 class="settings-section-title">{{ 'SETTINGS.FIELD_REQUIREMENTS_TITLE' | translate }}</h3>
+  <p class="settings-section-desc">{{ 'SETTINGS.FIELD_REQUIREMENTS_DESC' | translate }}</p>
+
+  @if (loading()) {
+    <div class="settings-loading">{{ 'COMMON.LOADING' | translate }}</div>
+  } @else {
+    <div class="settings-fields-list">
+      @for (req of requirements(); track req.fieldName) {
+        <div class="settings-field-row">
+          <div class="settings-field-info">
+            <span class="settings-field-name">{{ fieldLabel(req.fieldName) | translate }}</span>
+            <span class="settings-field-entity">{{ req.entityName }}</span>
+          </div>
+          <ws-segmented-control
+            [options]="reqOptions"
+            [translateLabels]="true"
+            [value]="segValue(req)"
+            (valueChange)="onToggle(req, $event)"
+          />
+        </div>
+      }
+    </div>
+  }
+</div>

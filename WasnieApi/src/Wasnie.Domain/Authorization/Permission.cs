@@ -28,4 +28,5 @@ public static class Permission
     public const string ImportsExecute = "Imports.Execute";
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";
+    public const string SettingsUpdate = "Settings.Update";
 }

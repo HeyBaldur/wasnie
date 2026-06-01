@@ -9,37 +9,43 @@ export interface Payee {
   tenantId: string;
   fullName: string;
   employeeCode: string;
-  email: string;
+  email: string | null;
   role: string | null;
   managerId: string | null;
   managerName: string | null;
   managerEmployeeCode: string | null;
-  hireDate: string;
+  hireDate: string | null;
   terminationDate: string | null;
   status: PayeeStatus;
   statusLabel: string;
   activeAssignmentCount: number;
   createdAt: string;
   updatedAt: string;
+  employmentType?: string | null;
+  location?: string | null;
 }
 
 export interface CreatePayeeRequest {
   fullName: string;
   employeeCode: string;
-  email: string;
-  hireDate: string;
+  email: string | null;
+  hireDate: string | null;
   role?: string | null;
   managerId?: string | null;
+  employmentType?: string | null;
+  location?: string | null;
 }
 
 export interface UpdatePayeeRequest {
   payeeId: string;
   fullName: string;
   employeeCode: string;
-  email: string;
-  hireDate: string;
+  email: string | null;
+  hireDate: string | null;
   role?: string | null;
   managerId?: string | null;
+  employmentType?: string | null;
+  location?: string | null;
 }
 
 export interface PayeeListParams {

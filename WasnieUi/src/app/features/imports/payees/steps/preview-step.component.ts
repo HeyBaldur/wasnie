@@ -1,17 +1,14 @@
-import { Component, computed, HostListener, inject, input, output, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { Component, computed, HostListener, input, output, signal } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
 import { WsButtonComponent, WsStatCardComponent, WsBadgeComponent, BadgeVariant } from '../../../../shared/ui';
-import { PayeeImportService } from '../services/payee-import.service';
 import {
   PayeeImportColumnMapping,
-  PayeeImportResult,
   PayeeRowValidationResult,
   ValidateResponse,
+  ValidationIssue,
 } from '../models/payee-import.models';
-import { extractApiError } from '../../../../shared/utils/api-error';
 import { composeFullName } from '../helpers/fullname-composer';
 
 type RowFilter = 'all' | 'errors' | 'warnings';
@@ -24,19 +21,15 @@ type RowFilter = 'all' | 'errors' | 'warnings';
   styleUrl: './preview-step.component.scss',
 })
 export class PreviewStepComponent {
-  private readonly importService = inject(PayeeImportService);
-
   readonly fileId = input.required<string>();
   readonly columnMapping = input.required<PayeeImportColumnMapping>();
   readonly validateResponse = input.required<ValidateResponse>();
 
-  readonly imported = output<PayeeImportResult>();
+  readonly importRequested = output<{ skipWarnings: boolean }>();
   readonly back = output<void>();
 
   readonly rowFilter = signal<RowFilter>('all');
   skipWarnings = false;
-  readonly loading = signal(false);
-  readonly error = signal<string | null>(null);
 
   // Column filter state
   readonly openFilterCol = signal<string | null>(null);
@@ -129,19 +122,23 @@ export class PreviewStepComponent {
     this.filterDropdownPos.set(null);
   }
 
-  async onImport(): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      const result = await firstValueFrom(
-        this.importService.executeImport(this.fileId(), this.columnMapping(), this.skipWarnings),
-      );
-      this.imported.emit(result);
-    } catch (err) {
-      this.error.set(extractApiError(err));
-    } finally {
-      this.loading.set(false);
+  onImport(): void {
+    this.importRequested.emit({ skipWarnings: this.skipWarnings });
+  }
+
+  issueBadgeVariant(issue: ValidationIssue): BadgeVariant {
+    if (issue.severity === 'Warning') return 'warning';
+    switch (issue.category) {
+      case 'Reference': return 'warning';
+      case 'Format':    return 'danger';
+      case 'Required':  return 'info';
+      default:          return 'neutral';
     }
+  }
+
+  issueCategoryKey(issue: ValidationIssue): string {
+    if (issue.severity === 'Warning') return '';
+    return `IMPORTS.ISSUE_CATEGORY_${issue.category.toUpperCase()}`;
   }
 
   onBack(): void { this.back.emit(); }

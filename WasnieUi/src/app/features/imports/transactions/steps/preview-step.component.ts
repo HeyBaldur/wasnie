@@ -9,6 +9,7 @@ import {
   TransactionImportColumnMapping,
   TransactionRowValidationResult,
   TransactionValidateResponse,
+  ValidationIssue,
 } from '../models/transaction-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
 
@@ -136,6 +137,21 @@ export class TxPreviewStepComponent {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  issueBadgeVariant(issue: ValidationIssue): BadgeVariant {
+    if (issue.severity === 'Warning') return 'warning';
+    switch (issue.category) {
+      case 'Reference': return 'warning';
+      case 'Format':    return 'danger';
+      case 'Required':  return 'info';
+      default:          return 'neutral';
+    }
+  }
+
+  issueCategoryKey(issue: ValidationIssue): string {
+    if (issue.severity === 'Warning') return '';
+    return `IMPORTS.ISSUE_CATEGORY_${issue.category.toUpperCase()}`;
   }
 
   onBack(): void { this.back.emit(); }

@@ -11,4 +11,6 @@ public sealed class PayeeImportColumnMapping
     public required string HireDateColumn { get; init; }
     public string? RoleColumn { get; init; }
     public string? ManagerEmployeeCodeColumn { get; init; }
+    public string? EmploymentTypeColumn { get; init; }
+    public string? LocationColumn { get; init; }
 }

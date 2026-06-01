@@ -34,7 +34,7 @@ public sealed class ListPayeesHandler(
             query = query.Where(x =>
                 x.FullName.ToLower().Contains(q) ||
                 x.EmployeeCode.ToLower().Contains(q) ||
-                x.Email.ToLower().Contains(q));
+                (x.Email != null && x.Email.ToLower().Contains(q)));
         }
 
         // Filters

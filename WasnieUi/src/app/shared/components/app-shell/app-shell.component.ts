@@ -10,7 +10,13 @@ import { WsConfirmationModalComponent } from '../../ui';
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [SidebarComponent, TopbarComponent, WsToastContainerComponent, WsConfirmationModalComponent, TranslateModule],
+  imports: [
+    SidebarComponent,
+    TopbarComponent,
+    WsToastContainerComponent,
+    WsConfirmationModalComponent,
+    TranslateModule,
+  ],
   templateUrl: './app-shell.component.html',
   styleUrl: './app-shell.component.scss',
 })

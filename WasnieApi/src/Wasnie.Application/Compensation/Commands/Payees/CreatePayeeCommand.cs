@@ -7,7 +7,9 @@ namespace Wasnie.Application.Compensation.Commands.Payees;
 public sealed record CreatePayeeCommand(
     string FullName,
     string EmployeeCode,
-    string Email,
-    DateOnly HireDate,
+    string? Email,
+    DateOnly? HireDate,
     string? Role = null,
-    Guid? ManagerId = null) : IRequest<Result<PayeeDto>>;
+    Guid? ManagerId = null,
+    string? EmploymentType = null,
+    string? Location = null) : IRequest<Result<PayeeDto>>;

@@ -370,11 +370,24 @@
     "ACTION_TERMINATE": "Dar de baja",
     "FIELD_FULL_NAME": "Nombre completo",
     "FIELD_EMAIL": "Correo electrónico",
+    "FIELD_EMAIL_OPTIONAL": "Correo electrónico (opcional)",
     "FIELD_EMPLOYEE_CODE": "Código de empleado",
     "FIELD_HIRE_DATE": "Fecha de contratación",
+    "FIELD_HIRE_DATE_OPTIONAL": "Fecha de contratación (opcional)",
     "FIELD_ROLE": "Cargo",
+    "FIELD_ROLE_OPTIONAL": "Cargo (opcional)",
     "FIELD_MANAGER": "Manager",
+    "FIELD_MANAGER_OPTIONAL": "Manager (opcional)",
     "FIELD_MANAGER_PLACEHOLDER": "Sin manager (opcional)",
+    "FIELD_EMPLOYMENT_TYPE": "Tipo de contrato",
+    "FIELD_EMPLOYMENT_TYPE_OPTIONAL": "Tipo de contrato (opcional)",
+    "FIELD_EMPLOYMENT_TYPE_PLACEHOLDER": "Seleccionar tipo de contrato",
+    "EMPLOYMENT_TYPE_FULLTIME": "Tiempo completo",
+    "EMPLOYMENT_TYPE_PARTTIME": "Tiempo parcial",
+    "EMPLOYMENT_TYPE_TEMPORARY": "Temporal",
+    "EMPLOYMENT_TYPE_CONTRACTOR": "Contratista",
+    "FIELD_LOCATION": "Ubicación",
+    "FIELD_LOCATION_OPTIONAL": "Ubicación (opcional)",
     "FIELD_TERMINATION_DATE": "Fecha de baja",
     "TOAST_CREATED": "Beneficiario añadido correctamente.",
     "TOAST_UPDATED": "Beneficiario actualizado.",
@@ -497,6 +510,10 @@
     "CONFIRM_DEACTIVATE_MSG": "Desactivar esta asignación impedirá que el beneficiario gane comisiones bajo este plan. ¿Estás seguro?"
   },
   "IMPORTS": {
+    "ISSUE_CATEGORY_REFERENCE": "Referencia",
+    "ISSUE_CATEGORY_FORMAT": "Formato",
+    "ISSUE_CATEGORY_REQUIRED": "Obligatorio",
+    "ISSUE_CATEGORY_OTHER": "Error",
     "PAYEES": {
       "TITLE": "Importar Beneficiarios",
       "SUBTITLE": "Sube tu equipo de ventas desde CSV o XLSX",
@@ -539,7 +556,16 @@
       "COMPLETE_SKIPPED": "{{ count }} filas fueron omitidas por errores.",
       "BTN_IMPORT_MORE": "Importar más",
       "BTN_VIEW_PAYEES": "Ver beneficiarios",
-      "STEP_COMPLETE": "Completado"
+      "STEP_IMPORTING": "Importando…",
+      "STEP_COMPLETE": "Completado",
+      "IMPORTING_TITLE": "Importando beneficiarios…",
+      "IMPORTING_SUBTITLE": "Espera mientras se importan tus beneficiarios."
+    },
+    "SHARED": {
+      "NET_ERROR": "Problema de red — reintentando…",
+      "FAILED_TITLE": "Error al importar",
+      "FAILED_MSG": "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
+      "RETRY": "Volver a la vista previa"
     },
     "TRANSACTIONS": {
       "TITLE": "Importar Transacciones",
@@ -595,5 +621,18 @@
       "FIELD_TRANSACTION_DATE": "Fecha de transacción",
       "FIELD_EXTERNAL_ID": "ID externo"
     }
+  },
+  "SETTINGS": {
+    "FIELD_REQUIREMENTS_TITLE": "Requisitos de campos",
+    "FIELD_REQUIREMENTS_DESC": "Controla qué campos son obligatorios al crear o importar beneficiarios. Los cambios aplican solo a nuevos registros — los datos existentes no se ven afectados.",
+    "FIELD_REQUIRED": "Obligatorio",
+    "FIELD_OPTIONAL": "Opcional",
+    "FIELD_EMAIL": "Correo electrónico",
+    "FIELD_HIREDATE": "Fecha de contratación",
+    "FIELD_ROLE": "Cargo",
+    "FIELD_MANAGERID": "Manager",
+    "FIELD_EMPLOYMENTTYPE": "Tipo de contrato",
+    "FIELD_LOCATION": "Ubicación",
+    "TOAST_SAVED": "Configuración guardada."
   }
 }

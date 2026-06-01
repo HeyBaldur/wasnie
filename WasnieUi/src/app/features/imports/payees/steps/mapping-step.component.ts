@@ -38,6 +38,8 @@ export class MappingStepComponent implements OnInit {
     hireDateColumn: [''],
     roleColumn: [''],
     managerColumn: [''],
+    employmentTypeColumn: [''],
+    locationColumn: [''],
   });
 
   readonly fullNameColumns = signal<string[]>([]);
@@ -87,6 +89,8 @@ export class MappingStepComponent implements OnInit {
       { label: 'Hire Date', cols: [v.hireDateColumn ?? ''].filter(Boolean) },
       ...(v.roleColumn ? [{ label: 'Role', cols: [v.roleColumn] }] : []),
       ...(v.managerColumn ? [{ label: 'Manager', cols: [v.managerColumn] }] : []),
+      ...(v.employmentTypeColumn ? [{ label: 'Employment Type', cols: [v.employmentTypeColumn] }] : []),
+      ...(v.locationColumn ? [{ label: 'Location', cols: [v.locationColumn] }] : []),
     ].filter(h => h.cols.length > 0 && h.cols.some(c => c.length > 0));
   }
 
@@ -116,6 +120,8 @@ export class MappingStepComponent implements OnInit {
         hireDateColumn: restored.hireDateColumn,
         roleColumn: restored.roleColumn ?? '',
         managerColumn: restored.managerEmployeeCodeColumn ?? '',
+        employmentTypeColumn: restored.employmentTypeColumn ?? '',
+        locationColumn: restored.locationColumn ?? '',
       });
       return;
     }
@@ -128,6 +134,8 @@ export class MappingStepComponent implements OnInit {
       hireDateColumn: detectOtherField(headers, OTHER_FIELD_PATTERNS['hireDateColumn']),
       roleColumn: detectOtherField(headers, OTHER_FIELD_PATTERNS['roleColumn']),
       managerColumn: detectOtherField(headers, OTHER_FIELD_PATTERNS['managerColumn']),
+      employmentTypeColumn: detectOtherField(headers, OTHER_FIELD_PATTERNS['employmentTypeColumn']),
+      locationColumn: detectOtherField(headers, OTHER_FIELD_PATTERNS['locationColumn']),
     });
   }
 
@@ -140,6 +148,8 @@ export class MappingStepComponent implements OnInit {
       hireDateColumn: v.hireDateColumn ?? '',
       roleColumn: v.roleColumn || null,
       managerEmployeeCodeColumn: v.managerColumn || null,
+      employmentTypeColumn: v.employmentTypeColumn || null,
+      locationColumn: v.locationColumn || null,
     };
   }
 

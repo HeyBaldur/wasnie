@@ -462,7 +462,6 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
@@ -471,13 +470,20 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("EmploymentType")
+                        .HasColumnType("int");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<DateOnly>("HireDate")
+                    b.Property<DateOnly?>("HireDate")
                         .HasColumnType("date");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<Guid?>("ManagerId")
                         .HasColumnType("uniqueidentifier");
@@ -506,7 +512,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ManagerId");
 
-                    b.HasIndex("TenantId", "Email");
+                    b.HasIndex("TenantId", "Email")
+                        .IsUnique()
+                        .HasFilter("[Email] IS NOT NULL");
 
                     b.HasIndex("TenantId", "EmployeeCode")
                         .IsUnique();
@@ -1108,6 +1116,36 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "TenantId");
 
                     b.ToTable("RefreshTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Settings.FieldRequirementSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EntityName", "FieldName")
+                        .IsUnique();
+
+                    b.ToTable("FieldRequirementSettings", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

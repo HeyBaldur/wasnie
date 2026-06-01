@@ -10,6 +10,297 @@
 
 ---
 
+## 2026-06-01 — WI-PROD-E DONE: contextual import error messages + IssueCategory visual distinction
+
+**WI:** WI-PROD-E — Actionable import validation messages  
+**Status:** DONE ✅
+
+Validation issue messages now include offending value + corrective action; new `IssueCategory` field on `ValidationIssue` with visual distinction in preview (Reference→amber, Format→red, Required→blue, Other→default). 36 emit sites updated across payee + transaction import validators. 3 new binding rules added to `14-forbidden-patterns.md`. Test count: 628→644 (+16). Smoke-tested in vivo.
+
+---
+
+## 2026-06-01 — Backlog update: WI-PROD-N + WI-PROD-O (upload security); threat-model decision #39
+
+**Type:** Backlog and decision documentation only. No code changes.
+
+### What was recorded
+
+**WI-PROD-N — File upload security hardening** added to backlog.  
+Triggered by owner asking whether uploaded files are scanned for viruses. Assessed current state (ClosedXML rejects malformed OOXML; 5 MB limit; no disk persistence; no serving back to users; macros never executed) and documented four gaps to close before the first paying customer: magic-byte validation, per-user upload rate limiting on the two parse endpoints, structured upload logging (actor / hash / MIME / size), and an internal security documentation page for customer IT reviews. Timing: before signing first customer (~1 focused day). NOT urgent today.
+
+**WI-PROD-O — Antivirus scanning integration** added to backlog.  
+Three provider candidates documented (Azure Defender for Storage, self-hosted ClamAV, VirusTotal API). Synchronous vs asynchronous scan flow trade-offs recorded. Quarantine workflow scoped (reject file, alert TenantAdmin, log at Critical). Timing: only when contractually required by a customer — do not implement speculatively. WI-PROD-N must ship first.
+
+**Decision #39 — Threat-model snapshot** recorded in "Important decisions made."  
+Risk assessment: LOW at current stage. Becomes MEDIUM at first IT-security review. Both WIs visible in backlog so the gap cannot be invented later under contract pressure.
+
+---
+
+## 2026-06-01 — WI-PROD-E: contextual error messages + category badges in import preview
+
+**WI:** WI-PROD-E — Actionable import validation messages  
+**Status:** DONE ✅  
+**Test count:** 628 → 644 backend (+16 — 8 per validator); 143 frontend (unchanged)
+
+### What was done
+
+**Model (`ImportValidationModels.cs`):**
+- `IssueCategory` enum added: `Reference | Format | Required | Other`
+- `ValidationIssue.Category` property added with default `Other` — backward-compatible; existing emit sites that weren't updated continue to serialize `Category: "Other"` without breaking
+
+**PayeeImportValidationService — all 22 emit sites updated:**
+- Reference errors (duplicate code, duplicate/existing email, manager not found) → embed offending value + corrective action, `Category = Reference`
+- Format errors (bad date, bad email format, too long, invalid employment type) → embed offending value, `Category = Format`
+- Required errors (email/hire date/role/employment type/location required per settings) → message explains the settings origin, `Category = Required`
+- Warnings (personal domain, recent hire date) → `Category = Other` (warnings keep existing style)
+
+**TransactionImportValidationService — all 14 emit sites updated:**
+- "Payee code not found." → `"Payee code 'EMP999' not found in this tenant. Create the payee first or correct the code in your file."` `Category = Reference`
+- Duplicate reference/externalId → embed value, `Category = Reference`
+- Bad amount/currency/date → embed value, `Category = Format`
+- Missing reference/payee code → `Category = Required`
+
+**Frontend (both payee and transaction preview steps):**
+- `ValidationIssue` model extended with `category: IssueCategory`
+- `issueBadgeVariant()` + `issueCategoryKey()` helpers added to both preview components
+- Issues column now renders `<ws-badge>` before each message: Reference → `'warning'` (amber), Format → `'danger'` (red), Required → `'info'` (blue), warnings → `'warning'`; `Other` → no badge (neutral, kept minimal)
+- `.preview-issue` + `.preview-issue__msg` CSS classes added to both preview SCSS files
+
+**i18n (EN/ES/PL):** `IMPORTS.ISSUE_CATEGORY_REFERENCE/FORMAT/REQUIRED/OTHER` added to all three files
+
+**`14-forbidden-patterns.md`:** New "Validation error message violations" section — three binding rules: (1) embed offending value, (2) corrective action on reference errors, (3) `Category` must be set explicitly
+
+### Smoke test
+No dedicated in-vivo test run in this session — the owner has the `_test.xlsx` instructions from the WI prompt and can verify the Reference badge on an EMP999 row. All automated tests green.
+
+---
+
+## 2026-06-01 — WI-PROD-A.2 CLOSED: smoke-tested in vivo; Settings shows 6 rows; Payee form persists new fields
+
+**WI:** WI-PROD-A.2 — Extend field requirement catalog  
+**Status:** CLOSED ✅  
+**Session type:** Documentation + closure. Code was completed in the prior implementation session (see entry below). This session records the in-vivo validation and officially closes the WI.
+
+### Smoke test results (in vivo, real tenant data)
+
+- **Settings → Field Requirements page:** Shows 6 rows as expected — Email, Hire date, Role, Manager, Employment type, Location. Each toggles independently between Required and Optional.
+- **Payee edit form:** EmploymentType select renders with four localized options (Full-time, Part-time, Temporary, Contractor). Location text input renders. Both fields save correctly and persist on reload.
+- **No regressions observed** on the existing payee list, payee detail, or import flows.
+
+### Summary
+
+WI-PROD-A.2 completed across two Claude Code sessions:
+- **Session 1 (crashed mid-flight):** Full Application layer — `Payee.cs` entity with new fields, `EmploymentType` enum, `PayeeFieldNames` constants, commands/DTOs/handlers/validators.
+- **Session 2 (continuation prompt):** EF migration `P2_PayeeNewColumns` (adds columns + seeds 4 catalog rows per tenant), import service extensions, frontend form fields, auto-detect patterns (7 languages), i18n (EN/ES/PL), tests.
+
+**Test count: 595 → 628 (+33).** Build clean. Migration applied to live DB without incident.
+
+**Architectural win confirmed in vivo:** A.1's data-driven Settings UI (iterates over the API response, one row per `FieldRequirementSetting`) absorbed the four new catalog entries automatically. Zero UI template changes needed — only new i18n keys. Pattern holds for all future catalog additions.
+
+### Remaining backlog (next sessions)
+
+- **WI-PROD-A.3** — `Payee.IsActive` + `DeactivatedAt` lifecycle; `AssignPayeeCommand` + `ReassignPayeeCommand` (`IMoneyCriticalCommand`); state machine enforcement; Assign/Reassign UI on transaction detail. (Decisions G, 11, E)
+- **WI-PROD-CURRENCY** — Full multi-currency system: account currency on Tenant, FX rate table, original + converted amount duality on Transaction, conversion engine. (Decision I)
+- **WI-PROD-K** — Books reconciliation (payout line → bank export).
+- **WI-PROD-B/C/E/G/I/J** — Smaller items (multi-sheet Excel picker, onboarding UX, actionable errors, etc.)
+
+---
+
+## 2026-06-01 — WI-PROD-A.2: EmploymentType + Location on Payee; field requirement catalog → 6 entries
+
+**WI:** WI-PROD-A.2 — Extend field requirement catalog  
+**Status:** DONE  
+**Note:** Completed across two sessions. The previous session (crashed mid-flight due to billing) had done all backend Application layer work. This session added the EF migration, import services, frontend form, and tests.
+
+### What was done
+
+**Backend:**
+- `PayeeConfiguration.cs` — added `EmploymentType` (nullable int) and `Location` (nvarchar 200) property configs
+- `20260601111756_P2_PayeeNewColumns` migration — adds two nullable columns to `Payees` table; seeds 4 new `FieldRequirementSetting` rows per existing tenant (Role/ManagerId/EmploymentType/Location = Optional by default)
+- `PayeeImportColumnMapping.cs` — added `EmploymentTypeColumn` and `LocationColumn` optional properties
+- `PayeeImportValidationService.cs` — validates EmploymentType (enum check) and Location (max 200 chars); Role now catalog-driven (Error when required, Warning when optional)
+- `PayeeImportExecutionService.cs` — passes EmploymentType (parsed to enum) and Location to `Payee.Create()`
+
+**Tests (before: 595 → after: 628):**
+- `PayeeTests.cs` — 7 new domain unit tests for EmploymentType (Create/Update, null, trim) and Location
+- `CreatePayeeCommandValidatorTests.cs` — 10 new validator unit tests for Role, ManagerId, EmploymentType (including invalid/valid values), Location; `ConfigurableFieldService` added
+- `PayeeImportValidationServiceTests.cs` — 13 new integration tests for EmploymentType (valid types case-insensitive, invalid type error, required error), Location (valid, required error, too long), Role catalog-driven required; `AlwaysRequiredExceptService` helper added
+
+**Frontend:**
+- `payee.model.ts` — `Payee` interface + `CreatePayeeRequest` + `UpdatePayeeRequest` gain `employmentType?` and `location?`
+- `payee-form.component.ts` — 4 new computed required signals (roleRequired, managerRequired, employmentTypeRequired, locationRequired); `employmentTypeOptions` static SelectOption array; 2 new form controls; effect refactored to loop with `syncRequired` helper; patch and payload extended
+- `payee-form.component.html` — EmploymentType `ws-select` (static options) and Location `ws-input`; Role and Manager labels now conditional on required setting
+- `payee-import.models.ts` — `PayeeImportColumnMapping` gains `employmentTypeColumn?` and `locationColumn?`
+- `mapping-step.component.ts` — form group, auto-detect init, restore, `currentMapping()`, and preview extended for 2 new optional columns
+- `mapping-step.component.html` — 2 new optional mapping rows
+- `column-auto-detect.ts` — `OTHER_FIELD_PATTERNS` extended with `employmentTypeColumn` (EN/ES/PL/PT/FR/DE/IT patterns) and `locationColumn` (EN/ES/PL/FR/DE/IT patterns)
+
+**i18n (EN + ES + PL):**  
+New keys in `PAYEES.*`: FIELD_ROLE_OPTIONAL, FIELD_MANAGER_OPTIONAL, FIELD_EMPLOYMENT_TYPE, FIELD_EMPLOYMENT_TYPE_OPTIONAL, FIELD_EMPLOYMENT_TYPE_PLACEHOLDER, EMPLOYMENT_TYPE_FULLTIME/PARTTIME/TEMPORARY/CONTRACTOR, FIELD_LOCATION, FIELD_LOCATION_OPTIONAL  
+New keys in `SETTINGS.*`: FIELD_ROLE, FIELD_MANAGERID, FIELD_EMPLOYMENTTYPE, FIELD_LOCATION
+
+**Settings UI** — fully data-driven (was already data-driven from A.1); shows 6 rows automatically once new catalog rows are seeded.
+
+### Test counts
+- Backend: **628 passing** (259 unit + 369 integration, 2 skipped rate-limit tests unchanged)
+- Frontend: **143 passing**, build clean
+
+### Notes
+- Bundle budget overrun (561 kB vs 500 kB angular.json budget) is pre-existing; NOT introduced by this WI
+- Frontend coverage 47% is pre-existing; NOT reduced by this WI
+- Smoke test screenshots not captured (no running instance); manual verification against live data deferred to deployment
+
+---
+
+## 2026-06-01 — Full day: WI-PROD-A.1 validated live; WI-PROD-D + WI-PROD-L done; 3 stores, ~12,500 txns
+
+**Duration:** Full day (morning + afternoon)
+**Phase:** Phase 2 (retail SPM domain model + UX improvements)
+**Tests at end of day:** 595 backend (238 unit + 357 integration), 143 frontend — no regressions.
+
+### Morning — WI-PROD-MODEL Part 3 + WI-PROD-A.1 implementation
+
+WI-PROD-MODEL was closed with three final decisions (10, 11, 12 — see Decision #37 in PROJECT_STATUS.md). WI-PROD-A.1 was then implemented and test-validated: `Payee.Email` and `Payee.HireDate` made nullable end-to-end, `FieldRequirementSetting` entity + settings system built, validators made conditional via `IFieldRequirementService`, and a Settings UI (TenantAdmin-only) built to toggle the two fields. `ValidationBehavior` was fixed from sync `Validate()` to async `ValidateAsync()` (critical bug that would have broken any future `MustAsync` validator). EF migration with filtered unique index, seed for existing tenants, and deduplication step. +32 backend tests, 0 regressions. See the WI-PROD-A.1 session entry below for full implementation details.
+
+### Afternoon — real-data validation + UX fixes
+
+**Real-data pass 1 — Warszawa / Galeria Mokotów (EMP201-EMP209, 4,232 txns):**
+- Owner toggled Email and HireDate to Optional in the new Settings → Field Requirements page.
+- Re-imported `Reserved_Warszawa_Employees_April2026.xlsx` (9 employees, 4 with no email) — all 9 imported with 0 errors. The original WI-PROD-A.1 blocker is dead.
+- Imported 4,232 Warszawa transaction rows — all successful. Payee name resolution (WI-PROD-F) correctly resolved all names server-side.
+
+**Payee import UX fix — WI-PROD-L (DONE):**
+Owner observed that the Payee import wizard lacked the progress screen and result feedback that the Transaction wizard had — clicking "Import" left the user on the preview table with only a spinning button. Claude Code implemented:
+- Shared `ImportProgressComponent` (`features/imports/shared/`) — visual component used by both wizards (indeterminate/determinate bar, error/retry state). This delivers WI-PROD-D (progress bar promoted when second consumer appeared).
+- New `PayeeImportingStepComponent` — 5th wizard step fires the HTTP import call on init, shows animated bar, transitions to complete or shows error with retry.
+- Transaction wizard refactored to use the shared component (behaviour unchanged, 6 existing tests pass).
+- Payee wizard extended: 4 steps → 5 steps; preview step now emits event to wizard rather than calling service directly.
+- 143/143 frontend tests pass, 0 regressions.
+
+**Real-data pass 2 — Silesia City Center Katowice (EMP301-EMP310, 5,066 txns):**
+- Owner generated a new store dataset (10 payees, 5,066 April 2026 transactions).
+- Imported all 10 payees via the updated wizard (new "Importing…" progress screen confirmed working).
+- Imported 5,066 transactions — all successful.
+- Tenant now has three stores coexisting: Galeria Katowice (8 payees, 3,183 txns), Galeria Mokotów Warszawa (9 payees, 4,232 txns), Silesia City Center Katowice (10 payees, 5,066 txns) — ~26 payees, ~12,500 transactions total. No regressions at this volume.
+
+### Items closed today
+
+- WI-PROD-MODEL — ✅ CLOSED (final decisions recorded)
+- WI-PROD-A.1 — ✅ DONE (implemented + real-data validated)
+- WI-PROD-D — ✅ DONE (delivered via WI-PROD-L)
+- WI-PROD-L — ✅ DONE (payee import UX: progress + result screens)
+
+### Items remaining (next sessions, priority TBD by owner)
+
+- WI-PROD-A.2 — additional configurable fields (Role, ManagerId, EmploymentType, Location)
+- WI-PROD-A.3 — assignment commands (AssignPayee / ReassignPayee state machine)
+- WI-PROD-CURRENCY — full multi-currency system (account currency + FX + original/converted duality)
+- WI-PROD-K — books reconciliation tool
+
+---
+
+## 2026-06-01 — WI-PROD-A.1: Email + HireDate optional via FieldRequirementSettings system
+
+**Duration:** ~3 hours
+**Phase:** Phase 2 (retail SPM domain model — first implementation sub-WI)
+**Backend tests before → after:** 563 (217 unit + 346 integration) → 595 (238 unit + 357 integration). **+32 tests.** 0 regressions.
+**Frontend tests before → after:** 143 → 143 (all existing pass; no new frontend tests added this session). 0 regressions.
+
+### What was built
+
+The real-data import blocker from 2026-05-29 is resolved: Reserved Polska retail exports with staff lacking corporate email can now be imported. The solution is a per-tenant configurable field-requirement system.
+
+### Backend changes
+
+**New domain:** `FieldRequirementSetting` entity (`Domain/Settings/`) extending `Entity`. Fields: `TenantId`, `EntityName`, `FieldName`, `IsRequired`. `SetRequired(bool)` method. No audit fields on the entity itself — all changes go to AuditLog.
+
+**New Application interfaces:** `IFieldRequirementService` (Application/Common/Interfaces) with async `IsRequiredAsync(entityName, fieldName, ct)`. Scoped service; caches per-request via lazy-load private list (single DB query for all settings per request). 
+
+**New Application commands/queries:** `GetFieldRequirementsQuery` + handler; `UpdateFieldRequirementCommand` + handler. Both require `Settings.Update` permission (TenantAdmin-only). `UpdateFieldRequirementHandler` uses explicit `auditService.LogAsync(...)` with before/after snapshots (Rule 5.1.5 — configuration changes must be audited). Audit swallows failures (non-money operation).
+
+**New Application validators:** `CreatePayeeCommandValidator` (was missing entirely). Both Create and Update validators inject `IFieldRequirementService`. Email and HireDate use `MustAsync` (presence check conditional on setting; format always enforced when value is present).
+
+**Critical bug fixed — ValidationBehavior:** `ValidationBehavior` was calling `v.Validate()` synchronously. FluentValidation throws `InvalidOperationException` when `Validate()` is called on a validator containing `MustAsync` rules. Changed to `ValidateAsync()` using `Task.WhenAll`. This is a backward-compatible fix — all existing sync validators work correctly with `ValidateAsync()`.
+
+**Payee domain:** `Email` → `string?`, `HireDate` → `DateOnly?`. Domain factory invariants updated: null values no longer throw; format validation (future date guard) only runs when value is present. `Update()` mirrors same nullable behavior.
+
+**PayeeImportValidationService:** Email and HireDate blank checks now conditional on `IFieldRequirementService`. Bug fix: `TryParseDate` was using `null` (thread culture) in `DateOnly.TryParseExact` — fixed to `CultureInfo.InvariantCulture` (same fix as WI-P2-04a-fix2 did for transaction import).
+
+**EF migration `20260601080854_P2_FieldRequirementSettings`:**
+- `Payee.Email` → nullable
+- `Payee.HireDate` → nullable
+- Drop old non-filtered index `IX_Payees_TenantId_Email`
+- Add filtered unique index `IX_Payees_TenantId_Email WHERE Email IS NOT NULL` (same pattern as `ExternalId` in WI-P2-02)
+- Create `FieldRequirementSettings` table with unique index `(TenantId, EntityName, FieldName)`
+- Deduplication step before index creation (handles dev DB with duplicate emails from test imports)
+- Seed SQL: inserts Email=Required + HireDate=Required for all existing tenants → backward compat
+
+**New API:** `GET /api/settings/field-requirements`, `PUT /api/settings/field-requirements/{entity}/{fieldName}`. Both require `Settings.Update` (TenantAdmin).
+
+**Permission + RolePermissions:** `Settings.Update` added to Domain constants; granted to TenantAdmin only.
+
+**New audit constants:** `AuditActions.FieldRequirementChanged`, `ResourceTypes.FieldRequirement`.
+
+### Frontend changes
+
+**New service:** `SettingsApiService` (`features/admin/services/`) — `getFieldRequirements()` + `updateFieldRequirement(entity, field, isRequired)`.
+
+**New component:** `FieldRequirementsComponent` (`features/admin/field-requirements/`) — renders `WsCard` with a list of field toggles using `WsSegmentedControlComponent` (Required / Optional per field). Loads settings on init; updates via PUT and shows toast on save. Gated by `*hasPermission="'Settings.Update'"` in AdminComponent.
+
+**AdminComponent:** replaced placeholder with live `FieldRequirementsComponent`. `*hasPermission` directive gates the section.
+
+**PayeeFormComponent:** loads field requirements on `ngOnInit()` via `SettingsApiService`. Email and HireDate validators are added/removed dynamically via `effect()` syncing with the loaded settings signals. Label changes from "Email" to "Email (optional)" and "Hire date" to "Hire date (optional)" when setting is Optional.
+
+**Payee model:** `email` and `hireDate` are now `string | null` throughout the model, request types, and form handling.
+
+**i18n (EN/ES/PL):** New `SETTINGS` namespace (7 keys each). New `PAYEES.FIELD_EMAIL_OPTIONAL` and `PAYEES.FIELD_HIRE_DATE_OPTIONAL` keys.
+
+### New tests (backend)
+
+- **Unit:** `PayeeTests.cs` (11 tests) — nullable email, nullable hireDate, format/range still enforced when present, always-required fields still throw
+- **Unit:** `CreatePayeeCommandValidatorTests.cs` (10 tests) — `FakeFieldRequirementService` fake, required/optional matrix for email + hireDate, format always enforced when present
+- **Integration:** `FieldRequirementSettingsEndpointsTests.cs` (11 tests) — GET auth/authz, PUT update and reflect, unknown field → 400, cross-tenant isolation, payee creation with null email when Optional → 201, invalid email format still rejected
+
+### New architecture rules
+
+Added to `14-forbidden-patterns.md`: (1) hardcoding required/optional for catalog fields — must use `IFieldRequirementService`; (2) calling `Validate()` sync when validators have `MustAsync` — must use `ValidateAsync()`; (3) adding new catalog fields without migration seed and test fixture seed.
+
+### Notes
+
+- Budget warning (initial bundle 61.84 kB over 500 kB) pre-existed before this WI — verified by git stash/pop. Not caused by this WI.
+- `ValidationBehavior` async fix is a systemic improvement that unblocks any future validator using `MustAsync` or `WhenAsync`.
+- Deduplication in migration is a one-time dev-DB cleanup; production will never hit it since the validator always prevented duplicate emails.
+
+---
+
+## 2026-06-01 — WI-PROD-MODEL Part 3 (FINAL): three decisions closed; WI-PROD-A unblocked
+
+**Duration:** ~15 min (docs only — no code, no tests, no builds, no migrations)
+**Phase:** Phase 2 (pre-implementation — product design, final part)
+**Tests:** 563 backend (217 unit + 346 integration), 143 frontend — no changes this session.
+
+### What we did
+
+Closed the WI-PROD-MODEL design conversation by resolving the three open questions carried over from Parts 1 and 2. Three firm decisions recorded as Decision #37 in `PROJECT_STATUS.md`. WI-PROD-MODEL is now fully CLOSED. WI-PROD-A is now UNBLOCKED.
+
+### Three firm decisions taken (Decision #37 — Part 3)
+
+**Decision 10 — Transaction status enum unchanged; "Unassigned" is derived, not a status.** `CompensationTransaction.Status` (`Pending / Eligible / Calculated / Paid / Cancelled`) stays as-is. Default for all new transactions remains `Pending`. The condition "no payee" is derived from `PayeeId IS NULL` — never encoded as a status value. Status and assignment are independent dimensions. Phase 3 Calculation Engine filters `Status = 'Pending' AND PayeeId IS NOT NULL` to process only what is processable.
+
+**Decision 11 — `AssignPayeeCommand` and `ReassignPayeeCommand` as distinct money-critical commands.** Both implement `IMoneyCriticalCommand` and are audit-logged automatically via the existing `AuditBehavior` pipeline (no new audit infrastructure). `AssignPayeeCommand`: no reason required; allowed when `PayeeId IS NULL`; Pending/Eligible/Calculated/Cancelled states allow. `ReassignPayeeCommand`: reason field REQUIRED (≥ 10 chars), persisted in audit log; reassignment on Eligible returns to Pending; on Calculated invalidates the commission line and returns to Pending; on Paid is BLOCKED with domain exception (money already disbursed). Frontend must hide/disable the action for Paid rows.
+
+**Decision 12 — Import against inactive payee: accept with warning.** When a row's `EmployeeCode` matches a payee with `IsActive = false`, the validator emits `IssueSeverity.Warning` — message: `"Payee X (code Y) is inactive — assignment will be historical"`. Row is imported and assigned. Historical assignments are a legitimate retail scenario (a transaction dated April 28 can arrive in the May 5 import even if the payee deactivated April 30). Comp manager can exclude warning rows via the existing `skipRowsWithWarnings` toggle.
+
+### Architectural observation
+
+The system now has four clearly identified money-critical commands all routing through the same `IMoneyCriticalCommand` → `AuditBehavior` transactional pipeline: `IngestTransactionCommand` (existing), `AssignPayeeCommand` (new — WI-PROD-A/A2), `ReassignPayeeCommand` (new — WI-PROD-A/A2), and whatever the Phase 3 Calculation Engine produces. The pattern holds; no new audit infrastructure needed for WI-PROD-A.
+
+### WI-PROD-A scope updated
+
+WI-PROD-A now covers all 12 WI-PROD-MODEL decisions. It is a LARGE WI — must be split into at least 3 sub-WIs before coding: A1 (schema + settings system), A2 (assignment commands), A3 (frontend UI). Scoping conversation recommended before implementation.
+
+---
+
 ## 2026-05-30 — WI-PROD-F: Server-side payee name resolution (GUID bug eliminated)
 
 **Duration:** ~45 min

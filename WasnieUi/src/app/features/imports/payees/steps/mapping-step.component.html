@@ -78,6 +78,18 @@
         </div>
         <ws-select formControlName="managerColumn" [options]="columnOptions()" />
       </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_EMPLOYMENT_TYPE_OPTIONAL' | translate }}</span>
+        </div>
+        <ws-select formControlName="employmentTypeColumn" [options]="columnOptions()" />
+      </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'PAYEES.FIELD_LOCATION_OPTIONAL' | translate }}</span>
+        </div>
+        <ws-select formControlName="locationColumn" [options]="columnOptions()" />
+      </div>
     </div>
   </div>
 

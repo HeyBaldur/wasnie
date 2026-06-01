@@ -451,6 +451,143 @@ public sealed class TransactionImportValidationServiceTests
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    //  IssueCategory — messages include offending values
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Validate_PayeeCodeNotFound_MessageContainsCode_CategoryReference()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync([ValidRow(code: "GHOST-99")], DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "payeeCode");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("GHOST-99");
+        issue.Message.Should().Contain("Create the payee first");
+    }
+
+    [Fact]
+    public async Task Validate_DuplicateReferenceInFile_MessageContainsRef_CategoryReference()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP001"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var rows = new List<Dictionary<string, string>>
+        {
+            ValidRow(refNum: "TXN-DUP"),
+            ValidRow(refNum: "TXN-DUP"),
+        };
+
+        var results = await sut.ValidateAsync(rows, DefaultMapping());
+
+        var issue = results[1].Issues.First(i => i.Field == "referenceNumber");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("TXN-DUP");
+    }
+
+    [Fact]
+    public async Task Validate_DuplicateReferenceInDb_MessageContainsRef_CategoryReference()
+    {
+        await using var db = CreateDb(TenantA);
+        var payee = MakePayee(TenantA, "EMP001");
+        db.Payees.Add(payee);
+        db.CompensationTransactions.Add(CompensationTransaction.Ingest(
+            TenantA, "TXN-EXISTS", payee.Id, Money.Of(50m, "USD"),
+            new DateOnly(2024, 3, 1), TransactionSource.EtlImport,
+            "system", Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync([ValidRow(refNum: "TXN-EXISTS")], DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "referenceNumber");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("TXN-EXISTS");
+    }
+
+    [Fact]
+    public async Task Validate_BadAmount_MessageContainsValue_CategoryFormat()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP001"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync([ValidRow(amount: "not-a-number")], DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "amount");
+        issue.Category.Should().Be(IssueCategory.Format);
+        issue.Message.Should().Contain("not-a-number");
+    }
+
+    [Fact]
+    public async Task Validate_BadCurrency_MessageContainsValue_CategoryFormat()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP001"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync([ValidRow(currency: "BADCCY")], DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "currency");
+        issue.Category.Should().Be(IssueCategory.Format);
+        issue.Message.Should().Contain("BADCCY");
+    }
+
+    [Fact]
+    public async Task Validate_FutureTransactionDate_MessageContainsDate_CategoryFormat()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP001"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync([ValidRow(date: "2026-01-01")], DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "transactionDate");
+        issue.Category.Should().Be(IssueCategory.Format);
+        issue.Message.Should().Contain("2026-01-01");
+    }
+
+    [Fact]
+    public async Task Validate_ExternalIdAlreadyInDb_MessageContainsId_CategoryReference()
+    {
+        await using var db = CreateDb(TenantA);
+        var payee = MakePayee(TenantA, "EMP001");
+        db.Payees.Add(payee);
+        db.CompensationTransactions.Add(CompensationTransaction.Ingest(
+            TenantA, "TXN-OLD", payee.Id, Money.Of(100m, "USD"),
+            new DateOnly(2024, 1, 1), TransactionSource.EtlImport,
+            "system", Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid(),
+            externalId: "EXT-CAT-TEST"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync(
+            [ValidRow(refNum: "TXN-NEW", extId: "EXT-CAT-TEST")],
+            DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "externalId");
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("EXT-CAT-TEST");
+    }
+
+    [Fact]
+    public async Task Validate_MissingPayeeCode_CategoryRequired()
+    {
+        await using var db = CreateDb(TenantA);
+        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var results = await sut.ValidateAsync([ValidRow(code: "")], DefaultMapping());
+
+        var issue = results[0].Issues.First(i => i.Field == "payeeCode");
+        issue.Category.Should().Be(IssueCategory.Required);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     //  Happy path
     // ──────────────────────────────────────────────────────────────────────────
 

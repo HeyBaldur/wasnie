@@ -54,7 +54,14 @@ public sealed class UpdatePayeeHandler(
             payee.HireDate,
             payee.Role,
             payee.ManagerId,
+            payee.EmploymentType,
+            payee.Location,
         };
+
+        Domain.Compensation.Payees.EmploymentType? employmentType = null;
+        if (request.EmploymentType is not null &&
+            Enum.TryParse<Domain.Compensation.Payees.EmploymentType>(request.EmploymentType, ignoreCase: true, out var et))
+            employmentType = et;
 
         payee.Update(
             request.FullName,
@@ -64,7 +71,9 @@ public sealed class UpdatePayeeHandler(
             request.Role,
             request.ManagerId,
             currentUser.UserId ?? "system",
-            clock.UtcNowOffset);
+            clock.UtcNowOffset,
+            employmentType,
+            request.Location);
 
         await db.SaveChangesAsync(cancellationToken);
 
