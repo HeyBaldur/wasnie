@@ -7,10 +7,10 @@ public sealed class Payee : BaseAuditableEntity
 {
     public string FullName { get; private set; } = string.Empty;
     public string EmployeeCode { get; private set; } = string.Empty;
-    public string Email { get; private set; } = string.Empty;
+    public string? Email { get; private set; }
     public string? Role { get; private set; }
     public Guid? ManagerId { get; private set; }
-    public DateOnly HireDate { get; private set; }
+    public DateOnly? HireDate { get; private set; }
     public DateOnly? TerminationDate { get; private set; }
     public PayeeStatus Status { get; private set; } = PayeeStatus.Active;
 
@@ -20,8 +20,8 @@ public sealed class Payee : BaseAuditableEntity
         Guid tenantId,
         string fullName,
         string employeeCode,
-        string email,
-        DateOnly hireDate,
+        string? email,
+        DateOnly? hireDate,
         string createdBy,
         Guid id,
         DateTimeOffset now,
@@ -32,9 +32,7 @@ public sealed class Payee : BaseAuditableEntity
             throw new DomainException("Full name is required.");
         if (string.IsNullOrWhiteSpace(employeeCode))
             throw new DomainException("Employee code is required.");
-        if (string.IsNullOrWhiteSpace(email))
-            throw new DomainException("Email is required.");
-        if (hireDate > DateOnly.FromDateTime(now.UtcDateTime))
+        if (hireDate.HasValue && hireDate.Value > DateOnly.FromDateTime(now.UtcDateTime))
             throw new DomainException("Hire date cannot be in the future.");
 
         return new Payee
@@ -43,7 +41,7 @@ public sealed class Payee : BaseAuditableEntity
             TenantId = tenantId,
             FullName = fullName.Trim(),
             EmployeeCode = employeeCode.Trim(),
-            Email = email.Trim().ToLowerInvariant(),
+            Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant(),
             Role = string.IsNullOrWhiteSpace(role) ? null : role.Trim(),
             ManagerId = managerId,
             HireDate = hireDate,
@@ -58,8 +56,8 @@ public sealed class Payee : BaseAuditableEntity
     public void Update(
         string fullName,
         string employeeCode,
-        string email,
-        DateOnly hireDate,
+        string? email,
+        DateOnly? hireDate,
         string? role,
         Guid? managerId,
         string updatedBy,
@@ -74,7 +72,7 @@ public sealed class Payee : BaseAuditableEntity
 
         FullName = fullName.Trim();
         EmployeeCode = employeeCode.Trim();
-        Email = email.Trim().ToLowerInvariant();
+        Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
         Role = string.IsNullOrWhiteSpace(role) ? null : role.Trim();
         ManagerId = managerId;
         HireDate = hireDate;

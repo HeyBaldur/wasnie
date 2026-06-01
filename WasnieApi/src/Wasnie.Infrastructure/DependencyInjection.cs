@@ -74,6 +74,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();
         services.AddScoped<IAuditService, AuditService>();
 
+        services.AddScoped<IFieldRequirementService, FieldRequirementService>();
         services.AddScoped<IImportCacheService, ImportCacheService>();
         services.AddScoped<IFileParserService, FileParserService>();
         services.AddScoped<IPayeeImportValidationService, PayeeImportValidationService>();

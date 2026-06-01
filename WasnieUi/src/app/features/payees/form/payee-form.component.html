@@ -16,7 +16,7 @@
 
     <ws-input
       type="email"
-      label="PAYEES.FIELD_EMAIL"
+      [label]="emailRequired() ? 'PAYEES.FIELD_EMAIL' : 'PAYEES.FIELD_EMAIL_OPTIONAL'"
       formControlName="email"
       [error]="hasError('email', 'required') ? 'VALIDATION.REQUIRED' : hasError('email', 'email') ? 'VALIDATION.EMAIL' : ''"
     />
@@ -27,7 +27,7 @@
     />
 
     <ws-date-picker
-      [label]="'PAYEES.FIELD_HIRE_DATE'"
+      [label]="hireDateRequired() ? 'PAYEES.FIELD_HIRE_DATE' : 'PAYEES.FIELD_HIRE_DATE_OPTIONAL'"
       formControlName="hireDate"
       [error]="hasError('hireDate', 'required') ? 'VALIDATION.REQUIRED' : ''"
     />

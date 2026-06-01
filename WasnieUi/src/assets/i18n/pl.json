@@ -370,8 +370,10 @@
     "ACTION_TERMINATE": "Zwolnij",
     "FIELD_FULL_NAME": "Imię i nazwisko",
     "FIELD_EMAIL": "Adres e-mail",
+    "FIELD_EMAIL_OPTIONAL": "Adres e-mail (opcjonalne)",
     "FIELD_EMPLOYEE_CODE": "Kod pracownika",
     "FIELD_HIRE_DATE": "Data zatrudnienia",
+    "FIELD_HIRE_DATE_OPTIONAL": "Data zatrudnienia (opcjonalne)",
     "FIELD_ROLE": "Stanowisko",
     "FIELD_MANAGER": "Przełożony",
     "FIELD_MANAGER_PLACEHOLDER": "Brak przełożonego (opcjonalne)",
@@ -595,5 +597,14 @@
       "FIELD_TRANSACTION_DATE": "Data transakcji",
       "FIELD_EXTERNAL_ID": "Zewnętrzny ID"
     }
+  },
+  "SETTINGS": {
+    "FIELD_REQUIREMENTS_TITLE": "Wymagania pól",
+    "FIELD_REQUIREMENTS_DESC": "Kontroluj, które pola są wymagane przy tworzeniu lub importowaniu beneficjentów. Zmiany dotyczą tylko nowych rekordów — istniejące dane nie są zmieniane.",
+    "FIELD_REQUIRED": "Wymagane",
+    "FIELD_OPTIONAL": "Opcjonalne",
+    "FIELD_EMAIL": "Adres e-mail",
+    "FIELD_HIREDATE": "Data zatrudnienia",
+    "TOAST_SAVED": "Ustawienie zapisane."
   }
 }

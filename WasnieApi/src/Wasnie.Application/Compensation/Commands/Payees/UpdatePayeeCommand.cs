@@ -8,7 +8,7 @@ public sealed record UpdatePayeeCommand(
     Guid PayeeId,
     string FullName,
     string EmployeeCode,
-    string Email,
-    DateOnly HireDate,
+    string? Email,
+    DateOnly? HireDate,
     string? Role = null,
     Guid? ManagerId = null) : IRequest<Result<PayeeDto>>;

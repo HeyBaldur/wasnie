@@ -10,6 +10,7 @@ using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Entities;
 using Wasnie.Domain.Identity;
+using Wasnie.Domain.Settings;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
 
 namespace Wasnie.Application.Common.Interfaces;
@@ -18,6 +19,7 @@ public interface IApplicationDbContext
 {
     DbSet<BackgroundJobRecord> BackgroundJobRecords { get; }
     DbSet<Tenant> Tenants { get; }
+    DbSet<FieldRequirementSetting> FieldRequirementSettings { get; }
     DbSet<ImportAudit> ImportAudits { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<Payee> Payees { get; }

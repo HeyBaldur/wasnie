@@ -370,8 +370,10 @@
     "ACTION_TERMINATE": "Terminate",
     "FIELD_FULL_NAME": "Full name",
     "FIELD_EMAIL": "Email",
+    "FIELD_EMAIL_OPTIONAL": "Email (optional)",
     "FIELD_EMPLOYEE_CODE": "Employee code",
     "FIELD_HIRE_DATE": "Hire date",
+    "FIELD_HIRE_DATE_OPTIONAL": "Hire date (optional)",
     "FIELD_ROLE": "Role",
     "FIELD_MANAGER": "Manager",
     "FIELD_MANAGER_PLACEHOLDER": "No manager (optional)",
@@ -595,5 +597,14 @@
     "TOAST_NOTES_SAVED": "Notes saved.",
     "CONFIRM_DEACTIVATE_TITLE": "Deactivate Assignment",
     "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?"
+  },
+  "SETTINGS": {
+    "FIELD_REQUIREMENTS_TITLE": "Field requirements",
+    "FIELD_REQUIREMENTS_DESC": "Control which fields are required when creating or importing payees. Changes apply to new records only — existing data is not affected.",
+    "FIELD_REQUIRED": "Required",
+    "FIELD_OPTIONAL": "Optional",
+    "FIELD_EMAIL": "Email",
+    "FIELD_HIREDATE": "Hire date",
+    "TOAST_SAVED": "Setting saved."
   }
 }

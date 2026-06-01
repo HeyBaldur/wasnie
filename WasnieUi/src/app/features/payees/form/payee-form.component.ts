@@ -1,9 +1,10 @@
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { Observable, map } from 'rxjs';
 import { PayeesStore } from '../state/payees.store';
 import { PayeesApiService } from '../services/payees.api.service';
+import { SettingsApiService, FieldRequirement } from '../../admin/services/settings.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { Payee } from '../models/payee.model';
@@ -29,10 +30,11 @@ import {
   templateUrl: './payee-form.component.html',
   styleUrl: './payee-form.component.scss',
 })
-export class PayeeFormComponent {
+export class PayeeFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly store = inject(PayeesStore);
   private readonly payeesApi = inject(PayeesApiService);
+  private readonly settingsApi = inject(SettingsApiService);
   private readonly toast = inject(ToastService);
 
   readonly payee = input<Payee | null>(null);
@@ -41,6 +43,15 @@ export class PayeeFormComponent {
 
   readonly isEditMode = computed(() => this.payee() !== null);
   readonly saving = signal(false);
+
+  readonly fieldRequirements = signal<FieldRequirement[]>([]);
+
+  readonly emailRequired = computed(() =>
+    this.fieldRequirements().find(r => r.fieldName === 'Email')?.isRequired ?? true
+  );
+  readonly hireDateRequired = computed(() =>
+    this.fieldRequirements().find(r => r.fieldName === 'HireDate')?.isRequired ?? true
+  );
 
   readonly managerSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -61,8 +72,8 @@ export class PayeeFormComponent {
   readonly form = this.fb.nonNullable.group({
     fullName: ['', [Validators.required, Validators.maxLength(200)]],
     employeeCode: ['', [Validators.required, Validators.maxLength(50)]],
-    email: ['', [Validators.required, Validators.email, Validators.maxLength(255)]],
-    hireDate: ['', Validators.required],
+    email: ['', [Validators.email, Validators.maxLength(255)]],
+    hireDate: [''],
     role: ['', Validators.maxLength(100)],
     managerId: [''],
   });
@@ -75,13 +86,39 @@ export class PayeeFormComponent {
           this.form.patchValue({
             fullName: p.fullName,
             employeeCode: p.employeeCode,
-            email: p.email,
-            hireDate: p.hireDate,
+            email: p.email ?? '',
+            hireDate: p.hireDate ?? '',
             role: p.role ?? '',
             managerId: p.managerId ?? '',
           });
         }
       });
+    });
+
+    // Sync required validators with settings
+    effect(() => {
+      const emailCtrl = this.form.controls.email;
+      const hireDateCtrl = this.form.controls.hireDate;
+
+      if (this.emailRequired()) {
+        emailCtrl.addValidators(Validators.required);
+      } else {
+        emailCtrl.removeValidators(Validators.required);
+      }
+      emailCtrl.updateValueAndValidity({ emitEvent: false });
+
+      if (this.hireDateRequired()) {
+        hireDateCtrl.addValidators(Validators.required);
+      } else {
+        hireDateCtrl.removeValidators(Validators.required);
+      }
+      hireDateCtrl.updateValueAndValidity({ emitEvent: false });
+    });
+  }
+
+  ngOnInit(): void {
+    this.settingsApi.getFieldRequirements().subscribe({
+      next: (data) => this.fieldRequirements.set(data),
     });
   }
 
@@ -94,8 +131,8 @@ export class PayeeFormComponent {
     const payload = {
       fullName: v.fullName.trim(),
       employeeCode: v.employeeCode.trim(),
-      email: v.email.trim(),
-      hireDate: v.hireDate,
+      email: v.email.trim() || null,
+      hireDate: v.hireDate || null,
       role: v.role.trim() || null,
       managerId: v.managerId || null,
     };

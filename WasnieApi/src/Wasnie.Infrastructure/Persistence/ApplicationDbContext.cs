@@ -14,6 +14,7 @@ using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Identity;
+using Wasnie.Domain.Settings;
 using Wasnie.Infrastructure.Persistence.Configurations;
 using Wasnie.Infrastructure.Persistence.Configurations.BackgroundJobs;
 using Wasnie.Infrastructure.Persistence.Configurations.Compensation;
@@ -35,6 +36,7 @@ public sealed class ApplicationDbContext(
 
     public Microsoft.EntityFrameworkCore.DbSet<BackgroundJobRecord> BackgroundJobRecords => Set<BackgroundJobRecord>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.Tenant> Tenants => Set<Wasnie.Domain.Entities.Tenant>();
+    public Microsoft.EntityFrameworkCore.DbSet<FieldRequirementSetting> FieldRequirementSettings => Set<FieldRequirementSetting>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Entities.ImportAudit> ImportAudits => Set<Wasnie.Domain.Entities.ImportAudit>();
     public Microsoft.EntityFrameworkCore.DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public Microsoft.EntityFrameworkCore.DbSet<Payee> Payees => Set<Payee>();
@@ -56,6 +58,7 @@ public sealed class ApplicationDbContext(
 
         builder.ApplyConfiguration(new TenantConfiguration());
         builder.ApplyConfiguration(new PayeeConfiguration());
+        builder.ApplyConfiguration(new FieldRequirementSettingConfiguration());
         builder.ApplyConfiguration(new PlanConfiguration());
         builder.ApplyConfiguration(new TransactionConfiguration());
         builder.ApplyConfiguration(new PayoutConfiguration());
@@ -74,6 +77,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
 
         builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<FieldRequirementSetting>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyPlan>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyTransaction>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<LegacyPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

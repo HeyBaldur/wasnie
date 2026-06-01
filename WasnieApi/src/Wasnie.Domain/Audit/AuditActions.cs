@@ -39,6 +39,9 @@ public static class AuditActions
     // Transactions (Phase 2)
     public const string TransactionIngested = "TRANSACTION_INGESTED";
 
+    // Settings (Rule 5.1.5 — configuration changes)
+    public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

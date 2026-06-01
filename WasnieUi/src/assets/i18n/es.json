@@ -370,8 +370,10 @@
     "ACTION_TERMINATE": "Dar de baja",
     "FIELD_FULL_NAME": "Nombre completo",
     "FIELD_EMAIL": "Correo electrónico",
+    "FIELD_EMAIL_OPTIONAL": "Correo electrónico (opcional)",
     "FIELD_EMPLOYEE_CODE": "Código de empleado",
     "FIELD_HIRE_DATE": "Fecha de contratación",
+    "FIELD_HIRE_DATE_OPTIONAL": "Fecha de contratación (opcional)",
     "FIELD_ROLE": "Cargo",
     "FIELD_MANAGER": "Manager",
     "FIELD_MANAGER_PLACEHOLDER": "Sin manager (opcional)",
@@ -595,5 +597,14 @@
       "FIELD_TRANSACTION_DATE": "Fecha de transacción",
       "FIELD_EXTERNAL_ID": "ID externo"
     }
+  },
+  "SETTINGS": {
+    "FIELD_REQUIREMENTS_TITLE": "Requisitos de campos",
+    "FIELD_REQUIREMENTS_DESC": "Controla qué campos son obligatorios al crear o importar beneficiarios. Los cambios aplican solo a nuevos registros — los datos existentes no se ven afectados.",
+    "FIELD_REQUIRED": "Obligatorio",
+    "FIELD_OPTIONAL": "Opcional",
+    "FIELD_EMAIL": "Correo electrónico",
+    "FIELD_HIREDATE": "Fecha de contratación",
+    "TOAST_SAVED": "Configuración guardada."
   }
 }

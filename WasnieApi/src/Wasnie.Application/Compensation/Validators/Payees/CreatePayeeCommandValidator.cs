@@ -4,11 +4,10 @@ using Wasnie.Application.Compensation.Commands.Payees;
 
 namespace Wasnie.Application.Compensation.Validators.Payees;
 
-public sealed class UpdatePayeeCommandValidator : AbstractValidator<UpdatePayeeCommand>
+public sealed class CreatePayeeCommandValidator : AbstractValidator<CreatePayeeCommand>
 {
-    public UpdatePayeeCommandValidator(IFieldRequirementService fieldRequirements)
+    public CreatePayeeCommandValidator(IFieldRequirementService fieldRequirements)
     {
-        RuleFor(x => x.PayeeId).NotEmpty();
         RuleFor(x => x.FullName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.EmployeeCode).NotEmpty().MaximumLength(50);
 

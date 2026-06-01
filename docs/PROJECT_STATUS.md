@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-05-30
-**Updated by:** Rodolfo Calvo (WI-PROD-F — server-side payee name resolution in transactions list; GUID bug eliminated)
+**Last updated:** 2026-06-01
+**Updated by:** Rodolfo Calvo (WI-PROD-A.1 DONE — Email + HireDate optional via field requirement config system)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** WI-PROD-MODEL design conversation in progress (2026-05-30). Nine firm decisions taken (A–I across Parts 1 and 2): field-level requirement config system, configurable fields list, always-required fields, nullable PayeeId, User/Payee separation, EmploymentType field, IsActive/DeactivatedAt, Location/CostCenter dimension, and tenant account currency with explicit FX. Three open questions deferred to Part 3 (PayeeId assignment audit, default transaction status, re-import behavior on inactive payees). WI-PROD-MODEL is NOT yet closed — Part 3 pending. Backend tests: 561 passing (217 unit + 344 integration). Frontend tests: 138 passing.
+**Right now we are:** WI-PROD-A.1 DONE (2026-06-01). Email and HireDate are now optional per-tenant via the new `FieldRequirementSettings` system. Real-data retail import blocker resolved. Next: WI-PROD-A.2 (additional configurable fields: Role, ManagerId, EmploymentType, Location) or WI-PROD-A.3 (assignment commands for payee reassignment). Backend tests: 595 passing (238 unit + 357 integration). Frontend tests: 143 passing.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -325,6 +325,26 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
    **Decision I — Tenant has an account currency; FX conversion is explicit and traceable.** The tenant has an "account currency" configured by the TenantAdmin (the single currency the company pays out in — e.g. Reserved Polska = PLN). Transactions are preserved in their native currency (Spec §5b.5 unchanged — no implicit conversion). For reports, payouts, and reconciliation in the account currency, the system performs **explicit** FX conversion using a traceable exchange-rate source. Both the original amount/currency and the converted amount/currency are preserved on the transaction record — never overwritten. This substantially expands the scope of WI-PROD-CURRENCY: (a) account-currency configuration field on Tenant; (b) exchange rate table (open sub-questions: rate source — ECB / fixer.io / manual entry; rate date — transaction date / period close / payout date; retroactive rate changes — disallowed vs. allowed with audit); (c) original-amount / converted-amount duality on every transaction (or equivalent representation preserving audit traceability); (d) conversion engine that respects §5b.5 (the conversion is the explicit module §5b.5 already permits). WI-PROD-CURRENCY is now a complete multi-currency handling system, not a styling fix. (2026-05-30)
 
+37. **WI-PROD-MODEL design decisions — Part 3 (FINAL — closes the conversation, 2026-06-01).** The three remaining open questions from Parts 1 and 2 are fully resolved. WI-PROD-MODEL is now CLOSED. The 12 firm decisions (A–I from Parts 1+2; 10–12 from Part 3) constitute the complete retail-SPM domain model contract.
+
+   **Decision 10 — Transaction status enum stays as-is; "Unassigned" is derived, not a status.** The `CompensationTransaction.Status` enum (`Pending=0, Eligible=1, Calculated=2, Paid=3, Cancelled=4`) stays unchanged. Default for new transactions (manual or import) remains `Pending`. The condition "transaction has no payee" is **derived** from `PayeeId IS NULL` — it is NOT a status value. The UI renders "Unassigned" when `PayeeId IS NULL` (already prepared defensively in WI-PROD-F). Status and assignment are two independent dimensions; filters and queries treat them separately. The Calculation Engine (Phase 3) will filter by `Status = 'Pending' AND PayeeId IS NOT NULL` to process only what is processable. (2026-06-01)
+
+   **Decision 11 — Payee assignment and reassignment as distinct money-critical commands.** Two separate commands, both implementing `IMoneyCriticalCommand` and both audit-logged automatically through `AuditBehavior` (no new audit infrastructure needed):
+
+   - **`AssignPayeeCommand`** — assigns a payee to a transaction where `PayeeId IS NULL`. No reason required. Allowed for CompManager and TenantAdmin. Audit log records the standard event (actor, timestamp, target payee). User MAY add a comment but it is not required.
+   - **`ReassignPayeeCommand`** — changes a transaction's payee from A to B. Reason field is REQUIRED (minimum 10 characters). Allowed for CompManager and TenantAdmin. Audit log records the event WITH the reason persisted.
+
+   State machine rules for both operations:
+   - `Pending`: both allowed.
+   - `Eligible`: both allowed; reassignment causes return to `Pending` for re-evaluation.
+   - `Calculated`: reassignment allowed, but **invalidates the calculated commission line** (marks it obsolete) and the transaction returns to `Pending` for recalculation.
+   - `Paid`: **BLOCKED**. The money already left the bank; corrections to a Paid transaction are an accounting problem, not a DB-field problem. Backend MUST throw a domain exception on attempted reassignment of a Paid transaction. Frontend MUST disable the reassign action for Paid rows.
+   - `Cancelled`: reassignment allowed (administrative closure).
+
+   (2026-06-01)
+
+   **Decision 12 — Import against an inactive payee: accept with warning.** When a CSV/XLSX import row's `EmployeeCode` matches a payee whose `IsActive` is false, the validator emits `IssueSeverity.Warning` with message `"Payee X (code Y) is inactive — assignment will be historical"`. Rows are imported and assigned to the inactive payee. Rationale: historical assignments are a legitimate retail scenario — a transaction from April 28 can legitimately arrive in the May 5 import even if the payee was deactivated on April 30. The wizard's existing `skipRowsWithWarnings` toggle continues to work; the comp manager can exclude them if desired. (2026-06-01)
+
 ---
 
 ## Key naming conventions
@@ -351,7 +371,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 (Update this section as questions emerge that need answers before proceeding)
 
-- **⚠️ WI-PROD-MODEL — IN PROGRESS (2026-05-30).** Parts 1+2 decisions taken (A–I, Decisions #35–#36). Part 3 still open: PayeeId assignment audit/history, default transaction status review, re-import behavior on inactive payees. WI-PROD-A and further import/transaction WIs remain soft-blocked until WI-PROD-MODEL is fully closed.
+- ~~**WI-PROD-MODEL — IN PROGRESS.**~~ **CLOSED (2026-06-01).** All 12 decisions recorded (Decisions #35, #36, #37). WI-PROD-A is now UNBLOCKED.
 - **Phase D or Phase 2 next?** Phase D adds coverage and docs polish but does not unblock new features. Phase 2 is the core product (Transactions + Calculation Engine). Recommended: Phase 2 directly; Phase D items can land incrementally alongside Phase 2.
 - **WI-06 approach:** Strict purity refactor (remove MediatR from Domain, EF Core from Application) deferred. If revisited, must update ARCHITECTURE.md §1.2 and run full regression suite. This is a 6-8h investment with no user-visible value — justify against backlog priority at that time.
 - **F-028 standardization timing:** Cross-tenant mutations return 422 (not 404) across Quotas/Assignments/PlanRules/Imports. Deferred to a dedicated API contract standardization WI. Decision needed: standardize on 404 (ARCHITECTURE.md §9.3.3) or document 422 as intentional? Recommend 404 when the WI runs.
@@ -368,9 +388,9 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
-### WI-PROD-MODEL — Retail SPM domain model review ⚠️ IN PROGRESS
+### WI-PROD-MODEL — Retail SPM domain model review ✅ CLOSED (2026-06-01)
 
-**Status:** In progress (design conversation ongoing as of 2026-05-30). Blocks WI-PROD-A, and influences WI-P2-05 (calc engine). NOT yet closed — Part 3 pending.
+**Status:** CLOSED. All 12 firm decisions taken across three parts (Decisions #35, #36, #37). WI-PROD-A is UNBLOCKED. The Calculation Engine (WI-P2-05) must respect Decision 10 (null-PayeeId filter) and Decision 11 (state machine) from the outset.
 
 **Problem:** Current domain model encodes B2B-tech SPM assumptions that conflict with retail SPM (the actual target market):
 
@@ -393,20 +413,22 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 - **H** — `Payee.Location` (or `CostCenter` — naming TBD at implementation) optional string dimension, NOT a `Store` entity. Also likely on Transaction (to confirm during scoping). Joins configurable-fields list.
 - **I** — Tenant account currency + explicit FX. Transactions preserved in native currency; explicit conversion with traceable exchange-rate source; original + converted amounts both persisted. Expands WI-PROD-CURRENCY to a full system (see that entry).
 
-**Still open (Part 3 — conversation pending):**
-- **Open Q1** — Audit/history of "transaction assigned to payee later": direct field update vs. event log of the assignment event. Decide before WI-PROD-A implemented.
-- **Open Q2** — Default status of newly imported transactions: confirm `Pending` is correct in context of eligibility lifecycle and calc engine.
-- **Open Q3** — Re-import behavior when payee is inactive: accept (historical correction), reject as error, or accept with warning.
+**Part 3 decisions — CLOSED (2026-06-01) → Decision #37:**
+- **Decision 10** — Status enum unchanged; `Pending` is the correct default; "Unassigned" is derived from `PayeeId IS NULL`, not a status value. Phase 3 engine filters `Status = 'Pending' AND PayeeId IS NOT NULL`.
+- **Decision 11** — `AssignPayeeCommand` (no reason required) and `ReassignPayeeCommand` (reason ≥ 10 chars, mandatory) as distinct `IMoneyCriticalCommand` commands. State machine: Paid → BLOCKED; Calculated → return to Pending + invalidate commission line; Cancelled → allowed.
+- **Decision 12** — Import against inactive payee: accept with `IssueSeverity.Warning` (historical assignment is legitimate). `skipRowsWithWarnings` toggle available.
 
-**Phase 3 cross-dependency (DO NOT defer):** The Calculation Engine (WI-P2-05) must decide how it handles `PayeeId = null` transactions BEFORE engine design starts. Options: (a) skip silently, (b) attribute to a "house pool" payee entity, (c) fail the calculation run with a clear error. This choice is part of WI-PROD-MODEL, not a Phase 3 concern to discover mid-implementation.
+**Phase 3 cross-dependency RESOLVED:** Calculation Engine filters `PayeeId IS NOT NULL` — unassigned transactions are skipped silently (not attributed to a house-pool entity, not an error). Phase 3 design may proceed on this foundation.
 
 ---
 
 ### WI-PROD-A — Field-level requirement configuration system per tenant
 
-**Depends on:** WI-PROD-MODEL fully closed (Part 3 must complete before implementation starts).
+**Status:** IN PROGRESS — WI-PROD-A.1 DONE (2026-06-01). Sub-WI A.1 shipped. Remaining: A.2 (additional configurable fields) and A.3 (assignment commands + UI).
 
-**Scope (concrete — derived from Decisions #35 and #36):**
+**Full scope (all 12 WI-PROD-MODEL decisions — #35, #36, #37):**
+
+*Sub-WI A.1 ✅ DONE (2026-06-01) — Email + HireDate optional via FieldRequirementSettings:*
 1. Implement the field-level requirement configuration system per tenant (TenantAdmin-only setting, audit-logged per Rule 5.1.5, no retroactive effect on existing data).
 2. Make the five configurable fields nullable in the entities: `Payee.Email`, `Payee.HireDate`, `Payee.Role`, `Payee.ManagerId`, `CompensationTransaction.PayeeId`.
 3. Convert the `(TenantId, Email)` unique index to a filtered index (`WHERE Email IS NOT NULL`) — same pattern as the `(TenantId, Source, ExternalId)` filtered index from WI-P2-02.
@@ -414,9 +436,22 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 5. Audit-log every change to a requirement setting.
 6. Update `IngestTransactionCommand` validator and `TransactionImportValidationService` to respect per-tenant field requirements.
 7. `Payee.EmploymentType` nullable (Decision F); add to configurable-fields list with default Optional.
-8. `Payee.IsActive` (default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable); `IsActive → false` automatically sets `DeactivatedAt`; re-activation clears it; all transitions audit-logged; ingest validator blocks assignment to inactive payees (Decision G). Re-import behavior when payee is inactive (Open Q3) must be resolved before this item is implemented.
-9. `Payee.Location` (or `CostCenter` — finalize naming) nullable string; treated as filter/group dimension in reports; also add to `CompensationTransaction` if confirmed during scoping (Decision H); joins configurable-fields list with default Optional.
-10. `User.PayeeId` nullable FK; TenantAdmin invite flow uses existing RBAC; manual invite-link mechanism for MVP (no email-send dependency until first paying customer — consistent with WI-02 deferral, Decision E).
+8. `Payee.IsActive` (default true) + `Payee.DeactivatedAt` (DateTimeOffset, nullable); `IsActive → false` automatically sets `DeactivatedAt`; re-activation clears it; all transitions audit-logged; ingest validator blocks assignment of new transactions to inactive payees (Decision G).
+9. Import validator: `IssueSeverity.Warning` when `EmployeeCode` matches an inactive payee — message `"Payee X (code Y) is inactive — assignment will be historical"`. Row is imported; `skipRowsWithWarnings` toggle available (Decision 12).
+10. `Payee.Location` (or `CostCenter` — finalize naming during scoping) nullable string; treated as filter/group dimension in reports; also add to `CompensationTransaction` if confirmed during scoping (Decision H); joins configurable-fields list with default Optional.
+
+*Sub-WI A2 — Assignment commands (Decision 11):*
+11. `AssignPayeeCommand` (`IMoneyCriticalCommand`): assigns a payee to a transaction where `PayeeId IS NULL`. No reason required. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`.
+12. `ReassignPayeeCommand` (`IMoneyCriticalCommand`): changes payee from A to B. Reason field REQUIRED (≥ 10 chars), persisted in audit log event. Allowed for CompManager + TenantAdmin. Audit-logged via `AuditBehavior`.
+13. State machine enforcement in domain layer: Paid → domain exception; Calculated → return to Pending + mark commission line obsolete; Eligible → return to Pending; Cancelled → allowed. Backend throws on violation.
+
+*Sub-WI A3 — Frontend UI (Decisions E, 11, and display work):*
+14. `User.PayeeId` nullable FK; TenantAdmin invite flow uses existing RBAC; manual invite-link mechanism for MVP (no email-send dependency — consistent with WI-02 deferral, Decision E).
+15. Assign / Reassign UI on the transaction detail/list (action gated by status: Paid rows show disabled/hidden action per CLAUDE.md §5.8 RBAC rules).
+16. Reason field modal for reassignment (required input, ≥ 10 chars, client-side validation).
+17. "Unassigned" rendering already shipped (WI-PROD-F) — no new work, but verify it holds after nullable migration.
+
+**⚠️ Do NOT attempt as a single WI.** This is a large, multi-layer change. Splitting into A1/A2/A3 lets each sub-WI close cleanly with tests. Scoping conversation recommended before any implementation starts.
 
 ---
 

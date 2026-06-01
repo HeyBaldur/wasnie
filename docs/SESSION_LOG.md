@@ -10,6 +10,108 @@
 
 ---
 
+## 2026-06-01 — WI-PROD-A.1: Email + HireDate optional via FieldRequirementSettings system
+
+**Duration:** ~3 hours
+**Phase:** Phase 2 (retail SPM domain model — first implementation sub-WI)
+**Backend tests before → after:** 563 (217 unit + 346 integration) → 595 (238 unit + 357 integration). **+32 tests.** 0 regressions.
+**Frontend tests before → after:** 143 → 143 (all existing pass; no new frontend tests added this session). 0 regressions.
+
+### What was built
+
+The real-data import blocker from 2026-05-29 is resolved: Reserved Polska retail exports with staff lacking corporate email can now be imported. The solution is a per-tenant configurable field-requirement system.
+
+### Backend changes
+
+**New domain:** `FieldRequirementSetting` entity (`Domain/Settings/`) extending `Entity`. Fields: `TenantId`, `EntityName`, `FieldName`, `IsRequired`. `SetRequired(bool)` method. No audit fields on the entity itself — all changes go to AuditLog.
+
+**New Application interfaces:** `IFieldRequirementService` (Application/Common/Interfaces) with async `IsRequiredAsync(entityName, fieldName, ct)`. Scoped service; caches per-request via lazy-load private list (single DB query for all settings per request). 
+
+**New Application commands/queries:** `GetFieldRequirementsQuery` + handler; `UpdateFieldRequirementCommand` + handler. Both require `Settings.Update` permission (TenantAdmin-only). `UpdateFieldRequirementHandler` uses explicit `auditService.LogAsync(...)` with before/after snapshots (Rule 5.1.5 — configuration changes must be audited). Audit swallows failures (non-money operation).
+
+**New Application validators:** `CreatePayeeCommandValidator` (was missing entirely). Both Create and Update validators inject `IFieldRequirementService`. Email and HireDate use `MustAsync` (presence check conditional on setting; format always enforced when value is present).
+
+**Critical bug fixed — ValidationBehavior:** `ValidationBehavior` was calling `v.Validate()` synchronously. FluentValidation throws `InvalidOperationException` when `Validate()` is called on a validator containing `MustAsync` rules. Changed to `ValidateAsync()` using `Task.WhenAll`. This is a backward-compatible fix — all existing sync validators work correctly with `ValidateAsync()`.
+
+**Payee domain:** `Email` → `string?`, `HireDate` → `DateOnly?`. Domain factory invariants updated: null values no longer throw; format validation (future date guard) only runs when value is present. `Update()` mirrors same nullable behavior.
+
+**PayeeImportValidationService:** Email and HireDate blank checks now conditional on `IFieldRequirementService`. Bug fix: `TryParseDate` was using `null` (thread culture) in `DateOnly.TryParseExact` — fixed to `CultureInfo.InvariantCulture` (same fix as WI-P2-04a-fix2 did for transaction import).
+
+**EF migration `20260601080854_P2_FieldRequirementSettings`:**
+- `Payee.Email` → nullable
+- `Payee.HireDate` → nullable
+- Drop old non-filtered index `IX_Payees_TenantId_Email`
+- Add filtered unique index `IX_Payees_TenantId_Email WHERE Email IS NOT NULL` (same pattern as `ExternalId` in WI-P2-02)
+- Create `FieldRequirementSettings` table with unique index `(TenantId, EntityName, FieldName)`
+- Deduplication step before index creation (handles dev DB with duplicate emails from test imports)
+- Seed SQL: inserts Email=Required + HireDate=Required for all existing tenants → backward compat
+
+**New API:** `GET /api/settings/field-requirements`, `PUT /api/settings/field-requirements/{entity}/{fieldName}`. Both require `Settings.Update` (TenantAdmin).
+
+**Permission + RolePermissions:** `Settings.Update` added to Domain constants; granted to TenantAdmin only.
+
+**New audit constants:** `AuditActions.FieldRequirementChanged`, `ResourceTypes.FieldRequirement`.
+
+### Frontend changes
+
+**New service:** `SettingsApiService` (`features/admin/services/`) — `getFieldRequirements()` + `updateFieldRequirement(entity, field, isRequired)`.
+
+**New component:** `FieldRequirementsComponent` (`features/admin/field-requirements/`) — renders `WsCard` with a list of field toggles using `WsSegmentedControlComponent` (Required / Optional per field). Loads settings on init; updates via PUT and shows toast on save. Gated by `*hasPermission="'Settings.Update'"` in AdminComponent.
+
+**AdminComponent:** replaced placeholder with live `FieldRequirementsComponent`. `*hasPermission` directive gates the section.
+
+**PayeeFormComponent:** loads field requirements on `ngOnInit()` via `SettingsApiService`. Email and HireDate validators are added/removed dynamically via `effect()` syncing with the loaded settings signals. Label changes from "Email" to "Email (optional)" and "Hire date" to "Hire date (optional)" when setting is Optional.
+
+**Payee model:** `email` and `hireDate` are now `string | null` throughout the model, request types, and form handling.
+
+**i18n (EN/ES/PL):** New `SETTINGS` namespace (7 keys each). New `PAYEES.FIELD_EMAIL_OPTIONAL` and `PAYEES.FIELD_HIRE_DATE_OPTIONAL` keys.
+
+### New tests (backend)
+
+- **Unit:** `PayeeTests.cs` (11 tests) — nullable email, nullable hireDate, format/range still enforced when present, always-required fields still throw
+- **Unit:** `CreatePayeeCommandValidatorTests.cs` (10 tests) — `FakeFieldRequirementService` fake, required/optional matrix for email + hireDate, format always enforced when present
+- **Integration:** `FieldRequirementSettingsEndpointsTests.cs` (11 tests) — GET auth/authz, PUT update and reflect, unknown field → 400, cross-tenant isolation, payee creation with null email when Optional → 201, invalid email format still rejected
+
+### New architecture rules
+
+Added to `14-forbidden-patterns.md`: (1) hardcoding required/optional for catalog fields — must use `IFieldRequirementService`; (2) calling `Validate()` sync when validators have `MustAsync` — must use `ValidateAsync()`; (3) adding new catalog fields without migration seed and test fixture seed.
+
+### Notes
+
+- Budget warning (initial bundle 61.84 kB over 500 kB) pre-existed before this WI — verified by git stash/pop. Not caused by this WI.
+- `ValidationBehavior` async fix is a systemic improvement that unblocks any future validator using `MustAsync` or `WhenAsync`.
+- Deduplication in migration is a one-time dev-DB cleanup; production will never hit it since the validator always prevented duplicate emails.
+
+---
+
+## 2026-06-01 — WI-PROD-MODEL Part 3 (FINAL): three decisions closed; WI-PROD-A unblocked
+
+**Duration:** ~15 min (docs only — no code, no tests, no builds, no migrations)
+**Phase:** Phase 2 (pre-implementation — product design, final part)
+**Tests:** 563 backend (217 unit + 346 integration), 143 frontend — no changes this session.
+
+### What we did
+
+Closed the WI-PROD-MODEL design conversation by resolving the three open questions carried over from Parts 1 and 2. Three firm decisions recorded as Decision #37 in `PROJECT_STATUS.md`. WI-PROD-MODEL is now fully CLOSED. WI-PROD-A is now UNBLOCKED.
+
+### Three firm decisions taken (Decision #37 — Part 3)
+
+**Decision 10 — Transaction status enum unchanged; "Unassigned" is derived, not a status.** `CompensationTransaction.Status` (`Pending / Eligible / Calculated / Paid / Cancelled`) stays as-is. Default for all new transactions remains `Pending`. The condition "no payee" is derived from `PayeeId IS NULL` — never encoded as a status value. Status and assignment are independent dimensions. Phase 3 Calculation Engine filters `Status = 'Pending' AND PayeeId IS NOT NULL` to process only what is processable.
+
+**Decision 11 — `AssignPayeeCommand` and `ReassignPayeeCommand` as distinct money-critical commands.** Both implement `IMoneyCriticalCommand` and are audit-logged automatically via the existing `AuditBehavior` pipeline (no new audit infrastructure). `AssignPayeeCommand`: no reason required; allowed when `PayeeId IS NULL`; Pending/Eligible/Calculated/Cancelled states allow. `ReassignPayeeCommand`: reason field REQUIRED (≥ 10 chars), persisted in audit log; reassignment on Eligible returns to Pending; on Calculated invalidates the commission line and returns to Pending; on Paid is BLOCKED with domain exception (money already disbursed). Frontend must hide/disable the action for Paid rows.
+
+**Decision 12 — Import against inactive payee: accept with warning.** When a row's `EmployeeCode` matches a payee with `IsActive = false`, the validator emits `IssueSeverity.Warning` — message: `"Payee X (code Y) is inactive — assignment will be historical"`. Row is imported and assigned. Historical assignments are a legitimate retail scenario (a transaction dated April 28 can arrive in the May 5 import even if the payee deactivated April 30). Comp manager can exclude warning rows via the existing `skipRowsWithWarnings` toggle.
+
+### Architectural observation
+
+The system now has four clearly identified money-critical commands all routing through the same `IMoneyCriticalCommand` → `AuditBehavior` transactional pipeline: `IngestTransactionCommand` (existing), `AssignPayeeCommand` (new — WI-PROD-A/A2), `ReassignPayeeCommand` (new — WI-PROD-A/A2), and whatever the Phase 3 Calculation Engine produces. The pattern holds; no new audit infrastructure needed for WI-PROD-A.
+
+### WI-PROD-A scope updated
+
+WI-PROD-A now covers all 12 WI-PROD-MODEL decisions. It is a LARGE WI — must be split into at least 3 sub-WIs before coding: A1 (schema + settings system), A2 (assignment commands), A3 (frontend UI). Scoping conversation recommended before implementation.
+
+---
+
 ## 2026-05-30 — WI-PROD-F: Server-side payee name resolution (GUID bug eliminated)
 
 **Duration:** ~45 min

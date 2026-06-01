@@ -9,12 +9,12 @@ export interface Payee {
   tenantId: string;
   fullName: string;
   employeeCode: string;
-  email: string;
+  email: string | null;
   role: string | null;
   managerId: string | null;
   managerName: string | null;
   managerEmployeeCode: string | null;
-  hireDate: string;
+  hireDate: string | null;
   terminationDate: string | null;
   status: PayeeStatus;
   statusLabel: string;
@@ -26,8 +26,8 @@ export interface Payee {
 export interface CreatePayeeRequest {
   fullName: string;
   employeeCode: string;
-  email: string;
-  hireDate: string;
+  email: string | null;
+  hireDate: string | null;
   role?: string | null;
   managerId?: string | null;
 }
@@ -36,8 +36,8 @@ export interface UpdatePayeeRequest {
   payeeId: string;
   fullName: string;
   employeeCode: string;
-  email: string;
-  hireDate: string;
+  email: string | null;
+  hireDate: string | null;
   role?: string | null;
   managerId?: string | null;
 }

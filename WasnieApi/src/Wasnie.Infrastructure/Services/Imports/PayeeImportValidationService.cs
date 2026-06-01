@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
@@ -7,7 +8,10 @@ using Wasnie.Application.Services.Imports;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
-public sealed class PayeeImportValidationService(IApplicationDbContext db, IClock clock) : IPayeeImportValidationService
+public sealed class PayeeImportValidationService(
+    IApplicationDbContext db,
+    IClock clock,
+    IFieldRequirementService fieldRequirements) : IPayeeImportValidationService
 {
     private static readonly Regex EmailRegex = new(
         @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
@@ -30,8 +34,14 @@ public sealed class PayeeImportValidationService(IApplicationDbContext db, ICloc
             StringComparer.OrdinalIgnoreCase);
 
         var existingEmails = new HashSet<string>(
-            await db.Payees.Select(p => p.Email).ToListAsync(cancellationToken),
+            await db.Payees
+                .Where(p => p.Email != null)
+                .Select(p => p.Email!)
+                .ToListAsync(cancellationToken),
             StringComparer.OrdinalIgnoreCase);
+
+        var emailRequired = await fieldRequirements.IsRequiredAsync("Payee", "Email", cancellationToken);
+        var hireDateRequired = await fieldRequirements.IsRequiredAsync("Payee", "HireDate", cancellationToken);
 
         var fileCodesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fileEmailsInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -75,15 +85,26 @@ public sealed class PayeeImportValidationService(IApplicationDbContext db, ICloc
             // ── Email ─────────────────────────────────────────────────────
             var email = GetField(row, mapping.EmailColumn);
             if (string.IsNullOrWhiteSpace(email))
-                issues.Add(Error("Email", "Email is required."));
+            {
+                if (emailRequired)
+                    issues.Add(Error("Email", "Email is required."));
+            }
             else if (email.Length > 255)
+            {
                 issues.Add(Error("Email", "Email must be 255 characters or fewer."));
+            }
             else if (!EmailRegex.IsMatch(email))
+            {
                 issues.Add(Error("Email", "Email address is not valid."));
+            }
             else if (existingEmails.Contains(email))
+            {
                 issues.Add(Error("Email", $"Email '{email}' already exists in the system."));
+            }
             else if (fileEmailsInFile.Contains(email))
+            {
                 issues.Add(Error("Email", $"Email '{email}' appears more than once in this file."));
+            }
             else
             {
                 fileEmailsInFile.Add(email);
@@ -96,7 +117,8 @@ public sealed class PayeeImportValidationService(IApplicationDbContext db, ICloc
             var hireDateStr = GetField(row, mapping.HireDateColumn);
             if (string.IsNullOrWhiteSpace(hireDateStr))
             {
-                issues.Add(Error("HireDate", "Hire date is required."));
+                if (hireDateRequired)
+                    issues.Add(Error("HireDate", "Hire date is required."));
             }
             else if (!TryParseDate(hireDateStr, out var hireDate))
             {
@@ -158,7 +180,7 @@ public sealed class PayeeImportValidationService(IApplicationDbContext db, ICloc
         string[] formats = ["yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "M/d/yyyy", "d/M/yyyy", "yyyy/MM/dd"];
         foreach (var fmt in formats)
         {
-            if (DateOnly.TryParseExact(s, fmt, null, System.Globalization.DateTimeStyles.None, out result))
+            if (DateOnly.TryParseExact(s, fmt, CultureInfo.InvariantCulture, DateTimeStyles.None, out result))
                 return true;
         }
         result = default;
