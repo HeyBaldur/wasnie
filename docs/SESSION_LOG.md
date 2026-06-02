@@ -10,6 +10,93 @@
 
 ---
 
+## 2026-06-02 — WI-FRONTEND-FIX-1: View Rule page form rehydration + Live Preview
+
+**WI:** WI-FRONTEND-FIX-1 — Pre-existing UI bugs in View Rule page, discovered during WI-CALC-A.2 smoke test
+**Status:** DONE ✅
+**Type:** Frontend bug fix + component tests.
+**Test count:** Frontend 143 → 154 (+11 new). Backend: 743 unchanged.
+
+### Bug discovery
+
+Bugs surfaced during the WI-CALC-A.2 smoke test when navigating to `/plans/{planId}/rules/{ruleId}` (Rule Test #1: Revenue measurement, Sum aggregation, Flat 5% rate). Two symptoms observed:
+1. Measurement Type and Aggregation dropdowns showed empty/blank (should show "Revenue" and "Sum").
+2. Live Preview showed "Rate Table: Attainment · 0 tiers" (should show "Flat · 5%"). Rate Table type tab buttons showed none as active.
+
+### Root cause (shared for both bugs)
+
+`Program.cs` adds `JsonStringEnumConverter` globally:
+```csharp
+opts.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+```
+All C# enum values serialize to the API as string names (`"Revenue"`, `"Sum"`, `"Flat"`) rather than integers (0, 1, 2).
+
+`_loadExistingRule()` was passing raw API values to `form.patchValue()` without coercion. Two downstream failures:
+
+- **Bug 1 (dropdowns empty):** `WsSelect` receives `writeValue("Revenue")` and sets `value = "Revenue"`. Its `selectedOption` computed does `options.find(o => o.value === "Revenue")` — but options have `value: 0` (number). Strict equality fails; no option matches → dropdown blank.
+- **Bug 2 (Live Preview wrong):** `rateTableType()` computed does `Number(v.rateTable?.type ?? RateTableType.Flat)`. With `"Flat"` (string), `Number("Flat") = NaN`. Then `NaN == 0 (Flat)` → false → falls to `@else` → renders "AttainmentBased · 0 tiers". Same `NaN` hides the `@if (rateTableType() == RateTableType.Flat)` flat-rate block, so the 5% value never appears.
+
+### Fix
+
+Added `_enumToNumber<T>(enumObj, value): number` private helper to `RuleFormComponent`. Applied at every enum field in `_loadExistingRule()`:
+- `measurement.type` → `MeasurementType`
+- `measurement.aggregation` → `MeasurementAggregation`
+- `rateTable.type` → `RateTableType` (also cached as `rateTableTypeNum` for the tier-branch check at the bottom)
+- `trigger.logicalOperator` → `LogicalOperator`
+- `condition.operator` → `ConditionOperator`
+- `condition.value.type` → `ConditionValueType`
+- `modifier.type` → `ModifierType`
+- `cap.scope` → `CapScope`
+
+### Tests added
+
+11 new tests in `rule-form.component.spec.ts`. Used `TestBed.overrideComponent` to replace the component template/imports with a minimal `<form>` to avoid `AppShellComponent` transitive dependency chain. Tests cover:
+- Measurement Type + Aggregation coercion from string → number
+- `rateTableType()` signal value for Flat / Tiered / AttainmentBased
+- `form.get('rateTable.type')?.value` is numeric after load
+- `flatRate` form control populated
+- `tiersArray.length` and `attainmentTiersArray.length` after load
+- Modifier type coercion
+- Cap scope coercion
+
+### Binding rule added
+
+Pattern: **Angular reactive form options use numeric enum values; backend `JsonStringEnumConverter` returns string names. Always coerce in `_loadExistingRule()` via `_enumToNumber`** — never patch the form with raw API enum values.
+
+---
+
+## 2026-06-02 — WI-CALC-A.2: Credit superseding on reassign (Decision #46 Case A)
+
+**WI:** WI-CALC-A.2 — Bug fix: orphaned Credits when Calculated transaction is reassigned
+**Status:** DONE ✅
+**Type:** Domain method + Application handler update + tests.
+**Test count:** 731 → 743 backend (307 unit / 436 integration), 2 intentionally skipped. 0 regressions.
+
+### What was done
+
+**Bug fixed:** WI-CALC-A.1 left Credits orphaned after reassign of a Calculated transaction — the Credit's `PayeeId` no longer matched the transaction's `PayeeId`, but `SupersededAt` remained NULL. Any future attainment (A.3) or payout (A.4) query aggregating `WHERE SupersededAt IS NULL` would have included stale Credits for the wrong payee.
+
+**Domain changes:**
+- `Credit.Supersede(string reason, DateTimeOffset now, Guid eventId)`: sets `SupersededAt` and `SupersededBy`, raises `CreditSupersededEvent`. Invariants: not-already-superseded, non-empty reason, reason ≤ 500 chars.
+- `CreditSupersededEvent` (new): `sealed record (EventId, OccurredOn, CreditId, TransactionId, PayeeId, TenantId, Reason)`.
+
+**Application handler (`ReassignPayeeHandler`):**
+- Added `ICreditAllocationService` constructor injection.
+- Before calling `transaction.Reassign(...)`: loads non-superseded Credits for the transaction, supersedes each with a structured reason `"Reassigned from payee {old} to {new} by {user} at {ts}. Reason: {cmd reason}"` (truncated at 500 chars).
+- After `Reassign`: calls `AllocateAsync` for the new payee (Option A). If Credits returned → persist + `MarkCalculated`. If empty → stays Pending (new payee has no plan).
+- One `SaveChangesAsync` at the end; entirely within the existing `IMoneyCriticalCommand` money-critical scope.
+
+**Re-numbering:** Original A.2 (IQuotaAttainmentService) is now A.3. A.4 (Payout Engine) and A.5 (Payouts UI) unchanged.
+
+**Note on Decision #46 Cases B, C, D:** Deferred. Case B (payout already calculated) and Case C (plan updated post-calculation) require Payouts (A.4). Case D (transaction cancelled) requires a cancellation-with-clawback flow. All are safe to defer because those feature paths don't exist yet.
+
+### Tests added
+- 6 unit tests in `CreditTests.cs` for `Credit.Supersede` invariants and event.
+- 4 integration tests in `CreditSupersedeIntegrationTests.cs`: Calculated→reassign-with-plan, Calculated→reassign-without-plan, Pending→reassign, supersede reason format.
+- `TestDatabaseFixture.ResetCreditsAsync()` and `ResetCreditSupersedeTestDataAsync()` helper methods added.
+
+---
+
 ## 2026-06-02 — WI-CALC-A.1: Credit Engine V1
 
 **WI:** WI-CALC-A.1 — Credit Engine + RuleSnapshot + Transaction status transitions

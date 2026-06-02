@@ -120,6 +120,27 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationTransactions");
     }
 
+    public async Task ResetCreditsAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Credits");
+    }
+
+    // Resets Credits + Transactions + compensation setup for tests that exercise
+    // the full Credit supersede flow (Decision #46 Case A).
+    public async Task ResetCreditSupersedeTestDataAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Credits");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationTransactions");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPlans");
+    }
+
     public async Task ResetImportsAsync()
     {
         using var scope = Factory.Services.CreateScope();

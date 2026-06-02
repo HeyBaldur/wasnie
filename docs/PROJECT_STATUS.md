@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-02 — WI-CALC-A.1 DONE: Credit Engine V1 complete. Credits created at ingest with RuleSnapshot frozen; Transaction.Status transitions Pending→Calculated; Primary credits only per Decision #44. 704 → 731 backend tests passing (299 unit + 432 integration), 2 intentionally skipped. Three binding rules added (domain null checks, tiered rate adjacent boundary, RuleSnapshot JSON converter). TODO: WI-CALC-A.2 must replace the attainment=100% stub with real IQuotaAttainmentService.
-**Updated by:** Rodolfo Calvo (WI-CALC-A.1 Credit Engine V1)
+**Last updated:** 2026-06-02 — WI-FRONTEND-FIX-1 DONE: Fixed View Rule page — form fields now rehydrate from backend data; Live Preview correctly displays Rate Table type for Flat, Tiered, and AttainmentBased rules. Root cause: backend `JsonStringEnumConverter` returns enum values as strings ("Revenue", "Flat"…) but frontend form options and `rateTableType()` computed expected integers; `_enumToNumber` helper added to coerce at load time. Frontend: 143 → 154 tests (+11). Backend unchanged: 743 tests, 2 skipped.
+**Updated by:** Rodolfo Calvo (WI-FRONTEND-FIX-1 — View Rule page form rehydration + Live Preview fix)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-02. WI-CALC-A.1 DONE. Credit Engine V1 is complete: Credits are created at every transaction ingest (CSV import + manual API), RuleSnapshot is frozen at allocation time, CompensationTransaction.Status transitions Pending→Calculated when credits are produced, Primary-only credits per Decision #44. Three critical bugs discovered and fixed during this WI: (1) Entity/ValueObject `== null` operator returns false for null-null comparison — all domain null checks now use `is null`/`is not null` (new binding rule); (2) RateTable.Tiered adjacent-boundary validation used `>=` instead of `>` (now allows `To[i] == From[i+1]`); (3) RuleSnapshot JSON deserialization missing — added `RuleSnapshotJsonConverter`. Smoke test TODO (CLAUDE.md §6): apply migration to dev DB, verify Credits table populated, verify Status=Calculated in transaction list UI. TODO WI-CALC-A.2: remove the attainment=100% stub in `CreditAllocationService.ComputeAttainmentCommission`. Backend: 731 tests passing (299 unit + 432 integration), 2 skipped. Frontend: 143 tests.
+**Right now we are:** End-of-day 2026-06-02. WI-FRONTEND-FIX-1 DONE. View Rule page bugs fixed (pre-existing; discovered during WI-CALC-A.2 smoke test). Backend: 743 tests passing (307 unit + 436 integration), 2 skipped. Frontend: 154 tests (+11). Next: WI-CALC-A.3 (IQuotaAttainmentService + QuotaAttainment VO — original A.2 content, re-numbered due to the A.2 bug-fix insertion).
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -419,9 +419,11 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
    2. `RateTable.Tiered` validation used `>=` boundary check, rejecting adjacent tiers where `To[i] == From[i+1]`. Fixed to `>` (strict overlap only). Standard adjacent tier layout (e.g. `[0-500)` and `[500-∞)`) now works.
    3. `CreditConfiguration.RuleSnapshot` stored as JSON but `RuleSnapshot` has only a private constructor — no parameterless constructor for System.Text.Json to use. Added `RuleSnapshotJsonConverter` in `Wasnie.Infrastructure.Persistence.Serialization`; `CreditConfiguration` now uses `BuildJsonOptions()` with both `MoneyJsonConverter` and `RuleSnapshotJsonConverter`.
 
-   **AttainmentBased V1 stub:** `ComputeAttainmentCommission` uses `attainmentPct=1.0m` (100% fixed). WI-CALC-A.2 must replace this with `IQuotaAttainmentService`.
+   **AttainmentBased V1 stub:** `ComputeAttainmentCommission` uses `attainmentPct=1.0m` (100% fixed). WI-CALC-A.3 must replace this with `IQuotaAttainmentService`.
 
    **Tests:** +27 (5 unit `CompensationTransactionTests`, 16 integration `CreditAllocationServiceTests`, 1 integration `TransactionImportJobTests.WithPlanAndAssignment`, 1 integration `TransactionsEndpointsTests.Post_WithPlanAndAssignment`, plus new domain event test coverage). 704 → 731 non-skipped tests. (2026-06-02)
+
+52. **WI-CALC-A.2 Done — Credit superseding on reassign; Decision #46 Case A (2026-06-02).** Orphaned-Credit bug fixed. When a Calculated transaction is reassigned, all non-superseded Credits for that transaction are marked superseded and the Credit Engine immediately re-allocates for the new payee. Sub-WI numbering shifted: original A.2 (quota attainment) → A.3. Decision #46 Cases B, C, D deferred (Payouts not built yet). Tests: +12 (6 unit `CreditTests`, 4 integration `CreditSupersedeIntegrationTests`). 731 → 743 non-skipped. (2026-06-02)
 
 ---
 
@@ -491,7 +493,40 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 **New tests:** 27 new (5 unit `CompensationTransactionTests`, 16 `CreditAllocationServiceTests`, 1 import E2E, 1 manual creation E2E). 704 → 731 non-skipped.
 
-**TODO WI-CALC-A.2:** Remove `// TODO WI-CALC-A.2` stub in `CreditAllocationService.ComputeAttainmentCommission` — replace with real `IQuotaAttainmentService`.
+**TODO WI-CALC-A.3:** Remove `// TODO WI-CALC-A.2` stub in `CreditAllocationService.ComputeAttainmentCommission` — replace with real `IQuotaAttainmentService` (original A.2 content, re-numbered to A.3 after this bug-fix WI was inserted).
+
+---
+
+### WI-FRONTEND-FIX-1 — View Rule page: form rehydration + Live Preview ✅ DONE (2026-06-02)
+
+**Status:** DONE. Two pre-existing UI bugs fixed. Discovered during WI-CALC-A.2 smoke test.
+
+**Root cause (shared):** Backend `Program.cs` adds `JsonStringEnumConverter` globally; enum values arrive from the API as string names (`"Revenue"`, `"Flat"`, `"Sum"`) rather than integers. `_loadExistingRule()` was patching the form with raw string values. `WsSelect` compares selected value with `===` against numeric option values → no match → dropdown blank. `rateTableType()` computed did `Number("Flat") = NaN` → Live Preview fell to `@else` and showed "Attainment · 0 tiers" regardless of actual type.
+
+**Fix:** Added `_enumToNumber<T>(enumObj, value): number` private helper to `RuleFormComponent`. Applied at every enum field in `_loadExistingRule()`: `MeasurementType`, `MeasurementAggregation`, `RateTableType`, `LogicalOperator`, `ConditionOperator`, `ConditionValueType`, `ModifierType`, `CapScope`. Also caches `rateTableTypeNum` so the tiered/attainment branch check (which was also comparing strings to numeric enum values) uses the coerced integer.
+
+**File changed:** `WasnieUi/src/app/features/plans/rule-form/rule-form.component.ts`
+
+**Tests:** +11 new in `rule-form.component.spec.ts` (Flat/Tiered/AttainmentBased rehydration, form control numeric values, tiersArray population, modifier + cap scope coercion). 143 → 154 frontend tests, all pass. Backend unchanged.
+
+---
+
+### WI-CALC-A.2 — Credit superseding on reassign ✅ DONE (2026-06-02)
+
+**Status:** DONE. Decision #46 Case A implemented.
+
+**Bug fixed:** WI-CALC-A.1 left Credits orphaned when a Calculated transaction was reassigned — the Credit's PayeeId no longer matched the transaction's PayeeId, but SupersededAt was NULL so attainment queries would have aggregated stale data.
+
+**What shipped:**
+- `Credit.Supersede(string reason, DateTimeOffset now, Guid eventId)` domain method with invariants (not-already-superseded, reason required, reason ≤ 500 chars).
+- `CreditSupersededEvent` domain event carrying creditId, transactionId, payeeId, tenantId, reason.
+- `ReassignPayeeHandler` updated: before changing payee, loads all non-superseded Credits for the transaction, calls `Supersede()` on each with a structured reason (`"Reassigned from payee {old} to payee {new} by {user} at {ts}. Reason: {commandReason}"`). After reassign, calls `ICreditAllocationService.AllocateAsync(transaction, ct)` immediately (Option A) — if Credits returned, persists them and marks transaction Calculated; if empty (new payee has no plan), leaves Pending.
+- All operations within the same money-critical `IMoneyCriticalCommand` scope (atomic with audit).
+- Decision #46 Cases B, C, D deferred (Payouts and plan-update flows don't exist yet).
+
+**New tests:** 12 new (6 unit `CreditTests`, 4 integration `CreditSupersedeIntegrationTests`). 731 → 743 non-skipped.
+
+**Sub-WI re-numbering:** Original A.2 (IQuotaAttainmentService) → A.3. Original A.3 (now absorbed here). A.4 (Payout Engine) unchanged. A.5 (Payouts UI) unchanged.
 
 ---
 

@@ -183,21 +183,38 @@ export class RuleFormComponent implements OnInit {
     });
   }
 
+  /**
+   * The API uses JsonStringEnumConverter, so enum values arrive as string names
+   * (e.g. "Revenue", "Flat"). The form options use numeric values (0, 1, 2…).
+   * This helper coerces either representation to the numeric value so that
+   * WsSelect's `selectedOption` comparison (===) finds the correct option.
+   */
+  private _enumToNumber<T extends Record<string, unknown>>(enumObj: T, value: unknown): number {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const n = enumObj[value];
+      return typeof n === 'number' ? n : 0;
+    }
+    return 0;
+  }
+
   private _loadExistingRule(): void {
     const plan = this.store.selectedPlan();
     const rule = plan?.rules.find((r) => r.id === this.ruleId);
     if (!rule) return;
 
+    const rateTableTypeNum = this._enumToNumber(RateTableType, rule.rateTable.type);
+
     this.form.patchValue({
       name: rule.name,
       sortOrder: rule.sortOrder,
       measurement: {
-        type: rule.measurement.type,
+        type: this._enumToNumber(MeasurementType, rule.measurement.type),
         sourceField: rule.measurement.sourceField,
-        aggregation: rule.measurement.aggregation,
+        aggregation: this._enumToNumber(MeasurementAggregation, rule.measurement.aggregation),
       },
       rateTable: {
-        type: rule.rateTable.type,
+        type: rateTableTypeNum,
         flatRate: rule.rateTable.flatRate ?? 0.05,
       },
       hasTrigger: !!rule.trigger,
@@ -207,13 +224,15 @@ export class RuleFormComponent implements OnInit {
     });
 
     if (rule.trigger) {
-      this.form.patchValue({ trigger: { logicalOperator: rule.trigger.logicalOperator } });
+      this.form.patchValue({
+        trigger: { logicalOperator: this._enumToNumber(LogicalOperator, rule.trigger.logicalOperator) },
+      });
       rule.trigger.conditions.forEach((c) => {
         this.conditionsArray.push(
           this.fb.nonNullable.group({
             field: [c.field, Validators.required],
-            operator: [c.operator],
-            valueType: [c.value.type],
+            operator: [this._enumToNumber(ConditionOperator, c.operator)],
+            valueType: [this._enumToNumber(ConditionValueType, c.value.type)],
             valueRaw: [c.value.raw],
           })
         );
@@ -222,25 +241,29 @@ export class RuleFormComponent implements OnInit {
 
     if (rule.modifier) {
       this.form.patchValue({
-        modifier: { name: rule.modifier.name, type: rule.modifier.type, factor: rule.modifier.factor },
+        modifier: {
+          name: rule.modifier.name,
+          type: this._enumToNumber(ModifierType, rule.modifier.type),
+          factor: rule.modifier.factor,
+        },
       });
     }
 
     if (rule.cap) {
-      this.form.patchValue({ cap: { amount: rule.cap.amount.amount, scope: rule.cap.scope } });
+      this.form.patchValue({ cap: { amount: rule.cap.amount.amount, scope: this._enumToNumber(CapScope, rule.cap.scope) } });
     }
 
     if (rule.floor) {
       this.form.patchValue({ floor: { amount: rule.floor.amount.amount } });
     }
 
-    if (rule.rateTable.type === RateTableType.Tiered && rule.rateTable.tiers) {
+    if (rateTableTypeNum === RateTableType.Tiered && rule.rateTable.tiers) {
       rule.rateTable.tiers.forEach((t) => {
         this.tiersArray.push(
           this.fb.nonNullable.group({ from: [t.from], to: [t.to], rate: [t.rate] })
         );
       });
-    } else if (rule.rateTable.type === RateTableType.AttainmentBased && rule.rateTable.attainmentTiers) {
+    } else if (rateTableTypeNum === RateTableType.AttainmentBased && rule.rateTable.attainmentTiers) {
       rule.rateTable.attainmentTiers.forEach((t) => {
         this.attainmentTiersArray.push(
           this.fb.nonNullable.group({ attainmentFrom: [t.attainmentFrom], attainmentTo: [t.attainmentTo], rate: [t.rate] })

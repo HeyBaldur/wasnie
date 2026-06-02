@@ -252,6 +252,36 @@ If you're about to write code that matches any pattern here, STOP. Either you're
   if (effectivePeriod is not null) ...;
   ```
 
+## Frontend reactive form enum binding violations
+
+- ❌ **Patching an Angular reactive form with raw enum values from the API without coercing to numbers first** (WI-FRONTEND-FIX-1, 2026-06-02). The backend adds `JsonStringEnumConverter` globally; all C# enum values serialize to string names in the HTTP response (`"Revenue"`, `"Flat"`, `"Sum"` rather than `0`, `0`, `0`). `WsSelect` uses strict equality (`===`) when matching the form control value against option values. If options have `value: 0` (number) but the form control has `"Revenue"` (string), NO option matches — the dropdown is silently blank.
+
+  **Rule:** Any `_loadExistingRule()` / `_patchFormFromDto()` method that patches a form whose controls hold enum values MUST coerce each API value from string to its numeric enum value before calling `patchValue()`. Use the `_enumToNumber<T extends Record<string, unknown>>(enumObj: T, value: unknown): number` pattern:
+
+  ```typescript
+  private _enumToNumber<T extends Record<string, unknown>>(enumObj: T, value: unknown): number {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const n = enumObj[value];
+      return typeof n === 'number' ? n : 0;
+    }
+    return 0;
+  }
+
+  // Usage in patchValue:
+  this.form.patchValue({
+    measurement: {
+      type: this._enumToNumber(MeasurementType, rule.measurement.type),
+      aggregation: this._enumToNumber(MeasurementAggregation, rule.measurement.aggregation),
+    },
+    rateTable: {
+      type: this._enumToNumber(RateTableType, rule.rateTable.type),
+    },
+  });
+  ```
+
+  This applies to: all `WsSelect` enum dropdowns, `rateTableType()` computed signals, and any TypeScript code that compares an API-sourced enum value to a numeric enum literal.
+
 ## EF Core owned-type nullable violations
 
 - ❌ **Calling `.IsRequired(false)` on a sub-property of a nullable owned value object when the sub-property type is a struct (e.g. `DateOnly`, `int`, `decimal`)** (WI-CALC-A.0, 2026-06-02). EF Core 8 throws at design time: "The property cannot be marked as nullable/optional because the type is not a nullable type." For nullable owned types where sub-properties are structs, the correct pattern is to express the optional nature only on the **navigation**: `builder.Navigation(r => r.EffectivePeriod).IsRequired(false)`. EF Core then allows both mapped columns to be `null` in the DB when the owned object is null. Sub-properties of a reference type (`string`) CAN still call `IsRequired(false)` directly. Example: `OwnsOne(r => r.EffectivePeriod, ep => { ep.Property(d => d.Start).HasColumnName("EffectivePeriodStart").HasColumnType("date"); ... }); builder.Navigation(r => r.EffectivePeriod).IsRequired(false);`
