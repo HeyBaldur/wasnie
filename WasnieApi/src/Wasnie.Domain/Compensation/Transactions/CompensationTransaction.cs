@@ -84,9 +84,19 @@ public sealed class CompensationTransaction : AggregateRoot
         RaiseDomainEvent(new TransactionMarkedEligibleEvent(eventId, now, Id, TenantId));
     }
 
-    // Phase 3 stub — implemented when the calculation engine is built.
-    public void MarkCalculated(string updatedBy, DateTimeOffset now, Guid eventId)
-        => throw new NotSupportedException("MarkCalculated is implemented in Phase 3.");
+    // Pending → Calculated: transaction has had Credits allocated by the calculation engine.
+    public void MarkCalculated(int creditCount, Money totalCommission, string updatedBy, DateTimeOffset now, Guid eventId)
+    {
+        if (Status != CompensationTransactionStatus.Pending)
+            throw new DomainException($"Only Pending transactions can be marked Calculated. Current status: {Status}.");
+
+        Status = CompensationTransactionStatus.Calculated;
+        UpdatedAt = now;
+
+        RaiseDomainEvent(new TransactionCalculatedEvent(
+            eventId, now, Id, PayeeId ?? Guid.Empty, TenantId,
+            creditCount, totalCommission.Amount, totalCommission.Currency));
+    }
 
     // Phase 3 stub — implemented when the payout module is built.
     public void MarkPaid(string updatedBy, DateTimeOffset now, Guid eventId)

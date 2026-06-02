@@ -27,7 +27,7 @@ public sealed class RateTable
                 throw new DomainException($"Tier at index {i} must have an upper bound when it is not the last tier.");
             }
 
-            if (tiers[i].To!.Value >= tiers[i + 1].From)
+            if (tiers[i].To!.Value > tiers[i + 1].From)
             {
                 throw new DomainException("Tier ranges must be non-overlapping and ordered ascending.");
             }

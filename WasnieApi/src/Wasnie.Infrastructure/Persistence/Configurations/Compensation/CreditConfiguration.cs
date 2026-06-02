@@ -3,12 +3,21 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.ValueObjects;
+using Wasnie.Infrastructure.Persistence.Serialization;
 
 namespace Wasnie.Infrastructure.Persistence.Configurations.Compensation;
 
 public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = BuildJsonOptions();
+
+    private static JsonSerializerOptions BuildJsonOptions()
+    {
+        var opts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        opts.Converters.Add(new MoneyJsonConverter());
+        opts.Converters.Add(new RuleSnapshotJsonConverter());
+        return opts;
+    }
 
     public void Configure(EntityTypeBuilder<Credit> builder)
     {
@@ -24,6 +33,8 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
         builder.Property(c => c.Role).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(c => c.AllocatedAt).IsRequired();
         builder.Property(c => c.AllocatedBy).IsRequired().HasMaxLength(450);
+        builder.Property(c => c.SupersededAt).IsRequired(false);
+        builder.Property(c => c.SupersededBy).HasColumnType("nvarchar(max)").IsRequired(false);
 
         builder.OwnsOne(c => c.OriginalAmount, m =>
         {
@@ -49,5 +60,7 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
                 v => JsonSerializer.Deserialize<RuleSnapshot>(v, JsonOptions)!);
 
         builder.HasIndex(c => new { c.TenantId, c.TransactionId, c.PayeeId });
+        builder.HasIndex(c => new { c.TenantId, c.SupersededAt })
+            .HasFilter("[SupersededAt] IS NULL");
     }
 }

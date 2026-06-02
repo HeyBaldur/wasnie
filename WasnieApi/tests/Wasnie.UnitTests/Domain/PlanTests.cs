@@ -3,6 +3,7 @@ using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
+using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
 using Wasnie.UnitTests.Builders;
 
@@ -353,5 +354,81 @@ public sealed class PlanTests
         var table = RateTable.Tiered(tiers);
         table.Type.Should().Be(RateTableType.Tiered);
         table.Tiers.Should().HaveCount(2);
+    }
+
+    // ── WI-CALC-A.0: PeriodType + Rule.Tag + Rule.EffectivePeriod ────────────
+
+    [Fact]
+    public void Create_WithPeriodType_SetsPeriodType()
+    {
+        var plan = Plan.Create(
+            Guid.NewGuid(), "Test Plan", "desc",
+            DateRange.Of(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31)),
+            "EUR", "user", Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid(),
+            periodType: PlanPeriodType.Monthly);
+
+        plan.PeriodType.Should().Be(PlanPeriodType.Monthly);
+    }
+
+    [Fact]
+    public void Create_WithDefaultPeriodType_PeriodTypeIsNull()
+    {
+        var plan = new PlanBuilder().Build();
+
+        plan.PeriodType.Should().BeNull();
+    }
+
+    [Fact]
+    public void CloneAsNewVersion_CopiesPeriodType()
+    {
+        var plan = Plan.Create(
+            Guid.NewGuid(), "Test Plan", "desc",
+            DateRange.Of(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31)),
+            "EUR", "user", Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid(),
+            periodType: PlanPeriodType.Quarterly);
+        plan.AddRule("Rule", 1, DefaultMeasurement, RateTable.Flat(0.05m));
+        plan.Activate("user", DateTimeOffset.UtcNow, Guid.NewGuid());
+
+        var clone = plan.CloneAsNewVersion("user", DateTimeOffset.UtcNow, Guid.NewGuid);
+
+        clone.PeriodType.Should().Be(PlanPeriodType.Quarterly);
+    }
+
+    [Fact]
+    public void AddRule_WithTagAndEffectivePeriod_RuleHasCorrectValues()
+    {
+        var plan = new PlanBuilder().Build();
+        var start = new DateOnly(2025, 4, 1);
+        var end = new DateOnly(2025, 6, 30);
+        var period = DateRange.Of(start, end);
+
+        var rule = plan.AddRule("Promo", 1, DefaultMeasurement, RateTable.Flat(0.1m),
+            effectivePeriod: period, tag: "Promo Q2");
+
+        rule.Tag.Should().Be("Promo Q2");
+        rule.EffectivePeriod.Should().NotBeNull();
+        rule.EffectivePeriod!.Start.Should().Be(start);
+        rule.EffectivePeriod.End.Should().Be(end);
+    }
+
+    [Fact]
+    public void AddRule_WithTagExceeding50Characters_ThrowsDomainException()
+    {
+        var plan = new PlanBuilder().Build();
+        var longTag = new string('x', 51);
+
+        var act = () => plan.AddRule("Rule", 1, DefaultMeasurement, RateTable.Flat(0.05m), tag: longTag);
+
+        act.Should().Throw<DomainException>().WithMessage("*50 characters*");
+    }
+
+    [Fact]
+    public void AddRule_WithNullTag_RuleTagIsNull()
+    {
+        var plan = new PlanBuilder().Build();
+
+        var rule = plan.AddRule("Rule", 1, DefaultMeasurement, RateTable.Flat(0.05m), tag: null);
+
+        rule.Tag.Should().BeNull();
     }
 }

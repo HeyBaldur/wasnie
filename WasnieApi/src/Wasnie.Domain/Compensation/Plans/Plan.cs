@@ -15,6 +15,7 @@ public sealed class Plan : AggregateRoot
     public PlanStatus Status { get; private set; } = PlanStatus.Draft;
     public DateRange EffectivePeriod { get; private set; } = null!;
     public string Currency { get; private set; } = string.Empty;
+    public PlanPeriodType? PeriodType { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public string CreatedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -34,7 +35,8 @@ public sealed class Plan : AggregateRoot
         string createdBy,
         Guid id,
         DateTimeOffset now,
-        Guid eventId)
+        Guid eventId,
+        PlanPeriodType? periodType = null)
     {
         var plan = new Plan
         {
@@ -44,6 +46,7 @@ public sealed class Plan : AggregateRoot
             Description = description,
             EffectivePeriod = effectivePeriod,
             Currency = currency,
+            PeriodType = periodType,
             Version = 1,
             Status = PlanStatus.Draft,
             CreatedAt = now,
@@ -64,14 +67,16 @@ public sealed class Plan : AggregateRoot
         Trigger? trigger = null,
         Modifier? modifier = null,
         Cap? cap = null,
-        Floor? floor = null)
+        Floor? floor = null,
+        DateRange? effectivePeriod = null,
+        string? tag = null)
     {
         if (Status != PlanStatus.Draft)
         {
             throw new DomainException("Rules can only be modified on Draft plans.");
         }
 
-        var rule = Rule.Create(Id, name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor);
+        var rule = Rule.Create(Id, name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
         _rules.Add(rule);
         return rule;
     }
@@ -98,7 +103,9 @@ public sealed class Plan : AggregateRoot
         Trigger? trigger = null,
         Modifier? modifier = null,
         Cap? cap = null,
-        Floor? floor = null)
+        Floor? floor = null,
+        DateRange? effectivePeriod = null,
+        string? tag = null)
     {
         if (Status != PlanStatus.Draft)
         {
@@ -108,7 +115,7 @@ public sealed class Plan : AggregateRoot
         var rule = _rules.FirstOrDefault(r => r.Id == ruleId && r.IsActive)
             ?? throw new DomainException($"Rule {ruleId} not found in this plan.");
 
-        rule.Update(name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor);
+        rule.Update(name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
     }
 
     public void Activate(string updatedBy, DateTimeOffset now, Guid eventId)
@@ -168,6 +175,7 @@ public sealed class Plan : AggregateRoot
             Description = Description,
             EffectivePeriod = DateRange.Of(EffectivePeriod.Start, EffectivePeriod.End),
             Currency = Currency,
+            PeriodType = PeriodType,
             Version = Version + 1,
             Status = PlanStatus.Draft,
             CreatedAt = now,
@@ -188,7 +196,9 @@ public sealed class Plan : AggregateRoot
                 rule.Modifier,
                 rule.Cap,
                 rule.Floor,
-                id: newId()));
+                id: newId(),
+                effectivePeriod: rule.EffectivePeriod,
+                tag: rule.Tag));
         }
 
         clone.RaiseDomainEvent(new PlanVersionClonedEvent(

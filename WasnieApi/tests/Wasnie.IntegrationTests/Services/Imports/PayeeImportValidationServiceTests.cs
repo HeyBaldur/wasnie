@@ -774,8 +774,11 @@ public sealed class PayeeImportValidationServiceTests
         };
         var row = new Dictionary<string, string>
         {
-            ["Name"] = "Alice", ["Code"] = "EMP001", ["Email"] = "alice@co.com",
-            ["Date"] = "2022-01-01", ["Mgr"] = "MGR_GHOST",
+            ["Name"] = "Alice",
+            ["Code"] = "EMP001",
+            ["Email"] = "alice@co.com",
+            ["Date"] = "2022-01-01",
+            ["Mgr"] = "MGR_GHOST",
         };
 
         var results = await sut.ValidateAsync(new List<Dictionary<string, string>> { row }, mapping);

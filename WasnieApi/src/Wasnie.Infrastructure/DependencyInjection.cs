@@ -10,8 +10,10 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Infrastructure.BackgroundJobs;
 using Wasnie.Infrastructure.Common;
+using Wasnie.Infrastructure.Compensation.Calculation;
 using Wasnie.Infrastructure.Identity;
 using Wasnie.Infrastructure.Observability;
 using Wasnie.Infrastructure.Persistence;
@@ -74,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();
         services.AddScoped<IAuditService, AuditService>();
 
+        services.AddScoped<ICreditAllocationService, CreditAllocationService>();
         services.AddScoped<IFieldRequirementService, FieldRequirementService>();
         services.AddScoped<IImportCacheService, ImportCacheService>();
         services.AddScoped<IFileParserService, FileParserService>();

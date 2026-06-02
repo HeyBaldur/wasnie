@@ -124,3 +124,6 @@ Serilog/
 *.swo
 *.orig
 *~
+
+# Claude Code agent worktrees - never commit
+.claude/

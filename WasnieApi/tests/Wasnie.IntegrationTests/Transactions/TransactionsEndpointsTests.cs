@@ -3,6 +3,12 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Domain.Compensation.Assignments;
+using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Domain.Compensation.Rules;
+using Wasnie.Domain.Compensation.ValueObjects;
+using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
 
 namespace Wasnie.IntegrationTests.Transactions;
@@ -239,6 +245,54 @@ public sealed class TransactionsEndpointsTests : IAsyncLifetime
         var latestAudit = auditEntries.OrderByDescending(a => a.TimestampUtc).First();
         latestAudit.Action.Should().Be("TRANSACTION_INGESTED");
         latestAudit.TenantId.Should().Be(TestConstants.TenantA);
+    }
+
+    // ── Credit Engine integration ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task Post_WithPlanAndAssignment_TransactionBecomesCalculated_WithCredit()
+    {
+        // Arrange: EUR plan at 10% flat rate, assigned to _payeeAId covering 2025.
+        Guid planId;
+        using (var setupScope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = setupScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            planId = Guid.NewGuid();
+            var plan = Plan.Create(TestConstants.TenantA, "Manual Credit Plan", "desc",
+                DateRange.Of(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31)),
+                "EUR", "test", planId, now, Guid.NewGuid());
+            plan.AddRule("10pct Flat", 1,
+                new Measurement { Type = MeasurementType.Revenue, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+                RateTable.Flat(0.10m));
+            db.CompensationPlans.Add(plan);
+
+            var payeeRef = PayeeReference.Snapshot(_payeeAId, "Payee Alpha", "PA001");
+            db.PlanAssignments.Add(PlanAssignment.Create(
+                TestConstants.TenantA, planId, _payeeAId, payeeRef,
+                DateRange.Of(new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31)),
+                "test", Guid.NewGuid(), now, Guid.NewGuid()));
+            await db.SaveChangesAsync();
+        }
+
+        // Act: POST a EUR 1500 transaction on 2025-06-15 (covered by the assignment).
+        var response = await _clientA.PostAsJsonAsync("/api/transactions",
+            ValidRequest(_payeeAId, "TXN-MANUAL-CREDIT-001"));
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var body = await response.Content.ReadFromJsonAsync<TransactionResponse>();
+        body!.Status.Should().Be("Calculated");
+
+        // Assert: one Credit with 10% of 1500 = 150.
+        using var verifyScope = _fixture.Factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var credits = await verifyDb.Credits
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == TestConstants.TenantA && c.PlanId == planId)
+            .ToListAsync();
+        credits.Should().HaveCount(1);
+        credits[0].CreditedAmount.Amount.Should().Be(150m);
+        credits[0].Role.Should().Be(CreditRole.Primary);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

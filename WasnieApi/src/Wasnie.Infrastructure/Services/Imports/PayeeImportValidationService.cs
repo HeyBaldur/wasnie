@@ -41,11 +41,11 @@ public sealed class PayeeImportValidationService(
                 .ToListAsync(cancellationToken),
             StringComparer.OrdinalIgnoreCase);
 
-        var emailRequired          = await fieldRequirements.IsRequiredAsync("Payee", "Email",          cancellationToken);
-        var hireDateRequired       = await fieldRequirements.IsRequiredAsync("Payee", "HireDate",       cancellationToken);
-        var roleRequired           = await fieldRequirements.IsRequiredAsync("Payee", "Role",           cancellationToken);
+        var emailRequired = await fieldRequirements.IsRequiredAsync("Payee", "Email", cancellationToken);
+        var hireDateRequired = await fieldRequirements.IsRequiredAsync("Payee", "HireDate", cancellationToken);
+        var roleRequired = await fieldRequirements.IsRequiredAsync("Payee", "Role", cancellationToken);
         var employmentTypeRequired = await fieldRequirements.IsRequiredAsync("Payee", "EmploymentType", cancellationToken);
-        var locationRequired       = await fieldRequirements.IsRequiredAsync("Payee", "Location",       cancellationToken);
+        var locationRequired = await fieldRequirements.IsRequiredAsync("Payee", "Location", cancellationToken);
 
         var fileCodesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fileEmailsInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -10,6 +10,96 @@
 
 ---
 
+## 2026-06-02 — WI-CALC-A.1: Credit Engine V1
+
+**WI:** WI-CALC-A.1 — Credit Engine + RuleSnapshot + Transaction status transitions
+**Status:** DONE ✅
+**Type:** Application service + Infrastructure implementation + domain fixes + tests.
+**Test count:** 704 → 731 backend (299 unit / 432 integration), 2 intentionally skipped. 0 regressions.
+
+### What was done
+
+**New Infrastructure service:**
+- `ICreditAllocationService` (Application, already existed as interface stub from prior partial session) — kept as-is.
+- `CreditAllocationService` (Infrastructure, partially implemented from prior session) — completed and fixed.
+- `RuleSnapshotJsonConverter` (Infrastructure, new) — required because `RuleSnapshot` has only a private constructor; `System.Text.Json` cannot deserialize without a converter. Reads `frozenAt`, `ruleId`, `planId`, `planVersion`, `ruleName`, `rateTable`, `trigger` from JSON and calls `RuleSnapshot.Freeze(...)`.
+
+**Domain fix: MarkCalculated:**
+- `CompensationTransaction.MarkCalculated(...)` was already implemented from a prior partial session (not a stub). No changes needed.
+- `TransactionCalculatedEvent` was also already complete.
+
+**Domain fix: RateTable.Tiered:**
+- `RateTable.Tiered` validation used `>=` for tier boundary check (`tiers[i].To >= tiers[i+1].From`), which rejected adjacent tiers (e.g. `To=500` and `From=500`). Fixed to `>` (strict overlap only). Adjacent tier layout `[0-500)` and `[500-∞)` is now valid.
+
+**Bug fix: Entity/ValueObject null operators:**
+- `Entity.operator ==` and `ValueObject.operator ==` return `false` when both operands are null. This caused `if (entity == null) return;` to NOT return when entity IS null. All null checks in `CreditAllocationService` changed to `is null` / `is not null`. New binding rule added to `14-forbidden-patterns.md`.
+
+**EF Core fix: Plan.Rules not loaded:**
+- `CompensationPlans` query in `AllocateAsync` now uses `.Include(p => p.Rules)` to eagerly load rules. Without this, `plan.Rules` was always empty (EF Core doesn't auto-load navigations).
+
+**CreditConfiguration fix:**
+- Updated `CreditConfiguration.JsonOptions` to use `BuildJsonOptions()` factory pattern (same as `PlanRuleConfiguration`), adding both `MoneyJsonConverter` and `RuleSnapshotJsonConverter`.
+
+**Integration points:**
+- `TransactionImportJobHandler`: already wired to `ICreditAllocationService` from prior partial session. Correct as-is.
+- `IngestTransactionHandler`: already wired. Correct as-is.
+
+**Tests added (27 new):**
+- `CreditAllocationServiceTests` (16 new): no-active-rules, two-rules, attainment-based-stub, modifier, plus the pre-existing tests for null-payee, not-pending, no-assignment, assignment-date-miss, flat-rule, tiered-rate, cap, floor, rule-period-miss, currency-mismatch, rule-snapshot, trigger-always, trigger-condition-pass, trigger-condition-fail, E2E full-flow, E2E unassigned.
+- `CompensationTransactionTests` (MarkCalculated tests — 5 already existed from prior session, confirmed passing).
+- `TransactionImportJobTests.WithPlanAndAssignment` (1 new E2E): CSV import with Plan+Assignment produces Credits, Status=Calculated.
+- `TransactionsEndpointsTests.Post_WithPlanAndAssignment` (1 new E2E): manual POST produces Credit, Status=Calculated.
+
+### Binding rules added to `14-forbidden-patterns.md`
+1. **Domain null-check violations:** `Entity`/`ValueObject` subclasses must use `is null` / `is not null` for null checks. Never `== null` or `!= null`.
+
+### What was NOT done
+- IQuotaAttainmentService → WI-CALC-A.2 (attainment=100% stub in `ComputeAttainmentCommission` remains with TODO comment).
+- Credit.Supersede() → WI-CALC-A.3
+- Payout Engine → WI-CALC-A.4
+- Frontend changes (no UI needed — backend-only flow)
+
+---
+
+## 2026-06-02 — WI-CALC-A.0: Phase 3 schema preparation (no engine logic)
+
+**WI:** WI-CALC-A.0 — Schema preparation for Phase 3 Calculation Engine
+**Status:** DONE ✅
+**Type:** Domain entities + EF configurations + migration + unit + integration tests. No commands, no API, no UI.
+**Test count:** 692 → 704 backend (294 unit / 410 integration), 2 intentionally skipped. 0 regressions.
+
+### What was done
+
+**Domain changes (3 entities, 1 new file):**
+- `Rule.cs`: Added `DateRange? EffectivePeriod` and `string? Tag`. `Rule.Create(...)` and `Rule.Update(...)` accept both as optional params (default null = backward compat). `ValidateTag()` private helper throws `DomainException("Rule tag must not exceed 50 characters.")` when tag.Trim().Length > 50.
+- `Plan.cs`: Added `PlanPeriodType? PeriodType`. `Plan.Create(...)` accepts `periodType = null` optional param. `CloneAsNewVersion(...)` copies PeriodType and also copies EffectivePeriod/Tag from each active rule. `AddRule(...)` and `UpdateRule(...)` plumb `effectivePeriod` and `tag` to the inner Rule factory.
+- `Credit.cs`: Added `DateTimeOffset? SupersededAt` and `string? SupersededBy`. Both default null. `Allocate(...)` factory unchanged — callers don't pass these; they default null.
+- `PlanPeriodType.cs` (new): Enum with 7 values: Monthly=0, Quarterly=1, Annual=2, Semestral=3, Weekly=4, Biweekly=5, Custom=6.
+
+**EF config changes:**
+- `PlanRuleConfiguration.cs`: `OwnsOne(r => r.EffectivePeriod, ep => { ep.Property(d => d.Start).HasColumnName("EffectivePeriodStart").HasColumnType("date"); ... })` + `builder.Navigation(r => r.EffectivePeriod).IsRequired(false)`. Important: `.IsRequired(false)` must go on the Navigation, NOT on the sub-properties — `DateOnly` is a struct and EF Core 8 rejects calling `IsRequired(false)` on a non-nullable value type property. `Tag` mapped as `nvarchar(50)` nullable.
+- `CompensationPlanConfiguration.cs`: `builder.Property(p => p.PeriodType).HasConversion<string>().HasMaxLength(50).IsRequired(false)` — follows `PlanStatus` string-enum convention.
+- `CreditConfiguration.cs`: `SupersededAt` (datetimeoffset nullable) + `SupersededBy` (nvarchar(max) nullable) + filtered index `IX_Credits_TenantId_SupersededAt WHERE [SupersededAt] IS NULL`.
+
+**Migration:** `20260602082902_P3_SchemaPreparation` — 4 AddColumn + 1 CreateIndex. Applied to local dev DB.
+
+**Tests added:**
+- Unit: 6 tests in `PlanTests.cs` (PeriodType create, default null, CloneAsNewVersion copies, AddRule with tag+period, tag>50 throws, null tag)
+- Unit: 2 tests in new `CreditTests.cs` (SupersededAt null, SupersededBy null after Allocate)
+- Integration: 4 tests in new `P3SchemaRoundTripTests.cs` + fixture + collection (isolated Testcontainers MSSQL; PeriodType round-trip, null PeriodType, Tag+EffectivePeriod round-trip, null Tag+EffectivePeriod)
+
+### Binding rule added to 14-forbidden-patterns.md
+Nullable owned `DateRange?` in EF Core 8 requires `Navigation(...).IsRequired(false)` on the navigation, NOT `.IsRequired(false)` on the sub-properties. `DateOnly` is a struct — calling IsRequired(false) on a struct property throws at design time ("cannot be marked as nullable because the type is not nullable").
+
+### What was NOT done (explicitly deferred per WI scope)
+- No engine logic
+- No EffectivePeriod containment invariants (WI-CALC-A.1)
+- No Supersede() domain method (WI-CALC-A.3)
+- No changes to Application commands
+- No frontend changes
+
+---
+
 ## 2026-06-01 — Full milestone close: WI-PROD-E + A.3 + R Done; WI-PROD-MODEL fully realized in code
 
 **Type:** Implementation + smoke test + UX polish + docs  

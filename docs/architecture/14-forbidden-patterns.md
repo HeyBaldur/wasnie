@@ -232,6 +232,32 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ **Custom `overflow` CSS on modal SCSS to work around `ws-select` dropdown clipping** (WI-PROD-R, 2026-06-01). `WsSelectComponent` is already modal-aware: `openDropdown()` detects the nearest `.ws-modal__dialog` via `Element.closest()` and uses its bounds for upward-flip and height-constraint logic. Adding `overflow-y: auto` or custom dropdown positioning in modal component SCSS is forbidden — it duplicates the logic already in `ws-select` and creates split-brain behaviour.
 - ❌ **Absent/null values in data table cells styled with the same color and weight as real values** (WI-PROD-R, 2026-06-01). When a table cell holds a placeholder for an absent value (e.g. "Unassigned"), it MUST be visually distinct from real values. Accepted treatment: `font-style: italic` + `color: var(--color-text-tertiary)`. Forbidden: rendering "Unassigned" or "None" in `col-secondary` or `col-primary` — a comp manager scanning a dense list cannot distinguish an action-required row from a populated one.
 
+## Domain null-check violations
+
+- ❌ **Using `== null` or `!= null` with `Entity` or `ValueObject` subclasses** (WI-CALC-A.1, 2026-06-02). Both `Entity.operator ==` and `ValueObject.operator ==` return `false` when both operands are null (they require both operands to be non-null AND equal). Consequently, `null == null` → `false` and `null != null` → `true`. This means:
+  - `if (entity == null) return;` does NOT return when `entity` IS null — the null check is bypassed.
+  - `if (valueObject != null) access.Property;` throws `NullReferenceException` when `valueObject` IS null.
+  
+  **Rule:** Always use C# pattern matching for null checks on `Entity` and `ValueObject` subclasses: `is null` and `is not null`. Never use `== null` or `!= null`.
+
+  ```csharp
+  // FORBIDDEN:
+  if (assignment == null) return;     // does NOT return when assignment is null
+  if (plan == null) return;           // same bug
+  if (effectivePeriod != null) ...;   // does NOT guard against null
+  
+  // CORRECT:
+  if (assignment is null) return;
+  if (plan is null) return;
+  if (effectivePeriod is not null) ...;
+  ```
+
+## EF Core owned-type nullable violations
+
+- ❌ **Calling `.IsRequired(false)` on a sub-property of a nullable owned value object when the sub-property type is a struct (e.g. `DateOnly`, `int`, `decimal`)** (WI-CALC-A.0, 2026-06-02). EF Core 8 throws at design time: "The property cannot be marked as nullable/optional because the type is not a nullable type." For nullable owned types where sub-properties are structs, the correct pattern is to express the optional nature only on the **navigation**: `builder.Navigation(r => r.EffectivePeriod).IsRequired(false)`. EF Core then allows both mapped columns to be `null` in the DB when the owned object is null. Sub-properties of a reference type (`string`) CAN still call `IsRequired(false)` directly. Example: `OwnsOne(r => r.EffectivePeriod, ep => { ep.Property(d => d.Start).HasColumnName("EffectivePeriodStart").HasColumnType("date"); ... }); builder.Navigation(r => r.EffectivePeriod).IsRequired(false);`
+
+---
+
 ## Claude Code autonomy violations
 
 - ❌ Claude Code performing ANY git operation (file 13, R13.2)

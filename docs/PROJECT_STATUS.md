@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-01 — Major milestone: WI-PROD-A trilogy + WI-PROD-MODEL decisions fully realized in code. WI-PROD-E + A.3 + R all Done and smoke-tested in vivo.
-**Updated by:** Rodolfo Calvo (full milestone close; 628→692 backend tests across today; architectural observations recorded in Decision #42)
+**Last updated:** 2026-06-02 — WI-CALC-A.1 DONE: Credit Engine V1 complete. Credits created at ingest with RuleSnapshot frozen; Transaction.Status transitions Pending→Calculated; Primary credits only per Decision #44. 704 → 731 backend tests passing (299 unit + 432 integration), 2 intentionally skipped. Three binding rules added (domain null checks, tiered rate adjacent boundary, RuleSnapshot JSON converter). TODO: WI-CALC-A.2 must replace the attainment=100% stub with real IQuotaAttainmentService.
+**Updated by:** Rodolfo Calvo (WI-CALC-A.1 Credit Engine V1)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-01. WI-PROD-R DONE. "Unassigned" transactions now render italic + `--color-text-tertiary` in the transactions list — visually distinct from assigned rows at a glance. `ws-select` async dropdown overflow in modals fixed: `openDropdown()` now uses the full 280px height estimate in async mode so the modal-aware positioning algorithm fires correctly before results load. Backend: 692 tests (286 unit + 406 integration), 2 skipped. Frontend: 143 tests. 0 failures. Next: WI-PROD-CURRENCY (design conversation first) or WI-PROD-K.
+**Right now we are:** End-of-day 2026-06-02. WI-CALC-A.1 DONE. Credit Engine V1 is complete: Credits are created at every transaction ingest (CSV import + manual API), RuleSnapshot is frozen at allocation time, CompensationTransaction.Status transitions Pending→Calculated when credits are produced, Primary-only credits per Decision #44. Three critical bugs discovered and fixed during this WI: (1) Entity/ValueObject `== null` operator returns false for null-null comparison — all domain null checks now use `is null`/`is not null` (new binding rule); (2) RateTable.Tiered adjacent-boundary validation used `>=` instead of `>` (now allows `To[i] == From[i+1]`); (3) RuleSnapshot JSON deserialization missing — added `RuleSnapshotJsonConverter`. Smoke test TODO (CLAUDE.md §6): apply migration to dev DB, verify Credits table populated, verify Status=Calculated in transaction list UI. TODO WI-CALC-A.2: remove the attainment=100% stub in `CreditAllocationService.ComputeAttainmentCommission`. Backend: 731 tests passing (299 unit + 432 integration), 2 skipped. Frontend: 143 tests.
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -385,6 +385,44 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
    Risk assessment: **LOW** at current stage (pre-revenue, controlled test tenants). Becomes **MEDIUM** when the first paying customer's IT-security questionnaire is conducted — mid-market retail customers rarely require AV scanning, but any financial-services or healthcare vertical will. WI-PROD-N closes the defensive baseline (magic-byte check, per-user upload rate limit, structured upload logging, internal security doc) before signing the first customer. WI-PROD-O adds active antivirus scanning only when a customer contract explicitly requires it — do not implement speculatively. (2026-06-01)
 
+50. **WI-CALC-A.0 Done — Schema preparation for Phase 3 Calculation Engine (2026-06-02).** Four new nullable columns added across three domain entities, plus a new enum. All additions are purely additive (nullable, backward-compatible); no existing data is affected; no behavior changes; all 704 non-skipped tests continue to pass.
+
+   **Entity changes:** `Rule` gains `EffectivePeriod` (`DateRange?`, nullable owned type mapping to `EffectivePeriodStart`/`EffectivePeriodEnd` date columns) and `Tag` (`string?`, `nvarchar(50)` nullable). `Plan` gains `PeriodType` (`PlanPeriodType?`, mapped as `nvarchar(50)` nullable following the same `HasConversion<string>()` convention as `PlanStatus`; `CloneAsNewVersion` copies it to the clone). `Credit` gains `SupersededAt` (`DateTimeOffset?`) and `SupersededBy` (`string?`, `nvarchar(max)`). Tag validation: throws `DomainException("Rule tag must not exceed 50 characters.")` when tag (if non-null) is longer than 50 chars after trimming.
+
+   **New enum:** `PlanPeriodType` (7 values: `Monthly=0, Quarterly=1, Annual=2, Semestral=3, Weekly=4, Biweekly=5, Custom=6`) in `Wasnie.Domain.Compensation.Plans`. Metadata only — the calculation engine does not consume it (Decision #42).
+
+   **EF config:** `PlanRuleConfiguration` uses `OwnsOne(r => r.EffectivePeriod, ...)` + `Navigation(...).IsRequired(false)` for the nullable owned type (the correct EF Core 8 pattern — `DateOnly` is a struct so `.IsRequired(false)` on sub-properties is forbidden; nullability is expressed on the navigation). `CreditConfiguration` adds a filtered index `IX_Credits_TenantId_SupersededAt WHERE [SupersededAt] IS NULL` for the high-frequency "active credits" query pattern (Decision #46).
+
+   **Migration:** `20260602082902_P3_SchemaPreparation` applied to local dev DB.
+
+   **Binding rule added to `14-forbidden-patterns.md`:** nullable owned `DateRange?` requires `Navigation(...).IsRequired(false)` — do NOT call `.IsRequired(false)` on the `DateOnly` sub-properties.
+
+   **Tests:** +12 (8 unit in `PlanTests.cs` + `CreditTests.cs`; 4 integration in `P3SchemaRoundTripTests.cs`). 692 → 704 non-skipped tests. (2026-06-02)
+
+51. **WI-CALC-A.1 Done — Credit Engine V1: Credits created at ingest with RuleSnapshot frozen; Transaction.Status Pending→Calculated (2026-06-02).**
+
+   **Core behavior:** `CreditAllocationService.AllocateAsync(transaction, ct)` runs inside every transaction ingest path (Hangfire import job + manual `IngestTransactionHandler`). For each `Pending` transaction with a non-null `PayeeId`:
+   - Finds the active `PlanAssignment` covering `TransactionDate` (Decision #40).
+   - Loads the `Plan` with rules eagerly (`Include(p => p.Rules)`).
+   - Filters rules by `IsActive` and `EffectivePeriod` containment (Decision #41 runtime).
+   - Evaluates each rule's `Trigger` (Trigger.Always, or condition set with And/Or logic).
+   - Computes commission: Flat / Tiered / AttainmentBased (V1 stub: attainment=100%; TODO WI-CALC-A.2).
+   - Applies Modifier (multiplicative), Cap (PerTransaction only), Floor.
+   - Freezes `RuleSnapshot` and calls `Credit.Allocate(...)` with Role=Primary, SplitPercentage=1.0 (Decision #44).
+   - Returns credits to caller; caller persists and calls `transaction.MarkCalculated(...)`.
+   - No assignment / no active rules / trigger false → empty list, transaction stays Pending (not an error).
+   - Plan/transaction currency mismatch → `DomainException` (WI-PROD-CURRENCY deferred).
+   - Tenant mismatch → `InvalidOperationException` (data integrity guard).
+
+   **Three bugs discovered and fixed during this WI:**
+   1. `Entity.operator ==` and `ValueObject.operator ==` return `false` when BOTH operands are null — `if (x == null)` does NOT guard against null for domain types. Fixed throughout service with `is null` / `is not null`. **New binding rule added to `14-forbidden-patterns.md`.**
+   2. `RateTable.Tiered` validation used `>=` boundary check, rejecting adjacent tiers where `To[i] == From[i+1]`. Fixed to `>` (strict overlap only). Standard adjacent tier layout (e.g. `[0-500)` and `[500-∞)`) now works.
+   3. `CreditConfiguration.RuleSnapshot` stored as JSON but `RuleSnapshot` has only a private constructor — no parameterless constructor for System.Text.Json to use. Added `RuleSnapshotJsonConverter` in `Wasnie.Infrastructure.Persistence.Serialization`; `CreditConfiguration` now uses `BuildJsonOptions()` with both `MoneyJsonConverter` and `RuleSnapshotJsonConverter`.
+
+   **AttainmentBased V1 stub:** `ComputeAttainmentCommission` uses `attainmentPct=1.0m` (100% fixed). WI-CALC-A.2 must replace this with `IQuotaAttainmentService`.
+
+   **Tests:** +27 (5 unit `CompensationTransactionTests`, 16 integration `CreditAllocationServiceTests`, 1 integration `TransactionImportJobTests.WithPlanAndAssignment`, 1 integration `TransactionsEndpointsTests.Post_WithPlanAndAssignment`, plus new domain event test coverage). 704 → 731 non-skipped tests. (2026-06-02)
+
 ---
 
 ## Key naming conventions
@@ -427,6 +465,33 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. After the two parser/date bugs were fixed, Upload + Map + Preview completed. Preview was blocked by expected "payee not found" (payees were not pre-loaded — intentional test). No further bugs in the wizard itself. The following items are **product/domain design decisions**, not code bugs.
 
 > **Real-data validation status (as of 2026-06-01):** Three retail stores imported successfully into the same tenant — Galeria Katowice (EMP001-EMP008, 3,183 txns), Galeria Mokotów Warszawa (EMP201-EMP209, 4,232 txns), and Silesia City Center Katowice (EMP301-EMP310, 5,066 txns). Total: ~26 payees, ~12,500 transactions, all imported via the Hangfire async pipeline with the field-requirement system (email/hire date optional per WI-PROD-A.1) and server-side payee name resolution (WI-PROD-F) functioning end to end. The original blocker that motivated WI-PROD-A.1 is dead in real testing. **No regressions observed.**
+
+---
+
+### WI-CALC-A.0 — Phase 3 schema preparation ✅ DONE (2026-06-02)
+
+**Status:** DONE. Schema-only WI — no engine logic, no commands, no API, no UI.
+
+**What shipped:** Four nullable additive columns across three domain entities; one new enum; three EF configurations updated; migration `P3_SchemaPreparation` (20260602082902) generated and applied; 12 new tests. Codebase behavior is unchanged — all 704 non-skipped tests pass.
+
+- `Rule.EffectivePeriod` (`DateRange?`) — maps to `EffectivePeriodStart`/`EffectivePeriodEnd` (`date null`) via `OwnsOne` + `Navigation(...).IsRequired(false)`. Tag validation enforced.
+- `Rule.Tag` (`string?`, `nvarchar(50)`) — free label for logical grouping of rules; validates max 50 chars.
+- `Plan.PeriodType` (`PlanPeriodType?`, `nvarchar(50)`) — 7-value enum, metadata only; `CloneAsNewVersion` copies it.
+- `Credit.SupersededAt` / `Credit.SupersededBy` — superseding markers; filtered index `IX_Credits_TenantId_SupersededAt WHERE [SupersededAt] IS NULL`.
+
+**Next:** WI-CALC-A.2 (IQuotaAttainmentService — removes the attainment=100% stub); WI-CALC-A.3 (Credit.Supersede() domain method).
+
+---
+
+### WI-CALC-A.1 — Credit Engine V1 ✅ DONE (2026-06-02)
+
+**Status:** DONE. Credit Engine V1 complete. Credits created at ingest; `TransactionCalculatedEvent` raised; `Transaction.Status` transitions Pending→Calculated; `RuleSnapshot` frozen at allocation time.
+
+**What shipped:** `ICreditAllocationService` (Application) + `CreditAllocationService` (Infrastructure, fully implemented); `CompensationTransaction.MarkCalculated(...)` (was a stub, now real); `TransactionCalculatedEvent`; integration into `TransactionImportJobHandler` and `IngestTransactionHandler`; `RuleSnapshotJsonConverter` for Credit persistence; `RateTable.Tiered` adjacent-boundary fix; `is null`/`is not null` binding rule for domain null checks.
+
+**New tests:** 27 new (5 unit `CompensationTransactionTests`, 16 `CreditAllocationServiceTests`, 1 import E2E, 1 manual creation E2E). 704 → 731 non-skipped.
+
+**TODO WI-CALC-A.2:** Remove `// TODO WI-CALC-A.2` stub in `CreditAllocationService.ComputeAttainmentCommission` — replace with real `IQuotaAttainmentService`.
 
 ---
 
