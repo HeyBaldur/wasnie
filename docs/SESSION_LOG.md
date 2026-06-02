@@ -10,6 +10,34 @@
 
 ---
 
+## 2026-06-02 (afternoon) — Documentation gap repaired + design iteration on Pending transaction handling
+
+**Type:** Design documentation only. No code, no tests, no builds, no migrations.
+**Status:** Design closed ✅ — Decisions #53 + #54 recorded; #55–#64 backfilled; WI-CALC-A.2.5 scoped; WI-CALC-MODEL parent entry added.
+**Test count:** 743 backend (unchanged) · 154 frontend (unchanged)
+
+### Two threads of work this afternoon after the WI-CALC-A.2 commit
+
+**Thread 1 — Documentation gap discovered and repaired.** When attempting to record decisions for Pending transaction handling, the agent detected that the decisions log skipped from #42 directly to #50, missing the nine WI-CALC-MODEL Part 1 decisions discussed earlier the same day. These decisions had been discussed in the design conversation but never written as formal entries in the decisions log. Backfilled as #55–#63 + milestone #64 with explicit *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time* notes. Added explanatory note at top of decisions log explaining that numbering reflects order of writing, not order of decision.
+
+**Thread 2 — Bug discovery + design iteration on Pending handling.** During smoke testing of A.2, the View Rule UI page was discovered to be broken (form fields not rehydrating, Live Preview showing wrong rate table type). Fixed in WI-FRONTEND-FIX-1. Then the conversation pivoted to the broader question of what happens with Pending transactions that accumulate when ingest precedes payee/plan configuration. The design conversation iterated through three positions:
+
+1. Initial assistant proposal: automatic backfill on PlanAssignment creation (rejected — too magical, violates the principle that nothing changes retroactively without explicit confirmation).
+2. Discussion of warnings + manual button (closer to alignment).
+3. Final landing: warnings live in existing import wizard validation table (Decision #53); processing happens via explicit "Procesar Pending" button (Decision #54).
+
+### What was recorded
+
+- **Decision #53:** validation issue at import for missing Staff ID when `Transaction.PayeeId` is Optional; inline in WI-PROD-E wizard validation table; warning severity; no modal, no threshold; comp manager decides to continue or cancel.
+- **Decision #54:** manual "Procesar Pending" button on three surfaces (PlanAssignment detail, Plan detail, filtered transactions list); `ProcessPendingTransactionsJob` Hangfire job; chunked obligatorio, cancelable at chunk boundary, idempotent `(TransactionId, RuleId, PayeeId)`, volume awareness at 5,000 threshold, skipping rule for overlapping-plan Credits, full audit trail per run.
+- **WI-CALC-A.2.5:** new sub-WI inserted between A.2 and A.3 in the Phase 3 sequence, combining both decisions.
+- **WI-CALC-MODEL parent backlog entry added** (PART 1 CLOSED): design conversation was closed today; sub-WI sequence (A.0 → A.5) now documented; Part 1.5 follow-up noted.
+- **Decisions #55–#63 backfilled** with authoritative content: (1) one active PlanAssignment per payee per period + Rule.Tag; (2) Rule.EffectivePeriod sub-plan temporal scoping with containment invariants; (3) PlanPeriodType as metadata only; (4) Quota.Period containment in Plan.EffectivePeriod; (5) V1 emits only Primary credits; (6) hybrid trigger — Credit Engine continuous / Payout Engine manual monthly; (7) retroactive recalculation via superseding and manual signal, Cases A–D; (8) period assignment by TransactionDate; (9) IQuotaAttainmentService domain service + QuotaAttainment VO.
+- **Decision #64 backfilled:** WI-CALC-MODEL Part 1 milestone summary — three-level calculation chain confirmed, two-engine architecture, comp manager retains full control.
+- **Numbering-convention note updated** at top of decisions log with exact language referencing #55–#64 and their backfill date.
+
+---
+
 ## 2026-06-02 — WI-FRONTEND-FIX-1: View Rule page form rehydration + Live Preview
 
 **WI:** WI-FRONTEND-FIX-1 — Pre-existing UI bugs in View Rule page, discovered during WI-CALC-A.2 smoke test
