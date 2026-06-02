@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Wasnie.Application.BackgroundJobs;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Audit;
@@ -21,6 +22,7 @@ public sealed class TransactionImportJobHandler(
     IClock clock,
     IGuidGenerator guid,
     ITransactionImportValidationService validator,
+    ICreditAllocationService creditAllocationService,
     ILogger<TransactionImportJobHandler> logger)
     : JobHandlerBase<TransactionImportPayload>
 {
@@ -133,6 +135,21 @@ public sealed class TransactionImportJobHandler(
                 try
                 {
                     await db.SaveChangesAsync(ct);
+
+                    // Allocate credits for this transaction (Decision #44: null payee = no credits).
+                    var credits = await creditAllocationService.AllocateAsync(transaction, ct);
+                    foreach (var credit in credits)
+                        db.Credits.Add(credit);
+
+                    if (credits.Count > 0)
+                    {
+                        var total = credits.Skip(1).Aggregate(credits[0].CreditedAmount,
+                            (acc, c) => acc.Add(c.CreditedAmount));
+                        transaction.MarkCalculated(credits.Count, total, payload.RequestedByUserId,
+                            clock.UtcNowOffset, guid.NewGuid());
+                        await db.SaveChangesAsync(ct);
+                    }
+
                     createdTransactions.Add(transaction);
                 }
                 catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))

@@ -17,6 +17,7 @@ public sealed class CompensationPlanConfiguration : IEntityTypeConfiguration<Pla
         builder.Property(p => p.Description).HasMaxLength(1000);
         builder.Property(p => p.Version).IsRequired();
         builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(p => p.PeriodType).HasConversion<string>().HasMaxLength(50).IsRequired(false);
         builder.Property(p => p.Currency).IsRequired().HasMaxLength(3);
         builder.Property(p => p.CreatedAt).IsRequired();
         builder.Property(p => p.CreatedBy).IsRequired().HasMaxLength(450);

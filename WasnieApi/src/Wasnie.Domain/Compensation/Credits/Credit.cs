@@ -19,6 +19,8 @@ public sealed class Credit : AggregateRoot
     public CreditRole Role { get; private set; }
     public DateTimeOffset AllocatedAt { get; private set; }
     public string AllocatedBy { get; private set; } = string.Empty;
+    public DateTimeOffset? SupersededAt { get; private set; }
+    public string? SupersededBy { get; private set; }
 
     private Credit() { }
 

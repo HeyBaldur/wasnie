@@ -1,13 +1,11 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
-using Wasnie.Domain.Settings;
 
 namespace Wasnie.Application.Settings.Commands;
 

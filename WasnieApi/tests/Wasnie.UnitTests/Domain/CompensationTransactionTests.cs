@@ -4,6 +4,7 @@ using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
+using Wasnie.Domain.Compensation.Rules;
 
 namespace Wasnie.UnitTests.Domain;
 
@@ -245,17 +246,84 @@ public sealed class CompensationTransactionTests
         act.Should().Throw<DomainException>().WithMessage("*already cancelled*");
     }
 
-    // ── Phase 3 stubs ─────────────────────────────────────────────────────────
+    // ── MarkCalculated (WI-CALC-A.1) ─────────────────────────────────────────
+
+    private static readonly Money ValidCommission = Money.Of(75m, "EUR");
 
     [Fact]
-    public void MarkCalculated_AlwaysThrowsNotSupportedException()
+    public void MarkCalculated_WhenPending_TransitionsToCalculated()
     {
         var tx = IngestValid();
+        tx.ClearDomainEvents();
 
-        var act = () => tx.MarkCalculated("engine", ValidNow, Guid.NewGuid());
+        tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*Phase 3*");
+        tx.Status.Should().Be(CompensationTransactionStatus.Calculated);
     }
+
+    [Fact]
+    public void MarkCalculated_WhenPending_RaisesTransactionCalculatedEvent()
+    {
+        var tx = IngestValid();
+        tx.ClearDomainEvents();
+
+        tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
+
+        tx.DomainEvents.Should().ContainSingle()
+            .Which.Should().BeOfType<TransactionCalculatedEvent>();
+    }
+
+    [Fact]
+    public void MarkCalculated_WhenPending_EventCarriesCorrectCreditCount()
+    {
+        var tx = IngestValid();
+        tx.ClearDomainEvents();
+
+        tx.MarkCalculated(3, ValidCommission, "engine", ValidNow, Guid.NewGuid());
+
+        var evt = tx.DomainEvents.OfType<TransactionCalculatedEvent>().Single();
+        evt.CreditCount.Should().Be(3);
+        evt.TotalCommissionAmount.Should().Be(ValidCommission.Amount);
+        evt.TotalCommissionCurrency.Should().Be(ValidCommission.Currency);
+    }
+
+    [Fact]
+    public void MarkCalculated_WhenAlreadyCalculated_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
+        tx.ClearDomainEvents();
+
+        var act = () => tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
+
+        act.Should().Throw<DomainException>().WithMessage("*Pending*");
+    }
+
+    [Fact]
+    public void MarkCalculated_WhenCancelled_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.ClearDomainEvents();
+
+        var act = () => tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
+
+        act.Should().Throw<DomainException>().WithMessage("*Pending*");
+    }
+
+    [Fact]
+    public void MarkCalculated_WhenEligible_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.MarkEligible("validator", ValidNow, Guid.NewGuid());
+        tx.ClearDomainEvents();
+
+        var act = () => tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
+
+        act.Should().Throw<DomainException>().WithMessage("*Pending*");
+    }
+
+    // ── Phase 3 stubs ─────────────────────────────────────────────────────────
 
     [Fact]
     public void MarkPaid_AlwaysThrowsNotSupportedException()

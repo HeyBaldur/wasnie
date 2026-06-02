@@ -6,11 +6,11 @@ namespace Wasnie.Application.Common.Constants;
 /// </summary>
 public static class PayeeFieldNames
 {
-    public const string Entity       = "Payee";
-    public const string Email          = "Email";
-    public const string HireDate       = "HireDate";
-    public const string Role           = "Role";
-    public const string ManagerId      = "ManagerId";
+    public const string Entity = "Payee";
+    public const string Email = "Email";
+    public const string HireDate = "HireDate";
+    public const string Role = "Role";
+    public const string ManagerId = "ManagerId";
     public const string EmploymentType = "EmploymentType";
-    public const string Location       = "Location";
+    public const string Location = "Location";
 }

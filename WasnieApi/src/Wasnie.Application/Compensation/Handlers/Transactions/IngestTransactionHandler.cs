@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Commands.Transactions;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Authorization;
@@ -21,7 +22,8 @@ public sealed class IngestTransactionHandler(
     IClock clock,
     IGuidGenerator guid,
     IAuthorizationService authorizationService,
-    IFieldRequirementService fieldRequirements)
+    IFieldRequirementService fieldRequirements,
+    ICreditAllocationService creditAllocationService)
     : IRequestHandler<IngestTransactionCommand, Result<TransactionDto>>
 {
     public async Task<Result<TransactionDto>> Handle(IngestTransactionCommand request, CancellationToken cancellationToken)
@@ -75,6 +77,20 @@ public sealed class IngestTransactionHandler(
 
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Allocate credits immediately after ingest (Decision #44: null payee = no credits).
+        var credits = await creditAllocationService.AllocateAsync(tx, cancellationToken);
+        foreach (var credit in credits)
+            db.Credits.Add(credit);
+
+        if (credits.Count > 0)
+        {
+            var total = credits.Skip(1).Aggregate(credits[0].CreditedAmount,
+                (acc, c) => acc.Add(c.CreditedAmount));
+            tx.MarkCalculated(credits.Count, total, currentUser.UserId ?? "system",
+                clock.UtcNowOffset, guid.NewGuid());
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         request.AuditResourceId = tx.Id.ToString();
 

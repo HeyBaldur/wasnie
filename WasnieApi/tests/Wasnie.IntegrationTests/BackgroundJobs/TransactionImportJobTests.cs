@@ -9,7 +9,10 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Persistence;
@@ -414,6 +417,73 @@ public sealed class TransactionImportJobTests : IAsyncLifetime
     // A monitoring alert on Failed background jobs (implemented in the Hangfire dashboard)
     // is the recovery trigger. Manual audit backfill is the recovery procedure.
     // This behavior is documented in docs/architecture/05-audit-trail.md.
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  Credit Engine integration: import with Plan + Assignment produces Credits
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task WithPlanAndAssignment_ImportedTransactions_AreCalculatedWithCredits()
+    {
+        // Arrange: create a EUR plan with 10% flat rule, assign to TEST-EMP001.
+        Guid planId;
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var payeeId = await db.Payees
+                .IgnoreQueryFilters()
+                .Where(p => p.TenantId == TestConstants.TenantA && p.EmployeeCode == "TEST-EMP001")
+                .Select(p => p.Id)
+                .FirstAsync();
+
+            planId = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+            var plan = Plan.Create(TestConstants.TenantA, "Import Credit Plan", "desc",
+                DateRange.Of(new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31)),
+                "EUR", "test", planId, now, Guid.NewGuid());
+            plan.AddRule("10pct Commission", 1,
+                new Measurement { Type = MeasurementType.Revenue, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+                RateTable.Flat(0.10m));
+            db.CompensationPlans.Add(plan);
+
+            var payeeRef = PayeeReference.Snapshot(payeeId, "Test Payee 1", "TEST-EMP001");
+            db.PlanAssignments.Add(PlanAssignment.Create(
+                TestConstants.TenantA, planId, payeeId, payeeRef,
+                DateRange.Of(new DateOnly(2024, 1, 1), new DateOnly(2024, 12, 31)),
+                "test", Guid.NewGuid(), now, Guid.NewGuid()));
+            await db.SaveChangesAsync();
+        }
+
+        var csv = BuildCsv(
+            "TXN-CRD-001,TEST-EMP001,500.00,EUR,2024-03-15,",
+            "TXN-CRD-002,TEST-EMP001,1000.00,EUR,2024-06-20,",
+            "TXN-CRD-003,TEST-EMP001,250.00,EUR,2024-09-10,");
+
+        var fileId = await ParseAsync(_clientA, csv);
+        var jobId = await ExecuteAsync(_clientA, fileId);
+        var status = await PollUntilDoneAsync(jobId);
+        status.State.Should().Be("Succeeded");
+
+        // Assert all 3 transactions are Calculated and each has a Credit.
+        using var verifyDb = GetDbNoFilter();
+        var txns = await verifyDb.CompensationTransactions
+            .IgnoreQueryFilters()
+            .Where(t => t.TenantId == TestConstants.TenantA && t.ReferenceNumber.StartsWith("TXN-CRD-"))
+            .ToListAsync();
+
+        txns.Should().HaveCount(3);
+        txns.Should().AllSatisfy(t => t.Status.Should().Be(CompensationTransactionStatus.Calculated));
+
+        var credits = await verifyDb.Credits
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == TestConstants.TenantA && c.PlanId == planId)
+            .ToListAsync();
+        credits.Should().HaveCount(3);
+        credits.Should().Contain(c => c.CreditedAmount.Amount == 50m);    // 500 * 10%
+        credits.Should().Contain(c => c.CreditedAmount.Amount == 100m);   // 1000 * 10%
+        credits.Should().Contain(c => c.CreditedAmount.Amount == 25m);    // 250 * 10%
+        credits.Should().AllSatisfy(c => c.Role.Should().Be(CreditRole.Primary));
+    }
 
     private sealed record JobStatus(string State, int ProgressCurrent, int ProgressTotal, string? ErrorMessage);
 }

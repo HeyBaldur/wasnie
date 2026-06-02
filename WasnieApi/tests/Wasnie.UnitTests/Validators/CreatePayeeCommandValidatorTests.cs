@@ -230,13 +230,13 @@ public sealed class CreatePayeeCommandValidatorTests
         public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken cancellationToken = default) =>
             Task.FromResult(fieldName switch
             {
-                "Email"          => email,
-                "HireDate"       => hireDate,
-                "Role"           => role,
-                "ManagerId"      => managerId,
+                "Email" => email,
+                "HireDate" => hireDate,
+                "Role" => role,
+                "ManagerId" => managerId,
                 "EmploymentType" => employmentType,
-                "Location"       => location,
-                _                => false,
+                "Location" => location,
+                _ => false,
             });
     }
 }

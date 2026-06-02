@@ -73,6 +73,15 @@ public sealed class PlanRuleConfiguration : IEntityTypeConfiguration<Rule>
                 v => v == null ? null : JsonSerializer.Deserialize<Floor>(v, JsonOptions),
                 NullableJsonComparer<Floor>());
 
+        builder.OwnsOne(r => r.EffectivePeriod, ep =>
+        {
+            ep.Property(d => d.Start).HasColumnName("EffectivePeriodStart").HasColumnType("date");
+            ep.Property(d => d.End).HasColumnName("EffectivePeriodEnd").HasColumnType("date");
+        });
+        builder.Navigation(r => r.EffectivePeriod).IsRequired(false);
+
+        builder.Property(r => r.Tag).HasColumnType("nvarchar(50)").IsRequired(false);
+
         builder.HasIndex(r => new { r.PlanId, r.SortOrder });
     }
 
