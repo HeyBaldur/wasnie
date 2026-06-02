@@ -82,5 +82,19 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    [HttpPost("{payeeId:guid}/deactivate")]
+    public async Task<IActionResult> Deactivate(Guid payeeId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new DeactivatePayeeCommand(payeeId), cancellationToken);
+        return result.IsSuccess ? NoContent() : UnprocessableEntity(new { message = result.Error });
+    }
+
+    [HttpPost("{payeeId:guid}/activate")]
+    public async Task<IActionResult> Activate(Guid payeeId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ActivatePayeeCommand(payeeId), cancellationToken);
+        return result.IsSuccess ? NoContent() : UnprocessableEntity(new { message = result.Error });
+    }
+
     public record TerminatePayeeRequest(DateOnly TerminationDate);
 }

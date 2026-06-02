@@ -68,25 +68,6 @@
   @apply flex items-center gap-2;
 }
 
-.topbar__lang-switcher {
-  @apply flex gap-0.5;
-}
-
-.topbar__lang-btn {
-  @apply px-2 py-1 rounded text-xs font-semibold cursor-pointer;
-  color: var(--color-fg-secondary);
-  transition: background-color 100ms ease, color 100ms ease;
-
-  &:hover {
-    color: var(--color-brand);
-    background-color: var(--color-brand-muted);
-  }
-
-  &--active {
-    color: var(--color-brand);
-    background-color: var(--color-brand-muted);
-  }
-}
 
 .topbar__icon-btn {
   @apply flex items-center justify-center relative cursor-pointer rounded-lg;

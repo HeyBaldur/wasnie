@@ -184,8 +184,10 @@ public sealed class TransactionImportEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Validate_EmptyPayeeCode_ReturnsError()
+    public async Task Validate_EmptyPayeeCode_WhenOptional_NoError()
     {
+        // Decision D: Transaction.PayeeId defaults to Optional for all tenants.
+        // An empty payeeCode is accepted — the transaction will be ingested as Unassigned.
         var csv = BuildCsv("TXN-001,,1000.00,USD,2024-01-15,");
         var fileId = await ParseCsvAsync(_adminA, csv);
 
@@ -193,7 +195,7 @@ public sealed class TransactionImportEndpointsTests : IAsyncLifetime
         var resp = await _adminA.PostAsync("/api/imports/transactions/validate", body);
 
         var result = await ReadJson(resp);
-        result.GetProperty("errorCount").GetInt32().Should().BeGreaterThan(0);
+        result.GetProperty("errorCount").GetInt32().Should().Be(0);
     }
 
     [Fact]

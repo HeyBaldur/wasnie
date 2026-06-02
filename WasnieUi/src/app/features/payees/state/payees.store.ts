@@ -148,6 +148,18 @@ export class PayeesStore {
     await this.loadPayees();
   }
 
+  async deactivate(payeeId: string): Promise<void> {
+    await firstValueFrom(this.api.deactivate(payeeId));
+    await this.loadPayee(payeeId);
+    await this.loadPayees();
+  }
+
+  async activate(payeeId: string): Promise<void> {
+    await firstValueFrom(this.api.activate(payeeId));
+    await this.loadPayee(payeeId);
+    await this.loadPayees();
+  }
+
   setSearch(value: string): void {
     this._rawSearch = value;
     this.page.set(1);

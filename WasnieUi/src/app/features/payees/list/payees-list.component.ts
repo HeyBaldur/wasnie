@@ -62,6 +62,10 @@ export class PayeesListComponent implements OnInit {
   readonly terminateSaving = signal(false);
   readonly pendingTerminateId = signal<string | null>(null);
 
+  readonly deactivateOpen = signal(false);
+  readonly deactivateSaving = signal(false);
+  readonly pendingDeactivateId = signal<string | null>(null);
+
   readonly statusOptions: SegOption[] = [
     { value: '', label: 'PAYEES.FILTER_ALL' },
     { value: String(PayeeStatus.Active), label: 'PAYEES.STATUS_ACTIVE' },
@@ -145,6 +149,38 @@ export class PayeesListComponent implements OnInit {
     this.closeMenu();
     this.pendingTerminateId.set(payeeId);
     this.terminateOpen.set(true);
+  }
+
+  onDeactivate(payeeId: string): void {
+    this.closeMenu();
+    this.pendingDeactivateId.set(payeeId);
+    this.deactivateOpen.set(true);
+  }
+
+  async onConfirmDeactivate(): Promise<void> {
+    const id = this.pendingDeactivateId();
+    if (!id) return;
+    this.deactivateSaving.set(true);
+    try {
+      await this.store.deactivate(id);
+      this.toast.show('PAYEES.TOAST_DEACTIVATED', 'success');
+      this.deactivateOpen.set(false);
+      this.pendingDeactivateId.set(null);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.deactivateSaving.set(false);
+    }
+  }
+
+  async onActivate(payeeId: string): Promise<void> {
+    this.closeMenu();
+    try {
+      await this.store.activate(payeeId);
+      this.toast.show('PAYEES.TOAST_ACTIVATED', 'success');
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    }
   }
 
   async onConfirmTerminate(): Promise<void> {

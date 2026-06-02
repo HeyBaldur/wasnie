@@ -2,6 +2,7 @@
 
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
@@ -33,6 +34,21 @@ public sealed class TransactionImportValidationServiceTests
     }
 
     private static FakeClock ClockAt(DateTimeOffset now) => new(now.UtcDateTime);
+
+    // Default: all transaction fields optional (Decision D default for all tenants).
+    private static IFieldRequirementService AllOptional() => new AllOptionalFieldRequirementService();
+
+    private sealed class AllOptionalFieldRequirementService : IFieldRequirementService
+    {
+        public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+    }
+
+    private sealed class PayeeIdRequiredService : IFieldRequirementService
+    {
+        public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken cancellationToken = default)
+            => Task.FromResult(entityName == "Transaction" && fieldName == "PayeeId");
+    }
 
     private static TransactionImportColumnMapping DefaultMapping() => new()
     {
@@ -76,7 +92,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync(
             [ValidRow(refNum: "")],
             DefaultMapping());
@@ -92,7 +108,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var rows = new List<Dictionary<string, string>>
         {
             ValidRow(refNum: "TXN-DUP", code: "EMP001"),
@@ -118,7 +134,7 @@ public sealed class TransactionImportValidationServiceTests
             "system", Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid()));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync(
             [ValidRow(refNum: "TXN-EXISTS")],
             DefaultMapping());
@@ -132,10 +148,10 @@ public sealed class TransactionImportValidationServiceTests
     // ──────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Validate_EmptyPayeeCode_ReturnsError()
+    public async Task Validate_EmptyPayeeCode_WhenRequired_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), new PayeeIdRequiredService());
         var results = await sut.ValidateAsync([ValidRow(code: "")], DefaultMapping());
 
         results[0].HasErrors.Should().BeTrue();
@@ -143,10 +159,22 @@ public sealed class TransactionImportValidationServiceTests
     }
 
     [Fact]
+    public async Task Validate_EmptyPayeeCode_WhenOptional_NoError()
+    {
+        // Decision D: when Transaction.PayeeId is Optional, blank payeeCode is accepted (unassigned).
+        await using var db = CreateDb(TenantA);
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
+        var results = await sut.ValidateAsync([ValidRow(code: "")], DefaultMapping());
+
+        results[0].HasErrors.Should().BeFalse();
+        results[0].Issues.Should().NotContain(i => i.Field == "payeeCode" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Fact]
     public async Task Validate_UnknownPayeeCode_ReturnsError()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(code: "NONEXISTENT")], DefaultMapping());
 
         results[0].HasErrors.Should().BeTrue();
@@ -160,7 +188,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(code: "EMP001")], DefaultMapping());
 
         results[0].Issues.Should().NotContain(i => i.Field == "payeeCode");
@@ -180,7 +208,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(amount: amount)], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "amount");
@@ -196,7 +224,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(amount: amount)], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "amount");
@@ -218,7 +246,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(currency: currency)], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "currency");
@@ -234,7 +262,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(currency: currency)], DefaultMapping());
 
         results[0].Issues.Should().NotContain(i => i.Field == "currency");
@@ -251,7 +279,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: "not-a-date")], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "transactionDate");
@@ -264,7 +292,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: "1999-12-31")], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "transactionDate");
@@ -278,7 +306,7 @@ public sealed class TransactionImportValidationServiceTests
         await db.SaveChangesAsync();
 
         var clock = ClockAt(new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero));
-        var sut = new TransactionImportValidationService(db, clock);
+        var sut = new TransactionImportValidationService(db, clock, AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: "2025-12-31")], DefaultMapping());
 
         results[0].Issues.Should().Contain(i => i.Field == "transactionDate");
@@ -294,7 +322,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: dateStr)], DefaultMapping());
 
         results[0].Issues.Should().NotContain(i => i.Field == "transactionDate",
@@ -308,7 +336,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: "hello")], DefaultMapping());
 
         results[0].HasErrors.Should().BeTrue();
@@ -331,7 +359,7 @@ public sealed class TransactionImportValidationServiceTests
             System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
         try
         {
-            var sut = new TransactionImportValidationService(db, ClockAt(Now));
+            var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
             var results = await sut.ValidateAsync([ValidRow(date: "2024-01-15")], DefaultMapping());
 
             results[0].Issues.Should().NotContain(i => i.Field == "transactionDate",
@@ -350,7 +378,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: "2000-01-01")], DefaultMapping());
 
         results[0].Issues.Should().NotContain(i => i.Field == "transactionDate");
@@ -373,7 +401,7 @@ public sealed class TransactionImportValidationServiceTests
             externalId: "EXT-001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync(
             [ValidRow(refNum: "TXN-NEW", extId: "EXT-001")],
             DefaultMapping());
@@ -390,7 +418,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var rows = new List<Dictionary<string, string>>
         {
             ValidRow(refNum: "TXN-001", extId: "EXT-DUP"),
@@ -420,7 +448,7 @@ public sealed class TransactionImportValidationServiceTests
             TransactionDateColumn = "Date",
         };
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow()], mappingWithoutExtId);
 
         results[0].HasErrors.Should().BeFalse();
@@ -441,7 +469,7 @@ public sealed class TransactionImportValidationServiceTests
 
         // Validation runs against TenantA's db context — EMP-TENB not visible.
         await using var dbA = CreateDb(TenantA);
-        var sut = new TransactionImportValidationService(dbA, ClockAt(Now));
+        var sut = new TransactionImportValidationService(dbA, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync(
             [ValidRow(code: "EMP-TENB")],
             DefaultMapping());
@@ -458,7 +486,7 @@ public sealed class TransactionImportValidationServiceTests
     public async Task Validate_PayeeCodeNotFound_MessageContainsCode_CategoryReference()
     {
         await using var db = CreateDb(TenantA);
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(code: "GHOST-99")], DefaultMapping());
 
         var issue = results[0].Issues.First(i => i.Field == "payeeCode");
@@ -474,7 +502,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var rows = new List<Dictionary<string, string>>
         {
             ValidRow(refNum: "TXN-DUP"),
@@ -500,7 +528,7 @@ public sealed class TransactionImportValidationServiceTests
             "system", Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid()));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(refNum: "TXN-EXISTS")], DefaultMapping());
 
         var issue = results[0].Issues.First(i => i.Field == "referenceNumber");
@@ -515,7 +543,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(amount: "not-a-number")], DefaultMapping());
 
         var issue = results[0].Issues.First(i => i.Field == "amount");
@@ -530,7 +558,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(currency: "BADCCY")], DefaultMapping());
 
         var issue = results[0].Issues.First(i => i.Field == "currency");
@@ -545,7 +573,7 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(date: "2026-01-01")], DefaultMapping());
 
         var issue = results[0].Issues.First(i => i.Field == "transactionDate");
@@ -566,7 +594,7 @@ public sealed class TransactionImportValidationServiceTests
             externalId: "EXT-CAT-TEST"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync(
             [ValidRow(refNum: "TXN-NEW", extId: "EXT-CAT-TEST")],
             DefaultMapping());
@@ -577,10 +605,11 @@ public sealed class TransactionImportValidationServiceTests
     }
 
     [Fact]
-    public async Task Validate_MissingPayeeCode_CategoryRequired()
+    public async Task Validate_MissingPayeeCode_WhenRequired_CategoryRequired()
     {
+        // Verify that the Required category is set when PayeeId is Required and payeeCode is missing.
         await using var db = CreateDb(TenantA);
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), new PayeeIdRequiredService());
         var results = await sut.ValidateAsync([ValidRow(code: "")], DefaultMapping());
 
         var issue = results[0].Issues.First(i => i.Field == "payeeCode");
@@ -598,10 +627,51 @@ public sealed class TransactionImportValidationServiceTests
         db.Payees.Add(MakePayee(TenantA, "EMP001"));
         await db.SaveChangesAsync();
 
-        var sut = new TransactionImportValidationService(db, ClockAt(Now));
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow()], DefaultMapping());
 
         results[0].HasErrors.Should().BeFalse();
         results[0].HasWarnings.Should().BeFalse();
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  Inactive payee (Decision 12)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Validate_InactivePayee_EmitsWarningNotError()
+    {
+        // Decision 12: matching an inactive payee emits a Warning so the row is still imported
+        // as a historical assignment. The comp manager can skip it via skipRowsWithWarnings if needed.
+        await using var db = CreateDb(TenantA);
+        var payee = MakePayee(TenantA, "EMP-INACTIVE");
+        payee.Deactivate("system", DateTimeOffset.UtcNow);
+        db.Payees.Add(payee);
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
+        var results = await sut.ValidateAsync([ValidRow(code: "EMP-INACTIVE")], DefaultMapping());
+
+        results[0].HasErrors.Should().BeFalse();
+        results[0].HasWarnings.Should().BeTrue();
+        var issue = results[0].Issues.Single(i => i.Field == "payeeCode");
+        issue.Severity.Should().Be(IssueSeverity.Warning);
+        issue.Category.Should().Be(IssueCategory.Reference);
+        issue.Message.Should().Contain("inactive");
+        issue.Message.Should().Contain("historical");
+    }
+
+    [Fact]
+    public async Task Validate_ActivePayee_NoWarning()
+    {
+        await using var db = CreateDb(TenantA);
+        db.Payees.Add(MakePayee(TenantA, "EMP-ACTIVE"));
+        await db.SaveChangesAsync();
+
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
+        var results = await sut.ValidateAsync([ValidRow(code: "EMP-ACTIVE")], DefaultMapping());
+
+        results[0].HasErrors.Should().BeFalse();
+        results[0].Issues.Should().NotContain(i => i.Field == "payeeCode");
     }
 }

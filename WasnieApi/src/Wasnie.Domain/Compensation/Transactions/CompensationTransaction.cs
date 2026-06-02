@@ -12,7 +12,9 @@ public sealed class CompensationTransaction : AggregateRoot
 
     public Guid TenantId { get; private set; }
     public string ReferenceNumber { get; private set; } = string.Empty;
-    public Guid PayeeId { get; private set; }
+    // Nullable per Decision D: e-commerce/house-pool/system-return rows may have no payee at ingest.
+    // Phase 3 filter: PayeeId IS NOT NULL AND Status = Pending to find processable transactions.
+    public Guid? PayeeId { get; private set; }
     public Money Amount { get; private set; } = null!;
     public DateOnly TransactionDate { get; private set; }
     public TransactionSource Source { get; private set; }
@@ -27,7 +29,7 @@ public sealed class CompensationTransaction : AggregateRoot
     public static CompensationTransaction Ingest(
         Guid tenantId,
         string referenceNumber,
-        Guid payeeId,
+        Guid? payeeId,
         Money amount,
         DateOnly transactionDate,
         TransactionSource source,
@@ -41,8 +43,8 @@ public sealed class CompensationTransaction : AggregateRoot
             throw new DomainException("TenantId must not be empty.");
         if (string.IsNullOrWhiteSpace(referenceNumber))
             throw new DomainException("Reference number is required.");
-        if (payeeId == Guid.Empty)
-            throw new DomainException("PayeeId must not be empty.");
+        if (payeeId.HasValue && payeeId.Value == Guid.Empty)
+            throw new DomainException("PayeeId must not be empty when provided.");
         if (transactionDate < MinTransactionDate)
             throw new DomainException($"Transaction date cannot be before {MinTransactionDate:yyyy-MM-dd}.");
         if (string.IsNullOrEmpty(ingestedBy))
@@ -89,6 +91,55 @@ public sealed class CompensationTransaction : AggregateRoot
     // Phase 3 stub — implemented when the payout module is built.
     public void MarkPaid(string updatedBy, DateTimeOffset now, Guid eventId)
         => throw new NotSupportedException("MarkPaid is implemented in Phase 3.");
+
+    // Assign a payee to a previously unassigned transaction (PayeeId IS NULL).
+    // State rules per Decision 11: Paid is blocked; Eligible/Calculated → revert to Pending.
+    public void Assign(Guid payeeId, string? comment, string updatedBy, DateTimeOffset now, Guid eventId)
+    {
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException("Cannot assign a payee to a Paid transaction — please use the accounting correction workflow.");
+        if (PayeeId.HasValue)
+            throw new DomainException("Transaction already has an assigned payee. Use ReassignPayeeCommand to change it.");
+        if (payeeId == Guid.Empty)
+            throw new DomainException("PayeeId must not be empty.");
+
+        PayeeId = payeeId;
+        RevertToPendingIfNeeded(updatedBy, now);
+        UpdatedAt = now;
+
+        RaiseDomainEvent(new TransactionPayeeAssignedEvent(eventId, now, Id, TenantId, payeeId, comment));
+    }
+
+    // Reassign from one payee to another (PayeeId IS NOT NULL → new value).
+    // Reason is mandatory (min 10 chars) and persisted in the audit event (Decision 11).
+    public void Reassign(Guid newPayeeId, string reason, string updatedBy, DateTimeOffset now, Guid eventId)
+    {
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException("Cannot reassign a Paid transaction — please use the accounting correction workflow.");
+        if (!PayeeId.HasValue)
+            throw new DomainException("Transaction has no assigned payee. Use AssignPayeeCommand to assign one.");
+        if (newPayeeId == Guid.Empty)
+            throw new DomainException("NewPayeeId must not be empty.");
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 10)
+            throw new DomainException("Reassignment reason is required and must be at least 10 characters.");
+
+        var oldPayeeId = PayeeId.Value;
+        PayeeId = newPayeeId;
+        RevertToPendingIfNeeded(updatedBy, now);
+        UpdatedAt = now;
+
+        RaiseDomainEvent(new TransactionPayeeReassignedEvent(eventId, now, Id, TenantId, oldPayeeId, newPayeeId, reason.Trim()));
+    }
+
+    // Reverts Status to Pending when PayeeId changes on an Eligible or Calculated transaction.
+    // Decision 11: assignment change invalidates prior eligibility/calculation results.
+    private void RevertToPendingIfNeeded(string updatedBy, DateTimeOffset now)
+    {
+        if (Status is CompensationTransactionStatus.Eligible or CompensationTransactionStatus.Calculated)
+        {
+            Status = CompensationTransactionStatus.Pending;
+        }
+    }
 
     // Pending → Cancelled, Eligible → Cancelled.
     // Cancellation of Calculated/Paid requires clawback evaluation (Phase 3).

@@ -65,6 +65,13 @@ export class WsSelectComponent implements ControlValueAccessor {
   readonly dropdownUpward = signal(false);
   readonly constrainedListHeight = signal<number | null>(null);
 
+  // Fixed positioning — used when ws-select is inside a modal (escapes overflow: hidden).
+  readonly dropdownFixed = signal(false);
+  readonly dropdownLeft = signal(0);
+  readonly dropdownWidth = signal(0);
+  readonly dropdownFixedTop = signal<number | null>(null);
+  readonly dropdownFixedBottom = signal<number | null>(null);
+
   // Async state (only active when searchFn is non-null)
   readonly asyncOptions = signal<SelectOption[]>([]);
   readonly asyncLoading = signal(false);
@@ -134,17 +141,17 @@ export class WsSelectComponent implements ControlValueAccessor {
     if (this.isDisabled()) return;
     const triggerEl = this.host.nativeElement as HTMLElement;
     const triggerRect = triggerEl.getBoundingClientRect();
-    const estimatedHeight = Math.min(280,
-      this.filteredOptions().length * 36 + (this.searchable() ? 44 : 0) + 16
-    );
 
+    // Inside a modal, use position: fixed so overflow: hidden on the dialog doesn't clip.
+    // Always use viewport bounds for space calculations regardless of mode.
     const modalDialog = triggerEl.closest('.ws-modal__dialog') as HTMLElement | null;
-    const containerBottom = modalDialog
-      ? modalDialog.getBoundingClientRect().bottom - 8
-      : window.innerHeight - 8;
-    const containerTop = modalDialog
-      ? modalDialog.getBoundingClientRect().top + 8
-      : 8;
+    const containerBottom = window.innerHeight - 8;
+    const containerTop = 8;
+
+    // Async mode: options arrive after open, so always estimate the max height.
+    const estimatedHeight = this.searchFn()
+      ? 280
+      : Math.min(280, this.filteredOptions().length * 36 + (this.searchable() ? 44 : 0) + 16);
 
     const spaceBelow = containerBottom - triggerRect.bottom;
     const spaceAbove = triggerRect.top - containerTop;
@@ -158,6 +165,21 @@ export class WsSelectComponent implements ControlValueAccessor {
     } else {
       this.dropdownUpward.set(spaceAbove > spaceBelow);
       this.constrainedListHeight.set(Math.max(spaceBelow, spaceAbove) - 8);
+    }
+
+    if (modalDialog) {
+      this.dropdownFixed.set(true);
+      this.dropdownLeft.set(triggerRect.left);
+      this.dropdownWidth.set(triggerRect.width);
+      if (this.dropdownUpward()) {
+        this.dropdownFixedBottom.set(window.innerHeight - triggerRect.top + 4);
+        this.dropdownFixedTop.set(null);
+      } else {
+        this.dropdownFixedTop.set(triggerRect.bottom + 4);
+        this.dropdownFixedBottom.set(null);
+      }
+    } else {
+      this.dropdownFixed.set(false);
     }
 
     this.isOpen.set(true);
@@ -176,6 +198,7 @@ export class WsSelectComponent implements ControlValueAccessor {
 
   closeDropdown(): void {
     this.isOpen.set(false);
+    this.dropdownFixed.set(false);
     this.onTouched();
   }
 

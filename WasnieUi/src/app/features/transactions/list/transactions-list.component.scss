@@ -17,13 +17,22 @@
   color: var(--color-text-secondary);
 }
 
+.col-unassigned {
+  font-family: Consolas, monospace;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--color-text-tertiary);
+}
+
 .col-num {
   text-align: right;
   font-size: var(--font-size-13);
   font-family: ui-monospace, monospace;
 }
 
-.skeleton-row td { padding: 14px 16px; }
+.skeleton-row td {
+  padding: 14px 16px;
+}
 
 .skeleton {
   display: inline-block;
@@ -32,13 +41,28 @@
   animation: shimmer 1.4s ease infinite;
   height: 14px;
 
-  &--text { width: 140px; }
-  &--text-wide { width: 180px; }
-  &--badge { width: 72px; height: 20px; border-radius: var(--radius-full); }
-  &--short { width: 80px; }
+  &--text {
+    width: 140px;
+  }
+  &--text-wide {
+    width: 180px;
+  }
+  &--badge {
+    width: 72px;
+    height: 20px;
+    border-radius: var(--radius-full);
+  }
+  &--short {
+    width: 80px;
+  }
 }
 
 @keyframes shimmer {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }

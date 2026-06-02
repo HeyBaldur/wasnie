@@ -1,0 +1,39 @@
+<div class="settings-card">
+  <h3 class="settings-section-title">{{ 'SETTINGS.APPEARANCE_TITLE' | translate }}</h3>
+  <p class="settings-section-desc">{{ 'SETTINGS.APPEARANCE_DESC' | translate }}</p>
+
+  <div class="appearance-rows">
+
+    <div class="appearance-row">
+      <span class="appearance-row__label">{{ 'SETTINGS.LANGUAGE' | translate }}</span>
+      <div class="lang-switcher">
+        @for (lang of supportedLangs; track lang) {
+          <button
+            class="lang-btn"
+            [class.lang-btn--active]="currentLang() === lang"
+            (click)="switchLanguage(lang)"
+          >
+            {{ lang.toUpperCase() }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="appearance-row">
+      <span class="appearance-row__label">{{ 'SETTINGS.THEME' | translate }}</span>
+      <div class="theme-options">
+        @for (option of themeOptions; track option.mode) {
+          <button
+            class="theme-btn"
+            [class.theme-btn--active]="currentTheme() === option.mode"
+            (click)="selectTheme(option.mode)"
+          >
+            <span class="theme-btn__icon" aria-hidden="true">{{ option.icon }}</span>
+            <span class="theme-btn__label">{{ option.labelKey | translate }}</span>
+          </button>
+        }
+      </div>
+    </div>
+
+  </div>
+</div>

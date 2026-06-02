@@ -38,6 +38,14 @@ export class PayeesApiService {
     return this.http.post<void>(`${this.base}/${payeeId}/mark-terminated`, { terminationDate });
   }
 
+  deactivate(payeeId: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/${payeeId}/deactivate`, {});
+  }
+
+  activate(payeeId: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/${payeeId}/activate`, {});
+  }
+
   getPayeeAssignments(payeeId: string, params?: PaginationParams): Observable<PagedResult<import('../../assignments/models/assignment.model').Assignment>> {
     return this.http.get<PagedResult<import('../../assignments/models/assignment.model').Assignment>>(
       `${this.base}/${payeeId}/assignments`, { params: buildHttpParams(params) });

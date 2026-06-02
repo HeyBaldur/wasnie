@@ -14,20 +14,6 @@
 
   <div class="topbar__actions">
 
-    <app-theme-toggle />
-
-    <div class="topbar__lang-switcher">
-      @for (lang of supportedLangs; track lang) {
-        <button
-          class="topbar__lang-btn"
-          [class.topbar__lang-btn--active]="currentLang() === lang"
-          (click)="switchLanguage(lang)"
-        >
-          {{ lang.toUpperCase() }}
-        </button>
-      }
-    </div>
-
     <button class="topbar__icon-btn" [attr.aria-label]="'TOPBAR.HELP' | translate">
       <app-icon name="help-circle" [size]="18" />
     </button>

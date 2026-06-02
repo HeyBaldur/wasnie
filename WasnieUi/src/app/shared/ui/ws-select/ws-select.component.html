@@ -29,7 +29,16 @@
   </div>
 
   @if (isOpen()) {
-    <div class="ws-select__dropdown" [class.ws-select__dropdown--upward]="dropdownUpward()">
+    <div
+      class="ws-select__dropdown"
+      [class.ws-select__dropdown--upward]="dropdownUpward() && !dropdownFixed()"
+      [style.position]="dropdownFixed() ? 'fixed' : null"
+      [style.left.px]="dropdownFixed() ? dropdownLeft() : null"
+      [style.width.px]="dropdownFixed() ? dropdownWidth() : null"
+      [style.top.px]="dropdownFixed() && dropdownFixedTop() !== null ? dropdownFixedTop()! : null"
+      [style.bottom.px]="dropdownFixed() && dropdownFixedBottom() !== null ? dropdownFixedBottom()! : null"
+      [style.right]="dropdownFixed() ? 'auto' : null"
+    >
       @if (searchable() || searchFn()) {
         <div class="ws-select__search-wrap">
           <input

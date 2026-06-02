@@ -81,6 +81,9 @@
                     <ws-badge [variant]="payeeStatusVariant(payee.status)" [dot]="payee.status === PayeeStatus.Active">
                       {{ payeeStatusKey(payee.status) | translate }}
                     </ws-badge>
+                    @if (!payee.isActive) {
+                      &nbsp;<ws-badge variant="warning">{{ 'PAYEES.STATUS_INACTIVE' | translate }}</ws-badge>
+                    }
                   </td>
                   <td class="col-num">{{ payee.activeAssignmentCount }}</td>
                   <td class="col-actions" (click)="$event.stopPropagation()">
@@ -102,23 +105,50 @@
                             <app-icon name="eye" [size]="14" />
                             {{ 'COMMON.VIEW' | translate }}
                           </a>
-                          @if (payee.status !== PayeeStatus.Active) {
-                            <button *hasPermission="'Payees.Update'" class="row-menu__item" type="button" (click)="onMarkActive(payee.id)">
-                              <app-icon name="check-circle" [size]="14" />
-                              {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
-                            </button>
-                          }
+
+                          <!-- Active employment: only move to On Leave -->
                           @if (payee.status === PayeeStatus.Active) {
                             <button *hasPermission="'Payees.Update'" class="row-menu__item" type="button" (click)="onMarkOnLeave(payee.id)">
                               <app-icon name="pause-circle" [size]="14" />
                               {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
                             </button>
                           }
-                          @if (payee.status !== PayeeStatus.Terminated) {
+
+                          <!-- On Leave: can return to Active, Terminate, or Deactivate/Activate -->
+                          @if (payee.status === PayeeStatus.OnLeave) {
+                            <button *hasPermission="'Payees.Update'" class="row-menu__item" type="button" (click)="onMarkActive(payee.id)">
+                              <app-icon name="check-circle" [size]="14" />
+                              {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+                            </button>
                             <button *hasPermission="'Payees.Terminate'" class="row-menu__item row-menu__item--danger" type="button" (click)="onTerminate(payee.id)">
                               <app-icon name="x-circle" [size]="14" />
                               {{ 'PAYEES.ACTION_TERMINATE' | translate }}
                             </button>
+                            @if (payee.isActive) {
+                              <button *hasPermission="'Payees.Deactivate'" class="row-menu__item row-menu__item--danger" type="button" (click)="onDeactivate(payee.id)">
+                                <app-icon name="ban" [size]="14" />
+                                {{ 'PAYEES.ACTION_DEACTIVATE' | translate }}
+                              </button>
+                            } @else {
+                              <button *hasPermission="'Payees.Deactivate'" class="row-menu__item" type="button" (click)="onActivate(payee.id)">
+                                <app-icon name="rotate-ccw" [size]="14" />
+                                {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
+                              </button>
+                            }
+                          }
+
+                          <!-- Terminated: can rehire or reactivate platform access -->
+                          @if (payee.status === PayeeStatus.Terminated) {
+                            <button *hasPermission="'Payees.Update'" class="row-menu__item" type="button" (click)="onMarkActive(payee.id)">
+                              <app-icon name="check-circle" [size]="14" />
+                              {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+                            </button>
+                            @if (!payee.isActive) {
+                              <button *hasPermission="'Payees.Deactivate'" class="row-menu__item" type="button" (click)="onActivate(payee.id)">
+                                <app-icon name="rotate-ccw" [size]="14" />
+                                {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
+                              </button>
+                            }
                           }
                         </div>
                       }
@@ -155,4 +185,16 @@
   [loading]="terminateSaving()"
   (confirmed)="onConfirmTerminate()"
   (cancelled)="terminateOpen.set(false)"
+/>
+
+<ws-confirmation-modal
+  [(isOpen)]="deactivateOpen"
+  [title]="'PAYEES.DEACTIVATE_TITLE' | translate"
+  [message]="'PAYEES.DEACTIVATE_MSG' | translate"
+  [confirmLabel]="'PAYEES.ACTION_DEACTIVATE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="deactivateSaving()"
+  (confirmed)="onConfirmDeactivate()"
+  (cancelled)="deactivateOpen.set(false)"
 />

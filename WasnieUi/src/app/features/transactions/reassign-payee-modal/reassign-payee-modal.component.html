@@ -1,0 +1,68 @@
+<ws-modal
+  [isOpen]="isOpen()"
+  [title]="'TRANSACTIONS.REASSIGN_MODAL_TITLE' | translate"
+  size="md"
+  (closed)="onClose()"
+>
+  <form [formGroup]="form" (ngSubmit)="onSubmit()">
+
+    <!-- Transaction context — critical for safe reassignment -->
+    <div class="reassign-modal__context">
+      <div class="reassign-modal__context-row">
+        <span class="reassign-modal__context-label">{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</span>
+        <span class="reassign-modal__context-value">{{ transaction().referenceNumber }}</span>
+      </div>
+      <div class="reassign-modal__context-row">
+        <span class="reassign-modal__context-label">{{ 'TRANSACTIONS.COL_DATE' | translate }}</span>
+        <span class="reassign-modal__context-value">{{ transaction().transactionDate }}</span>
+      </div>
+      <div class="reassign-modal__context-row">
+        <span class="reassign-modal__context-label">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</span>
+        <span class="reassign-modal__context-value reassign-modal__context-value--amount">
+          {{ transaction().amount | currencyFormat: transaction().currency }}
+        </span>
+      </div>
+      @if (transaction().payeeName) {
+        <div class="reassign-modal__context-row">
+          <span class="reassign-modal__context-label">{{ 'TRANSACTIONS.COL_PAYEE' | translate }}</span>
+          <span class="reassign-modal__context-value">{{ transaction().payeeName }}</span>
+        </div>
+      }
+    </div>
+
+    <!-- New payee picker -->
+    <div class="reassign-modal__field">
+      <ws-select
+        formControlName="newPayeeId"
+        [label]="'TRANSACTIONS.REASSIGN_PAYEE_LABEL' | translate"
+        [placeholder]="'TRANSACTIONS.REASSIGN_PAYEE_PLACEHOLDER' | translate"
+        [searchFn]="payeeSearchFn"
+        [error]="form.controls.newPayeeId.touched && form.controls.newPayeeId.invalid ? ('TRANSACTIONS.REASSIGN_PAYEE_REQUIRED' | translate) : ''"
+      />
+    </div>
+
+    <!-- Reason textarea -->
+    <div class="reassign-modal__field" [class.reassign-modal__field--error]="reasonTouched && reasonInvalid">
+      <label class="reassign-modal__label">{{ 'TRANSACTIONS.REASSIGN_REASON_LABEL' | translate }}</label>
+      <textarea
+        class="reassign-modal__textarea"
+        formControlName="reason"
+        [placeholder]="'TRANSACTIONS.REASSIGN_REASON_PLACEHOLDER' | translate"
+        rows="3"
+      ></textarea>
+      @if (reasonTouched && reasonInvalid) {
+        <span class="reassign-modal__error-msg">{{ reasonError | translate }}</span>
+      }
+    </div>
+
+  </form>
+
+  <div slot="footer" class="reassign-modal__footer">
+    <ws-button type="button" variant="secondary" (click)="onClose()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button type="button" variant="primary" [loading]="saving()" (click)="onSubmit()">
+      {{ 'TRANSACTIONS.REASSIGN_SUBMIT' | translate }}
+    </ws-button>
+  </div>
+</ws-modal>

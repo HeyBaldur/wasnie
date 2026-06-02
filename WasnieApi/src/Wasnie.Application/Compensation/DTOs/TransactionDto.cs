@@ -4,7 +4,7 @@ public sealed record TransactionDto(
     Guid Id,
     Guid TenantId,
     string ReferenceNumber,
-    Guid PayeeId,
+    Guid? PayeeId,
     decimal Amount,
     string Currency,
     DateOnly TransactionDate,

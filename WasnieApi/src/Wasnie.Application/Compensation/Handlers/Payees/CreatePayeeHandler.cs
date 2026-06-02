@@ -112,5 +112,7 @@ public sealed class CreatePayeeHandler(
             payee.CreatedAt,
             payee.UpdatedAt,
             payee.EmploymentType?.ToString(),
-            payee.Location);
+            payee.Location,
+            payee.IsActive,
+            payee.DeactivatedAt);
 }

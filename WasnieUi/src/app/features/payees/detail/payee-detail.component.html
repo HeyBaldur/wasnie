@@ -17,30 +17,63 @@
       [backLabel]="'PAYEES.TITLE' | translate"
     >
       <div slot="actions" class="payee-detail__actions">
+        <!-- Employment status badge -->
         <ws-badge [variant]="payeeStatusVariant(payee.status)" [dot]="payee.status === PayeeStatus.Active">
           {{ payeeStatusKey(payee.status) | translate }}
         </ws-badge>
+        <!-- Platform activation badge — shown only when inactive -->
+        @if (!payee.isActive) {
+          <ws-badge variant="warning">{{ 'PAYEES.STATUS_INACTIVE' | translate }}</ws-badge>
+        }
+
         <ws-button variant="secondary" size="sm" (click)="openEdit()">
           <app-icon name="edit" [size]="14" />
           {{ 'COMMON.EDIT' | translate }}
         </ws-button>
-        @if (payee.status !== PayeeStatus.Active) {
-          <ws-button variant="primary" size="sm" (click)="onMarkActive()">
-            <app-icon name="check-circle" [size]="14" />
-            {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
-          </ws-button>
-        }
+
+        <!-- Active employment: only transition to On Leave -->
         @if (payee.status === PayeeStatus.Active) {
-          <ws-button variant="secondary" size="sm" (click)="onMarkOnLeave()">
+          <ws-button *hasPermission="'Payees.Update'" variant="secondary" size="sm" (click)="onMarkOnLeave()">
             <app-icon name="pause-circle" [size]="14" />
             {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
           </ws-button>
         }
-        @if (payee.status !== PayeeStatus.Terminated) {
-          <ws-button variant="danger" size="sm" (click)="openTerminate()">
+
+        <!-- On Leave: can return, terminate, or deactivate/activate -->
+        @if (payee.status === PayeeStatus.OnLeave) {
+          <ws-button *hasPermission="'Payees.Update'" variant="primary" size="sm" (click)="onMarkActive()">
+            <app-icon name="check-circle" [size]="14" />
+            {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+          </ws-button>
+          <ws-button *hasPermission="'Payees.Terminate'" variant="danger" size="sm" (click)="openTerminate()">
             <app-icon name="x-circle" [size]="14" />
             {{ 'PAYEES.ACTION_TERMINATE' | translate }}
           </ws-button>
+          @if (payee.isActive) {
+            <ws-button *hasPermission="'Payees.Deactivate'" variant="danger" size="sm" (click)="openDeactivate()">
+              <app-icon name="ban" [size]="14" />
+              {{ 'PAYEES.ACTION_DEACTIVATE' | translate }}
+            </ws-button>
+          } @else {
+            <ws-button *hasPermission="'Payees.Deactivate'" variant="secondary" size="sm" (click)="onActivate()">
+              <app-icon name="rotate-ccw" [size]="14" />
+              {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
+            </ws-button>
+          }
+        }
+
+        <!-- Terminated: can rehire -->
+        @if (payee.status === PayeeStatus.Terminated) {
+          <ws-button *hasPermission="'Payees.Update'" variant="primary" size="sm" (click)="onMarkActive()">
+            <app-icon name="check-circle" [size]="14" />
+            {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+          </ws-button>
+          @if (!payee.isActive) {
+            <ws-button *hasPermission="'Payees.Deactivate'" variant="secondary" size="sm" (click)="onActivate()">
+              <app-icon name="rotate-ccw" [size]="14" />
+              {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
+            </ws-button>
+          }
         }
       </div>
 
@@ -93,6 +126,18 @@
                 <span class="profile-field__value">{{ payee.terminationDate | dateFormat }}</span>
               </div>
             }
+            @if (payee.employmentType) {
+              <div class="profile-field">
+                <span class="profile-field__label">{{ 'PAYEES.FIELD_EMPLOYMENT_TYPE' | translate }}</span>
+                <span class="profile-field__value">{{ 'PAYEES.EMPLOYMENT_TYPE_' + payee.employmentType.toUpperCase() | translate }}</span>
+              </div>
+            }
+            @if (payee.location) {
+              <div class="profile-field">
+                <span class="profile-field__label">{{ 'PAYEES.FIELD_LOCATION' | translate }}</span>
+                <span class="profile-field__value">{{ payee.location }}</span>
+              </div>
+            }
             <div class="profile-field">
               <span class="profile-field__label">{{ 'COMMON.STATUS' | translate }}</span>
               <span class="profile-field__value">
@@ -101,6 +146,22 @@
                 </ws-badge>
               </span>
             </div>
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_PLATFORM_STATUS' | translate }}</span>
+              <span class="profile-field__value">
+                @if (payee.isActive) {
+                  <ws-badge variant="success">{{ 'PAYEES.PLATFORM_ACTIVE' | translate }}</ws-badge>
+                } @else {
+                  <ws-badge variant="warning">{{ 'PAYEES.STATUS_INACTIVE' | translate }}</ws-badge>
+                }
+              </span>
+            </div>
+            @if (payee.deactivatedAt) {
+              <div class="profile-field">
+                <span class="profile-field__label">{{ 'PAYEES.FIELD_DEACTIVATED_AT' | translate }}</span>
+                <span class="profile-field__value">{{ payee.deactivatedAt | dateFormat }}</span>
+              </div>
+            }
             <div class="profile-field">
               <span class="profile-field__label">{{ 'PAYEES.COL_ASSIGNMENTS' | translate }}</span>
               <span class="profile-field__value mono">{{ payee.activeAssignmentCount }}</span>
@@ -283,6 +344,19 @@
           </div>
         </form>
       </ws-confirmation-modal>
+
+      <!-- Deactivate modal -->
+      <ws-confirmation-modal
+        [(isOpen)]="deactivateModalOpen"
+        [title]="'PAYEES.DEACTIVATE_TITLE' | translate"
+        [message]="'PAYEES.DEACTIVATE_MSG' | translate"
+        [confirmLabel]="'PAYEES.ACTION_DEACTIVATE' | translate"
+        [cancelLabel]="'COMMON.CANCEL' | translate"
+        variant="danger"
+        [loading]="deactivateSaving()"
+        (confirmed)="onConfirmDeactivate()"
+        (cancelled)="deactivateModalOpen.set(false)"
+      />
     </ws-page-layout>
   }
 </app-shell>

@@ -23,6 +23,8 @@ export interface Payee {
   updatedAt: string;
   employmentType?: string | null;
   location?: string | null;
+  isActive: boolean;
+  deactivatedAt?: string | null;
 }
 
 export interface CreatePayeeRequest {

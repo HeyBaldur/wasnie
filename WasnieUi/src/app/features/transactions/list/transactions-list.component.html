@@ -38,6 +38,7 @@
               <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
               <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
+              <th *hasPermission="'Transactions.Update'" class="col-actions"></th>
             </tr>
           </thead>
           <tbody>
@@ -49,11 +50,12 @@
                   <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--short"></span></td>
                   <td><span class="skeleton skeleton--badge"></span></td>
+                  <td></td>
                 </tr>
               }
             } @else if (store.transactions().length === 0) {
               <tr>
-                <td colspan="5">
+                <td colspan="6">
                   <ws-table-empty messageKey="TRANSACTIONS.EMPTY_FILTER_TITLE" />
                 </td>
               </tr>
@@ -61,13 +63,34 @@
               @for (tx of store.transactions(); track tx.id) {
                 <tr>
                   <td class="col-ref">{{ tx.referenceNumber }}</td>
-                  <td class="col-secondary">{{ tx.payeeName || ('TRANSACTIONS.UNASSIGNED' | translate) }}</td>
+                  <td class="col-secondary">
+                    @if (tx.payeeName) {
+                      {{ tx.payeeName }}
+                    } @else {
+                      <span class="col-unassigned">{{ 'TRANSACTIONS.UNASSIGNED' | translate }}</span>
+                    }
+                  </td>
                   <td class="col-secondary">{{ tx.transactionDate }}</td>
                   <td class="col-num">{{ tx.amount | currencyFormat: tx.currency }}</td>
                   <td>
                     <ws-badge [variant]="statusVariant(tx.status)">
                       {{ statusKey(tx.status) | translate }}
                     </ws-badge>
+                  </td>
+                  <td *hasPermission="'Transactions.Update'" class="col-actions">
+                    @if (isUnassigned(tx)) {
+                      <ws-button size="sm" variant="secondary" (click)="openAssign(tx)">
+                        {{ 'TRANSACTIONS.ACTION_ASSIGN' | translate }}
+                      </ws-button>
+                    } @else if (canReassign(tx)) {
+                      <ws-button size="sm" variant="secondary" (click)="openReassign(tx)">
+                        {{ 'TRANSACTIONS.ACTION_REASSIGN' | translate }}
+                      </ws-button>
+                    } @else if (tx.status === TransactionStatus.Paid) {
+                      <ws-button size="sm" variant="secondary" [disabled]="true" [title]="'TRANSACTIONS.REASSIGN_PAID_TOOLTIP' | translate">
+                        {{ 'TRANSACTIONS.ACTION_REASSIGN' | translate }}
+                      </ws-button>
+                    }
                   </td>
                 </tr>
               }
@@ -89,3 +112,19 @@
     }
   </ws-page-layout>
 </app-shell>
+
+@if (selectedTransaction()) {
+  <app-assign-payee-modal
+    [transaction]="selectedTransaction()!"
+    [isOpen]="assignModalOpen()"
+    (closed)="onModalClosed()"
+    (saved)="onModalClosed()"
+  />
+
+  <app-reassign-payee-modal
+    [transaction]="selectedTransaction()!"
+    [isOpen]="reassignModalOpen()"
+    (closed)="onModalClosed()"
+    (saved)="onModalClosed()"
+  />
+}

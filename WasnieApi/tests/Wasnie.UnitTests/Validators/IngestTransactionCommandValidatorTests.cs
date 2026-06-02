@@ -53,6 +53,14 @@ public sealed class IngestTransactionCommandValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.PayeeId);
     }
 
+    [Fact]
+    public void NullPayeeId_PassesValidation_OptionalityEnforcedByHandler()
+    {
+        // Decision D: null PayeeId passes the validator; handler enforces optionality via field requirements.
+        var result = _sut.TestValidate(Valid() with { PayeeId = null });
+        result.ShouldNotHaveValidationErrorFor(x => x.PayeeId);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

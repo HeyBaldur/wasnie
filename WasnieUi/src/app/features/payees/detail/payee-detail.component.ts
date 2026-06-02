@@ -15,6 +15,7 @@ import { Assignment } from '../../assignments/models/assignment.model';
 import { QuotaSummary } from '../../quotas/models/quota.model';
 import { Payee, PayeeStatus } from '../models/payee.model';
 import { PayeeFormComponent } from '../form/payee-form.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { PagedResult } from '../../../shared/models/pagination.models';
 import {
   WsPageLayoutComponent,
@@ -44,6 +45,7 @@ type Tab = 'profile' | 'assignments' | 'quotas' | 'activity';
     DateFormatPipe,
     CurrencyFormatPipe,
     PayeeFormComponent,
+    HasPermissionDirective,
     WsPageLayoutComponent,
     WsBadgeComponent,
     WsButtonComponent,
@@ -71,7 +73,9 @@ export class PayeeDetailComponent implements OnInit {
   readonly activeTab = signal<Tab>('profile');
   readonly editModalOpen = signal(false);
   readonly terminateModalOpen = signal(false);
+  readonly deactivateModalOpen = signal(false);
   readonly saving = signal(false);
+  readonly deactivateSaving = signal(false);
 
   readonly payeeAssignmentsResult = signal<PagedResult<Assignment> | null>(null);
   readonly assignmentsLoading = signal(false);
@@ -145,6 +149,32 @@ export class PayeeDetailComponent implements OnInit {
     try {
       await this.store.markAsOnLeave(this.payeeId);
       this.toast.show('PAYEES.TOAST_MARKED_ON_LEAVE', 'success');
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    }
+  }
+
+  openDeactivate(): void {
+    this.deactivateModalOpen.set(true);
+  }
+
+  async onConfirmDeactivate(): Promise<void> {
+    this.deactivateSaving.set(true);
+    try {
+      await this.store.deactivate(this.payeeId);
+      this.toast.show('PAYEES.TOAST_DEACTIVATED', 'success');
+      this.deactivateModalOpen.set(false);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.deactivateSaving.set(false);
+    }
+  }
+
+  async onActivate(): Promise<void> {
+    try {
+      await this.store.activate(this.payeeId);
+      this.toast.show('PAYEES.TOAST_ACTIVATED', 'success');
     } catch (err) {
       this.toast.show(extractApiError(err), 'error');
     }

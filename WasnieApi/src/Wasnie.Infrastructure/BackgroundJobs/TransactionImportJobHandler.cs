@@ -85,11 +85,18 @@ public sealed class TransactionImportJobHandler(
                     ? GetField(row, payload.ColumnMapping.ExternalIdColumn)
                     : null;
 
-                if (!payeesByCode.TryGetValue(payeeCode, out var payeeId))
+                // PayeeId is nullable (Decision D): blank payeeCode → null (row passed validation, Optional setting confirmed).
+                // Inactive payee match → still assigned (historical assignment per Decision 12).
+                Guid? payeeId = null;
+                if (!string.IsNullOrWhiteSpace(payeeCode))
                 {
-                    // Payee not found — skip (shouldn't happen if validation passed, but defensive).
-                    skippedByIdempotency++;
-                    continue;
+                    if (!payeesByCode.TryGetValue(payeeCode, out var resolvedId))
+                    {
+                        // Payee not found — defensive skip (validation should have caught this).
+                        skippedByIdempotency++;
+                        continue;
+                    }
+                    payeeId = resolvedId;
                 }
 
                 if (!decimal.TryParse(amountStr, System.Globalization.NumberStyles.Number,

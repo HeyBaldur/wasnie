@@ -20,4 +20,6 @@ public sealed record PayeeDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? EmploymentType = null,
-    string? Location = null);
+    string? Location = null,
+    bool IsActive = true,
+    DateTimeOffset? DeactivatedAt = null);

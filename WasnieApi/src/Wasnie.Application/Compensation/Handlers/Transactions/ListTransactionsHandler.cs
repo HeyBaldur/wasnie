@@ -36,7 +36,7 @@ public sealed class ListTransactionsHandler(
             query = query.Where(t => t.Status == statusEnum);
 
         if (p.PayeeId.HasValue)
-            query = query.Where(t => t.PayeeId == p.PayeeId.Value);
+            query = query.Where(t => t.PayeeId == (Guid?)p.PayeeId.Value);
 
         if (!string.IsNullOrWhiteSpace(p.Source) &&
             Enum.TryParse<TransactionSource>(p.Source, ignoreCase: true, out var sourceEnum))
@@ -65,7 +65,12 @@ public sealed class ListTransactionsHandler(
 
         // Batch-fetch payee names for this page in a single query — no N+1.
         // Tenant-scoped automatically via the global query filter on Payees.
-        var payeeIds = paged.Items.Select(t => t.PayeeId).Distinct().ToList();
+        var payeeIds = paged.Items
+            .Select(t => t.PayeeId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
         var payeeLookup = await db.Payees
             .Where(p => payeeIds.Contains(p.Id))
             .Select(p => new { p.Id, p.FullName, p.EmployeeCode })
@@ -73,7 +78,7 @@ public sealed class ListTransactionsHandler(
 
         var dtos = paged.Items.Select(t =>
         {
-            var payee = payeeLookup.GetValueOrDefault(t.PayeeId);
+            var payee = t.PayeeId.HasValue ? payeeLookup.GetValueOrDefault(t.PayeeId.Value) : null;
             return IngestTransactionHandler.ToDto(t) with
             {
                 PayeeName = payee?.FullName,

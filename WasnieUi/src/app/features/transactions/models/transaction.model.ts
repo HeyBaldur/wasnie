@@ -14,7 +14,7 @@ export interface Transaction {
   id: string;
   tenantId: string;
   referenceNumber: string;
-  payeeId: string;
+  payeeId: string | null;
   amount: number;
   currency: string;
   transactionDate: string;
@@ -26,8 +26,18 @@ export interface Transaction {
 
 export interface CreateTransactionRequest {
   referenceNumber: string;
-  payeeId: string;
+  payeeId: string | null;
   amount: number;
   currency: string;
   transactionDate: string;
+}
+
+export interface AssignPayeeRequest {
+  payeeId: string;
+  comment?: string | null;
+}
+
+export interface ReassignPayeeRequest {
+  newPayeeId: string;
+  reason: string;
 }

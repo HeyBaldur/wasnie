@@ -8,7 +8,7 @@ namespace Wasnie.Application.Compensation.Commands.Transactions;
 
 public sealed record IngestTransactionCommand(
     string ReferenceNumber,
-    Guid PayeeId,
+    Guid? PayeeId,
     decimal Amount,
     string Currency,
     DateOnly TransactionDate) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand

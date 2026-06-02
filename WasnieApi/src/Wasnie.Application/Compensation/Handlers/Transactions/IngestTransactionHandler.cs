@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Transactions;
 using Wasnie.Application.Compensation.DTOs;
@@ -19,18 +20,33 @@ public sealed class IngestTransactionHandler(
     ICurrentUserService currentUser,
     IClock clock,
     IGuidGenerator guid,
-    IAuthorizationService authorizationService)
+    IAuthorizationService authorizationService,
+    IFieldRequirementService fieldRequirements)
     : IRequestHandler<IngestTransactionCommand, Result<TransactionDto>>
 {
     public async Task<Result<TransactionDto>> Handle(IngestTransactionCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.TransactionsCreate, cancellationToken);
 
-        var payeeExists = await db.Payees
-            .AnyAsync(p => p.Id == request.PayeeId, cancellationToken);
+        var payeeIdRequired = await fieldRequirements.IsRequiredAsync(
+            TransactionFieldNames.Entity, TransactionFieldNames.PayeeId, cancellationToken);
 
-        if (!payeeExists)
-            return Result<TransactionDto>.Failure($"Payee '{request.PayeeId}' not found.");
+        if (request.PayeeId is null)
+        {
+            if (payeeIdRequired)
+                return Result<TransactionDto>.Failure("Payee is required for this tenant. Please assign a payee.");
+        }
+        else
+        {
+            var payee = await db.Payees
+                .FirstOrDefaultAsync(p => p.Id == request.PayeeId.Value, cancellationToken);
+
+            if (payee is null)
+                return Result<TransactionDto>.Failure($"Payee '{request.PayeeId}' not found.");
+
+            if (!payee.IsActive)
+                return Result<TransactionDto>.Failure($"Payee '{request.PayeeId}' is inactive. Use import to assign historical transactions to inactive payees.");
+        }
 
         Money amount;
         try

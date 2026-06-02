@@ -16,6 +16,8 @@ public static class AuditActions
     public const string PayeeTerminated = "PAYEE_TERMINATED";
     public const string PayeeReactivated = "PAYEE_REACTIVATED";
     public const string PayeeDeleted = "PAYEE_DELETED";
+    public const string PayeeDeactivated = "PAYEE_DEACTIVATED";
+    public const string PayeeActivated = "PAYEE_ACTIVATED";
 
     // Plans
     public const string PlanCreated = "PLAN_CREATED";
@@ -38,6 +40,8 @@ public static class AuditActions
 
     // Transactions (Phase 2)
     public const string TransactionIngested = "TRANSACTION_INGESTED";
+    public const string TransactionPayeeAssigned = "TRANSACTION_PAYEE_ASSIGNED";
+    public const string TransactionPayeeReassigned = "TRANSACTION_PAYEE_REASSIGNED";
 
     // Settings (Rule 5.1.5 — configuration changes)
     public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";
