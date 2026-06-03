@@ -8,6 +8,10 @@
       <app-icon name="upload-cloud" [size]="14" />
       {{ 'TRANSACTIONS.ACTION_IMPORT' | translate }}
     </ws-button>
+    <ws-button slot="actions" variant="secondary" routerLink="import" [queryParams]="{ mode: 'update' }" [hidden]="!('Transactions.UpdateFromExcel' | hasPermission)">
+      <app-icon name="refresh" [size]="14" />
+      {{ 'TRANSACTIONS.ACTION_UPDATE_EXCEL' | translate }}
+    </ws-button>
     <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Transactions.Create' | hasPermission)">
       <app-icon name="plus" [size]="16" />
       {{ 'TRANSACTIONS.NEW' | translate }}
@@ -20,6 +24,25 @@
         [(value)]="statusTabValue"
       />
     </div>
+
+    <!-- Export to Excel (only when there are filtered results) -->
+    @if ((store.totalCount() > 0) && ('Transactions.Export' | hasPermission)) {
+      <div class="transactions-list__export-row">
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [disabled]="exporting()"
+          [loading]="exporting()"
+          (click)="onExport()"
+        >
+          <app-icon name="file-excel" [size]="14" />
+          {{ 'TRANSACTIONS.EXPORT.BUTTON' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="transactions-list__export-error">{{ exportError()! | translate }}</span>
+        }
+      </div>
+    }
 
     <!-- Advanced filter panel -->
     <app-transaction-filter

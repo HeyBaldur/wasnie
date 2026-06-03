@@ -28,4 +28,5 @@ public class PaginationQuery
     public decimal? AmountMax { get; set; }
     public bool? UnassignedOnly { get; set; }
     public string? AmountSort { get; set; }        // "asc" | "desc" — sort by Amount
+    public string? ReferenceNumbers { get; set; }  // comma-separated exact ReferenceNumber values (for skip-log filter navigation)
 }

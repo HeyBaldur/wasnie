@@ -125,7 +125,15 @@ public sealed class HangfireBackgroundJobService(
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task SetResultSummaryAsync(Guid jobId, string summaryJson, CancellationToken ct = default)
+    {
+        var record = await db.BackgroundJobRecords.FindAsync([jobId], ct);
+        if (record is null) return;
+        record.SetResultSummary(summaryJson);
+        await db.SaveChangesAsync(ct);
+    }
+
     private static JobStatusDto ToDto(BackgroundJobRecord r) =>
         new(r.Id, r.State, r.ProgressCurrent, r.ProgressTotal,
-            r.ErrorMessage, r.EnqueuedAtUtc, r.StartedAtUtc, r.CompletedAtUtc);
+            r.ErrorMessage, r.EnqueuedAtUtc, r.StartedAtUtc, r.CompletedAtUtc, r.ResultSummary);
 }

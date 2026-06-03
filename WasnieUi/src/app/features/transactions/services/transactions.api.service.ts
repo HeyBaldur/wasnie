@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
@@ -20,6 +21,25 @@ export interface ProcessPendingResponse {
   candidateCount: number;
 }
 
+export interface ProcessPendingResultSummary {
+  processed: number;
+  creditsCreated: number;
+  skippedByOverlapRule: number;
+  skippedByIdempotency: number;
+  skippedByValidation: number;
+  skipReasonCounts: Record<string, number>;
+  skipDetails: {
+    txId: string;
+    refNum: string;
+    txDate: string;
+    amount: number;
+    currency: string;
+    payeeName: string | null;
+    payeeCode: string | null;
+    reason: string;
+  }[];
+}
+
 export interface JobStatus {
   id: string;
   state: JobState;
@@ -29,6 +49,7 @@ export interface JobStatus {
   enqueuedAtUtc: string;
   startedAtUtc: string | null;
   completedAtUtc: string | null;
+  resultSummary: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -74,5 +95,17 @@ export class TransactionsApiService {
 
   cancelJob(jobId: string): Observable<void> {
     return this.http.post<void>(`/api/jobs/${jobId}/cancel`, {});
+  }
+
+  exportToExcel(filter: Record<string, string>): Observable<Blob> {
+    return this.http.post(`${this.base}/export`, filter, { responseType: 'blob' });
+  }
+
+  getExportCount(filter: PaginationParams): Observable<{ count: number }> {
+    // Re-uses the list endpoint with page=1/pageSize=1 to get totalCount without fetching data.
+    // The totalCount in the response is the filtered count.
+    return this.http.get<{ totalCount: number; unfilteredTotal: number | null }>(
+      this.base, { params: buildHttpParams({ ...filter, page: 1, pageSize: 1 }) }
+    ).pipe(map(r => ({ count: r.totalCount })));
   }
 }

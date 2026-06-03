@@ -78,12 +78,14 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, AuditService>();
 
         services.AddScoped<ICreditAllocationService, CreditAllocationService>();
+        services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<IFieldRequirementService, FieldRequirementService>();
         services.AddScoped<IImportCacheService, ImportCacheService>();
         services.AddScoped<IFileParserService, FileParserService>();
         services.AddScoped<IPayeeImportValidationService, PayeeImportValidationService>();
         services.AddScoped<IPayeeImportExecutionService, PayeeImportExecutionService>();
         services.AddScoped<ITransactionImportValidationService, TransactionImportValidationService>();
+        services.AddScoped<ITransactionUpdateValidationService, TransactionUpdateValidationService>();
 
         // Background jobs — Hangfire (LGPLv3) backed by the existing Azure SQL database.
         // F1 plan has no Always On; the Hangfire server restarts on the next request after idle,
@@ -114,6 +116,7 @@ public static class DependencyInjection
         services.AddScoped<IJobHandler<PingPayload>, PingJobHandler>();
         services.AddScoped<IJobHandler<TransactionImportPayload>, TransactionImportJobHandler>();
         services.AddScoped<IJobHandler<ProcessPendingTransactionsPayload>, ProcessPendingTransactionsJobHandler>();
+        services.AddScoped<IJobHandler<TransactionUpdatePayload>, UpdateTransactionsFromExcelJobHandler>();
 
         services.AddIdentity<IdentityUser, IdentityRole>(options =>
             {

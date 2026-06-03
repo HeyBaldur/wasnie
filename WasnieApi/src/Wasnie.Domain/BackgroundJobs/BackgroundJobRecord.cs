@@ -13,6 +13,7 @@ public sealed class BackgroundJobRecord
     public DateTime EnqueuedAtUtc { get; private set; }
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    public string? ResultSummary { get; private set; }
 
     private BackgroundJobRecord() { }
 
@@ -65,4 +66,6 @@ public sealed class BackgroundJobRecord
         State = JobState.Cancelled;
         CompletedAtUtc = DateTime.UtcNow;
     }
+
+    public void SetResultSummary(string summaryJson) => ResultSummary = summaryJson;
 }

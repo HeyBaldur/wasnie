@@ -21,33 +21,24 @@
         </p>
       }
 
-      <!-- Progress bar while job runs -->
-      @if (isRunning) {
-        <div class="process-pending__progress">
-          <div class="process-pending__progress-bar">
-            <div
-              class="process-pending__progress-fill"
-              [style.width.%]="progressPct"
-            ></div>
-          </div>
-          <p class="process-pending__progress-text">
-            @if (jobStatus()?.state === 'Cancelling') {
-              {{ 'TRANSACTIONS.PROCESS_PENDING.CANCELLING' | translate }}
-            } @else {
-              {{
-                'TRANSACTIONS.PROCESS_PENDING.RUNNING'
-                  | translate
-                    : {
-                        processed: jobStatus()?.progressCurrent ?? 0,
-                        total: jobStatus()?.progressTotal ?? 0
-                      }
-              }}
-            }
-          </p>
-          @if (netError()) {
-            <p class="process-pending__net-error">{{ 'TRANSACTIONS.PROCESS_PENDING.NET_ERROR' | translate }}</p>
-          }
-          @if (jobStatus()?.state !== 'Cancelling') {
+      @if (netError()) {
+        <p class="process-pending__net-error">{{ 'TRANSACTIONS.PROCESS_PENDING.NET_ERROR' | translate }}</p>
+      }
+
+      <!-- Main action button — shows loader while running/dispatching -->
+      @if (!isDone) {
+        <div class="process-pending__actions">
+          <ws-button
+            variant="secondary"
+            size="sm"
+            [loading]="isRunning || dispatching()"
+            [disabled]="isRunning || dispatching()"
+            (click)="onProcessPending()"
+            data-testid="process-pending-btn"
+          >
+            {{ 'TRANSACTIONS.PROCESS_PENDING.BUTTON' | translate }}
+          </ws-button>
+          @if (isRunning && jobStatus()?.state !== 'Cancelling') {
             <ws-button variant="ghost" size="sm" [disabled]="cancelling()" (click)="onCancel()">
               {{ 'TRANSACTIONS.PROCESS_PENDING.CANCEL' | translate }}
             </ws-button>
@@ -57,12 +48,79 @@
 
       <!-- Terminal states -->
       @if (jobStatus()?.state === 'Succeeded') {
-        <p class="process-pending__success">
-          {{
-            'TRANSACTIONS.PROCESS_PENDING.DONE'
-              | translate: { processed: jobStatus()?.progressCurrent ?? 0 }
-          }}
-        </p>
+        <div class="process-pending__result">
+          <p class="process-pending__success">
+            @if (resultSummary; as s) {
+              @if (s.processed === 0) {
+                {{ 'TRANSACTIONS.PROCESS_PENDING.NOTHING_TO_PROCESS' | translate }}
+              } @else if (s.skippedByValidation > 0) {
+                {{
+                  'TRANSACTIONS.PROCESS_PENDING.DONE_WITH_SKIPS'
+                    | translate: { processed: s.processed, skipped: s.skippedByValidation }
+                }}
+              } @else {
+                {{
+                  'TRANSACTIONS.PROCESS_PENDING.DONE'
+                    | translate: { processed: s.processed }
+                }}
+              }
+            } @else {
+              {{
+                'TRANSACTIONS.PROCESS_PENDING.DONE'
+                  | translate: { processed: jobStatus()?.progressCurrent ?? 0 }
+              }}
+            }
+          </p>
+          @if (resultSummary && resultSummary.skippedByValidation > 0) {
+            <div class="process-pending__skip-summary">
+              <div class="process-pending__skip-actions">
+                <button type="button" class="process-pending__skip-toggle" (click)="skipLogOpen.set(!skipLogOpen())">
+                  {{ (skipLogOpen() ? 'TRANSACTIONS.PROCESS_PENDING.HIDE_SKIP_LOG' : 'TRANSACTIONS.PROCESS_PENDING.VIEW_SKIP_LOG')
+                    | translate: { count: resultSummary.skippedByValidation } }}
+                </button>
+                <ws-button variant="ghost" size="sm" (click)="onOpenInFilter()">
+                  {{ 'TRANSACTIONS.PROCESS_PENDING.OPEN_IN_FILTER' | translate }}
+                </ws-button>
+              </div>
+              @if (skipLogOpen()) {
+                <div class="process-pending__skip-list">
+                  <div class="process-pending__skip-header">
+                    <span>{{ 'TRANSACTIONS.PROCESS_PENDING.SKIP_COL_REF' | translate }}</span>
+                    <span>{{ 'TRANSACTIONS.PROCESS_PENDING.SKIP_COL_PAYEE' | translate }}</span>
+                    <span>{{ 'TRANSACTIONS.PROCESS_PENDING.SKIP_COL_DATE' | translate }}</span>
+                    <span class="process-pending__skip-header--right">{{ 'TRANSACTIONS.PROCESS_PENDING.SKIP_COL_AMOUNT' | translate }}</span>
+                    <span>{{ 'TRANSACTIONS.PROCESS_PENDING.SKIP_COL_REASON' | translate }}</span>
+                  </div>
+                  @for (entry of resultSummary.skipDetails; track entry.txId) {
+                    <div class="process-pending__skip-entry">
+                      <span class="process-pending__skip-ref">
+                        <button
+                          type="button"
+                          class="process-pending__copy-btn"
+                          [wsTooltip]="copiedRef() === entry.refNum ? ('COMMON.COPIED' | translate) : ('COMMON.COPY_ID' | translate)"
+                          tooltipPlacement="top"
+                          (click)="copyRef(entry.refNum)"
+                        >
+                          <app-icon [name]="copiedRef() === entry.refNum ? 'check-circle' : 'copy'" [size]="11" />
+                        </button>
+                        {{ entry.refNum }}
+                      </span>
+                      <span class="process-pending__skip-payee">
+                        {{ entry.payeeName ?? ('COMMON.UNASSIGNED' | translate) }}
+                        @if (entry.payeeCode) {
+                          <span class="process-pending__skip-code">({{ entry.payeeCode }})</span>
+                        }
+                      </span>
+                      <span class="process-pending__skip-date">{{ entry.txDate }}</span>
+                      <span class="process-pending__skip-amount">{{ entry.amount | number:'1.2-2' }} {{ entry.currency }}</span>
+                      <span class="process-pending__skip-reason" [wsTooltip]="entry.reason" tooltipPlacement="top">{{ entry.reason }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
       }
       @if (jobStatus()?.state === 'Cancelled') {
         <p class="process-pending__cancelled">
@@ -82,18 +140,6 @@
         </p>
       }
 
-      <!-- Main action button (hidden while running or done) -->
-      @if (!isRunning && !isDone) {
-        <ws-button
-          variant="secondary"
-          size="sm"
-          [disabled]="dispatching()"
-          (click)="onProcessPending()"
-          data-testid="process-pending-btn"
-        >
-          {{ 'TRANSACTIONS.PROCESS_PENDING.BUTTON' | translate }}
-        </ws-button>
-      }
     </div>
   </ws-card>
 }

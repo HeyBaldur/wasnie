@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-03 — WI-PROD-I.2 Done. Advanced transaction filter (8 criteria + AND logic + URL sync + count header + Eligible tab removed).
-**Updated by:** Rodolfo Calvo (WI-PROD-I.2)
+**Last updated:** 2026-06-03 — WI-PROD-T-FIX-6 Done. Skip log layout: Reason is now a proper 5th column; Amount right-aligned with breathing room; "Open skipped in filter" opens in new tab. Build clean.
+**Updated by:** Rodolfo Calvo (WI-PROD-T)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,13 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-03. WI-PROD-I.2 DONE. Advanced transaction filter with 8 criteria (reference, payees, date ranges, amount range, status multi-select, unassigned toggle, amount sort), URL sync, count header, Eligible tab removed. Backend: 752 tests (312 unit + 440 integration), 2 skipped. Frontend: 159 tests. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
+**Right now we are:** End-of-day 2026-06-03. WI-PROD-T-FIX-5 DONE. Process Pending skip log enriched: each entry now shows Reference Number, Payee name+code, Date, Amount+Currency, and Reason in a styled 4-column table. "Open skipped in filter" button navigates to `/transactions?refs=...`. `ReferenceNumbers` exact-match filter added to `PaginationQuery`, `ListTransactionsHandler`, `ExportTransactionsHandler`, and `TransactionsStore`. Backend: 752 tests — unchanged. Frontend: 159 tests — unchanged. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
+
+**Most recent significant work (2026-06-03 — WI-PROD-T: Export + Re-upload + Process Pending skip fix):**
+- **Part 1 — Process Pending skip:** `ProcessPendingTransactionsJobHandler` now catches `DomainException` per-transaction (currency mismatch etc.), skips the transaction (stays Pending), logs reason. Job completes normally with skip counts. `BackgroundJobRecord.ResultSummary` (nvarchar(max) nullable) added via migration `20260603093913_AddJobResultSummary`. `JobStatusDto` + `JobContext` extended. UI: `ProcessPendingComponent` shows skip count + expandable log of skipped transaction IDs + reasons. i18n EN/ES/PL.
+- **Part 2 — Excel export:** `ExportTransactionsQuery` + `ExportTransactionsHandler` (same filters as ListTransactions, no pagination, 50K row cap). `TransactionExcelExportService` (ClosedXML): 10-column export, frozen header, ReferenceNumber marked as KEY. `POST /api/transactions/export`. `Transactions.Export` permission. Frontend: export button, blob download, >50K confirmation dialog.
+- **Part 3 — Update-from-Excel wizard:** Full 5-step wizard at `/transactions/update-excel`. ReferenceNumber as fixed key. Per-row diff preview (old→new). Blocked on Paid, Credits superseded on Calculated. `CompensationTransaction.ApplyExcelUpdate()` domain method. `UpdateTransactionsFromExcelJobHandler` with per-transaction audit diffs. 3 new endpoints: `POST /api/imports/transactions/update/{parse,validate,execute}`. `Transactions.UpdateFromExcel` permission. "↻ Update from Excel" button in transactions list. i18n EN/ES/PL.
+- **Test count: 752 backend + 159 frontend — unchanged. Both builds clean. Tests deferred per owner instruction.**
 
 **Most recent significant work (2026-06-03 — WI-PROD-I.2: Advanced transaction filter):**
 - **Backend:** `PaginationQuery` extended with 8 new filter fields: `Reference` (substring), `Statuses` (comma-separated multi-status), `PayeeIds` (comma-separated multi-payee), `IngestedFrom`/`IngestedTo`, `AmountMin`/`AmountMax`, `UnassignedOnly`, `AmountSort`. `ListTransactionsHandler` applies all filters. `PagedResult<T>` extended with `UnfilteredTotal?`. Migration `P3_TransactionPayeeIndex` adds `(TenantId, PayeeId)` index.
@@ -286,6 +292,72 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 ## TODO_TESTS — Deferred test backfill
 
 These tests were explicitly deferred by owner instruction on 2026-06-03 (WI-PROD-I.2). Add in a dedicated test WI before the first paying customer.
+
+### WI-PROD-T-FIX-5 — Enrich skip log + open-in-filter
+
+**Backend integration tests:**
+- `ProcessPendingTransactionsJobHandler`: seed payee + EUR plan assignment + PLN transaction; run job; verify `ResultSummary.skipDetails[0]` has `refNum`, `txDate`, `amount`, `currency`, `payeeName`, `payeeCode`, `reason` populated correctly.
+- `ListTransactionsHandler`: add `ReferenceNumbers = "REF1,REF2"` to `PaginationQuery`; verify exact match — `REF1` and `REF2` returned, `REF3` not.
+- `ListTransactionsHandler`: `ReferenceNumbers` with one valid + one non-existent ref → returns only the valid one.
+- `ExportTransactionsHandler`: `ReferenceNumbers` filter produces the same rows as `ListTransactionsHandler` with the same filter.
+
+**Frontend component tests:**
+- `ProcessPendingComponent`: when `skipDetails` contains enriched entries, rendered rows show `refNum`, not `txId`.
+- `ProcessPendingComponent`: `onOpenInFilter()` calls `router.navigate` with `{ queryParams: { refs: 'REF1,REF2' } }`.
+- `TransactionsStore.loadFromQueryParams`: `refs=REF1,REF2` → `referenceNumbers: ['REF1', 'REF2']`.
+- `TransactionsStore._buildFilterRecord`: `referenceNumbers: ['REF1']` → `referenceNumbers: 'REF1'` in the filter record.
+
+---
+
+### WI-PROD-T-FIX-4 — Strict ISO date validation
+
+**Backend unit tests (MUST add before first paying customer):**
+- `TransactionImportValidationService`: validate row with `31/05/2026` → `IssueSeverity.Error`, `IssueCategory.Format`, message contains "ISO 8601".
+- `TransactionImportValidationService`: validate row with `05/31/2026` → same.
+- `TransactionImportValidationService`: validate row with `15-05-2026` → same.
+- `TransactionImportValidationService`: validate row with `2026-05-15` → no date error.
+- `TransactionImportValidationService`: validate row with `2026/13/45` → error (invalid date, not merely wrong format).
+- `TransactionImportJobHandler.TryParseDate` (or via integration): `"31/05/2026"` → returns `false`; `"2026-05-31"` → returns `true`.
+
+---
+
+### WI-PROD-T-FIX-3 — Currency mismatch per-row validation
+
+**Backend integration tests (MUST add before first paying customer):**
+- `TransactionImportValidationService`: seed payee with active EUR plan assignment; validate a batch with mixed EUR + PLN rows; verify PLN rows have `IssueSeverity.Error`, `IssueCategory.Reference`, field `"currency"`, and message contains plan name and currencies.
+- `TransactionImportValidationService`: seed payee with NO active assignment for the transaction date; verify no currency error is emitted (row imports as Pending).
+- `TransactionImportValidationService`: seed payee with active EUR assignment; validate row with valid EUR currency; verify no currency issue emitted.
+- `TransactionImportJobHandler` (belt-and-suspenders): force a `DomainException` in `AllocateAsync` for one row in a batch; verify the batch completes, other rows are imported, `skippedByDomainValidation` is counted in `totalSkipped`.
+
+---
+
+### WI-PROD-T-FIX-2 — Update wizard i18n + merge
+
+**TODO:** Test that `TransactionImportWizardComponent` correctly renders CREATE steps in default mode and UPDATE steps when `?mode=update` is passed. Specifically: step label translation, correct step component mounted per mode, and that UPDATE mode state signals are independent from CREATE mode state signals.
+
+---
+
+### WI-PROD-T-FIX-1 — Excel export filter alignment
+
+**Regression guard (MUST add before first paying customer):**
+- Test: applying filter combination F (payee + status + date range + amount range) to `GET /api/transactions` returns `totalCount = N`. The same F sent as body to `POST /api/transactions/export` must produce a file with exactly N data rows. Any divergence means `_buildFilterRecord` in the store and `ExportTransactionsHandler` are out of sync.
+
+---
+
+### WI-PROD-T — Export + Re-upload + Process Pending skip fix
+
+**Backend integration tests:**
+- `ProcessPendingTransactionsJobHandler`: seed mix of EUR + PLN transactions, run job, verify EUR are Calculated, PLN remain Pending, `ResultSummary.skippedByValidation` matches expected count.
+- `POST /api/transactions/export`: with each filter combination, verify correct columns and row count.
+- `POST /api/imports/transactions/update/validate`: diff computation per field (amount, currency, date, payeeId); Paid blocks; missing reference errors.
+- `UpdateTransactionsFromExcelJobHandler`: Calculated transaction → Credits superseded + Status reset to Pending; audit log before/after JSON populated.
+
+**Frontend component tests:**
+- `ProcessPendingComponent`: skip log expand/collapse, `DONE_WITH_SKIPS` message rendered when `skippedByValidation > 0`.
+- `TransactionsListComponent`: Export button shown only when `totalCount > 0`; `onExport()` triggers blob download.
+- `TransactionUpdateWizardComponent`: step transitions upload→map→preview→progress→complete.
+
+---
 
 ### WI-PROD-I.2 — Advanced transaction filter
 

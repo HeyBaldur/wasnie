@@ -26,4 +26,5 @@ public interface IBackgroundJobService
     Task<bool> CancelJobAsync(Guid jobId, Guid tenantId, CancellationToken ct = default);
 
     Task MarkCancelledAsync(Guid jobId, CancellationToken ct = default);
+    Task SetResultSummaryAsync(Guid jobId, string summaryJson, CancellationToken ct = default);
 }

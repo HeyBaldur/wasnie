@@ -10,6 +10,215 @@
 
 ---
 
+## 2026-06-03 — WI-PROD-T-FIX-6: Skip log layout cleanup + open in new tab
+
+**WI:** WI-PROD-T-FIX-6
+**Status:** DONE ✅
+**Type:** UI polish — layout fix.
+
+### Changes
+1. **Reason as 5th column:** `__skip-entry` changed from `display: flex; flex-direction: column` to `display: grid; grid-template-columns: 2fr 2fr 1fr 1fr 3fr`. Reason span moved from below-row sibling to a proper grid cell. `__skip-header` also updated to 5 columns. Truncated with `text-overflow: ellipsis` + `WsTooltipDirective` on hover for full text.
+2. **Amount alignment:** AMOUNT header column now `text-align: right` (matching value). Amount cell gets `padding-right: var(--space-1)` for breathing room. Now that reason is the 5th column, amount is no longer flush against the container edge.
+3. **Open in new tab:** `onOpenInFilter()` changed from `router.navigate(...)` to `window.open(router.serializeUrl(router.createUrlTree(...)), '_blank', 'noopener')`. Original page stays visible.
+
+### i18n
+Added `SKIP_COL_REASON` in EN/ES/PL.
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-5: Enrich Process Pending skip log + open-in-filter
+
+**WI:** WI-PROD-T-FIX-5
+**Status:** DONE ✅
+**Type:** UX improvement — skip log enrichment + navigation action.
+
+### Root cause
+Skip log entries showed only a raw Guid + reason string. Users had no way to identify which invoices were skipped without querying the DB. The UX was effectively a black box.
+
+### Backend changes
+
+**`ProcessPendingTransactionsJobHandler`:**
+- Added 2 pre-load queries before the chunk loop (not per-row): payee ID map for eligible transactions, then payee name/code lookup.
+- `skipDetails` tuple type extended to carry `RefNum`, `TxDate`, `Amt`, `Ccy`, `PayeeName`, `PayeeCode`, `Reason`.
+- Summary serialization updated: `skipDetails` entries now include all enriched fields (`txId`, `refNum`, `txDate`, `amount`, `currency`, `payeeName`, `payeeCode`, `reason`).
+
+**`PaginationQuery` + `ListTransactionsHandler` + `ExportTransactionsHandler`:**
+- Added `ReferenceNumbers` (comma-separated, exact match) filter — enables the "Open skipped in filter" navigation target.
+
+### Frontend changes
+
+**`transactions.api.service.ts`:** `skipDetails` interface expanded with all new fields.
+
+**`transactions.store.ts`:** Added `referenceNumbers: string[]` to `TransactionFilter`, `EMPTY_FILTER`, `_buildFilterRecord` (API key: `referenceNumbers`), `toQueryParams` (URL key: `refs`), `loadFromQueryParams` (reads `refs`), `activeFilterCount`.
+
+**`process-pending.component`:**
+- Skip log rebuilt as a proper 4-column data table (Ref | Payee (Code) | Date | Amount) with a reason row below. Styled with `grid-template-columns: 2fr 2fr 1fr 1fr`, sticky header, `var(--color-brand)` for reference number, token-based spacing.
+- Added `Router` injection and `onOpenInFilter()` method: navigates to `/transactions?refs=REF1,REF2,...`.
+- Added `ws-button variant="ghost" size="sm"` "Open skipped in filter" button next to the expand/collapse toggle.
+- i18n EN/ES/PL: `OPEN_IN_FILTER`, `SKIP_COL_REF`, `SKIP_COL_PAYEE`, `SKIP_COL_DATE`, `SKIP_COL_AMOUNT`.
+
+### `14-forbidden-patterns.md`
+Added rule: skip/audit logs must include human-readable identifiers.
+
+### Tests deferred
+See TODO_TESTS (owner instruction).
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-4: Strict ISO date validation at import
+
+**WI:** WI-PROD-T-FIX-4
+**Status:** DONE ✅
+**Type:** Bug fix — silent date cultural ambiguity.
+
+### Root cause
+`TransactionImportValidationService` had `DateFormats = ["yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "M/d/yyyy", "d/M/yyyy", "yyyy/MM/dd"]`. `TryParseDate` iterated all formats with `TryParseExact`. `31/05/2026` matched `dd/MM/yyyy` and was silently accepted as a valid date. This is a financial safety issue: `04/05/2026` would be accepted as either April 5 (US) or May 4 (EU) depending on which format matched first — wrong date = wrong Plan/Quota/Payout period.
+
+### Why it was safe to restrict
+`FileParserService.ReadCellAsString(cell)` already converts `XLDataType.DateTime` cells to `dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)` before the validator sees them. Excel native date cells are already ISO 8601 strings. Restricting the validator to ISO-only does NOT break Excel imports.
+
+### Fix
+Three transaction-path files changed:
+1. **`TransactionImportValidationService`** — `DateFormats` reduced to `["yyyy-MM-dd"]`. Error message updated to: `"Date '{value}' is not in the required ISO 8601 format (YYYY-MM-DD). Examples: 2026-05-15, 2026-12-31."`
+2. **`TransactionImportJobHandler`** — `DateFormats` array removed; `TryParseDate` simplified to a one-liner `TryParseExact("yyyy-MM-dd", InvariantCulture, ...)`. Also fixed pre-existing `null` culture bug (was passing `null` instead of `CultureInfo.InvariantCulture`).
+3. **`TransactionUpdateValidationService`** — same simplification.
+
+Payee import (`PayeeImportValidationService`, `PayeeImportExecutionService`) — same multi-format arrays present but out of scope for this WI.
+
+### 14-forbidden-patterns.md
+Added rule: multi-format date parsing for user-supplied transaction dates is forbidden; ISO-only with InvariantCulture is required.
+
+### Tests deferred
+See TODO_TESTS (owner instruction).
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-3: Currency mismatch aborts import batch
+
+**WI:** WI-PROD-T-FIX-3
+**Status:** DONE ✅
+**Type:** Bug fix — per-row currency validation in Step 3 preview + defensive Step 4 skip.
+
+### Root cause
+`CreditAllocationService.AllocateAsync()` throws `DomainException("Currency mismatch: …")` when a transaction's currency differs from its assigned plan's currency. `TransactionImportJobHandler` only caught `DbUpdateException` (idempotency). The `DomainException` propagated uncaught, aborted the entire batch. A 105-row import (100 EUR + 5 PLN rows against a EUR plan) produced "Import failed — Currency mismatch" with 0 rows imported.
+
+### Fix — Step 3 (Preview): per-row validation in `TransactionImportValidationService`
+Added a batched plan-currency lookup (2 queries, regardless of row count):
+1. Collect all payee IDs referenced in the batch.
+2. Load all active `PlanAssignments` for those payees (full entities, in-memory — EF Core cannot reliably translate `DateOnly` owned-type comparisons in SQL WHERE).
+3. Load `Currency + Name` from `CompensationPlans` for the referenced `PlanId`s.
+4. Per-row: find active assignment covering `txDate`, compare currencies. If mismatch → `ValidationIssue(Severity=Error, Category=Reference, Field="currency", Message="Currency mismatch: transaction is in {txCurrency} but payee '{code}' is assigned to plan '{planName}' denominated in {planCurrency}.")`.
+- If no active assignment covers `txDate`, no error is emitted — the row imports as Pending; the Process Pending job will skip it later per its existing currency-skip logic.
+
+### Fix — Step 4 (Import): defensive `DomainException` skip in `TransactionImportJobHandler`
+Added `catch (DomainException domEx)` before the existing `catch (DbUpdateException)`. Mirrors `ProcessPendingTransactionsJobHandler` pattern: log warning + `ChangeTracker.Clear()` + `skippedByDomainValidation++`. Belt-and-suspenders for edge case where assignment is created between validate and execute. `totalSkipped` now includes `skippedByDomainValidation`.
+
+### Fix — Docs
+- `14-forbidden-patterns.md`: "Batch operation abort violations" section updated with the skip-and-continue rule explicitly covering the import wizard.
+
+### What stays unchanged
+All existing validation categories, `IssueCategory` enum (no new values), import job structure, credit allocation logic.
+
+### Tests deferred
+See TODO_TESTS (owner instruction, 2026-06-03).
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-2: Update wizard i18n + reuse import wizard
+
+**WI:** WI-PROD-T-FIX-2
+**Status:** DONE ✅
+**Type:** Bug fix (i18n) + Refactor (Option A: wizard merge).
+
+### i18n root cause
+Update wizard template used `IMPORTS.STEPS.UPLOAD/MAP/PREVIEW/PROGRESS/COMPLETE` — keys that never existed. The import wizard uses `IMPORTS.TRANSACTIONS.STEP_*`. Fix: template now uses the existing keys.
+
+### Refactor: Option A
+Merged `TransactionUpdateWizardComponent` into `TransactionImportWizardComponent`:
+- `mode = computed(() => route.snapshot.queryParamMap.get('mode') === 'update' ? 'update' : 'create')`.
+- Template branches on `mode()` to render CREATE or UPDATE step components.
+- Separate state signal sets for each mode (different types: `TransactionImportColumnMapping` vs `TransactionUpdateColumnMapping`).
+- Route `/transactions/update-excel` removed. Button "↻ Update from Excel" now navigates to `/transactions/import?mode=update`.
+- `TransactionUpdateWizardComponent` file left as dead code (tree-shaken by Angular build).
+
+### What stays unchanged
+All CREATE behavior (session storage, step components, handlers) is unchanged. All UPDATE backend (validation, job handler, Credits supersession) is unchanged.
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-1: Excel export ignores filter fields
+
+**WI:** WI-PROD-T-FIX-1
+**Status:** DONE ✅
+**Type:** Bug fix — frontend payload mismatch.
+
+### Root cause
+
+`onExport()` called `store.toQueryParams()` (URL-sync shorthand keys: `txFrom`, `txTo`, `ref`, `amtMin`, etc.) and sent that as the POST body to `/api/transactions/export`. The backend deserializes `[FromBody] PaginationQuery` — field names like `DateFrom`, `DateTo`, `Reference`, `AmountMin`, etc. — and silently sets unmatched fields to null. Only `statuses` and `payeeIds` coincidentally matched, so payee+status filters worked but all other 9 filter fields were silently dropped.
+
+### Fix
+
+- Extracted `TransactionsStore._buildFilterRecord(f: TransactionFilter): Record<string, string>` — **single source of truth** mapping `TransactionFilter` → API field names (`dateFrom`, `dateTo`, `reference`, `ingestedFrom`, `ingestedTo`, `amountMin`, `amountMax`, `unassignedOnly`, `amountSort`).
+- `_loadInternal` (list) now calls `_buildFilterRecord` instead of inline mapping.
+- New `toExportFilter()` method also calls `_buildFilterRecord` — guarantees identical predicate for list and export.
+- `onExport()` now calls `store.toExportFilter()` instead of `store.toQueryParams()`.
+- `exportToExcel()` API service param type corrected from `PaginationParams` to `Record<string, string>`.
+
+### Smoke verification scope
+Filter Payee=EMP301, Status=Pending, TxDate 2026-05-01–2026-05-31 → list shows 77 → export must contain exactly 77 rows all within May 2026.
+
+---
+
+## 2026-06-03 — WI-PROD-T: Export + Re-upload transactions + Fix Process Pending skip
+
+**WI:** WI-PROD-T
+**Status:** DONE ✅
+**Type:** Bug fix (skip behavior) + New feature (Excel export) + New feature (Update wizard)
+**Test count:** 752 backend — unchanged. Frontend 159 — unchanged. Both builds clean. Tests deferred per owner instruction; see TODO_TESTS in PROJECT_STATUS.
+
+### What was built
+
+**Part 1 — Process Pending skip fix:**
+- `ProcessPendingTransactionsJobHandler`: added `catch (DomainException)` inside the per-transaction try/catch. Currency mismatches (and any other `DomainException` from `CreditAllocationService`) are now skipped (transaction stays Pending) and logged with reason + TransactionId. Remaining transactions in the batch continue normally.
+- Skip details tracked in `skipDetails` list (capped at 200 entries for ResultSummary), `skipReasonCounts` aggregated by reason.
+- New `BackgroundJobRecord.ResultSummary` (nullable string JSON) field + EF config + migration `20260603093913_AddJobResultSummary`. `SetResultSummary(string)` domain method. `IBackgroundJobService.SetResultSummaryAsync()` + `HangfireBackgroundJobService` impl. `JobStatusDto` + `JobContext` extended with `ResultSummary`.
+- `ProcessPendingTransactionsJobHandler` calls `context.SetResultSummaryAsync(json)` at job completion with processed/skipped/creditsCreated counts.
+- Frontend: `JobStatus.resultSummary` added to TypeScript interface. `ProcessPendingComponent` parses and shows skip counts + expandable skip log (transaction IDs + reasons) after `Succeeded` state. New i18n keys: `DONE_WITH_SKIPS`, `VIEW_SKIP_LOG`, `HIDE_SKIP_LOG` in EN/ES/PL.
+
+**Part 2 — Excel export:**
+- New `Permission.TransactionsExport` (TenantAdmin + CompManager).
+- `ExportTransactionsQuery` + `ExportTransactionsHandler` (Application): same filter logic as `ListTransactionsHandler`, no pagination, 50K row safety cap returns EXPORT_TOO_LARGE error.
+- `TransactionExportRow` DTO.
+- `ITransactionExcelExportService` interface (Application). `TransactionExcelExportService` (Infrastructure, ClosedXML): 10-column export, frozen header row, `ReferenceNumber [KEY]` column header marking, auto-fit columns.
+- `POST /api/transactions/export` endpoint (returns file attachment; 422 on >50K).
+- Frontend: `TransactionsApiService.exportToExcel()`. Export button in transactions list (gated by `Transactions.Export`, shown when totalCount > 0). Confirmation dialog for >50K. Download via Blob URL. i18n EN/ES/PL.
+
+**Part 3 — Update-from-Excel wizard:**
+- New `Permission.TransactionsUpdateFromExcel` (TenantAdmin + CompManager).
+- New `TransactionUpdateColumnMapping`, `TransactionUpdatePayload` models.
+- New validation models: `FieldDiff`, `UpdateRowStatus`, `TransactionUpdateRowPreviewResult`, `TransactionUpdateValidateResponse`, `TransactionUpdateExecuteAccepted`.
+- `ITransactionUpdateValidationService` + `TransactionUpdateValidationService` (Infrastructure): row-by-row ReferenceNumber lookup, diff computation, Paid-transaction blocking, payee code resolution, missing-reference errors.
+- `UpdateTransactionsFromExcelJobHandler` (Infrastructure): ChunkSize=50, locate by ReferenceNumber, supersede non-superseded Credits when Status==Calculated, call `tx.ApplyExcelUpdate()`, per-transaction audit log with before/after JSON diffs, `ResultSummary` at job end.
+- `CompensationTransaction.ApplyExcelUpdate()` new domain method: applies Amount/Date/PayeeId changes, reverts Calculated→Pending, blocks Paid, raises `UpdatedAt`.
+- `AuditActions.TransactionUpdatedViaExcel` constant.
+- 3 new endpoints on `ImportsController`: `POST /api/imports/transactions/update/parse`, `.../validate`, `.../execute`.
+- Frontend: `TransactionUpdateColumnMapping` + related models. `TransactionUpdateService`. New wizard components: `TxUpdateUploadStepComponent`, `TxUpdateMappingStepComponent` (ReferenceNumber fixed as key with KEY badge), `TxUpdatePreviewStepComponent` (diff per row with old→new), `TxUpdateProgressStepComponent`, `TxUpdateCompleteStepComponent`. `TransactionUpdateWizardComponent` orchestrator. Route `/transactions/update-excel` gated by `Transactions.UpdateFromExcel`. "↻ Update from Excel" button in transactions list actions. i18n EN/ES/PL.
+
+### Decisions / patterns
+- `BackgroundJobRecord.ResultSummary` is nvarchar(max) nullable — used by all job types to surface post-completion data without a separate query.
+- Process Pending does NOT abort on `DomainException` (currency mismatch is a per-transaction skip, not a job failure).
+- Excel export sync only for ≤50K rows; async path deferred (TODO_TESTS).
+- Update-from-Excel: Paid transactions blocked entirely. Cancelled transactions allowed with no recalculation. Calculated transactions: Credits superseded, Status reset to Pending.
+
+### Deferred (TODO_TESTS)
+- Integration test: Process Pending skip counts match actual skipped transactions.
+- Integration test: `POST /api/transactions/export` returns correct columns and row count.
+- Integration test: `POST /api/imports/transactions/update/validate` diff computation per field.
+- Integration test: Update job supersedes Credits on Calculated transactions.
+- Frontend tests: `ProcessPendingComponent` skip log expand/collapse. Export button download trigger. Update wizard step transitions.
+
+---
+
 ## 2026-06-03 — WI-PROD-I.2: Advanced transaction filter
 
 **WI:** WI-PROD-I.2

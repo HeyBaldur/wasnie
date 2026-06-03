@@ -1,0 +1,102 @@
+<div class="preview-step">
+
+  <!-- Summary stat cards — same visual as CREATE import preview -->
+  <div class="preview-step__stats">
+    <ws-stat-card [value]="validateResponse().totalRows"      [label]="'IMPORTS.UPDATE.WILL_UPDATE' | translate"  icon="check-circle"   variant="success" />
+    <ws-stat-card [value]="validateResponse().noChangesCount" [label]="'IMPORTS.UPDATE.NO_CHANGES' | translate"   icon="list"           variant="default" />
+    <ws-stat-card [value]="validateResponse().errorCount"     [label]="'IMPORTS.UPDATE.ERRORS' | translate"       icon="x-circle"       variant="danger"  />
+  </div>
+
+  <!-- Row filter tabs -->
+  <div class="row-filter">
+    <span class="row-filter__btn row-filter__btn--active">
+      {{ 'IMPORTS.UPDATE.WILL_UPDATE' | translate }}
+      <span class="row-filter__count">({{ validateResponse().willUpdateCount }})</span>
+    </span>
+    @if (validateResponse().errorCount > 0) {
+      <span class="row-filter__btn row-filter__count">
+        {{ 'IMPORTS.UPDATE.ERRORS' | translate }}
+        <span class="row-filter__count">({{ validateResponse().errorCount }})</span>
+      </span>
+    }
+  </div>
+
+  <!-- Diff table -->
+  <div class="preview-table-wrap">
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th class="preview-table__th preview-table__th--num">#</th>
+          <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_STATUS' | translate }}</th>
+          <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_REFERENCE' | translate }}</th>
+          @if (columnMapping().payeeCodeColumn) {
+            <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_STAFF_ID' | translate }}</th>
+          }
+          <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_CHANGES' | translate }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of visibleRows; track row.rowNumber) {
+          <tr [class.preview-table__row--error]="row.status === 'Error'">
+            <td class="preview-table__td preview-table__td--num">{{ row.rowNumber }}</td>
+            <td class="preview-table__td">
+              <ws-badge [variant]="rowBadge(row)">{{ rowLabel(row) | translate }}</ws-badge>
+            </td>
+            <td class="preview-table__td">{{ getReferenceNumber(row) }}</td>
+            @if (columnMapping().payeeCodeColumn) {
+              <td class="preview-table__td">{{ getPayeeCode(row) }}</td>
+            }
+            <td class="preview-table__td preview-table__td--changes">
+              @if (row.status === 'WillUpdate') {
+                @for (diff of row.diffs; track diff.fieldName) {
+                  <div class="diff-entry">
+                    <span class="diff-entry__field">{{ diff.fieldName }}:</span>
+                    <span class="diff-entry__old">{{ diff.oldValue }}</span>
+                    <span class="diff-entry__arrow">→</span>
+                    <span class="diff-entry__new">{{ diff.newValue }}</span>
+                  </div>
+                }
+              }
+              @if (row.status === 'Error') {
+                @for (issue of row.issues; track issue.field) {
+                  <span class="diff-entry__issue">{{ issue.message }}</span>
+                }
+              }
+            </td>
+          </tr>
+        }
+        @if (validateResponse().rowResults.length > 200) {
+          <tr>
+            <td [attr.colspan]="columnMapping().payeeCodeColumn ? 5 : 4" class="preview-table__td preview-table__td--truncated">
+              {{ 'IMPORTS.UPDATE.TABLE_TRUNCATED' | translate: { shown: 200, total: validateResponse().rowResults.length } }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (error()) {
+    <p class="mapping-error">
+      <app-icon name="alert-circle" [size]="14" />
+      {{ error() }}
+    </p>
+  }
+
+  <div class="mapping-actions">
+    <ws-button variant="secondary" (click)="onBack()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'COMMON.BACK' | translate }}
+    </ws-button>
+    <ws-button
+      variant="primary"
+      [disabled]="validateResponse().willUpdateCount === 0 || loading()"
+      [loading]="loading()"
+      (click)="onExecute()"
+    >
+      {{ 'IMPORTS.UPDATE.EXECUTE_BTN' | translate: { count: validateResponse().willUpdateCount } }}
+      <app-icon name="arrow-right" [size]="14" />
+    </ws-button>
+  </div>
+
+</div>

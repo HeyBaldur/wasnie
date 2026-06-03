@@ -7,7 +7,8 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { timer, Subscription, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
@@ -15,23 +16,27 @@ import {
   TransactionsApiService,
   ProcessPendingScope,
   JobStatus,
+  ProcessPendingResultSummary,
 } from '../services/transactions.api.service';
 import {
   WsButtonComponent,
   WsBadgeComponent,
   WsCardComponent,
 } from '../../../shared/ui';
+import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.directive';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 
 @Component({
   selector: 'app-process-pending',
   standalone: true,
-  imports: [CommonModule, TranslateModule, WsButtonComponent, WsBadgeComponent, WsCardComponent],
+  imports: [CommonModule, DecimalPipe, TranslateModule, WsButtonComponent, WsBadgeComponent, WsCardComponent, WsTooltipDirective, IconComponent],
   templateUrl: './process-pending.component.html',
   styleUrl: './process-pending.component.scss',
 })
 export class ProcessPendingComponent implements OnInit {
   private readonly txApi = inject(TransactionsApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   readonly scope = input.required<ProcessPendingScope>();
   readonly scopeId = input<string | null>(null);
@@ -46,6 +51,14 @@ export class ProcessPendingComponent implements OnInit {
   readonly dispatching = signal(false);
   readonly cancelling = signal(false);
   readonly netError = signal(false);
+  readonly skipLogOpen = signal(false);
+  readonly copiedRef = signal<string | null>(null);
+
+  get resultSummary(): ProcessPendingResultSummary | null {
+    const raw = this.jobStatus()?.resultSummary;
+    if (!raw) return null;
+    try { return JSON.parse(raw) as ProcessPendingResultSummary; } catch { return null; }
+  }
 
   private _polling: Subscription | null = null;
 
@@ -148,5 +161,21 @@ export class ProcessPendingComponent implements OnInit {
       next: () => this.cancelling.set(false),
       error: () => this.cancelling.set(false),
     });
+  }
+
+  copyRef(ref: string): void {
+    navigator.clipboard.writeText(ref).then(() => {
+      this.copiedRef.set(ref);
+      setTimeout(() => this.copiedRef.set(null), 2000);
+    });
+  }
+
+  onOpenInFilter(): void {
+    const refs = this.resultSummary?.skipDetails.map(e => e.refNum).filter(Boolean).join(',');
+    if (!refs) return;
+    const url = this.router.serializeUrl(
+      this.router.createUrlTree(['/transactions'], { queryParams: { refs } }),
+    );
+    window.open(url, '_blank', 'noopener');
   }
 }

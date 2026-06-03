@@ -71,3 +71,43 @@ public sealed class TransactionValidateResponse
 }
 
 public sealed record TransactionExecuteAccepted(Guid JobId);
+
+// ── Update-from-Excel models ───────────────────────────────────────────────
+
+public sealed class FieldDiff
+{
+    public required string FieldName { get; init; }
+    public required string? OldValue { get; init; }
+    public required string? NewValue { get; init; }
+}
+
+public enum UpdateRowStatus
+{
+    WillUpdate,    // At least one diff — row will be applied
+    NoChanges,     // Identical to current DB state — will be silently skipped
+    Error,         // Blocked (Paid status, reference not found, etc.)
+    Warning,       // Read-only fields modified but row may still proceed
+}
+
+public sealed class TransactionUpdateRowPreviewResult
+{
+    public required int RowNumber { get; init; }
+    public required Dictionary<string, string> OriginalData { get; init; }
+    public required UpdateRowStatus Status { get; init; }
+    public required List<FieldDiff> Diffs { get; init; }
+    public required List<ValidationIssue> Issues { get; init; }
+
+    /// <summary>Null when ReferenceNumber not found.</summary>
+    public Guid? ExistingTransactionId { get; init; }
+}
+
+public sealed class TransactionUpdateValidateResponse
+{
+    public required int TotalRows { get; init; }
+    public required int WillUpdateCount { get; init; }
+    public required int NoChangesCount { get; init; }
+    public required int ErrorCount { get; init; }
+    public required List<TransactionUpdateRowPreviewResult> RowResults { get; init; }
+}
+
+public sealed record TransactionUpdateExecuteAccepted(Guid JobId);

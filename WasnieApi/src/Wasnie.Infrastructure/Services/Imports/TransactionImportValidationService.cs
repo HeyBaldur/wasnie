@@ -5,6 +5,7 @@ using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
+using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Infrastructure.Services.Imports;
@@ -20,8 +21,7 @@ public sealed class TransactionImportValidationService(
         RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(100));
 
-    private static readonly string[] DateFormats =
-        ["yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "M/d/yyyy", "d/M/yyyy", "yyyy/MM/dd"];
+    private static readonly string[] DateFormats = ["yyyy-MM-dd"];
 
     private static readonly DateOnly MinDate = new(2000, 1, 1);
 
@@ -39,6 +39,41 @@ public sealed class TransactionImportValidationService(
         var payeesByCode = await db.Payees
             .Select(p => new { p.EmployeeCode, p.Id, p.IsActive })
             .ToDictionaryAsync(p => p.EmployeeCode, StringComparer.OrdinalIgnoreCase, ct);
+
+        // Pre-load plan currencies for currency-vs-plan validation (WI-PROD-T-FIX-3).
+        // Step 1: collect payee IDs referenced in this batch.
+        var payeeIdsInBatch = new HashSet<Guid>();
+        foreach (var row in rows)
+        {
+            var code = GetField(row, mapping.PayeeCodeColumn);
+            if (!string.IsNullOrWhiteSpace(code) && payeesByCode.TryGetValue(code, out var p))
+                payeeIdsInBatch.Add(p.Id);
+        }
+
+        // Step 2: load all active assignments for those payees.
+        // Load full entities in-memory — EF Core does not reliably translate DateOnly
+        // owned-type comparisons (EffectivePeriod.Start/End) in SQL WHERE clauses.
+        var activeAssignments = payeeIdsInBatch.Count > 0
+            ? await db.PlanAssignments
+                .Where(pa => pa.Status == AssignmentStatus.Active
+                          && payeeIdsInBatch.Contains(pa.PayeeId))
+                .ToListAsync(ct)
+            : [];
+
+        // Step 3: load plan Currency+Name for all referenced plans (one query).
+        var planIds = activeAssignments.Select(pa => pa.PlanId).ToHashSet();
+        var planInfoById = planIds.Count > 0
+            ? (await db.CompensationPlans
+                .Where(p => planIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Currency, p.Name })
+                .ToListAsync(ct))
+                .ToDictionary(p => p.Id, p => (p.Currency, p.Name))
+            : new Dictionary<Guid, (string Currency, string Name)>();
+
+        // Step 4: build PayeeId → active-assignments lookup for O(1) per-row access.
+        var assignmentsByPayee = activeAssignments
+            .GroupBy(pa => pa.PayeeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var existingReferenceNumbers = new HashSet<string>(
             await db.CompensationTransactions
@@ -128,7 +163,7 @@ public sealed class TransactionImportValidationService(
             var dateStr = GetField(row, mapping.TransactionDateColumn);
             if (!TryParseDate(dateStr, out var transactionDate))
             {
-                issues.Add(Error("transactionDate", $"'{dateStr}' is not a recognisable date. Use YYYY-MM-DD.", IssueCategory.Format));
+                issues.Add(Error("transactionDate", $"Date '{dateStr}' is not in the required ISO 8601 format (YYYY-MM-DD). Examples: 2026-05-15, 2026-12-31.", IssueCategory.Format));
             }
             else if (transactionDate < MinDate)
             {
@@ -137,6 +172,32 @@ public sealed class TransactionImportValidationService(
             else if (transactionDate > today)
             {
                 issues.Add(Error("transactionDate", $"Transaction date '{transactionDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}' is in the future.", IssueCategory.Format));
+            }
+
+            // ── plan currency check ───────────────────────────────────────────
+            // Only when: payee resolved, currency format valid, date parsed successfully.
+            // If no active assignment covers txDate, currency cannot be validated yet —
+            // the transaction will be Pending until a PlanAssignment is created (Decision #54 skip logic).
+            if (!string.IsNullOrWhiteSpace(payeeCode)
+                && payeesByCode.TryGetValue(payeeCode, out var resolvedPayee)
+                && CurrencyRegex.IsMatch(currency)
+                && TryParseDate(dateStr, out var txDateForCurrencyCheck)
+                && assignmentsByPayee.TryGetValue(resolvedPayee.Id, out var payeeAssignments))
+            {
+                var assignmentForDate = payeeAssignments.FirstOrDefault(pa =>
+                    pa.EffectivePeriod is not null &&
+                    pa.EffectivePeriod.Start <= txDateForCurrencyCheck &&
+                    pa.EffectivePeriod.End >= txDateForCurrencyCheck);
+
+                if (assignmentForDate is not null
+                    && planInfoById.TryGetValue(assignmentForDate.PlanId, out var planInfo)
+                    && !string.Equals(currency, planInfo.Currency, StringComparison.OrdinalIgnoreCase))
+                {
+                    issues.Add(Error("currency",
+                        $"Currency mismatch: transaction is in {currency} but payee '{payeeCode}' " +
+                        $"is assigned to plan '{planInfo.Name}' denominated in {planInfo.Currency}.",
+                        IssueCategory.Reference));
+                }
             }
 
             // ── externalId (optional column) ──────────────────────────────────

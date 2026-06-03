@@ -83,6 +83,21 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
             : BadRequest(new { message = result.Error });
     }
 
+    [HttpPost("export")]
+    public async Task<IActionResult> Export([FromBody] PaginationQuery filter, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ExportTransactionsQuery(filter), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            // Propagate "too large" as 422 so the frontend can prompt user confirmation.
+            if (result.Error?.StartsWith("EXPORT_TOO_LARGE:", StringComparison.Ordinal) == true)
+                return UnprocessableEntity(new { message = result.Error });
+            return BadRequest(new { message = result.Error });
+        }
+        var export = result.Value!;
+        return File(export.Bytes, export.ContentType, export.FileName);
+    }
+
     public record AssignPayeeRequest(Guid PayeeId, string? Comment);
     public record ReassignPayeeRequest(Guid NewPayeeId, string Reason);
     public record PendingCountRequest(

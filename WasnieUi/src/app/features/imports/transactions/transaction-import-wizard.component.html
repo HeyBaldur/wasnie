@@ -1,8 +1,8 @@
 <app-shell>
   <ws-page-layout
-    icon="upload"
-    title="{{ 'IMPORTS.TRANSACTIONS.TITLE' | translate }}"
-    subtitle="{{ 'IMPORTS.TRANSACTIONS.SUBTITLE' | translate }}"
+    icon="{{ mode() === 'update' ? 'refresh' : 'upload' }}"
+    [title]="(mode() === 'update' ? 'IMPORTS.UPDATE.TITLE' : 'IMPORTS.TRANSACTIONS.TITLE') | translate"
+    [subtitle]="(mode() === 'update' ? 'IMPORTS.UPDATE.SUBTITLE' : 'IMPORTS.TRANSACTIONS.SUBTITLE') | translate"
     backLink="/transactions"
     [backLabel]="'TRANSACTIONS.TITLE' | translate"
   >
@@ -36,42 +36,75 @@
         icon="check-circle"
       />
 
-      @if (currentStep() === 'upload') {
-        <app-tx-upload-step (parsed)="onParsed($event)" />
+      @if (mode() === 'create') {
+        @if (currentStep() === 'upload') {
+          <app-tx-upload-step (parsed)="onParsed($event)" />
+        }
+        @if (currentStep() === 'map' && parseResult()) {
+          <app-tx-mapping-step
+            [parseResult]="parseResult()!"
+            [initialMapping]="columnMapping()"
+            (validated)="onValidated($event)"
+            (back)="onBackToUpload()"
+          />
+        }
+        @if (currentStep() === 'preview' && parseResult() && columnMapping() && validateResponse()) {
+          <app-tx-preview-step
+            [fileId]="parseResult()!.fileId"
+            [columnMapping]="columnMapping()!"
+            [validateResponse]="validateResponse()!"
+            (executed)="onExecuted($event)"
+            (back)="onBackToMap()"
+          />
+        }
+        @if (currentStep() === 'progress' && jobId()) {
+          <app-tx-progress-step
+            [jobId]="jobId()!"
+            (completed)="onCompleted($event)"
+            (retryRequested)="onRetryFromPreview()"
+          />
+        }
+        @if (currentStep() === 'complete' && importResult()) {
+          <app-tx-complete-step
+            [result]="importResult()!"
+            (importMore)="onImportMore()"
+          />
+        }
       }
 
-      @if (currentStep() === 'map' && parseResult()) {
-        <app-tx-mapping-step
-          [parseResult]="parseResult()!"
-          [initialMapping]="columnMapping()"
-          (validated)="onValidated($event)"
-          (back)="onBackToUpload()"
-        />
-      }
-
-      @if (currentStep() === 'preview' && parseResult() && columnMapping() && validateResponse()) {
-        <app-tx-preview-step
-          [fileId]="parseResult()!.fileId"
-          [columnMapping]="columnMapping()!"
-          [validateResponse]="validateResponse()!"
-          (executed)="onExecuted($event)"
-          (back)="onBackToMap()"
-        />
-      }
-
-      @if (currentStep() === 'progress' && jobId()) {
-        <app-tx-progress-step
-          [jobId]="jobId()!"
-          (completed)="onCompleted($event)"
-          (retryRequested)="onRetryFromPreview()"
-        />
-      }
-
-      @if (currentStep() === 'complete' && importResult()) {
-        <app-tx-complete-step
-          [result]="importResult()!"
-          (importMore)="onImportMore()"
-        />
+      @if (mode() === 'update') {
+        @if (currentStep() === 'upload') {
+          <app-tx-update-upload-step (parsed)="onUpdateParsed($event)" />
+        }
+        @if (currentStep() === 'map' && updateParseResult()) {
+          <app-tx-update-mapping-step
+            [parseResult]="updateParseResult()!"
+            (validated)="onUpdateValidated($event)"
+            (back)="onUpdateBackToUpload()"
+          />
+        }
+        @if (currentStep() === 'preview' && updateParseResult() && updateColumnMapping() && updateValidateResponse()) {
+          <app-tx-update-preview-step
+            [fileId]="updateParseResult()!.fileId"
+            [columnMapping]="updateColumnMapping()!"
+            [validateResponse]="updateValidateResponse()!"
+            (executed)="onUpdateExecuted($event)"
+            (back)="onUpdateBackToMap()"
+          />
+        }
+        @if (currentStep() === 'progress' && updateJobId()) {
+          <app-tx-update-progress-step
+            [jobId]="updateJobId()!"
+            (completed)="onUpdateCompleted($event)"
+            (retryRequested)="onUpdateRetry()"
+          />
+        }
+        @if (currentStep() === 'complete') {
+          <app-tx-update-complete-step
+            [result]="updateResult()"
+            (done)="onDone()"
+          />
+        }
       }
     </ws-wizard>
   </ws-page-layout>

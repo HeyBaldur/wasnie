@@ -22,6 +22,7 @@ export interface TransactionFilter {
   amountMax: number | null;
   unassignedOnly: boolean;
   amountSort: 'asc' | 'desc' | null;
+  referenceNumbers: string[];
 }
 
 export const EMPTY_FILTER: TransactionFilter = {
@@ -36,6 +37,7 @@ export const EMPTY_FILTER: TransactionFilter = {
   amountMax: null,
   unassignedOnly: false,
   amountSort: null,
+  referenceNumbers: [],
 };
 
 @Injectable({ providedIn: 'root' })
@@ -87,6 +89,7 @@ export class TransactionsStore {
     if (f.amountMin !== null || f.amountMax !== null) count++;
     if (f.unassignedOnly) count++;
     if (f.amountSort) count++;
+    if (f.referenceNumbers.length > 0) count++;
     return count;
   });
 
@@ -103,6 +106,30 @@ export class TransactionsStore {
     });
   }
 
+  // Single source of truth for TransactionFilter → API field names.
+  // Used by both _loadInternal (list) and toExportFilter (export) to guarantee identical predicates.
+  private static _buildFilterRecord(f: TransactionFilter): Record<string, string> {
+    const filters: Record<string, string> = {};
+    if (f.reference) filters['reference'] = f.reference;
+    if (f.statuses.length > 0) filters['statuses'] = f.statuses.join(',');
+    if (f.payeeIds.length > 0) filters['payeeIds'] = f.payeeIds.join(',');
+    if (f.txDateFrom) filters['dateFrom'] = f.txDateFrom;
+    if (f.txDateTo) filters['dateTo'] = f.txDateTo;
+    if (f.ingestedFrom) filters['ingestedFrom'] = f.ingestedFrom;
+    if (f.ingestedTo) filters['ingestedTo'] = f.ingestedTo;
+    if (f.amountMin !== null) filters['amountMin'] = String(f.amountMin);
+    if (f.amountMax !== null) filters['amountMax'] = String(f.amountMax);
+    if (f.unassignedOnly) filters['unassignedOnly'] = 'true';
+    if (f.amountSort) filters['amountSort'] = f.amountSort;
+    if (f.referenceNumbers.length > 0) filters['referenceNumbers'] = f.referenceNumbers.join(',');
+    return filters;
+  }
+
+  // Returns the filter as a flat object with PaginationQuery field names — for POST body to export.
+  toExportFilter(): Record<string, string> {
+    return TransactionsStore._buildFilterRecord(this.filter());
+  }
+
   private async _loadInternal(
     page: number,
     pageSize: number,
@@ -113,19 +140,7 @@ export class TransactionsStore {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const filters: Record<string, string> = {};
-
-      if (f.reference) filters['reference'] = f.reference;
-      if (f.statuses.length > 0) filters['statuses'] = f.statuses.join(',');
-      if (f.payeeIds.length > 0) filters['payeeIds'] = f.payeeIds.join(',');
-      if (f.txDateFrom) filters['dateFrom'] = f.txDateFrom;
-      if (f.txDateTo) filters['dateTo'] = f.txDateTo;
-      if (f.ingestedFrom) filters['ingestedFrom'] = f.ingestedFrom;
-      if (f.ingestedTo) filters['ingestedTo'] = f.ingestedTo;
-      if (f.amountMin !== null) filters['amountMin'] = String(f.amountMin);
-      if (f.amountMax !== null) filters['amountMax'] = String(f.amountMax);
-      if (f.unassignedOnly) filters['unassignedOnly'] = 'true';
-      if (f.amountSort) filters['amountSort'] = f.amountSort;
+      const filters = TransactionsStore._buildFilterRecord(f);
 
       const params: PaginationParams = {
         page,
@@ -210,6 +225,7 @@ export class TransactionsStore {
     if (f.amountMax !== null) params['amtMax'] = String(f.amountMax);
     if (f.unassignedOnly) params['unassigned'] = '1';
     if (f.amountSort) params['amtSort'] = f.amountSort;
+    if (f.referenceNumbers.length > 0) params['refs'] = f.referenceNumbers.join(',');
     return params;
   }
 
@@ -230,6 +246,7 @@ export class TransactionsStore {
     if (params['amtMax']) f.amountMax = Number(params['amtMax']) || null;
     if (params['unassigned'] === '1') f.unassignedOnly = true;
     if (params['amtSort'] === 'asc' || params['amtSort'] === 'desc') f.amountSort = params['amtSort'];
+    if (params['refs']) f.referenceNumbers = params['refs'].split(',').filter(Boolean);
     this.filter.set(f);
   }
 

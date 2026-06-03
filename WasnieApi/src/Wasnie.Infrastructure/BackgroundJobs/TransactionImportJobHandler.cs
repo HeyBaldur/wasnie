@@ -10,6 +10,7 @@ using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Exceptions;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Entities;
@@ -65,6 +66,7 @@ public sealed class TransactionImportJobHandler(
         var createdTransactions = new List<CompensationTransaction>(totalValidRows);
         var processedSoFar = 0;
         var skippedByIdempotency = 0;
+        var skippedByDomainValidation = 0;
 
         // Process in chunks of 50, each in its own transaction.
         var chunks = validRows
@@ -152,6 +154,17 @@ public sealed class TransactionImportJobHandler(
 
                     createdTransactions.Add(transaction);
                 }
+                catch (DomainException domEx)
+                {
+                    // Per-row validation failure at import time (e.g. currency mismatch that slipped past
+                    // Step 3 preview — belt-and-suspenders). Transaction was already saved as Pending;
+                    // no credits allocated. Clear tracker so remaining rows in the chunk can proceed.
+                    logger.LogWarning(
+                        "TransactionImportJob {JobId}: skipping credit allocation for ref '{RefNum}' — {Reason}",
+                        context.JobId, refNum, domEx.Message);
+                    db.ChangeTracker.Clear();
+                    skippedByDomainValidation++;
+                }
                 catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
                 {
                     logger.LogWarning(
@@ -171,7 +184,7 @@ public sealed class TransactionImportJobHandler(
 
         var completedAt = clock.UtcNowOffset;
         var totalCreated = createdTransactions.Count;
-        var totalSkipped = skippedCount + skippedByIdempotency;
+        var totalSkipped = skippedCount + skippedByIdempotency + skippedByDomainValidation;
 
         logger.LogInformation(
             "TransactionImportJob {JobId}: {Created} transactions created, {Skipped} skipped. " +
@@ -259,17 +272,7 @@ public sealed class TransactionImportJobHandler(
     private static string GetField(Dictionary<string, string> row, string column) =>
         row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
 
-    private static readonly string[] DateFormats =
-        ["yyyy-MM-dd", "MM/dd/yyyy", "dd/MM/yyyy", "M/d/yyyy", "d/M/yyyy", "yyyy/MM/dd"];
-
-    private static bool TryParseDate(string s, out DateOnly result)
-    {
-        foreach (var fmt in DateFormats)
-        {
-            if (DateOnly.TryParseExact(s, fmt, null, System.Globalization.DateTimeStyles.None, out result))
-                return true;
-        }
-        result = default;
-        return false;
-    }
+    private static bool TryParseDate(string s, out DateOnly result) =>
+        DateOnly.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out result);
 }

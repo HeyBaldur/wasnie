@@ -98,6 +98,16 @@ public sealed class ListTransactionsHandler(
         if (p.UnassignedOnly == true)
             query = query.Where(t => t.PayeeId == null);
 
+        if (!string.IsNullOrWhiteSpace(p.ReferenceNumbers))
+        {
+            var refList = p.ReferenceNumbers.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToList();
+            if (refList.Count > 0)
+                query = query.Where(t => refList.Contains(t.ReferenceNumber));
+        }
+
         // ── Sort ────────────────────────────────────────────────────────────────
 
         // AmountSort overrides SortBy when present.

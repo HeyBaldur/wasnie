@@ -18,6 +18,7 @@ public sealed class BackgroundJobRecordConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.ProgressCurrent).IsRequired();
         builder.Property(x => x.ProgressTotal).IsRequired();
         builder.Property(x => x.ErrorMessage).HasMaxLength(2000);
+        builder.Property(x => x.ResultSummary);
         builder.Property(x => x.EnqueuedAtUtc).IsRequired();
         builder.Property(x => x.StartedAtUtc);
         builder.Property(x => x.CompletedAtUtc);
