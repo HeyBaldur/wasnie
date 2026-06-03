@@ -521,7 +521,31 @@
       "CANCELLED_RESULT": "Cancelado. {{processed}} transacciones procesadas, {{remaining}} pendientes.",
       "FAILED": "Error en el procesamiento",
       "NET_ERROR": "Error de red — reintentando…"
-    }
+    },
+    "FILTER": {
+      "TITLE": "Filtros",
+      "CLEAR": "Limpiar todo",
+      "REFERENCE": "Referencia",
+      "REFERENCE_PLACEHOLDER": "Buscar por referencia…",
+      "STATUS": "Estado",
+      "PAYEE": "Vendedor",
+      "PAYEE_PLACEHOLDER": "Buscar vendedor…",
+      "UNASSIGNED": "Sin asignar",
+      "UNASSIGNED_LABEL": "Solo sin asignar",
+      "TX_DATE_FROM": "Fecha tx desde",
+      "TX_DATE_TO": "Fecha tx hasta",
+      "ING_DATE_FROM": "Creado desde",
+      "ING_DATE_TO": "Creado hasta",
+      "AMT_MIN": "Importe mín.",
+      "AMT_MAX": "Importe máx.",
+      "AMT_SORT": "Orden importe",
+      "AMT_SORT_NONE": "Orden predeterminado",
+      "AMT_SORT_ASC": "Menor primero",
+      "AMT_SORT_DESC": "Mayor primero"
+    },
+    "COL_INGESTED": "Creado",
+    "COUNT_FILTERED": "Mostrando {{showing}} de {{filtered}} ({{total}} total)",
+    "COUNT_TOTAL": "{{total}} transacciones"
   },
   "ASSIGNMENTS": {
     "TITLE": "Asignaciones",

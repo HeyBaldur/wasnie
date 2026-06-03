@@ -521,7 +521,31 @@
       "CANCELLED_RESULT": "Anulowano. Przetworzono {{processed}} transakcji, pozostało {{remaining}}.",
       "FAILED": "Błąd przetwarzania",
       "NET_ERROR": "Błąd sieci — ponawianie…"
-    }
+    },
+    "FILTER": {
+      "TITLE": "Filtry",
+      "CLEAR": "Wyczyść wszystko",
+      "REFERENCE": "Referencja",
+      "REFERENCE_PLACEHOLDER": "Szukaj po referencji…",
+      "STATUS": "Status",
+      "PAYEE": "Sprzedawca",
+      "PAYEE_PLACEHOLDER": "Szukaj sprzedawcy…",
+      "UNASSIGNED": "Nieprzypisane",
+      "UNASSIGNED_LABEL": "Tylko nieprzypisane",
+      "TX_DATE_FROM": "Data tx od",
+      "TX_DATE_TO": "Data tx do",
+      "ING_DATE_FROM": "Utworzono od",
+      "ING_DATE_TO": "Utworzono do",
+      "AMT_MIN": "Kwota min.",
+      "AMT_MAX": "Kwota maks.",
+      "AMT_SORT": "Sortowanie kwoty",
+      "AMT_SORT_NONE": "Domyślna kolejność",
+      "AMT_SORT_ASC": "Najniższe pierwsze",
+      "AMT_SORT_DESC": "Najwyższe pierwsze"
+    },
+    "COL_INGESTED": "Utworzono",
+    "COUNT_FILTERED": "Pokazuje {{showing}} z {{filtered}} (łącznie {{total}})",
+    "COUNT_TOTAL": "{{total}} transakcji"
   },
   "ASSIGNMENTS": {
     "TITLE": "Przypisania",

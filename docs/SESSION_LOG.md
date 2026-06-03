@@ -10,6 +10,35 @@
 
 ---
 
+## 2026-06-03 — WI-PROD-I.2: Advanced transaction filter
+
+**WI:** WI-PROD-I.2
+**Status:** DONE ✅
+**Type:** Backend query extension + Frontend filter panel + URL sync.
+**Test count:** 752 backend (312 unit + 440 integration), 2 skipped — unchanged. Frontend 159 — unchanged. Both builds clean. Tests deferred per owner instruction; see TODO_TESTS in PROJECT_STATUS.
+
+### What was built
+
+**Backend:**
+- `PaginationQuery` extended with 8 new optional fields: `Reference`, `Statuses` (comma-separated), `PayeeIds` (comma-separated), `IngestedFrom`, `IngestedTo`, `AmountMin`, `AmountMax`, `UnassignedOnly`, `AmountSort`.
+- `ListTransactionsHandler` applies all 8 filters. `Reference` uses `.ToLower().Contains()` (case-insensitive). `Statuses`/`PayeeIds` parse comma-separated strings. `UnfilteredTotal` added as a separate `CountAsync()` before filters are applied.
+- `PagedResult<T>` extended with `int? UnfilteredTotal` (nullable; only populated by the transactions endpoint).
+- Migration `P3_TransactionPayeeIndex`: creates `IX_CompensationTransactions_TenantId_PayeeId` for multi-payee filter performance. Index was already defined in EF config; migration applies it to the DB.
+- Count alignment with `GetPendingTransactionsCountQuery` guaranteed: both use the same EF LINQ predicates on `Status`, `PayeeId`, `TransactionDate`.
+
+**Frontend:**
+- `TransactionFilter` interface + `EMPTY_FILTER` constant added to `transactions.store.ts`.
+- `TransactionsStore` rewritten: single `filter` signal replaces 4 individual filter signals. New signals: `activeFilterCount`, `hasActiveFilters`, `unfilteredTotal`. URL sync: `toQueryParams()` and `loadFromQueryParams()`. Legacy computed aliases kept for `ProcessPendingComponent` backward compat.
+- `TransactionFilterComponent` (new, `transactions/filter/`): collapsible ws-card panel with ReactiveFormsModule form. Rows: (1) reference input + status toggle chips, (2) payee async select + chips + unassigned toggle, (3) tx date from/to + ingested date from/to, (4) amount min/max + amount sort. Debounce: reference 300ms, amounts 400ms, dates immediate. Sync to parent via `filterChange` output. Fixed: `untracked()` on `selectedPayees` read inside `effect()` to prevent infinite loop.
+- `TransactionsListComponent`: uses `TransactionFilterComponent`, URL sync via `ActivatedRoute` + `Router.navigate(replaceUrl)`, count header ("Showing X of Y (Z total)"), `DateFormatPipe` applied to transaction date and ingested date columns, `ingestedAt` added to `Transaction` interface, status tabs feed `statusesFilter`.
+
+**Decision: Eligible tab removed.**
+`TransactionStatus.Eligible` is never set by any handler in the current codebase. The tab was always empty and confusing users who expected it to match something. Removed from the status segmented control. Enum value preserved in the domain for future use (when `MarkEligible` is eventually wired). Documented here.
+
+**Binding rule added to `14-forbidden-patterns.md`:** Every filter endpoint and its corresponding count query MUST share identical predicate logic. Duplicate WHERE clauses between count and list queries are forbidden.
+
+---
+
 ## 2026-06-03 (afternoon) — WI-CALC-A.2.5-FIX: DI registration bug + UI design pass
 
 **WI:** WI-CALC-A.2.5-FIX

@@ -142,9 +142,6 @@ export class WsSelectComponent implements ControlValueAccessor {
     const triggerEl = this.host.nativeElement as HTMLElement;
     const triggerRect = triggerEl.getBoundingClientRect();
 
-    // Inside a modal, use position: fixed so overflow: hidden on the dialog doesn't clip.
-    // Always use viewport bounds for space calculations regardless of mode.
-    const modalDialog = triggerEl.closest('.ws-modal__dialog') as HTMLElement | null;
     const containerBottom = window.innerHeight - 8;
     const containerTop = 8;
 
@@ -167,19 +164,17 @@ export class WsSelectComponent implements ControlValueAccessor {
       this.constrainedListHeight.set(Math.max(spaceBelow, spaceAbove) - 8);
     }
 
-    if (modalDialog) {
-      this.dropdownFixed.set(true);
-      this.dropdownLeft.set(triggerRect.left);
-      this.dropdownWidth.set(triggerRect.width);
-      if (this.dropdownUpward()) {
-        this.dropdownFixedBottom.set(window.innerHeight - triggerRect.top + 4);
-        this.dropdownFixedTop.set(null);
-      } else {
-        this.dropdownFixedTop.set(triggerRect.bottom + 4);
-        this.dropdownFixedBottom.set(null);
-      }
+    // Always use position:fixed so the dropdown escapes any overflow-constrained ancestor
+    // (filter panels, cards, page scroll containers) — same strategy as ws-date-picker.
+    this.dropdownFixed.set(true);
+    this.dropdownLeft.set(triggerRect.left);
+    this.dropdownWidth.set(triggerRect.width);
+    if (this.dropdownUpward()) {
+      this.dropdownFixedBottom.set(window.innerHeight - triggerRect.top + 4);
+      this.dropdownFixedTop.set(null);
     } else {
-      this.dropdownFixed.set(false);
+      this.dropdownFixedTop.set(triggerRect.bottom + 4);
+      this.dropdownFixedBottom.set(null);
     }
 
     this.isOpen.set(true);

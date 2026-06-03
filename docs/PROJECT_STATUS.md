@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-03 — WI-CALC-A.2.5-FIX Done. DI bug fixed; UI design pass.
-**Updated by:** Rodolfo Calvo (WI-CALC-A.2.5-FIX)
+**Last updated:** 2026-06-03 — WI-PROD-I.2 Done. Advanced transaction filter (8 criteria + AND logic + URL sync + count header + Eligible tab removed).
+**Updated by:** Rodolfo Calvo (WI-PROD-I.2)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,14 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-03. WI-CALC-A.2.5-FIX DONE. DI registration bug fixed + UI design pass applied to three surfaces. Backend: 752 tests (312 unit + 440 integration), 2 skipped. Frontend: 159 tests. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
+**Right now we are:** End-of-day 2026-06-03. WI-PROD-I.2 DONE. Advanced transaction filter with 8 criteria (reference, payees, date ranges, amount range, status multi-select, unassigned toggle, amount sort), URL sync, count header, Eligible tab removed. Backend: 752 tests (312 unit + 440 integration), 2 skipped. Frontend: 159 tests. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
+
+**Most recent significant work (2026-06-03 — WI-PROD-I.2: Advanced transaction filter):**
+- **Backend:** `PaginationQuery` extended with 8 new filter fields: `Reference` (substring), `Statuses` (comma-separated multi-status), `PayeeIds` (comma-separated multi-payee), `IngestedFrom`/`IngestedTo`, `AmountMin`/`AmountMax`, `UnassignedOnly`, `AmountSort`. `ListTransactionsHandler` applies all filters. `PagedResult<T>` extended with `UnfilteredTotal?`. Migration `P3_TransactionPayeeIndex` adds `(TenantId, PayeeId)` index.
+- **Frontend:** New `TransactionFilterComponent` (collapsible ws-card panel). Status multi-select toggle chips. Payee multi-select (ws-select async + removable chips). Date pickers × 4. Amount range inputs. Amount sort select. Debounced reference input (300ms). `TransactionsStore` rewritten with `TransactionFilter` composite object, `toQueryParams()`/`loadFromQueryParams()` URL sync. Legacy signal aliases kept for `ProcessPendingComponent` compat. Count header "Showing X of Y (Z total)". `ingestedAt` added to frontend model + shown as "Created" column.
+- **Decision: Eligible tab removed.** `TransactionStatus.Eligible` is never set today — tab was always empty and confusing. Removed from status tabs and filter chips. Enum value preserved.
+- **Tests: deferred per owner instruction.** See TODO_TESTS section.
+- **Test count: 752 backend + 159 frontend — unchanged. Both builds clean.**
 
 **Most recent significant work (2026-06-03 — WI-CALC-A.2.5: Procesar Pending — import warning + Hangfire job + UI):**
 - **Decision #53:** `TransactionImportValidationService` now emits a `Warning` (IssueCategory.Required) when `payeeCode` is blank and `Transaction.PayeeId` is Optional. Message: "No Staff ID provided — this transaction will be imported as Unassigned and requires manual assignment for commission calculation." Row remains importable; comp manager decides whether to continue.
@@ -273,6 +280,34 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 - WI-P2-03c — manual transaction entry UI (needs `DESIGN_SYSTEM.md`) ← next recommended
 - Phase 2 Calculation Engine — core product IP
 - Marketing / content strategy (planned for parallel work once Phase 1 fully closed)
+
+---
+
+## TODO_TESTS — Deferred test backfill
+
+These tests were explicitly deferred by owner instruction on 2026-06-03 (WI-PROD-I.2). Add in a dedicated test WI before the first paying customer.
+
+### WI-PROD-I.2 — Advanced transaction filter
+
+**Backend unit tests:**
+- `ListTransactionsHandler`: each of the 8 filter fields applied in isolation, verify SQL WHERE predicate.
+- `ListTransactionsHandler`: multiple filters combined (AND logic).
+- `ListTransactionsHandler`: `Statuses` comma-parsing, invalid values ignored.
+- `ListTransactionsHandler`: `PayeeIds` comma-parsing, invalid GUIDs ignored.
+- `ListTransactionsHandler`: `UnfilteredTotal` returned correctly even when filters reduce page to 0.
+
+**Backend integration tests:**
+- End-to-end: seed 50 transactions with mixed statuses, payees, amounts, dates → apply each filter → verify count + items.
+- Count alignment: filter(Status=Pending, PayeeId=X, DateFrom, DateTo) count == GetPendingTransactionsCountQuery(ByPayeeAndPeriod, X, DateFrom, DateTo).
+
+**Frontend component tests:**
+- `TransactionFilterComponent`: status chip toggles (add/remove, multi-select).
+- `TransactionFilterComponent`: payee chip add and removal.
+- `TransactionFilterComponent`: clear all resets form and emits `cleared`.
+- `TransactionFilterComponent`: debounce — reference input emits filterChange after 300ms.
+- `TransactionsListComponent`: URL sync — loadFromQueryParams called on init with URL params.
+- `TransactionsStore`: `toQueryParams()` serializes all active filters.
+- `TransactionsStore`: `loadFromQueryParams()` deserializes and applies filters.
 
 ---
 

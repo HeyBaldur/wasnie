@@ -18,6 +18,7 @@ export interface Transaction {
   amount: number;
   currency: string;
   transactionDate: string;
+  ingestedAt: string;
   source: TransactionSource;
   status: TransactionStatus;
   payeeName?: string | null;

@@ -289,6 +289,12 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Filter/count query alignment violations
+
+- ❌ **A list-endpoint filter query and its corresponding count query using DIFFERENT predicates** (WI-PROD-I.2, 2026-06-03). If `GetPendingTransactionsCountQuery.CountByPayeeAndPeriod` filters `Status==Pending && PayeeId==id && TransactionDate between start and end`, then the Transactions list endpoint with the equivalent filter combination MUST produce the same count. Duplicate WHERE clauses between count and list queries cause the plan-page "77 Pending" badge to disagree with the filter result total — a trust-destroying bug. **Rule:** Extract the predicate into a shared helper or verify alignment by code review whenever either the count handler or the list handler is modified.
+
+---
+
 ## Claude Code autonomy violations
 
 - ❌ Claude Code performing ANY git operation (file 13, R13.2)

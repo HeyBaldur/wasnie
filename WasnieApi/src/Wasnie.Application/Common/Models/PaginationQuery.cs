@@ -17,4 +17,15 @@ public class PaginationQuery
     public string? Source { get; set; }
     public DateOnly? DateFrom { get; set; }
     public DateOnly? DateTo { get; set; }
+
+    // Extended transaction filters (WI-PROD-I.2)
+    public string? Reference { get; set; }        // substring match on ReferenceNumber
+    public string? Statuses { get; set; }          // comma-separated TransactionStatus values
+    public string? PayeeIds { get; set; }          // comma-separated Guid values
+    public DateTimeOffset? IngestedFrom { get; set; }
+    public DateTimeOffset? IngestedTo { get; set; }
+    public decimal? AmountMin { get; set; }
+    public decimal? AmountMax { get; set; }
+    public bool? UnassignedOnly { get; set; }
+    public string? AmountSort { get; set; }        // "asc" | "desc" — sort by Amount
 }

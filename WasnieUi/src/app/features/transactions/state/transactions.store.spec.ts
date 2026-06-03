@@ -13,6 +13,7 @@ const mockTransaction: Transaction = {
   amount: 500,
   currency: 'USD',
   transactionDate: '2024-01-15',
+    ingestedAt: '2024-01-15T10:00:00Z',
   source: TransactionSource.Manual,
   status: TransactionStatus.Pending,
 };

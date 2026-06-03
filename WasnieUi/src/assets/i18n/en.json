@@ -634,7 +634,31 @@
       "CANCELLED_RESULT": "Cancelled. {{processed}} transactions processed, {{remaining}} remaining.",
       "FAILED": "Processing failed",
       "NET_ERROR": "Network error — retrying…"
-    }
+    },
+    "FILTER": {
+      "TITLE": "Filters",
+      "CLEAR": "Clear all",
+      "REFERENCE": "Reference",
+      "REFERENCE_PLACEHOLDER": "Search by reference…",
+      "STATUS": "Status",
+      "PAYEE": "Payee",
+      "PAYEE_PLACEHOLDER": "Search payee…",
+      "UNASSIGNED": "Unassigned",
+      "UNASSIGNED_LABEL": "Unassigned only",
+      "TX_DATE_FROM": "Tx date from",
+      "TX_DATE_TO": "Tx date to",
+      "ING_DATE_FROM": "Created from",
+      "ING_DATE_TO": "Created to",
+      "AMT_MIN": "Amount min",
+      "AMT_MAX": "Amount max",
+      "AMT_SORT": "Amount sort",
+      "AMT_SORT_NONE": "Default order",
+      "AMT_SORT_ASC": "Lowest first",
+      "AMT_SORT_DESC": "Highest first"
+    },
+    "COL_INGESTED": "Created",
+    "COUNT_FILTERED": "Showing {{showing}} of {{filtered}} ({{total}} total)",
+    "COUNT_TOTAL": "{{total}} transactions"
   },
   "ASSIGNMENTS": {
     "TITLE": "Assignments",

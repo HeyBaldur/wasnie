@@ -17,6 +17,12 @@
   border-color: var(--color-border-default);
 }
 
+.ws-card--raised {
+  background: var(--color-bg-surface-raised);
+  box-shadow: none;
+  border-color: var(--color-border-default);
+}
+
 .ws-card--interactive {
   cursor: pointer;
 
