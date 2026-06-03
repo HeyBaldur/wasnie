@@ -10,6 +10,60 @@
 
 ---
 
+## 2026-06-03 — WI-CALC-A.2.5: Procesar Pending — import wizard warning + Hangfire job + UI
+
+**WI:** WI-CALC-A.2.5 — Decisions #53 + #54
+**Status:** DONE ✅
+**Type:** Backend + Frontend feature implementation + tests.
+**Test count:** Backend 743 → 752 (+9 — 5 unit + 4 integration). Frontend 154 → 159 (+5). Build clean.
+
+### What was built
+
+**Decision #53 — Import wizard validation warning:**
+- `TransactionImportValidationService`: blank payeeCode when Optional now emits a `Warning` (IssueCategory.Required, not Error). Message explains Unassigned status and manual assignment requirement. Row remains importable.
+- Existing test `Validate_EmptyPayeeCode_WhenOptional_NoError` updated to `Validate_EmptyPayeeCode_WhenOptional_EmitsWarning_NotError` (behavior change). New test for message content added.
+
+**Decision #54 — ProcessPendingTransactionsJob (backend):**
+- `ProcessPendingScope` enum: ByPlanAssignment / ByPlan / ByPayeeAndPeriod.
+- `ProcessPendingTransactionsPayload` (Application layer, Hangfire payload).
+- `ProcessPendingTransactionsCommand` (IMoneyCriticalCommand) + validator + command handler: RBAC, count candidates, enqueue job, return `{jobId, candidateCount}`.
+- `GetPendingTransactionsCountQuery` + handler: lightweight count for badge UI.
+- `ProcessPendingTransactionsJobHandler` (Infrastructure): loads candidates by scope, applies skipping rule (skip Pending txns with any non-superseded Credits), chunks of 50, honors cancellation at chunk boundary, audit-logs the run.
+- New permission: `Transactions.ProcessPending` (TenantAdmin + CompManager, code-only).
+- `AuditActions.PendingTransactionsProcessed` added.
+- Fix applied: load full `PlanAssignment` entity instead of projecting `DateRange` (EF Core owned-type projection restriction).
+
+**Cancellation support (job infrastructure):**
+- `JobState` extended: `Cancelling = 5`, `Cancelled = 6` (stored as string, no migration).
+- `BackgroundJobRecord` gains `RequestCancellation()` and `MarkCancelled()`.
+- `IBackgroundJobService` gains `CancelJobAsync(jobId, tenantId)` and `MarkCancelledAsync(jobId)`.
+- `HangfireBackgroundJobService` implements both; `CancelJobAsync` calls `hangfireClient.Delete(hangfireJobId)`.
+- `HangfireJobDispatcher` catches `OperationCanceledException` → `MarkCancelledAsync` (not `MarkFailedAsync`).
+- `POST /api/jobs/{id}/cancel` endpoint added to `JobsController`.
+
+**New API endpoints:**
+- `GET /api/assignments/{id}` — new `GetAssignmentByIdQuery` + handler (needed for the new detail page).
+- `GET /api/transactions/pending-count?scope=…&scopeId=…&periodStart=…&periodEnd=…`
+- `POST /api/transactions/process-pending` — returns `{jobId, candidateCount}` (202 Accepted).
+
+**Decision #54 — UI (frontend):**
+- `ProcessPendingComponent` (standalone, `process-pending/`): inputs `scope`, `scopeId`, `periodStart`, `periodEnd`; fetches count on init; shows badge ("X Pending elegibles para procesamiento"), volume notice when > 5,000, progress bar + Cancel button during execution, terminal state messages.
+- Polling: `timer(0, 3000) + takeUntilDestroyed + switchMap` (same pattern as import wizard). Cancel calls `POST /api/jobs/{id}/cancel`.
+- `AssignmentDetailComponent` + route `/assignments/:assignmentId` — new page, mirrors existing detail pages; shows assignment details + ProcessPending section (ByPlanAssignment scope).
+- `PlanDetailComponent` assignments tab: `ProcessPendingComponent` added (ByPlan scope), gated by `*hasPermission="'Transactions.ProcessPending'"`.
+- `TransactionsListComponent`: `ProcessPendingComponent` shown when payeeId + dateFrom + dateTo filters all set (ByPayeeAndPeriod scope). `TransactionsStore` extended with `payeeIdFilter`, `dateFromFilter`, `dateToFilter` signals + setters.
+- i18n: `TRANSACTIONS.PROCESS_PENDING.*` (11 keys) + `ASSIGNMENTS.ERROR_LOAD` in EN/ES/PL.
+
+### Pre-existing issue flagged
+Angular initial bundle: 562.85KB > 500KB warning budget. Pre-existing before this WI. New components are all lazy-loaded (do not contribute to initial bundle).
+
+### Deferred
+- Period-close scheduling, recurring jobs — V2 per Decision #54.
+- Quota attainment service — WI-CALC-A.3.
+- Payout Engine — WI-CALC-A.4.
+
+---
+
 ## 2026-06-02 (afternoon) — Documentation gap repaired + design iteration on Pending transaction handling
 
 **Type:** Design documentation only. No code, no tests, no builds, no migrations.

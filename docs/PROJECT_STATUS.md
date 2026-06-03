@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-02 — Decisions #53 + #54 closed; #55–#64 backfilled from chat; WI-CALC-A.2.5 added to sequence (Procesar Pending: import wizard warning + manual button + Hangfire job).
-**Updated by:** Rodolfo Calvo (WI-DOCS-FULL — Decisions #53 + #54; WI-CALC-MODEL Part 1 backfill #55–#64; WI-CALC-A.2.5)
+**Last updated:** 2026-06-03 — WI-CALC-A.2.5 Done. Decisions #53 + #54 fully implemented.
+**Updated by:** Rodolfo Calvo (WI-CALC-A.2.5)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,17 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-02. WI-FRONTEND-FIX-1 DONE. View Rule page bugs fixed (pre-existing; discovered during WI-CALC-A.2 smoke test). Backend: 743 tests passing (307 unit + 436 integration), 2 skipped. Frontend: 154 tests (+11). Next: WI-CALC-A.2.5 (Procesar Pending: import wizard validation warning + manual "Procesar Pending" button + Hangfire job — Decisions #53 + #54).
+**Right now we are:** End-of-day 2026-06-03. WI-CALC-A.2.5 DONE. Procesar Pending fully implemented: import warning for missing Staff ID (Decision #53), ProcessPendingTransactionsCommand + Hangfire job with chunking/skipping rule/cancellation (Decision #54), three UI surfaces with badge + volume notice + progress + cancel. Backend: 752 tests passing (312 unit + 440 integration), 2 skipped. Frontend: 159 tests (+5). Next: WI-CALC-A.3 (Quota Attainment Service).
+
+**Most recent significant work (2026-06-03 — WI-CALC-A.2.5: Procesar Pending — import warning + Hangfire job + UI):**
+- **Decision #53:** `TransactionImportValidationService` now emits a `Warning` (IssueCategory.Required) when `payeeCode` is blank and `Transaction.PayeeId` is Optional. Message: "No Staff ID provided — this transaction will be imported as Unassigned and requires manual assignment for commission calculation." Row remains importable; comp manager decides whether to continue.
+- **Decision #54 — Backend:** New `ProcessPendingTransactionsCommand` (IMoneyCriticalCommand) + `ProcessPendingScope` enum (ByPlanAssignment / ByPlan / ByPayeeAndPeriod). `ProcessPendingTransactionsJobHandler` Hangfire job: loads candidates by scope, applies skipping rule (skip transactions with non-superseded Credits from any plan), processes in chunks of 50, honors `CancellationToken` at chunk boundary, audit-logs the run. New permission: `Transactions.ProcessPending` (TenantAdmin + CompManager). New query: `GetPendingTransactionsCountQuery` for lightweight badge count.
+- **Cancellation support:** `JobState` enum extended with `Cancelling` and `Cancelled` values (stored as string, no migration needed). `BackgroundJobRecord` gains `RequestCancellation()` and `MarkCancelled()`. `IBackgroundJobService` gains `CancelJobAsync()` and `MarkCancelledAsync()`. `HangfireJobDispatcher` catches `OperationCanceledException` → marks job Cancelled instead of Failed. `POST /api/jobs/{id}/cancel` endpoint added.
+- **New endpoints:** `GET /api/transactions/pending-count`, `POST /api/transactions/process-pending`, `GET /api/assignments/{id}` (PlanAssignment detail page required a GetByIdQuery).
+- **Decision #54 — Frontend:** `ProcessPendingComponent` (standalone) takes `scope`, `scopeId`, `periodStart`, `periodEnd` inputs; fetches candidate count on init; shows badge, volume notice when > 5,000, progress bar + Cancel button during job execution, terminal states. Added to: (a) new `AssignmentDetailComponent` at `/assignments/:assignmentId` (ByPlanAssignment scope); (b) `PlanDetailComponent` assignments tab (ByPlan scope); (c) `TransactionsListComponent` when payee+period filters are active (ByPayeeAndPeriod scope). `TransactionsStore` extended with `payeeIdFilter`, `dateFromFilter`, `dateToFilter` signals.
+- **i18n:** `TRANSACTIONS.PROCESS_PENDING.*` + `ASSIGNMENTS.ERROR_LOAD` added in EN/ES/PL.
+- **Pre-existing issue flagged:** Angular initial bundle 562.85KB (500KB warning budget). Pre-existing before this WI; new components are all lazy-loaded.
+- **Test count: 743 → 752 backend (+9), 154 → 159 frontend (+5). Build clean.**
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.

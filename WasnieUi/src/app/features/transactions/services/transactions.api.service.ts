@@ -4,6 +4,32 @@ import { Observable } from 'rxjs';
 import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
+import { JobState } from '../../imports/transactions/models/transaction-import.models';
+
+export type ProcessPendingScope = 'ByPlanAssignment' | 'ByPlan' | 'ByPayeeAndPeriod';
+
+export interface ProcessPendingRequest {
+  scope: ProcessPendingScope;
+  scopeId?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+}
+
+export interface ProcessPendingResponse {
+  jobId: string;
+  candidateCount: number;
+}
+
+export interface JobStatus {
+  id: string;
+  state: JobState;
+  progressCurrent: number;
+  progressTotal: number;
+  errorMessage: string | null;
+  enqueuedAtUtc: string;
+  startedAtUtc: string | null;
+  completedAtUtc: string | null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TransactionsApiService {
@@ -28,5 +54,25 @@ export class TransactionsApiService {
 
   reassignPayee(transactionId: string, request: ReassignPayeeRequest): Observable<Transaction> {
     return this.http.post<Transaction>(`${this.base}/${transactionId}/reassign-payee`, request);
+  }
+
+  getPendingCount(scope: ProcessPendingScope, scopeId?: string | null, periodStart?: string | null, periodEnd?: string | null): Observable<{ count: number }> {
+    const params: Record<string, string> = { scope };
+    if (scopeId) params['scopeId'] = scopeId;
+    if (periodStart) params['periodStart'] = periodStart;
+    if (periodEnd) params['periodEnd'] = periodEnd;
+    return this.http.get<{ count: number }>(`${this.base}/pending-count`, { params });
+  }
+
+  processPending(request: ProcessPendingRequest): Observable<ProcessPendingResponse> {
+    return this.http.post<ProcessPendingResponse>(`${this.base}/process-pending`, request);
+  }
+
+  getJobStatus(jobId: string): Observable<JobStatus> {
+    return this.http.get<JobStatus>(`/api/jobs/${jobId}`);
+  }
+
+  cancelJob(jobId: string): Observable<void> {
+    return this.http.post<void>(`/api/jobs/${jobId}/cancel`, {});
   }
 }

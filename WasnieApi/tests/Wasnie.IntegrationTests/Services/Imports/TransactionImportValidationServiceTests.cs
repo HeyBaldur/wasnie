@@ -159,15 +159,33 @@ public sealed class TransactionImportValidationServiceTests
     }
 
     [Fact]
-    public async Task Validate_EmptyPayeeCode_WhenOptional_NoError()
+    public async Task Validate_EmptyPayeeCode_WhenOptional_EmitsWarning_NotError()
     {
-        // Decision D: when Transaction.PayeeId is Optional, blank payeeCode is accepted (unassigned).
+        // Decision #53: when Transaction.PayeeId is Optional, blank payeeCode emits a Warning (not Error).
+        // Row remains importable; comp manager decides whether to continue.
         await using var db = CreateDb(TenantA);
         var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
         var results = await sut.ValidateAsync([ValidRow(code: "")], DefaultMapping());
 
         results[0].HasErrors.Should().BeFalse();
-        results[0].Issues.Should().NotContain(i => i.Field == "payeeCode" && i.Severity == IssueSeverity.Error);
+        results[0].HasWarnings.Should().BeTrue();
+        var issue = results[0].Issues.Should().ContainSingle(i => i.Field == "payeeCode").Subject;
+        issue.Severity.Should().Be(IssueSeverity.Warning);
+        issue.Category.Should().Be(IssueCategory.Required);
+        issue.Message.Should().Contain("Staff ID");
+    }
+
+    [Fact]
+    public async Task Validate_EmptyPayeeCode_WhenOptional_MessageDescribesManualAssignment()
+    {
+        // The warning message must guide the comp manager — Decision #53 wording requirement.
+        await using var db = CreateDb(TenantA);
+        var sut = new TransactionImportValidationService(db, ClockAt(Now), AllOptional());
+        var results = await sut.ValidateAsync([ValidRow(code: "")], DefaultMapping());
+
+        var issue = results[0].Issues.Should().ContainSingle(i => i.Field == "payeeCode").Subject;
+        issue.Message.Should().Contain("Unassigned");
+        issue.Message.Should().Contain("manual assignment");
     }
 
     [Fact]

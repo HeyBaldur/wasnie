@@ -52,4 +52,17 @@ public sealed class BackgroundJobRecord
         ErrorMessage = errorMessage;
         CompletedAtUtc = DateTime.UtcNow;
     }
+
+    public void RequestCancellation()
+    {
+        if (State is not (JobState.Pending or JobState.Running))
+            return; // no-op if already terminal
+        State = JobState.Cancelling;
+    }
+
+    public void MarkCancelled()
+    {
+        State = JobState.Cancelled;
+        CompletedAtUtc = DateTime.UtcNow;
+    }
 }

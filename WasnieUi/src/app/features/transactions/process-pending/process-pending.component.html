@@ -1,0 +1,93 @@
+<div class="process-pending">
+  <!-- Badge: eligible count -->
+  @if (candidateCount() !== null && !isDone) {
+    <div class="process-pending__badge-row">
+      <ws-badge variant="warning" size="sm">
+        {{ candidateCount() }} {{ 'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_BADGE' | translate }}
+      </ws-badge>
+    </div>
+  }
+
+  <!-- Volume warning (informative, not blocking) -->
+  @if (showVolumeWarning) {
+    <p class="process-pending__volume-notice">
+      {{
+        'TRANSACTIONS.PROCESS_PENDING.VOLUME_NOTICE'
+          | translate: { count: candidateCount(), minutes: estimatedMinutes }
+      }}
+    </p>
+  }
+
+  <!-- Job running: progress + cancel -->
+  @if (isRunning) {
+    <div class="process-pending__progress">
+      <div class="process-pending__progress-bar">
+        <div
+          class="process-pending__progress-fill"
+          [style.width.%]="progressPct"
+        ></div>
+      </div>
+      <p class="process-pending__progress-text">
+        @if (jobStatus()?.state === 'Cancelling') {
+          {{ 'TRANSACTIONS.PROCESS_PENDING.CANCELLING' | translate }}
+        } @else {
+          {{
+            'TRANSACTIONS.PROCESS_PENDING.RUNNING'
+              | translate
+                : {
+                    processed: jobStatus()?.progressCurrent ?? 0,
+                    total: jobStatus()?.progressTotal ?? 0
+                  }
+          }}
+        }
+      </p>
+      @if (netError()) {
+        <p class="process-pending__net-error">{{ 'TRANSACTIONS.PROCESS_PENDING.NET_ERROR' | translate }}</p>
+      }
+      @if (jobStatus()?.state !== 'Cancelling') {
+        <ws-button variant="ghost" size="sm" [disabled]="cancelling()" (click)="onCancel()">
+          {{ 'TRANSACTIONS.PROCESS_PENDING.CANCEL' | translate }}
+        </ws-button>
+      }
+    </div>
+  }
+
+  <!-- Terminal states -->
+  @if (jobStatus()?.state === 'Succeeded') {
+    <p class="process-pending__success">
+      {{
+        'TRANSACTIONS.PROCESS_PENDING.DONE'
+          | translate: { processed: jobStatus()?.progressCurrent ?? 0 }
+      }}
+    </p>
+  }
+  @if (jobStatus()?.state === 'Cancelled') {
+    <p class="process-pending__cancelled">
+      {{
+        'TRANSACTIONS.PROCESS_PENDING.CANCELLED_RESULT'
+          | translate
+            : {
+                processed: jobStatus()?.progressCurrent ?? 0,
+                remaining: (jobStatus()?.progressTotal ?? 0) - (jobStatus()?.progressCurrent ?? 0)
+              }
+      }}
+    </p>
+  }
+  @if (jobStatus()?.state === 'Failed') {
+    <p class="process-pending__error">
+      {{ 'TRANSACTIONS.PROCESS_PENDING.FAILED' | translate }}: {{ jobStatus()?.errorMessage }}
+    </p>
+  }
+
+  <!-- Main action button (hidden while running or done) -->
+  @if (!isRunning && !isDone) {
+    <ws-button
+      variant="secondary"
+      [disabled]="dispatching() || (candidateCount() ?? 0) === 0"
+      (click)="onProcessPending()"
+      data-testid="process-pending-btn"
+    >
+      {{ 'TRANSACTIONS.PROCESS_PENDING.BUTTON' | translate }}
+    </ws-button>
+  }
+</div>

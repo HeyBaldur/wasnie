@@ -1,6 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
+import { ProcessPendingComponent } from '../process-pending/process-pending.component';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
@@ -44,6 +45,7 @@ import {
     WsPaginationComponent,
     AssignPayeeModalComponent,
     ReassignPayeeModalComponent,
+    ProcessPendingComponent,
   ],
   templateUrl: './transactions-list.component.html',
   styleUrl: './transactions-list.component.scss',
@@ -52,6 +54,12 @@ export class TransactionsListComponent {
   readonly store = inject(TransactionsStore);
 
   readonly TransactionStatus = TransactionStatus;
+
+  readonly showProcessPending = computed(() =>
+    !!this.store.payeeIdFilter() &&
+    !!this.store.dateFromFilter() &&
+    !!this.store.dateToFilter()
+  );
 
   readonly assignModalOpen = signal(false);
   readonly reassignModalOpen = signal(false);

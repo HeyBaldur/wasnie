@@ -508,7 +508,20 @@
     "REASSIGN_REASON_REQUIRED": "Powód jest wymagany.",
     "REASSIGN_REASON_MIN_LENGTH": "Powód musi mieć co najmniej 10 znaków.",
     "REASSIGN_SUBMIT": "Przepisz",
-    "TOAST_REASSIGNED": "Beneficjent przepisany pomyślnie."
+    "TOAST_REASSIGNED": "Beneficjent przepisany pomyślnie.",
+    "PROCESS_PENDING": {
+      "BUTTON": "Przetwórz oczekujące",
+      "SECTION_TITLE": "Oczekujące transakcje",
+      "ELIGIBLE_BADGE": "oczekujących transakcji kwalifikujących się do przetworzenia",
+      "VOLUME_NOTICE": "Przetwarzanie ~{{count}} transakcji, szacowany czas ~{{minutes}} minut. Możesz kontynuować pracę.",
+      "RUNNING": "Przetwarzanie {{processed}} z {{total}} transakcji…",
+      "CANCELLING": "Żądano anulowania — kończenie bieżącego bloku…",
+      "CANCEL": "Anuluj",
+      "DONE": "Gotowe. Przetworzono {{processed}} transakcji.",
+      "CANCELLED_RESULT": "Anulowano. Przetworzono {{processed}} transakcji, pozostało {{remaining}}.",
+      "FAILED": "Błąd przetwarzania",
+      "NET_ERROR": "Błąd sieci — ponawianie…"
+    }
   },
   "ASSIGNMENTS": {
     "TITLE": "Przypisania",
@@ -538,7 +551,8 @@
     "TOAST_DEACTIVATED": "Przypisanie zostało dezaktywowane.",
     "TOAST_NOTES_SAVED": "Notatki zapisane.",
     "CONFIRM_DEACTIVATE_TITLE": "Dezaktywuj Przypisanie",
-    "CONFIRM_DEACTIVATE_MSG": "Dezaktywacja tego przypisania uniemożliwi beneficjentowi naliczanie prowizji w ramach tego planu. Czy jesteś pewny?"
+    "CONFIRM_DEACTIVATE_MSG": "Dezaktywacja tego przypisania uniemożliwi beneficjentowi naliczanie prowizji w ramach tego planu. Czy jesteś pewny?",
+    "ERROR_LOAD": "Nie udało się załadować przypisania."
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Odniesienie",

@@ -621,7 +621,20 @@
     "REASSIGN_REASON_REQUIRED": "Reason is required.",
     "REASSIGN_REASON_MIN_LENGTH": "Reason must be at least 10 characters.",
     "REASSIGN_SUBMIT": "Reassign",
-    "TOAST_REASSIGNED": "Payee reassigned successfully."
+    "TOAST_REASSIGNED": "Payee reassigned successfully.",
+    "PROCESS_PENDING": {
+      "BUTTON": "Process Pending",
+      "SECTION_TITLE": "Pending Transactions",
+      "ELIGIBLE_BADGE": "Pending transactions eligible for processing",
+      "VOLUME_NOTICE": "Processing ~{{count}} transactions, estimated time ~{{minutes}} minutes. You can keep working.",
+      "RUNNING": "Processing {{processed}} of {{total}} transactions…",
+      "CANCELLING": "Cancellation requested — finishing current chunk…",
+      "CANCEL": "Cancel",
+      "DONE": "Done. {{processed}} transactions processed.",
+      "CANCELLED_RESULT": "Cancelled. {{processed}} transactions processed, {{remaining}} remaining.",
+      "FAILED": "Processing failed",
+      "NET_ERROR": "Network error — retrying…"
+    }
   },
   "ASSIGNMENTS": {
     "TITLE": "Assignments",
@@ -651,7 +664,8 @@
     "TOAST_DEACTIVATED": "Assignment deactivated.",
     "TOAST_NOTES_SAVED": "Notes saved.",
     "CONFIRM_DEACTIVATE_TITLE": "Deactivate Assignment",
-    "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?"
+    "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?",
+    "ERROR_LOAD": "Failed to load assignment."
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Appearance",

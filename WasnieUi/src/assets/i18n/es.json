@@ -508,7 +508,20 @@
     "REASSIGN_REASON_REQUIRED": "El motivo es obligatorio.",
     "REASSIGN_REASON_MIN_LENGTH": "El motivo debe tener al menos 10 caracteres.",
     "REASSIGN_SUBMIT": "Reasignar",
-    "TOAST_REASSIGNED": "Beneficiario reasignado correctamente."
+    "TOAST_REASSIGNED": "Beneficiario reasignado correctamente.",
+    "PROCESS_PENDING": {
+      "BUTTON": "Procesar Pendientes",
+      "SECTION_TITLE": "Transacciones Pendientes",
+      "ELIGIBLE_BADGE": "transacciones Pendientes elegibles para procesamiento",
+      "VOLUME_NOTICE": "Procesando ~{{count}} transacciones, tiempo estimado ~{{minutes}} minutos. Puedes seguir trabajando.",
+      "RUNNING": "Procesando {{processed}} de {{total}} transacciones…",
+      "CANCELLING": "Cancelación solicitada — finalizando el bloque actual…",
+      "CANCEL": "Cancelar",
+      "DONE": "Listo. {{processed}} transacciones procesadas.",
+      "CANCELLED_RESULT": "Cancelado. {{processed}} transacciones procesadas, {{remaining}} pendientes.",
+      "FAILED": "Error en el procesamiento",
+      "NET_ERROR": "Error de red — reintentando…"
+    }
   },
   "ASSIGNMENTS": {
     "TITLE": "Asignaciones",
@@ -538,7 +551,8 @@
     "TOAST_DEACTIVATED": "Asignación desactivada.",
     "TOAST_NOTES_SAVED": "Notas guardadas.",
     "CONFIRM_DEACTIVATE_TITLE": "Desactivar Asignación",
-    "CONFIRM_DEACTIVATE_MSG": "Desactivar esta asignación impedirá que el beneficiario gane comisiones bajo este plan. ¿Estás seguro?"
+    "CONFIRM_DEACTIVATE_MSG": "Desactivar esta asignación impedirá que el beneficiario gane comisiones bajo este plan. ¿Estás seguro?",
+    "ERROR_LOAD": "Error al cargar la asignación."
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Referencia",

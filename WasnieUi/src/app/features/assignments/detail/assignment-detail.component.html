@@ -1,0 +1,63 @@
+<app-shell>
+  @if (loading()) {
+    <div class="assignment-detail assignment-detail--loading">
+      <span class="skeleton skeleton--title"></span>
+    </div>
+  } @else if (error()) {
+    <div class="assignment-detail assignment-detail--error">
+      <app-icon name="alert-circle" [size]="32" />
+      <span>{{ error()! | translate }}</span>
+    </div>
+  } @else if (assignment(); as a) {
+    <ws-page-layout
+      icon="link"
+      [title]="a.payeeFullName"
+      [subtitle]="a.planName + ' v' + a.planVersion"
+      backLink="/assignments"
+      [backLabel]="'ASSIGNMENTS.TITLE' | translate"
+    >
+      <div slot="meta">
+        <ws-badge [variant]="statusVariant(a.status)">
+          {{ 'ASSIGNMENTS.STATUS_' + a.status.toUpperCase() | translate }}
+        </ws-badge>
+      </div>
+
+      <div class="assignment-detail__body">
+        <ws-card padding="md">
+          <dl class="assignment-detail__dl">
+            <div class="assignment-detail__row">
+              <dt>{{ 'ASSIGNMENTS.FIELD_PAYEE' | translate }}</dt>
+              <dd>{{ a.payeeFullName }} <span class="assignment-detail__code">({{ a.payeeEmployeeCode }})</span></dd>
+            </div>
+            <div class="assignment-detail__row">
+              <dt>{{ 'ASSIGNMENTS.FIELD_PLAN' | translate }}</dt>
+              <dd>{{ a.planName }} v{{ a.planVersion }}</dd>
+            </div>
+            <div class="assignment-detail__row">
+              <dt>{{ 'ASSIGNMENTS.FIELD_PERIOD' | translate }}</dt>
+              <dd>{{ a.effectiveStart | dateFormat }} – {{ a.effectiveEnd | dateFormat }}</dd>
+            </div>
+            @if (a.notes) {
+              <div class="assignment-detail__row">
+                <dt>{{ 'ASSIGNMENTS.FIELD_NOTES' | translate }}</dt>
+                <dd>{{ a.notes }}</dd>
+              </div>
+            }
+          </dl>
+        </ws-card>
+
+        <ws-card padding="md">
+          <h3 class="assignment-detail__section-title">
+            {{ 'TRANSACTIONS.PROCESS_PENDING.SECTION_TITLE' | translate }}
+          </h3>
+          <div *hasPermission="'Transactions.ProcessPending'">
+            <app-process-pending
+              scope="ByPlanAssignment"
+              [scopeId]="assignmentId"
+            />
+          </div>
+        </ws-card>
+      </div>
+    </ws-page-layout>
+  }
+</app-shell>

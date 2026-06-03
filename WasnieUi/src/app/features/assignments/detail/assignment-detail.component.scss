@@ -1,0 +1,55 @@
+.assignment-detail {
+  &--loading,
+  &--error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-8);
+    color: var(--color-text-secondary);
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: 720px;
+  }
+
+  &__section-title {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin: 0 0 var(--space-3) 0;
+  }
+
+  &__dl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+  }
+
+  &__row {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: var(--space-2);
+
+    dt {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-secondary);
+      font-weight: var(--font-weight-medium);
+    }
+
+    dd {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-primary);
+      margin: 0;
+    }
+  }
+
+  &__code {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-xs);
+  }
+}

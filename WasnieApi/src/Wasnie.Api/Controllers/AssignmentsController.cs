@@ -12,6 +12,13 @@ namespace Wasnie.Api.Controllers;
 [Authorize]
 public sealed class AssignmentsController(IMediator mediator) : ControllerBase
 {
+    [HttpGet("{assignmentId:guid}")]
+    public async Task<IActionResult> GetById(Guid assignmentId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetAssignmentByIdQuery(assignmentId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] PaginationQuery pagination, CancellationToken cancellationToken)
     {

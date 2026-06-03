@@ -43,7 +43,7 @@ export interface ExecuteAccepted {
   jobId: string;
 }
 
-export type JobState = 'Pending' | 'Running' | 'Succeeded' | 'Failed';
+export type JobState = 'Pending' | 'Running' | 'Succeeded' | 'Failed' | 'Cancelling' | 'Cancelled';
 
 export interface ImportJobStatus {
   id: string;

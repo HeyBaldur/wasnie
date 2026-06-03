@@ -89,10 +89,13 @@ public sealed class TransactionImportValidationService(
             var payeeCode = GetField(row, mapping.PayeeCodeColumn);
             if (string.IsNullOrWhiteSpace(payeeCode))
             {
-                // Blank payeeCode: error if required, silent if Optional (Decision D).
+                // Blank payeeCode: error if required; warning if Optional (Decision D + Decision #53).
                 if (payeeIdRequired)
                     issues.Add(Error("payeeCode", "Payee code is required. Add it to your file or set Payee field to Optional in Settings.", IssueCategory.Required));
-                // If Optional, null PayeeId is accepted — no issue emitted.
+                else
+                    issues.Add(Warn("payeeCode",
+                        "No Staff ID provided — this transaction will be imported as Unassigned and requires manual assignment for commission calculation.",
+                        IssueCategory.Required));
             }
             else if (!payeesByCode.TryGetValue(payeeCode, out var matchedPayee))
             {

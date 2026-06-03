@@ -11,4 +11,9 @@ export const assignmentsRoutes: Routes = [
     loadComponent: () =>
       import('./create/assignment-create.component').then((m) => m.AssignmentCreateComponent),
   },
+  {
+    path: ':assignmentId',
+    loadComponent: () =>
+      import('./detail/assignment-detail.component').then((m) => m.AssignmentDetailComponent),
+  },
 ];

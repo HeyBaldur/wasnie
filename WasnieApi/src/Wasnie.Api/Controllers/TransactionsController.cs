@@ -65,6 +65,29 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
         return Ok(result.Value);
     }
 
+    [HttpGet("pending-count")]
+    public async Task<IActionResult> PendingCount([FromQuery] PendingCountRequest req, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new GetPendingTransactionsCountQuery(req.Scope, req.ScopeId, req.PeriodStart, req.PeriodEnd),
+            cancellationToken);
+        return result.IsSuccess ? Ok(new { count = result.Value }) : BadRequest(new { message = result.Error });
+    }
+
+    [HttpPost("process-pending")]
+    public async Task<IActionResult> ProcessPending([FromBody] ProcessPendingTransactionsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? Accepted(new { jobId = result.Value!.JobId, candidateCount = result.Value.CandidateCount })
+            : BadRequest(new { message = result.Error });
+    }
+
     public record AssignPayeeRequest(Guid PayeeId, string? Comment);
     public record ReassignPayeeRequest(Guid NewPayeeId, string Reason);
+    public record PendingCountRequest(
+        Wasnie.Application.Compensation.Calculation.ProcessPendingScope Scope,
+        Guid? ScopeId,
+        DateOnly? PeriodStart,
+        DateOnly? PeriodEnd);
 }

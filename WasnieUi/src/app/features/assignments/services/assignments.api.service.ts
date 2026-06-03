@@ -10,6 +10,10 @@ export class AssignmentsApiService {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/assignments';
 
+  getAssignment(id: string): Observable<Assignment> {
+    return this.http.get<Assignment>(`${this.base}/${id}`);
+  }
+
   getAssignments(params?: PaginationParams): Observable<PagedResult<Assignment>> {
     return this.http.get<PagedResult<Assignment>>(this.base, { params: buildHttpParams(params) });
   }

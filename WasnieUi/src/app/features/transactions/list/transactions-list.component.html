@@ -20,6 +20,17 @@
       />
     </div>
 
+    @if (showProcessPending()) {
+      <div class="transactions-list__process-pending" *hasPermission="'Transactions.ProcessPending'">
+        <app-process-pending
+          scope="ByPayeeAndPeriod"
+          [scopeId]="store.payeeIdFilter()"
+          [periodStart]="store.dateFromFilter()"
+          [periodEnd]="store.dateToFilter()"
+        />
+      </div>
+    }
+
     @if (!store.loading() && store.transactions().length === 0 && store.statusFilter() === null) {
       <ws-empty-state
         illustration="transactions-empty"

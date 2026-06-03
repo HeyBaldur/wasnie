@@ -16,6 +16,9 @@ export class TransactionsStore {
   readonly sortBy = signal('transactiondate');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly statusFilter = signal<TransactionStatus | null>(null);
+  readonly payeeIdFilter = signal<string | null>(null);
+  readonly dateFromFilter = signal<string | null>(null);
+  readonly dateToFilter = signal<string | null>(null);
 
   readonly pagedResult = signal<PagedResult<Transaction> | null>(null);
 
@@ -32,7 +35,10 @@ export class TransactionsStore {
       const sb = this.sortBy();
       const so = this.sortOrder();
       const st = this.statusFilter();
-      void this._loadInternal(p, ps, sb, so, st);
+      const pid = this.payeeIdFilter();
+      const df = this.dateFromFilter();
+      const dt = this.dateToFilter();
+      void this._loadInternal(p, ps, sb, so, st, pid, df, dt);
     });
   }
 
@@ -42,12 +48,18 @@ export class TransactionsStore {
     sortBy: string,
     sortOrder: 'asc' | 'desc',
     status: TransactionStatus | null,
+    payeeId: string | null,
+    dateFrom: string | null,
+    dateTo: string | null,
   ): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
       const filters: Record<string, string> = {};
       if (status !== null) filters['status'] = status;
+      if (payeeId) filters['payeeId'] = payeeId;
+      if (dateFrom) filters['dateFrom'] = dateFrom;
+      if (dateTo) filters['dateTo'] = dateTo;
 
       const params: PaginationParams = {
         page,
@@ -68,7 +80,7 @@ export class TransactionsStore {
   async loadTransactions(): Promise<void> {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),
-      this.statusFilter()
+      this.statusFilter(), this.payeeIdFilter(), this.dateFromFilter(), this.dateToFilter()
     );
   }
 
@@ -92,6 +104,21 @@ export class TransactionsStore {
 
   setStatusFilter(value: TransactionStatus | null): void {
     this.statusFilter.set(value);
+    this.page.set(1);
+  }
+
+  setPayeeIdFilter(value: string | null): void {
+    this.payeeIdFilter.set(value);
+    this.page.set(1);
+  }
+
+  setDateFromFilter(value: string | null): void {
+    this.dateFromFilter.set(value);
+    this.page.set(1);
+  }
+
+  setDateToFilter(value: string | null): void {
+    this.dateToFilter.set(value);
     this.page.set(1);
   }
 
