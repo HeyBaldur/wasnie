@@ -206,6 +206,12 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ Background job that silently returns `Guid.Empty` from a tenant-context instead of throwing (R9.4.3). Every multi-tenant query filter would match zero rows, creating ghost-data bugs. `BackgroundJobTenantContext` exists precisely to prevent this.
 - ❌ **`IJobHandler<TPayload>` implementation NOT registered in `Wasnie.Infrastructure/DependencyInjection.cs`** (WI-CALC-A.2.5-FIX, 2026-06-03). `HangfireJobDispatcher` resolves the handler by its `IJobHandler<TPayload>` interface type at runtime — if the registration is missing the error is "No service for type IJobHandler`1[...]" at dispatch time, not at startup. **Checklist:** every `class XyzJobHandler : JobHandlerBase<XyzPayload>` MUST have a corresponding `services.AddScoped<IJobHandler<XyzPayload>, XyzJobHandler>()` entry in the `// Register job handlers` block of `DependencyInjection.cs`.
 
+- ❌ **Calling `hangfireClient.Enqueue(...)` while the `BackgroundJobRecord` is inside an uncommitted DB transaction** (WI-PROD-T-FIX-8, 2026-06-03). With `QueuePollInterval = TimeSpan.Zero`, Hangfire picks up enqueued jobs in ~2ms. If the row is not yet committed (e.g. because `EnqueueAsync` is called inside `AuditBehavior`'s money-critical transaction), the Hangfire worker calls `MarkRunningAsync`, finds no row, throws `InvalidOperationException`, and Hangfire retries in 26 seconds — turning 100ms of real work into a 40-second user-perceived delay. The symptom in logs is `"Background job record {id} not found"` on the first attempt followed by a retry after the retry delay.
+
+  **Fix already in place:** `MarkRunningAsync` now retries up to 5 × 100ms (500ms window) before throwing. This tolerates the race because the outer transaction commits within a few ms after Hangfire picks up the job.
+
+  **Future prevention:** If adding new job-enqueueing paths, ensure the `BackgroundJobRecord` INSERT is committed BEFORE `hangfireClient.Enqueue()` is called. This means either: (a) calling `EnqueueAsync` OUTSIDE of any wrapping DB transaction, or (b) using a fresh `IDbContextFactory<ApplicationDbContext>` connection for the record INSERT so it commits independently.
+
 ---
 
 ## Frontend data-fetching violations
@@ -295,6 +301,33 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ **Calling `store.toQueryParams()` (URL-sync shorthand keys) to build the export POST body** (WI-PROD-T-FIX-1, 2026-06-03). `toQueryParams()` produces abbreviated URL keys (`txFrom`, `txTo`, `ref`, `amtMin`, etc.) for browser address-bar sync — these are NOT the field names the backend `PaginationQuery` expects (`DateFrom`, `DateTo`, `Reference`, `AmountMin`, etc.). Sending these as a JSON body silently drops all non-matching fields. **Rule:** Use `store.toExportFilter()` (which calls `_buildFilterRecord`) to build any export payload. `toQueryParams()` is only for URL display.
 - ❌ **List and export endpoints applying different filter predicates** (WI-PROD-T-FIX-1 + WI-PROD-I.2). `TransactionsStore._buildFilterRecord(f)` is the single source of truth for `TransactionFilter → PaginationQuery field names`. Both `_loadInternal` and `toExportFilter` call it. If you add a new filter field to `TransactionFilter`, you MUST add it to `_buildFilterRecord` — it will then automatically apply to both list and export.
 
+---
+
+## Chunked-job N+1 query violations
+
+- ❌ **Calling `ICreditAllocationService.AllocateAsync(transaction, ct)` (single-tx path) inside a per-row loop in a chunked background job** (WI-PROD-T-FIX-7, 2026-06-03). The single-transaction overload makes 2 DB roundtrips per invocation (PlanAssignments + Plan+Rules). In a loop of N rows this is an N+1 pattern. On Azure F1 (5-DTU SQL) this was the root cause of 10–60s wall-clock for a 2-transaction Process Pending job.
+
+  **Rule:** Any chunked job (N rows in a loop) that calls `AllocateAsync` MUST use the batch overload: pre-load all assignments and plans for the chunk in **2 queries total** before the per-row loop, then pass the pre-loaded dictionaries to `AllocateAsync(transaction, assignmentsByPayee, plansById, ct)`. The batch overload performs 0 DB queries per invocation.
+
+  ```csharp
+  // FORBIDDEN in per-row loops:
+  var credits = await creditAllocationService.AllocateAsync(transaction, ct);  // 2 DB queries each time
+
+  // REQUIRED:
+  // Pre-load BEFORE the loop (2 queries total for the chunk):
+  var chunkAssignments = await db.PlanAssignments.IgnoreQueryFilters()
+      .Where(a => a.TenantId == tenantId && chunkPayeeIds.Contains(a.PayeeId)).ToListAsync(ct);
+  var assignmentsByPayee = chunkAssignments.GroupBy(a => a.PayeeId)
+      .ToDictionary(g => g.Key, g => (IReadOnlyList<PlanAssignment>)g.ToList());
+  var plansInChunk = await db.CompensationPlans.IgnoreQueryFilters().Include(p => p.Rules)
+      .Where(p => p.TenantId == tenantId && chunkPlanIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
+
+  // Inside the loop (0 DB queries):
+  var credits = await creditAllocationService.AllocateAsync(transaction, assignmentsByPayee, plansInChunk, ct);
+  ```
+
+- ❌ **Issuing one DB query per assignment to load transaction IDs in `LoadByPlanAsync`** (WI-PROD-T-FIX-7, 2026-06-03). Loading full assignment entities in one query, then looping to issue one `CompensationTransactions` query per assignment is N+1. **Rule:** Load all pending transactions for the full set of payee IDs in one query, then filter in memory by assignment period. EF Core 8 does not reliably translate `DateOnly` on owned `DateRange` in WHERE clauses — in-memory filtering after a set-based fetch is the correct workaround (consistent with `CreditAllocationService`'s own approach for assignment date matching).
+
 ## Batch operation abort violations
 
 - ❌ **`ProcessPendingTransactionsJobHandler` (or any batch job handler) re-throwing `DomainException` from a per-item call** (WI-PROD-T, 2026-06-03). A `DomainException` from `CreditAllocationService.AllocateAsync()` (e.g. currency mismatch) must be caught per-transaction — the transaction is skipped (stays Pending) and the job continues with remaining transactions. Re-throwing aborts the entire batch. **Rule:** Per-transaction validation failures inside a batch job MUST be caught by a `catch (DomainException)` block, logged with TransactionId + reason, counted in `skipReasonCounts`, and treated as a skip — never as a job failure.
@@ -308,6 +341,17 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 ## Excel re-upload immutability violation
 
 - ❌ **Making `ReferenceNumber` writable in the Update-from-Excel mapping step** (WI-PROD-T, 2026-06-03). `ReferenceNumber` is the immutable identity key used to locate the existing transaction during re-upload. If the user modifies it, the update would silently target the wrong transaction. **Rule:** The `ReferenceNumber` column in `TransactionUpdateColumnMapping` is a fixed key — it MUST be auto-detected and locked in the UI mapping step, never offered as a user-configurable target field. The validation service MUST return an `Error` row for any row where `ReferenceNumber` is blank or not found.
+
+## Cross-wizard validation divergence violations
+
+- ❌ **Duplicating field-level validation logic across the IMPORT and UPDATE wizards** (WI-PROD-T-FIX-9, 2026-06-03). Each wizard has its own `ValidationService`, and it is easy for them to diverge over time. The reported case: `TransactionUpdateValidationService` had no currency format check — "3SD2F13SD" passed the UPDATE preview as `WillUpdate`, then failed silently at apply time inside `Money.Of` (which only validates length-3), leaving the user thinking the update applied when it silently skipped.
+
+  **Rule:** All field-level validation rules (format, range, minimum, maximum) for `amount`, `currency`, `transactionDate`, and any other shared fields MUST be implemented in `TransactionFieldValidators` (static class in `Wasnie.Application.Services.Imports`) and called identically by BOTH `TransactionImportValidationService` and `TransactionUpdateValidationService`. Never inline a validation expression directly in a validator if the same expression is needed in another wizard.
+
+  **Checklist when adding a validation rule to one wizard:**
+  1. Does this rule apply to the same field in the other wizard? → Yes → add to `TransactionFieldValidators` and use from BOTH wizards.
+  2. Does this rule only make sense in one context (e.g. file-level duplicate check)? → Keep inline in that wizard only.
+  3. Does the UPDATE wizard need a `today` reference for future-date check? → Inject `IClock` (already done as of FIX-9).
 
 ## Filter/count query alignment violations
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Compensation.Enums;
@@ -7,10 +8,9 @@ using Wasnie.Infrastructure.Persistence;
 
 namespace Wasnie.Infrastructure.Services.Imports;
 
-public sealed class TransactionUpdateValidationService(ApplicationDbContext db)
+public sealed class TransactionUpdateValidationService(ApplicationDbContext db, IClock clock)
     : ITransactionUpdateValidationService
 {
-
     public async Task<List<TransactionUpdateRowPreviewResult>> ValidateAsync(
         List<Dictionary<string, string>> rows,
         TransactionUpdateColumnMapping mapping,
@@ -31,16 +31,21 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db)
                 t.TransactionDate, t.PayeeId, t.Status))
             .ToDictionaryAsync(t => t.ReferenceNumber, StringComparer.OrdinalIgnoreCase, ct);
 
-        // Pre-load payee codes for payee lookup and reverse-lookup (id → code for diff display).
+        // Pre-load payees — include IsActive for inactive warning (mirrors IMPORT behavior).
         var payeesByCode = mapping.PayeeCodeColumn is not null
-            ? await db.Payees.ToDictionaryAsync(
-                p => p.EmployeeCode, p => p.Id,
-                StringComparer.OrdinalIgnoreCase, ct)
-            : new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            ? await db.Payees
+                .Select(p => new { p.EmployeeCode, p.Id, p.IsActive })
+                .ToDictionaryAsync(
+                    p => p.EmployeeCode,
+                    p => (p.Id, p.IsActive),
+                    StringComparer.OrdinalIgnoreCase,
+                    ct)
+            : new Dictionary<string, (Guid Id, bool IsActive)>(StringComparer.OrdinalIgnoreCase);
 
         // Inverted lookup for showing the existing payee's code in diffs.
-        var payeeIdToCode = payeesByCode.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+        var payeeIdToCode = payeesByCode.ToDictionary(kvp => kvp.Value.Id, kvp => kvp.Key);
 
+        var today = DateOnly.FromDateTime(clock.UtcNow);
         var results = new List<TransactionUpdateRowPreviewResult>(rows.Count);
 
         for (var i = 0; i < rows.Count; i++)
@@ -93,49 +98,61 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db)
             }
 
             // Compute diffs for mapped columns.
+            // For each editable field: if the column is mapped and the cell is non-blank,
+            // validate the new value using the same rules as the IMPORT wizard (shared helper),
+            // then compute a diff only when validation passes and the value actually changed.
+
             if (mapping.AmountColumn is not null)
             {
                 var amountStr = GetField(row, mapping.AmountColumn);
-                if (!string.IsNullOrWhiteSpace(amountStr) &&
-                    decimal.TryParse(amountStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var newAmount) &&
-                    newAmount != existing.Amount)
+                if (!string.IsNullOrWhiteSpace(amountStr))
                 {
-                    diffs.Add(new FieldDiff
-                    {
-                        FieldName = "Amount",
-                        OldValue = existing.Amount.ToString(CultureInfo.InvariantCulture),
-                        NewValue = newAmount.ToString(CultureInfo.InvariantCulture),
-                    });
+                    var amountIssue = TransactionFieldValidators.ValidateAmount(amountStr, out var newAmount);
+                    if (amountIssue is not null)
+                        issues.Add(amountIssue);
+                    else if (newAmount != existing.Amount)
+                        diffs.Add(new FieldDiff
+                        {
+                            FieldName = "Amount",
+                            OldValue = existing.Amount.ToString(CultureInfo.InvariantCulture),
+                            NewValue = newAmount.ToString(CultureInfo.InvariantCulture),
+                        });
                 }
             }
 
             if (mapping.CurrencyColumn is not null)
             {
                 var newCurrency = GetField(row, mapping.CurrencyColumn).Trim().ToUpperInvariant();
-                if (!string.IsNullOrWhiteSpace(newCurrency) &&
-                    !string.Equals(newCurrency, existing.Currency, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(newCurrency))
                 {
-                    diffs.Add(new FieldDiff
-                    {
-                        FieldName = "Currency",
-                        OldValue = existing.Currency,
-                        NewValue = newCurrency,
-                    });
+                    var currencyIssue = TransactionFieldValidators.ValidateCurrency(newCurrency);
+                    if (currencyIssue is not null)
+                        issues.Add(currencyIssue);
+                    else if (!string.Equals(newCurrency, existing.Currency, StringComparison.OrdinalIgnoreCase))
+                        diffs.Add(new FieldDiff
+                        {
+                            FieldName = "Currency",
+                            OldValue = existing.Currency,
+                            NewValue = newCurrency,
+                        });
                 }
             }
 
             if (mapping.TransactionDateColumn is not null)
             {
                 var dateStr = GetField(row, mapping.TransactionDateColumn);
-                if (!string.IsNullOrWhiteSpace(dateStr) && TryParseDate(dateStr, out var newDate) &&
-                    newDate != existing.TransactionDate)
+                if (!string.IsNullOrWhiteSpace(dateStr))
                 {
-                    diffs.Add(new FieldDiff
-                    {
-                        FieldName = "TransactionDate",
-                        OldValue = existing.TransactionDate.ToString("yyyy-MM-dd"),
-                        NewValue = newDate.ToString("yyyy-MM-dd"),
-                    });
+                    var dateIssue = TransactionFieldValidators.ValidateTransactionDate(dateStr, today, out var newDate);
+                    if (dateIssue is not null)
+                        issues.Add(dateIssue);
+                    else if (newDate != existing.TransactionDate)
+                        diffs.Add(new FieldDiff
+                        {
+                            FieldName = "TransactionDate",
+                            OldValue = existing.TransactionDate.ToString("yyyy-MM-dd"),
+                            NewValue = newDate.ToString("yyyy-MM-dd"),
+                        });
                 }
             }
 
@@ -144,7 +161,7 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db)
                 var newCode = GetField(row, mapping.PayeeCodeColumn).Trim();
                 if (!string.IsNullOrWhiteSpace(newCode))
                 {
-                    if (!payeesByCode.TryGetValue(newCode, out var newPayeeId))
+                    if (!payeesByCode.TryGetValue(newCode, out var payeeMatch))
                     {
                         issues.Add(new ValidationIssue
                         {
@@ -154,17 +171,30 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db)
                             Category = IssueCategory.Reference,
                         });
                     }
-                    else if (newPayeeId != existing.PayeeId)
+                    else
                     {
-                        var oldCode = existing.PayeeId.HasValue
-                            ? payeeIdToCode.GetValueOrDefault(existing.PayeeId.Value, "Unassigned")
-                            : "Unassigned";
-                        diffs.Add(new FieldDiff
+                        // Inactive payee → Warning (mirrors IMPORT Decision 12: row still processable).
+                        if (!payeeMatch.IsActive)
+                            issues.Add(new ValidationIssue
+                            {
+                                Field = "StaffId",
+                                Message = $"Payee '{newCode}' is inactive — assignment will be historical.",
+                                Severity = IssueSeverity.Warning,
+                                Category = IssueCategory.Reference,
+                            });
+
+                        if (payeeMatch.Id != existing.PayeeId)
                         {
-                            FieldName = "StaffId",
-                            OldValue = oldCode,
-                            NewValue = newCode,
-                        });
+                            var oldCode = existing.PayeeId.HasValue
+                                ? payeeIdToCode.GetValueOrDefault(existing.PayeeId.Value, "Unassigned")
+                                : "Unassigned";
+                            diffs.Add(new FieldDiff
+                            {
+                                FieldName = "StaffId",
+                                OldValue = oldCode,
+                                NewValue = newCode,
+                            });
+                        }
                     }
                 }
             }
@@ -204,10 +234,6 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db)
 
     private static string GetField(Dictionary<string, string> row, string? column) =>
         column is not null && row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
-
-    private static bool TryParseDate(string s, out DateOnly result) =>
-        DateOnly.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out result);
 
     private sealed record ExistingTxProjection(
         Guid Id, string ReferenceNumber, decimal Amount, string Currency,

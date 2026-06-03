@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,7 @@ public sealed class ProcessPendingTransactionsJobHandler(
         JobContext context,
         CancellationToken ct)
     {
+        var sw = Stopwatch.StartNew();
         var startedAt = clock.UtcNowOffset;
 
         logger.LogInformation(
@@ -112,11 +114,49 @@ public sealed class ProcessPendingTransactionsJobHandler(
             ct.ThrowIfCancellationRequested();
 
             var chunkIds = chunk.ToList();
+            var chunkSw = Stopwatch.StartNew();
 
             // Load transaction entities for this chunk (must be tracked for MarkCalculated).
             var transactions = await db.CompensationTransactions
                 .Where(t => chunkIds.Contains(t.Id))
                 .ToListAsync(ct);
+
+            // Batch pre-load: all PlanAssignments for payees in this chunk (1 query, not N).
+            // This avoids 2 DB roundtrips per transaction inside AllocateAsync.
+            var chunkPayeeIds = transactions
+                .Where(t => t.PayeeId.HasValue)
+                .Select(t => t.PayeeId!.Value)
+                .Distinct()
+                .ToList();
+
+            var chunkAssignments = chunkPayeeIds.Count > 0
+                ? await db.PlanAssignments
+                    .IgnoreQueryFilters()
+                    .Where(a => a.TenantId == payload.TenantId && chunkPayeeIds.Contains(a.PayeeId))
+                    .ToListAsync(ct)
+                : [];
+
+            var assignmentsByPayee = chunkAssignments
+                .GroupBy(a => a.PayeeId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<Wasnie.Domain.Compensation.Assignments.PlanAssignment>)g.ToList());
+
+            // Batch pre-load: all Plans+Rules for those assignments (1 query, not N).
+            var chunkPlanIds = chunkAssignments.Select(a => a.PlanId).Distinct().ToList();
+            var plansInChunk = chunkPlanIds.Count > 0
+                ? await db.CompensationPlans
+                    .IgnoreQueryFilters()
+                    .Include(p => p.Rules)
+                    .Where(p => p.TenantId == payload.TenantId && chunkPlanIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, ct)
+                : new Dictionary<Guid, Wasnie.Domain.Compensation.Plans.Plan>();
+
+            logger.LogDebug(
+                "ProcessPendingTransactionsJob {JobId}: chunk {ChunkSize} tx pre-loaded in {Ms}ms " +
+                "({Assignments} assignments, {Plans} plans).",
+                context.JobId, transactions.Count, chunkSw.ElapsedMilliseconds,
+                chunkAssignments.Count, plansInChunk.Count);
 
             await using var sqlTx = await db.Database.BeginTransactionAsync(ct);
 
@@ -127,7 +167,10 @@ public sealed class ProcessPendingTransactionsJobHandler(
 
                 try
                 {
-                    var credits = await creditAllocationService.AllocateAsync(transaction, ct);
+                    // Batch path: no DB queries inside AllocateAsync — uses pre-loaded lookups.
+                    var credits = await creditAllocationService.AllocateAsync(
+                        transaction, assignmentsByPayee, plansInChunk, ct);
+
                     foreach (var credit in credits)
                         db.Credits.Add(credit);
 
@@ -185,6 +228,10 @@ public sealed class ProcessPendingTransactionsJobHandler(
             await sqlTx.CommitAsync(ct);
             processedSoFar += chunkIds.Count;
             await context.ReportProgressAsync(processedSoFar, totalToProcess, ct);
+
+            logger.LogDebug(
+                "ProcessPendingTransactionsJob {JobId}: chunk complete in {Ms}ms.",
+                context.JobId, chunkSw.ElapsedMilliseconds);
         }
 
         var completedAt = clock.UtcNowOffset;
@@ -302,22 +349,31 @@ public sealed class ProcessPendingTransactionsJobHandler(
                      && a.Status == AssignmentStatus.Active)
             .ToListAsync(ct);
 
+        var activeAssignments = assignments.Where(a => a.EffectivePeriod is not null).ToList();
+        if (activeAssignments.Count == 0) return [];
+
+        // Load all pending transactions for these payees in one query (not one query per assignment).
+        // DateRange is an owned type that EF Core 8 doesn't translate reliably in WHERE,
+        // so filter by date in-memory after fetching all pending rows for the payee set.
+        var planPayeeIds = activeAssignments.Select(a => a.PayeeId).Distinct().ToList();
+
+        var allPendingForPayees = await db.CompensationTransactions
+            .Where(t => t.Status == CompensationTransactionStatus.Pending
+                     && t.PayeeId.HasValue
+                     && planPayeeIds.Contains(t.PayeeId!.Value))
+            .Select(t => new { t.Id, t.PayeeId, t.TransactionDate })
+            .ToListAsync(ct);
+
         var ids = new List<Guid>();
-        foreach (var a in assignments.Where(a => a.EffectivePeriod is not null))
+        foreach (var a in activeAssignments)
         {
             var start = a.EffectivePeriod!.Start;
             var end = a.EffectivePeriod.End;
-            var payeeId = a.PayeeId;
-
-            var batch = await db.CompensationTransactions
-                .Where(t => t.Status == CompensationTransactionStatus.Pending
-                         && t.PayeeId == payeeId
+            ids.AddRange(allPendingForPayees
+                .Where(t => t.PayeeId == a.PayeeId
                          && t.TransactionDate >= start
                          && t.TransactionDate <= end)
-                .Select(t => t.Id)
-                .ToListAsync(ct);
-
-            ids.AddRange(batch);
+                .Select(t => t.Id));
         }
         return ids;
     }

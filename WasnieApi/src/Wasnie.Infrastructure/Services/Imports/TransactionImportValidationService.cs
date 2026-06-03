@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Constants;
@@ -16,15 +15,6 @@ public sealed class TransactionImportValidationService(
     IFieldRequirementService fieldRequirements)
     : ITransactionImportValidationService
 {
-    private static readonly Regex CurrencyRegex = new(
-        @"^[A-Z]{3}$",
-        RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(100));
-
-    private static readonly string[] DateFormats = ["yyyy-MM-dd"];
-
-    private static readonly DateOnly MinDate = new(2000, 1, 1);
-
     public async Task<List<TransactionRowValidationResult>> ValidateAsync(
         List<Dictionary<string, string>> rows,
         TransactionImportColumnMapping mapping,
@@ -144,35 +134,18 @@ public sealed class TransactionImportValidationService(
 
             // ── amount ────────────────────────────────────────────────────────
             var amountStr = GetField(row, mapping.AmountColumn);
-            if (!decimal.TryParse(amountStr, System.Globalization.NumberStyles.Number,
-                    System.Globalization.CultureInfo.InvariantCulture, out var amount))
-            {
-                issues.Add(Error("amount", $"Amount '{amountStr}' is not a valid number.", IssueCategory.Format));
-            }
-            else if (amount <= 0)
-            {
-                issues.Add(Error("amount", $"Amount '{amount.ToString(System.Globalization.CultureInfo.InvariantCulture)}' must be greater than zero.", IssueCategory.Format));
-            }
+            var amountIssue = TransactionFieldValidators.ValidateAmount(amountStr, out _);
+            if (amountIssue is not null) issues.Add(amountIssue);
 
             // ── currency ──────────────────────────────────────────────────────
             var currency = GetField(row, mapping.CurrencyColumn);
-            if (!CurrencyRegex.IsMatch(currency))
-                issues.Add(Error("currency", $"Currency '{currency}' must be a 3-letter ISO 4217 code (e.g. USD, EUR, PLN).", IssueCategory.Format));
+            var currencyIssue = TransactionFieldValidators.ValidateCurrency(currency);
+            if (currencyIssue is not null) issues.Add(currencyIssue);
 
             // ── transactionDate ───────────────────────────────────────────────
             var dateStr = GetField(row, mapping.TransactionDateColumn);
-            if (!TryParseDate(dateStr, out var transactionDate))
-            {
-                issues.Add(Error("transactionDate", $"Date '{dateStr}' is not in the required ISO 8601 format (YYYY-MM-DD). Examples: 2026-05-15, 2026-12-31.", IssueCategory.Format));
-            }
-            else if (transactionDate < MinDate)
-            {
-                issues.Add(Error("transactionDate", $"Transaction date '{transactionDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}' is before the minimum date {MinDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}.", IssueCategory.Format));
-            }
-            else if (transactionDate > today)
-            {
-                issues.Add(Error("transactionDate", $"Transaction date '{transactionDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)}' is in the future.", IssueCategory.Format));
-            }
+            var dateIssue = TransactionFieldValidators.ValidateTransactionDate(dateStr, today, out _);
+            if (dateIssue is not null) issues.Add(dateIssue);
 
             // ── plan currency check ───────────────────────────────────────────
             // Only when: payee resolved, currency format valid, date parsed successfully.
@@ -180,8 +153,8 @@ public sealed class TransactionImportValidationService(
             // the transaction will be Pending until a PlanAssignment is created (Decision #54 skip logic).
             if (!string.IsNullOrWhiteSpace(payeeCode)
                 && payeesByCode.TryGetValue(payeeCode, out var resolvedPayee)
-                && CurrencyRegex.IsMatch(currency)
-                && TryParseDate(dateStr, out var txDateForCurrencyCheck)
+                && TransactionFieldValidators.ValidateCurrency(currency) is null
+                && TransactionFieldValidators.TryParseDate(dateStr, out var txDateForCurrencyCheck)
                 && assignmentsByPayee.TryGetValue(resolvedPayee.Id, out var payeeAssignments))
             {
                 var assignmentForDate = payeeAssignments.FirstOrDefault(pa =>
@@ -234,18 +207,6 @@ public sealed class TransactionImportValidationService(
 
     private static string GetField(Dictionary<string, string> row, string column) =>
         row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
-
-    private static bool TryParseDate(string s, out DateOnly result)
-    {
-        foreach (var fmt in DateFormats)
-        {
-            if (DateOnly.TryParseExact(s, fmt, System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.None, out result))
-                return true;
-        }
-        result = default;
-        return false;
-    }
 
     private static ValidationIssue Error(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
         new() { Field = field, Message = msg, Severity = IssueSeverity.Error, Category = cat };

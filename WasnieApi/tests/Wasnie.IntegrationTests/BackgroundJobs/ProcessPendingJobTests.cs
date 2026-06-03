@@ -275,5 +275,6 @@ public sealed class ProcessPendingJobTests : IAsyncLifetime
         public Task MarkFailedAsync(Guid jobId, string errorMessage, CancellationToken ct = default) => Task.CompletedTask;
         public Task<bool> CancelJobAsync(Guid jobId, Guid tenantId, CancellationToken ct = default) => Task.FromResult(true);
         public Task MarkCancelledAsync(Guid jobId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SetResultSummaryAsync(Guid jobId, string summaryJson, CancellationToken ct = default) => Task.CompletedTask;
     }
 }

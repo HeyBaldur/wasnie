@@ -62,8 +62,22 @@ public sealed class HangfireBackgroundJobService(
 
     public async Task MarkRunningAsync(Guid jobId, CancellationToken ct = default)
     {
-        var record = await db.BackgroundJobRecords.FindAsync([jobId], ct)
-            ?? throw new InvalidOperationException($"Background job record {jobId} not found.");
+        // Retry up to 500ms to handle a race: EnqueueAsync saves the BackgroundJobRecord
+        // inside the caller's DB transaction (e.g. AuditBehavior money-critical tx), but
+        // Hangfire (QueuePollInterval=TimeSpan.Zero) picks up the job before that transaction
+        // commits. The row is visible only after commit, which typically happens within a
+        // few ms — well within this 500ms window.
+        BackgroundJobRecord? record = null;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            record = await db.BackgroundJobRecords.FindAsync([jobId], ct);
+            if (record is not null) break;
+            if (attempt < 4) await Task.Delay(100, ct);
+        }
+
+        if (record is null)
+            throw new InvalidOperationException($"Background job record {jobId} not found.");
+
         record.MarkRunning();
         await db.SaveChangesAsync(ct);
     }

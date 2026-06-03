@@ -129,7 +129,7 @@ export class ProcessPendingComponent implements OnInit {
   }
 
   private _startPolling(jobId: string): void {
-    this._polling = timer(0, 3000)
+    this._polling = timer(0, 1000)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         switchMap(() =>

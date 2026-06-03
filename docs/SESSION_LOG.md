@@ -10,6 +10,112 @@
 
 ---
 
+## 2026-06-03 — WI-PROD-T-FIX-9: UPDATE wizard missing currency (and field) validation
+
+**WI:** WI-PROD-T-FIX-9
+**Status:** DONE ✅
+**Type:** Backend validation bug fix.
+
+### Root cause
+`TransactionUpdateValidationService` had no field-level format validation on editable columns. When a user set currency to "3SD2F13SD" in the UPDATE wizard, the preview showed `WillUpdate` (green). At apply time, `Money.Of(baseAmount, newCurrency)` in `UpdateTransactionsFromExcelJobHandler` threw `DomainException("Currency must be a 3-letter ISO code")` → row silently skipped → user believed the update applied. Same pattern existed for amount (non-parseable silently treated as no-change) and date (non-ISO silently treated as no-change).
+
+### Full gap list (IMPORT had, UPDATE didn't)
+| Field | Gap |
+|---|---|
+| currency | No format check (`^[A-Z]{3}$`) |
+| amount | No error for unparseable; no check for ≤ 0 |
+| transactionDate | No error for non-ISO; no min-date (2000-01-01); no future-date check |
+| payeeCode | No inactive-payee warning |
+
+### Fix — shared `TransactionFieldValidators` static class
+New file: `Wasnie.Application.Services.Imports.TransactionFieldValidators`. Contains:
+- `ValidateCurrency(string)` → `ValidationIssue?` — `^[A-Z]{3}$` regex (matches plan validator: `Length(3)`)
+- `ValidateAmount(string, out decimal)` → `ValidationIssue?` — parse + > 0
+- `ValidateTransactionDate(string, DateOnly today, out DateOnly)` → `ValidationIssue?` — ISO 8601 + ≥ 2000-01-01 + not future
+- `TryParseDate(string, out DateOnly)` → bool — ISO 8601 only
+- `MinTransactionDate = DateOnly(2000, 1, 1)`
+
+`TransactionImportValidationService` refactored to use shared helpers (behavior identical).
+`TransactionUpdateValidationService` updated to use shared helpers for all four editable fields. `IClock` injected for `today` reference (replaces non-injected `DateTime.UtcNow`).
+
+### Changes
+- New: `Wasnie.Application/Services/Imports/TransactionFieldValidators.cs`
+- Updated: `TransactionImportValidationService.cs` (use shared helpers — no behavior change)
+- Updated: `TransactionUpdateValidationService.cs` (add currency/amount/date/inactive-payee validation)
+
+### Test count
+- Backend: 312 unit + 438 integration passing, 2 skipped, 2 pre-existing date-format failures (unrelated). Build clean.
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-8: Job dispatcher race condition (root cause of 40s delays)
+
+**WI:** WI-PROD-T-FIX-8
+**Status:** DONE ✅
+**Type:** Backend infrastructure fix.
+
+### Root cause
+`ProcessPendingTransactionsCommand` implements `IMoneyCriticalCommand`, so `AuditBehavior` wraps the entire handler in an explicit DB transaction (`BeginTransactionAsync` → ... → `CommitAsync`). Inside that transaction, `HangfireBackgroundJobService.EnqueueAsync` INSERT'd the `BackgroundJobRecord` (within the open, uncommitted transaction) and THEN called `hangfireClient.Enqueue(...)` — which writes to Hangfire's tables via a separate connection and commits immediately. With `QueuePollInterval = TimeSpan.Zero`, Hangfire picked up the job in ~2ms, before the outer transaction committed. `MarkRunningAsync` did a `FindAsync` on the not-yet-committed row → `InvalidOperationException: Background job record not found` → 26-second Hangfire retry → total wall-clock 40s for 100ms of real work.
+
+### Fix — Option B: resilient `MarkRunningAsync` with retry
+`MarkRunningAsync` now retries up to 5 × 100ms (500ms window) before throwing. The outer transaction commits within a few ms after Hangfire picks up the job; the 500ms window is a generous 100× buffer. On success in attempt 1 (no race), latency impact is zero. On race: recovers in ~100ms instead of triggering a 26-second Hangfire retry.
+
+### Deferred TODO — EF Core Money owned-type tracking warning
+Logs show: `"The same entity is being tracked as different entity types 'Credit.OriginalAmount#Money' and 'CompensationTransaction.Amount#Money'"`. This is an EF Core owned-type tracking ambiguity caused by `Money` being configured as an owned type on multiple entities. Intentionally OUT OF SCOPE for this WI — requires careful EF Core configuration changes. Tracked as a separate future WI.
+
+### Before / after
+- Before: 40s wall-clock (100ms real work + 26s Hangfire retry)
+- After: target <2s wall-clock (actual work + ≤100ms retry overhead + 1s UI poll)
+
+### Test count
+- Backend: 312 unit + 438 integration passing, 2 skipped, 2 pre-existing failures (date format tests unrelated to this WI). Build clean.
+
+---
+
+## 2026-06-03 — WI-PROD-T-FIX-7: Process Pending performance — N+1 elimination
+
+**WI:** WI-PROD-T-FIX-7
+**Status:** DONE ✅
+**Type:** Backend + UI performance fix.
+
+### Root cause
+`CreditAllocationService.AllocateAsync` (single-tx path) made **2 DB roundtrips per transaction** — one for PlanAssignments and one for Plan+Rules. The `ProcessPendingTransactionsJobHandler` called this per-row, creating an N+1 pattern. For 2 transactions on Azure F1 (5-DTU SQL), those 4 extra queries + per-row SaveChanges + UI polling at 3s produced 10–60s wall-clock time.
+
+Secondary: `LoadByPlanAsync` had its own N+1 — one query per assignment to load transaction IDs.
+
+Hangfire pickup was NOT a bottleneck (`QueuePollInterval = TimeSpan.Zero` → near-instant).
+
+### Changes
+
+**Backend — `ICreditAllocationService`** (was already modified pre-session with the batch signature):
+- Interface already defined: `AllocateAsync(transaction, assignmentsByPayee, plansById, ct)`
+
+**Backend — `CreditAllocationService`**:
+- Implemented the batch overload: looks up assignment and plan from caller-supplied dictionaries — **0 DB queries per invocation**.
+- Extracted shared credit-building logic into `BuildCredits(transaction, assignment, plan)` — called by both the single-tx and batch paths, eliminating duplication.
+
+**Backend — `ProcessPendingTransactionsJobHandler`**:
+- Per chunk: pre-load all PlanAssignments for payees in the chunk (**1 query**), pre-load all Plans+Rules for those assignments (**1 query**). Then call batch `AllocateAsync` per row (0 DB queries inside).
+- Net result: **2 queries per chunk** instead of **2N queries per chunk**.
+- Added `Stopwatch` instrumentation at chunk level (Debug-level structured logs with elapsed ms, assignment count, plan count).
+- `LoadByPlanAsync` N+1 fixed: replaced per-assignment `ToListAsync` loop with a single query for all pending transactions across all payees, in-memory date filtering (consistent with the EF Core DateRange owned-type limitation that was already worked around).
+
+**Backend — `ProcessPendingJobTests.NoOpJobService`** (pre-existing gap):
+- Added missing `SetResultSummaryAsync` stub — the interface method was added in FIX-5 but the test stub was never updated, causing a build failure that masked the test count.
+
+**Frontend — `ProcessPendingComponent`**:
+- `timer(0, 3000)` → `timer(0, 1000)`: UI polls every 1s instead of 3s. Cuts worst-case polling latency from 3s to 1s.
+
+### Expected before/after (2-transaction smoke)
+- Before: 10–60s (N+1 DB queries × F1 DTU throttling + 3s poll overhead)
+- After: target ≤ 3s (2+2 pre-load queries + per-row SaveChanges + 1s poll)
+
+### Test count
+- Backend: 312 unit + 440 integration passing, 2 skipped, 2 pre-existing failures in `TransactionImportValidationServiceTests` (date format tests, unrelated to this WI). Build clean.
+- Frontend: build clean, bundle within pre-existing budget constraint.
+
+---
+
 ## 2026-06-03 — WI-PROD-T-FIX-6: Skip log layout cleanup + open in new tab
 
 **WI:** WI-PROD-T-FIX-6

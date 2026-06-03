@@ -1,6 +1,6 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-03 — WI-PROD-T-FIX-6 Done. Skip log layout: Reason is now a proper 5th column; Amount right-aligned with breathing room; "Open skipped in filter" opens in new tab. Build clean.
+**Last updated:** 2026-06-03 — WI-PROD-T-FIX-9 Done. UPDATE wizard currency validation gap fixed. Shared `TransactionFieldValidators` static class extracts amount/currency/date rules used by both wizards. UPDATE now rejects garbage currency, unparseable amounts, bad dates, out-of-range dates. Inactive payee warning added to UPDATE. Build clean.
 **Updated by:** Rodolfo Calvo (WI-PROD-T)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-03. WI-PROD-T-FIX-5 DONE. Process Pending skip log enriched: each entry now shows Reference Number, Payee name+code, Date, Amount+Currency, and Reason in a styled 4-column table. "Open skipped in filter" button navigates to `/transactions?refs=...`. `ReferenceNumbers` exact-match filter added to `PaginationQuery`, `ListTransactionsHandler`, `ExportTransactionsHandler`, and `TransactionsStore`. Backend: 752 tests — unchanged. Frontend: 159 tests — unchanged. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
+**Right now we are:** End-of-day 2026-06-03. WI-PROD-T-FIX-9 DONE. UPDATE wizard field validation gap closed. New `TransactionFieldValidators` (shared static class, Application layer) implements amount/currency/date rules used identically by both `TransactionImportValidationService` and `TransactionUpdateValidationService`. UPDATE now rejects garbage currency ("3SD2F13SD"), unparseable amounts, bad date formats, pre-2000 dates, and future dates. Inactive payee warning added to UPDATE. IMPORT refactored to use shared helpers (behavior unchanged). Backend: 312 unit + 438 integration passing. Next: WI-CALC-A.3 (Quota Attainment Service).
 
 **Most recent significant work (2026-06-03 — WI-PROD-T: Export + Re-upload + Process Pending skip fix):**
 - **Part 1 — Process Pending skip:** `ProcessPendingTransactionsJobHandler` now catches `DomainException` per-transaction (currency mismatch etc.), skips the transaction (stays Pending), logs reason. Job completes normally with skip counts. `BackgroundJobRecord.ResultSummary` (nvarchar(max) nullable) added via migration `20260603093913_AddJobResultSummary`. `JobStatusDto` + `JobContext` extended. UI: `ProcessPendingComponent` shows skip count + expandable log of skipped transaction IDs + reasons. i18n EN/ES/PL.
@@ -292,6 +292,30 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 ## TODO_TESTS — Deferred test backfill
 
 These tests were explicitly deferred by owner instruction on 2026-06-03 (WI-PROD-I.2). Add in a dedicated test WI before the first paying customer.
+
+### WI-PROD-T-FIX-9 — UPDATE wizard currency + field validation
+
+**Backend unit tests for `TransactionFieldValidators`:**
+- `ValidateCurrency("EUR")` → null (valid)
+- `ValidateCurrency("3SD2F13SD")` → Error, field="currency", category=Format
+- `ValidateCurrency("usd")` → Error (lowercase fails `^[A-Z]{3}$`)
+- `ValidateCurrency("")` → Error
+- `ValidateAmount("100", out decimal)` → null, parsed=100
+- `ValidateAmount("-1", out decimal)` → Error (≤ 0)
+- `ValidateAmount("abc", out decimal)` → Error (not a number)
+- `ValidateTransactionDate("2026-05-15", today, out DateOnly)` → null, parsed correctly
+- `ValidateTransactionDate("31/05/2026", today, out DateOnly)` → Error (not ISO 8601)
+- `ValidateTransactionDate("1999-12-31", today, out DateOnly)` → Error (before min date)
+- `ValidateTransactionDate(future date, today, out DateOnly)` → Error (future)
+
+**Backend integration tests for `TransactionUpdateValidationService`:**
+- Row with currency "3SD2F13SD" → `UpdateRowStatus.Error`, issue field="currency", category=Format
+- Row with currency "EUR" (different from existing PLN) → `UpdateRowStatus.WillUpdate`, diff shows PLN→EUR
+- Row with amount "abc" → `UpdateRowStatus.Error`, issue field="amount"
+- Row with amount "-5" → `UpdateRowStatus.Error`, issue field="amount"
+- Row with date "31/05/2026" → `UpdateRowStatus.Error`, issue field="transactionDate"
+- Row with date "1999-01-01" → `UpdateRowStatus.Error`, issue field="transactionDate"
+- Row with inactive payee code → `UpdateRowStatus.WillUpdate` (warning, not error) + diff shows payee change
 
 ### WI-PROD-T-FIX-5 — Enrich skip log + open-in-filter
 
