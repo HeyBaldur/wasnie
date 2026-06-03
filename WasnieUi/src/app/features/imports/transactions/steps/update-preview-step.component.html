@@ -1,23 +1,22 @@
 <div class="preview-step">
 
-  <!-- Summary stat cards — same visual as CREATE import preview -->
+  <!-- Summary cards — 4 cards matching IMPORT layout -->
   <div class="preview-step__stats">
-    <ws-stat-card [value]="validateResponse().totalRows"      [label]="'IMPORTS.UPDATE.WILL_UPDATE' | translate"  icon="check-circle"   variant="success" />
-    <ws-stat-card [value]="validateResponse().noChangesCount" [label]="'IMPORTS.UPDATE.NO_CHANGES' | translate"   icon="list"           variant="default" />
-    <ws-stat-card [value]="validateResponse().errorCount"     [label]="'IMPORTS.UPDATE.ERRORS' | translate"       icon="x-circle"       variant="danger"  />
+    <ws-stat-card [value]="validateResponse().totalRows"      [label]="'IMPORTS.UPDATE.SUMMARY_TOTAL' | translate"      icon="list"           variant="default"  />
+    <ws-stat-card [value]="validateResponse().willUpdateCount" [label]="'IMPORTS.UPDATE.WILL_UPDATE' | translate"        icon="check-circle"   variant="success"  />
+    <ws-stat-card [value]="validateResponse().errorCount"     [label]="'IMPORTS.UPDATE.ERRORS' | translate"             icon="x-circle"       variant="danger"   />
+    <ws-stat-card [value]="validateResponse().noChangesCount" [label]="'IMPORTS.UPDATE.NO_CHANGES' | translate"         icon="minus-circle"   variant="default"  />
   </div>
 
-  <!-- Row filter tabs -->
+  <!-- Row filter tabs — functional, matching IMPORT pattern -->
   <div class="row-filter">
-    <span class="row-filter__btn row-filter__btn--active">
-      {{ 'IMPORTS.UPDATE.WILL_UPDATE' | translate }}
-      <span class="row-filter__count">({{ validateResponse().willUpdateCount }})</span>
-    </span>
-    @if (validateResponse().errorCount > 0) {
-      <span class="row-filter__btn row-filter__count">
-        {{ 'IMPORTS.UPDATE.ERRORS' | translate }}
-        <span class="row-filter__count">({{ validateResponse().errorCount }})</span>
-      </span>
+    @for (f of ['all', 'willUpdate', 'noChanges', 'errors']; track f) {
+      <button type="button" class="row-filter__btn" [class.row-filter__btn--active]="rowFilter() === f" (click)="rowFilter.set($any(f))">
+        {{ 'IMPORTS.UPDATE.FILTER_' + f.toUpperCase() | translate }}
+        @if (f === 'willUpdate') { <span class="row-filter__count">({{ validateResponse().willUpdateCount }})</span> }
+        @if (f === 'noChanges')  { <span class="row-filter__count">({{ validateResponse().noChangesCount }})</span> }
+        @if (f === 'errors')     { <span class="row-filter__count">({{ validateResponse().errorCount }})</span> }
+      </button>
     }
   </div>
 
@@ -27,26 +26,36 @@
       <thead>
         <tr>
           <th class="preview-table__th preview-table__th--num">#</th>
-          <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_STATUS' | translate }}</th>
+          <th class="preview-table__th preview-table__th--status">{{ 'IMPORTS.UPDATE.COL_STATUS' | translate }}</th>
           <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_REFERENCE' | translate }}</th>
           @if (columnMapping().payeeCodeColumn) {
             <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_STAFF_ID' | translate }}</th>
           }
-          <th class="preview-table__th">{{ 'IMPORTS.UPDATE.COL_CHANGES' | translate }}</th>
+          <th class="preview-table__th preview-table__th--changes">{{ 'IMPORTS.UPDATE.COL_CHANGES' | translate }}</th>
         </tr>
       </thead>
       <tbody>
-        @for (row of visibleRows; track row.rowNumber) {
-          <tr [class.preview-table__row--error]="row.status === 'Error'">
+        @if (filteredRows().length === 0) {
+          <tr>
+            <td [attr.colspan]="columnMapping().payeeCodeColumn ? 5 : 4" class="preview-table__empty">
+              {{ 'IMPORTS.UPDATE.FILTER_EMPTY' | translate }}
+            </td>
+          </tr>
+        }
+        @for (row of filteredRows(); track row.rowNumber) {
+          <tr class="preview-table__row" [class.preview-table__row--error]="row.status === 'Error'">
             <td class="preview-table__td preview-table__td--num">{{ row.rowNumber }}</td>
-            <td class="preview-table__td">
-              <ws-badge [variant]="rowBadge(row)">{{ rowLabel(row) | translate }}</ws-badge>
+            <td class="preview-table__td preview-table__td--status">
+              <ws-badge [variant]="rowBadgeVariant(row)" size="sm">
+                {{ rowBadgeKey(row) | translate }}
+              </ws-badge>
             </td>
             <td class="preview-table__td">{{ getReferenceNumber(row) }}</td>
             @if (columnMapping().payeeCodeColumn) {
               <td class="preview-table__td">{{ getPayeeCode(row) }}</td>
             }
             <td class="preview-table__td preview-table__td--changes">
+              <!-- Diffs for rows that will update -->
               @if (row.status === 'WillUpdate') {
                 @for (diff of row.diffs; track diff.fieldName) {
                   <div class="diff-entry">
@@ -57,15 +66,25 @@
                   </div>
                 }
               }
-              @if (row.status === 'Error') {
-                @for (issue of row.issues; track issue.field) {
-                  <span class="diff-entry__issue">{{ issue.message }}</span>
-                }
+              <!-- Issues with category badges — matches IMPORT preview issues column -->
+              @if (row.issues.length > 0) {
+                <ul class="preview-issues">
+                  @for (issue of row.issues; track issue.field) {
+                    <li class="preview-issue">
+                      @if (issueCategoryKey(issue)) {
+                        <ws-badge [variant]="issueBadgeVariant(issue)" size="sm">
+                          {{ issueCategoryKey(issue) | translate }}
+                        </ws-badge>
+                      }
+                      <span class="preview-issue__msg">{{ issue.message }}</span>
+                    </li>
+                  }
+                </ul>
               }
             </td>
           </tr>
         }
-        @if (validateResponse().rowResults.length > 200) {
+        @if (validateResponse().rowResults.length > 200 && filteredRows().length > 200) {
           <tr>
             <td [attr.colspan]="columnMapping().payeeCodeColumn ? 5 : 4" class="preview-table__td preview-table__td--truncated">
               {{ 'IMPORTS.UPDATE.TABLE_TRUNCATED' | translate: { shown: 200, total: validateResponse().rowResults.length } }}
@@ -77,13 +96,13 @@
   </div>
 
   @if (error()) {
-    <p class="mapping-error">
+    <p class="preview-error">
       <app-icon name="alert-circle" [size]="14" />
       {{ error() }}
     </p>
   }
 
-  <div class="mapping-actions">
+  <div class="preview-actions">
     <ws-button variant="secondary" (click)="onBack()">
       <app-icon name="arrow-left" [size]="14" />
       {{ 'COMMON.BACK' | translate }}

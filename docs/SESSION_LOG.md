@@ -10,6 +10,40 @@
 
 ---
 
+## 2026-06-03 — WI-PROD-T-FIX-10: Currency whitelist + unified Step 3 preview UI
+
+**WI:** WI-PROD-T-FIX-10
+**Status:** DONE ✅
+**Type:** Backend validation + Frontend UI.
+
+### Part 1 — Currency ISO 4217 whitelist
+New `CurrencyConstants.KnownCurrencies` (17-code HashSet) in `Wasnie.Application.Common.Constants`. Applied to:
+- `TransactionFieldValidators.ValidateCurrency` — replaced regex-only check. XXX, ABC, ZZZ now rejected. Error message: "Currency '{value}' is not a recognized currency code. Examples: EUR, USD, GBP, PLN, CHF."
+- `CreatePlanCommandValidator` — `Must(BeInKnownCurrencies)` added, same set. Plan creation with XXX now rejected with the same message.
+
+Removed `System.Text.RegularExpressions` from `TransactionFieldValidators` (no longer needed — whitelist check via HashSet `Contains` is O(1) and simpler).
+
+### Part 2 — UPDATE Step 3 preview visual unification (Option B)
+**Root cause of divergence:** UPDATE preview grew independently with different table styles (13px vs 12px font, `surface-raised` header bg vs `surface-sunken`, larger padding), static non-interactive tabs, raw `<span>` issues text, 3 stat cards with a wrong first-card value (`totalRows` labeled "Will update").
+
+**Changes to `update-preview-step.component.*`:**
+- TypeScript: added `rowFilter = signal<UpdateRowFilter>('all')`, `filteredRows = computed(...)`, `issueBadgeVariant(issue)`, `issueCategoryKey(issue)` — mirrors IMPORT's methods exactly.
+- HTML: rewritten. 4 stat cards (Total/Will Update/Errors/No Changes). Functional filter tabs with `rowFilter` signal (All/Will Update/No Changes/Errors). Issues in Changes column now render `<ws-badge> + message` matching IMPORT issues column.
+- SCSS: fully replaced with IMPORT-matching table styles (`surface-sunken` header, `space-1 space-2` padding, `font-size-12`). Kept `diff-entry` styles (UPDATE-specific — shows old→new change diffs).
+- i18n (EN/ES/PL): added `SUMMARY_TOTAL`, `FILTER_ALL`, `FILTER_WILLUPDATE`, `FILTER_NOCHANGES`, `FILTER_ERRORS`, `FILTER_EMPTY`.
+
+### Test count
+- Backend: 312 unit + 438 integration passing, 2 pre-existing failures. Build clean.
+- Frontend: production build clean (same 2 pre-existing warnings).
+
+### TODO_TESTS (deferred)
+- `ValidateCurrency("XXX")` → Error
+- `ValidateCurrency("EUR")` → null (valid)
+- `CreatePlanCommandValidator` with currency "XXX" → validation error
+- `CreatePlanCommandValidator` with currency "EUR" → valid
+
+---
+
 ## 2026-06-03 — WI-PROD-T-FIX-9: UPDATE wizard missing currency (and field) validation
 
 **WI:** WI-PROD-T-FIX-9

@@ -296,6 +296,16 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Currency validation violations
+
+- ❌ **Validating currency codes with a format-only regex (`^[A-Z]{3}$`) without a whitelist** (WI-PROD-T-FIX-10, 2026-06-03). A regex check alone accepts any 3-letter uppercase combination: XXX, ABC, ZZZ, AAA — all valid by regex, all invalid as real ISO 4217 codes. A user can corrupt financial data by typing three random uppercase letters. The fix is a whitelist of known codes, not a regex.
+
+  **Rule:** Currency code validation MUST use `CurrencyConstants.KnownCurrencies` (defined in `Wasnie.Application.Common.Constants`). Apply this check at every currency entry point: transaction imports (`TransactionFieldValidators.ValidateCurrency`), transaction updates (same shared helper), and plan creation (`CreatePlanCommandValidator`). The regex `^[A-Z]{3}$` alone is FORBIDDEN as the sole currency check.
+
+  To add a new supported currency: add it to `CurrencyConstants.KnownCurrencies` and redeploy. No migration needed.
+
+---
+
 ## Export/list filter divergence violations
 
 - ❌ **Calling `store.toQueryParams()` (URL-sync shorthand keys) to build the export POST body** (WI-PROD-T-FIX-1, 2026-06-03). `toQueryParams()` produces abbreviated URL keys (`txFrom`, `txTo`, `ref`, `amtMin`, etc.) for browser address-bar sync — these are NOT the field names the backend `PaginationQuery` expects (`DateFrom`, `DateTo`, `Reference`, `AmountMin`, etc.). Sending these as a JSON body silently drops all non-matching fields. **Rule:** Use `store.toExportFilter()` (which calls `_buildFilterRecord`) to build any export payload. `toQueryParams()` is only for URL display.
