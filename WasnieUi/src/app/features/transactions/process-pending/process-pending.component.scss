@@ -4,16 +4,23 @@
   gap: var(--space-3);
   align-items: flex-start;
 
-  &__badge-row {
+  &__count-row {
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  &__count-label {
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
   }
 
   &__volume-notice {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-13);
     color: var(--color-text-secondary);
     margin: 0;
+    max-width: 480px;
   }
 
   &__progress {
@@ -34,38 +41,39 @@
   &__progress-fill {
     height: 100%;
     border-radius: var(--radius-full);
-    background: var(--color-brand-primary);
+    background: var(--color-brand);
     transition: width 0.3s ease;
   }
 
   &__progress-text {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-13);
     color: var(--color-text-secondary);
     margin: 0;
   }
 
   &__net-error {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-danger);
+    font-size: var(--font-size-13);
+    color: var(--color-danger);
     margin: 0;
   }
 
   &__success {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-success);
+    font-size: var(--font-size-13);
+    color: var(--color-success);
+    font-weight: 500;
     margin: 0;
   }
 
   &__cancelled {
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-13);
     color: var(--color-text-secondary);
     font-style: italic;
     margin: 0;
   }
 
   &__error {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-danger);
+    font-size: var(--font-size-13);
+    color: var(--color-danger);
     margin: 0;
   }
 }

@@ -21,7 +21,7 @@
     </div>
 
     @if (showProcessPending()) {
-      <div class="transactions-list__process-pending" *hasPermission="'Transactions.ProcessPending'">
+      <div *hasPermission="'Transactions.ProcessPending'" class="transactions-list__process-pending">
         <app-process-pending
           scope="ByPayeeAndPeriod"
           [scopeId]="store.payeeIdFilter()"

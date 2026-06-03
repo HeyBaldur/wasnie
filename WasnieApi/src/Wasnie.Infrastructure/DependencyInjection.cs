@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Models.Calculation;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Application.Compensation.Calculation;
@@ -112,6 +113,7 @@ public static class DependencyInjection
         // Register job handlers so the dispatcher can resolve them by interface type.
         services.AddScoped<IJobHandler<PingPayload>, PingJobHandler>();
         services.AddScoped<IJobHandler<TransactionImportPayload>, TransactionImportJobHandler>();
+        services.AddScoped<IJobHandler<ProcessPendingTransactionsPayload>, ProcessPendingTransactionsJobHandler>();
 
         services.AddIdentity<IdentityUser, IdentityRole>(options =>
             {

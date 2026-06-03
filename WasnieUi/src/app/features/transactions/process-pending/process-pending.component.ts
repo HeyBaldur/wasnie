@@ -19,12 +19,13 @@ import {
 import {
   WsButtonComponent,
   WsBadgeComponent,
+  WsCardComponent,
 } from '../../../shared/ui';
 
 @Component({
   selector: 'app-process-pending',
   standalone: true,
-  imports: [CommonModule, TranslateModule, WsButtonComponent, WsBadgeComponent],
+  imports: [CommonModule, TranslateModule, WsButtonComponent, WsBadgeComponent, WsCardComponent],
   templateUrl: './process-pending.component.html',
   styleUrl: './process-pending.component.scss',
 })

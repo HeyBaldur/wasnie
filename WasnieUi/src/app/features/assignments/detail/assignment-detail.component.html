@@ -46,17 +46,12 @@
           </dl>
         </ws-card>
 
-        <ws-card padding="md">
-          <h3 class="assignment-detail__section-title">
-            {{ 'TRANSACTIONS.PROCESS_PENDING.SECTION_TITLE' | translate }}
-          </h3>
-          <div *hasPermission="'Transactions.ProcessPending'">
-            <app-process-pending
-              scope="ByPlanAssignment"
-              [scopeId]="assignmentId"
-            />
-          </div>
-        </ws-card>
+        <div *hasPermission="'Transactions.ProcessPending'">
+          <app-process-pending
+            scope="ByPlanAssignment"
+            [scopeId]="assignmentId"
+          />
+        </div>
       </div>
     </ws-page-layout>
   }

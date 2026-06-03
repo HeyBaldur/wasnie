@@ -203,6 +203,7 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ Hangfire dashboard exposed without an authorization filter (file 04, security). The dashboard shows cross-tenant job data. In Production it MUST be blocked until a global SystemAdmin role/claim is in place.
 - ❌ Hangfire (or any background-job library) referenced in Application or Domain layer (file 01, R1.1/R1.4). Hangfire is an Infrastructure concern; Application defines `IBackgroundJobService` + `IJobHandler<T>` abstractions only.
 - ❌ Background job that silently returns `Guid.Empty` from a tenant-context instead of throwing (R9.4.3). Every multi-tenant query filter would match zero rows, creating ghost-data bugs. `BackgroundJobTenantContext` exists precisely to prevent this.
+- ❌ **`IJobHandler<TPayload>` implementation NOT registered in `Wasnie.Infrastructure/DependencyInjection.cs`** (WI-CALC-A.2.5-FIX, 2026-06-03). `HangfireJobDispatcher` resolves the handler by its `IJobHandler<TPayload>` interface type at runtime — if the registration is missing the error is "No service for type IJobHandler`1[...]" at dispatch time, not at startup. **Checklist:** every `class XyzJobHandler : JobHandlerBase<XyzPayload>` MUST have a corresponding `services.AddScoped<IJobHandler<XyzPayload>, XyzJobHandler>()` entry in the `// Register job handlers` block of `DependencyInjection.cs`.
 
 ---
 

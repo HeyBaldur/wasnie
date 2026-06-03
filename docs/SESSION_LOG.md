@@ -10,6 +10,39 @@
 
 ---
 
+## 2026-06-03 (afternoon) — WI-CALC-A.2.5-FIX: DI registration bug + UI design pass
+
+**WI:** WI-CALC-A.2.5-FIX
+**Status:** DONE ✅
+**Type:** Backend DI wiring fix + frontend design system compliance.
+**Test count:** 752 backend (unchanged) · 159 frontend (unchanged). Both builds clean.
+
+### Bug 1 — Missing DI registration
+
+`ProcessPendingTransactionsJobHandler` was created in A.2.5 but never registered in the DI container. `HangfireJobDispatcher` resolves handlers by `IJobHandler<TPayload>` interface at runtime; the missing registration caused a "No service for type IJobHandler`1[ProcessPendingTransactionsPayload]" error on first dispatch.
+
+**Fix:** Added `services.AddScoped<IJobHandler<ProcessPendingTransactionsPayload>, ProcessPendingTransactionsJobHandler>();` to the `// Register job handlers` block in `Wasnie.Infrastructure/DependencyInjection.cs`. Added the corresponding `using Wasnie.Application.Models.Calculation;`.
+
+**Binding rule added to `14-forbidden-patterns.md`:** every `JobHandlerBase<T>` implementation MUST have a matching DI registration in the `// Register job handlers` block of `DependencyInjection.cs`. Error is runtime-only (no startup detection), so the checklist is the only guard.
+
+### Bug 2 — UI design pass
+
+Three surfaces from A.2.5 had design system violations:
+
+1. **Invalid CSS tokens** in `process-pending.component.scss`: `--font-size-sm` (undefined → `--font-size-13`), `--color-brand-primary` (undefined → `--color-brand`), `--color-text-danger` (undefined → `--color-danger`), `--color-text-success` (undefined → `--color-success`). All four replaced with correct tokens.
+
+2. **WsBadge misuse**: `WsBadge` was used for the sentence "77 Pending transactions eligible for processing". `WsBadge` has `white-space: nowrap` and is designed for compact short labels (not sentences). Changed to: `<ws-badge>{{ count }}</ws-badge>` + `<span>{{ label }}</span>` side by side.
+
+3. **Missing `ws-card` wrapper** on Plan detail and Transactions list (CLAUDE.md §5.2: every content block lives inside a `WsCard`): wrapped `ProcessPendingComponent` in `<ws-card variant="flat" accent="warning" padding="sm">` on both surfaces. Added missing CSS rules: `.assignments-tab-process-pending` and `.transactions-list__process-pending`.
+
+4. **Assignment detail page**: changed the wrapping card to `accent="warning"` for visual context.
+
+5. **Button size**: changed `variant="secondary"` button to `size="sm"` so it matches the visual weight of other action buttons in the same context (e.g. "Assign Payee" is `size="sm"`).
+
+Added `WsCardComponent` to imports of `PlanDetailComponent` and `TransactionsListComponent`.
+
+---
+
 ## 2026-06-03 — WI-CALC-A.2.5: Procesar Pending — import wizard warning + Hangfire job + UI
 
 **WI:** WI-CALC-A.2.5 — Decisions #53 + #54

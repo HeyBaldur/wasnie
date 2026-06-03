@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-03 — WI-CALC-A.2.5 Done. Decisions #53 + #54 fully implemented.
-**Updated by:** Rodolfo Calvo (WI-CALC-A.2.5)
+**Last updated:** 2026-06-03 — WI-CALC-A.2.5-FIX Done. DI bug fixed; UI design pass.
+**Updated by:** Rodolfo Calvo (WI-CALC-A.2.5-FIX)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-03. WI-CALC-A.2.5 DONE. Procesar Pending fully implemented: import warning for missing Staff ID (Decision #53), ProcessPendingTransactionsCommand + Hangfire job with chunking/skipping rule/cancellation (Decision #54), three UI surfaces with badge + volume notice + progress + cancel. Backend: 752 tests passing (312 unit + 440 integration), 2 skipped. Frontend: 159 tests (+5). Next: WI-CALC-A.3 (Quota Attainment Service).
+**Right now we are:** End-of-day 2026-06-03. WI-CALC-A.2.5-FIX DONE. DI registration bug fixed + UI design pass applied to three surfaces. Backend: 752 tests (312 unit + 440 integration), 2 skipped. Frontend: 159 tests. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
 
 **Most recent significant work (2026-06-03 — WI-CALC-A.2.5: Procesar Pending — import warning + Hangfire job + UI):**
 - **Decision #53:** `TransactionImportValidationService` now emits a `Warning` (IssueCategory.Required) when `payeeCode` is blank and `Transaction.PayeeId` is Optional. Message: "No Staff ID provided — this transaction will be imported as Unassigned and requires manual assignment for commission calculation." Row remains importable; comp manager decides whether to continue.

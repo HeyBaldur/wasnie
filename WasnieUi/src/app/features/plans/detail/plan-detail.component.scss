@@ -228,6 +228,10 @@
   margin-bottom: var(--space-4);
 }
 
+.assignments-tab-process-pending {
+  margin-bottom: var(--space-4);
+}
+
 .payee-link {
   @apply flex items-center gap-2;
   font-size: var(--font-size-14);
