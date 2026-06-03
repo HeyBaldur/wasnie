@@ -1,7 +1,7 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-02 — WI-CALC-A.1 DONE: Credit Engine V1 complete. Credits created at ingest with RuleSnapshot frozen; Transaction.Status transitions Pending→Calculated; Primary credits only per Decision #44. 704 → 731 backend tests passing (299 unit + 432 integration), 2 intentionally skipped. Three binding rules added (domain null checks, tiered rate adjacent boundary, RuleSnapshot JSON converter). TODO: WI-CALC-A.2 must replace the attainment=100% stub with real IQuotaAttainmentService.
-**Updated by:** Rodolfo Calvo (WI-CALC-A.1 Credit Engine V1)
+**Last updated:** 2026-06-03 — WI-PROD-T-FIX-9 Done. UPDATE wizard currency validation gap fixed. Shared `TransactionFieldValidators` static class extracts amount/currency/date rules used by both wizards. UPDATE now rejects garbage currency, unparseable amounts, bad dates, out-of-range dates. Inactive payee warning added to UPDATE. Build clean.
+**Updated by:** Rodolfo Calvo (WI-PROD-T)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
 ---
@@ -119,7 +119,30 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-02. WI-CALC-A.1 DONE. Credit Engine V1 is complete: Credits are created at every transaction ingest (CSV import + manual API), RuleSnapshot is frozen at allocation time, CompensationTransaction.Status transitions Pending→Calculated when credits are produced, Primary-only credits per Decision #44. Three critical bugs discovered and fixed during this WI: (1) Entity/ValueObject `== null` operator returns false for null-null comparison — all domain null checks now use `is null`/`is not null` (new binding rule); (2) RateTable.Tiered adjacent-boundary validation used `>=` instead of `>` (now allows `To[i] == From[i+1]`); (3) RuleSnapshot JSON deserialization missing — added `RuleSnapshotJsonConverter`. Smoke test TODO (CLAUDE.md §6): apply migration to dev DB, verify Credits table populated, verify Status=Calculated in transaction list UI. TODO WI-CALC-A.2: remove the attainment=100% stub in `CreditAllocationService.ComputeAttainmentCommission`. Backend: 731 tests passing (299 unit + 432 integration), 2 skipped. Frontend: 143 tests.
+**Right now we are:** End-of-day 2026-06-03. WI-PROD-T-FIX-9 DONE. UPDATE wizard field validation gap closed. New `TransactionFieldValidators` (shared static class, Application layer) implements amount/currency/date rules used identically by both `TransactionImportValidationService` and `TransactionUpdateValidationService`. UPDATE now rejects garbage currency ("3SD2F13SD"), unparseable amounts, bad date formats, pre-2000 dates, and future dates. Inactive payee warning added to UPDATE. IMPORT refactored to use shared helpers (behavior unchanged). Backend: 312 unit + 438 integration passing. Next: WI-CALC-A.3 (Quota Attainment Service).
+
+**Most recent significant work (2026-06-03 — WI-PROD-T: Export + Re-upload + Process Pending skip fix):**
+- **Part 1 — Process Pending skip:** `ProcessPendingTransactionsJobHandler` now catches `DomainException` per-transaction (currency mismatch etc.), skips the transaction (stays Pending), logs reason. Job completes normally with skip counts. `BackgroundJobRecord.ResultSummary` (nvarchar(max) nullable) added via migration `20260603093913_AddJobResultSummary`. `JobStatusDto` + `JobContext` extended. UI: `ProcessPendingComponent` shows skip count + expandable log of skipped transaction IDs + reasons. i18n EN/ES/PL.
+- **Part 2 — Excel export:** `ExportTransactionsQuery` + `ExportTransactionsHandler` (same filters as ListTransactions, no pagination, 50K row cap). `TransactionExcelExportService` (ClosedXML): 10-column export, frozen header, ReferenceNumber marked as KEY. `POST /api/transactions/export`. `Transactions.Export` permission. Frontend: export button, blob download, >50K confirmation dialog.
+- **Part 3 — Update-from-Excel wizard:** Full 5-step wizard at `/transactions/update-excel`. ReferenceNumber as fixed key. Per-row diff preview (old→new). Blocked on Paid, Credits superseded on Calculated. `CompensationTransaction.ApplyExcelUpdate()` domain method. `UpdateTransactionsFromExcelJobHandler` with per-transaction audit diffs. 3 new endpoints: `POST /api/imports/transactions/update/{parse,validate,execute}`. `Transactions.UpdateFromExcel` permission. "↻ Update from Excel" button in transactions list. i18n EN/ES/PL.
+- **Test count: 752 backend + 159 frontend — unchanged. Both builds clean. Tests deferred per owner instruction.**
+
+**Most recent significant work (2026-06-03 — WI-PROD-I.2: Advanced transaction filter):**
+- **Backend:** `PaginationQuery` extended with 8 new filter fields: `Reference` (substring), `Statuses` (comma-separated multi-status), `PayeeIds` (comma-separated multi-payee), `IngestedFrom`/`IngestedTo`, `AmountMin`/`AmountMax`, `UnassignedOnly`, `AmountSort`. `ListTransactionsHandler` applies all filters. `PagedResult<T>` extended with `UnfilteredTotal?`. Migration `P3_TransactionPayeeIndex` adds `(TenantId, PayeeId)` index.
+- **Frontend:** New `TransactionFilterComponent` (collapsible ws-card panel). Status multi-select toggle chips. Payee multi-select (ws-select async + removable chips). Date pickers × 4. Amount range inputs. Amount sort select. Debounced reference input (300ms). `TransactionsStore` rewritten with `TransactionFilter` composite object, `toQueryParams()`/`loadFromQueryParams()` URL sync. Legacy signal aliases kept for `ProcessPendingComponent` compat. Count header "Showing X of Y (Z total)". `ingestedAt` added to frontend model + shown as "Created" column.
+- **Decision: Eligible tab removed.** `TransactionStatus.Eligible` is never set today — tab was always empty and confusing. Removed from status tabs and filter chips. Enum value preserved.
+- **Tests: deferred per owner instruction.** See TODO_TESTS section.
+- **Test count: 752 backend + 159 frontend — unchanged. Both builds clean.**
+
+**Most recent significant work (2026-06-03 — WI-CALC-A.2.5: Procesar Pending — import warning + Hangfire job + UI):**
+- **Decision #53:** `TransactionImportValidationService` now emits a `Warning` (IssueCategory.Required) when `payeeCode` is blank and `Transaction.PayeeId` is Optional. Message: "No Staff ID provided — this transaction will be imported as Unassigned and requires manual assignment for commission calculation." Row remains importable; comp manager decides whether to continue.
+- **Decision #54 — Backend:** New `ProcessPendingTransactionsCommand` (IMoneyCriticalCommand) + `ProcessPendingScope` enum (ByPlanAssignment / ByPlan / ByPayeeAndPeriod). `ProcessPendingTransactionsJobHandler` Hangfire job: loads candidates by scope, applies skipping rule (skip transactions with non-superseded Credits from any plan), processes in chunks of 50, honors `CancellationToken` at chunk boundary, audit-logs the run. New permission: `Transactions.ProcessPending` (TenantAdmin + CompManager). New query: `GetPendingTransactionsCountQuery` for lightweight badge count.
+- **Cancellation support:** `JobState` enum extended with `Cancelling` and `Cancelled` values (stored as string, no migration needed). `BackgroundJobRecord` gains `RequestCancellation()` and `MarkCancelled()`. `IBackgroundJobService` gains `CancelJobAsync()` and `MarkCancelledAsync()`. `HangfireJobDispatcher` catches `OperationCanceledException` → marks job Cancelled instead of Failed. `POST /api/jobs/{id}/cancel` endpoint added.
+- **New endpoints:** `GET /api/transactions/pending-count`, `POST /api/transactions/process-pending`, `GET /api/assignments/{id}` (PlanAssignment detail page required a GetByIdQuery).
+- **Decision #54 — Frontend:** `ProcessPendingComponent` (standalone) takes `scope`, `scopeId`, `periodStart`, `periodEnd` inputs; fetches candidate count on init; shows badge, volume notice when > 5,000, progress bar + Cancel button during job execution, terminal states. Added to: (a) new `AssignmentDetailComponent` at `/assignments/:assignmentId` (ByPlanAssignment scope); (b) `PlanDetailComponent` assignments tab (ByPlan scope); (c) `TransactionsListComponent` when payee+period filters are active (ByPayeeAndPeriod scope). `TransactionsStore` extended with `payeeIdFilter`, `dateFromFilter`, `dateToFilter` signals.
+- **i18n:** `TRANSACTIONS.PROCESS_PENDING.*` + `ASSIGNMENTS.ERROR_LOAD` added in EN/ES/PL.
+- **Pre-existing issue flagged:** Angular initial bundle 562.85KB (500KB warning budget). Pre-existing before this WI; new components are all lazy-loaded.
+- **Test count: 743 → 752 backend (+9), 154 → 159 frontend (+5). Build clean.**
 
 **Most recent significant work (2026-05-29 — WI-P2-04a-fix2: Excel native DateTime parsing):**
 - **Root cause:** `cell.GetString()` on `XLDataType.DateTime` cells produced culture-dependent strings (`"4/1/2026 10:21:04 AM"`), rejected by the validator. All rows from real POS exports fail date validation.
@@ -266,7 +289,127 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ---
 
+## TODO_TESTS — Deferred test backfill
+
+These tests were explicitly deferred by owner instruction on 2026-06-03 (WI-PROD-I.2). Add in a dedicated test WI before the first paying customer.
+
+### WI-PROD-T-FIX-9 — UPDATE wizard currency + field validation
+
+**Backend unit tests for `TransactionFieldValidators`:**
+- `ValidateCurrency("EUR")` → null (valid)
+- `ValidateCurrency("3SD2F13SD")` → Error, field="currency", category=Format
+- `ValidateCurrency("usd")` → Error (lowercase fails `^[A-Z]{3}$`)
+- `ValidateCurrency("")` → Error
+- `ValidateAmount("100", out decimal)` → null, parsed=100
+- `ValidateAmount("-1", out decimal)` → Error (≤ 0)
+- `ValidateAmount("abc", out decimal)` → Error (not a number)
+- `ValidateTransactionDate("2026-05-15", today, out DateOnly)` → null, parsed correctly
+- `ValidateTransactionDate("31/05/2026", today, out DateOnly)` → Error (not ISO 8601)
+- `ValidateTransactionDate("1999-12-31", today, out DateOnly)` → Error (before min date)
+- `ValidateTransactionDate(future date, today, out DateOnly)` → Error (future)
+
+**Backend integration tests for `TransactionUpdateValidationService`:**
+- Row with currency "3SD2F13SD" → `UpdateRowStatus.Error`, issue field="currency", category=Format
+- Row with currency "EUR" (different from existing PLN) → `UpdateRowStatus.WillUpdate`, diff shows PLN→EUR
+- Row with amount "abc" → `UpdateRowStatus.Error`, issue field="amount"
+- Row with amount "-5" → `UpdateRowStatus.Error`, issue field="amount"
+- Row with date "31/05/2026" → `UpdateRowStatus.Error`, issue field="transactionDate"
+- Row with date "1999-01-01" → `UpdateRowStatus.Error`, issue field="transactionDate"
+- Row with inactive payee code → `UpdateRowStatus.WillUpdate` (warning, not error) + diff shows payee change
+
+### WI-PROD-T-FIX-5 — Enrich skip log + open-in-filter
+
+**Backend integration tests:**
+- `ProcessPendingTransactionsJobHandler`: seed payee + EUR plan assignment + PLN transaction; run job; verify `ResultSummary.skipDetails[0]` has `refNum`, `txDate`, `amount`, `currency`, `payeeName`, `payeeCode`, `reason` populated correctly.
+- `ListTransactionsHandler`: add `ReferenceNumbers = "REF1,REF2"` to `PaginationQuery`; verify exact match — `REF1` and `REF2` returned, `REF3` not.
+- `ListTransactionsHandler`: `ReferenceNumbers` with one valid + one non-existent ref → returns only the valid one.
+- `ExportTransactionsHandler`: `ReferenceNumbers` filter produces the same rows as `ListTransactionsHandler` with the same filter.
+
+**Frontend component tests:**
+- `ProcessPendingComponent`: when `skipDetails` contains enriched entries, rendered rows show `refNum`, not `txId`.
+- `ProcessPendingComponent`: `onOpenInFilter()` calls `router.navigate` with `{ queryParams: { refs: 'REF1,REF2' } }`.
+- `TransactionsStore.loadFromQueryParams`: `refs=REF1,REF2` → `referenceNumbers: ['REF1', 'REF2']`.
+- `TransactionsStore._buildFilterRecord`: `referenceNumbers: ['REF1']` → `referenceNumbers: 'REF1'` in the filter record.
+
+---
+
+### WI-PROD-T-FIX-4 — Strict ISO date validation
+
+**Backend unit tests (MUST add before first paying customer):**
+- `TransactionImportValidationService`: validate row with `31/05/2026` → `IssueSeverity.Error`, `IssueCategory.Format`, message contains "ISO 8601".
+- `TransactionImportValidationService`: validate row with `05/31/2026` → same.
+- `TransactionImportValidationService`: validate row with `15-05-2026` → same.
+- `TransactionImportValidationService`: validate row with `2026-05-15` → no date error.
+- `TransactionImportValidationService`: validate row with `2026/13/45` → error (invalid date, not merely wrong format).
+- `TransactionImportJobHandler.TryParseDate` (or via integration): `"31/05/2026"` → returns `false`; `"2026-05-31"` → returns `true`.
+
+---
+
+### WI-PROD-T-FIX-3 — Currency mismatch per-row validation
+
+**Backend integration tests (MUST add before first paying customer):**
+- `TransactionImportValidationService`: seed payee with active EUR plan assignment; validate a batch with mixed EUR + PLN rows; verify PLN rows have `IssueSeverity.Error`, `IssueCategory.Reference`, field `"currency"`, and message contains plan name and currencies.
+- `TransactionImportValidationService`: seed payee with NO active assignment for the transaction date; verify no currency error is emitted (row imports as Pending).
+- `TransactionImportValidationService`: seed payee with active EUR assignment; validate row with valid EUR currency; verify no currency issue emitted.
+- `TransactionImportJobHandler` (belt-and-suspenders): force a `DomainException` in `AllocateAsync` for one row in a batch; verify the batch completes, other rows are imported, `skippedByDomainValidation` is counted in `totalSkipped`.
+
+---
+
+### WI-PROD-T-FIX-2 — Update wizard i18n + merge
+
+**TODO:** Test that `TransactionImportWizardComponent` correctly renders CREATE steps in default mode and UPDATE steps when `?mode=update` is passed. Specifically: step label translation, correct step component mounted per mode, and that UPDATE mode state signals are independent from CREATE mode state signals.
+
+---
+
+### WI-PROD-T-FIX-1 — Excel export filter alignment
+
+**Regression guard (MUST add before first paying customer):**
+- Test: applying filter combination F (payee + status + date range + amount range) to `GET /api/transactions` returns `totalCount = N`. The same F sent as body to `POST /api/transactions/export` must produce a file with exactly N data rows. Any divergence means `_buildFilterRecord` in the store and `ExportTransactionsHandler` are out of sync.
+
+---
+
+### WI-PROD-T — Export + Re-upload + Process Pending skip fix
+
+**Backend integration tests:**
+- `ProcessPendingTransactionsJobHandler`: seed mix of EUR + PLN transactions, run job, verify EUR are Calculated, PLN remain Pending, `ResultSummary.skippedByValidation` matches expected count.
+- `POST /api/transactions/export`: with each filter combination, verify correct columns and row count.
+- `POST /api/imports/transactions/update/validate`: diff computation per field (amount, currency, date, payeeId); Paid blocks; missing reference errors.
+- `UpdateTransactionsFromExcelJobHandler`: Calculated transaction → Credits superseded + Status reset to Pending; audit log before/after JSON populated.
+
+**Frontend component tests:**
+- `ProcessPendingComponent`: skip log expand/collapse, `DONE_WITH_SKIPS` message rendered when `skippedByValidation > 0`.
+- `TransactionsListComponent`: Export button shown only when `totalCount > 0`; `onExport()` triggers blob download.
+- `TransactionUpdateWizardComponent`: step transitions upload→map→preview→progress→complete.
+
+---
+
+### WI-PROD-I.2 — Advanced transaction filter
+
+**Backend unit tests:**
+- `ListTransactionsHandler`: each of the 8 filter fields applied in isolation, verify SQL WHERE predicate.
+- `ListTransactionsHandler`: multiple filters combined (AND logic).
+- `ListTransactionsHandler`: `Statuses` comma-parsing, invalid values ignored.
+- `ListTransactionsHandler`: `PayeeIds` comma-parsing, invalid GUIDs ignored.
+- `ListTransactionsHandler`: `UnfilteredTotal` returned correctly even when filters reduce page to 0.
+
+**Backend integration tests:**
+- End-to-end: seed 50 transactions with mixed statuses, payees, amounts, dates → apply each filter → verify count + items.
+- Count alignment: filter(Status=Pending, PayeeId=X, DateFrom, DateTo) count == GetPendingTransactionsCountQuery(ByPayeeAndPeriod, X, DateFrom, DateTo).
+
+**Frontend component tests:**
+- `TransactionFilterComponent`: status chip toggles (add/remove, multi-select).
+- `TransactionFilterComponent`: payee chip add and removal.
+- `TransactionFilterComponent`: clear all resets form and emits `cleared`.
+- `TransactionFilterComponent`: debounce — reference input emits filterChange after 300ms.
+- `TransactionsListComponent`: URL sync — loadFromQueryParams called on init with URL params.
+- `TransactionsStore`: `toQueryParams()` serializes all active filters.
+- `TransactionsStore`: `loadFromQueryParams()` deserializes and applies filters.
+
+---
+
 ## Important decisions made
+
+> **Note on numbering — 2026-06-02:** Decision numbers are assigned in order of WRITING to this log, not in the order in which decisions were conceptually made. Decisions #55–#64 were backfilled on 2026-06-02 from a chat conversation earlier that day; they were decided BEFORE #50–#54 (which document implementation WIs and follow-up decisions) but written AFTER. Each backfilled entry is marked accordingly.
 
 1. **Document hierarchy:** ARCHITECTURE.md > Product Spec > DESIGN_SYSTEM > Master Plan. Conflicts resolved in this order.
 2. **Strict architecture enforcement:** Claude (chat) acts as gatekeeper. Refuses prompts that violate ARCHITECTURE.md.
@@ -419,9 +562,35 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
    2. `RateTable.Tiered` validation used `>=` boundary check, rejecting adjacent tiers where `To[i] == From[i+1]`. Fixed to `>` (strict overlap only). Standard adjacent tier layout (e.g. `[0-500)` and `[500-∞)`) now works.
    3. `CreditConfiguration.RuleSnapshot` stored as JSON but `RuleSnapshot` has only a private constructor — no parameterless constructor for System.Text.Json to use. Added `RuleSnapshotJsonConverter` in `Wasnie.Infrastructure.Persistence.Serialization`; `CreditConfiguration` now uses `BuildJsonOptions()` with both `MoneyJsonConverter` and `RuleSnapshotJsonConverter`.
 
-   **AttainmentBased V1 stub:** `ComputeAttainmentCommission` uses `attainmentPct=1.0m` (100% fixed). WI-CALC-A.2 must replace this with `IQuotaAttainmentService`.
+   **AttainmentBased V1 stub:** `ComputeAttainmentCommission` uses `attainmentPct=1.0m` (100% fixed). WI-CALC-A.3 must replace this with `IQuotaAttainmentService`.
 
    **Tests:** +27 (5 unit `CompensationTransactionTests`, 16 integration `CreditAllocationServiceTests`, 1 integration `TransactionImportJobTests.WithPlanAndAssignment`, 1 integration `TransactionsEndpointsTests.Post_WithPlanAndAssignment`, plus new domain event test coverage). 704 → 731 non-skipped tests. (2026-06-02)
+
+52. **WI-CALC-A.2 Done — Credit superseding on reassign; Decision #46 Case A (2026-06-02).** Orphaned-Credit bug fixed. When a Calculated transaction is reassigned, all non-superseded Credits for that transaction are marked superseded and the Credit Engine immediately re-allocates for the new payee. Sub-WI numbering shifted: original A.2 (quota attainment) → A.3. Decision #46 Cases B, C, D deferred (Payouts not built yet). Tests: +12 (6 unit `CreditTests`, 4 integration `CreditSupersedeIntegrationTests`). 731 → 743 non-skipped. (2026-06-02)
+
+53. **Decision #53 — WI-CALC-MODEL Part 1.5: Validation issue on transactions without payee at import (2026-06-02).** When the import wizard processes a CSV row that has no Staff ID (and the tenant's `Transaction.PayeeId` setting is `Optional`, per Decision 10 of WI-PROD-MODEL), the system emits a `ValidationIssue` for that row using the existing IssueCategory infrastructure from WI-PROD-E. The issue appears inline in the wizard's validation table, alongside any other format/reference/required issues from the same import. The issue: Category: `IssueCategory.Required` (or a new category if a distinct visual treatment is preferred — to be decided in the implementation WI, not here). Message: clear, contextual — e.g. "No Staff ID provided — this transaction will be imported as Unassigned and requires manual assignment to a payee later for commission calculation." Severity: warning, not error — the row is still importable. The comp manager sees ALL such warnings inline in the wizard's existing validation table (same UX as Format / Reference / Required warnings from WI-PROD-E). The comp manager decides: Cancel the import and upload a corrected CSV. Continue with the import; transactions without Staff ID enter as `Unassigned` (`PayeeId = null`). No threshold, no modal, no separate alert mechanism. The existing validation table is the only surface. The comp manager has full visibility and decides based on what they see, not based on a system-imposed threshold. Coherent with Decision 10 of WI-PROD-MODEL: `Transaction.PayeeId Optional` remains valid for legitimately unassigned transactions (returns, anonymous sales, online sales without staff). This decision adds visibility, not enforcement. (2026-06-02)
+
+54. **Decision #54 — WI-CALC-MODEL Part 1.5: Manual "Procesar Pending" button to trigger Credit allocation on existing Pending transactions (2026-06-02).** The Credit Engine (WI-CALC-A.1) runs continuously during ingest. Transactions ingested with `PayeeId` and an active `PlanAssignment` covering the `TransactionDate` immediately become Calculated. Transactions that fall outside this happy path — either because they had no PayeeId at ingest (Unassigned, later assigned), or because no PlanAssignment was configured at ingest time — remain Pending. These accumulate when clients upload CSVs before configuring plans, or when payees are assigned to plans after import. The system does NOT process these retroactively without explicit user action. No auto-backfill on PlanAssignment creation. No background job runs without trigger. Instead, the comp manager triggers backfill manually via a "Procesar Pending" button visible in surfaces where it is contextually relevant: the PlanAssignment detail page (processes that payee's Pending in the assignment's period); the Plan detail page (processes all assigned payees' Pending in the plan's period — for bulk); the transactions list when filtered by payee + period (processes the filtered subset). Above the button, the system shows an informative badge: "X transactions Pending elegibles para procesamiento". Click dispatches a Hangfire job `ProcessPendingTransactionsJob` with three technical specifications: (1) **Chunking obligatorio.** Process in chunks of 50-100 (mirroring TransactionImportJobHandler from Phase 2). Each chunk in its own DB transaction with its own commit. No single transaction processes more than one chunk. Idempotency: Credit's `(TransactionId, RuleId, PayeeId)` is unique; retried chunks finding existing Credits skip silently. (2) **Volume awareness UI.** When candidate query returns >5,000 transactions, show informative message: "Procesando N transactions, tiempo estimado ~M minutos. Puedes seguir trabajando." Threshold hardcoded at 5,000 for V1; configurable per tenant in the future. Estimate formula: `total / 100 = chunks × 3 seconds per chunk`. (3) **Cancelable.** The job MUST be cancelable from the UI. Hangfire's cancellation token is honored at chunk boundary — current chunk completes (avoiding partial-chunk corruption), then job stops cleanly. Already-committed chunks remain; remaining transactions stay Pending. Cancellation audit-logged with actor and timestamp. Skipping rule (consistent with Decision #46 Case B): the job skips transactions that already have non-superseded Credits from ANOTHER Plan whose `EffectivePeriod` overlaps. The job does NOT automatically supersede them. If the comp manager wants to replace an old plan's calculations, they must explicitly trigger a separate "Recalculate transactions for this payee" operation (future feature; out of A.2.5 scope). Audit trail: each processing run records trigger (user action), actor, timestamp, scope, processed count, created count, skipped count. The Credit Engine becomes reachable via three paths: (1) Synchronously during transaction ingest (WI-CALC-A.1). (2) Synchronously during reassign (WI-CALC-A.2). (3) Asynchronously via manual "Procesar Pending" trigger (WI-CALC-A.2.5, this decision). All paths converge on the same `ICreditAllocationService.AllocateAsync` contract — no duplication of allocation logic. No automatic trigger. This is the firm choice: control over convenience. Coherent with the project's broader principle that retroactive changes require explicit user confirmation. (2026-06-02)
+
+55. **Decision #55 — WI-CALC-MODEL Part 1, Decision 1: One active PlanAssignment per payee per period; Rule.Tag for grouping (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* A Payee can have only one `PlanAssignment` whose `EffectivePeriod` overlaps with any other active `PlanAssignment` for the same Payee. The domain enforces this invariant in the `PlanAssignment` factory / creation command: if the Payee already has an active `PlanAssignment` whose `EffectivePeriod` overlaps with the new one, creation is rejected with a clear `DomainException`. To change a Payee's plan, the TenantAdmin deactivates the current `PlanAssignment` (the `Deactivate()` method already exists) and creates a new one. The transition is audit-logged automatically by existing `AuditBehavior` infrastructure. `Rule` gains an optional `Tag` property (string, nullable, max 50 characters). The Tag is not enforced — it is a free label that allows logical grouping of rules across plans (e.g. "Promo Spring 2026", "Base", "Q3 Campaign"). Used for reporting and bulk operations later. Tag is metadata only; the engine does not consume it for calculation. Open for later: aggregations across payees (e.g. "team bonus when store revenue > 500k"). This requires Triggers to support cross-payee aggregations, which is outside the single-payee plan model. Deferred to a future phase. Architectural implication: the join in the Credit Engine simplifies to `Transaction → PlanAssignment (single active, period contains TransactionDate) → Plan → Rules`. No disambiguation logic needed. One transaction → one Plan (or none, if Payee has no active assignment in that period). (2026-06-02)
+
+56. **Decision #56 — WI-CALC-MODEL Part 1, Decision 2: Rule.EffectivePeriod for sub-plan temporal scoping (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* The `Rule` entity gains property `EffectivePeriod` of type `DateRange?` (nullable). Semantics: If null → the rule applies during the entire `Plan.EffectivePeriod` (preserves existing behavior; existing rules migrate with null). If present → the rule applies only within the specified date range. **Invariant A (containment):** If `Rule.EffectivePeriod` is set, it must be fully contained in `Plan.EffectivePeriod`. Validated in `Plan.AddRule(...)` and `Plan.UpdateRule(...)`. If a rule range falls outside the plan range, the operation is rejected with a `DomainException` whose message mentions both ranges (e.g. "Rule 'Spring Promo' period (2026-04-20 to 2026-08-15) is not within Plan period (2026-04-01 to 2026-06-30)"). **Invariant B (bidirectional):** When updating `Plan.EffectivePeriod` (in Draft state), the domain validates that no active rule with a specific `EffectivePeriod` would fall outside the new plan range. If any rule would be invalidated, the plan update is rejected with a clear message. **Invariant C (Draft only):** Both invariants apply only when `Plan.Status == Draft`. Once a plan is Active, the period is frozen — for changes, the existing `CloneAsNewVersion` pattern is used. The generic `Trigger.Condition` system (Field/Operator/Value with ConditionValueType.Date) remains intact for non-temporal scoping (amount thresholds, category matches, etc.). It is NOT used for date ranges going forward — `Rule.EffectivePeriod` is the first-class concept for "this rule applies during these dates". UX implication: the Rule form gains an optional date-range picker labeled "Applies only during (optional):". When empty, hint displays "During the entire plan period." Architectural rationale: date-range scoping at the rule level is needed to model real retail patterns — seasonal promotions, "3x1 campaigns", limited-time bonuses — without requiring multi-plan assignment per Payee. This decision enables Decision #55 (one plan per Payee) to remain practical: campaigns live as time-scoped rules inside the Payee's single plan, not as separate Plans. (2026-06-02)
+
+57. **Decision #57 — WI-CALC-MODEL Part 1, Decision 3: PlanPeriodType as semantic label, not engine behavior (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* New enum `PlanPeriodType` with seven values: `Monthly`, `Quarterly`, `Annual`, `Semestral`, `Weekly`, `Biweekly`, `Custom`. New nullable property on `Plan`: `PlanPeriodType? PeriodType`. Interpretation chosen: the enum is metadata for reporting, UI, and UX. The calculation engine does NOT consume it for scheduling, period closing, or aggregation. The temporal contract remains `Plan.EffectivePeriod` (DateRange). Existing plans migrate with `PeriodType = null` — UI renders as "Custom" with no functional change. Future possibility (NOT decided today): if Phase 3 V2 introduces automatic period-close scheduling, `PeriodType` may be elevated to behavior. Today it does not commit to that. (2026-06-02)
+
+58. **Decision #58 — WI-CALC-MODEL Part 1, Decision 4: Quota.Period must be contained in Plan.EffectivePeriod (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* `Quota.Period` must be fully contained in the `Plan.EffectivePeriod` of the Plan it belongs to. Validated in `Quota.Create(...)` and `Quota.UpdateDraft(...)`. If the invariant fails, a `DomainException` is thrown with a contextual message citing both ranges. **Bidirectional:** when updating `Plan.EffectivePeriod` (in Draft state), the domain validates that no active Quota would have its period orphaned outside the new range. If any would be orphaned, the update is rejected. **Draft-only enforcement** — consistent with Decision #56. **Permissive migration:** existing Quotas with inconsistent periods are NOT rejected at migration time; legacy data tolerated. Gradual cure: validation kicks in on the next `UpdateDraft`, forcing the user to correct the period before saving. Conceptual coherence: Plan is the temporal container for Rules (Decision #56) and Quotas (this decision). All temporal child entities are constrained to the plan's range. (2026-06-02)
+
+59. **Decision #59 — WI-CALC-MODEL Part 1, Decision 5: Phase 3 V1 emits only Primary credits; Splits and Overlays deferred to V2 (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* Phase 3 V1 of the Calculation Engine emits Credits only with `Role = Primary` and `SplitPercentage = 1.0`. One transaction generates Credits only for the Payee assigned by its active `PlanAssignment` (single-plan-per-Payee per Decision #55). The Credit model retains intact support for `CreditRole.Overlay`, `CreditRole.Split`, and `SplitPercentage < 1.0`. The V1 engine does not produce them, but the model is ready. Phase 3 V2 (future) will enable Splits and Overlays without model redesign — only extending the engine logic to produce them. When the first real customer requires these features (likely in retail: store manager earning overlay on team sales), the feature is activated. (2026-06-02)
+
+60. **Decision #60 — WI-CALC-MODEL Part 1, Decision 6: Hybrid calculation trigger; manual Payouts in V1 (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* Two distinct engines with different granularities: **Credit Engine (continuous):** when a `CompensationTransaction` is ingested (manual entry or import), the engine evaluates the Rules of the Payee's active Plan and creates one `Credit` per firing Rule. Runs synchronously in the ingest pipeline or inside the Hangfire import job. `CompensationTransaction.Status` transitions Pending → Calculated when its Credit is created. **Payout Engine (manual, monthly):** `PayoutLine` and `CompensationPayout` are NOT maintained live. They are computed when the comp manager clicks "Calculate period" on the Payouts screen, dispatching `CalculatePayoutsForPeriodCommand(tenantId, planId, period)` as a Hangfire job. The job aggregates Credits → PayoutLines → CompensationPayouts. Job state visible via polling (same pattern as the import wizard). Each calculation is audit-logged (actor, timestamp, period, payout count). Automatic scheduling deferred to V2. An optional Hangfire recurring job per tenant can be added when Wasnie has stable production customers. All triggering is manual in V1. (2026-06-02)
+
+61. **Decision #61 — WI-CALC-MODEL Part 1, Decision 7: Retroactive recalculation via superseding and manual signal (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* Credits are immutable. Changes produce new Credits that supersede earlier ones. The comp manager decides when to recalculate; the system only signals. **Model changes:** `Credit` gains `SupersededAt` (DateTimeOffset, nullable) and `SupersededBy` (string, nullable). Superseded Credits remain in the DB; they are excluded by `WHERE SupersededAt IS NULL` in all calculations. A "recalculate suggested" signal on a Payout is derived by query — no new fields on `CompensationPayout`. **Four covered cases:** Case A — Transaction reassigned (Calculated status): prior payee's Credit marked superseded; new Credit created for the new payee with current RuleSnapshot. Case B — Reassign when Payout is Calculated/Approved: Payout NOT modified automatically. UI signals "pending changes — recalculate?". If chosen, existing Payout is marked superseded and a new one created. If Payout is Paid, recalculation is blocked. Case C — Plan updated after calculation: existing Payouts NOT recalculated automatically. Frozen RuleSnapshot protects historical calculation. Manual decision of the comp manager. Case D — Transaction cancelled: associated Credit marked superseded; same manual-signal flow. Blocked if Payout is Paid. Comp manager retains full control and traceability. Nothing changes behind their back after approval. Note: WI-CALC-A.2 implemented Case A on 2026-06-02. Cases B, C, D remain pending until their respective feature flows exist. (2026-06-02)
+
+62. **Decision #62 — WI-CALC-MODEL Part 1, Decision 8: Period assignment by TransactionDate (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* The period a transaction belongs to is determined strictly by `CompensationTransaction.TransactionDate`. The engine aggregates Credits using `WHERE TransactionDate >= Period.Start AND TransactionDate <= Period.End AND SupersededAt IS NULL`. `IngestedAt` is operational metadata only — it does NOT participate in period assignment. Late-ingested transactions (e.g. April CSV with March sales) are correctly assigned to March. If the March Payout was already calculated, Decision #61 applies: a new Credit is created and the comp manager sees the recalculation signal. The RuleSnapshot is frozen with Rules active at `TransactionDate` — consistent with Decision #56 (`Rule.EffectivePeriod`). (2026-06-02)
+
+63. **Decision #63 — WI-CALC-MODEL Part 1, Decision 9: Quota attainment via Domain Service with per-request cache (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* **Domain Service:** `IQuotaAttainmentService` in the Domain layer, with primary method: `QuotaAttainment ComputeAttainment(Quota quota, IEnumerable<Credit> credits)`. The service interprets `MeasurementType` (Revenue → sum `OriginalAmount`, Units → sum quantities, Margin → formula, etc.). Attainment semantics live in the domain because they depend on the model. **Per-request cache** in the implementation — same pattern as `IFieldRequirementService` from WI-PROD-A.1: lazy-load, scoped, computes the first time and reuses within the request. No snapshot table, no global cache invalidation. **Value Object `QuotaAttainment`** encapsulates: `AttainedAmount` (Money) — the total measured so far; `AttainmentPercentage` — can exceed 100% (overachievement); range 0–2.0+ (requires new VO `AttainmentPercentage` because the existing `Percentage` VO constrains to 0–1.0); `QuotaAmount` (Money) — the original target; `MeasurementType` (enum) — what was measured; `Period` (DateRange) — the period evaluated; `ComputedAt` (DateTimeOffset) — when this snapshot was computed. **Consumers:** Credit Engine (when a Rule uses `RateTable.AttainmentBased`, the engine asks running attainment before applying the rate); Quota UI / Payee Dashboard (displays "X is at 76% of their target"); Reporting / Payout view (includes attainment as context). **Computation filter:** the service considers only Credits that (a) reference the same `PlanId` as the Quota, (b) whose `TransactionDate` falls in `Quota.Period`, and (c) whose `SupersededAt IS NULL`. The `SupersededAt` filter connects to Decision #61 — attainment reflects current reality, not historical. (2026-06-02)
+
+64. **Decision #64 — WI-CALC-MODEL Part 1 milestone: Phase 3 domain model complete (2026-06-02).** *Backfilled from chat conversation 2026-06-02 — was discussed and decided but not written to disk at the time.* Nine decisions (#55–#63) define the complete conceptual domain model for the Phase 3 Calculation Engine. Architectural takeaways: The existing Phase 1 entity shells (`CompensationPayout`, `PayoutLine`, `Credit`) are richer than initially recognized. They form a three-level calculation chain: `Transaction → Credit → PayoutLine → CompensationPayout`. Phase 3 V1 will populate them. Three read-only inspections informed this conclusion (Plan/Quota/Rule/PlanAssignment inventory; Rule.Trigger model; CompensationPayout+PayoutLine+Credit shells). Two distinct engines: **Credit Engine** (high frequency, continuous, in ingest pipeline) and **Payout Engine** (low frequency, monthly, manual trigger). Audit trail is preserved through immutable Credits with superseding markers + frozen RuleSnapshots embedded in each Credit. Comp manager retains full control: nothing changes automatically after approving a Payout; system only signals pending changes. Implementation scoped into sub-WIs (WI-CALC-A.0 through A.5). (2026-06-02)
 
 ---
 
@@ -468,6 +637,25 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 ---
 
+### WI-CALC-MODEL — Calculation Engine domain model ✅ PART 1 CLOSED (2026-06-02)
+
+**Status:** Part 1 CLOSED (2026-06-02). Nine decisions (#55–#63) define the complete domain model for the Phase 3 Calculation Engine. Implementation is in progress through sub-WIs.
+
+**Purpose:** Multi-session design conversation defining the domain model for Phase 3 (Calculation Engine). Parallels WI-PROD-MODEL in structure. Closed the gap between the existing Plan/Quota/Rule entity shells and the calculation engine implementation.
+
+**Sub-WI sequence:**
+- WI-CALC-A.0 ✅ Done (Decision #50) — Schema preparation
+- WI-CALC-A.1 ✅ Done (Decision #51) — Credit Engine V1 + RuleSnapshot
+- WI-CALC-A.2 ✅ Done (Decision #52) — Credit superseding on reassign (Decision #61 Case A)
+- **WI-CALC-A.2.5 ⏳ NEXT** — Procesar Pending: import warning + manual trigger button + Hangfire job (Decisions #53 + #54)
+- WI-CALC-A.3 — Quota attainment service (Decision #63)
+- WI-CALC-A.4 — Payout Engine + manual trigger (Decision #60)
+- WI-CALC-A.5 — Payouts UI
+
+**Part 1.5 follow-up decisions:** Decisions #53 and #54 emerged from real-world testing during A.1/A.2 implementation and formalize how Pending transactions are visualized (at import time via existing WI-PROD-E validation table) and processed (via explicit user action, no auto-backfill).
+
+---
+
 ### WI-CALC-A.0 — Phase 3 schema preparation ✅ DONE (2026-06-02)
 
 **Status:** DONE. Schema-only WI — no engine logic, no commands, no API, no UI.
@@ -479,7 +667,7 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 - `Plan.PeriodType` (`PlanPeriodType?`, `nvarchar(50)`) — 7-value enum, metadata only; `CloneAsNewVersion` copies it.
 - `Credit.SupersededAt` / `Credit.SupersededBy` — superseding markers; filtered index `IX_Credits_TenantId_SupersededAt WHERE [SupersededAt] IS NULL`.
 
-**Next:** WI-CALC-A.2 (IQuotaAttainmentService — removes the attainment=100% stub); WI-CALC-A.3 (Credit.Supersede() domain method).
+**Next (at time of this entry):** WI-CALC-A.1 (Credit Engine V1 — ✅ DONE) and WI-CALC-A.2 (Credit superseding — ✅ DONE). Active next: WI-CALC-A.2.5 (Procesar Pending — see WI-CALC-MODEL entry above).
 
 ---
 
@@ -491,7 +679,63 @@ Real POS export: Reserved Polska / Galeria Katowice, April 2026, 3,183 rows. Aft
 
 **New tests:** 27 new (5 unit `CompensationTransactionTests`, 16 `CreditAllocationServiceTests`, 1 import E2E, 1 manual creation E2E). 704 → 731 non-skipped.
 
-**TODO WI-CALC-A.2:** Remove `// TODO WI-CALC-A.2` stub in `CreditAllocationService.ComputeAttainmentCommission` — replace with real `IQuotaAttainmentService`.
+**TODO WI-CALC-A.3:** Remove `// TODO WI-CALC-A.2` stub in `CreditAllocationService.ComputeAttainmentCommission` — replace with real `IQuotaAttainmentService` (original A.2 content, re-numbered to A.3 after this bug-fix WI was inserted).
+
+---
+
+### WI-FRONTEND-FIX-1 — View Rule page: form rehydration + Live Preview ✅ DONE (2026-06-02)
+
+**Status:** DONE. Two pre-existing UI bugs fixed. Discovered during WI-CALC-A.2 smoke test.
+
+**Root cause (shared):** Backend `Program.cs` adds `JsonStringEnumConverter` globally; enum values arrive from the API as string names (`"Revenue"`, `"Flat"`, `"Sum"`) rather than integers. `_loadExistingRule()` was patching the form with raw string values. `WsSelect` compares selected value with `===` against numeric option values → no match → dropdown blank. `rateTableType()` computed did `Number("Flat") = NaN` → Live Preview fell to `@else` and showed "Attainment · 0 tiers" regardless of actual type.
+
+**Fix:** Added `_enumToNumber<T>(enumObj, value): number` private helper to `RuleFormComponent`. Applied at every enum field in `_loadExistingRule()`: `MeasurementType`, `MeasurementAggregation`, `RateTableType`, `LogicalOperator`, `ConditionOperator`, `ConditionValueType`, `ModifierType`, `CapScope`. Also caches `rateTableTypeNum` so the tiered/attainment branch check (which was also comparing strings to numeric enum values) uses the coerced integer.
+
+**File changed:** `WasnieUi/src/app/features/plans/rule-form/rule-form.component.ts`
+
+**Tests:** +11 new in `rule-form.component.spec.ts` (Flat/Tiered/AttainmentBased rehydration, form control numeric values, tiersArray population, modifier + cap scope coercion). 143 → 154 frontend tests, all pass. Backend unchanged.
+
+---
+
+### WI-CALC-A.2 — Credit superseding on reassign ✅ DONE (2026-06-02)
+
+**Status:** DONE. Decision #46 Case A implemented.
+
+**Bug fixed:** WI-CALC-A.1 left Credits orphaned when a Calculated transaction was reassigned — the Credit's PayeeId no longer matched the transaction's PayeeId, but SupersededAt was NULL so attainment queries would have aggregated stale data.
+
+**What shipped:**
+- `Credit.Supersede(string reason, DateTimeOffset now, Guid eventId)` domain method with invariants (not-already-superseded, reason required, reason ≤ 500 chars).
+- `CreditSupersededEvent` domain event carrying creditId, transactionId, payeeId, tenantId, reason.
+- `ReassignPayeeHandler` updated: before changing payee, loads all non-superseded Credits for the transaction, calls `Supersede()` on each with a structured reason (`"Reassigned from payee {old} to payee {new} by {user} at {ts}. Reason: {commandReason}"`). After reassign, calls `ICreditAllocationService.AllocateAsync(transaction, ct)` immediately (Option A) — if Credits returned, persists them and marks transaction Calculated; if empty (new payee has no plan), leaves Pending.
+- All operations within the same money-critical `IMoneyCriticalCommand` scope (atomic with audit).
+- Decision #46 Cases B, C, D deferred (Payouts and plan-update flows don't exist yet).
+
+**New tests:** 12 new (6 unit `CreditTests`, 4 integration `CreditSupersedeIntegrationTests`). 731 → 743 non-skipped.
+
+**Sub-WI re-numbering:** Original A.2 (IQuotaAttainmentService) → A.3. Original A.3 (now absorbed here). A.4 (Payout Engine) unchanged. A.5 (Payouts UI) unchanged.
+
+---
+
+### WI-CALC-A.2.5 — Procesar Pending: import warning + manual trigger + Hangfire job ⏳ NEXT (2026-06-02)
+
+**Status:** Pending. Next in sequence. Combines Decisions #53 + #54.
+
+**Scope:**
+
+1. **Import wizard: ValidationIssue for unassigned rows (Decision #53).** When a CSV/XLSX row has no Staff ID and `Transaction.PayeeId` is Optional, emit a `ValidationIssue` (warning severity) using the existing `IssueCategory` infrastructure from WI-PROD-E. Inline in the wizard's existing validation table — no modal, no threshold. The comp manager sees all such warnings paginated alongside other Format/Reference/Required issues and decides: cancel the import and upload a corrected CSV, OR continue (rows enter as `Unassigned`, `PayeeId = null`).
+
+2. **"Procesar Pending" button (Decision #54).** Visible on: PlanAssignment detail page (payee + period scope); Plan detail page (all assigned payees in the plan — bulk); filtered transactions list (filtered subset scope). Above the button: informative badge with eligible Pending count.
+
+3. **`ProcessPendingTransactionsJob` (Hangfire, Decision #54).** Technical invariants:
+   - Chunked processing (50–100 per chunk); each chunk in its own DB transaction with its own commit.
+   - Idempotency: `(TransactionId, RuleId, PayeeId)` unique tuple — existing Credits skipped silently on retry.
+   - Cancelable at chunk boundary (completed chunks persist; remaining transactions stay `Pending`; cancellation audit-logged).
+   - Volume awareness: >5,000 candidates shows estimated time message (`total / 100 chunks × 3 s/chunk`); threshold hardcoded for V1.
+   - Skipping rule: skip transactions with non-superseded Credits from a DIFFERENT Plan whose EffectivePeriod overlaps — does NOT auto-supersede (consistent with Decision #54).
+
+4. **Audit trail per run:** actor, timestamp, scope, processed count, created count, skipped count + skip reason per transaction.
+
+**Technical note:** All three Credit Engine paths (ingest, reassign, backfill) converge on `ICreditAllocationService.AllocateAsync` — Decision #63.
 
 ---
 

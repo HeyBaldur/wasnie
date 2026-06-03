@@ -1,0 +1,78 @@
+<form [formGroup]="form" class="mapping-step">
+
+  <!-- ReferenceNumber: immutable key -->
+  <div class="mapping-section">
+    <h3 class="mapping-section__title">{{ 'IMPORTS.UPDATE.MAPPING_HINT' | translate }}</h3>
+    <div class="mapping-rows">
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_REFERENCE' | translate }}</span>
+          <span class="mapping-row__key-badge">{{ 'IMPORTS.UPDATE.KEY_BADGE' | translate }}</span>
+        </div>
+        <ws-select formControlName="referenceNumberColumn" [options]="columnOptions()" />
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Optional fields -->
+  <div class="mapping-section">
+    <h3 class="mapping-section__title">{{ 'IMPORTS.TRANSACTIONS.MAP_OPTIONAL' | translate }}</h3>
+    <div class="mapping-rows">
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_AMOUNT' | translate }}</span>
+        </div>
+        <ws-select formControlName="amountColumn" [options]="optionalColumnOptions()" />
+      </div>
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_CURRENCY' | translate }}</span>
+        </div>
+        <ws-select formControlName="currencyColumn" [options]="optionalColumnOptions()" />
+      </div>
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_DATE' | translate }}</span>
+        </div>
+        <ws-select formControlName="transactionDateColumn" [options]="optionalColumnOptions()" />
+      </div>
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_STAFF_ID' | translate }}</span>
+        </div>
+        <ws-select formControlName="payeeCodeColumn" [options]="optionalColumnOptions()" />
+      </div>
+
+    </div>
+  </div>
+
+  @if (error()) {
+    <p class="mapping-error">
+      <app-icon name="alert-circle" [size]="14" />
+      {{ error() }}
+    </p>
+  }
+
+  <div class="mapping-actions">
+    <ws-button variant="secondary" (click)="back.emit()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'COMMON.BACK' | translate }}
+    </ws-button>
+    <ws-button
+      variant="primary"
+      [disabled]="!canContinue || loading()"
+      [loading]="loading()"
+      (click)="onValidate()"
+    >
+      {{ 'IMPORTS.TRANSACTIONS.BTN_VALIDATE' | translate }}
+      <app-icon name="arrow-right" [size]="14" />
+    </ws-button>
+  </div>
+
+</form>

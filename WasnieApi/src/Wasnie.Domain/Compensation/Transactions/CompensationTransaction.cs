@@ -151,6 +151,39 @@ public sealed class CompensationTransaction : AggregateRoot
         }
     }
 
+    // Apply value changes from the Excel re-upload workflow (WI-PROD-T).
+    // The caller MUST supersede existing Credits before calling this when Status == Calculated.
+    // Paid transactions MUST be rejected before reaching this method.
+    public void ApplyExcelUpdate(
+        Money? newAmount,
+        DateOnly? newDate,
+        Guid? newPayeeId,
+        string updatedBy,
+        DateTimeOffset now)
+    {
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException("Cannot update a Paid transaction via Excel re-upload.");
+
+        if (newAmount is not null)
+            Amount = newAmount;
+
+        if (newDate.HasValue)
+        {
+            if (newDate.Value < MinTransactionDate)
+                throw new DomainException($"Transaction date cannot be before {MinTransactionDate:yyyy-MM-dd}.");
+            TransactionDate = newDate.Value;
+        }
+
+        if (newPayeeId.HasValue)
+            PayeeId = newPayeeId.Value;
+
+        // Any value change on a Calculated transaction reverts it to Pending.
+        if (Status == CompensationTransactionStatus.Calculated)
+            Status = CompensationTransactionStatus.Pending;
+
+        UpdatedAt = now;
+    }
+
     // Pending → Cancelled, Eligible → Cancelled.
     // Cancellation of Calculated/Paid requires clawback evaluation (Phase 3).
     public void Cancel(string updatedBy, DateTimeOffset now, Guid eventId)

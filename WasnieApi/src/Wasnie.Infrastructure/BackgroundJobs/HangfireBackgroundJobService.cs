@@ -62,8 +62,22 @@ public sealed class HangfireBackgroundJobService(
 
     public async Task MarkRunningAsync(Guid jobId, CancellationToken ct = default)
     {
-        var record = await db.BackgroundJobRecords.FindAsync([jobId], ct)
-            ?? throw new InvalidOperationException($"Background job record {jobId} not found.");
+        // Retry up to 500ms to handle a race: EnqueueAsync saves the BackgroundJobRecord
+        // inside the caller's DB transaction (e.g. AuditBehavior money-critical tx), but
+        // Hangfire (QueuePollInterval=TimeSpan.Zero) picks up the job before that transaction
+        // commits. The row is visible only after commit, which typically happens within a
+        // few ms — well within this 500ms window.
+        BackgroundJobRecord? record = null;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            record = await db.BackgroundJobRecords.FindAsync([jobId], ct);
+            if (record is not null) break;
+            if (attempt < 4) await Task.Delay(100, ct);
+        }
+
+        if (record is null)
+            throw new InvalidOperationException($"Background job record {jobId} not found.");
+
         record.MarkRunning();
         await db.SaveChangesAsync(ct);
     }
@@ -96,7 +110,44 @@ public sealed class HangfireBackgroundJobService(
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<bool> CancelJobAsync(Guid jobId, Guid tenantId, CancellationToken ct = default)
+    {
+        var record = await db.BackgroundJobRecords
+            .FirstOrDefaultAsync(r => r.Id == jobId && r.TenantId == tenantId, ct);
+
+        if (record is null) return false;
+
+        // Only active jobs can be cancelled.
+        if (record.State is not (JobState.Pending or JobState.Running)) return false;
+
+        var hangfireJobId = record.HangfireJobId;
+        record.RequestCancellation();
+        await db.SaveChangesAsync(ct);
+
+        // Signal Hangfire to abort the job (signals CancellationToken in the job method).
+        if (!string.IsNullOrEmpty(hangfireJobId))
+            hangfireClient.Delete(hangfireJobId);
+
+        return true;
+    }
+
+    public async Task MarkCancelledAsync(Guid jobId, CancellationToken ct = default)
+    {
+        var record = await db.BackgroundJobRecords.FindAsync([jobId], ct);
+        if (record is null) return;
+        record.MarkCancelled();
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetResultSummaryAsync(Guid jobId, string summaryJson, CancellationToken ct = default)
+    {
+        var record = await db.BackgroundJobRecords.FindAsync([jobId], ct);
+        if (record is null) return;
+        record.SetResultSummary(summaryJson);
+        await db.SaveChangesAsync(ct);
+    }
+
     private static JobStatusDto ToDto(BackgroundJobRecord r) =>
         new(r.Id, r.State, r.ProgressCurrent, r.ProgressTotal,
-            r.ErrorMessage, r.EnqueuedAtUtc, r.StartedAtUtc, r.CompletedAtUtc);
+            r.ErrorMessage, r.EnqueuedAtUtc, r.StartedAtUtc, r.CompletedAtUtc, r.ResultSummary);
 }

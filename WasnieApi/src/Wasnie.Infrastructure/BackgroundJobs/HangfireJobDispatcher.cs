@@ -52,6 +52,15 @@ public sealed class HangfireJobDispatcher(
             logger.LogInformation(
                 "Background job {JobId} completed successfully.", jobTrackingId);
         }
+        catch (OperationCanceledException)
+        {
+            await jobService.MarkCancelledAsync(jobTrackingId, CancellationToken.None);
+
+            logger.LogInformation(
+                "Background job {JobId} cancelled at chunk boundary.", jobTrackingId);
+
+            throw; // Re-throw so Hangfire marks the job as deleted/aborted.
+        }
         catch (Exception ex)
         {
             await jobService.MarkFailedAsync(jobTrackingId, ex.Message, cancellationToken);

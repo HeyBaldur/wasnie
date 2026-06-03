@@ -17,6 +17,8 @@ import {
 import { getPlanPermissions } from '../services/plan-permissions';
 import { Assignment } from '../../assignments/models/assignment.model';
 import { PagedResult } from '../../../shared/models/pagination.models';
+import { ProcessPendingComponent } from '../../transactions/process-pending/process-pending.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import {
   WsPageLayoutComponent,
   WsBadgeComponent,
@@ -48,6 +50,8 @@ type Tab = 'rules' | 'versions' | 'assignments';
     WsConfirmationModalComponent,
     WsTooltipDirective,
     WsPaginationComponent,
+    ProcessPendingComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './plan-detail.component.html',
   styleUrl: './plan-detail.component.scss',

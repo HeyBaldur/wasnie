@@ -12,6 +12,7 @@ using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
+using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
 
 namespace Wasnie.Infrastructure.Compensation.Calculation;
 
@@ -34,6 +35,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
         _logger = logger;
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<Credit>> AllocateAsync(
         CompensationTransaction transaction,
         CancellationToken ct = default)
@@ -82,6 +84,54 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
         if (plan is null) return Array.Empty<Credit>();
 
+        return BuildCredits(transaction, assignment, plan);
+    }
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<Credit>> AllocateAsync(
+        CompensationTransaction transaction,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PlanAssignment>> assignmentsByPayee,
+        IReadOnlyDictionary<Guid, CompensationPlan> plansById,
+        CancellationToken ct = default)
+    {
+        // Decision #44: unassigned transactions never produce Credits.
+        if (transaction.PayeeId == null)
+            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+
+        // Only Pending transactions get processed.
+        if (transaction.Status != CompensationTransactionStatus.Pending)
+            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+
+        var payeeIdVal = transaction.PayeeId.Value;
+        var txDate = transaction.TransactionDate;
+
+        // Resolve assignment from the caller-supplied pre-loaded dictionary (no DB query).
+        if (!assignmentsByPayee.TryGetValue(payeeIdVal, out var payeeAssignments))
+            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+
+        var assignment = payeeAssignments.FirstOrDefault(pa =>
+            pa.Status == AssignmentStatus.Active &&
+            pa.EffectivePeriod is not null &&
+            pa.EffectivePeriod.Start <= txDate &&
+            pa.EffectivePeriod.End >= txDate);
+
+        if (assignment is null)
+            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+
+        // Resolve plan from the caller-supplied pre-loaded dictionary (no DB query).
+        if (!plansById.TryGetValue(assignment.PlanId, out var plan))
+            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+
+        return Task.FromResult(BuildCredits(transaction, assignment, plan));
+    }
+
+    // ── Shared credit-building logic ──────────────────────────────────────────
+
+    private IReadOnlyList<Credit> BuildCredits(
+        CompensationTransaction transaction,
+        PlanAssignment assignment,
+        CompensationPlan plan)
+    {
         // Multi-tenant guard.
         if (plan.TenantId != transaction.TenantId ||
             assignment.TenantId != transaction.TenantId)
@@ -96,6 +146,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 $"but plan '{plan.Name}' is denominated in '{plan.Currency}'.");
 
         var now = _clock.UtcNowOffset;
+        var txDate = transaction.TransactionDate;
         var credits = new List<Credit>();
 
         // Decision #41: filter rules by EffectivePeriod at runtime.
@@ -124,7 +175,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
             var credit = Credit.Allocate(
                 tenantId: transaction.TenantId,
                 transactionId: transaction.Id,
-                payeeId: payeeIdVal,
+                payeeId: transaction.PayeeId!.Value,
                 planId: plan.Id,
                 ruleId: rule.Id,
                 ruleSnapshot: snapshot,

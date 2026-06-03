@@ -6,6 +6,8 @@ export interface PagedResult<T> {
   totalPages: number;
   hasNextPage: boolean;
   hasPreviousPage: boolean;
+  /** Tenant-wide unfiltered total — only populated by endpoints that support advanced filtering. */
+  unfilteredTotal?: number;
 }
 
 export interface PaginationParams {

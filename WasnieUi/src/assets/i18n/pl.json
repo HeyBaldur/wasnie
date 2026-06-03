@@ -163,7 +163,8 @@
     "MARK_AS_ACTIVE": "Oznacz jako Aktywny",
     "STATUS": "Status",
     "CREATED_AT": "Utworzono",
-    "UPDATED_AT": "Zaktualizowano"
+    "UPDATED_AT": "Zaktualizowano",
+    "CONTINUE": "Kontynuuj"
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -463,6 +464,7 @@
     "SUBTITLE": "Przeglądaj i rejestruj transakcje sprzedaży.",
     "NEW": "Nowa Transakcja",
     "ACTION_IMPORT": "Importuj",
+    "ACTION_UPDATE_EXCEL": "Aktualizuj z Excela",
     "FILTER_ALL": "Wszystkie",
     "STATUS_PENDING": "Oczekująca",
     "STATUS_ELIGIBLE": "Kwalifikująca się",
@@ -508,7 +510,58 @@
     "REASSIGN_REASON_REQUIRED": "Powód jest wymagany.",
     "REASSIGN_REASON_MIN_LENGTH": "Powód musi mieć co najmniej 10 znaków.",
     "REASSIGN_SUBMIT": "Przepisz",
-    "TOAST_REASSIGNED": "Beneficjent przepisany pomyślnie."
+    "TOAST_REASSIGNED": "Beneficjent przepisany pomyślnie.",
+    "PROCESS_PENDING": {
+      "BUTTON": "Przetwórz oczekujące",
+      "SECTION_TITLE": "Oczekujące transakcje",
+      "ELIGIBLE_BADGE": "oczekujących transakcji kwalifikujących się do przetworzenia",
+      "VOLUME_NOTICE": "Przetwarzanie ~{{count}} transakcji, szacowany czas ~{{minutes}} minut. Możesz kontynuować pracę.",
+      "RUNNING": "Przetwarzanie {{processed}} z {{total}} transakcji…",
+      "CANCELLING": "Żądano anulowania — kończenie bieżącego bloku…",
+      "CANCEL": "Anuluj",
+      "DONE": "Gotowe. Przetworzono {{processed}} transakcji.",
+      "DONE_WITH_SKIPS": "Gotowe. Przetworzono {{processed}}, pominięto {{skipped}}.",
+      "NOTHING_TO_PROCESS": "Wszystkie transakcje są już aktualne — nie ma nic do przetworzenia.",
+      "VIEW_SKIP_LOG": "Pokaż {{count}} pominiętych transakcji",
+      "HIDE_SKIP_LOG": "Ukryj dziennik pominięć ({{count}} pominiętych)",
+      "OPEN_IN_FILTER": "Otwórz pominięte w filtrze",
+      "SKIP_COL_REF": "Referencja",
+      "SKIP_COL_PAYEE": "Pracownik",
+      "SKIP_COL_DATE": "Data",
+      "SKIP_COL_AMOUNT": "Kwota",
+      "SKIP_COL_REASON": "Powód",
+      "CANCELLED_RESULT": "Anulowano. Przetworzono {{processed}} transakcji, pozostało {{remaining}}.",
+      "FAILED": "Błąd przetwarzania",
+      "NET_ERROR": "Błąd sieci — ponawianie…"
+    },
+    "EXPORT": {
+      "BUTTON": "Eksportuj do Excel",
+      "ERROR": "Błąd eksportu. Spróbuj ponownie."
+    },
+    "FILTER": {
+      "TITLE": "Filtry",
+      "CLEAR": "Wyczyść wszystko",
+      "REFERENCE": "Referencja",
+      "REFERENCE_PLACEHOLDER": "Szukaj po referencji…",
+      "STATUS": "Status",
+      "PAYEE": "Sprzedawca",
+      "PAYEE_PLACEHOLDER": "Szukaj sprzedawcy…",
+      "UNASSIGNED": "Nieprzypisane",
+      "UNASSIGNED_LABEL": "Tylko nieprzypisane",
+      "TX_DATE_FROM": "Data tx od",
+      "TX_DATE_TO": "Data tx do",
+      "ING_DATE_FROM": "Utworzono od",
+      "ING_DATE_TO": "Utworzono do",
+      "AMT_MIN": "Kwota min.",
+      "AMT_MAX": "Kwota maks.",
+      "AMT_SORT": "Sortowanie kwoty",
+      "AMT_SORT_NONE": "Domyślna kolejność",
+      "AMT_SORT_ASC": "Najniższe pierwsze",
+      "AMT_SORT_DESC": "Najwyższe pierwsze"
+    },
+    "COL_INGESTED": "Utworzono",
+    "COUNT_FILTERED": "Pokazuje {{showing}} z {{filtered}} (łącznie {{total}})",
+    "COUNT_TOTAL": "{{total}} transakcji"
   },
   "ASSIGNMENTS": {
     "TITLE": "Przypisania",
@@ -538,7 +591,8 @@
     "TOAST_DEACTIVATED": "Przypisanie zostało dezaktywowane.",
     "TOAST_NOTES_SAVED": "Notatki zapisane.",
     "CONFIRM_DEACTIVATE_TITLE": "Dezaktywuj Przypisanie",
-    "CONFIRM_DEACTIVATE_MSG": "Dezaktywacja tego przypisania uniemożliwi beneficjentowi naliczanie prowizji w ramach tego planu. Czy jesteś pewny?"
+    "CONFIRM_DEACTIVATE_MSG": "Dezaktywacja tego przypisania uniemożliwi beneficjentowi naliczanie prowizji w ramach tego planu. Czy jesteś pewny?",
+    "ERROR_LOAD": "Nie udało się załadować przypisania."
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Odniesienie",
@@ -651,6 +705,37 @@
       "FIELD_CURRENCY": "Waluta",
       "FIELD_TRANSACTION_DATE": "Data transakcji",
       "FIELD_EXTERNAL_ID": "Zewnętrzny ID"
+    },
+    "UPDATE": {
+      "TITLE": "Aktualizuj transakcje z Excel",
+      "SUBTITLE": "Prześlij edytowany plik eksportu, aby zaktualizować istniejące transakcje",
+      "UPLOAD_BTN": "Prześlij plik",
+      "MAPPING_HINT": "Zmapuj kolumny z pliku. ReferenceNumber to klucz — identyfikuje którą transakcję zaktualizować.",
+      "COL_REFERENCE": "ReferenceNumber",
+      "COL_AMOUNT": "Kwota",
+      "COL_CURRENCY": "Waluta",
+      "COL_DATE": "Data transakcji",
+      "COL_STAFF_ID": "ID pracownika (kod payee)",
+      "KEY_BADGE": "KLUCZ",
+      "KEY_NOTE": "Ta kolumna identyfikuje istniejącą transakcję. Nigdy nie wolno jej zmieniać w pliku.",
+      "WILL_UPDATE": "Do aktualizacji",
+      "NO_CHANGES": "Bez zmian",
+      "ERRORS": "Błędy (pominięte)",
+      "COL_ROW": "#",
+      "COL_STATUS": "Status",
+      "COL_CHANGES": "Zmiany",
+      "ROW_WILL_UPDATE": "AKTUALIZUJ",
+      "ROW_ERROR": "BŁĄD",
+      "ROW_WARNING": "OSTRZEŻENIE",
+      "ROW_NO_CHANGES": "BEZ ZMIAN",
+      "EXECUTE_BTN": "Zastosuj {{count}} aktualizacji",
+      "TABLE_TRUNCATED": "Pokazano pierwsze {{shown}} z {{total}} wierszy.",
+      "PROGRESS_TITLE": "Aktualizacja w toku",
+      "COMPLETE_TITLE": "Aktualizacja zakończona",
+      "COMPLETE_UPDATED": "Zaktualizowano {{count}} transakcji.",
+      "COMPLETE_NO_CHANGES": "{{count}} wierszy nie miało zmian i zostało pominiętych.",
+      "COMPLETE_ERRORS": "{{count}} wierszy zostało pominiętych z powodu błędów.",
+      "BACK_TO_TRANSACTIONS": "Wróć do transakcji"
     }
   },
   "SETTINGS": {

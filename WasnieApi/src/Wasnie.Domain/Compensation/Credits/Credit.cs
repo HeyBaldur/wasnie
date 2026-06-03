@@ -2,6 +2,7 @@ using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.ValueObjects;
+using Wasnie.Domain.Exceptions;
 
 namespace Wasnie.Domain.Compensation.Credits;
 
@@ -61,5 +62,23 @@ public sealed class Credit : AggregateRoot
             eventId, now, credit.Id, transactionId, payeeId, tenantId));
 
         return credit;
+    }
+
+    // Decision #46 Case A: mark this Credit superseded when the owning transaction is reassigned.
+    // All non-superseded Credits for a Calculated transaction must be superseded before the transaction
+    // is reassigned, so attainment queries never aggregate stale Credits.
+    public void Supersede(string reason, DateTimeOffset now, Guid eventId)
+    {
+        if (SupersededAt is not null)
+            throw new DomainException("Credit is already superseded.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new DomainException("Supersede reason is required.");
+        if (reason.Length > 500)
+            throw new DomainException("Supersede reason must not exceed 500 characters.");
+
+        SupersededAt = now;
+        SupersededBy = reason;
+
+        RaiseDomainEvent(new CreditSupersededEvent(eventId, now, Id, TransactionId, PayeeId, TenantId, reason));
     }
 }

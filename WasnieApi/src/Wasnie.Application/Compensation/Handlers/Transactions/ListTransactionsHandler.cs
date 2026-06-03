@@ -28,9 +28,14 @@ public sealed class ListTransactionsHandler(
         await authorizationService.RequireAsync(Permission.TransactionsRead, cancellationToken);
 
         var p = request.Pagination;
+
+        // Unfiltered total (whole tenant) — counted before any filter is applied.
+        var unfilteredTotal = await db.CompensationTransactions.CountAsync(cancellationToken);
+
         var query = db.CompensationTransactions.AsQueryable();
 
-        // Filters
+        // ── Legacy single-value filters (backward compat) ──────────────────────
+
         if (!string.IsNullOrWhiteSpace(p.Status) &&
             Enum.TryParse<CompensationTransactionStatus>(p.Status, ignoreCase: true, out var statusEnum))
             query = query.Where(t => t.Status == statusEnum);
@@ -48,23 +53,89 @@ public sealed class ListTransactionsHandler(
         if (p.DateTo.HasValue)
             query = query.Where(t => t.TransactionDate <= p.DateTo.Value);
 
-        // Sort
-        var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "transactiondate";
-        var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+        // ── Extended filters (WI-PROD-I.2) ─────────────────────────────────────
 
-        query = sortBy switch
+        if (!string.IsNullOrWhiteSpace(p.Reference))
         {
-            "amount" => desc ? query.OrderByDescending(t => t.Amount.Amount) : query.OrderBy(t => t.Amount.Amount),
-            "status" => desc ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
-            "ingestedat" => desc ? query.OrderByDescending(t => t.IngestedAt) : query.OrderBy(t => t.IngestedAt),
-            "referencenumber" => desc ? query.OrderByDescending(t => t.ReferenceNumber) : query.OrderBy(t => t.ReferenceNumber),
-            _ => desc ? query.OrderByDescending(t => t.TransactionDate) : query.OrderBy(t => t.TransactionDate),
-        };
+            var refLower = p.Reference.Trim().ToLower();
+            query = query.Where(t => t.ReferenceNumber.ToLower().Contains(refLower));
+        }
+
+        if (!string.IsNullOrWhiteSpace(p.Statuses))
+        {
+            var statusList = p.Statuses.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => Enum.TryParse<CompensationTransactionStatus>(s, ignoreCase: true, out _))
+                .Select(s => Enum.Parse<CompensationTransactionStatus>(s, ignoreCase: true))
+                .ToList();
+            if (statusList.Count > 0)
+                query = query.Where(t => statusList.Contains(t.Status));
+        }
+
+        if (!string.IsNullOrWhiteSpace(p.PayeeIds))
+        {
+            var payeeIdList = p.PayeeIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => Guid.TryParse(s.Trim(), out var g) ? (Guid?)g : null)
+                .Where(g => g.HasValue)
+                .Select(g => g!.Value)
+                .ToList();
+            if (payeeIdList.Count > 0)
+                query = query.Where(t => t.PayeeId.HasValue && payeeIdList.Contains(t.PayeeId.Value));
+        }
+
+        if (p.IngestedFrom.HasValue)
+            query = query.Where(t => t.IngestedAt >= p.IngestedFrom.Value);
+
+        if (p.IngestedTo.HasValue)
+            query = query.Where(t => t.IngestedAt <= p.IngestedTo.Value);
+
+        if (p.AmountMin.HasValue)
+            query = query.Where(t => t.Amount.Amount >= p.AmountMin.Value);
+
+        if (p.AmountMax.HasValue)
+            query = query.Where(t => t.Amount.Amount <= p.AmountMax.Value);
+
+        if (p.UnassignedOnly == true)
+            query = query.Where(t => t.PayeeId == null);
+
+        if (!string.IsNullOrWhiteSpace(p.ReferenceNumbers))
+        {
+            var refList = p.ReferenceNumbers.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrEmpty(s))
+                .ToList();
+            if (refList.Count > 0)
+                query = query.Where(t => refList.Contains(t.ReferenceNumber));
+        }
+
+        // ── Sort ────────────────────────────────────────────────────────────────
+
+        // AmountSort overrides SortBy when present.
+        if (!string.IsNullOrWhiteSpace(p.AmountSort))
+        {
+            var amountDesc = string.Equals(p.AmountSort, "desc", StringComparison.OrdinalIgnoreCase);
+            query = amountDesc
+                ? query.OrderByDescending(t => t.Amount.Amount)
+                : query.OrderBy(t => t.Amount.Amount);
+        }
+        else
+        {
+            var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "transactiondate";
+            var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+            query = sortBy switch
+            {
+                "amount" => desc ? query.OrderByDescending(t => t.Amount.Amount) : query.OrderBy(t => t.Amount.Amount),
+                "status" => desc ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),
+                "ingestedat" => desc ? query.OrderByDescending(t => t.IngestedAt) : query.OrderBy(t => t.IngestedAt),
+                "referencenumber" => desc ? query.OrderByDescending(t => t.ReferenceNumber) : query.OrderBy(t => t.ReferenceNumber),
+                _ => desc ? query.OrderByDescending(t => t.TransactionDate) : query.OrderBy(t => t.TransactionDate),
+            };
+        }
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
 
         // Batch-fetch payee names for this page in a single query — no N+1.
-        // Tenant-scoped automatically via the global query filter on Payees.
         var payeeIds = paged.Items
             .Select(t => t.PayeeId)
             .Where(id => id.HasValue)
@@ -92,6 +163,7 @@ public sealed class ListTransactionsHandler(
             TotalCount = paged.TotalCount,
             Page = paged.Page,
             PageSize = paged.PageSize,
+            UnfilteredTotal = unfilteredTotal,
         });
     }
 }

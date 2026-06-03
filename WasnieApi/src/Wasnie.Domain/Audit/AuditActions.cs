@@ -42,6 +42,8 @@ public static class AuditActions
     public const string TransactionIngested = "TRANSACTION_INGESTED";
     public const string TransactionPayeeAssigned = "TRANSACTION_PAYEE_ASSIGNED";
     public const string TransactionPayeeReassigned = "TRANSACTION_PAYEE_REASSIGNED";
+    public const string PendingTransactionsProcessed = "PENDING_TRANSACTIONS_PROCESSED";
+    public const string TransactionUpdatedViaExcel = "TRANSACTION_UPDATED_VIA_EXCEL";
 
     // Settings (Rule 5.1.5 — configuration changes)
     public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";

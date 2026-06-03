@@ -8,19 +8,78 @@
       <app-icon name="upload-cloud" [size]="14" />
       {{ 'TRANSACTIONS.ACTION_IMPORT' | translate }}
     </ws-button>
+    <ws-button slot="actions" variant="secondary" routerLink="import" [queryParams]="{ mode: 'update' }" [hidden]="!('Transactions.UpdateFromExcel' | hasPermission)">
+      <app-icon name="refresh" [size]="14" />
+      {{ 'TRANSACTIONS.ACTION_UPDATE_EXCEL' | translate }}
+    </ws-button>
     <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Transactions.Create' | hasPermission)">
       <app-icon name="plus" [size]="16" />
       {{ 'TRANSACTIONS.NEW' | translate }}
     </ws-button>
 
+    <!-- Status tabs (quick shortcuts — feed into Status filter) -->
     <div class="transactions-list__toolbar">
       <ws-segmented-control
         [options]="statusOptions"
-        [(value)]="statusFilterValue"
+        [(value)]="statusTabValue"
       />
     </div>
 
-    @if (!store.loading() && store.transactions().length === 0 && store.statusFilter() === null) {
+    <!-- Export to Excel (only when there are filtered results) -->
+    @if ((store.totalCount() > 0) && ('Transactions.Export' | hasPermission)) {
+      <div class="transactions-list__export-row">
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [disabled]="exporting()"
+          [loading]="exporting()"
+          (click)="onExport()"
+        >
+          <app-icon name="file-excel" [size]="14" />
+          {{ 'TRANSACTIONS.EXPORT.BUTTON' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="transactions-list__export-error">{{ exportError()! | translate }}</span>
+        }
+      </div>
+    }
+
+    <!-- Advanced filter panel -->
+    <app-transaction-filter
+      [filter]="store.filter()"
+      [activeFilterCount]="store.activeFilterCount()"
+      (filterChange)="onFilterChange($event)"
+      (cleared)="onFilterCleared()"
+    />
+
+    <!-- ProcessPending (shown when payee + date range filtered) -->
+    @if (showProcessPending()) {
+      <div *hasPermission="'Transactions.ProcessPending'" class="transactions-list__process-pending">
+        <app-process-pending
+          scope="ByPayeeAndPeriod"
+          [scopeId]="store.payeeIdsFilter()[0]"
+          [periodStart]="store.txDateFromFilter()"
+          [periodEnd]="store.txDateToFilter()"
+        />
+      </div>
+    }
+
+    <!-- Result count header -->
+    @if (!store.loading() && store.unfilteredTotal() !== null) {
+      <p class="transactions-list__count">
+        @if (store.hasActiveFilters()) {
+          {{ 'TRANSACTIONS.COUNT_FILTERED' | translate:{
+            showing: store.transactions().length,
+            filtered: store.totalCount(),
+            total: store.unfilteredTotal()
+          } }}
+        } @else {
+          {{ 'TRANSACTIONS.COUNT_TOTAL' | translate:{ total: store.totalCount() } }}
+        }
+      </p>
+    }
+
+    @if (!store.loading() && store.transactions().length === 0 && !store.hasActiveFilters()) {
       <ws-empty-state
         illustration="transactions-empty"
         titleKey="TRANSACTIONS.EMPTY_TITLE"
@@ -36,6 +95,7 @@
               <th>{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_PAYEE' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
+              <th>{{ 'TRANSACTIONS.COL_INGESTED' | translate }}</th>
               <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
               <th *hasPermission="'Transactions.Update'" class="col-actions"></th>
@@ -48,6 +108,7 @@
                   <td><span class="skeleton skeleton--text-wide"></span></td>
                   <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--short"></span></td>
                   <td><span class="skeleton skeleton--badge"></span></td>
                   <td></td>
@@ -55,7 +116,7 @@
               }
             } @else if (store.transactions().length === 0) {
               <tr>
-                <td colspan="6">
+                <td colspan="7">
                   <ws-table-empty messageKey="TRANSACTIONS.EMPTY_FILTER_TITLE" />
                 </td>
               </tr>
@@ -66,11 +127,15 @@
                   <td class="col-secondary">
                     @if (tx.payeeName) {
                       {{ tx.payeeName }}
+                      @if (tx.payeeEmployeeCode) {
+                        <span class="col-code">({{ tx.payeeEmployeeCode }})</span>
+                      }
                     } @else {
                       <span class="col-unassigned">{{ 'TRANSACTIONS.UNASSIGNED' | translate }}</span>
                     }
                   </td>
-                  <td class="col-secondary">{{ tx.transactionDate }}</td>
+                  <td class="col-secondary">{{ tx.transactionDate | dateFormat }}</td>
+                  <td class="col-secondary">{{ tx.ingestedAt | dateFormat }}</td>
                   <td class="col-num">{{ tx.amount | currencyFormat: tx.currency }}</td>
                   <td>
                     <ws-badge [variant]="statusVariant(tx.status)">

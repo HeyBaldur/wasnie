@@ -163,7 +163,8 @@
     "MARK_AS_ACTIVE": "Marcar como Activo",
     "STATUS": "Estado",
     "CREATED_AT": "Creado",
-    "UPDATED_AT": "Actualizado"
+    "UPDATED_AT": "Actualizado",
+    "CONTINUE": "Continuar"
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",
@@ -463,6 +464,7 @@
     "SUBTITLE": "Ver y registrar transacciones de ventas.",
     "NEW": "Nueva Transacción",
     "ACTION_IMPORT": "Importar",
+    "ACTION_UPDATE_EXCEL": "Actualizar desde Excel",
     "FILTER_ALL": "Todas",
     "STATUS_PENDING": "Pendiente",
     "STATUS_ELIGIBLE": "Elegible",
@@ -508,7 +510,58 @@
     "REASSIGN_REASON_REQUIRED": "El motivo es obligatorio.",
     "REASSIGN_REASON_MIN_LENGTH": "El motivo debe tener al menos 10 caracteres.",
     "REASSIGN_SUBMIT": "Reasignar",
-    "TOAST_REASSIGNED": "Beneficiario reasignado correctamente."
+    "TOAST_REASSIGNED": "Beneficiario reasignado correctamente.",
+    "PROCESS_PENDING": {
+      "BUTTON": "Procesar Pendientes",
+      "SECTION_TITLE": "Transacciones Pendientes",
+      "ELIGIBLE_BADGE": "transacciones Pendientes elegibles para procesamiento",
+      "VOLUME_NOTICE": "Procesando ~{{count}} transacciones, tiempo estimado ~{{minutes}} minutos. Puedes seguir trabajando.",
+      "RUNNING": "Procesando {{processed}} de {{total}} transacciones…",
+      "CANCELLING": "Cancelación solicitada — finalizando el bloque actual…",
+      "CANCEL": "Cancelar",
+      "DONE": "Listo. {{processed}} transacciones procesadas.",
+      "DONE_WITH_SKIPS": "Listo. {{processed}} procesadas, {{skipped}} omitidas.",
+      "NOTHING_TO_PROCESS": "Todas las transacciones ya están actualizadas — nada que procesar.",
+      "VIEW_SKIP_LOG": "Ver {{count}} transacciones omitidas",
+      "HIDE_SKIP_LOG": "Ocultar registro de omisiones ({{count}} omitidas)",
+      "OPEN_IN_FILTER": "Abrir omitidas en filtro",
+      "SKIP_COL_REF": "Referencia",
+      "SKIP_COL_PAYEE": "Colaborador",
+      "SKIP_COL_DATE": "Fecha",
+      "SKIP_COL_AMOUNT": "Importe",
+      "SKIP_COL_REASON": "Motivo",
+      "CANCELLED_RESULT": "Cancelado. {{processed}} transacciones procesadas, {{remaining}} pendientes.",
+      "FAILED": "Error en el procesamiento",
+      "NET_ERROR": "Error de red — reintentando…"
+    },
+    "EXPORT": {
+      "BUTTON": "Exportar a Excel",
+      "ERROR": "Error al exportar. Por favor, inténtalo de nuevo."
+    },
+    "FILTER": {
+      "TITLE": "Filtros",
+      "CLEAR": "Limpiar todo",
+      "REFERENCE": "Referencia",
+      "REFERENCE_PLACEHOLDER": "Buscar por referencia…",
+      "STATUS": "Estado",
+      "PAYEE": "Vendedor",
+      "PAYEE_PLACEHOLDER": "Buscar vendedor…",
+      "UNASSIGNED": "Sin asignar",
+      "UNASSIGNED_LABEL": "Solo sin asignar",
+      "TX_DATE_FROM": "Fecha tx desde",
+      "TX_DATE_TO": "Fecha tx hasta",
+      "ING_DATE_FROM": "Creado desde",
+      "ING_DATE_TO": "Creado hasta",
+      "AMT_MIN": "Importe mín.",
+      "AMT_MAX": "Importe máx.",
+      "AMT_SORT": "Orden importe",
+      "AMT_SORT_NONE": "Orden predeterminado",
+      "AMT_SORT_ASC": "Menor primero",
+      "AMT_SORT_DESC": "Mayor primero"
+    },
+    "COL_INGESTED": "Creado",
+    "COUNT_FILTERED": "Mostrando {{showing}} de {{filtered}} ({{total}} total)",
+    "COUNT_TOTAL": "{{total}} transacciones"
   },
   "ASSIGNMENTS": {
     "TITLE": "Asignaciones",
@@ -538,7 +591,8 @@
     "TOAST_DEACTIVATED": "Asignación desactivada.",
     "TOAST_NOTES_SAVED": "Notas guardadas.",
     "CONFIRM_DEACTIVATE_TITLE": "Desactivar Asignación",
-    "CONFIRM_DEACTIVATE_MSG": "Desactivar esta asignación impedirá que el beneficiario gane comisiones bajo este plan. ¿Estás seguro?"
+    "CONFIRM_DEACTIVATE_MSG": "Desactivar esta asignación impedirá que el beneficiario gane comisiones bajo este plan. ¿Estás seguro?",
+    "ERROR_LOAD": "Error al cargar la asignación."
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Referencia",
@@ -651,6 +705,37 @@
       "FIELD_CURRENCY": "Moneda",
       "FIELD_TRANSACTION_DATE": "Fecha de transacción",
       "FIELD_EXTERNAL_ID": "ID externo"
+    },
+    "UPDATE": {
+      "TITLE": "Actualizar transacciones desde Excel",
+      "SUBTITLE": "Sube un archivo de exportación editado para actualizar los valores de transacciones existentes",
+      "UPLOAD_BTN": "Subir archivo",
+      "MAPPING_HINT": "Mapea las columnas de tu archivo. ReferenceNumber es la clave — identifica qué transacción actualizar.",
+      "COL_REFERENCE": "ReferenceNumber",
+      "COL_AMOUNT": "Importe",
+      "COL_CURRENCY": "Moneda",
+      "COL_DATE": "Fecha de transacción",
+      "COL_STAFF_ID": "ID de empleado (código payee)",
+      "KEY_BADGE": "CLAVE",
+      "KEY_NOTE": "Esta columna identifica la transacción existente. Nunca debe modificarse en tu archivo.",
+      "WILL_UPDATE": "Se actualizarán",
+      "NO_CHANGES": "Sin cambios",
+      "ERRORS": "Errores (omitidos)",
+      "COL_ROW": "#",
+      "COL_STATUS": "Estado",
+      "COL_CHANGES": "Cambios",
+      "ROW_WILL_UPDATE": "ACTUALIZAR",
+      "ROW_ERROR": "ERROR",
+      "ROW_WARNING": "ADVERTENCIA",
+      "ROW_NO_CHANGES": "SIN CAMBIO",
+      "EXECUTE_BTN": "Aplicar {{count}} actualizaciones",
+      "TABLE_TRUNCATED": "Mostrando las primeras {{shown}} filas de {{total}} totales.",
+      "PROGRESS_TITLE": "Actualización en curso",
+      "COMPLETE_TITLE": "Actualización completada",
+      "COMPLETE_UPDATED": "{{count}} transacciones actualizadas.",
+      "COMPLETE_NO_CHANGES": "{{count}} filas no tenían cambios y fueron omitidas.",
+      "COMPLETE_ERRORS": "{{count}} filas fueron omitidas por errores.",
+      "BACK_TO_TRANSACTIONS": "Volver a Transacciones"
     }
   },
   "SETTINGS": {

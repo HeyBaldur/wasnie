@@ -225,6 +225,13 @@
               {{ 'PLANS.ACTION_ASSIGN_PAYEE' | translate }}
             </ws-button>
           </div>
+          <div *hasPermission="'Transactions.ProcessPending'" class="assignments-tab-process-pending">
+            <app-process-pending
+              scope="ByPlan"
+              [scopeId]="planId"
+            />
+          </div>
+
           @if (assignmentsLoading()) {
             <ws-empty-state illustration="assignments-empty" titleKey="COMMON.LOADING" />
           } @else if ((planAssignmentsResult()?.items?.length ?? 0) === 0) {

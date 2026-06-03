@@ -10,5 +10,6 @@ public sealed record JobStatusDto(
     string? ErrorMessage,
     DateTime EnqueuedAtUtc,
     DateTime? StartedAtUtc,
-    DateTime? CompletedAtUtc
+    DateTime? CompletedAtUtc,
+    string? ResultSummary
 );

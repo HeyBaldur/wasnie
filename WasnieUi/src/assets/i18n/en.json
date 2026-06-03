@@ -163,7 +163,8 @@
     "MARK_AS_ACTIVE": "Mark as Active",
     "STATUS": "Status",
     "CREATED_AT": "Created",
-    "UPDATED_AT": "Updated"
+    "UPDATED_AT": "Updated",
+    "CONTINUE": "Continue"
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
@@ -526,6 +527,37 @@
       "FIELD_CURRENCY": "Currency",
       "FIELD_TRANSACTION_DATE": "Transaction date",
       "FIELD_EXTERNAL_ID": "External ID"
+    },
+    "UPDATE": {
+      "TITLE": "Update Transactions from Excel",
+      "SUBTITLE": "Upload an edited export file to update existing transaction values",
+      "UPLOAD_BTN": "Upload file",
+      "MAPPING_HINT": "Map the columns from your file. ReferenceNumber is the key — it identifies which transaction to update.",
+      "COL_REFERENCE": "ReferenceNumber",
+      "COL_AMOUNT": "Amount",
+      "COL_CURRENCY": "Currency",
+      "COL_DATE": "Transaction Date",
+      "COL_STAFF_ID": "Staff ID (Payee Code)",
+      "KEY_BADGE": "KEY",
+      "KEY_NOTE": "This column identifies the existing transaction. It must never be changed in your file.",
+      "WILL_UPDATE": "Will update",
+      "NO_CHANGES": "No changes",
+      "ERRORS": "Errors (skipped)",
+      "COL_ROW": "#",
+      "COL_STATUS": "Status",
+      "COL_CHANGES": "Changes",
+      "ROW_WILL_UPDATE": "UPDATE",
+      "ROW_ERROR": "ERROR",
+      "ROW_WARNING": "WARNING",
+      "ROW_NO_CHANGES": "NO CHANGE",
+      "EXECUTE_BTN": "Apply {{count}} updates",
+      "TABLE_TRUNCATED": "Showing first {{shown}} rows of {{total}} total.",
+      "PROGRESS_TITLE": "Update in progress",
+      "COMPLETE_TITLE": "Update complete",
+      "COMPLETE_UPDATED": "{{count}} transactions updated.",
+      "COMPLETE_NO_CHANGES": "{{count}} rows had no changes and were skipped.",
+      "COMPLETE_ERRORS": "{{count}} rows were skipped due to errors.",
+      "BACK_TO_TRANSACTIONS": "Back to Transactions"
     }
   },
   "QUOTAS": {
@@ -576,6 +608,7 @@
     "SUBTITLE": "View and record sales transactions.",
     "NEW": "New Transaction",
     "ACTION_IMPORT": "Import",
+    "ACTION_UPDATE_EXCEL": "Update from Excel",
     "FILTER_ALL": "All",
     "STATUS_PENDING": "Pending",
     "STATUS_ELIGIBLE": "Eligible",
@@ -621,7 +654,58 @@
     "REASSIGN_REASON_REQUIRED": "Reason is required.",
     "REASSIGN_REASON_MIN_LENGTH": "Reason must be at least 10 characters.",
     "REASSIGN_SUBMIT": "Reassign",
-    "TOAST_REASSIGNED": "Payee reassigned successfully."
+    "TOAST_REASSIGNED": "Payee reassigned successfully.",
+    "PROCESS_PENDING": {
+      "BUTTON": "Process Pending",
+      "SECTION_TITLE": "Pending Transactions",
+      "ELIGIBLE_BADGE": "Pending transactions eligible for processing",
+      "VOLUME_NOTICE": "Processing ~{{count}} transactions, estimated time ~{{minutes}} minutes. You can keep working.",
+      "RUNNING": "Processing {{processed}} of {{total}} transactions…",
+      "CANCELLING": "Cancellation requested — finishing current chunk…",
+      "CANCEL": "Cancel",
+      "DONE": "Done. {{processed}} transactions processed.",
+      "DONE_WITH_SKIPS": "Done. {{processed}} processed, {{skipped}} skipped.",
+      "NOTHING_TO_PROCESS": "All transactions are already up to date — nothing to process.",
+      "VIEW_SKIP_LOG": "View {{count}} skipped transactions",
+      "HIDE_SKIP_LOG": "Hide skip log ({{count}} skipped)",
+      "OPEN_IN_FILTER": "Open skipped in filter",
+      "SKIP_COL_REF": "Reference",
+      "SKIP_COL_PAYEE": "Payee",
+      "SKIP_COL_DATE": "Date",
+      "SKIP_COL_AMOUNT": "Amount",
+      "SKIP_COL_REASON": "Reason",
+      "CANCELLED_RESULT": "Cancelled. {{processed}} transactions processed, {{remaining}} remaining.",
+      "FAILED": "Processing failed",
+      "NET_ERROR": "Network error — retrying…"
+    },
+    "EXPORT": {
+      "BUTTON": "Export to Excel",
+      "ERROR": "Export failed. Please try again."
+    },
+    "FILTER": {
+      "TITLE": "Filters",
+      "CLEAR": "Clear all",
+      "REFERENCE": "Reference",
+      "REFERENCE_PLACEHOLDER": "Search by reference…",
+      "STATUS": "Status",
+      "PAYEE": "Payee",
+      "PAYEE_PLACEHOLDER": "Search payee…",
+      "UNASSIGNED": "Unassigned",
+      "UNASSIGNED_LABEL": "Unassigned only",
+      "TX_DATE_FROM": "Tx date from",
+      "TX_DATE_TO": "Tx date to",
+      "ING_DATE_FROM": "Created from",
+      "ING_DATE_TO": "Created to",
+      "AMT_MIN": "Amount min",
+      "AMT_MAX": "Amount max",
+      "AMT_SORT": "Amount sort",
+      "AMT_SORT_NONE": "Default order",
+      "AMT_SORT_ASC": "Lowest first",
+      "AMT_SORT_DESC": "Highest first"
+    },
+    "COL_INGESTED": "Created",
+    "COUNT_FILTERED": "Showing {{showing}} of {{filtered}} ({{total}} total)",
+    "COUNT_TOTAL": "{{total}} transactions"
   },
   "ASSIGNMENTS": {
     "TITLE": "Assignments",
@@ -651,7 +735,8 @@
     "TOAST_DEACTIVATED": "Assignment deactivated.",
     "TOAST_NOTES_SAVED": "Notes saved.",
     "CONFIRM_DEACTIVATE_TITLE": "Deactivate Assignment",
-    "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?"
+    "CONFIRM_DEACTIVATE_MSG": "Deactivating this assignment will stop the payee from earning under this plan. Are you sure?",
+    "ERROR_LOAD": "Failed to load assignment."
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Appearance",

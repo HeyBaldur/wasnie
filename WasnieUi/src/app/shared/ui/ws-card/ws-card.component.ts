@@ -1,6 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 
-export type CardVariant = 'default' | 'flat' | 'interactive';
+export type CardVariant = 'default' | 'flat' | 'raised' | 'interactive';
 export type CardPadding = 'sm' | 'md' | 'lg' | 'none';
 export type CardAccent = 'none' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
 

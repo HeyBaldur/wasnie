@@ -8,4 +8,7 @@ public sealed class JobContext(Guid jobId, IBackgroundJobService jobService)
 
     public Task ReportProgressAsync(int current, int total, CancellationToken ct = default) =>
         jobService.UpdateProgressAsync(jobId, current, total, ct);
+
+    public Task SetResultSummaryAsync(string summaryJson, CancellationToken ct = default) =>
+        jobService.SetResultSummaryAsync(jobId, summaryJson, ct);
 }

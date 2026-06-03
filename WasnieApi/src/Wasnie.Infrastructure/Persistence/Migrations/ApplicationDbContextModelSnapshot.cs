@@ -314,6 +314,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<string>("ResultSummary")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("HandlerType")
                         .IsRequired()
                         .HasMaxLength(500)

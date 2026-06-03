@@ -9,4 +9,10 @@ public sealed class PagedResult<T>
     public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
     public bool HasNextPage => Page < TotalPages;
     public bool HasPreviousPage => Page > 1;
+
+    /// <summary>
+    /// Tenant-wide unfiltered total, populated only by list endpoints that support
+    /// advanced filtering (e.g. Transactions). Null for all other endpoints.
+    /// </summary>
+    public int? UnfilteredTotal { get; init; }
 }

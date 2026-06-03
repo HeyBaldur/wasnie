@@ -1,0 +1,146 @@
+<ws-card variant="raised" padding="sm" class="tx-filter">
+
+  <!-- Header: toggle + active count badge + clear -->
+  <div class="tx-filter__header" (click)="togglePanel()">
+    <span class="tx-filter__title">
+      <app-icon name="filter" [size]="14" />
+      {{ 'TRANSACTIONS.FILTER.TITLE' | translate }}
+    </span>
+    @if (activeFilterCount() > 0) {
+      <ws-badge variant="brand" size="sm">{{ activeFilterCount() }}</ws-badge>
+    }
+    <span class="tx-filter__spacer"></span>
+    @if (activeFilterCount() > 0) {
+      <ws-button variant="ghost" size="sm" (click)="$event.stopPropagation(); onClear()">
+        {{ 'TRANSACTIONS.FILTER.CLEAR' | translate }}
+      </ws-button>
+    }
+    <app-icon [name]="panelOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" class="tx-filter__chevron" />
+  </div>
+
+  @if (panelOpen()) {
+    <form [formGroup]="form" class="tx-filter__body">
+
+      <!-- Row 1: Reference + Status chips -->
+      <div class="tx-filter__row">
+        <div class="tx-filter__field tx-filter__field--wide">
+          <ws-input
+            type="search"
+            prefixIcon="search"
+            formControlName="reference"
+            [label]="'TRANSACTIONS.FILTER.REFERENCE' | translate"
+            [placeholder]="'TRANSACTIONS.FILTER.REFERENCE_PLACEHOLDER' | translate"
+          />
+        </div>
+        <div class="tx-filter__field tx-filter__field--wide">
+          <label class="tx-filter__label">{{ 'TRANSACTIONS.FILTER.STATUS' | translate }}</label>
+          <div class="tx-filter__chips">
+            @for (s of STATUS_OPTIONS; track s) {
+              <button
+                type="button"
+                class="tx-filter__chip"
+                [class.tx-filter__chip--active]="isStatusActive(s)"
+                (click)="toggleStatus(s)"
+              >{{ statusKey(s) | translate }}</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Payee picker + Unassigned toggle -->
+      <div class="tx-filter__row">
+        <div class="tx-filter__field tx-filter__field--wide">
+          <ws-select
+            formControlName="payeeSearch"
+            [searchFn]="payeeSearchFn"
+            [label]="'TRANSACTIONS.FILTER.PAYEE' | translate"
+            [placeholder]="'TRANSACTIONS.FILTER.PAYEE_PLACEHOLDER' | translate"
+          />
+          @if (selectedPayees().length > 0) {
+            <div class="tx-filter__payee-chips">
+              @for (p of selectedPayees(); track p.id) {
+                <span class="tx-filter__payee-chip">
+                  {{ p.label }}
+                  <button type="button" class="tx-filter__payee-chip-remove" (click)="removePayee(p.id)">
+                    <app-icon name="x" [size]="11" />
+                  </button>
+                </span>
+              }
+            </div>
+          }
+        </div>
+        <div class="tx-filter__field">
+          <label class="tx-filter__label">{{ 'TRANSACTIONS.FILTER.UNASSIGNED' | translate }}</label>
+          <ws-button
+            [variant]="filter().unassignedOnly ? 'secondary' : 'ghost'"
+            size="sm"
+            (click)="onUnassignedToggle()"
+          >
+            @if (filter().unassignedOnly) {
+              <app-icon name="check-square" [size]="13" />
+            } @else {
+              <app-icon name="square" [size]="13" />
+            }
+            {{ 'TRANSACTIONS.FILTER.UNASSIGNED_LABEL' | translate }}
+          </ws-button>
+        </div>
+      </div>
+
+      <!-- Row 3: Transaction date + Ingested date -->
+      <div class="tx-filter__row">
+        <div class="tx-filter__field">
+          <ws-date-picker
+            formControlName="txDateFrom"
+            [label]="'TRANSACTIONS.FILTER.TX_DATE_FROM' | translate"
+          />
+        </div>
+        <div class="tx-filter__field">
+          <ws-date-picker
+            formControlName="txDateTo"
+            [label]="'TRANSACTIONS.FILTER.TX_DATE_TO' | translate"
+          />
+        </div>
+        <div class="tx-filter__field">
+          <ws-date-picker
+            formControlName="ingestedFrom"
+            [label]="'TRANSACTIONS.FILTER.ING_DATE_FROM' | translate"
+          />
+        </div>
+        <div class="tx-filter__field">
+          <ws-date-picker
+            formControlName="ingestedTo"
+            [label]="'TRANSACTIONS.FILTER.ING_DATE_TO' | translate"
+          />
+        </div>
+      </div>
+
+      <!-- Row 4: Amount range + Amount sort -->
+      <div class="tx-filter__row">
+        <div class="tx-filter__field">
+          <ws-input
+            type="number"
+            formControlName="amountMin"
+            [label]="'TRANSACTIONS.FILTER.AMT_MIN' | translate"
+            placeholder="0"
+          />
+        </div>
+        <div class="tx-filter__field">
+          <ws-input
+            type="number"
+            formControlName="amountMax"
+            [label]="'TRANSACTIONS.FILTER.AMT_MAX' | translate"
+            placeholder="&#x221e;"
+          />
+        </div>
+        <div class="tx-filter__field">
+          <ws-select
+            formControlName="amountSort"
+            [options]="amountSortOptions"
+            [label]="'TRANSACTIONS.FILTER.AMT_SORT' | translate"
+          />
+        </div>
+      </div>
+
+    </form>
+  }
+</ws-card>

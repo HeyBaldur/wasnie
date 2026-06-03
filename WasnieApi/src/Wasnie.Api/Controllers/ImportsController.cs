@@ -21,6 +21,7 @@ public sealed class ImportsController(
     ICurrentUserService currentUser,
     ITenantContext tenantContext,
     ITransactionImportValidationService transactionValidator,
+    ITransactionUpdateValidationService updateValidator,
     IBackgroundJobService backgroundJobService,
     IWasnieAuthorizationService authorizationService,
     IOptions<ImportOptions> importOptions) : ControllerBase
@@ -222,6 +223,105 @@ public sealed class ImportsController(
         return Ok(new { maxRows = Imports.TransactionMaxRows });
     }
 
+    // ── Update-from-Excel endpoints ────────────────────────────────────────────
+
+    // POST /api/imports/transactions/update/parse  (reuses same parse logic)
+    [HttpPost("transactions/update/parse")]
+    public async Task<IActionResult> ParseTransactionsUpdate(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.TransactionsUpdateFromExcel, cancellationToken);
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { message = "No file provided." });
+
+        if (file.Length > MaxFileBytes)
+            return BadRequest(new { message = "File exceeds the 5 MB limit." });
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not ".csv" and not ".xlsx")
+            return BadRequest(new { message = "Only .csv and .xlsx files are supported." });
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var parsed = await fileParser.ParseAsync(stream, file.FileName, Imports.TransactionMaxRows, cancellationToken);
+            var fileId = cache.Store(parsed, file.FileName, "transaction-update");
+
+            return Ok(new ParseResponse
+            {
+                FileId = fileId,
+                Headers = parsed.Headers,
+                RowCount = parsed.Rows.Count,
+                SampleRows = parsed.Rows.Take(5).ToList(),
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    // POST /api/imports/transactions/update/validate
+    [HttpPost("transactions/update/validate")]
+    public async Task<IActionResult> ValidateTransactionsUpdate(
+        [FromBody] TransactionUpdateValidateRequest body,
+        CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.TransactionsUpdateFromExcel, cancellationToken);
+
+        var cached = cache.Retrieve(body.FileId, "transaction-update");
+        if (cached is null)
+            return BadRequest(new { message = "File session not found or has expired. Please upload the file again." });
+
+        var (parsed, _) = cached.Value;
+        var rowResults = await updateValidator.ValidateAsync(parsed.Rows, body.ColumnMapping, cancellationToken);
+
+        return Ok(new TransactionUpdateValidateResponse
+        {
+            TotalRows = parsed.Rows.Count,
+            WillUpdateCount = rowResults.Count(r => r.Status == UpdateRowStatus.WillUpdate),
+            NoChangesCount = rowResults.Count(r => r.Status == UpdateRowStatus.NoChanges),
+            ErrorCount = rowResults.Count(r => r.Status == UpdateRowStatus.Error),
+            RowResults = rowResults,
+        });
+    }
+
+    // POST /api/imports/transactions/update/execute
+    [HttpPost("transactions/update/execute")]
+    public async Task<IActionResult> ExecuteTransactionsUpdate(
+        [FromBody] TransactionUpdateExecuteRequest body,
+        CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.TransactionsUpdateFromExcel, cancellationToken);
+
+        var cached = cache.Retrieve(body.FileId, "transaction-update");
+        if (cached is null)
+            return BadRequest(new { message = "File session not found or has expired. Please upload the file again." });
+
+        var (parsed, originalFileName) = cached.Value;
+
+        var updatePayload = new TransactionUpdatePayload(
+            TenantId: tenantContext.TenantId,
+            RequestedByUserId: currentUser.UserId ?? "system",
+            RequestedByEmail: currentUser.Email ?? string.Empty,
+            OriginalFileName: originalFileName,
+            ColumnMapping: body.ColumnMapping,
+            Rows: parsed.Rows);
+
+        var jobId = await backgroundJobService.EnqueueAsync(
+            updatePayload,
+            tenantContext.TenantId,
+            currentUser.UserId ?? "system",
+            currentUser.Email ?? string.Empty,
+            cancellationToken);
+
+        cache.Remove(body.FileId, "transaction-update");
+
+        return StatusCode(202, new TransactionUpdateExecuteAccepted(jobId));
+    }
+
     public sealed record ValidateRequest(string FileId, PayeeImportColumnMapping ColumnMapping);
     public sealed record ExecuteRequest(string FileId, PayeeImportColumnMapping ColumnMapping, ExecuteOptions Options);
     public sealed record ExecuteOptions(bool SkipRowsWithWarnings);
@@ -229,4 +329,7 @@ public sealed class ImportsController(
     public sealed record TransactionValidateRequest(string FileId, TransactionImportColumnMapping ColumnMapping);
     public sealed record TransactionExecuteRequest(string FileId, TransactionImportColumnMapping ColumnMapping, TransactionExecuteOptions Options);
     public sealed record TransactionExecuteOptions(bool SkipRowsWithWarnings);
+
+    public sealed record TransactionUpdateValidateRequest(string FileId, TransactionUpdateColumnMapping ColumnMapping);
+    public sealed record TransactionUpdateExecuteRequest(string FileId, TransactionUpdateColumnMapping ColumnMapping);
 }

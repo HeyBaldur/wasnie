@@ -13,6 +13,7 @@ public sealed class BackgroundJobRecord
     public DateTime EnqueuedAtUtc { get; private set; }
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    public string? ResultSummary { get; private set; }
 
     private BackgroundJobRecord() { }
 
@@ -52,4 +53,19 @@ public sealed class BackgroundJobRecord
         ErrorMessage = errorMessage;
         CompletedAtUtc = DateTime.UtcNow;
     }
+
+    public void RequestCancellation()
+    {
+        if (State is not (JobState.Pending or JobState.Running))
+            return; // no-op if already terminal
+        State = JobState.Cancelling;
+    }
+
+    public void MarkCancelled()
+    {
+        State = JobState.Cancelled;
+        CompletedAtUtc = DateTime.UtcNow;
+    }
+
+    public void SetResultSummary(string summaryJson) => ResultSummary = summaryJson;
 }
