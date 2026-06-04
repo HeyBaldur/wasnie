@@ -170,22 +170,22 @@
 }
 
 .auth-page__headline {
-  font-size: var(--font-size-28);
-  font-weight: 700;
+  font-size: clamp(2rem, 3.2vw, 3.5rem);
+  font-weight: 800;
   color: white;
-  line-height: 1.2;
+  line-height: 1.1;
   margin: 0;
-  letter-spacing: -0.02em;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  letter-spacing: -0.03em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
 }
 
 .auth-page__subline {
-  font-size: var(--font-size-14);
-  color: rgba(255, 255, 255, 0.85);
-  line-height: 1.6;
+  font-size: clamp(1rem, 1.2vw, 1.25rem);
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.65;
   margin: 0;
-  max-width: 360px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
 }
 
 .auth-page__trust-badges {
