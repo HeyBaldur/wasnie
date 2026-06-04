@@ -23,7 +23,9 @@
     "INVALID_CREDENTIALS": "Nieprawidłowy adres e-mail lub hasło.",
     "ERROR_GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
     "HERO_TITLE": "Wynagrodzenia, które napędzają wyniki.",
-    "HERO_SUBTITLE": "Projektuj plany motywacyjne, śledź realizację celów i wypłacaj prowizje z dokładnością — wszystko w jednym miejscu.",
+    "HERO_SUBTITLE": "Zaloguj się, aby zarządzać zautomatyzowanym silnikiem prowizji i wyeliminować chaos na koniec miesiąca.",
+    "REGISTER_HERO_TITLE": "Buduj zaufanie do wynagrodzeń sprzedażowych.",
+    "REGISTER_HERO_SUBTITLE": "Zastąp skomplikowane arkusze kalkulacyjne zautomatyzowanym silnikiem prowizji gotowym na audyt, stworzonym dla rozwijających się zespołów SaaS.",
     "FOOTER_RIGHTS": "© 2025 Wasnie. Wszelkie prawa zastrzeżone."
   },
   "SESSION": {

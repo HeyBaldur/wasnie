@@ -23,7 +23,9 @@
     "INVALID_CREDENTIALS": "Invalid email or password.",
     "ERROR_GENERIC": "Something went wrong. Please try again.",
     "HERO_TITLE": "Compensation that drives results.",
-    "HERO_SUBTITLE": "Design incentive plans, track attainment, and pay your team accurately — all in one platform.",
+    "HERO_SUBTITLE": "Log in to manage your automated commission engine and eliminate month-end fire drills.",
+    "REGISTER_HERO_TITLE": "Build trust in your sales compensation.",
+    "REGISTER_HERO_SUBTITLE": "Replace complex spreadsheets with an automated, audit-ready commission engine built for growing SaaS teams.",
     "FOOTER_RIGHTS": "© 2025 Wasnie. All rights reserved."
   },
   "SESSION": {
