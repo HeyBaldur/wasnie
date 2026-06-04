@@ -10,6 +10,52 @@
 
 ---
 
+## 2026-06-04 — WI-PROD-CREDITS-VISIBILITY: Expose credits in UI
+
+**WI:** WI-PROD-CREDITS-VISIBILITY
+**Status:** DONE ✅
+**Type:** Full-stack new feature — backend 4 endpoints + frontend 2 pages.
+
+### Why it exists
+363 active Credits (54,589.15 EUR) confirmed correct via SQL, but invisible in UI. Owner: "Sin visibilidad no hay confianza." Every subsequent phase (Payouts, Dashboards) builds on calculated credits — if users can't inspect them, errors are undetectable until financial damage occurs.
+
+### Visibility principle (new forbidden-pattern rule)
+Every calculated financial entity MUST have: (a) list page with filters, (b) detail page with source data + formula + "show your work" trace + audit info. A dashboard aggregate is NOT a substitute.
+
+### Backend (Application + API layers)
+- `Permission.CreditsRead` + granted to TenantAdmin + CompManager
+- `CreditFilterQuery` — 9 filter params (payeeIds, planIds, status, allocatedFrom/To, amountMin/Max, currencies, reference)
+- `ListCreditsQuery` → handler: Credits + Transaction join (ref), Payee batch-lookup, Plan batch-lookup → `CreditListDto`
+- `GetCreditCountersQuery` → handler: active count, superseded count, per-currency totals of active credits
+- `GetCreditsByPayeeQuery` → handler: groups credits by payee, sums amounts per currency, orders by total desc
+- `GetCreditByIdQuery` → handler: joins Transaction + Payee + Plan; deserializes RuleSnapshot for Section D; builds step-by-step calc display for Flat rate type
+- `GET /api/credits`, `/counters`, `/by-payee`, `/:id`
+
+### Frontend
+- `CreditFilter` type + `CreditsStore` (signals, `_buildFilterRecord` single source of truth per FIX-11 rule)
+- `credits.routes.ts` — `/credits` + `/credits/:id`
+- **List page:** counter cards (active, superseded, totals), filter panel (status/payee/plan/ref/date/amount), view toggle (Table | By Payee), paginated table, By-Payee table with click-to-filter
+- **Detail page:** 5 sections — Summary (credited amount highlighted, status badge, audit fields), Source Transaction (ref + date + amount + payee + link), Plan & Rule (with status badge + link), "How it was calculated" (Flat: base × rate = credit visual trace; raw JSON toggle), Superseded banner
+- Nav: "Credits" entry with `receipt` icon, guarded by `Credits.Read`
+- i18n: ~60 keys in EN/ES/PL
+
+### RuleSnapshot rendering
+- Flat type: structured step-by-step calc display (BaseAmount × 5.00% = CreditedAmount)
+- All types: "View raw snapshot" toggle → pre-formatted JSON
+- TriggerAlways flag handles "no conditions" case cleanly
+
+### TODO_TESTS
+- Integration: GET /api/credits returns 363 active credits matching SQL count
+- Integration: By-Payee returns top earner Agnieszka EMP301 with 37,714.32 EUR
+- Integration: Filter by payeeId=EMP301 returns only EMP301 credits
+- Integration: GET /api/credits/:id returns all 5 section fields correctly
+
+### Build
+- `dotnet build Wasnie.Application` — 0 errors
+- `ng build --configuration production` — clean
+
+---
+
 ## 2026-06-04 — WI-PROD-T-FIX-13: "Open in filter" must show exact eligible list
 
 **WI:** WI-PROD-T-FIX-13

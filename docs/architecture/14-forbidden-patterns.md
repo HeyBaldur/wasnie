@@ -370,6 +370,12 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Calculated-value invisibility violations
+
+- ❌ **Any value calculated and persisted by the system with no UI to inspect it** (WI-PROD-CREDITS-VISIBILITY, 2026-06-04). Hiding calculations in the database forces users (and developers) to run SQL queries to verify correctness. This destroys trust and makes bugs invisible until they cause a financial error. **Rule:** Every entity that holds a calculated financial value (Credit, Payout, Tax line, etc.) MUST have: (a) a list page filtered/searchable by the relevant dimensions, (b) a detail page showing all 5 of: the result, the source data, the rule/formula applied, a "show your work" step-by-step trace, and audit information. A count or aggregate on a dashboard is not a substitute for inspectability — users need to see individual rows, trace them back to source transactions, and verify the math.
+
+---
+
 ## Financial action opacity violations
 
 - ❌ **Showing a count of affected items before an action without showing which items** (WI-PROD-T-FIX-12, 2026-06-04). A badge that says "3 Pending eligible for processing" without a visible list of those 3 transactions is a black box. In a financial system this destroys trust: the user cannot verify what will be acted on, cannot cross-reference with their Excel records, and cannot detect a misconfiguration before it corrupts commission records. **Rule:** Any "eligible / applicable / affected" count displayed before a user-triggered financial action (Process Pending, batch write, recalculate) MUST be backed by an inline, inspectable list of the exact items the action WILL target. The list MUST use the SAME predicate as the count — if they diverge, the list is misleading. Caps (e.g. "first 200, see filter for rest") are acceptable; a count-only display is not.

@@ -1,0 +1,297 @@
+<app-shell>
+  <ws-page-layout
+    icon="coin"
+    [title]="'CREDITS.TITLE' | translate"
+    [subtitle]="'CREDITS.SUBTITLE' | translate"
+  >
+
+    <!-- Counter cards -->
+    @if (store.counters(); as c) {
+      <div class="credits-list__counters">
+        <ws-card variant="flat" padding="sm" class="credits-list__counter">
+          <p class="credits-list__counter-value">{{ c.activeCount | number }}</p>
+          <p class="credits-list__counter-label">{{ 'CREDITS.COUNTER_ACTIVE' | translate }}</p>
+        </ws-card>
+        <ws-card variant="flat" padding="sm" class="credits-list__counter">
+          <p class="credits-list__counter-value">{{ c.supersededCount | number }}</p>
+          <p class="credits-list__counter-label">{{ 'CREDITS.COUNTER_SUPERSEDED' | translate }}</p>
+        </ws-card>
+        @for (total of c.activeTotals; track total.currency) {
+          <ws-card variant="flat" padding="sm" class="credits-list__counter credits-list__counter--total">
+            <p class="credits-list__counter-value">{{ total.amount | currencyFormat: total.currency }}</p>
+            <p class="credits-list__counter-label">{{ 'CREDITS.COUNTER_TOTAL' | translate: { currency: total.currency } }}</p>
+          </ws-card>
+        }
+      </div>
+    }
+
+    <!-- Filter panel -->
+    <ws-card variant="raised" padding="sm" class="credits-list__filter">
+      <div class="credits-list__filter-header" (click)="filterOpen.set(!filterOpen())">
+        <span class="credits-list__filter-title">
+          <app-icon name="filter" [size]="14" />
+          {{ 'CREDITS.FILTER.TITLE' | translate }}
+        </span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
+        }
+        <span class="credits-list__filter-spacer"></span>
+        @if (store.hasActiveFilters()) {
+          <ws-button variant="ghost" size="sm" (click)="$event.stopPropagation(); clearFilters()">
+            {{ 'CREDITS.FILTER.CLEAR' | translate }}
+          </ws-button>
+        }
+        <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+      </div>
+
+      @if (filterOpen()) {
+        <form [formGroup]="form" class="credits-list__filter-body">
+          <div class="credits-list__filter-row">
+            <!-- Status chips -->
+            <div class="credits-list__filter-field">
+              <label class="credits-list__filter-label">{{ 'CREDITS.FILTER.STATUS' | translate }}</label>
+              <ws-select
+                formControlName="status"
+                [options]="statusOptions"
+              />
+            </div>
+            <!-- Reference search -->
+            <div class="credits-list__filter-field credits-list__filter-field--wide">
+              <ws-input
+                type="search"
+                prefixIcon="search"
+                formControlName="reference"
+                [label]="'CREDITS.FILTER.REFERENCE' | translate"
+                [placeholder]="'CREDITS.FILTER.REFERENCE_PLACEHOLDER' | translate"
+              />
+            </div>
+          </div>
+
+          <div class="credits-list__filter-row">
+            <!-- Payee picker -->
+            <div class="credits-list__filter-field credits-list__filter-field--wide">
+              <ws-select
+                formControlName="payeeSearch"
+                [searchFn]="payeeSearchFn"
+                [label]="'CREDITS.FILTER.PAYEE' | translate"
+                [placeholder]="'CREDITS.FILTER.PAYEE_PLACEHOLDER' | translate"
+              />
+              @if (selectedPayees().length > 0) {
+                <div class="credits-list__chips">
+                  @for (p of selectedPayees(); track p.id) {
+                    <span class="credits-list__chip">
+                      {{ p.label }}
+                      <button type="button" class="credits-list__chip-remove" (click)="removePayee(p.id)">
+                        <app-icon name="x" [size]="11" />
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+            <!-- Plan picker -->
+            <div class="credits-list__filter-field credits-list__filter-field--wide">
+              <ws-select
+                formControlName="planSearch"
+                [searchFn]="planSearchFn"
+                [label]="'CREDITS.FILTER.PLAN' | translate"
+                [placeholder]="'CREDITS.FILTER.PLAN_PLACEHOLDER' | translate"
+              />
+              @if (selectedPlans().length > 0) {
+                <div class="credits-list__chips">
+                  @for (p of selectedPlans(); track p.id) {
+                    <span class="credits-list__chip">
+                      {{ p.label }}
+                      <button type="button" class="credits-list__chip-remove" (click)="removePlan(p.id)">
+                        <app-icon name="x" [size]="11" />
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="credits-list__filter-row">
+            <div class="credits-list__filter-field">
+              <ws-date-picker formControlName="allocatedFrom" [label]="'CREDITS.FILTER.ALLOC_FROM' | translate" />
+            </div>
+            <div class="credits-list__filter-field">
+              <ws-date-picker formControlName="allocatedTo" [label]="'CREDITS.FILTER.ALLOC_TO' | translate" />
+            </div>
+            <div class="credits-list__filter-field">
+              <ws-input type="number" formControlName="amountMin" [label]="'CREDITS.FILTER.AMT_MIN' | translate" placeholder="0" />
+            </div>
+            <div class="credits-list__filter-field">
+              <ws-input type="number" formControlName="amountMax" [label]="'CREDITS.FILTER.AMT_MAX' | translate" placeholder="∞" />
+            </div>
+          </div>
+        </form>
+      }
+    </ws-card>
+
+    <!-- View toggle: Table | By Payee -->
+    <div class="credits-list__view-toggle">
+      <ws-button
+        [variant]="viewMode() === 'table' ? 'primary' : 'secondary'"
+        size="sm"
+        (click)="setViewMode('table')"
+      >
+        <app-icon name="list" [size]="14" />
+        {{ 'CREDITS.VIEW_TABLE' | translate }}
+        @if (store.totalCount() > 0) {
+          <ws-badge variant="neutral" size="sm">{{ store.totalCount() | number }}</ws-badge>
+        }
+      </ws-button>
+      <ws-button
+        [variant]="viewMode() === 'byPayee' ? 'primary' : 'secondary'"
+        size="sm"
+        (click)="setViewMode('byPayee')"
+      >
+        <app-icon name="users" [size]="14" />
+        {{ 'CREDITS.VIEW_BY_PAYEE' | translate }}
+      </ws-button>
+    </div>
+
+    <!-- ── TABLE VIEW ── -->
+    @if (viewMode() === 'table') {
+      @if (!store.loading() && store.unfilteredTotal() !== null) {
+        <p class="credits-list__count">
+          @if (store.hasActiveFilters()) {
+            {{ 'CREDITS.COUNT_FILTERED' | translate:{
+              showing: store.items().length, filtered: store.totalCount(), total: store.unfilteredTotal()
+            } }}
+          } @else {
+            {{ 'CREDITS.COUNT_TOTAL' | translate:{ total: store.totalCount() } }}
+          }
+        </p>
+      }
+
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'CREDITS.COL_REFERENCE' | translate }}</th>
+              <th>{{ 'CREDITS.COL_PAYEE' | translate }}</th>
+              <th>{{ 'CREDITS.COL_PLAN_RULE' | translate }}</th>
+              <th class="col-num">{{ 'CREDITS.COL_ORIGINAL' | translate }}</th>
+              <th class="col-num">{{ 'CREDITS.COL_CREDITED' | translate }}</th>
+              <th>{{ 'CREDITS.COL_ALLOCATED_AT' | translate }}</th>
+              <th>{{ 'CREDITS.COL_STATUS' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (store.loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--badge"></span></td>
+                </tr>
+              }
+            } @else if (store.items().length === 0) {
+              <tr>
+                <td colspan="7">
+                  <ws-table-empty messageKey="CREDITS.EMPTY_FILTER" />
+                </td>
+              </tr>
+            } @else {
+              @for (credit of store.items(); track credit.id) {
+                <tr class="credits-list__row" [routerLink]="['/credits', credit.id]">
+                  <td class="col-ref">
+                    <a [routerLink]="['/credits', credit.id]" class="credits-list__ref-link">
+                      {{ credit.referenceNumber }}
+                    </a>
+                  </td>
+                  <td class="col-secondary">
+                    @if (credit.payeeName) {
+                      {{ credit.payeeName }}
+                      @if (credit.payeeCode) {
+                        <span class="col-code">({{ credit.payeeCode }})</span>
+                      }
+                    } @else {
+                      <span class="col-unassigned">—</span>
+                    }
+                  </td>
+                  <td class="credits-list__plan-rule">
+                    <span class="credits-list__plan-name">{{ credit.planName }}</span>
+                    <span class="credits-list__rule-name">{{ credit.ruleName }}</span>
+                  </td>
+                  <td class="col-num col-secondary">{{ credit.originalAmount | currencyFormat: credit.originalCurrency }}</td>
+                  <td class="col-num col-primary">{{ credit.creditedAmount | currencyFormat: credit.creditedCurrency }}</td>
+                  <td class="col-secondary">{{ credit.allocatedAt | dateFormat }}</td>
+                  <td>
+                    <ws-badge [variant]="statusBadge(credit.isSuperseded)">
+                      {{ statusLabel(credit.isSuperseded) | translate }}
+                    </ws-badge>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </ws-table>
+
+      @if (!store.loading() && store.totalCount() > 0) {
+        <ws-pagination
+          [currentPage]="store.page()"
+          [totalPages]="store.totalPages()"
+          [totalCount]="store.totalCount()"
+          [pageSize]="store.pageSize()"
+          (pageChange)="goToPage($event)"
+          (pageSizeChange)="goToPageSize($event)"
+        />
+      }
+    }
+
+    <!-- ── BY-PAYEE VIEW ── -->
+    @if (viewMode() === 'byPayee') {
+      @if (store.byPayeeLoading()) {
+        <p class="credits-list__loading">{{ 'COMMON.LOADING' | translate }}</p>
+      } @else if (store.byPayee().length === 0) {
+        <ws-empty-state
+          illustration="transactions-empty"
+          titleKey="CREDITS.EMPTY_FILTER"
+          descKey="CREDITS.EMPTY_FILTER_DESC"
+        />
+      } @else {
+        <ws-table>
+          <table>
+            <thead>
+              <tr>
+                <th>{{ 'CREDITS.BY_PAYEE_COL_PAYEE' | translate }}</th>
+                <th class="col-num">{{ 'CREDITS.BY_PAYEE_COL_COUNT' | translate }}</th>
+                <th class="col-num">{{ 'CREDITS.BY_PAYEE_COL_TOTAL' | translate }}</th>
+                <th>{{ 'CREDITS.BY_PAYEE_COL_LATEST' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of store.byPayee(); track row.payeeId) {
+                <tr class="credits-list__row credits-list__row--clickable" (click)="openPayeeFilter(row.payeeId)">
+                  <td>
+                    <span class="credits-list__payee-name">{{ row.payeeName ?? '—' }}</span>
+                    @if (row.payeeCode) {
+                      <span class="col-code">({{ row.payeeCode }})</span>
+                    }
+                  </td>
+                  <td class="col-num">{{ row.creditCount | number }}</td>
+                  <td class="col-num col-primary">
+                    @for (t of row.totals; track t.currency) {
+                      <div>{{ t.amount | currencyFormat: t.currency }}</div>
+                    }
+                  </td>
+                  <td class="col-secondary">{{ row.latestAllocatedAt | dateFormat }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </ws-table>
+      }
+    }
+
+  </ws-page-layout>
+</app-shell>
