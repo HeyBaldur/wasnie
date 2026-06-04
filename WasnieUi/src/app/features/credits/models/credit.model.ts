@@ -56,6 +56,7 @@ export interface CreditDetail {
   transactionDate: string;
   transactionAmount: number;
   transactionCurrency: string;
+  transactionQuantity: number;
   transactionStatus: string;
   transactionPayeeId: string | null;
   payeeName: string | null;

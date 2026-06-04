@@ -5,7 +5,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Testcontainers.MsSql;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.Calculation;
@@ -64,7 +63,8 @@ public sealed class ProcessPendingJobTests : IAsyncLifetime
         var clock = new FakeClock(Now.UtcDateTime);
         var guidGen = new FakeGuidGenerator();
         var allocationService = new CreditAllocationService(
-            db, guidGen, clock, NullLogger<CreditAllocationService>.Instance);
+            db, guidGen, clock, NullLogger<CreditAllocationService>.Instance,
+            new StubQuotaAttainmentService());
         return new ProcessPendingTransactionsJobHandler(
             db, clock, guidGen, allocationService,
             NullLogger<ProcessPendingTransactionsJobHandler>.Instance);

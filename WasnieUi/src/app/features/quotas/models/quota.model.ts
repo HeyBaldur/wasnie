@@ -47,6 +47,21 @@ export interface UpdateQuotaRequest {
   notes?: string | null;
 }
 
+export interface QuotaAttainment {
+  quotaId: string;
+  planId: string;
+  planName: string;
+  measurementType: QuotaMeasurementType;
+  targetAmount: number;
+  currency: string;
+  achievedAmount: number;
+  attainmentValue: number;
+  attainmentPercent: string;
+  periodStart: string;
+  periodEnd: string;
+  status: QuotaStatus;
+}
+
 export interface QuotaListParams {
   page: number;
   pageSize: number;

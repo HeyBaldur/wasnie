@@ -4,7 +4,6 @@ using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
-using Wasnie.Domain.Compensation.Rules;
 
 namespace Wasnie.UnitTests.Domain;
 

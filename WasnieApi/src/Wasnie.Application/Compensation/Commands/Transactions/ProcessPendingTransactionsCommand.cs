@@ -1,6 +1,6 @@
 using MediatR;
-using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Common.Results;
 

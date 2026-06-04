@@ -81,6 +81,7 @@ public sealed class GetCreditByIdHandler(
             TransactionDate: tx?.TransactionDate ?? DateOnly.MinValue,
             TransactionAmount: tx?.Amount.Amount ?? 0,
             TransactionCurrency: tx?.Amount.Currency ?? credit.OriginalAmount.Currency,
+            TransactionQuantity: tx?.Quantity ?? 1,
             TransactionStatus: tx?.Status.ToString() ?? "Unknown",
             TransactionPayeeId: tx?.PayeeId,
             PayeeName: payee?.FullName,

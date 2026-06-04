@@ -1,4 +1,5 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
@@ -12,7 +13,7 @@ import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
 import { Assignment } from '../../assignments/models/assignment.model';
-import { QuotaSummary } from '../../quotas/models/quota.model';
+import { QuotaAttainment, QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
 import { Payee, PayeeStatus } from '../models/payee.model';
 import { PayeeFormComponent } from '../form/payee-form.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
@@ -31,7 +32,7 @@ import {
   type BadgeVariant,
 } from '../../../shared/ui';
 
-type Tab = 'profile' | 'assignments' | 'quotas' | 'activity';
+type Tab = 'profile' | 'assignments' | 'quotas' | 'attainment' | 'activity';
 
 @Component({
   selector: 'app-payee-detail',
@@ -42,6 +43,7 @@ type Tab = 'profile' | 'assignments' | 'quotas' | 'activity';
     RouterLink,
     ReactiveFormsModule,
     TranslateModule,
+    DecimalPipe,
     DateFormatPipe,
     CurrencyFormatPipe,
     PayeeFormComponent,
@@ -83,6 +85,10 @@ export class PayeeDetailComponent implements OnInit {
   readonly payeeQuotasResult = signal<PagedResult<QuotaSummary> | null>(null);
   readonly quotasLoading = signal(false);
   readonly quotasPage = signal(1);
+  readonly attainmentResult = signal<QuotaAttainment[] | null>(null);
+  readonly attainmentLoading = signal(false);
+
+  readonly QuotaMeasurementType = QuotaMeasurementType;
 
   readonly terminateForm = this.fb.nonNullable.group({
     terminationDate: ['', Validators.required],
@@ -99,6 +105,9 @@ export class PayeeDetailComponent implements OnInit {
     }
     if (tab === 'quotas' && !this.quotasLoading() && !this.payeeQuotasResult()) {
       this.loadPayeeQuotas(1);
+    }
+    if (tab === 'attainment' && !this.attainmentLoading() && this.attainmentResult() === null) {
+      this.loadPayeeAttainment();
     }
   }
 
@@ -126,6 +135,25 @@ export class PayeeDetailComponent implements OnInit {
     } finally {
       this.quotasLoading.set(false);
     }
+  }
+
+  async loadPayeeAttainment(): Promise<void> {
+    this.attainmentLoading.set(true);
+    try {
+      const result = await firstValueFrom(this.payeesApi.getPayeeAttainment(this.payeeId));
+      this.attainmentResult.set(result);
+    } catch {
+      this.attainmentResult.set([]);
+    } finally {
+      this.attainmentLoading.set(false);
+    }
+  }
+
+  attainmentColorClass(value: number): string {
+    if (value >= 1.0) return 'attainment-bar--blue';
+    if (value >= 0.80) return 'attainment-bar--green';
+    if (value >= 0.50) return 'attainment-bar--amber';
+    return 'attainment-bar--red';
   }
 
   openEdit(): void {

@@ -52,6 +52,11 @@
           <!-- Currency (no filter) -->
           <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_CURRENCY' | translate }}</th>
 
+          <!-- Quantity (no filter, optional) -->
+          @if (columnMapping().quantityColumn) {
+            <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_QUANTITY' | translate }}</th>
+          }
+
           <!-- Transaction Date (no filter) -->
           <th class="preview-table__th">{{ 'IMPORTS.TRANSACTIONS.FIELD_TRANSACTION_DATE' | translate }}</th>
 
@@ -81,6 +86,9 @@
             <td class="preview-table__td">{{ getCell(row, columnMapping().payeeCodeColumn) }}</td>
             <td class="preview-table__td">{{ getCell(row, columnMapping().amountColumn) }}</td>
             <td class="preview-table__td">{{ getCell(row, columnMapping().currencyColumn) }}</td>
+            @if (columnMapping().quantityColumn) {
+              <td class="preview-table__td">{{ getCell(row, columnMapping().quantityColumn!) }}</td>
+            }
             <td class="preview-table__td">{{ getCell(row, columnMapping().transactionDateColumn) }}</td>
             <td class="preview-table__td preview-table__td--status">
               <ws-badge [variant]="rowBadgeVariant(row)" size="sm">

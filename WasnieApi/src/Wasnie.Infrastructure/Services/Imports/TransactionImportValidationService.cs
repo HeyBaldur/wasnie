@@ -4,7 +4,6 @@ using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
-using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Infrastructure.Services.Imports;
@@ -136,6 +135,14 @@ public sealed class TransactionImportValidationService(
             var amountStr = GetField(row, mapping.AmountColumn);
             var amountIssue = TransactionFieldValidators.ValidateAmount(amountStr, out _);
             if (amountIssue is not null) issues.Add(amountIssue);
+
+            // ── quantity (optional column, defaults to 1 if not mapped or blank) ───────
+            if (mapping.QuantityColumn is not null)
+            {
+                var quantityStr = GetField(row, mapping.QuantityColumn);
+                var quantityIssue = TransactionFieldValidators.ValidateQuantity(quantityStr, out _);
+                if (quantityIssue is not null) issues.Add(quantityIssue);
+            }
 
             // ── currency ──────────────────────────────────────────────────────
             var currency = GetField(row, mapping.CurrencyColumn);

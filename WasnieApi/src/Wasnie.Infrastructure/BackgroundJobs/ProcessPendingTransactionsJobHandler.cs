@@ -49,10 +49,16 @@ public sealed class ProcessPendingTransactionsJobHandler(
             logger.LogInformation(
                 "ProcessPendingTransactionsJob {JobId}: no candidates found. Done.", context.JobId);
             await context.SetResultSummaryAsync(JsonSerializer.Serialize(
-                new { Processed = 0, CreditsCreated = 0, SkippedByOverlapRule = 0,
-                      SkippedByIdempotency = 0, SkippedByValidation = 0,
-                      SkipReasonCounts = new Dictionary<string, int>(),
-                      SkipDetails = Array.Empty<object>() },
+                new
+                {
+                    Processed = 0,
+                    CreditsCreated = 0,
+                    SkippedByOverlapRule = 0,
+                    SkippedByIdempotency = 0,
+                    SkippedByValidation = 0,
+                    SkipReasonCounts = new Dictionary<string, int>(),
+                    SkipDetails = Array.Empty<object>()
+                },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), ct);
             return;
         }
@@ -257,7 +263,8 @@ public sealed class ProcessPendingTransactionsJobHandler(
             SkippedByValidation = totalValidationSkips,
             SkipReasonCounts = skipReasonCounts,
             // First 200 skip entries for UI display (protection against unbounded JSON).
-            SkipDetails = skipDetails.Take(200).Select(s => new {
+            SkipDetails = skipDetails.Take(200).Select(s => new
+            {
                 TxId = s.TxId,
                 RefNum = s.RefNum,
                 TxDate = s.TxDate.ToString("yyyy-MM-dd"),

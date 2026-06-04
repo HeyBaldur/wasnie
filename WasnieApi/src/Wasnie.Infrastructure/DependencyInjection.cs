@@ -8,10 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Models.Calculation;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
-using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Infrastructure.BackgroundJobs;
 using Wasnie.Infrastructure.Common;
 using Wasnie.Infrastructure.Compensation.Calculation;
@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, AuditService>();
 
         services.AddScoped<ICreditAllocationService, CreditAllocationService>();
+        services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
         services.AddScoped<IFieldRequirementService, FieldRequirementService>();

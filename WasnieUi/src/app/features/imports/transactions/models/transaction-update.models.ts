@@ -4,6 +4,7 @@ export interface TransactionUpdateColumnMapping {
   currencyColumn?: string | null;
   transactionDateColumn?: string | null;
   payeeCodeColumn?: string | null;
+  quantityColumn?: string | null;
 }
 
 export interface FieldDiff {

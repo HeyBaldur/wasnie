@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;

@@ -11,6 +11,7 @@ public sealed record TransactionExportRow(
     string? PayeeName,
     decimal Amount,
     string Currency,
+    int Quantity,
     DateOnly TransactionDate,
     string Source,
     string Status,

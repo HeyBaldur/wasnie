@@ -2,7 +2,6 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Compensation.Queries.Credits;
-using Wasnie.Application.Compensation.Queries.Transactions;
 
 namespace Wasnie.Api.Controllers;
 

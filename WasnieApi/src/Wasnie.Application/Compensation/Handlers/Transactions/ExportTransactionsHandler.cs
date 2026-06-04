@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -140,6 +139,7 @@ public sealed class ExportTransactionsHandler(
                 PayeeName: payee?.FullName,
                 Amount: t.Amount.Amount,
                 Currency: t.Amount.Currency,
+                Quantity: t.Quantity,
                 TransactionDate: t.TransactionDate,
                 Source: t.Source.ToString(),
                 Status: t.Status.ToString(),

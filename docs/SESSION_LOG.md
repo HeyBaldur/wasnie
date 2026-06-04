@@ -10,6 +10,124 @@
 
 ---
 
+## 2026-06-04 — WI-CALC-A.3-FIX-1: Quota-Plan currency invariant
+
+**Root cause:** Create Quota dialog had an independent currency dropdown. Nothing prevented choosing EUR for a Quota whose Plan is PLN — producing nonsensical attainment ratios (PLN credits vs EUR target).
+
+**Domain (1 file):**
+- `Quota.Create`: added optional `planCurrency` param. If provided, throws `DomainException` when `amount.Currency != planCurrency`.
+- `Quota.UpdateDraft`: same `planCurrency` param added.
+- Null/omitted: no validation (backward-compatible for existing calls without planCurrency).
+
+**Application (2 files):**
+- `CreateQuotaHandler`: loads Plan before `Quota.Create`. Passes `plan.Currency` as `planCurrency`. Returns 400 on mismatch (via `Result.Failure`).
+- `UpdateQuotaHandler`: loads Plan (via `quota.PlanId`) before `UpdateDraft`. Passes `plan?.Currency`. Returns 422 on mismatch (existing error path).
+
+**UI (1 component file, 3 i18n files):**
+- `quota-create.component.ts`: currency form control starts `disabled`. Subscribes to `planId.valueChanges` → calls `plansApi.getPlan(planId)` → sets currency value and `planCurrencyLocked` signal. Control stays disabled (grayed out, non-editable). `getRawValue()` still includes disabled control value.
+- Template: WsInput for currency with `[placeholder]` showing "Select a plan first" until a plan is chosen, then shows the plan's ISO 3-letter currency code.
+- EN/ES/PL: `QUOTAS.CURRENCY_LOCKED` + `QUOTAS.CURRENCY_SELECT_PLAN_FIRST` added.
+
+**Tests (+7 net: 333 unit + 448 integration = 781 total):**
+- `QuotaTests.cs` (new, 5 unit tests): `Create` matching/mismatch, `Create` no-planCurrency passthrough, `UpdateDraft` matching/mismatch
+- `QuotasEndpointsTests`: `CreateQuota_CurrencyMismatchWithPlan_Returns400` (new), `UpdateQuota_CurrencyMismatchWithPlan_ReturnsError` (new), `UpdateQuota_ValidRequest_Returns200` updated to use EUR (was USD which was already a mismatch)
+- `QuotaAttainmentServiceTests`: two `Quota.Create` calls updated to pass `planCurrency: Currency`
+
+**Forbidden pattern added:** "Derived-entity currency must equal parent currency — enforce at both domain (factory validates) and UI (locked field) layers."
+
+**Audit query (run manually against dev DB):**
+```sql
+SELECT q.Id, q.QuotaAmount, q.QuotaCurrency, p.Name, p.Currency
+FROM Quotas q JOIN CompensationPlans p ON q.PlanId = p.Id
+WHERE q.QuotaCurrency <> p.Currency;
+```
+Expected: at least 1 row (Quota B from smoke test: EUR on PLN plan). Default: do NOT auto-clean — owner corrects via UI.
+
+**Both builds clean. NO git operations.**
+
+---
+
+## 2026-06-04 — WI-CALC-A.3: Quota Attainment Service
+
+**Strategic context:** A.3 closes the gap between Credits (computed by A.1/A.2) and Payouts (A.4 next). Answers: "what % of her quota has Anna achieved?"
+
+**Test pattern restored:** Pattern is back. +7 tests net (328 unit + 446 integration = 774 total). 2 intentionally skipped remain.
+
+**Domain (1 file):**
+- `AttainmentPercentage` VO: range 0–∞ (no upper cap), `FromAchievedAndTarget(achieved, target)` with target=0 → Zero, `ToPercentString()` → "76%"/"120%", banker's rounding to 4 decimals. Distinct from `Percentage` VO (capped 0–1 for rule rates).
+
+**Application (4 files):**
+- `IQuotaAttainmentService`: single method `ComputeAsync(payeeId, planId, asOfDate, ct)` returning `AttainmentPercentage`
+- `GetPayeeAttainmentQuery` + `GetPayeeAttainmentHandler`: `GET /api/payees/:id/attainment` returning `QuotaAttainmentDto[]` per non-Draft quota (Revenue sums OriginalAmount, Units sums Quantity)
+- `QuotaAttainmentDto`: QuotaId, PlanName, MeasurementType, TargetAmount, AchievedAmount, AttainmentValue, AttainmentPercent, period, status
+
+**Infrastructure (2 files):**
+- `QuotaAttainmentService`: scoped per request, `Dictionary<(Guid,Guid,DateOnly), AttainmentPercentage>` cache (mirrors FieldRequirementService pattern). Quotas loaded in-memory then date-filtered (same DateOnly-on-owned-type workaround as CreditAllocationService). Revenue = sum `Credit.OriginalAmount`, Units = sum `CompensationTransaction.Quantity`.
+- `CreditAllocationService`: `IQuotaAttainmentService` injected; `BuildCredits` → `BuildCreditsAsync`; `PlanUsesAttainment(plan)` short-circuit (only calls `ComputeAsync` when at least one active AttainmentBased rule). Both overloads updated.
+
+**Controller (1 file):**
+- `PayeesController`: `GET /api/payees/{payeeId:guid}/attainment` added
+
+**Frontend (6 files):**
+- `QuotaAttainment` model added to `quota.model.ts`
+- `PayeesApiService.getPayeeAttainment(payeeId)` added
+- `payee-detail.component.ts`: `'attainment'` added to Tab type; `attainmentResult/attainmentLoading` signals; `loadPayeeAttainment()` method; `attainmentColorClass(value)` helper (red <50%, amber 50–79%, green 80–100%, blue ≥100%); `QuotaMeasurementType` enum exposed; `DecimalPipe` imported
+- `payee-detail.component.html`: Attainment tab button + quota cards with target/achieved/progress bar + color coding + empty state
+- `payee-detail.component.scss`: `.attainment-grid`, `.attainment-card`, `.attainment-stat`, `.attainment-progress` with color variants
+- `en.json` + `es.json` + `pl.json`: `PAYEES.DETAIL_TAB_ATTAINMENT`, `PAYEES.ATTAINMENT_TAB_EMPTY`, `ATTAINMENT.*` section (Target, Achieved, Measure_Revenue, Measure_Units, Units)
+
+**Tests (3 new files):**
+- `AttainmentPercentageTests.cs` (unit): 9 cases — equality, from-target-zero, negative-target, negative-achieved, exceeds-100, ToPercentString formats, partial rounding
+- `QuotaAttainmentServiceTests.cs` (integration): 6 cases — Revenue attainment, Units attainment, no quota → Zero, Draft quota → Zero, overlapping periods → shortest wins, credits outside period not counted
+- `CreditAllocationServiceTests.cs`: replaced `AllocateAsync_AttainmentBased_V1Stub_*` with `_UsesRealAttainmentFromService` (stub returns 75% → 7% bracket) + `AllocateAsync_FlatPlan_DoesNotCallAttainmentService` (CallCount=0 short-circuit test)
+- `StubQuotaAttainmentService.cs`: `CallCount` tracking, configurable fixed attainment value
+
+**Forbidden patterns (1 new rule added):**
+- "Attainment is per-Quota, not per-Payee — never aggregate attainment across Plans"
+- "Always check PlanUsesAttainment before calling ComputeAsync"
+- "Use OriginalAmount (transaction revenue) not CreditedAmount (commission) for Revenue-type attainment"
+
+**Key decision:** Revenue quota attainment sums `Credit.OriginalAmount` (the transaction revenue attributed to this payee), NOT `Credit.CreditedAmount` (the commission). The WI spec's reference to "CreditedAmount" was interpreted as "credited/attributed revenue" — the correct domain measure is the original transaction amount.
+
+**Smoke test:** Use Create Quota UI (already functional) to seed a Quota for EMP301 on Test Flat 5% Plan, period May 2026, Revenue, target 50,000 EUR. Open /payees/:id → Attainment tab → see card with progress bar.
+
+**Both builds clean. 774 tests (328 unit + 446 integration). NO git operations.**
+
+---
+
+## 2026-06-04 — WI-PROD-QUANTITY-FIELD: Quantity field + MeasurementType V1 filter
+
+**Strategic decision:** Support Revenue + Units in V1. Margin/ACV/Bookings hidden from Quota creation (enum values preserved for future activation). Quantity field added to CompensationTransactions to enable Units attainment in A.3.
+
+**Backend (17 files):**
+- `CompensationTransaction`: + `Quantity int` property (default 1), + `quantity` param in `Ingest()`, + `newQuantity` param in `ApplyExcelUpdate()`
+- `CompensationTransactionConfiguration`: + `HasDefaultValue(1)` column mapping
+- Migration `P3_AddTransactionQuantity`: `ADD COLUMN Quantity int NOT NULL DEFAULT 1`. All 10K+ existing rows → 1.
+- `TransactionFieldValidators`: + `ValidateQuantity()` — empty→1, non-int or <1→Format error
+- `TransactionImportColumnMapping`: + `QuantityColumn?`; import validation + job handler parse + pass to `Ingest()`
+- `TransactionUpdateColumnMapping` + update validation service (with diff) + update job handler: same
+- `IngestTransactionCommand` + validator (`>= 1`) + handler: Quantity threaded through
+- `TransactionDto`: + `Quantity`; `IngestTransactionHandler.ToDto` updated (ListTransactions via same method)
+- `TransactionExportRow` + `ExportTransactionsHandler` + `TransactionExcelExportService`: Quantity column (col 7, shifts others)
+- `CreditDetailDto`: + `TransactionQuantity`; `GetCreditByIdHandler`: joined from tx
+
+**Frontend (10 files):**
+- `transaction.model.ts`: + `quantity` on Transaction + CreateTransactionRequest
+- `transaction-form`: Quantity input (min: 1, default: 1)
+- `transactions-list`: + Qty column header/cell, colspan updated
+- `column-auto-detect.ts`: + `quantityColumn` patterns (EN/ES/PL)
+- Import + update column mapping models: + `quantityColumn?`
+- Import preview step: + Quantity column (conditional on mapping)
+- `credit.model.ts` + credit detail HTML: + `transactionQuantity` in Section B (shown when > 1)
+- `quota-create.component.ts`: MEASUREMENT_TYPES filtered to Revenue + Units only
+- i18n EN/ES/PL: FIELD_QUANTITY, FIELD_QUANTITY_MIN, COL_QUANTITY, TX_QUANTITY, IMPORTS.TRANSACTIONS.FIELD_QUANTITY
+
+**Build:** Backend clean (0 errors). Frontend production clean. Migration applied to dev DB.
+
+**TODO_TESTS:** See TODO_TESTS section (WI-PROD-QUANTITY-FIELD entry).
+
+---
+
 ## 2026-06-04 — WI-PROD-CREDITS-EXPORT: Excel export for /credits + unified button placement
 
 **Consistency principle:** Both /credits and /transactions now have "Export to Excel" in the same position — right-aligned above the table, inline with the count text. Reduces cognitive load for users switching between pages.

@@ -56,6 +56,7 @@ public sealed record CreditDetailDto(
     DateOnly TransactionDate,
     decimal TransactionAmount,
     string TransactionCurrency,
+    int TransactionQuantity,
     string TransactionStatus,
     Guid? TransactionPayeeId,
     string? PayeeName,

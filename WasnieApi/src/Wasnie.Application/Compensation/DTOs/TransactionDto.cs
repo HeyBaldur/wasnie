@@ -7,6 +7,7 @@ public sealed record TransactionDto(
     Guid? PayeeId,
     decimal Amount,
     string Currency,
+    int Quantity,
     DateOnly TransactionDate,
     string Source,
     string Status,

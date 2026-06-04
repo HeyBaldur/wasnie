@@ -24,6 +24,8 @@ public sealed class UpdateQuotaHandler(
         if (quota is null)
             return Result<QuotaSummaryDto>.Failure("Quota not found.");
 
+        var plan = await db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
+
         try
         {
             quota.UpdateDraft(
@@ -32,7 +34,8 @@ public sealed class UpdateQuotaHandler(
                 request.MeasurementType,
                 request.Notes,
                 currentUser.UserId ?? "system",
-                clock.UtcNowOffset);
+                clock.UtcNowOffset,
+                planCurrency: plan?.Currency);
         }
         catch (Exception ex)
         {
@@ -42,7 +45,6 @@ public sealed class UpdateQuotaHandler(
         await db.SaveChangesAsync(cancellationToken);
 
         var payee = await db.Payees.FirstOrDefaultAsync(p => p.Id == quota.PayeeId, cancellationToken);
-        var plan = await db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
 
         return Result<QuotaSummaryDto>.Success(new QuotaSummaryDto(
             quota.Id,

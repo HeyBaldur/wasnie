@@ -36,6 +36,14 @@
       />
     </div>
 
+    <ws-input
+      label="TRANSACTIONS.FIELD_QUANTITY"
+      type="number"
+      formControlName="quantity"
+      placeholder="1"
+      [error]="hasError('quantity', 'min') ? 'TRANSACTIONS.FIELD_QUANTITY_MIN' : ''"
+    />
+
     <p class="source-info ws-form-grid__full">
       {{ 'TRANSACTIONS.SOURCE_INFO' | translate }}
     </p>

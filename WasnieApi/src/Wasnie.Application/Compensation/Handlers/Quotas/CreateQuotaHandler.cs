@@ -23,26 +23,39 @@ public sealed class CreateQuotaHandler(
     public async Task<Result<QuotaSummaryDto>> Handle(CreateQuotaCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.QuotasSet, cancellationToken);
+
+        var plan = await db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == request.PlanId, cancellationToken);
+        if (plan is null)
+            return Result<QuotaSummaryDto>.Failure("Plan not found.");
+
         var amount = Money.OfNonNegative(request.Amount, request.Currency);
         var period = DateRange.Of(request.PeriodStart, request.PeriodEnd);
 
-        var quota = Quota.Create(
-            tenantContext.TenantId,
-            request.PayeeId,
-            request.PlanId,
-            amount,
-            period,
-            request.MeasurementType,
-            currentUser.UserId ?? "system",
-            guid.NewGuid(),
-            clock.UtcNowOffset,
-            request.Notes);
+        Quota quota;
+        try
+        {
+            quota = Quota.Create(
+                tenantContext.TenantId,
+                request.PayeeId,
+                request.PlanId,
+                amount,
+                period,
+                request.MeasurementType,
+                currentUser.UserId ?? "system",
+                guid.NewGuid(),
+                clock.UtcNowOffset,
+                request.Notes,
+                planCurrency: plan.Currency);
+        }
+        catch (Exception ex)
+        {
+            return Result<QuotaSummaryDto>.Failure(ex.Message);
+        }
 
         db.Quotas.Add(quota);
         await db.SaveChangesAsync(cancellationToken);
 
         var payee = await db.Payees.FirstOrDefaultAsync(p => p.Id == quota.PayeeId, cancellationToken);
-        var plan = await db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
 
         return Result<QuotaSummaryDto>.Success(new QuotaSummaryDto(
             quota.Id,
@@ -51,7 +64,7 @@ public sealed class CreateQuotaHandler(
             payee?.FullName ?? string.Empty,
             payee?.EmployeeCode ?? string.Empty,
             quota.PlanId,
-            plan?.Name ?? string.Empty,
+            plan.Name,
             quota.MeasurementType,
             quota.Amount.Amount,
             quota.Amount.Currency,

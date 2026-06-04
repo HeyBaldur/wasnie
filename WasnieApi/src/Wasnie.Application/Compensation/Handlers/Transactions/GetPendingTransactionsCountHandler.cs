@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Queries.Transactions;

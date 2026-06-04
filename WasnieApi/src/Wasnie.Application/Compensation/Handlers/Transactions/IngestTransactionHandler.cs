@@ -73,7 +73,8 @@ public sealed class IngestTransactionHandler(
             ingestedBy: currentUser.UserId ?? "system",
             id: txId,
             now: now,
-            eventId: guid.NewGuid());
+            eventId: guid.NewGuid(),
+            quantity: request.Quantity);
 
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync(cancellationToken);
@@ -99,7 +100,7 @@ public sealed class IngestTransactionHandler(
 
     internal static TransactionDto ToDto(CompensationTransaction tx) =>
         new(tx.Id, tx.TenantId, tx.ReferenceNumber, tx.PayeeId,
-            tx.Amount.Amount, tx.Amount.Currency, tx.TransactionDate,
+            tx.Amount.Amount, tx.Amount.Currency, tx.Quantity, tx.TransactionDate,
             tx.Source.ToString(), tx.Status.ToString(), tx.ExternalId,
             tx.IngestedAt, tx.IngestedBy, tx.UpdatedAt);
 }

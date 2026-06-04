@@ -55,4 +55,9 @@ export class PayeesApiService {
     return this.http.get<PagedResult<import('../../quotas/models/quota.model').QuotaSummary>>(
       `${this.base}/${payeeId}/quotas`, { params: buildHttpParams(params) });
   }
+
+  getPayeeAttainment(payeeId: string): Observable<import('../../quotas/models/quota.model').QuotaAttainment[]> {
+    return this.http.get<import('../../quotas/models/quota.model').QuotaAttainment[]>(
+      `${this.base}/${payeeId}/attainment`);
+  }
 }

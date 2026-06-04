@@ -82,6 +82,7 @@
               <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_INGESTED' | translate }}</th>
               <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
+              <th class="col-num">{{ 'TRANSACTIONS.COL_QUANTITY' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
               <th *hasPermission="'Transactions.Update'" class="col-actions"></th>
             </tr>
@@ -96,12 +97,13 @@
                   <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--short"></span></td>
                   <td><span class="skeleton skeleton--badge"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
                   <td></td>
                 </tr>
               }
             } @else if (store.transactions().length === 0) {
               <tr>
-                <td colspan="7">
+                <td colspan="8">
                   <ws-table-empty messageKey="TRANSACTIONS.EMPTY_FILTER_TITLE" />
                 </td>
               </tr>
@@ -122,6 +124,7 @@
                   <td class="col-secondary">{{ tx.transactionDate | dateFormat }}</td>
                   <td class="col-secondary">{{ tx.ingestedAt | dateFormat }}</td>
                   <td class="col-num">{{ tx.amount | currencyFormat: tx.currency }}</td>
+                  <td class="col-num">{{ tx.quantity }}</td>
                   <td>
                     <ws-badge [variant]="statusVariant(tx.status)">
                       {{ statusKey(tx.status) | translate }}

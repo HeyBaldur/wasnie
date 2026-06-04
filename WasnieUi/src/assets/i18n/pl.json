@@ -413,11 +413,20 @@
     "DETAIL_TAB_PROFILE": "Profil",
     "DETAIL_TAB_ASSIGNMENTS": "Przypisania",
     "DETAIL_TAB_QUOTAS": "Kwoty",
+    "DETAIL_TAB_ATTAINMENT": "Realizacja",
     "DETAIL_TAB_ACTIVITY": "Aktywność",
     "EDIT_TITLE": "Edytuj Beneficjenta",
     "ASSIGNMENTS_TAB_HINT": "Brak przypisań. Przypisz tego beneficjenta do planu wynagrodzeniowego, aby zacząć śledzić zarobki.",
     "QUOTAS_TAB_HINT": "Brak zdefiniowanych kwot dla tego beneficjenta. Dodaj kwotę, aby ustawić cele wydajnościowe.",
+    "ATTAINMENT_TAB_EMPTY": "Brak aktywnych kwot dla tego beneficjenta. Utwórz kwotę w zakładce Kwoty, aby zacząć śledzić realizację.",
     "ACTION_IMPORT": "Importuj"
+  },
+  "ATTAINMENT": {
+    "TARGET": "Cel",
+    "ACHIEVED": "Osiągnięto",
+    "MEASURE_REVENUE": "Przychód",
+    "MEASURE_UNITS": "Jednostki",
+    "UNITS": "szt."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -445,6 +454,8 @@
     "FIELD_AMOUNT": "Kwota docelowa",
     "FIELD_AMOUNT_MIN": "Kwota musi być większa niż 0.",
     "FIELD_CURRENCY": "Waluta",
+    "CURRENCY_LOCKED": "Zablokowana do waluty planu",
+    "CURRENCY_SELECT_PLAN_FIRST": "Najpierw wybierz plan",
     "FIELD_PERIOD": "Okres",
     "ACTION_CREATE": "Utwórz Kwotę",
     "FIELD_MEASUREMENT_TYPE": "Typ pomiaru",
@@ -489,6 +500,9 @@
     "FIELD_AMOUNT": "Kwota",
     "FIELD_AMOUNT_MIN": "Kwota musi być większa od 0.",
     "FIELD_CURRENCY": "Waluta",
+    "FIELD_QUANTITY": "Ilość",
+    "FIELD_QUANTITY_MIN": "Ilość musi wynosić co najmniej 1.",
+    "COL_QUANTITY": "Ilość",
     "SOURCE_INFO": "Źródło: Wpis ręczny",
     "ACTION_CREATE": "Zarejestruj Transakcję",
     "TOAST_CREATED": "Transakcja została zarejestrowana.",
@@ -649,6 +663,7 @@
       "REFERENCE": "Numer referencyjny",
       "TX_DATE": "Data transakcji",
       "TX_AMOUNT": "Kwota transakcji",
+      "TX_QUANTITY": "Jednostki",
       "TX_STATUS": "Status transakcji",
       "PAYEE": "Beneficjent",
       "VIEW_TRANSACTION": "Zobacz transakcję",
@@ -805,7 +820,8 @@
       "FIELD_AMOUNT": "Kwota",
       "FIELD_CURRENCY": "Waluta",
       "FIELD_TRANSACTION_DATE": "Data transakcji",
-      "FIELD_EXTERNAL_ID": "Zewnętrzny ID"
+      "FIELD_EXTERNAL_ID": "Zewnętrzny ID",
+      "FIELD_QUANTITY": "Ilość"
     },
     "UPDATE": {
       "TITLE": "Aktualizuj transakcje z Excel",

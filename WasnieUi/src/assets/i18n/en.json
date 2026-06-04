@@ -413,11 +413,20 @@
     "DETAIL_TAB_PROFILE": "Profile",
     "DETAIL_TAB_ASSIGNMENTS": "Assignments",
     "DETAIL_TAB_QUOTAS": "Quotas",
+    "DETAIL_TAB_ATTAINMENT": "Attainment",
     "DETAIL_TAB_ACTIVITY": "Activity",
     "EDIT_TITLE": "Edit Payee",
     "ASSIGNMENTS_TAB_HINT": "No assignments yet. Assign this payee to a compensation plan to start tracking earnings.",
     "QUOTAS_TAB_HINT": "No quotas defined for this payee. Add a quota to set their performance targets.",
+    "ATTAINMENT_TAB_EMPTY": "No active quotas defined for this payee. Create a quota in the Quotas tab to start tracking attainment.",
     "ACTION_IMPORT": "Import"
+  },
+  "ATTAINMENT": {
+    "TARGET": "Target",
+    "ACHIEVED": "Achieved",
+    "MEASURE_REVENUE": "Revenue",
+    "MEASURE_UNITS": "Units",
+    "UNITS": "units"
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Reference",
@@ -529,7 +538,8 @@
       "FIELD_AMOUNT": "Amount",
       "FIELD_CURRENCY": "Currency",
       "FIELD_TRANSACTION_DATE": "Transaction date",
-      "FIELD_EXTERNAL_ID": "External ID"
+      "FIELD_EXTERNAL_ID": "External ID",
+      "FIELD_QUANTITY": "Quantity"
     },
     "UPDATE": {
       "TITLE": "Update Transactions from Excel",
@@ -595,6 +605,8 @@
     "FIELD_AMOUNT": "Target amount",
     "FIELD_AMOUNT_MIN": "Amount must be greater than 0.",
     "FIELD_CURRENCY": "Currency",
+    "CURRENCY_LOCKED": "Locked to plan currency",
+    "CURRENCY_SELECT_PLAN_FIRST": "Select a plan first",
     "FIELD_PERIOD": "Period",
     "ACTION_CREATE": "Create Quota",
     "FIELD_MEASUREMENT_TYPE": "Measurement type",
@@ -639,6 +651,9 @@
     "FIELD_AMOUNT": "Amount",
     "FIELD_AMOUNT_MIN": "Amount must be greater than 0.",
     "FIELD_CURRENCY": "Currency",
+    "FIELD_QUANTITY": "Quantity",
+    "FIELD_QUANTITY_MIN": "Quantity must be at least 1.",
+    "COL_QUANTITY": "Qty",
     "SOURCE_INFO": "Source: Manual entry",
     "ACTION_CREATE": "Record Transaction",
     "TOAST_CREATED": "Transaction recorded successfully.",
@@ -799,6 +814,7 @@
       "REFERENCE": "Reference number",
       "TX_DATE": "Transaction date",
       "TX_AMOUNT": "Transaction amount",
+      "TX_QUANTITY": "Units",
       "TX_STATUS": "Transaction status",
       "PAYEE": "Payee",
       "VIEW_TRANSACTION": "View transaction",

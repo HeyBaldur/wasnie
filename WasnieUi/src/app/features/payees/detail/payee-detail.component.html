@@ -87,6 +87,9 @@
         <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'quotas'" (click)="setTab('quotas')">
           {{ 'PAYEES.DETAIL_TAB_QUOTAS' | translate }}
         </button>
+        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'attainment'" (click)="setTab('attainment')">
+          {{ 'PAYEES.DETAIL_TAB_ATTAINMENT' | translate }}
+        </button>
         <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'activity'" (click)="setTab('activity')">
           {{ 'PAYEES.DETAIL_TAB_ACTIVITY' | translate }}
         </button>
@@ -296,6 +299,76 @@
                 [pageSize]="10"
                 (pageChange)="loadPayeeQuotas($event)"
               />
+            }
+          </div>
+        }
+
+        @if (activeTab() === 'attainment') {
+          <div class="tab-content">
+            @if (attainmentLoading()) {
+              <div class="attainment-grid">
+                @for (row of [0,1,2]; track row) {
+                  <div class="attainment-card skeleton-card">
+                    <span class="skeleton skeleton--title"></span>
+                    <span class="skeleton skeleton--text"></span>
+                  </div>
+                }
+              </div>
+            } @else if ((attainmentResult()?.length ?? 0) === 0) {
+              <ws-table-empty messageKey="PAYEES.ATTAINMENT_TAB_EMPTY" />
+            } @else {
+              <div class="attainment-grid">
+                @for (a of attainmentResult()!; track a.quotaId) {
+                  <div class="attainment-card">
+                    <div class="attainment-card__header">
+                      <span class="attainment-card__plan">{{ a.planName }}</span>
+                      <ws-badge [variant]="quotaStatusVariant(a.status)">
+                        {{ 'QUOTAS.STATUS_' + a.status.toUpperCase() | translate }}
+                      </ws-badge>
+                    </div>
+                    <div class="attainment-card__meta">
+                      <span class="attainment-card__period col-secondary">{{ a.periodStart | dateFormat }} – {{ a.periodEnd | dateFormat }}</span>
+                      <ws-badge variant="neutral">
+                        {{ a.measurementType === QuotaMeasurementType.Units ? ('ATTAINMENT.MEASURE_UNITS' | translate) : ('ATTAINMENT.MEASURE_REVENUE' | translate) }}
+                      </ws-badge>
+                    </div>
+                    <div class="attainment-card__numbers">
+                      <div class="attainment-stat">
+                        <span class="attainment-stat__label">{{ 'ATTAINMENT.TARGET' | translate }}</span>
+                        <span class="attainment-stat__value">
+                          @if (a.measurementType === QuotaMeasurementType.Units) {
+                            {{ a.targetAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                          } @else {
+                            {{ a.targetAmount | currencyFormat: a.currency }}
+                          }
+                        </span>
+                      </div>
+                      <div class="attainment-stat">
+                        <span class="attainment-stat__label">{{ 'ATTAINMENT.ACHIEVED' | translate }}</span>
+                        <span class="attainment-stat__value">
+                          @if (a.measurementType === QuotaMeasurementType.Units) {
+                            {{ a.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                          } @else {
+                            {{ a.achievedAmount | currencyFormat: a.currency }}
+                          }
+                        </span>
+                      </div>
+                    </div>
+                    <div class="attainment-progress">
+                      <div class="attainment-progress__bar-wrap">
+                        <div
+                          class="attainment-progress__fill"
+                          [class]="attainmentColorClass(a.attainmentValue)"
+                          [style.width.%]="(a.attainmentValue > 1 ? 1 : a.attainmentValue) * 100"
+                        ></div>
+                      </div>
+                      <span class="attainment-progress__pct" [class]="attainmentColorClass(a.attainmentValue)">
+                        {{ a.attainmentPercent }}
+                      </span>
+                    </div>
+                  </div>
+                }
+              </div>
             }
           </div>
         }

@@ -10,10 +10,10 @@ using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Enums;
-using Wasnie.Domain.Exceptions;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Entities;
+using Wasnie.Domain.Exceptions;
 using Wasnie.Infrastructure.Persistence;
 
 namespace Wasnie.Infrastructure.BackgroundJobs;
@@ -119,6 +119,14 @@ public sealed class TransactionImportJobHandler(
                 var money = Money.Of(amount, currency);
                 var externalIdValue = string.IsNullOrEmpty(externalId) ? null : externalId;
 
+                var quantityStr = payload.ColumnMapping.QuantityColumn is not null
+                    ? GetField(row, payload.ColumnMapping.QuantityColumn)
+                    : null;
+                var quantity = 1;
+                if (!string.IsNullOrWhiteSpace(quantityStr) &&
+                    int.TryParse(quantityStr.Trim(), out var parsedQty) && parsedQty >= 1)
+                    quantity = parsedQty;
+
                 var transaction = CompensationTransaction.Ingest(
                     tenantId: payload.TenantId,
                     referenceNumber: refNum,
@@ -130,7 +138,8 @@ public sealed class TransactionImportJobHandler(
                     id: guid.NewGuid(),
                     now: clock.UtcNowOffset,
                     eventId: guid.NewGuid(),
-                    externalId: externalIdValue);
+                    externalId: externalIdValue,
+                    quantity: quantity);
 
                 db.CompensationTransactions.Add(transaction);
 

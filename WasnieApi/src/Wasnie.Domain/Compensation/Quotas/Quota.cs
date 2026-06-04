@@ -33,8 +33,15 @@ public sealed class Quota : AggregateRoot
         string createdBy,
         Guid id,
         DateTimeOffset now,
-        string? notes = null)
+        string? notes = null,
+        string? planCurrency = null)
     {
+        if (planCurrency is not null &&
+            !string.Equals(amount.Currency, planCurrency, StringComparison.OrdinalIgnoreCase))
+            throw new DomainException(
+                $"Quota currency '{amount.Currency}' does not match the Plan's currency '{planCurrency}'. " +
+                "A Quota must be denominated in the same currency as its Plan.");
+
         if (notes is not null && notes.Length > 500)
             throw new DomainException("Notes must not exceed 500 characters.");
 
@@ -56,10 +63,17 @@ public sealed class Quota : AggregateRoot
         };
     }
 
-    public void UpdateDraft(Money amount, DateRange period, QuotaMeasurementType measurementType, string? notes, string updatedBy, DateTimeOffset now)
+    public void UpdateDraft(Money amount, DateRange period, QuotaMeasurementType measurementType, string? notes, string updatedBy, DateTimeOffset now, string? planCurrency = null)
     {
         if (Status != QuotaStatus.Draft)
             throw new DomainException("Only Draft quotas can be updated.");
+
+        if (planCurrency is not null &&
+            !string.Equals(amount.Currency, planCurrency, StringComparison.OrdinalIgnoreCase))
+            throw new DomainException(
+                $"Quota currency '{amount.Currency}' does not match the Plan's currency '{planCurrency}'. " +
+                "A Quota must be denominated in the same currency as its Plan.");
+
         if (notes is not null && notes.Length > 500)
             throw new DomainException("Notes must not exceed 500 characters.");
 

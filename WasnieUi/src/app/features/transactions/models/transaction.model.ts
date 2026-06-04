@@ -17,6 +17,7 @@ export interface Transaction {
   payeeId: string | null;
   amount: number;
   currency: string;
+  quantity: number;
   transactionDate: string;
   ingestedAt: string;
   source: TransactionSource;
@@ -30,6 +31,7 @@ export interface CreateTransactionRequest {
   payeeId: string | null;
   amount: number;
   currency: string;
+  quantity: number;
   transactionDate: string;
 }
 

@@ -82,6 +82,13 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    [HttpGet("{payeeId:guid}/attainment")]
+    public async Task<IActionResult> GetAttainment(Guid payeeId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetPayeeAttainmentQuery(payeeId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("{payeeId:guid}/deactivate")]
     public async Task<IActionResult> Deactivate(Guid payeeId, CancellationToken cancellationToken)
     {

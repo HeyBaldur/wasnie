@@ -97,6 +97,12 @@
             <dt>{{ 'CREDITS.DETAIL.TX_AMOUNT' | translate }}</dt>
             <dd>{{ c.transactionAmount | currencyFormat: c.transactionCurrency }}</dd>
           </div>
+          @if (c.transactionQuantity > 1) {
+            <div class="credit-detail__dl-row">
+              <dt>{{ 'CREDITS.DETAIL.TX_QUANTITY' | translate }}</dt>
+              <dd>{{ c.transactionQuantity }}</dd>
+            </div>
+          }
           <div class="credit-detail__dl-row">
             <dt>{{ 'CREDITS.DETAIL.TX_STATUS' | translate }}</dt>
             <dd>{{ c.transactionStatus }}</dd>

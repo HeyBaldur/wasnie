@@ -137,8 +137,20 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
                     }
                 }
 
+                int? newQuantity = null;
+                if (payload.ColumnMapping.QuantityColumn is not null)
+                {
+                    var qtyStr = GetField(row, payload.ColumnMapping.QuantityColumn).Trim();
+                    if (!string.IsNullOrWhiteSpace(qtyStr) &&
+                        int.TryParse(qtyStr, out var parsedQty) &&
+                        parsedQty >= 1 && parsedQty != tx.Quantity)
+                    {
+                        newQuantity = parsedQty;
+                    }
+                }
+
                 // No changes — skip silently.
-                if (newAmount is null && newDate is null && newPayeeId is null)
+                if (newAmount is null && newQuantity is null && newDate is null && newPayeeId is null)
                 {
                     skippedNoChanges++;
                     continue;
@@ -149,6 +161,7 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
                 {
                     Amount = tx.Amount.Amount,
                     Currency = tx.Amount.Currency,
+                    Quantity = tx.Quantity,
                     TransactionDate = tx.TransactionDate.ToString("yyyy-MM-dd"),
                     PayeeId = tx.PayeeId,
                     Status = tx.Status.ToString(),
@@ -171,13 +184,14 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
 
                 try
                 {
-                    tx.ApplyExcelUpdate(newAmount, newDate, newPayeeId, payload.RequestedByUserId, clock.UtcNowOffset);
+                    tx.ApplyExcelUpdate(newAmount, newQuantity, newDate, newPayeeId, payload.RequestedByUserId, clock.UtcNowOffset);
                     await db.SaveChangesAsync(ct);
 
                     var afterSnapshot = new
                     {
                         Amount = tx.Amount.Amount,
                         Currency = tx.Amount.Currency,
+                        Quantity = tx.Quantity,
                         TransactionDate = tx.TransactionDate.ToString("yyyy-MM-dd"),
                         PayeeId = tx.PayeeId,
                         Status = tx.Status.ToString(),
