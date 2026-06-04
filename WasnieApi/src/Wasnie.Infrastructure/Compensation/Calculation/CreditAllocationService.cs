@@ -65,12 +65,20 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 pa.PayeeId == payeeIdVal)
             .ToListAsync(ct);
 
-        var assignment = allPayeeAssignments
-            .FirstOrDefault(pa =>
-                pa.Status == AssignmentStatus.Active &&
-                pa.EffectivePeriod is not null &&
-                pa.EffectivePeriod.Start <= txDate &&
-                pa.EffectivePeriod.End >= txDate);
+        // Pattern B: load plan currencies so the resolver can match by currency.
+        var assignmentPlanIds = allPayeeAssignments.Select(a => a.PlanId).Distinct().ToList();
+        var planCurrencyById = assignmentPlanIds.Count > 0
+            ? (await _db.CompensationPlans
+                .IgnoreQueryFilters()
+                .Where(p => p.TenantId == tenantId && assignmentPlanIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Currency })
+                .ToListAsync(ct))
+                .ToDictionary(p => p.Id, p => p.Currency)
+            : new Dictionary<Guid, string>();
+
+        // Pattern B resolution: pick the assignment whose plan currency matches the transaction currency.
+        var assignment = PlanAssignmentResolver.Resolve(
+            allPayeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
         if (assignment is null) return Array.Empty<Credit>();
 
@@ -109,11 +117,12 @@ public sealed class CreditAllocationService : ICreditAllocationService
         if (!assignmentsByPayee.TryGetValue(payeeIdVal, out var payeeAssignments))
             return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
 
-        var assignment = payeeAssignments.FirstOrDefault(pa =>
-            pa.Status == AssignmentStatus.Active &&
-            pa.EffectivePeriod is not null &&
-            pa.EffectivePeriod.Start <= txDate &&
-            pa.EffectivePeriod.End >= txDate);
+        // Pattern B: build planCurrencyById from the pre-loaded plans dictionary (no DB query).
+        var planCurrencyById = plansById.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+
+        // Pattern B resolution: pick the assignment whose plan currency matches the transaction currency.
+        var assignment = PlanAssignmentResolver.Resolve(
+            payeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
         if (assignment is null)
             return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());

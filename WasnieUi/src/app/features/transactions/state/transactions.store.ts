@@ -23,6 +23,7 @@ export interface TransactionFilter {
   unassignedOnly: boolean;
   amountSort: 'asc' | 'desc' | null;
   referenceNumbers: string[];
+  currencies: string[];
 }
 
 export const EMPTY_FILTER: TransactionFilter = {
@@ -38,6 +39,7 @@ export const EMPTY_FILTER: TransactionFilter = {
   unassignedOnly: false,
   amountSort: null,
   referenceNumbers: [],
+  currencies: [],
 };
 
 @Injectable({ providedIn: 'root' })
@@ -90,6 +92,7 @@ export class TransactionsStore {
     if (f.unassignedOnly) count++;
     if (f.amountSort) count++;
     if (f.referenceNumbers.length > 0) count++;
+    if (f.currencies.length > 0) count++;
     return count;
   });
 
@@ -122,6 +125,7 @@ export class TransactionsStore {
     if (f.unassignedOnly) filters['unassignedOnly'] = 'true';
     if (f.amountSort) filters['amountSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) filters['referenceNumbers'] = f.referenceNumbers.join(',');
+    if (f.currencies.length > 0) filters['currencies'] = f.currencies.join(',');
     return filters;
   }
 
@@ -144,6 +148,7 @@ export class TransactionsStore {
     if (f.unassignedOnly) body['unassignedOnly'] = true;            // bool? — must be boolean
     if (f.amountSort) body['amountSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) body['referenceNumbers'] = f.referenceNumbers.join(',');
+    if (f.currencies.length > 0) body['currencies'] = f.currencies.join(',');
     return body;
   }
 
@@ -243,6 +248,7 @@ export class TransactionsStore {
     if (f.unassignedOnly) params['unassigned'] = '1';
     if (f.amountSort) params['amtSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) params['refs'] = f.referenceNumbers.join(',');
+    if (f.currencies.length > 0) params['currencies'] = f.currencies.join(',');
     return params;
   }
 
@@ -264,6 +270,7 @@ export class TransactionsStore {
     if (params['unassigned'] === '1') f.unassignedOnly = true;
     if (params['amtSort'] === 'asc' || params['amtSort'] === 'desc') f.amountSort = params['amtSort'];
     if (params['refs']) f.referenceNumbers = params['refs'].split(',').filter(Boolean);
+    if (params['currencies']) f.currencies = params['currencies'].split(',').filter(Boolean);
     this.filter.set(f);
   }
 

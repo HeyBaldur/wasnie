@@ -66,7 +66,7 @@ public sealed class GetEligiblePendingTransactionsHandler(
         return Result<EligiblePendingResult>.Success(new EligiblePendingResult(dtos, totalCount));
     }
 
-    // Identical predicate to GetPendingTransactionsCountHandler.CountByAssignment.
+    // Identical predicate to GetPendingTransactionsCountHandler.CountByAssignment (Pattern B).
     private static async Task<(IReadOnlyList<CompensationTransaction> Transactions, int TotalCount)>
         LoadByAssignmentAsync(IApplicationDbContext db, Guid assignmentId, CancellationToken ct)
     {
@@ -78,6 +78,16 @@ public sealed class GetEligiblePendingTransactionsHandler(
         if (assignment is null || assignment.EffectivePeriod is null)
             return (Array.Empty<CompensationTransaction>(), 0);
 
+        // Pattern B: load plan currency — only show transactions that will actually process.
+        var plan = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == assignment.PlanId)
+            .Select(p => new { p.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null)
+            return (Array.Empty<CompensationTransaction>(), 0);
+
         var payeeId = assignment.PayeeId;
         var start = assignment.EffectivePeriod.Start;
         var end = assignment.EffectivePeriod.End;
@@ -86,14 +96,16 @@ public sealed class GetEligiblePendingTransactionsHandler(
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId == payeeId
                      && t.TransactionDate >= start
-                     && t.TransactionDate <= end)
+                     && t.TransactionDate <= end
+                     && t.Amount.Currency == plan.Currency)
             .CountAsync(ct);
 
         var rows = await db.CompensationTransactions
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId == payeeId
                      && t.TransactionDate >= start
-                     && t.TransactionDate <= end)
+                     && t.TransactionDate <= end
+                     && t.Amount.Currency == plan.Currency)
             .OrderBy(t => t.TransactionDate)
             .Take(MaxInlineRows)
             .ToListAsync(ct);
@@ -101,11 +113,21 @@ public sealed class GetEligiblePendingTransactionsHandler(
         return (rows, totalCount);
     }
 
-    // Same predicate as GetPendingTransactionsCountHandler.CountByPlan.
+    // Same predicate as GetPendingTransactionsCountHandler.CountByPlan (Pattern B).
     // Uses 2 queries total (not N+1 per assignment) per the forbidden-patterns batch rule.
     private static async Task<(IReadOnlyList<CompensationTransaction> Transactions, int TotalCount)>
         LoadByPlanAsync(IApplicationDbContext db, Guid planId, CancellationToken ct)
     {
+        // Pattern B: load plan currency — only show transactions that will actually process.
+        var plan = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == planId)
+            .Select(p => new { p.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null)
+            return (Array.Empty<CompensationTransaction>(), 0);
+
         var assignments = await db.PlanAssignments
             .IgnoreQueryFilters()
             .Where(a => a.PlanId == planId && a.Status == AssignmentStatus.Active)
@@ -120,12 +142,13 @@ public sealed class GetEligiblePendingTransactionsHandler(
 
         var allPayeeIds = eligibleAssignments.Select(a => a.PayeeId).Distinct().ToList();
 
-        // Single query for all candidates — in-memory period filter applied below.
+        // Single query: all Pending transactions for plan's payees, in the plan's currency.
         // EF Core 8 cannot translate DateOnly comparisons on the owned DateRange type in WHERE.
         var candidates = await db.CompensationTransactions
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId.HasValue
-                     && allPayeeIds.Contains(t.PayeeId!.Value))
+                     && allPayeeIds.Contains(t.PayeeId!.Value)
+                     && t.Amount.Currency == plan.Currency)
             .OrderBy(t => t.TransactionDate)
             .ToListAsync(ct);
 

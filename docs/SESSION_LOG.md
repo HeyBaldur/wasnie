@@ -10,6 +10,102 @@
 
 ---
 
+## 2026-06-04 — WI-PROD-FILTERS-CURRENCY-RULE-FIX-1: Currency and Rule converted to dropdown
+
+**Problem:** Currency filter shipped as 17 inline toggle buttons (full-width row) instead of the dropdown+chip pattern used by Payee and Plan. Rule filter had the same inline-chip issue. Layout broke the filter panel grid.
+
+**Fix:** Both Currency and Rule now use `ws-select` (the shared primitive) with `[options]` + `[searchable]="true"`. Selection adds a removable chip below the dropdown (exact same pattern as Payee/Plan). The inline toggle-chip CSS was removed from the credits SCSS.
+
+**Layout:** Currency is now a single `ws-select` field in the amount row. Rule is a `ws-select` in its own compact row (still conditional on ≥1 plan selected). Grid restored.
+
+**Changes:** `transaction-filter.component.ts/html` (replaced `activeCurrencies` + toggle-chip pattern → `selectedCurrencies` + `currencySearch` FormControl + `availableCurrencyOptions` computed). `credits-list.component.ts/html/scss` (same for currency + rule: `selectedCurrencies`, `currencySearch`, `ruleSearch`, `availableCurrencyOptions`, `availableRuleOptions`). i18n EN/ES/PL: + `CURRENCY_PLACEHOLDER`, `RULE_PLACEHOLDER`.
+
+**Build:** Frontend production clean. No backend changes.
+
+---
+
+## 2026-06-04 — WI-PROD-FILTERS-CURRENCY-RULE: Currency + Rule filters
+
+**What was done:**
+- Added Currency multi-select (chip-button toggle) to `/credits` filter panel — 17 ISO 4217 codes from `CurrencyConstants.KnownCurrencies`. Backend was already wired; only UI was missing.
+- Added Rule multi-select to `/credits` filter panel — chips appear when ≥1 Plan is selected; loads active rules from `PlansApiService.getPlan()`. Selecting a rule narrows results to credits from that rule's `c.RuleId`. Removing a plan removes its rules from both available and selected sets.
+- Added Currency multi-select (same chip-button pattern) to `/transactions` filter panel.
+- All 3 new filters URL-sync (`?currencies=EUR,PLN`, `?ruleIds=<id>`).
+- Counter cards and By-Payee aggregate for credits already respect all filters via `ListCreditsHandler.BuildQuery` — no extra work needed.
+- FIX-11 8-location checklist verified for each new field.
+
+**Backend changes (no migrations):**
+- `PaginationQuery`: + `Currencies` field.
+- `ListTransactionsHandler`: + currency WHERE predicate (`t.Amount.Currency`).
+- `ExportTransactionsHandler`: + same currency predicate.
+- `CreditFilterQuery`: + `RuleIds` field.
+- `ListCreditsHandler.BuildQuery`: + `WHERE c.RuleId IN (...)` predicate.
+
+**Frontend changes:**
+- `TransactionFilter` interface + `EMPTY_FILTER` + `_buildFilterRecord` + `toExportFilter` + `toQueryParams` + `loadFromQueryParams` + `activeFilterCount`: + `currencies: string[]`.
+- `TransactionFilterComponent` (TS + HTML): new Row 5 with currency chips.
+- `CreditFilter` interface + `EMPTY_CREDIT_FILTER` + `_buildFilterRecord` + `toQueryParams` + `loadFromQueryParams` + `activeFilterCount`: + `ruleIds: string[]`.
+- `CreditsListComponent` (TS + HTML + SCSS): currency toggle chips + rule chip picker (plan-linked).
+- i18n EN/ES/PL: `TRANSACTIONS.FILTER.CURRENCY`, `CREDITS.FILTER.CURRENCY`, `CREDITS.FILTER.RULE`, `CREDITS.FILTER.RULE_NO_RULES`.
+
+**Build:** Backend Application project: clean. Frontend production: clean (pre-existing bundle warning 563KB unchanged).
+
+**TODO_TESTS:** Add filter tests for the 3 new fields per WI-PROD-FILTERS-CURRENCY-RULE (backend predicates + frontend store URL sync + filter component chip toggling).
+
+---
+
+## 2026-06-04 — WI-CALC-MULTIPLAN-CURRENCY-MATCH: Pattern B — multi-plan match by currency
+
+**WI:** WI-CALC-MULTIPLAN-CURRENCY-MATCH
+**Status:** DONE ✅
+**Type:** Backend logic fix — credit engine + badge + import validator.
+
+### Decision #65: Plan resolution by currency match (Pattern B)
+When a payee has multiple active PlanAssignments covering a transaction date, the assignment whose Plan currency matches the transaction currency is the one that applies. Other assignments in different currencies are irrelevant for that transaction. Currency mismatch = routing signal, NOT an error.
+
+Comparison: Xactly/Spiff/CaptivateIQ all implement multi-plan support where the transaction's currency determines which plan receives it. Pattern B is the industry-standard approach.
+
+### Smoke bug chain (fixed)
+1. EMP301 had EUR plan + PLN plan active in May 2026.
+2. 3 PLN transactions for May were Pending.
+3. Badge on PLN plan counted ALL pending for EMP301 in May (EUR + PLN) = misleading.
+4. Process Pending from PLN plan → `FirstOrDefault` picked EUR plan → `DomainException("Currency mismatch")` → transactions skipped with wrong error message referencing wrong plan.
+
+### New `PlanAssignmentResolver` (Application layer)
+`Wasnie.Application.Compensation.Calculation.PlanAssignmentResolver.Resolve()`:
+- Takes pre-loaded `allPayeeAssignments`, `txDate`, `txCurrency`, `planCurrencyById`
+- Returns the unique matching PlanAssignment per Pattern B rules
+- No DB access (pure function on in-memory data)
+- Tie-break: shortest effective period → smallest Id (deterministic)
+
+### All surfaces updated
+1. **`CreditAllocationService`** (both overloads): loads plan currencies, calls resolver instead of `FirstOrDefault`. Keeps currency guard in `BuildCredits` as last-resort defensive check.
+2. **`ProcessPendingJobHandler.LoadByPlanAsync`**: loads plan currency, adds `t.Amount.Currency == plan.Currency` to WHERE clause.
+3. **`ProcessPendingJobHandler.LoadByAssignmentAsync`**: same currency filter added.
+4. **`GetPendingTransactionsCountHandler.CountByPlan` + `CountByAssignment`**: load plan currency, filter by it.
+5. **`GetEligiblePendingTransactionsHandler.LoadByPlanAsync` + `LoadByAssignmentAsync`**: same.
+6. **`TransactionImportValidationService`**: `FirstOrDefault` → check all assignments for date; if any match currency → no issue; if none match → `Warning` (not `Error`) with message "Transaction will remain Pending until a {currency} plan is assigned."
+
+### What's now correct after Pattern B
+- PLN plan badge shows only PLN-currency Pending transactions for its payees in their assignment periods.
+- EUR plan badge shows only EUR-currency Pending transactions.
+- Process Pending from PLN plan processes only PLN transactions — 3 processed, 0 skipped for currency reasons.
+- Import of PLN transactions for EMP301 shows no error; shows a warning only if EMP301 has NO PLN plan at all.
+- Skip log will no longer contain "Currency mismatch" entries (this was the false error).
+
+### TODO_TESTS
+- Integration test: payee with EUR + PLN plans in May; 3 PLN Pending transactions in May; Process Pending with ByPlan scope for PLN plan → processes all 3, creates 3 PLN credits.
+- Integration test: badge count for PLN plan == 3 (not 3 + EUR transactions).
+- Integration test: badge count for EUR plan == EUR transactions only (no PLN ones counted).
+- Integration test: import of PLN transaction for payee with EUR plan → Warning (not Error).
+- Integration test: import of PLN transaction for payee with PLN plan → no issue.
+
+### Build
+- `dotnet build Wasnie.Application` — 0 errors
+- `dotnet build Wasnie.Infrastructure` — 0 errors
+
+---
+
 ## 2026-06-04 — WI-PROD-CREDITS-VISIBILITY: Expose credits in UI
 
 **WI:** WI-PROD-CREDITS-VISIBILITY

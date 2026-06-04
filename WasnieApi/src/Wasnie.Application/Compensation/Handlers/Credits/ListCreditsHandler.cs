@@ -98,6 +98,13 @@ public sealed class ListCreditsHandler(
                 query = query.Where(c => curs.Contains(c.CreditedAmount.Currency));
         }
 
+        if (!string.IsNullOrWhiteSpace(f.RuleIds))
+        {
+            var ids = ParseGuids(f.RuleIds);
+            if (ids.Count > 0)
+                query = query.Where(c => ids.Contains(c.RuleId));
+        }
+
         // Reference filter requires a subquery against CompensationTransactions.
         if (!string.IsNullOrWhiteSpace(f.Reference))
         {

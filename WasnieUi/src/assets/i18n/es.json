@@ -567,7 +567,9 @@
       "AMT_SORT": "Orden importe",
       "AMT_SORT_NONE": "Orden predeterminado",
       "AMT_SORT_ASC": "Menor primero",
-      "AMT_SORT_DESC": "Mayor primero"
+      "AMT_SORT_DESC": "Mayor primero",
+      "CURRENCY": "Moneda",
+      "CURRENCY_PLACEHOLDER": "Añadir moneda…"
     },
     "COL_INGESTED": "Creado",
     "COUNT_FILTERED": "Mostrando {{showing}} de {{filtered}} ({{total}} total)",
@@ -614,7 +616,12 @@
       "ALLOC_FROM": "Asignado desde",
       "ALLOC_TO": "Asignado hasta",
       "AMT_MIN": "Importe mínimo",
-      "AMT_MAX": "Importe máximo"
+      "AMT_MAX": "Importe máximo",
+      "CURRENCY": "Moneda",
+      "CURRENCY_PLACEHOLDER": "Añadir moneda…",
+      "RULE": "Regla",
+      "RULE_PLACEHOLDER": "Seleccionar regla…",
+      "RULE_NO_RULES": "No hay reglas activas en el/los plan(es) seleccionado(s)."
     },
     "DETAIL": {
       "TITLE": "Detalle de Crédito",

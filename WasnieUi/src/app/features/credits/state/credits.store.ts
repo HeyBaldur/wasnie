@@ -16,6 +16,7 @@ export interface CreditFilter {
   amountMax: number | null;
   currencies: string[];
   reference: string;
+  ruleIds: string[];
 }
 
 export const EMPTY_CREDIT_FILTER: CreditFilter = {
@@ -28,6 +29,7 @@ export const EMPTY_CREDIT_FILTER: CreditFilter = {
   amountMax: null,
   currencies: [],
   reference: '',
+  ruleIds: [],
 };
 
 @Injectable({ providedIn: 'root' })
@@ -64,6 +66,7 @@ export class CreditsStore {
     if (f.amountMin !== null || f.amountMax !== null) n++;
     if (f.currencies.length > 0) n++;
     if (f.reference) n++;
+    if (f.ruleIds.length > 0) n++;
     return n;
   });
 
@@ -90,6 +93,7 @@ export class CreditsStore {
     if (f.amountMax !== null) p['amountMax'] = String(f.amountMax);
     if (f.currencies.length > 0) p['currencies'] = f.currencies.join(',');
     if (f.reference) p['reference'] = f.reference;
+    if (f.ruleIds.length > 0) p['ruleIds'] = f.ruleIds.join(',');
     return p;
   }
 
@@ -170,6 +174,7 @@ export class CreditsStore {
     if (f.amountMax !== null) p['amtMax'] = String(f.amountMax);
     if (f.currencies.length > 0) p['currencies'] = f.currencies.join(',');
     if (f.reference) p['ref'] = f.reference;
+    if (f.ruleIds.length > 0) p['ruleIds'] = f.ruleIds.join(',');
     return p;
   }
 
@@ -184,6 +189,7 @@ export class CreditsStore {
     if (params['amtMax']) f.amountMax = Number(params['amtMax']) || null;
     if (params['currencies']) f.currencies = params['currencies'].split(',').filter(Boolean);
     if (params['ref']) f.reference = params['ref'];
+    if (params['ruleIds']) f.ruleIds = params['ruleIds'].split(',').filter(Boolean);
     this.filter.set(f);
   }
 }

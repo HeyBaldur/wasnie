@@ -46,8 +46,9 @@
 
       @if (filterOpen()) {
         <form [formGroup]="form" class="credits-list__filter-body">
+
+          <!-- Row 1: Status + Reference -->
           <div class="credits-list__filter-row">
-            <!-- Status chips -->
             <div class="credits-list__filter-field">
               <label class="credits-list__filter-label">{{ 'CREDITS.FILTER.STATUS' | translate }}</label>
               <ws-select
@@ -55,7 +56,6 @@
                 [options]="statusOptions"
               />
             </div>
-            <!-- Reference search -->
             <div class="credits-list__filter-field credits-list__filter-field--wide">
               <ws-input
                 type="search"
@@ -67,8 +67,8 @@
             </div>
           </div>
 
+          <!-- Row 2: Payee + Plan -->
           <div class="credits-list__filter-row">
-            <!-- Payee picker -->
             <div class="credits-list__filter-field credits-list__filter-field--wide">
               <ws-select
                 formControlName="payeeSearch"
@@ -89,7 +89,6 @@
                 </div>
               }
             </div>
-            <!-- Plan picker -->
             <div class="credits-list__filter-field credits-list__filter-field--wide">
               <ws-select
                 formControlName="planSearch"
@@ -112,6 +111,43 @@
             </div>
           </div>
 
+          <!-- Row 3: Rule (only when ≥1 plan selected) -->
+          @if (selectedPlans().length > 0) {
+            <div class="credits-list__filter-row">
+              <div class="credits-list__filter-field credits-list__filter-field--wide">
+                @if (rulesLoading()) {
+                  <ws-select
+                    formControlName="ruleSearch"
+                    [options]="[]"
+                    [label]="'CREDITS.FILTER.RULE' | translate"
+                    [placeholder]="'COMMON.LOADING' | translate"
+                  />
+                } @else {
+                  <ws-select
+                    formControlName="ruleSearch"
+                    [options]="availableRuleOptions()"
+                    [searchable]="true"
+                    [label]="'CREDITS.FILTER.RULE' | translate"
+                    [placeholder]="'CREDITS.FILTER.RULE_PLACEHOLDER' | translate"
+                  />
+                }
+                @if (selectedRules().length > 0) {
+                  <div class="credits-list__chips">
+                    @for (r of selectedRules(); track r.id) {
+                      <span class="credits-list__chip">
+                        {{ r.label }}
+                        <button type="button" class="credits-list__chip-remove" (click)="removeRule(r.id)">
+                          <app-icon name="x" [size]="11" />
+                        </button>
+                      </span>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Row 4: Allocated dates + Amount range + Currency -->
           <div class="credits-list__filter-row">
             <div class="credits-list__filter-field">
               <ws-date-picker formControlName="allocatedFrom" [label]="'CREDITS.FILTER.ALLOC_FROM' | translate" />
@@ -125,7 +161,29 @@
             <div class="credits-list__filter-field">
               <ws-input type="number" formControlName="amountMax" [label]="'CREDITS.FILTER.AMT_MAX' | translate" placeholder="∞" />
             </div>
+            <div class="credits-list__filter-field">
+              <ws-select
+                formControlName="currencySearch"
+                [options]="availableCurrencyOptions()"
+                [searchable]="true"
+                [label]="'CREDITS.FILTER.CURRENCY' | translate"
+                [placeholder]="'CREDITS.FILTER.CURRENCY_PLACEHOLDER' | translate"
+              />
+              @if (selectedCurrencies().length > 0) {
+                <div class="credits-list__chips">
+                  @for (c of selectedCurrencies(); track c) {
+                    <span class="credits-list__chip">
+                      {{ c }}
+                      <button type="button" class="credits-list__chip-remove" (click)="removeCurrency(c)">
+                        <app-icon name="x" [size]="11" />
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
           </div>
+
         </form>
       }
     </ws-card>
@@ -201,9 +259,9 @@
               </tr>
             } @else {
               @for (credit of store.items(); track credit.id) {
-                <tr class="credits-list__row" [routerLink]="['/credits', credit.id]">
+                <tr class="credits-list__row">
                   <td class="col-ref">
-                    <a [routerLink]="['/credits', credit.id]" class="credits-list__ref-link">
+                    <a [routerLink]="['/credits', credit.id]" target="_blank" class="credits-list__ref-link">
                       {{ credit.referenceNumber }}
                     </a>
                   </td>

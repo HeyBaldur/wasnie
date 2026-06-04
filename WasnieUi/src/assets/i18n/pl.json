@@ -567,7 +567,9 @@
       "AMT_SORT": "Sortowanie kwoty",
       "AMT_SORT_NONE": "Domyślna kolejność",
       "AMT_SORT_ASC": "Najniższe pierwsze",
-      "AMT_SORT_DESC": "Najwyższe pierwsze"
+      "AMT_SORT_DESC": "Najwyższe pierwsze",
+      "CURRENCY": "Waluta",
+      "CURRENCY_PLACEHOLDER": "Dodaj walutę…"
     },
     "COL_INGESTED": "Utworzono",
     "COUNT_FILTERED": "Pokazuje {{showing}} z {{filtered}} (łącznie {{total}})",
@@ -614,7 +616,12 @@
       "ALLOC_FROM": "Przyznana od",
       "ALLOC_TO": "Przyznana do",
       "AMT_MIN": "Kwota min",
-      "AMT_MAX": "Kwota maks"
+      "AMT_MAX": "Kwota maks",
+      "CURRENCY": "Waluta",
+      "CURRENCY_PLACEHOLDER": "Dodaj walutę…",
+      "RULE": "Reguła",
+      "RULE_PLACEHOLDER": "Wybierz regułę…",
+      "RULE_NO_RULES": "Brak aktywnych reguł w wybranym planie lub planach."
     },
     "DETAIL": {
       "TITLE": "Szczegóły Kredytu",

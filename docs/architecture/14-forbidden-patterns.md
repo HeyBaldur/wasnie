@@ -370,6 +370,14 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Multi-plan currency routing violations
+
+- ❌ **Treating currency mismatch between a transaction and a PlanAssignment as a validation error** (WI-CALC-MULTIPLAN-CURRENCY-MATCH, 2026-06-04 — Decision #65). When a payee has multiple active PlanAssignments, a transaction whose currency doesn't match one plan's currency does NOT belong to that plan — it belongs to the plan whose currency matches. Treating this as an error causes false skip-log entries, badge over-counting, and destroys trust. **Rule (Pattern B):** `PlanAssignmentResolver.Resolve(payeeAssignments, txDate, txCurrency, planCurrencyById)` is the single source of truth for selecting the applicable PlanAssignment. It MUST be used everywhere a "which plan applies?" question is asked: Credit Engine, Process Pending job, badge/eligible predicates, import validator. Currency mismatch at the resolver level → transaction stays Pending (no error, no log noise). A `Warning` (not Error) in the import validator is acceptable when no plan in the transaction's currency exists.
+
+- ❌ **`FirstOrDefault` on PlanAssignments without currency disambiguation** (Decision #65). `payeeAssignments.FirstOrDefault(pa => pa covers txDate)` selects an arbitrary plan when multiple overlap on the same date. The correct query is `PlanAssignmentResolver.Resolve(...)` which applies the currency-match rule first, then the shortest-period tie-break.
+
+---
+
 ## Calculated-value invisibility violations
 
 - ❌ **Any value calculated and persisted by the system with no UI to inspect it** (WI-PROD-CREDITS-VISIBILITY, 2026-06-04). Hiding calculations in the database forces users (and developers) to run SQL queries to verify correctness. This destroys trust and makes bugs invisible until they cause a financial error. **Rule:** Every entity that holds a calculated financial value (Credit, Payout, Tax line, etc.) MUST have: (a) a list page filtered/searchable by the relevant dimensions, (b) a detail page showing all 5 of: the result, the source data, the rule/formula applied, a "show your work" step-by-step trace, and audit information. A count or aggregate on a dashboard is not a substitute for inspectability — users need to see individual rows, trace them back to source transactions, and verify the math.

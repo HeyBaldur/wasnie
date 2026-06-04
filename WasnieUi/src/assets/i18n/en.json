@@ -717,7 +717,9 @@
       "AMT_SORT": "Amount sort",
       "AMT_SORT_NONE": "Default order",
       "AMT_SORT_ASC": "Lowest first",
-      "AMT_SORT_DESC": "Highest first"
+      "AMT_SORT_DESC": "Highest first",
+      "CURRENCY": "Currency",
+      "CURRENCY_PLACEHOLDER": "Add currency…"
     },
     "COL_INGESTED": "Created",
     "COUNT_FILTERED": "Showing {{showing}} of {{filtered}} ({{total}} total)",
@@ -764,7 +766,12 @@
       "ALLOC_FROM": "Allocated from",
       "ALLOC_TO": "Allocated to",
       "AMT_MIN": "Amount min",
-      "AMT_MAX": "Amount max"
+      "AMT_MAX": "Amount max",
+      "CURRENCY": "Currency",
+      "CURRENCY_PLACEHOLDER": "Add currency…",
+      "RULE": "Rule",
+      "RULE_PLACEHOLDER": "Select rule…",
+      "RULE_NO_RULES": "No active rules in selected plan(s)."
     },
     "DETAIL": {
       "TITLE": "Credit Detail",

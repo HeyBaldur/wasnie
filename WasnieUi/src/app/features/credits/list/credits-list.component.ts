@@ -60,6 +60,31 @@ export class CreditsListComponent implements OnInit {
   readonly selectedPayees = signal<{ id: string; label: string }[]>([]);
   readonly selectedPlans = signal<{ id: string; label: string }[]>([]);
 
+  // Currency dropdown + chips
+  readonly selectedCurrencies = signal<string[]>([]);
+
+  private static readonly _ALL_CURRENCIES: SelectOption[] = [
+    'EUR', 'USD', 'GBP', 'PLN', 'CHF', 'JPY', 'CAD', 'AUD',
+    'NOK', 'SEK', 'DKK', 'CZK', 'HUF', 'RON', 'BGN', 'MXN', 'BRL',
+  ].map(c => ({ value: c, label: c }));
+
+  readonly availableCurrencyOptions = computed<SelectOption[]>(() => {
+    const selected = new Set(this.selectedCurrencies());
+    return CreditsListComponent._ALL_CURRENCIES.filter(o => !selected.has(o.value as string));
+  });
+
+  // Rule dropdown + chips — options loaded from selected plans
+  readonly availableRules = signal<{ id: string; label: string; planId: string; planName: string }[]>([]);
+  readonly selectedRules = signal<{ id: string; label: string }[]>([]);
+  readonly rulesLoading = signal(false);
+
+  readonly availableRuleOptions = computed<SelectOption[]>(() => {
+    const selected = new Set(this.store.filter().ruleIds);
+    return this.availableRules()
+      .filter(r => !selected.has(r.id))
+      .map(r => ({ value: r.id, label: r.label }));
+  });
+
   readonly statusOptions: SelectOption[] = [
     { value: 'Active', label: 'CREDITS.FILTER.STATUS_ACTIVE' },
     { value: 'Superseded', label: 'CREDITS.FILTER.STATUS_SUPERSEDED' },
@@ -75,6 +100,8 @@ export class CreditsListComponent implements OnInit {
     status: new FormControl<string>('Active', { nonNullable: true }),
     payeeSearch: new FormControl<string | number>('', { nonNullable: true }),
     planSearch: new FormControl<string | number>('', { nonNullable: true }),
+    currencySearch: new FormControl<string | number>('', { nonNullable: true }),
+    ruleSearch: new FormControl<string | number>('', { nonNullable: true }),
   });
 
   readonly payeeSearchFn = (q: string) =>
@@ -86,10 +113,13 @@ export class CreditsListComponent implements OnInit {
       })),
     );
 
+  private readonly _planLabelCache = new Map<string, string>();
+
   readonly planSearchFn = (q: string) =>
     this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
       map(r => r.items.map(p => {
         const label = `${p.name} v${p.version}`;
+        this._planLabelCache.set(p.id, label);
         return { value: p.id, label };
       })),
     );
@@ -115,8 +145,16 @@ export class CreditsListComponent implements OnInit {
       status: f.status,
     }, { emitEvent: false });
     this.selectedPayees.set(f.payeeIds.map(id => ({ id, label: this._payeeCache.get(id) ?? id })));
-    this.selectedPlans.set(f.planIds.map(id => ({ id, label: id })));
-    if (f.payeeIds.length > 0) this.filterOpen.set(true);
+    this.selectedPlans.set(f.planIds.map(id => ({ id, label: this._planLabelCache.get(id) ?? id })));
+    this.selectedCurrencies.set([...f.currencies]);
+    if (f.ruleIds.length > 0) {
+      this.selectedRules.set(f.ruleIds.map(id => ({
+        id, label: this.availableRules().find(r => r.id === id)?.label ?? id,
+      })));
+    }
+    if (f.payeeIds.length > 0 || f.currencies.length > 0 || f.ruleIds.length > 0) {
+      this.filterOpen.set(true);
+    }
   }
 
   private _wireFormSubscriptions(): void {
@@ -156,9 +194,32 @@ export class CreditsListComponent implements OnInit {
         if (!v) return;
         const idStr = String(v);
         if (this.store.filter().planIds.includes(idStr)) return;
-        this.selectedPlans.update(ps => [...ps, { id: idStr, label: idStr }]);
+        const planLabel = this._planLabelCache.get(idStr) ?? idStr;
+        this.selectedPlans.update(ps => [...ps, { id: idStr, label: planLabel }]);
         this._setFilter({ planIds: [...this.store.filter().planIds, idStr] });
+        this._loadRulesForPlan(idStr);
         setTimeout(() => c.planSearch.setValue('', { emitEvent: false }), 0);
+      });
+
+    c.currencySearch.valueChanges.pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(v => {
+        if (!v) return;
+        const code = String(v);
+        if (this.store.filter().currencies.includes(code)) return;
+        this.selectedCurrencies.update(cs => [...cs, code]);
+        this._setFilter({ currencies: [...this.store.filter().currencies, code] });
+        setTimeout(() => c.currencySearch.setValue('', { emitEvent: false }), 0);
+      });
+
+    c.ruleSearch.valueChanges.pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(v => {
+        if (!v) return;
+        const ruleId = String(v);
+        if (this.store.filter().ruleIds.includes(ruleId)) return;
+        const label = this.availableRules().find(r => r.id === ruleId)?.label ?? ruleId;
+        this.selectedRules.update(rs => [...rs, { id: ruleId, label }]);
+        this._setFilter({ ruleIds: [...this.store.filter().ruleIds, ruleId] });
+        setTimeout(() => c.ruleSearch.setValue('', { emitEvent: false }), 0);
       });
   }
 
@@ -175,7 +236,23 @@ export class CreditsListComponent implements OnInit {
 
   removePlan(id: string): void {
     this.selectedPlans.update(ps => ps.filter(p => p.id !== id));
-    this._setFilter({ planIds: this.store.filter().planIds.filter(x => x !== id) });
+    const newPlanIds = this.store.filter().planIds.filter(x => x !== id);
+    // Remove available and selected rules that belong to the removed plan
+    const removedRuleIds = new Set(this.availableRules().filter(r => r.planId === id).map(r => r.id));
+    this.availableRules.update(rs => rs.filter(r => r.planId !== id));
+    this.selectedRules.update(rs => rs.filter(r => !removedRuleIds.has(r.id)));
+    const newRuleIds = this.store.filter().ruleIds.filter(rid => !removedRuleIds.has(rid));
+    this._setFilter({ planIds: newPlanIds, ruleIds: newRuleIds });
+  }
+
+  removeCurrency(code: string): void {
+    this.selectedCurrencies.update(cs => cs.filter(c => c !== code));
+    this._setFilter({ currencies: this.store.filter().currencies.filter(x => x !== code) });
+  }
+
+  removeRule(id: string): void {
+    this.selectedRules.update(rs => rs.filter(r => r.id !== id));
+    this._setFilter({ ruleIds: this.store.filter().ruleIds.filter(x => x !== id) });
   }
 
   clearFilters(): void {
@@ -183,12 +260,37 @@ export class CreditsListComponent implements OnInit {
     this.form.reset({
       reference: '', allocatedFrom: null, allocatedTo: null,
       amountMin: '', amountMax: '', status: 'Active',
-      payeeSearch: '', planSearch: '',
+      payeeSearch: '', planSearch: '', currencySearch: '', ruleSearch: '',
     });
     this.selectedPayees.set([]);
     this.selectedPlans.set([]);
+    this.selectedCurrencies.set([]);
+    this.availableRules.set([]);
+    this.selectedRules.set([]);
     this._syncUrl();
     void this.store.loadCounters();
+  }
+
+  // ── Rule loading ─────────────────────────────────────────────────────────
+
+  private _loadRulesForPlan(planId: string): void {
+    this.rulesLoading.set(true);
+    this.plansApi.getPlan(planId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: plan => {
+        const planLabel = this._planLabelCache.get(planId) ?? plan.name;
+        // Update plan label in selectedPlans with the real name
+        this.selectedPlans.update(ps => ps.map(p => p.id === planId ? { ...p, label: planLabel } : p));
+        const newRules = plan.rules
+          .filter(r => r.isActive)
+          .map(r => ({ id: r.id, label: r.name, planId, planName: planLabel }));
+        this.availableRules.update(rs => [
+          ...rs.filter(r => r.planId !== planId), // replace if already loaded
+          ...newRules,
+        ]);
+        this.rulesLoading.set(false);
+      },
+      error: () => this.rulesLoading.set(false),
+    });
   }
 
   setViewMode(mode: 'table' | 'byPayee'): void {

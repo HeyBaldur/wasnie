@@ -1,6 +1,7 @@
 import {
   Component,
   DestroyRef,
+  computed,
   effect,
   inject,
   input,
@@ -56,6 +57,17 @@ export class TransactionFilterComponent implements OnInit {
   readonly panelOpen = signal(false);
   readonly activeStatuses = signal<TransactionStatus[]>([]);
   readonly selectedPayees = signal<{ id: string; label: string }[]>([]);
+  readonly selectedCurrencies = signal<string[]>([]);
+
+  private static readonly _ALL_CURRENCIES: SelectOption[] = [
+    'EUR', 'USD', 'GBP', 'PLN', 'CHF', 'JPY', 'CAD', 'AUD',
+    'NOK', 'SEK', 'DKK', 'CZK', 'HUF', 'RON', 'BGN', 'MXN', 'BRL',
+  ].map(c => ({ value: c, label: c }));
+
+  readonly availableCurrencyOptions = computed<SelectOption[]>(() => {
+    const selected = new Set(this.selectedCurrencies());
+    return TransactionFilterComponent._ALL_CURRENCIES.filter(o => !selected.has(o.value as string));
+  });
 
   // id → "FullName (EMP000)" — populated when search results arrive or a payee is fetched by id.
   private readonly _payeeCache = new Map<string, string>();
@@ -72,6 +84,7 @@ export class TransactionFilterComponent implements OnInit {
     amountMax: new FormControl<string>('', { nonNullable: true }),
     amountSort: new FormControl<string>('', { nonNullable: true }),
     payeeSearch: new FormControl<string | number>('', { nonNullable: true }),
+    currencySearch: new FormControl<string | number>('', { nonNullable: true }),
   });
 
   readonly amountSortOptions: SelectOption[] = [
@@ -114,6 +127,7 @@ export class TransactionFilterComponent implements OnInit {
         amountSort: f.amountSort ?? '',
       }, { emitEvent: false });
       this.activeStatuses.set([...f.statuses]);
+      this.selectedCurrencies.set([...f.currencies]);
       // Sync payee chips — preserve known labels, then check cache, then fall back to GUID
       const known = untracked(() => this.selectedPayees()); // untracked: avoids re-triggering effect
       this.selectedPayees.set(f.payeeIds.map(id => ({
@@ -183,6 +197,20 @@ export class TransactionFilterComponent implements OnInit {
           this._patching = false;
         }, 0);
       });
+
+    c.currencySearch.valueChanges.pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(v => {
+        if (!v || this._patching) return;
+        const code = String(v);
+        if (this.filter().currencies.includes(code)) return;
+        this.selectedCurrencies.update(cs => [...cs, code]);
+        this.filterChange.emit({ currencies: [...this.filter().currencies, code] });
+        setTimeout(() => {
+          this._patching = true;
+          c.currencySearch.setValue('', { emitEvent: false });
+          this._patching = false;
+        }, 0);
+      });
   }
 
   private _resolvePayeeNames(ids: string[]): void {
@@ -217,6 +245,11 @@ export class TransactionFilterComponent implements OnInit {
     this.filterChange.emit({ payeeIds: this.filter().payeeIds.filter(p => p !== id) });
   }
 
+  removeCurrency(code: string): void {
+    this.selectedCurrencies.update(cs => cs.filter(c => c !== code));
+    this.filterChange.emit({ currencies: this.filter().currencies.filter(c => c !== code) });
+  }
+
   onUnassignedToggle(): void {
     this.filterChange.emit({ unassignedOnly: !this.filter().unassignedOnly });
   }
@@ -228,9 +261,10 @@ export class TransactionFilterComponent implements OnInit {
     this.form.reset({
       reference: '', txDateFrom: null, txDateTo: null,
       ingestedFrom: null, ingestedTo: null,
-      amountMin: '', amountMax: '', amountSort: '', payeeSearch: '',
+      amountMin: '', amountMax: '', amountSort: '', payeeSearch: '', currencySearch: '',
     });
     this.activeStatuses.set([]);
+    this.selectedCurrencies.set([]);
     this.selectedPayees.set([]);
     this._patching = false;
     this.cleared.emit();

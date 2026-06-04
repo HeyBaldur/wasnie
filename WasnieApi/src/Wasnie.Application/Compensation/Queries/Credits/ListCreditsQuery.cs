@@ -21,6 +21,7 @@ public sealed record CreditFilterQuery
     public decimal? AmountMax { get; init; }
     public string? Currencies { get; init; }      // comma-separated currency codes
     public string? Reference { get; init; }       // substring on ReferenceNumber
+    public string? RuleIds { get; init; }         // comma-separated rule GUIDs (WI-PROD-FILTERS-CURRENCY-RULE)
 }
 
 public sealed record ListCreditsQuery(CreditFilterQuery Filter)
