@@ -17,6 +17,7 @@ import {
   ProcessPendingScope,
   JobStatus,
   ProcessPendingResultSummary,
+  EligiblePendingTransaction,
 } from '../services/transactions.api.service';
 import {
   WsButtonComponent,
@@ -46,6 +47,11 @@ export class ProcessPendingComponent implements OnInit {
   readonly candidateCount = signal<number | null>(null);
   readonly countLoading = signal(false);
 
+  readonly eligibleTransactions = signal<EligiblePendingTransaction[]>([]);
+  readonly eligibleTotalCount = signal(0);
+  readonly eligibleLoading = signal(false);
+  readonly eligibleOpen = signal(true);
+
   readonly jobId = signal<string | null>(null);
   readonly jobStatus = signal<JobStatus | null>(null);
   readonly dispatching = signal(false);
@@ -63,9 +69,12 @@ export class ProcessPendingComponent implements OnInit {
   private _polling: Subscription | null = null;
 
   readonly VOLUME_THRESHOLD = 5000;
+  readonly ELIGIBLE_INLINE_MAX = 200;
+  readonly ELIGIBLE_URL_REF_LIMIT = 100;
 
   ngOnInit(): void {
     this._loadCount();
+    this._loadEligible();
   }
 
   private _loadCount(): void {
@@ -78,6 +87,21 @@ export class ProcessPendingComponent implements OnInit {
           this.countLoading.set(false);
         },
         error: () => this.countLoading.set(false),
+      });
+  }
+
+  private _loadEligible(): void {
+    this.eligibleLoading.set(true);
+    this.txApi
+      .getEligiblePending(this.scope(), this.scopeId(), this.periodStart(), this.periodEnd())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          this.eligibleTransactions.set(res.transactions);
+          this.eligibleTotalCount.set(res.totalCount);
+          this.eligibleLoading.set(false);
+        },
+        error: () => this.eligibleLoading.set(false),
       });
   }
 
@@ -97,6 +121,10 @@ export class ProcessPendingComponent implements OnInit {
     return Math.round((s.progressCurrent / s.progressTotal) * 100);
   }
 
+  get isOnTransactionsPage(): boolean {
+    return this.router.url.startsWith('/transactions');
+  }
+
   get showVolumeWarning(): boolean {
     const c = this.candidateCount();
     return c !== null && c > this.VOLUME_THRESHOLD && !this.jobId();
@@ -105,6 +133,16 @@ export class ProcessPendingComponent implements OnInit {
   get estimatedMinutes(): number {
     const c = this.candidateCount() ?? 0;
     return Math.ceil((c / 100) * 3 / 60);
+  }
+
+  get eligibleOverflowCount(): number {
+    const total = this.eligibleTotalCount();
+    const shown = this.eligibleTransactions().length;
+    return Math.max(0, total - shown);
+  }
+
+  get eligibleUrlTruncated(): boolean {
+    return this.eligibleTransactions().length > this.ELIGIBLE_URL_REF_LIMIT;
   }
 
   onProcessPending(): void {
@@ -128,6 +166,18 @@ export class ProcessPendingComponent implements OnInit {
       });
   }
 
+  onOpenEligibleInFilter(): void {
+    const refs = this.eligibleTransactions()
+      .slice(0, this.ELIGIBLE_URL_REF_LIMIT)
+      .map(t => t.referenceNumber)
+      .join(',');
+    if (!refs) return;
+    const url = this.router.serializeUrl(
+      this.router.createUrlTree(['/transactions'], { queryParams: { refs } }),
+    );
+    window.open(url, '_blank', 'noopener');
+  }
+
   private _startPolling(jobId: string): void {
     this._polling = timer(0, 1000)
       .pipe(
@@ -147,8 +197,10 @@ export class ProcessPendingComponent implements OnInit {
         this.jobStatus.set(s);
         if (s.state === 'Succeeded' || s.state === 'Cancelled' || s.state === 'Failed') {
           this._polling?.unsubscribe();
-          // Refresh count after processing completes.
-          if (s.state === 'Succeeded') this._loadCount();
+          if (s.state === 'Succeeded') {
+            this._loadCount();
+            this._loadEligible();
+          }
         }
       });
   }

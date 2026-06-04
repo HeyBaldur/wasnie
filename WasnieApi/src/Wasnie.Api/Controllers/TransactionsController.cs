@@ -74,6 +74,15 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(new { count = result.Value }) : BadRequest(new { message = result.Error });
     }
 
+    [HttpGet("eligible-pending")]
+    public async Task<IActionResult> EligiblePending([FromQuery] PendingCountRequest req, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new GetEligiblePendingTransactionsQuery(req.Scope, req.ScopeId, req.PeriodStart, req.PeriodEnd),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("process-pending")]
     public async Task<IActionResult> ProcessPending([FromBody] ProcessPendingTransactionsCommand command, CancellationToken cancellationToken)
     {

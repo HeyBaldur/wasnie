@@ -62,6 +62,12 @@
     width: 100%;
   }
 
+  &__filter-truncated {
+    font-size: var(--font-size-11);
+    color: var(--color-text-tertiary);
+    font-style: italic;
+  }
+
   &__skip-summary {
     width: 100%;
   }
@@ -85,6 +91,74 @@
     &:hover {
       color: var(--color-brand-hover);
     }
+  }
+
+  &__eligible-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--font-size-13);
+    color: var(--color-brand);
+    cursor: pointer;
+    text-decoration: underline;
+    margin-left: auto;
+
+    &:hover { color: var(--color-brand-hover); }
+  }
+
+  &__eligible-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+
+    // Neutralize the top margin on __skip-list when reused in this context (gap provides spacing).
+    .process-pending__skip-list { margin-top: 0; }
+  }
+
+  &__eligible-loading {
+    font-size: var(--font-size-13);
+    color: var(--color-text-tertiary);
+    margin: 0;
+  }
+
+  &__eligible-header {
+    display: grid;
+    grid-template-columns: 2fr 2fr 1fr 1.5fr;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    border-bottom: 1px solid var(--color-border-default);
+    font-size: var(--font-size-11);
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--color-bg-surface-sunken);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+
+    &--right { text-align: right; }
+  }
+
+  &__eligible-entry {
+    display: grid;
+    grid-template-columns: 2fr 2fr 1fr 1.5fr;
+    gap: var(--space-2);
+    align-items: baseline;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: var(--font-size-12);
+
+    &:last-child { border-bottom: none; }
+  }
+
+  &__eligible-overflow {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-11);
+    color: var(--color-text-tertiary);
+    font-style: italic;
+    border-top: 1px solid var(--color-border-subtle);
   }
 
   &__skip-list {

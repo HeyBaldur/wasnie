@@ -10,6 +10,130 @@
 
 ---
 
+## 2026-06-04 — WI-PROD-T-FIX-13: "Open in filter" must show exact eligible list
+
+**WI:** WI-PROD-T-FIX-13
+**Status:** DONE ✅
+**Type:** Frontend bug fix — URL construction for "Open in filter" button.
+
+### Root cause
+FIX-12's `onOpenEligibleInFilter()` used scope-based logic (payeeIds + period), which returns a superset — e.g. "all Pending for these payees" = 416 rows instead of the exact 8 the badge showed. The skip log already had the correct pattern: `refs=ref1,ref2,...` which navigates to the exact rows by reference number.
+
+### Fix
+Replaced entire scope-based URL logic with the skip log's pattern:
+```typescript
+const refs = this.eligibleTransactions()
+  .slice(0, this.ELIGIBLE_URL_REF_LIMIT)
+  .map(t => t.referenceNumber)
+  .join(',');
+const url = this.router.serializeUrl(
+  this.router.createUrlTree(['/transactions'], { queryParams: { refs } }),
+);
+window.open(url, '_blank', 'noopener');
+```
+Works uniformly for all 3 scopes (no scope-based branching needed).
+
+### Principle
+**Badge count = inline table rows = filter result.** All three must show the same N. Reference numbers are the stable, exact identifier for navigation.
+
+### Cleanup
+- Removed `filterPayeeId` input (obsolete — no longer needed for URL construction)
+- Removed corresponding binding from `assignment-detail.component.html`
+
+### Truncation (N > 100)
+URL cap at 100 refs. When `eligibleTransactions().length > 100`, a "(first 100 of N — see full list above)" note appears next to the button in EN/ES/PL.
+
+### TODO_TESTS
+- Verify `GET /api/transactions?statuses=Pending&refs=ref1,ref2,...,refN` returns exactly N rows matching the eligible table.
+- Verify skip log "Open in filter" still works correctly (no regression).
+
+### Build
+- `ng build --configuration production` — clean
+
+---
+
+## 2026-06-04 — WI-PROD-T-FIX-12: Show eligible Pending transactions before processing
+
+**WI:** WI-PROD-T-FIX-12
+**Status:** DONE ✅
+**Type:** Full-stack feature — backend endpoint + frontend component upgrade.
+
+### UX problem solved
+The "N Pending eligible" badge was a black box. Users could not see WHICH transactions the job would act on, making it impossible to verify correctness before committing to a financial operation. Owner quote: "¿cuáles??? Necesitamos ver cuáles están pending."
+
+### Transparency principle added
+Any eligible/applicable/affected COUNT before a financial action MUST be backed by an inspectable list of those EXACT items. Count-only = trust-destroying. Added to `14-forbidden-patterns.md`.
+
+### Backend (Option Y — separate endpoint)
+New `GET /api/transactions/eligible-pending?scope=...&scopeId=...&periodStart=...&periodEnd=...`
+- Same params as `pending-count` (count endpoint unchanged, no breaking change)
+- Handler: `GetEligiblePendingTransactionsHandler` — identical predicates to count handler for all 3 scopes
+- ByPlan scope: 2 queries (batch payee load + in-memory period filter) — not N+1 per assignment
+- Returns `EligiblePendingResult { transactions[], totalCount }` — capped at 200 inline rows
+- `EligiblePendingTransactionDto`: Id, PayeeId, ReferenceNumber, PayeeName, PayeeCode, TransactionDate, Amount, Currency
+
+### Frontend changes
+- `TransactionsApiService.getEligiblePending()` — new method
+- `ProcessPendingComponent`:
+  - New signals: `eligibleTransactions`, `eligibleTotalCount`, `eligibleLoading`, `eligibleOpen`
+  - New input: `filterPayeeId` (for ByPlanAssignment "Open in filter" URL)
+  - `ngOnInit` fires both `_loadCount()` and `_loadEligible()` concurrently
+  - After job succeeds: both count and eligible list refresh
+  - Inline table: skip-log CSS style (4 columns: Ref / Payee / Date / Amount+Currency), max 260px with scroll, overflow footer if > 200
+  - Show/hide toggle on count row (default: visible)
+  - "Open in filter" button per scope: exact for ByPayeeAndPeriod + ByPlanAssignment; payee-ID-approximate for ByPlan
+- Assignment detail: passes `filterPayeeId`, `periodStart`, `periodEnd` to ProcessPendingComponent
+- i18n: 8 new keys in EN/ES/PL
+
+### Predicate alignment confirmed
+Badge count and eligible list use identical WHERE predicates (code comment on each loader method). Count == list.length for all scopes.
+
+### TODO_TESTS
+- Integration test: `GET /api/transactions/eligible-pending?scope=ByPayeeAndPeriod&scopeId=<id>&periodStart=...&periodEnd=...` returns same count as `pending-count` for same params.
+- Integration test: ByPlan scope returns only transactions within each assignment's effective period (not all Pending for those payees).
+
+### Build
+- `dotnet build Wasnie.Application` — 0 errors
+- `ng build --configuration production` — clean
+
+---
+
+## 2026-06-04 — WI-PROD-T-FIX-11: Critical payeeIds filter ignored in transactions list
+
+**WI:** WI-PROD-T-FIX-11
+**Status:** DONE ✅
+**Type:** Frontend bug fix (one line) + forbidden-pattern rule.
+
+### Root cause
+`payeeIds` was missing from `TransactionsStore._buildFilterRecord()` in `transactions.store.ts`. This is the function that maps `TransactionFilter` → HTTP query params for the list API call. Because `payeeIds` was absent, the `GET /api/transactions` call carried no payee filter — the backend returned all matching transactions regardless of payee. The URL chip and filter state looked correct (they read directly from the signal), but the API request was silently wrong.
+
+The export (`toExportFilter`) correctly included `payeeIds` (different code path), so exports were filtered but the list was not.
+
+**Confirmed hypothesis: D** — frontend omits the filter parameter from the API request.
+
+### Fix
+`transactions.store.ts` (unstaged modification already in working tree):
+```typescript
+// _buildFilterRecord — line 115:
+if (f.payeeIds.length > 0) filters['payeeIds'] = f.payeeIds.join(',');
+```
+One-line addition. `toExportFilter` was already symmetric. Backend handlers (`ListTransactionsHandler`, `ExportTransactionsHandler`) were already correct.
+
+### Plan badge vs filter alignment
+`CountByPayeeAndPeriod` (used by ProcessPendingComponent) applies identical predicate `Status=Pending AND PayeeId=@id AND TransactionDate BETWEEN @start AND @end`. After fix, the list total count for the same parameters will match this count — resolving the 20 vs 3 discrepancy.
+
+### Audit of other multi-value filters
+`statuses` and `referenceNumbers` were already present in `_buildFilterRecord` and `toExportFilter`. No other gaps found.
+
+### New forbidden-pattern rule
+Added to `docs/architecture/14-forbidden-patterns.md` under "Export/list filter divergence violations": 8-location checklist for adding a new `TransactionFilter` field. Highlights `_buildFilterRecord` as the most commonly missed location.
+
+### Build
+- `ng build --configuration production` — clean (pre-existing bundle-size warning, pre-existing unused import warning)
+- `dotnet build` — clean (0 warnings, 0 errors)
+
+---
+
 ## 2026-06-03 — WI-PROD-T-FIX-10: Currency whitelist + unified Step 3 preview UI
 
 **WI:** WI-PROD-T-FIX-10
