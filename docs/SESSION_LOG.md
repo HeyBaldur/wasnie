@@ -10,6 +10,67 @@
 
 ---
 
+## 2026-06-04 — WI-PROD-PAYEE-DASHBOARD-V2: Scroll-único dashboard + tab cleanup
+
+**Strategic change:** Removed Assignments, Quotas, Attainment tabs. New "Overview" is the default landing tab. All list data accessible via bento cards with virtual scroll (IntersectionObserver sentinel). Pacing target line in gauges. Period filter Active/All.
+
+**Research note (industry pattern):** Pacing target line is the standard CaptivateIQ/Xactly feature. In a 30-day quota period, on day 15 the pacing target line sits at 50% — if your attainment bar is to the left of it, you're behind pace. Default to "Active" filter matches CaptivateIQ's default view which hides historical quotas unless explicitly requested.
+
+**Backend (6 files):**
+- `PaginationQuery`: `Period` field added (`"active"` | `"all"`)
+- `ListQuotasByPayeeHandler`: in-memory period filter (`PeriodEnd >= today` for active). Removed EF `ToPagedResultAsync` — does manual pagination on filtered list (avoids owned DateRange SQL WHERE issues).
+- `ListAssignmentsByPayeeHandler`: same pattern. `AssignmentRow` private record replaces `dynamic` for typed in-memory filtering.
+- `GetPayeeDashboardHandler`: accepts `period` param. Returns gauges + trend only (list cards moved to separate endpoints). Period filter: active quotas + last 90 days credits.
+- `GetPayeeCreditsQuery` + `GetPayeeCreditsHandler`: new paginated credits endpoint for payee. `ListCreditsHandler.EnrichPageAsync` promoted to `internal static` for reuse.
+- `PayeesController`: `[period]` on `/dashboard`, new `GET /:id/credits?page&period`
+
+**Frontend (7 files):**
+- `ws-load-more.directive.ts`: new standalone directive using `IntersectionObserver`. Sentinel element at bottom of list emits `wsLoadMore` when enters viewport. Zero new dependencies.
+- `ws-gauge`: new `pacingValue: number | null` input. SVG circle at `x=100−80cos(p×π), y=100−80sin(p×π)`. Shown only for in-progress quotas.
+- `ws-line-chart`: tooltip X clamped to `[8, 75]%` — prevents right-edge overflow.
+- `payees.api.service.ts`: `getPayeeDashboard(period)`, `getPayeeCredits(page, period)` added
+- `payee-detail.component.ts`: entirely rewritten. Tabs: overview|profile|activity. Virtual scroll signals per card (assignments/quotas/credits). `loadMoreX()` pattern triggered by `wsLoadMore`. `computePacing(periodStart, periodEnd)` → pacing fraction for gauge.
+- `payee-detail.component.html`: entirely rewritten. Compact header (initials avatar, name, meta row, actions). Period filter pill toggle. 5 bento cards (2×2 + 1 full-width credits). All list rows clickable via `[routerLink]`. `wsLoadMore` sentinels at bottom of each list card.
+- `payee-detail.component.scss`: entirely rewritten. Compact header, tabs, period filter, bento grid, gauge rows, list rows, credit row grid, virtual scroll helpers. Mobile responsive at ≤700px.
+- `en/es/pl.json`: `PAYEES.DETAIL_TAB_OVERVIEW`, `DASHBOARD.CREDITS_TITLE`, `DASHBOARD.CREDITS_EMPTY`, `DASHBOARD.END_OF_LIST`, `DASHBOARD.PERIOD_ACTIVE`, `DASHBOARD.PERIOD_ALL`
+
+**Tests (+1 net: 785 total):** Updated `GetDashboard_WithQuotaAndAssignment` (list sections now empty — served by separate endpoints); added `GetDashboard_WithPeriodAll`.
+
+**Bundle: 574 KB (unchanged). Both builds clean. NO git.**
+
+---
+
+## 2026-06-04 — WI-PROD-PAYEE-DASHBOARD: Bento dashboard for Attainment tab
+
+**Decision:** Chart.js rejected (not in project; +150KB). Built with native SVG — zero dependencies, zero bundle growth (SVG in lazy payees chunk).
+
+**Backend (5 files):**
+- `PayeeDashboardDto` + `EarningsTrendPointDto`
+- `GetPayeeDashboardQuery` + `GetPayeeDashboardHandler`: composed `GET /api/payees/:id/dashboard`
+  - All four data fetches parallel: quotas, all credits (join TX for date/currency), assignments, plan names
+  - Attainment: in-memory filter by (planId, period) from preloaded credits
+  - Earnings trend: in-memory GROUP BY (year, month, currency) — avoids EF Core owned-type translation issues
+  - Recent quotas: last 5. Recent assignments: last 10.
+- `PayeesController`: new `GET /{payeeId:guid}/dashboard` endpoint
+
+**Frontend (7 new/updated files):**
+- `ws-gauge`: SVG half-circle gauge (path `M 20,100 A 80,80 0 0,1 180,100`, 200×120 viewBox). Inputs: `value` (0–2.0+), `label`. Stroke-dasharray fill: `min(value,1.0) × πR`. Color via CSS vars: brand/success/warning/danger. Animated with CSS transition. ARIA accessible.
+- `ws-line-chart`: SVG polyline chart (560×180 viewBox). Inputs: `points` (label+value+currency?), `emptyLabel`. Multi-currency: up to 3 series in brand/success/warning colors. Y-gridlines + axis labels. Area gradient fill. Hover tooltip via mousemove + floating div. ARIA accessible.
+- Both exported from `shared/ui/index.ts`
+- `payee-dashboard.model.ts`: `PayeeDashboard`, `EarningsTrendPoint`, `DashboardAssignment`
+- `payees.api.service.ts`: `getPayeeDashboard(payeeId)` added
+- `payee-detail.component.ts`: replaces `attainmentResult`/`attainmentLoading` with `dashboardResult`/`dashboardLoading`; new imports `WsCardComponent`, `WsGaugeComponent`, `WsLineChartComponent`; bento helpers added
+- `payee-detail.component.html`: Attainment tab content replaced with 2×2 CSS Grid bento layout
+- `payee-detail.component.scss`: old attainment styles removed; full bento CSS system added (grid, cards, gauge rows, mini progress, list rows, responsive single-column at ≤700px)
+
+**i18n:** `DASHBOARD.*` section added in EN/ES/PL (6 keys: GAUGES_TITLE, TREND_TITLE, TREND_EMPTY, QUOTAS_TITLE, ASSIGNMENTS_TITLE, VIEW_ALL)
+
+**Tests (+3 integration):** `PayeeDashboardEndpointsTests`: 401 (no auth), 200 empty (new payee), 200 with quota+assignment data.
+
+**Zero new dependencies. Both builds clean. 784 tests (333 unit + 451 integration).**
+
+---
+
 ## 2026-06-04 — WI-CALC-A.3-FIX-1: Quota-Plan currency invariant
 
 **Root cause:** Create Quota dialog had an independent currency dropdown. Nothing prevented choosing EUR for a Quota whose Plan is PLN — producing nonsensical attainment ratios (PLN credits vs EUR target).

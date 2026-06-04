@@ -1,6 +1,6 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
@@ -12,27 +12,30 @@ import { extractApiError } from '../../../shared/utils/api-error';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
-import { Assignment } from '../../assignments/models/assignment.model';
-import { QuotaAttainment, QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
+import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
+import { PayeeDashboard, EarningsTrendPoint } from '../models/payee-dashboard.model';
 import { Payee, PayeeStatus } from '../models/payee.model';
 import { PayeeFormComponent } from '../form/payee-form.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { WsLoadMoreDirective } from '../../../shared/directives/ws-load-more.directive';
 import { PagedResult } from '../../../shared/models/pagination.models';
+import { Assignment } from '../../assignments/models/assignment.model';
+import { CreditListItem } from '../../credits/models/credit.model';
 import {
-  WsPageLayoutComponent,
   WsBadgeComponent,
   WsButtonComponent,
+  WsCardComponent,
   WsDatePickerComponent,
   WsModalComponent,
   WsConfirmationModalComponent,
-  WsTableComponent,
   WsTableEmptyComponent,
-  WsClickableRowDirective,
-  WsPaginationComponent,
+  WsGaugeComponent,
+  WsLineChartComponent,
+  type LineChartPoint,
   type BadgeVariant,
 } from '../../../shared/ui';
 
-type Tab = 'profile' | 'assignments' | 'quotas' | 'attainment' | 'activity';
+type Tab = 'overview' | 'profile' | 'activity';
 
 @Component({
   selector: 'app-payee-detail',
@@ -48,47 +51,65 @@ type Tab = 'profile' | 'assignments' | 'quotas' | 'attainment' | 'activity';
     CurrencyFormatPipe,
     PayeeFormComponent,
     HasPermissionDirective,
-    WsPageLayoutComponent,
+    WsLoadMoreDirective,
     WsBadgeComponent,
     WsButtonComponent,
+    WsCardComponent,
     WsDatePickerComponent,
     WsModalComponent,
     WsConfirmationModalComponent,
-    WsTableComponent,
     WsTableEmptyComponent,
-    WsClickableRowDirective,
-    WsPaginationComponent,
+    WsGaugeComponent,
+    WsLineChartComponent,
   ],
   templateUrl: './payee-detail.component.html',
   styleUrl: './payee-detail.component.scss',
 })
 export class PayeeDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly payeesApi = inject(PayeesApiService);
   readonly store = inject(PayeesStore);
   private readonly toast = inject(ToastService);
 
   readonly PayeeStatus = PayeeStatus;
+  readonly QuotaMeasurementType = QuotaMeasurementType;
 
   readonly payeeId = this.route.snapshot.paramMap.get('payeeId')!;
-  readonly activeTab = signal<Tab>('profile');
+  readonly activeTab = signal<Tab>('overview');
+  readonly period = signal<'active' | 'all'>('active');
+
   readonly editModalOpen = signal(false);
   readonly terminateModalOpen = signal(false);
   readonly deactivateModalOpen = signal(false);
   readonly saving = signal(false);
   readonly deactivateSaving = signal(false);
 
-  readonly payeeAssignmentsResult = signal<PagedResult<Assignment> | null>(null);
-  readonly assignmentsLoading = signal(false);
-  readonly assignmentsPage = signal(1);
-  readonly payeeQuotasResult = signal<PagedResult<QuotaSummary> | null>(null);
-  readonly quotasLoading = signal(false);
-  readonly quotasPage = signal(1);
-  readonly attainmentResult = signal<QuotaAttainment[] | null>(null);
-  readonly attainmentLoading = signal(false);
+  // Dashboard (gauges + trend)
+  readonly dashboard = signal<PayeeDashboard | null>(null);
+  readonly dashboardLoading = signal(false);
 
-  readonly QuotaMeasurementType = QuotaMeasurementType;
+  // Assignments virtual scroll
+  readonly assignments = signal<Assignment[]>([]);
+  readonly assignmentsPage = signal(1);
+  readonly assignmentsTotal = signal(0);
+  readonly assignmentsLoading = signal(false);
+  readonly assignmentsHasMore = computed(() => this.assignments().length < this.assignmentsTotal());
+
+  // Quotas virtual scroll
+  readonly quotas = signal<QuotaSummary[]>([]);
+  readonly quotasPage = signal(1);
+  readonly quotasTotal = signal(0);
+  readonly quotasLoading = signal(false);
+  readonly quotasHasMore = computed(() => this.quotas().length < this.quotasTotal());
+
+  // Credits virtual scroll
+  readonly credits = signal<CreditListItem[]>([]);
+  readonly creditsPage = signal(1);
+  readonly creditsTotal = signal(0);
+  readonly creditsLoading = signal(false);
+  readonly creditsHasMore = computed(() => this.credits().length < this.creditsTotal());
 
   readonly terminateForm = this.fb.nonNullable.group({
     terminationDate: ['', Validators.required],
@@ -96,95 +117,154 @@ export class PayeeDetailComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.loadPayee(this.payeeId);
+
+    // Read period from URL before loading so the first fetch uses the correct filter
+    const p = this.route.snapshot.queryParamMap.get('period');
+    if (p === 'all') this.period.set('all');
+
+    this.loadOverview();
   }
+
+  // ── Tab switching ────────────────────────────────────────────────────────
 
   setTab(tab: Tab): void {
     this.activeTab.set(tab);
-    if (tab === 'assignments' && !this.assignmentsLoading() && !this.payeeAssignmentsResult()) {
-      this.loadPayeeAssignments(1);
-    }
-    if (tab === 'quotas' && !this.quotasLoading() && !this.payeeQuotasResult()) {
-      this.loadPayeeQuotas(1);
-    }
-    if (tab === 'attainment' && !this.attainmentLoading() && this.attainmentResult() === null) {
-      this.loadPayeeAttainment();
+  }
+
+  // ── Period filter ─────────────────────────────────────────────────────────
+
+  setPeriod(p: 'active' | 'all'): void {
+    this.period.set(p);
+    this.router.navigate([], { queryParams: { period: p }, queryParamsHandling: 'merge', replaceUrl: true });
+    this.resetAndLoad();
+  }
+
+  private resetAndLoad(): void {
+    this.dashboard.set(null);
+    this.assignments.set([]); this.assignmentsPage.set(1); this.assignmentsTotal.set(0);
+    this.quotas.set([]); this.quotasPage.set(1); this.quotasTotal.set(0);
+    this.credits.set([]); this.creditsPage.set(1); this.creditsTotal.set(0);
+    this.loadOverview();
+    this.loadMoreAssignments();
+    this.loadMoreQuotas();
+    this.loadMoreCredits();
+  }
+
+  // ── Dashboard (gauges + trend) ────────────────────────────────────────────
+
+  private async loadOverview(): Promise<void> {
+    this.dashboardLoading.set(true);
+    try {
+      const result = await firstValueFrom(this.payeesApi.getPayeeDashboard(this.payeeId, this.period()));
+      this.dashboard.set(result);
+    } catch {
+      this.dashboard.set({ attainmentItems: [], earningsTrend: [], recentQuotas: [], recentAssignments: [] });
+    } finally {
+      this.dashboardLoading.set(false);
+      // Load list cards after dashboard
+      this.loadMoreAssignments();
+      this.loadMoreQuotas();
+      this.loadMoreCredits();
     }
   }
 
-  async loadPayeeAssignments(page: number): Promise<void> {
-    this.assignmentsPage.set(page);
+  // ── Virtual scroll list cards ─────────────────────────────────────────────
+
+  async loadMoreAssignments(): Promise<void> {
+    if (this.assignmentsLoading() || (!this.assignmentsHasMore() && this.assignmentsPage() > 1)) return;
     this.assignmentsLoading.set(true);
     try {
-      const result = await firstValueFrom(this.payeesApi.getPayeeAssignments(this.payeeId, { page, pageSize: 10, sortBy: 'effectivestart', sortOrder: 'desc' }));
-      this.payeeAssignmentsResult.set(result);
-    } catch {
-      // silent — tab will show empty state
-    } finally {
+      const result = await firstValueFrom(
+        this.payeesApi.getPayeeAssignments(this.payeeId, {
+          page: this.assignmentsPage(),
+          pageSize: 10,
+          sortBy: 'effectivestart',
+          sortOrder: 'desc',
+          period: this.period(),
+        } as any)
+      );
+      this.assignments.update(prev => [...prev, ...result.items]);
+      this.assignmentsTotal.set(result.totalCount);
+      this.assignmentsPage.update(p => p + 1);
+    } catch { /* silent */ } finally {
       this.assignmentsLoading.set(false);
     }
   }
 
-  async loadPayeeQuotas(page: number): Promise<void> {
-    this.quotasPage.set(page);
+  async loadMoreQuotas(): Promise<void> {
+    if (this.quotasLoading() || (!this.quotasHasMore() && this.quotasPage() > 1)) return;
     this.quotasLoading.set(true);
     try {
-      const result = await firstValueFrom(this.payeesApi.getPayeeQuotas(this.payeeId, { page, pageSize: 10, sortBy: 'periodstart', sortOrder: 'desc' }));
-      this.payeeQuotasResult.set(result);
-    } catch {
-      // silent — tab will show empty state
-    } finally {
+      const result = await firstValueFrom(
+        this.payeesApi.getPayeeQuotas(this.payeeId, {
+          page: this.quotasPage(),
+          pageSize: 10,
+          sortBy: 'periodstart',
+          sortOrder: 'desc',
+          period: this.period(),
+        } as any)
+      );
+      this.quotas.update(prev => [...prev, ...result.items]);
+      this.quotasTotal.set(result.totalCount);
+      this.quotasPage.update(p => p + 1);
+    } catch { /* silent */ } finally {
       this.quotasLoading.set(false);
     }
   }
 
-  async loadPayeeAttainment(): Promise<void> {
-    this.attainmentLoading.set(true);
+  async loadMoreCredits(): Promise<void> {
+    if (this.creditsLoading() || (!this.creditsHasMore() && this.creditsPage() > 1)) return;
+    this.creditsLoading.set(true);
     try {
-      const result = await firstValueFrom(this.payeesApi.getPayeeAttainment(this.payeeId));
-      this.attainmentResult.set(result);
-    } catch {
-      this.attainmentResult.set([]);
-    } finally {
-      this.attainmentLoading.set(false);
+      const result = await firstValueFrom(
+        this.payeesApi.getPayeeCredits(this.payeeId, this.creditsPage(), this.period())
+      );
+      this.credits.update(prev => [...prev, ...result.items]);
+      this.creditsTotal.set(result.totalCount);
+      this.creditsPage.update(p => p + 1);
+    } catch { /* silent */ } finally {
+      this.creditsLoading.set(false);
     }
   }
 
-  attainmentColorClass(value: number): string {
-    if (value >= 1.0) return 'attainment-bar--blue';
-    if (value >= 0.80) return 'attainment-bar--green';
-    if (value >= 0.50) return 'attainment-bar--amber';
-    return 'attainment-bar--red';
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  trendChartPoints(trend: EarningsTrendPoint[]): LineChartPoint[] {
+    return trend.map(p => ({ label: p.monthLabel, value: p.amount, currency: p.currency }));
   }
 
-  openEdit(): void {
-    this.editModalOpen.set(true);
+  /** Compute pacing fraction for a currently-active quota period. */
+  computePacing(periodStart: string, periodEnd: string): number | null {
+    const start = new Date(periodStart).getTime();
+    const end = new Date(periodEnd).getTime();
+    const now = Date.now();
+    if (now < start || now > end) return null;
+    return Math.min(1, Math.max(0, (now - start) / (end - start)));
   }
 
-  onEditSaved(_payee: Payee): void {
-    this.editModalOpen.set(false);
+  gaugeColorClass(value: number): string {
+    if (value >= 1.0) return 'bento-bar--blue';
+    if (value >= 0.80) return 'bento-bar--green';
+    if (value >= 0.50) return 'bento-bar--amber';
+    return 'bento-bar--red';
   }
+
+  // ── Profile + status helpers ──────────────────────────────────────────────
+
+  openEdit(): void { this.editModalOpen.set(true); }
+  onEditSaved(_payee: Payee): void { this.editModalOpen.set(false); }
 
   async onMarkActive(): Promise<void> {
-    try {
-      await this.store.markAsActive(this.payeeId);
-      this.toast.show('PAYEES.TOAST_MARKED_ACTIVE', 'success');
-    } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
-    }
+    try { await this.store.markAsActive(this.payeeId); this.toast.show('PAYEES.TOAST_MARKED_ACTIVE', 'success'); }
+    catch (err) { this.toast.show(extractApiError(err), 'error'); }
   }
 
   async onMarkOnLeave(): Promise<void> {
-    try {
-      await this.store.markAsOnLeave(this.payeeId);
-      this.toast.show('PAYEES.TOAST_MARKED_ON_LEAVE', 'success');
-    } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
-    }
+    try { await this.store.markAsOnLeave(this.payeeId); this.toast.show('PAYEES.TOAST_MARKED_ON_LEAVE', 'success'); }
+    catch (err) { this.toast.show(extractApiError(err), 'error'); }
   }
 
-  openDeactivate(): void {
-    this.deactivateModalOpen.set(true);
-  }
+  openDeactivate(): void { this.deactivateModalOpen.set(true); }
 
   async onConfirmDeactivate(): Promise<void> {
     this.deactivateSaving.set(true);
@@ -192,47 +272,31 @@ export class PayeeDetailComponent implements OnInit {
       await this.store.deactivate(this.payeeId);
       this.toast.show('PAYEES.TOAST_DEACTIVATED', 'success');
       this.deactivateModalOpen.set(false);
-    } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
-    } finally {
-      this.deactivateSaving.set(false);
-    }
+    } catch (err) { this.toast.show(extractApiError(err), 'error'); }
+    finally { this.deactivateSaving.set(false); }
   }
 
   async onActivate(): Promise<void> {
-    try {
-      await this.store.activate(this.payeeId);
-      this.toast.show('PAYEES.TOAST_ACTIVATED', 'success');
-    } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
-    }
+    try { await this.store.activate(this.payeeId); this.toast.show('PAYEES.TOAST_ACTIVATED', 'success'); }
+    catch (err) { this.toast.show(extractApiError(err), 'error'); }
   }
 
   openTerminate(): void {
     const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    this.terminateForm.reset({ terminationDate: `${yyyy}-${mm}-${dd}` });
+    this.terminateForm.reset({ terminationDate: today.toISOString().slice(0, 10) });
     this.terminateModalOpen.set(true);
   }
 
   async onConfirmTerminate(): Promise<void> {
-    if (this.terminateForm.invalid) {
-      this.terminateForm.markAllAsTouched();
-      return;
-    }
+    if (this.terminateForm.invalid) { this.terminateForm.markAllAsTouched(); return; }
     const { terminationDate } = this.terminateForm.getRawValue();
     this.saving.set(true);
     try {
       await this.store.markAsTerminated(this.payeeId, terminationDate);
       this.toast.show('PAYEES.TOAST_TERMINATED', 'success');
       this.terminateModalOpen.set(false);
-    } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
-    } finally {
-      this.saving.set(false);
-    }
+    } catch (err) { this.toast.show(extractApiError(err), 'error'); }
+    finally { this.saving.set(false); }
   }
 
   payeeStatusVariant(status: PayeeStatus): BadgeVariant {
@@ -249,10 +313,6 @@ export class PayeeDetailComponent implements OnInit {
       case PayeeStatus.OnLeave: return 'PAYEES.STATUS_ON_LEAVE';
       case PayeeStatus.Terminated: return 'PAYEES.STATUS_TERMINATED';
     }
-  }
-
-  assignmentStatusVariant(status: string): BadgeVariant {
-    return status === 'Active' ? 'success' : 'neutral';
   }
 
   quotaStatusVariant(status: string): BadgeVariant {

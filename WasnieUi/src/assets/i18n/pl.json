@@ -410,6 +410,7 @@
     "PLATFORM_ACTIVE": "Aktywny",
     "TERMINATE_TITLE": "Zwolnij beneficjenta",
     "TERMINATE_MSG": "Spowoduje to oznaczenie beneficjenta jako zwolnionego. Podaj datę zwolnienia.",
+    "DETAIL_TAB_OVERVIEW": "Przegląd",
     "DETAIL_TAB_PROFILE": "Profil",
     "DETAIL_TAB_ASSIGNMENTS": "Przypisania",
     "DETAIL_TAB_QUOTAS": "Kwoty",
@@ -427,6 +428,20 @@
     "MEASURE_REVENUE": "Przychód",
     "MEASURE_UNITS": "Jednostki",
     "UNITS": "szt."
+  },
+  "DASHBOARD": {
+    "GAUGES_TITLE": "Realizacja Kwot",
+    "TREND_TITLE": "Trend Zarobków (12 miesięcy)",
+    "TREND_EMPTY": "Brak historii kredytów dla tego beneficjenta.",
+    "QUOTAS_TITLE": "Kwoty",
+    "ASSIGNMENTS_TITLE": "Przypisania",
+    "CREDITS_TITLE": "Ostatnie Kredyty",
+    "CREDITS_EMPTY": "Brak kredytów w tym okresie.",
+    "VIEW_ALL": "Zobacz wszystkie",
+    "END_OF_LIST": "Koniec listy",
+    "LOAD_MORE": "Załaduj więcej",
+    "PERIOD_ACTIVE": "Aktywny",
+    "PERIOD_ALL": "Wszystkie"
   },
   "QUOTAS": {
     "TITLE": "Kwoty",

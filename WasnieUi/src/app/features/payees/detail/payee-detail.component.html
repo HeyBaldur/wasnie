@@ -1,435 +1,431 @@
 <app-shell>
   @if (store.loading() && !store.selectedPayee()) {
-    <div class="payee-detail payee-detail--loading">
+    <div class="pd-loading">
       <span class="skeleton skeleton--title"></span>
     </div>
   } @else if (store.error()) {
-    <div class="payee-detail payee-detail--error">
+    <div class="pd-error">
       <app-icon name="alert-circle" [size]="32" />
       <span>{{ store.error()! | translate }}</span>
     </div>
   } @else if (store.selectedPayee(); as payee) {
-    <ws-page-layout
-      icon="user"
-      [title]="payee.fullName"
-      [subtitle]="payee.role || payee.employeeCode"
-      backLink="/payees"
-      [backLabel]="'PAYEES.TITLE' | translate"
-    >
-      <div slot="actions" class="payee-detail__actions">
-        <!-- Employment status badge -->
-        <ws-badge [variant]="payeeStatusVariant(payee.status)" [dot]="payee.status === PayeeStatus.Active">
-          {{ payeeStatusKey(payee.status) | translate }}
-        </ws-badge>
-        <!-- Platform activation badge — shown only when inactive -->
-        @if (!payee.isActive) {
-          <ws-badge variant="warning">{{ 'PAYEES.STATUS_INACTIVE' | translate }}</ws-badge>
-        }
 
-        <ws-button variant="secondary" size="sm" (click)="openEdit()">
-          <app-icon name="edit" [size]="14" />
-          {{ 'COMMON.EDIT' | translate }}
-        </ws-button>
-
-        <!-- Active employment: only transition to On Leave -->
-        @if (payee.status === PayeeStatus.Active) {
-          <ws-button *hasPermission="'Payees.Update'" variant="secondary" size="sm" (click)="onMarkOnLeave()">
-            <app-icon name="pause-circle" [size]="14" />
-            {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
-          </ws-button>
-        }
-
-        <!-- On Leave: can return, terminate, or deactivate/activate -->
-        @if (payee.status === PayeeStatus.OnLeave) {
-          <ws-button *hasPermission="'Payees.Update'" variant="primary" size="sm" (click)="onMarkActive()">
-            <app-icon name="check-circle" [size]="14" />
-            {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
-          </ws-button>
-          <ws-button *hasPermission="'Payees.Terminate'" variant="danger" size="sm" (click)="openTerminate()">
-            <app-icon name="x-circle" [size]="14" />
-            {{ 'PAYEES.ACTION_TERMINATE' | translate }}
-          </ws-button>
-          @if (payee.isActive) {
-            <ws-button *hasPermission="'Payees.Deactivate'" variant="danger" size="sm" (click)="openDeactivate()">
-              <app-icon name="ban" [size]="14" />
-              {{ 'PAYEES.ACTION_DEACTIVATE' | translate }}
-            </ws-button>
-          } @else {
-            <ws-button *hasPermission="'Payees.Deactivate'" variant="secondary" size="sm" (click)="onActivate()">
-              <app-icon name="rotate-ccw" [size]="14" />
-              {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
-            </ws-button>
-          }
-        }
-
-        <!-- Terminated: can rehire -->
-        @if (payee.status === PayeeStatus.Terminated) {
-          <ws-button *hasPermission="'Payees.Update'" variant="primary" size="sm" (click)="onMarkActive()">
-            <app-icon name="check-circle" [size]="14" />
-            {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
-          </ws-button>
-          @if (!payee.isActive) {
-            <ws-button *hasPermission="'Payees.Deactivate'" variant="secondary" size="sm" (click)="onActivate()">
-              <app-icon name="rotate-ccw" [size]="14" />
-              {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
-            </ws-button>
-          }
-        }
-      </div>
-
-      <div class="payee-detail__tabs">
-        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'profile'" (click)="setTab('profile')">
-          {{ 'PAYEES.DETAIL_TAB_PROFILE' | translate }}
-        </button>
-        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'assignments'" (click)="setTab('assignments')">
-          {{ 'PAYEES.DETAIL_TAB_ASSIGNMENTS' | translate }}
-        </button>
-        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'quotas'" (click)="setTab('quotas')">
-          {{ 'PAYEES.DETAIL_TAB_QUOTAS' | translate }}
-        </button>
-        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'attainment'" (click)="setTab('attainment')">
-          {{ 'PAYEES.DETAIL_TAB_ATTAINMENT' | translate }}
-        </button>
-        <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'activity'" (click)="setTab('activity')">
-          {{ 'PAYEES.DETAIL_TAB_ACTIVITY' | translate }}
-        </button>
-      </div>
-
-      <div class="payee-detail__body">
-
-        @if (activeTab() === 'profile') {
-          <div class="profile-grid">
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'PAYEES.FIELD_EMPLOYEE_CODE' | translate }}</span>
-              <span class="profile-field__value mono">{{ payee.employeeCode }}</span>
-            </div>
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'PAYEES.FIELD_EMAIL' | translate }}</span>
-              <span class="profile-field__value">{{ payee.email }}</span>
-            </div>
+    <!-- ── Compact header ─────────────────────────────────────────────────── -->
+    <div class="pd-header">
+      <a class="pd-header__back" [routerLink]="['/payees']">
+        <app-icon name="chevron-left" [size]="14" />
+        {{ 'PAYEES.TITLE' | translate }}
+      </a>
+      <div class="pd-header__row1">
+        <!-- Avatar initials -->
+        <div class="pd-avatar" [class]="'pd-avatar--' + payee.status.toLowerCase()">
+          {{ payee.fullName.charAt(0).toUpperCase() }}
+        </div>
+        <div class="pd-header__title-area">
+          <h1 class="pd-header__name">{{ payee.fullName }}</h1>
+          <div class="pd-header__meta">
             @if (payee.role) {
-              <div class="profile-field">
-                <span class="profile-field__label">{{ 'PAYEES.FIELD_ROLE' | translate }}</span>
-                <span class="profile-field__value">{{ payee.role }}</span>
-              </div>
+              <span>{{ payee.role }}</span><span class="pd-meta-sep">·</span>
+            }
+            <span class="pd-meta-code">{{ payee.employeeCode }}</span>
+            @if (payee.email) {
+              <span class="pd-meta-sep">·</span>
+              <span class="pd-meta-email">{{ payee.email }}</span>
             }
             @if (payee.managerName) {
-              <div class="profile-field">
-                <span class="profile-field__label">{{ 'PAYEES.FIELD_MANAGER' | translate }}</span>
-                <span class="profile-field__value">{{ payee.managerName }}</span>
+              <span class="pd-meta-sep">·</span>
+              <span>{{ 'PAYEES.FIELD_MANAGER' | translate }}: {{ payee.managerName }}</span>
+            }
+          </div>
+        </div>
+        <div class="pd-header__actions">
+          <ws-badge [variant]="payeeStatusVariant(payee.status)" [dot]="payee.status === PayeeStatus.Active">
+            {{ payeeStatusKey(payee.status) | translate }}
+          </ws-badge>
+          @if (!payee.isActive) {
+            <ws-badge variant="warning">{{ 'PAYEES.STATUS_INACTIVE' | translate }}</ws-badge>
+          }
+          <ws-button variant="secondary" size="sm" (click)="openEdit()">
+            <app-icon name="edit" [size]="14" />
+            {{ 'COMMON.EDIT' | translate }}
+          </ws-button>
+          @if (payee.status === PayeeStatus.Active) {
+            <ws-button *hasPermission="'Payees.Update'" variant="secondary" size="sm" (click)="onMarkOnLeave()">
+              {{ 'PAYEES.ACTION_MARK_ON_LEAVE' | translate }}
+            </ws-button>
+          }
+          @if (payee.status === PayeeStatus.OnLeave) {
+            <ws-button *hasPermission="'Payees.Update'" variant="primary" size="sm" (click)="onMarkActive()">
+              {{ 'PAYEES.ACTION_MARK_ACTIVE' | translate }}
+            </ws-button>
+            <ws-button *hasPermission="'Payees.Terminate'" variant="danger" size="sm" (click)="openTerminate()">
+              {{ 'PAYEES.ACTION_TERMINATE' | translate }}
+            </ws-button>
+            @if (payee.isActive) {
+              <ws-button *hasPermission="'Payees.Deactivate'" variant="danger" size="sm" (click)="openDeactivate()">
+                {{ 'PAYEES.ACTION_DEACTIVATE' | translate }}
+              </ws-button>
+            } @else {
+              <ws-button *hasPermission="'Payees.Deactivate'" variant="secondary" size="sm" (click)="onActivate()">
+                {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
+              </ws-button>
+            }
+          }
+          @if (payee.status === PayeeStatus.Terminated && !payee.isActive) {
+            <ws-button *hasPermission="'Payees.Deactivate'" variant="secondary" size="sm" (click)="onActivate()">
+              {{ 'PAYEES.ACTION_ACTIVATE' | translate }}
+            </ws-button>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tabs ──────────────────────────────────────────────────────────── -->
+    <div class="pd-tabs">
+      <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'overview'" (click)="setTab('overview')">
+        {{ 'PAYEES.DETAIL_TAB_OVERVIEW' | translate }}
+      </button>
+      <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'profile'" (click)="setTab('profile')">
+        {{ 'PAYEES.DETAIL_TAB_PROFILE' | translate }}
+      </button>
+      <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'activity'" (click)="setTab('activity')">
+        {{ 'PAYEES.DETAIL_TAB_ACTIVITY' | translate }}
+      </button>
+    </div>
+
+    <!-- ── Tab bodies ─────────────────────────────────────────────────────── -->
+    <div class="pd-body">
+
+      <!-- ────────── OVERVIEW TAB ───────────────────────────────────────── -->
+      @if (activeTab() === 'overview') {
+
+        <!-- Period filter -->
+        <div class="pd-period-filter">
+          <button class="period-btn" [class.period-btn--active]="period() === 'active'" (click)="setPeriod('active')">
+            {{ 'DASHBOARD.PERIOD_ACTIVE' | translate }}
+          </button>
+          <button class="period-btn" [class.period-btn--active]="period() === 'all'" (click)="setPeriod('all')">
+            {{ 'DASHBOARD.PERIOD_ALL' | translate }}
+          </button>
+        </div>
+
+        @if (dashboardLoading()) {
+          <div class="bento-grid">
+            @for (i of [0,1,2,3]; track i) {
+              <div class="bento-card bento-card--skeleton">
+                <span class="skeleton skeleton--title"></span>
+                <span class="skeleton skeleton--text"></span>
               </div>
             }
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
-              <span class="profile-field__value">{{ payee.hireDate | dateFormat }}</span>
-            </div>
-            @if (payee.terminationDate) {
-              <div class="profile-field">
-                <span class="profile-field__label">{{ 'PAYEES.FIELD_TERMINATION_DATE' | translate }}</span>
-                <span class="profile-field__value">{{ payee.terminationDate | dateFormat }}</span>
+          </div>
+        } @else {
+          <div class="bento-grid">
+
+            <!-- Card 1 — Attainment Gauges -->
+            <div class="bento-card">
+              <div class="bento-card__header">
+                <span class="bento-card__title">{{ 'DASHBOARD.GAUGES_TITLE' | translate }}</span>
+                <a class="bento-card__link" [routerLink]="['/quotas']" [queryParams]="{ payeeId: payee.id }">
+                  {{ 'DASHBOARD.VIEW_ALL' | translate }} →
+                </a>
               </div>
-            }
-            @if (payee.employmentType) {
-              <div class="profile-field">
-                <span class="profile-field__label">{{ 'PAYEES.FIELD_EMPLOYMENT_TYPE' | translate }}</span>
-                <span class="profile-field__value">{{ 'PAYEES.EMPLOYMENT_TYPE_' + payee.employmentType.toUpperCase() | translate }}</span>
-              </div>
-            }
-            @if (payee.location) {
-              <div class="profile-field">
-                <span class="profile-field__label">{{ 'PAYEES.FIELD_LOCATION' | translate }}</span>
-                <span class="profile-field__value">{{ payee.location }}</span>
-              </div>
-            }
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'COMMON.STATUS' | translate }}</span>
-              <span class="profile-field__value">
-                <ws-badge [variant]="payeeStatusVariant(payee.status)">
-                  {{ payeeStatusKey(payee.status) | translate }}
-                </ws-badge>
-              </span>
-            </div>
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'PAYEES.FIELD_PLATFORM_STATUS' | translate }}</span>
-              <span class="profile-field__value">
-                @if (payee.isActive) {
-                  <ws-badge variant="success">{{ 'PAYEES.PLATFORM_ACTIVE' | translate }}</ws-badge>
+              <div class="bento-card__body">
+                @if (!dashboard()?.attainmentItems?.length) {
+                  <p class="bento-empty">{{ 'PAYEES.ATTAINMENT_TAB_EMPTY' | translate }}</p>
                 } @else {
-                  <ws-badge variant="warning">{{ 'PAYEES.STATUS_INACTIVE' | translate }}</ws-badge>
+                  @for (a of dashboard()!.attainmentItems; track a.quotaId) {
+                    <div class="bento-gauge-row" role="link" tabindex="0" [routerLink]="['/quotas', a.quotaId]" (keydown.enter)="$any($event.target).click()">
+                      <div class="bento-gauge-wrap">
+                        <ws-gauge
+                          [value]="a.attainmentValue"
+                          [pacingValue]="computePacing(a.periodStart, a.periodEnd)"
+                        />
+                      </div>
+                      <div class="bento-gauge-info">
+                        <span class="bento-gauge-info__plan">{{ a.planName }}</span>
+                        <span class="bento-gauge-info__period">{{ a.periodStart | dateFormat }} – {{ a.periodEnd | dateFormat }}</span>
+                        <div class="bento-gauge-info__amounts">
+                          <div class="bento-gauge-info__stat">
+                            <span class="bento-stat-lbl">{{ 'ATTAINMENT.TARGET' | translate }}</span>
+                            @if (a.measurementType === QuotaMeasurementType.Units) {
+                              {{ a.targetAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                            } @else {
+                              {{ a.targetAmount | currencyFormat: a.currency }}
+                            }
+                          </div>
+                          <div class="bento-gauge-info__stat">
+                            <span class="bento-stat-lbl">{{ 'ATTAINMENT.ACHIEVED' | translate }}</span>
+                            @if (a.measurementType === QuotaMeasurementType.Units) {
+                              {{ a.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                            } @else {
+                              {{ a.achievedAmount | currencyFormat: a.currency }}
+                            }
+                          </div>
+                        </div>
+                        <div class="bento-mini-bar">
+                          <div class="bento-mini-bar__track">
+                            <div class="bento-mini-bar__fill" [class]="gaugeColorClass(a.attainmentValue)"
+                                 [style.width.%]="(a.attainmentValue > 1 ? 1 : a.attainmentValue) * 100"></div>
+                          </div>
+                          <span class="bento-mini-bar__pct" [class]="gaugeColorClass(a.attainmentValue)">
+                            {{ a.attainmentPercent }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  }
                 }
-              </span>
-            </div>
-            @if (payee.deactivatedAt) {
-              <div class="profile-field">
-                <span class="profile-field__label">{{ 'PAYEES.FIELD_DEACTIVATED_AT' | translate }}</span>
-                <span class="profile-field__value">{{ payee.deactivatedAt | dateFormat }}</span>
               </div>
-            }
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'PAYEES.COL_ASSIGNMENTS' | translate }}</span>
-              <span class="profile-field__value mono">{{ payee.activeAssignmentCount }}</span>
             </div>
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'COMMON.CREATED_AT' | translate }}</span>
-              <span class="profile-field__value">{{ payee.createdAt | dateFormat }}</span>
-            </div>
-            <div class="profile-field">
-              <span class="profile-field__label">{{ 'COMMON.UPDATED_AT' | translate }}</span>
-              <span class="profile-field__value">{{ payee.updatedAt | dateFormat }}</span>
-            </div>
-          </div>
-        }
 
-        @if (activeTab() === 'assignments') {
-          <div class="tab-content">
-            <div class="tab-content__header">
-              <ws-button variant="primary" size="sm" [routerLink]="['/assignments/new']" [queryParams]="{ payeeId: payee.id, payeeName: payee.fullName, payeeCode: payee.employeeCode, returnTo: '/payees/' + payee.id }">
-                {{ 'ASSIGNMENTS.NEW' | translate }}
-              </ws-button>
+            <!-- Card 2 — Earnings Trend -->
+            <div class="bento-card">
+              <div class="bento-card__header">
+                <span class="bento-card__title">{{ 'DASHBOARD.TREND_TITLE' | translate }}</span>
+              </div>
+              <div class="bento-card__body">
+                <ws-line-chart
+                  [points]="trendChartPoints(dashboard()?.earningsTrend ?? [])"
+                  [emptyLabel]="'DASHBOARD.TREND_EMPTY' | translate"
+                />
+              </div>
             </div>
-            <ws-table>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{{ 'ASSIGNMENTS.COL_PLAN' | translate }}</th>
-                    <th>{{ 'ASSIGNMENTS.COL_PERIOD' | translate }}</th>
-                    <th>{{ 'ASSIGNMENTS.COL_STATUS' | translate }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @if (assignmentsLoading()) {
-                    @for (row of [0,1,2]; track row) {
-                      <tr class="skeleton-row">
-                        <td><span class="skeleton skeleton--text-wide"></span></td>
-                        <td><span class="skeleton skeleton--text"></span></td>
-                        <td><span class="skeleton skeleton--badge"></span></td>
-                      </tr>
-                    }
-                  } @else if ((payeeAssignmentsResult()?.items?.length ?? 0) === 0) {
-                    <tr>
-                      <td colspan="3">
-                        <ws-table-empty messageKey="PAYEES.ASSIGNMENTS_TAB_HINT" />
-                      </td>
-                    </tr>
-                  } @else {
-                    @for (a of payeeAssignmentsResult()!.items; track a.id) {
-                      <tr>
-                        <td>
-                          <a class="plan-link" [routerLink]="['/plans', a.planId]">
-                            {{ a.planName }}
-                            <span class="plan-version">v{{ a.planVersion }}</span>
-                          </a>
-                        </td>
-                        <td class="col-secondary">{{ a.effectiveStart | dateFormat }} – {{ a.effectiveEnd | dateFormat }}</td>
-                        <td>
-                          <ws-badge [variant]="assignmentStatusVariant(a.status)">
-                            {{ 'ASSIGNMENTS.STATUS_' + a.status.toUpperCase() | translate }}
-                          </ws-badge>
-                        </td>
-                      </tr>
-                    }
-                  }
-                </tbody>
-              </table>
-            </ws-table>
-            @if (payeeAssignmentsResult() && payeeAssignmentsResult()!.totalPages > 1) {
-              <ws-pagination
-                [currentPage]="assignmentsPage()"
-                [totalPages]="payeeAssignmentsResult()!.totalPages"
-                [totalCount]="payeeAssignmentsResult()!.totalCount"
-                [pageSize]="10"
-                (pageChange)="loadPayeeAssignments($event)"
-              />
-            }
-          </div>
-        }
 
-        @if (activeTab() === 'quotas') {
-          <div class="tab-content">
-            <div class="tab-content__header">
-              <ws-button variant="primary" size="sm" [routerLink]="['/quotas/new']" [queryParams]="{ payeeId: payee.id, payeeName: payee.fullName, payeeCode: payee.employeeCode, returnTo: '/payees/' + payee.id }">
-                {{ 'QUOTAS.NEW' | translate }}
-              </ws-button>
-            </div>
-            <ws-table>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{{ 'QUOTAS.COL_PERIOD' | translate }}</th>
-                    <th class="col-num">{{ 'QUOTAS.COL_TARGET' | translate }}</th>
-                    <th>{{ 'QUOTAS.COL_STATUS' | translate }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @if (quotasLoading()) {
-                    @for (row of [0,1,2]; track row) {
-                      <tr class="skeleton-row">
-                        <td><span class="skeleton skeleton--text"></span></td>
-                        <td><span class="skeleton skeleton--text"></span></td>
-                        <td><span class="skeleton skeleton--badge"></span></td>
-                      </tr>
-                    }
-                  } @else if ((payeeQuotasResult()?.items?.length ?? 0) === 0) {
-                    <tr>
-                      <td colspan="3">
-                        <ws-table-empty messageKey="PAYEES.QUOTAS_TAB_HINT" />
-                      </td>
-                    </tr>
-                  } @else {
-                    @for (q of payeeQuotasResult()!.items; track q.id) {
-                      <tr [routerLink]="['/quotas', q.id]">
-                        <td class="col-secondary">{{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}</td>
-                        <td class="col-num">{{ q.amount | currencyFormat: q.currency }}</td>
-                        <td>
-                          <ws-badge [variant]="quotaStatusVariant(q.status)">
-                            {{ 'QUOTAS.STATUS_' + q.status.toUpperCase() | translate }}
-                          </ws-badge>
-                        </td>
-                      </tr>
-                    }
-                  }
-                </tbody>
-              </table>
-            </ws-table>
-            @if (payeeQuotasResult() && payeeQuotasResult()!.totalPages > 1) {
-              <ws-pagination
-                [currentPage]="quotasPage()"
-                [totalPages]="payeeQuotasResult()!.totalPages"
-                [totalCount]="payeeQuotasResult()!.totalCount"
-                [pageSize]="10"
-                (pageChange)="loadPayeeQuotas($event)"
-              />
-            }
-          </div>
-        }
-
-        @if (activeTab() === 'attainment') {
-          <div class="tab-content">
-            @if (attainmentLoading()) {
-              <div class="attainment-grid">
-                @for (row of [0,1,2]; track row) {
-                  <div class="attainment-card skeleton-card">
-                    <span class="skeleton skeleton--title"></span>
-                    <span class="skeleton skeleton--text"></span>
+            <!-- Card 3 — Quotas virtual scroll -->
+            <div class="bento-card">
+              <div class="bento-card__header">
+                <span class="bento-card__title">{{ 'DASHBOARD.QUOTAS_TITLE' | translate }}</span>
+                <a class="bento-card__link" [routerLink]="['/quotas']" [queryParams]="{ payeeId: payee.id }">
+                  {{ 'DASHBOARD.VIEW_ALL' | translate }} →
+                </a>
+              </div>
+              <div class="bento-card__body">
+                @if (!quotas().length && !quotasLoading()) {
+                  <p class="bento-empty">{{ 'PAYEES.QUOTAS_TAB_HINT' | translate }}</p>
+                }
+                @for (q of quotas(); track q.id) {
+                  <div class="bento-list-row clickable" role="link" tabindex="0"
+                       [routerLink]="['/quotas', q.id]"
+                       (keydown.enter)="$any($event.target).click()">
+                    <div class="bento-list-row__main">
+                      <span class="bento-list-row__name">{{ q.planName }}</span>
+                      <span class="bento-list-row__sub">{{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}</span>
+                    </div>
+                    <div class="bento-list-row__end">
+                      <span class="bento-list-row__val">
+                        @if (q.measurementType === QuotaMeasurementType.Units) {
+                          {{ q.amount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
+                        } @else {
+                          {{ q.amount | currencyFormat: q.currency }}
+                        }
+                      </span>
+                      <ws-badge [variant]="quotaStatusVariant(q.status)" size="sm">
+                        {{ 'QUOTAS.STATUS_' + q.status.toUpperCase() | translate }}
+                      </ws-badge>
+                    </div>
                   </div>
                 }
+                @if (quotasLoading()) {
+                  <div class="bento-loading"><span class="skeleton skeleton--text"></span></div>
+                }
+                @if (quotasHasMore() && !quotasLoading()) {
+                  <button class="bento-load-more" (click)="loadMoreQuotas()">
+                    {{ 'DASHBOARD.LOAD_MORE' | translate }}
+                  </button>
+                }
               </div>
-            } @else if ((attainmentResult()?.length ?? 0) === 0) {
-              <ws-table-empty messageKey="PAYEES.ATTAINMENT_TAB_EMPTY" />
-            } @else {
-              <div class="attainment-grid">
-                @for (a of attainmentResult()!; track a.quotaId) {
-                  <div class="attainment-card">
-                    <div class="attainment-card__header">
-                      <span class="attainment-card__plan">{{ a.planName }}</span>
-                      <ws-badge [variant]="quotaStatusVariant(a.status)">
-                        {{ 'QUOTAS.STATUS_' + a.status.toUpperCase() | translate }}
+            </div>
+
+            <!-- Card 4 — Assignments virtual scroll -->
+            <div class="bento-card">
+              <div class="bento-card__header">
+                <span class="bento-card__title">{{ 'DASHBOARD.ASSIGNMENTS_TITLE' | translate }}</span>
+              </div>
+              <div class="bento-card__body">
+                @if (!assignments().length && !assignmentsLoading()) {
+                  <p class="bento-empty">{{ 'PAYEES.ASSIGNMENTS_TAB_HINT' | translate }}</p>
+                }
+                @for (a of assignments(); track a.id) {
+                  <div class="bento-list-row clickable" role="link" tabindex="0"
+                       [routerLink]="['/plans', a.planId]"
+                       (keydown.enter)="$any($event.target).click()">
+                    <div class="bento-list-row__main">
+                      <span class="bento-list-row__name">
+                        {{ a.planName }}
+                        <span class="plan-ver">v{{ a.planVersion }}</span>
+                      </span>
+                      <span class="bento-list-row__sub">{{ a.effectiveStart | dateFormat }} – {{ a.effectiveEnd | dateFormat }}</span>
+                    </div>
+                    <div class="bento-list-row__end">
+                      <ws-badge [variant]="a.status === 'Active' ? 'success' : 'neutral'" size="sm">
+                        {{ 'ASSIGNMENTS.STATUS_' + a.status.toUpperCase() | translate }}
                       </ws-badge>
                     </div>
-                    <div class="attainment-card__meta">
-                      <span class="attainment-card__period col-secondary">{{ a.periodStart | dateFormat }} – {{ a.periodEnd | dateFormat }}</span>
-                      <ws-badge variant="neutral">
-                        {{ a.measurementType === QuotaMeasurementType.Units ? ('ATTAINMENT.MEASURE_UNITS' | translate) : ('ATTAINMENT.MEASURE_REVENUE' | translate) }}
-                      </ws-badge>
+                  </div>
+                }
+                @if (assignmentsLoading()) {
+                  <div class="bento-loading"><span class="skeleton skeleton--text"></span></div>
+                }
+                @if (assignmentsHasMore() && !assignmentsLoading()) {
+                  <button class="bento-load-more" (click)="loadMoreAssignments()">
+                    {{ 'DASHBOARD.LOAD_MORE' | translate }}
+                  </button>
+                }
+              </div>
+            </div>
+
+            <!-- Card 5 — Recent Credits -->
+            <div class="bento-card">
+              <div class="bento-card__header">
+                <span class="bento-card__title">{{ 'DASHBOARD.CREDITS_TITLE' | translate }}</span>
+                <a class="bento-card__link" [routerLink]="['/credits']" [queryParams]="{ payeeId: payee.id }">
+                  {{ 'DASHBOARD.VIEW_ALL' | translate }} →
+                </a>
+              </div>
+              <div class="bento-card__body">
+                @if (!credits().length && !creditsLoading()) {
+                  <p class="bento-empty">{{ 'DASHBOARD.CREDITS_EMPTY' | translate }}</p>
+                }
+                @for (c of credits(); track c.id) {
+                  <div class="bento-list-row clickable" role="link" tabindex="0"
+                       [routerLink]="['/credits', c.id]"
+                       (keydown.enter)="$any($event.target).click()">
+                    <div class="bento-list-row__main">
+                      <span class="bento-list-row__name">{{ c.planName }}</span>
+                      <span class="bento-list-row__sub">{{ c.referenceNumber }} · {{ c.allocatedAt | dateFormat }}</span>
                     </div>
-                    <div class="attainment-card__numbers">
-                      <div class="attainment-stat">
-                        <span class="attainment-stat__label">{{ 'ATTAINMENT.TARGET' | translate }}</span>
-                        <span class="attainment-stat__value">
-                          @if (a.measurementType === QuotaMeasurementType.Units) {
-                            {{ a.targetAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
-                          } @else {
-                            {{ a.targetAmount | currencyFormat: a.currency }}
-                          }
-                        </span>
-                      </div>
-                      <div class="attainment-stat">
-                        <span class="attainment-stat__label">{{ 'ATTAINMENT.ACHIEVED' | translate }}</span>
-                        <span class="attainment-stat__value">
-                          @if (a.measurementType === QuotaMeasurementType.Units) {
-                            {{ a.achievedAmount | number: '1.0-0' }} {{ 'ATTAINMENT.UNITS' | translate }}
-                          } @else {
-                            {{ a.achievedAmount | currencyFormat: a.currency }}
-                          }
-                        </span>
-                      </div>
-                    </div>
-                    <div class="attainment-progress">
-                      <div class="attainment-progress__bar-wrap">
-                        <div
-                          class="attainment-progress__fill"
-                          [class]="attainmentColorClass(a.attainmentValue)"
-                          [style.width.%]="(a.attainmentValue > 1 ? 1 : a.attainmentValue) * 100"
-                        ></div>
-                      </div>
-                      <span class="attainment-progress__pct" [class]="attainmentColorClass(a.attainmentValue)">
-                        {{ a.attainmentPercent }}
+                    <div class="bento-list-row__end">
+                      <span class="bento-list-row__val">
+                        {{ c.creditedAmount | currencyFormat: c.creditedCurrency }}
                       </span>
                     </div>
                   </div>
                 }
+                @if (creditsLoading()) {
+                  <div class="bento-loading"><span class="skeleton skeleton--text"></span></div>
+                }
+                @if (creditsHasMore() && !creditsLoading()) {
+                  <button class="bento-load-more" (click)="loadMoreCredits()">
+                    {{ 'DASHBOARD.LOAD_MORE' | translate }}
+                  </button>
+                }
               </div>
-            }
-          </div>
+            </div>
+
+          </div><!-- end bento-grid -->
         }
+      }
 
-        @if (activeTab() === 'activity') {
-          <div class="tab-placeholder">
-            <app-icon name="activity" [size]="32" />
-            <p>{{ 'COMMON.COMING_SOON' | translate }}</p>
+      <!-- ────────── PROFILE TAB ─────────────────────────────────────────── -->
+      @if (activeTab() === 'profile') {
+        <ws-card variant="default" padding="lg">
+        <div class="profile-grid">
+          <div class="profile-field">
+            <span class="profile-field__label">{{ 'PAYEES.FIELD_EMPLOYEE_CODE' | translate }}</span>
+            <span class="profile-field__value mono">{{ payee.employeeCode }}</span>
           </div>
-        }
-
-      </div>
-
-      <!-- Edit modal — shared PayeeFormComponent; lg size fits 6 fields without scroll -->
-      <ws-modal
-        [(isOpen)]="editModalOpen"
-        size="lg"
-        [title]="'PAYEES.EDIT_TITLE' | translate"
-      >
-        <app-payee-form
-          [payee]="store.selectedPayee()"
-          (saved)="onEditSaved($event)"
-          (cancelled)="editModalOpen.set(false)"
-        />
-      </ws-modal>
-
-      <!-- Terminate modal -->
-      <ws-confirmation-modal
-        [(isOpen)]="terminateModalOpen"
-        [title]="'PAYEES.TERMINATE_TITLE' | translate"
-        [message]="'PAYEES.TERMINATE_MSG' | translate"
-        [confirmLabel]="'PAYEES.ACTION_TERMINATE' | translate"
-        [cancelLabel]="'COMMON.CANCEL' | translate"
-        variant="danger"
-        [loading]="saving()"
-        (confirmed)="onConfirmTerminate()"
-        (cancelled)="terminateModalOpen.set(false)"
-      >
-        <form [formGroup]="terminateForm" class="terminate-form">
-          <div class="terminate-field-wrap">
-            <ws-date-picker
-              [label]="'PAYEES.FIELD_TERMINATION_DATE'"
-              formControlName="terminationDate"
-              [error]="hasTerminateError('terminationDate', 'required') ? 'VALIDATION.REQUIRED' : ''"
-            />
+          <div class="profile-field">
+            <span class="profile-field__label">{{ 'PAYEES.FIELD_EMAIL' | translate }}</span>
+            <span class="profile-field__value">{{ payee.email }}</span>
           </div>
-        </form>
-      </ws-confirmation-modal>
+          @if (payee.role) {
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_ROLE' | translate }}</span>
+              <span class="profile-field__value">{{ payee.role }}</span>
+            </div>
+          }
+          @if (payee.managerName) {
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_MANAGER' | translate }}</span>
+              <span class="profile-field__value">{{ payee.managerName }}</span>
+            </div>
+          }
+          <div class="profile-field">
+            <span class="profile-field__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
+            <span class="profile-field__value">{{ payee.hireDate | dateFormat }}</span>
+          </div>
+          @if (payee.terminationDate) {
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_TERMINATION_DATE' | translate }}</span>
+              <span class="profile-field__value">{{ payee.terminationDate | dateFormat }}</span>
+            </div>
+          }
+          @if (payee.employmentType) {
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_EMPLOYMENT_TYPE' | translate }}</span>
+              <span class="profile-field__value">{{ 'PAYEES.EMPLOYMENT_TYPE_' + payee.employmentType.toUpperCase() | translate }}</span>
+            </div>
+          }
+          @if (payee.location) {
+            <div class="profile-field">
+              <span class="profile-field__label">{{ 'PAYEES.FIELD_LOCATION' | translate }}</span>
+              <span class="profile-field__value">{{ payee.location }}</span>
+            </div>
+          }
+          <div class="profile-field">
+            <span class="profile-field__label">{{ 'COMMON.CREATED_AT' | translate }}</span>
+            <span class="profile-field__value">{{ payee.createdAt | dateFormat }}</span>
+          </div>
+          <div class="profile-field">
+            <span class="profile-field__label">{{ 'COMMON.UPDATED_AT' | translate }}</span>
+            <span class="profile-field__value">{{ payee.updatedAt | dateFormat }}</span>
+          </div>
+        </div>
+        </ws-card>
+      }
 
-      <!-- Deactivate modal -->
-      <ws-confirmation-modal
-        [(isOpen)]="deactivateModalOpen"
-        [title]="'PAYEES.DEACTIVATE_TITLE' | translate"
-        [message]="'PAYEES.DEACTIVATE_MSG' | translate"
-        [confirmLabel]="'PAYEES.ACTION_DEACTIVATE' | translate"
-        [cancelLabel]="'COMMON.CANCEL' | translate"
-        variant="danger"
-        [loading]="deactivateSaving()"
-        (confirmed)="onConfirmDeactivate()"
-        (cancelled)="deactivateModalOpen.set(false)"
+      <!-- ────────── ACTIVITY TAB ───────────────────────────────────────── -->
+      @if (activeTab() === 'activity') {
+        <div class="tab-placeholder">
+          <app-icon name="activity" [size]="32" />
+          <p>{{ 'COMMON.COMING_SOON' | translate }}</p>
+        </div>
+      }
+
+    </div>
+
+    <!-- ── Modals ─────────────────────────────────────────────────────────── -->
+    <ws-modal [(isOpen)]="editModalOpen" size="lg" [title]="'PAYEES.EDIT_TITLE' | translate">
+      <app-payee-form
+        [payee]="store.selectedPayee()"
+        (saved)="onEditSaved($event)"
+        (cancelled)="editModalOpen.set(false)"
       />
-    </ws-page-layout>
+    </ws-modal>
+
+    <ws-confirmation-modal
+      [(isOpen)]="terminateModalOpen"
+      [title]="'PAYEES.TERMINATE_TITLE' | translate"
+      [message]="'PAYEES.TERMINATE_MSG' | translate"
+      [confirmLabel]="'PAYEES.ACTION_TERMINATE' | translate"
+      [cancelLabel]="'COMMON.CANCEL' | translate"
+      variant="danger"
+      [loading]="saving()"
+      (confirmed)="onConfirmTerminate()"
+      (cancelled)="terminateModalOpen.set(false)"
+    >
+      <form [formGroup]="terminateForm" class="terminate-form">
+        <div class="terminate-field-wrap">
+          <ws-date-picker
+            [label]="'PAYEES.FIELD_TERMINATION_DATE'"
+            formControlName="terminationDate"
+            [error]="hasTerminateError('terminationDate', 'required') ? 'VALIDATION.REQUIRED' : ''"
+          />
+        </div>
+      </form>
+    </ws-confirmation-modal>
+
+    <ws-confirmation-modal
+      [(isOpen)]="deactivateModalOpen"
+      [title]="'PAYEES.DEACTIVATE_TITLE' | translate"
+      [message]="'PAYEES.DEACTIVATE_MSG' | translate"
+      [confirmLabel]="'PAYEES.ACTION_DEACTIVATE' | translate"
+      [cancelLabel]="'COMMON.CANCEL' | translate"
+      variant="danger"
+      [loading]="deactivateSaving()"
+      (confirmed)="onConfirmDeactivate()"
+      (cancelled)="deactivateModalOpen.set(false)"
+    />
+
   }
 </app-shell>

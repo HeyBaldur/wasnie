@@ -117,7 +117,7 @@ public sealed class ListCreditsHandler(
         return query;
     }
 
-    private static async Task<List<CreditListDto>> EnrichPageAsync(
+    internal static async Task<List<CreditListDto>> EnrichPageAsync(
         IApplicationDbContext db,
         IReadOnlyList<Credit> credits,
         CreditFilterQuery filter,

@@ -410,6 +410,7 @@
     "PLATFORM_ACTIVE": "Active",
     "TERMINATE_TITLE": "Terminate Payee",
     "TERMINATE_MSG": "This will mark the payee as terminated. Please enter the termination date.",
+    "DETAIL_TAB_OVERVIEW": "Overview",
     "DETAIL_TAB_PROFILE": "Profile",
     "DETAIL_TAB_ASSIGNMENTS": "Assignments",
     "DETAIL_TAB_QUOTAS": "Quotas",
@@ -427,6 +428,20 @@
     "MEASURE_REVENUE": "Revenue",
     "MEASURE_UNITS": "Units",
     "UNITS": "units"
+  },
+  "DASHBOARD": {
+    "GAUGES_TITLE": "Quota Attainment",
+    "TREND_TITLE": "Earnings Trend (12 months)",
+    "TREND_EMPTY": "No credit history yet for this payee.",
+    "QUOTAS_TITLE": "Quotas",
+    "ASSIGNMENTS_TITLE": "Assignments",
+    "CREDITS_TITLE": "Recent Credits",
+    "CREDITS_EMPTY": "No credits in this period.",
+    "VIEW_ALL": "View all",
+    "END_OF_LIST": "End of list",
+    "LOAD_MORE": "Load more",
+    "PERIOD_ACTIVE": "Active",
+    "PERIOD_ALL": "All"
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Reference",

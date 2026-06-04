@@ -89,6 +89,20 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    [HttpGet("{payeeId:guid}/dashboard")]
+    public async Task<IActionResult> GetDashboard(Guid payeeId, [FromQuery] string period = "active", CancellationToken cancellationToken = default)
+    {
+        var result = await mediator.Send(new GetPayeeDashboardQuery(payeeId, period), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    [HttpGet("{payeeId:guid}/credits")]
+    public async Task<IActionResult> GetCredits(Guid payeeId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string period = "active", CancellationToken cancellationToken = default)
+    {
+        var result = await mediator.Send(new GetPayeeCreditsQuery(payeeId, page, pageSize, period), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("{payeeId:guid}/deactivate")]
     public async Task<IActionResult> Deactivate(Guid payeeId, CancellationToken cancellationToken)
     {

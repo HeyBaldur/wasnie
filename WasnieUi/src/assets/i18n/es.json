@@ -410,6 +410,7 @@
     "PLATFORM_ACTIVE": "Activo",
     "TERMINATE_TITLE": "Dar de baja al beneficiario",
     "TERMINATE_MSG": "Esto marcará al beneficiario como dado de baja. Introduce la fecha de baja.",
+    "DETAIL_TAB_OVERVIEW": "Resumen",
     "DETAIL_TAB_PROFILE": "Perfil",
     "DETAIL_TAB_ASSIGNMENTS": "Asignaciones",
     "DETAIL_TAB_QUOTAS": "Cuotas",
@@ -427,6 +428,20 @@
     "MEASURE_REVENUE": "Ingresos",
     "MEASURE_UNITS": "Unidades",
     "UNITS": "uds."
+  },
+  "DASHBOARD": {
+    "GAUGES_TITLE": "Cumplimiento de Cuotas",
+    "TREND_TITLE": "Tendencia de Ganancias (12 meses)",
+    "TREND_EMPTY": "Sin historial de créditos para este beneficiario.",
+    "QUOTAS_TITLE": "Cuotas",
+    "ASSIGNMENTS_TITLE": "Asignaciones",
+    "CREDITS_TITLE": "Créditos Recientes",
+    "CREDITS_EMPTY": "Sin créditos en este período.",
+    "VIEW_ALL": "Ver todo",
+    "END_OF_LIST": "Fin de la lista",
+    "LOAD_MORE": "Cargar más",
+    "PERIOD_ACTIVE": "Activo",
+    "PERIOD_ALL": "Todo"
   },
   "QUOTAS": {
     "TITLE": "Cuotas",
