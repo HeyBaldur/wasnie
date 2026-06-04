@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Text.RegularExpressions;
+using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Models.Imports;
 
 namespace Wasnie.Application.Services.Imports;
@@ -11,24 +11,17 @@ namespace Wasnie.Application.Services.Imports;
 /// </summary>
 public static class TransactionFieldValidators
 {
-    // Plans allow any 3-letter uppercase code (CreatePlanCommandValidator: Length(3)).
-    // Currency validation here mirrors that constraint — no additional whitelist.
-    // If a currency whitelist becomes necessary, add it here and update both wizards simultaneously.
-    private static readonly Regex CurrencyRegex = new(
-        @"^[A-Z]{3}$",
-        RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(100));
-
     public static readonly DateOnly MinTransactionDate = new(2000, 1, 1);
 
     /// <summary>
-    /// Returns null if <paramref name="currency"/> is a valid 3-letter uppercase code; otherwise an error issue.
+    /// Returns null if <paramref name="currency"/> is a known ISO 4217 code; otherwise an error issue.
+    /// The accepted set is <see cref="CurrencyConstants.KnownCurrencies"/> — same list used by plan creation.
     /// </summary>
     public static ValidationIssue? ValidateCurrency(string currency)
     {
-        if (!CurrencyRegex.IsMatch(currency))
+        if (!CurrencyConstants.KnownCurrencies.Contains(currency))
             return MakeError("currency",
-                $"Currency '{currency}' must be a 3-letter ISO 4217 code (e.g. USD, EUR, PLN).",
+                $"Currency '{currency}' is not a recognized currency code. Examples: EUR, USD, GBP, PLN, CHF.",
                 IssueCategory.Format);
         return null;
     }

@@ -21,6 +21,22 @@ export interface ProcessPendingResponse {
   candidateCount: number;
 }
 
+export interface EligiblePendingTransaction {
+  id: string;
+  payeeId: string | null;
+  referenceNumber: string;
+  payeeName: string | null;
+  payeeCode: string | null;
+  transactionDate: string;
+  amount: number;
+  currency: string;
+}
+
+export interface EligiblePendingResult {
+  transactions: EligiblePendingTransaction[];
+  totalCount: number;
+}
+
 export interface ProcessPendingResultSummary {
   processed: number;
   creditsCreated: number;
@@ -85,6 +101,14 @@ export class TransactionsApiService {
     return this.http.get<{ count: number }>(`${this.base}/pending-count`, { params });
   }
 
+  getEligiblePending(scope: ProcessPendingScope, scopeId?: string | null, periodStart?: string | null, periodEnd?: string | null): Observable<EligiblePendingResult> {
+    const params: Record<string, string> = { scope };
+    if (scopeId) params['scopeId'] = scopeId;
+    if (periodStart) params['periodStart'] = periodStart;
+    if (periodEnd) params['periodEnd'] = periodEnd;
+    return this.http.get<EligiblePendingResult>(`${this.base}/eligible-pending`, { params });
+  }
+
   processPending(request: ProcessPendingRequest): Observable<ProcessPendingResponse> {
     return this.http.post<ProcessPendingResponse>(`${this.base}/process-pending`, request);
   }
@@ -97,7 +121,7 @@ export class TransactionsApiService {
     return this.http.post<void>(`/api/jobs/${jobId}/cancel`, {});
   }
 
-  exportToExcel(filter: Record<string, string>): Observable<Blob> {
+  exportToExcel(filter: Record<string, unknown>): Observable<Blob> {
     return this.http.post(`${this.base}/export`, filter, { responseType: 'blob' });
   }
 

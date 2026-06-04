@@ -296,10 +296,21 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Currency validation violations
+
+- ❌ **Validating currency codes with a format-only regex (`^[A-Z]{3}$`) without a whitelist** (WI-PROD-T-FIX-10, 2026-06-03). A regex check alone accepts any 3-letter uppercase combination: XXX, ABC, ZZZ, AAA — all valid by regex, all invalid as real ISO 4217 codes. A user can corrupt financial data by typing three random uppercase letters. The fix is a whitelist of known codes, not a regex.
+
+  **Rule:** Currency code validation MUST use `CurrencyConstants.KnownCurrencies` (defined in `Wasnie.Application.Common.Constants`). Apply this check at every currency entry point: transaction imports (`TransactionFieldValidators.ValidateCurrency`), transaction updates (same shared helper), and plan creation (`CreatePlanCommandValidator`). The regex `^[A-Z]{3}$` alone is FORBIDDEN as the sole currency check.
+
+  To add a new supported currency: add it to `CurrencyConstants.KnownCurrencies` and redeploy. No migration needed.
+
+---
+
 ## Export/list filter divergence violations
 
 - ❌ **Calling `store.toQueryParams()` (URL-sync shorthand keys) to build the export POST body** (WI-PROD-T-FIX-1, 2026-06-03). `toQueryParams()` produces abbreviated URL keys (`txFrom`, `txTo`, `ref`, `amtMin`, etc.) for browser address-bar sync — these are NOT the field names the backend `PaginationQuery` expects (`DateFrom`, `DateTo`, `Reference`, `AmountMin`, etc.). Sending these as a JSON body silently drops all non-matching fields. **Rule:** Use `store.toExportFilter()` (which calls `_buildFilterRecord`) to build any export payload. `toQueryParams()` is only for URL display.
 - ❌ **List and export endpoints applying different filter predicates** (WI-PROD-T-FIX-1 + WI-PROD-I.2). `TransactionsStore._buildFilterRecord(f)` is the single source of truth for `TransactionFilter → PaginationQuery field names`. Both `_loadInternal` and `toExportFilter` call it. If you add a new filter field to `TransactionFilter`, you MUST add it to `_buildFilterRecord` — it will then automatically apply to both list and export.
+- ❌ **Adding a `TransactionFilter` field without updating ALL eight locations** (WI-PROD-T-FIX-11, 2026-06-04). The root cause of the critical payeeIds bug: `payeeIds` existed in the filter state and URL chip but was missing from `_buildFilterRecord` — the list API call silently ignored it, returning the wrong payee's transactions. A user could click "Process Pending" on results belonging to a completely different payee. **Checklist when adding any new filter field:** (1) `TransactionFilter` interface; (2) `EMPTY_FILTER`; (3) `_buildFilterRecord` ← **list API path, most commonly missed**; (4) `toExportFilter`; (5) `toQueryParams` + `loadFromQueryParams` (URL sync); (6) backend `PaginationQuery`; (7) `ListTransactionsHandler` WHERE predicate; (8) `ExportTransactionsHandler` WHERE predicate. Missing (3) is a critical financial data-integrity bug: the UI chip looks correct, the URL looks correct, but the query returns wrong data.
 
 ---
 
@@ -356,6 +367,12 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 ## Filter/count query alignment violations
 
 - ❌ **A list-endpoint filter query and its corresponding count query using DIFFERENT predicates** (WI-PROD-I.2, 2026-06-03). If `GetPendingTransactionsCountQuery.CountByPayeeAndPeriod` filters `Status==Pending && PayeeId==id && TransactionDate between start and end`, then the Transactions list endpoint with the equivalent filter combination MUST produce the same count. Duplicate WHERE clauses between count and list queries cause the plan-page "77 Pending" badge to disagree with the filter result total — a trust-destroying bug. **Rule:** Extract the predicate into a shared helper or verify alignment by code review whenever either the count handler or the list handler is modified.
+
+---
+
+## Financial action opacity violations
+
+- ❌ **Showing a count of affected items before an action without showing which items** (WI-PROD-T-FIX-12, 2026-06-04). A badge that says "3 Pending eligible for processing" without a visible list of those 3 transactions is a black box. In a financial system this destroys trust: the user cannot verify what will be acted on, cannot cross-reference with their Excel records, and cannot detect a misconfiguration before it corrupts commission records. **Rule:** Any "eligible / applicable / affected" count displayed before a user-triggered financial action (Process Pending, batch write, recalculate) MUST be backed by an inline, inspectable list of the exact items the action WILL target. The list MUST use the SAME predicate as the count — if they diverge, the list is misleading. Caps (e.g. "first 200, see filter for rest") are acceptable; a count-only display is not.
 
 ---
 

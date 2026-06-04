@@ -125,9 +125,26 @@ export class TransactionsStore {
     return filters;
   }
 
-  // Returns the filter as a flat object with PaginationQuery field names — for POST body to export.
-  toExportFilter(): Record<string, string> {
-    return TransactionsStore._buildFilterRecord(this.filter());
+  // Returns the filter as a typed JSON object for POST body to export endpoint.
+  // PaginationQuery uses [FromBody] JSON deserialization — bool? and decimal? must be actual
+  // JSON booleans/numbers, not strings. _buildFilterRecord produces strings (correct for GET
+  // query params where model binding is lenient), but JSON body deserialization is strict.
+  toExportFilter(): Record<string, unknown> {
+    const f = this.filter();
+    const body: Record<string, unknown> = {};
+    if (f.reference) body['reference'] = f.reference;
+    if (f.statuses.length > 0) body['statuses'] = f.statuses.join(',');
+    if (f.payeeIds.length > 0) body['payeeIds'] = f.payeeIds.join(',');
+    if (f.txDateFrom) body['dateFrom'] = f.txDateFrom;
+    if (f.txDateTo) body['dateTo'] = f.txDateTo;
+    if (f.ingestedFrom) body['ingestedFrom'] = f.ingestedFrom;
+    if (f.ingestedTo) body['ingestedTo'] = f.ingestedTo;
+    if (f.amountMin !== null) body['amountMin'] = f.amountMin;      // decimal? — must be number
+    if (f.amountMax !== null) body['amountMax'] = f.amountMax;      // decimal? — must be number
+    if (f.unassignedOnly) body['unassignedOnly'] = true;            // bool? — must be boolean
+    if (f.amountSort) body['amountSort'] = f.amountSort;
+    if (f.referenceNumbers.length > 0) body['referenceNumbers'] = f.referenceNumbers.join(',');
+    return body;
   }
 
   private async _loadInternal(

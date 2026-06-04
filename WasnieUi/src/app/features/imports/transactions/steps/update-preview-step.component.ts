@@ -1,4 +1,4 @@
-import { Component, inject, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
@@ -10,6 +10,8 @@ import {
   TransactionUpdateRowPreviewResult,
 } from '../models/transaction-update.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
+
+type UpdateRowFilter = 'all' | 'willUpdate' | 'noChanges' | 'errors';
 
 @Component({
   selector: 'app-tx-update-preview-step',
@@ -28,31 +30,51 @@ export class TxUpdatePreviewStepComponent {
   readonly executed = output<string>();
   readonly back = output<void>();
 
+  readonly rowFilter = signal<UpdateRowFilter>('all');
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
-  get visibleRows(): TransactionUpdateRowPreviewResult[] {
-    return this.validateResponse().rowResults
-      .filter(r => r.status !== 'NoChanges')
-      .slice(0, 200);
-  }
+  readonly filteredRows = computed(() => {
+    const rows = this.validateResponse().rowResults;
+    const tab = this.rowFilter();
+    if (tab === 'all') return rows;
+    if (tab === 'willUpdate') return rows.filter(r => r.status === 'WillUpdate');
+    if (tab === 'noChanges') return rows.filter(r => r.status === 'NoChanges');
+    if (tab === 'errors') return rows.filter(r => r.status === 'Error');
+    return rows;
+  });
 
-  rowBadge(row: TransactionUpdateRowPreviewResult): BadgeVariant {
+  rowBadgeVariant(row: TransactionUpdateRowPreviewResult): BadgeVariant {
     switch (row.status) {
       case 'WillUpdate': return 'brand';
-      case 'Error': return 'danger';
-      case 'Warning': return 'warning';
-      default: return 'neutral';
+      case 'Error':      return 'danger';
+      case 'Warning':    return 'warning';
+      default:           return 'neutral';
     }
   }
 
-  rowLabel(row: TransactionUpdateRowPreviewResult): string {
+  rowBadgeKey(row: TransactionUpdateRowPreviewResult): string {
     switch (row.status) {
       case 'WillUpdate': return 'IMPORTS.UPDATE.ROW_WILL_UPDATE';
-      case 'Error': return 'IMPORTS.UPDATE.ROW_ERROR';
-      case 'Warning': return 'IMPORTS.UPDATE.ROW_WARNING';
-      default: return 'IMPORTS.UPDATE.ROW_NO_CHANGES';
+      case 'Error':      return 'IMPORTS.UPDATE.ROW_ERROR';
+      case 'Warning':    return 'IMPORTS.UPDATE.ROW_WARNING';
+      default:           return 'IMPORTS.UPDATE.ROW_NO_CHANGES';
     }
+  }
+
+  issueBadgeVariant(issue: { severity: string; category: string }): BadgeVariant {
+    if (issue.severity === 'Warning') return 'warning';
+    switch (issue.category) {
+      case 'Reference': return 'warning';
+      case 'Format':    return 'danger';
+      case 'Required':  return 'info';
+      default:          return 'neutral';
+    }
+  }
+
+  issueCategoryKey(issue: { severity: string; category: string }): string {
+    if (issue.severity === 'Warning') return '';
+    return `IMPORTS.ISSUE_CATEGORY_${issue.category.toUpperCase()}`;
   }
 
   getReferenceNumber(row: TransactionUpdateRowPreviewResult): string {

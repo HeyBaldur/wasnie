@@ -1,10 +1,5 @@
 @reference "../../../../../styles.scss";
 
-:host {
-  display: block;
-  width: 100%;
-}
-
 .preview-step {
   display: flex;
   flex-direction: column;
@@ -13,9 +8,11 @@
 
 .preview-step__stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-3);
 }
+
+// ── Row filter tabs — identical to IMPORT preview ───────────────────────────
 
 .row-filter {
   @apply flex items-center gap-1;
@@ -25,13 +22,22 @@
     @apply flex items-center gap-1 font-semibold;
     font-size: var(--font-size-12);
     padding: var(--space-2) var(--space-3);
-    color: var(--color-text-primary);
-    border-bottom: 2px solid var(--color-brand);
+    color: var(--color-text-tertiary);
+    border-bottom: 2px solid transparent;
     margin-bottom: -1px;
+    cursor: pointer;
     background: none;
     border-top: none;
     border-left: none;
     border-right: none;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+
+    &:hover { color: var(--color-text-primary); }
+
+    &--active {
+      color: var(--color-text-primary);
+      border-bottom-color: var(--color-brand);
+    }
   }
 
   &__count {
@@ -39,6 +45,8 @@
     font-weight: 400;
   }
 }
+
+// ── Table — identical tokens to IMPORT preview ───────────────────────────────
 
 .preview-table-wrap {
   overflow-x: auto;
@@ -49,42 +57,105 @@
 }
 
 .preview-table {
+  @apply text-xs font-semibold;
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--font-size-13);
 
   &__th {
-    background: var(--color-bg-surface-raised);
-    padding: var(--space-2) var(--space-4);
+    padding: var(--space-1) var(--space-2);
     text-align: left;
-    font-weight: 600;
     font-size: var(--font-size-11);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-weight: 600;
     color: var(--color-text-tertiary);
-    border-bottom: 1px solid var(--color-border-default);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: var(--color-bg-surface-sunken);
+    border-bottom: 1px solid var(--color-border-subtle);
     white-space: nowrap;
     position: sticky;
     top: 0;
     z-index: 1;
 
-    &--num { width: 48px; }
+    &--num    { width: 36px; }
+    &--status { width: 80px; }
+    &--changes { width: 40%; }
   }
 
   &__td {
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-1) var(--space-2);
+    color: var(--color-text-primary);
     border-bottom: 1px solid var(--color-border-subtle);
     vertical-align: top;
-    color: var(--color-text-primary);
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 
-    &--num { color: var(--color-text-tertiary); font-family: monospace; }
-    &--changes { max-width: 480px; }
-    &--truncated { color: var(--color-text-tertiary); font-style: italic; font-size: var(--font-size-12); text-align: center; }
+    &--num {
+      width: 36px;
+      color: var(--color-text-tertiary);
+      white-space: nowrap;
+      max-width: none;
+    }
+
+    &--status {
+      white-space: nowrap;
+      max-width: none;
+    }
+
+    &--changes {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+    }
+
+    &--truncated {
+      color: var(--color-text-tertiary);
+      font-style: italic;
+      font-size: var(--font-size-12);
+      text-align: center;
+    }
   }
 
-  tr:last-child .preview-table__td { border-bottom: none; }
-  &__row--error .preview-table__td { background: color-mix(in srgb, var(--color-danger) 6%, transparent); }
+  &__row:last-child &__td { border-bottom: none; }
+
+  &__row--error &__td { background: color-mix(in srgb, var(--color-danger) 5%, transparent); }
+
+  &__empty {
+    padding: var(--space-6);
+    text-align: center;
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-12);
+  }
 }
+
+// ── Issues list — identical to IMPORT preview ────────────────────────────────
+
+.preview-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.preview-issue {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+
+  &__msg {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// ── Diff entries (UPDATE-specific) ───────────────────────────────────────────
 
 .diff-entry {
   display: flex;
@@ -95,23 +166,22 @@
   font-size: var(--font-size-12);
 
   &__field { font-weight: 600; color: var(--color-text-secondary); }
-  &__old { color: var(--color-danger); text-decoration: line-through; }
+  &__old   { color: var(--color-danger); text-decoration: line-through; }
   &__arrow { color: var(--color-text-tertiary); }
-  &__new { color: var(--color-success); font-weight: 600; }
-  &__issue { color: var(--color-danger); font-size: var(--font-size-12); display: block; }
+  &__new   { color: var(--color-success); font-weight: 600; }
 }
 
-.mapping-error {
+// ── Bottom bar ───────────────────────────────────────────────────────────────
+
+.preview-error {
   @apply flex items-center gap-2;
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12);
   color: var(--color-danger);
   margin: 0;
 }
 
-.mapping-actions {
+.preview-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border-subtle);
 }

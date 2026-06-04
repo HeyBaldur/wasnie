@@ -1,13 +1,75 @@
 @if ((candidateCount() ?? 0) > 0 || jobId() !== null) {
   <ws-card variant="flat" accent="warning" padding="sm">
     <div class="process-pending">
-      <!-- Count badge + label -->
+
+      <!-- Count badge + label + show/hide toggle -->
       @if (candidateCount() !== null && !isDone) {
         <div class="process-pending__count-row">
           <ws-badge variant="warning" size="sm">{{ candidateCount() }}</ws-badge>
           <span class="process-pending__count-label">
             {{ 'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_BADGE' | translate }}
           </span>
+          <button
+            type="button"
+            class="process-pending__eligible-toggle"
+            (click)="eligibleOpen.set(!eligibleOpen())"
+          >
+            {{ (eligibleOpen()
+              ? 'TRANSACTIONS.PROCESS_PENDING.HIDE_ELIGIBLE'
+              : 'TRANSACTIONS.PROCESS_PENDING.VIEW_ELIGIBLE') | translate }}
+          </button>
+        </div>
+      }
+
+      <!-- Eligible transactions table -->
+      @if (eligibleOpen() && !isDone) {
+        <div class="process-pending__eligible-section">
+
+          @if (eligibleLoading()) {
+            <p class="process-pending__eligible-loading">{{ 'COMMON.LOADING' | translate }}</p>
+          } @else if (eligibleTransactions().length > 0) {
+            <div class="process-pending__skip-list">
+              <div class="process-pending__eligible-header">
+                <span>{{ 'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_COL_REF' | translate }}</span>
+                <span>{{ 'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_COL_PAYEE' | translate }}</span>
+                <span>{{ 'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_COL_DATE' | translate }}</span>
+                <span class="process-pending__eligible-header--right">{{ 'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_COL_AMOUNT' | translate }}</span>
+              </div>
+              @for (tx of eligibleTransactions(); track tx.id) {
+                <div class="process-pending__eligible-entry">
+                  <span class="process-pending__skip-ref">
+                    <button
+                      type="button"
+                      class="process-pending__copy-btn"
+                      [wsTooltip]="copiedRef() === tx.referenceNumber ? ('COMMON.COPIED' | translate) : ('COMMON.COPY_ID' | translate)"
+                      tooltipPlacement="top"
+                      (click)="copyRef(tx.referenceNumber)"
+                    >
+                      <app-icon [name]="copiedRef() === tx.referenceNumber ? 'check-circle' : 'copy'" [size]="11" />
+                    </button>
+                    {{ tx.referenceNumber }}
+                  </span>
+                  <span class="process-pending__skip-payee">
+                    {{ tx.payeeName ?? ('COMMON.UNASSIGNED' | translate) }}
+                    @if (tx.payeeCode) {
+                      <span class="process-pending__skip-code">({{ tx.payeeCode }})</span>
+                    }
+                  </span>
+                  <span class="process-pending__skip-date">{{ tx.transactionDate }}</span>
+                  <span class="process-pending__skip-amount">{{ tx.amount | number:'1.2-2' }} {{ tx.currency }}</span>
+                </div>
+              }
+              @if (eligibleOverflowCount > 0) {
+                <div class="process-pending__eligible-overflow">
+                  {{
+                    'TRANSACTIONS.PROCESS_PENDING.ELIGIBLE_MORE'
+                      | translate: { count: eligibleOverflowCount }
+                  }}
+                </div>
+              }
+            </div>
+
+          }
         </div>
       }
 
@@ -38,6 +100,19 @@
           >
             {{ 'TRANSACTIONS.PROCESS_PENDING.BUTTON' | translate }}
           </ws-button>
+          @if (!isOnTransactionsPage && eligibleTransactions().length > 0) {
+            <ws-button variant="ghost" size="sm" (click)="onOpenEligibleInFilter()">
+              {{ 'TRANSACTIONS.PROCESS_PENDING.OPEN_ELIGIBLE_IN_FILTER' | translate }}
+            </ws-button>
+            @if (eligibleUrlTruncated) {
+              <span class="process-pending__filter-truncated">
+                {{
+                  'TRANSACTIONS.PROCESS_PENDING.FILTER_TRUNCATED'
+                    | translate: { shown: ELIGIBLE_URL_REF_LIMIT, total: eligibleTransactions().length }
+                }}
+              </span>
+            }
+          }
           @if (isRunning && jobStatus()?.state !== 'Cancelling') {
             <ws-button variant="ghost" size="sm" [disabled]="cancelling()" (click)="onCancel()">
               {{ 'TRANSACTIONS.PROCESS_PENDING.CANCEL' | translate }}

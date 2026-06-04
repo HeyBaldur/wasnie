@@ -57,6 +57,9 @@ export class TransactionFilterComponent implements OnInit {
   readonly activeStatuses = signal<TransactionStatus[]>([]);
   readonly selectedPayees = signal<{ id: string; label: string }[]>([]);
 
+  // id → "FullName (EMP000)" — populated when search results arrive or a payee is fetched by id.
+  private readonly _payeeCache = new Map<string, string>();
+
   private _patching = false;
 
   readonly form = new FormGroup({
@@ -86,10 +89,11 @@ export class TransactionFilterComponent implements OnInit {
 
   readonly payeeSearchFn = (q: string) =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
-      map(r => r.items.map(p => ({
-        value: p.id,
-        label: `${p.fullName} (${p.employeeCode})`,
-      }))),
+      map(r => r.items.map(p => {
+        const label = `${p.fullName} (${p.employeeCode})`;
+        this._payeeCache.set(p.id, label);
+        return { value: p.id, label };
+      })),
     );
 
   constructor() {
@@ -110,12 +114,17 @@ export class TransactionFilterComponent implements OnInit {
         amountSort: f.amountSort ?? '',
       }, { emitEvent: false });
       this.activeStatuses.set([...f.statuses]);
-      // Sync payee chips — preserve labels for already-known payees
+      // Sync payee chips — preserve known labels, then check cache, then fall back to GUID
       const known = untracked(() => this.selectedPayees()); // untracked: avoids re-triggering effect
       this.selectedPayees.set(f.payeeIds.map(id => ({
         id,
-        label: known.find(p => p.id === id)?.label ?? id,
+        label: known.find(p => p.id === id && p.label !== p.id)?.label
+          ?? this._payeeCache.get(id)
+          ?? id,
       })));
+      // Fetch names for any payeeId still showing as a raw GUID (e.g. loaded from URL params)
+      const unresolved = f.payeeIds.filter(id => !this._payeeCache.has(id));
+      if (unresolved.length > 0) untracked(() => this._resolvePayeeNames(unresolved));
       this._patching = false;
     }, { allowSignalWrites: true });
   }
@@ -165,7 +174,8 @@ export class TransactionFilterComponent implements OnInit {
         if (!v || this._patching) return;
         const idStr = String(v);
         if (this.filter().payeeIds.includes(idStr)) return;
-        this.selectedPayees.update(ps => [...ps, { id: idStr, label: idStr }]);
+        const label = this._payeeCache.get(idStr) ?? idStr;
+        this.selectedPayees.update(ps => [...ps, { id: idStr, label }]);
         this.filterChange.emit({ payeeIds: [...this.filter().payeeIds, idStr] });
         setTimeout(() => {
           this._patching = true;
@@ -173,6 +183,20 @@ export class TransactionFilterComponent implements OnInit {
           this._patching = false;
         }, 0);
       });
+  }
+
+  private _resolvePayeeNames(ids: string[]): void {
+    ids.forEach(id => {
+      this.payeesApi.getPayee(id).pipe(
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe(payee => {
+        const label = `${payee.fullName} (${payee.employeeCode})`;
+        this._payeeCache.set(id, label);
+        this.selectedPayees.update(chips =>
+          chips.map(c => c.id === id ? { ...c, label } : c)
+        );
+      });
+    });
   }
 
   togglePanel(): void { this.panelOpen.update(v => !v); }
