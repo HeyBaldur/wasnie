@@ -16,6 +16,9 @@ public sealed class CompensationTransaction : AggregateRoot
     // Phase 3 filter: PayeeId IS NOT NULL AND Status = Pending to find processable transactions.
     public Guid? PayeeId { get; private set; }
     public Money Amount { get; private set; } = null!;
+    // Number of units represented by this transaction (WI-PROD-QUANTITY-FIELD).
+    // Default 1 — single-line sales. Set > 1 for multi-item transactions (e.g. 5 units in one POS row).
+    public int Quantity { get; private set; } = 1;
     public DateOnly TransactionDate { get; private set; }
     public TransactionSource Source { get; private set; }
     public CompensationTransactionStatus Status { get; private set; } = CompensationTransactionStatus.Pending;
@@ -37,7 +40,8 @@ public sealed class CompensationTransaction : AggregateRoot
         Guid id,
         DateTimeOffset now,
         Guid eventId,
-        string? externalId = null)
+        string? externalId = null,
+        int quantity = 1)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("TenantId must not be empty.");
@@ -49,6 +53,8 @@ public sealed class CompensationTransaction : AggregateRoot
             throw new DomainException($"Transaction date cannot be before {MinTransactionDate:yyyy-MM-dd}.");
         if (string.IsNullOrEmpty(ingestedBy))
             throw new DomainException("IngestedBy is required.");
+        if (quantity < 1)
+            throw new DomainException("Quantity must be at least 1.");
 
         var tx = new CompensationTransaction
         {
@@ -57,6 +63,7 @@ public sealed class CompensationTransaction : AggregateRoot
             ReferenceNumber = referenceNumber,
             PayeeId = payeeId,
             Amount = amount,
+            Quantity = quantity,
             TransactionDate = transactionDate,
             Source = source,
             Status = CompensationTransactionStatus.Pending,
@@ -156,6 +163,7 @@ public sealed class CompensationTransaction : AggregateRoot
     // Paid transactions MUST be rejected before reaching this method.
     public void ApplyExcelUpdate(
         Money? newAmount,
+        int? newQuantity,
         DateOnly? newDate,
         Guid? newPayeeId,
         string updatedBy,
@@ -166,6 +174,13 @@ public sealed class CompensationTransaction : AggregateRoot
 
         if (newAmount is not null)
             Amount = newAmount;
+
+        if (newQuantity.HasValue)
+        {
+            if (newQuantity.Value < 1)
+                throw new DomainException("Quantity must be at least 1.");
+            Quantity = newQuantity.Value;
+        }
 
         if (newDate.HasValue)
         {

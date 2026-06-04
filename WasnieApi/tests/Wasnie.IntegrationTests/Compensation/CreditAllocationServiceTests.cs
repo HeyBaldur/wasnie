@@ -1,16 +1,17 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Compensation.Calculation;
 using Wasnie.IntegrationTests.TestDoubles;
-using System.Collections.Generic;
 
 namespace Wasnie.IntegrationTests.Compensation;
 
@@ -60,12 +61,14 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
     }
 
     private CreditAllocationService CreateService(CreditAllocationServiceFixture.FixedTenantContext ctx,
-        Wasnie.Infrastructure.Persistence.ApplicationDbContext db)
+        Wasnie.Infrastructure.Persistence.ApplicationDbContext db,
+        IQuotaAttainmentService? attainmentService = null)
     {
         var clock = new FakeClock(Now.UtcDateTime);
         var guidGen = new FakeGuidGenerator();
         return new CreditAllocationService(db, guidGen, clock,
-            NullLogger<CreditAllocationService>.Instance);
+            NullLogger<CreditAllocationService>.Instance,
+            attainmentService ?? new StubQuotaAttainmentService());
     }
 
     // ── Core allocation ───────────────────────────────────────────────────────
@@ -397,8 +400,11 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
         }
     }
 
+    // Decision #65 (WI-CALC-MULTIPLAN-CURRENCY-MATCH, Pattern B): currency mismatch is now a routing
+    // signal, not an error. A transaction whose currency doesn't match any plan stays Pending with
+    // zero credits — no DomainException is thrown.
     [Fact]
-    public async Task AllocateAsync_CurrencyMismatch_ThrowsDomainException()
+    public async Task AllocateAsync_CurrencyMismatch_ReturnsEmptyCredits()
     {
         var tenantId = Guid.NewGuid();
         var payeeId = Guid.NewGuid();
@@ -406,7 +412,7 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
 
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            // Plan is in PLN, transaction in EUR.
+            // Plan is in PLN, transaction in EUR — no currency match.
             var plan = Plan.Create(tenantId, "PLN Plan", "desc",
                 DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
                 "PLN", "test-user", planId, Now, Guid.NewGuid());
@@ -433,10 +439,9 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
 
             var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db);
 
-            var act = async () => await svc.AllocateAsync(tx);
+            var credits = await svc.AllocateAsync(tx);
 
-            await act.Should().ThrowAsync<Wasnie.Domain.Exceptions.DomainException>()
-                .WithMessage("*Currency mismatch*");
+            credits.Should().BeEmpty("currency mismatch routes the transaction to Pending, not an error (Pattern B)");
         }
     }
 
@@ -757,8 +762,9 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
     }
 
     [Fact]
-    public async Task AllocateAsync_AttainmentBased_V1Stub_Uses100PercentBracket()
+    public async Task AllocateAsync_AttainmentBased_UsesRealAttainmentFromService()
     {
+        // Stub returns 75% attainment → picks the 50-99% bracket at 7%.
         var tenantId = Guid.NewGuid();
         var payeeId = Guid.NewGuid();
         var planId = Guid.NewGuid();
@@ -786,17 +792,56 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
 
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            // V1 stub: attainment = 100% → picks the 1.00+ bracket at 12%.
             var tx = CompensationTransaction.Ingest(
                 tenantId, "REF-ATTAIN", payeeId, Money.Of(1000m, Currency),
                 TxDate, TransactionSource.Manual, "user",
                 Guid.NewGuid(), Now, Guid.NewGuid());
 
-            var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db);
+            // Stub: 75% attainment → 50-99% bracket → 7%
+            var attainmentStub = new StubQuotaAttainmentService(
+                AttainmentPercentage.FromAchievedAndTarget(75m, 100m));
+            var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db, attainmentStub);
             var credits = await svc.AllocateAsync(tx);
 
             credits.Should().HaveCount(1);
-            credits[0].CreditedAmount.Amount.Should().Be(120m); // 1000 * 12%
+            credits[0].CreditedAmount.Amount.Should().Be(70m); // 1000 * 7%
+            attainmentStub.CallCount.Should().Be(1); // computed exactly once
+        }
+    }
+
+    [Fact]
+    public async Task AllocateAsync_FlatPlan_DoesNotCallAttainmentService()
+    {
+        // Short-circuit: flat plans never call IQuotaAttainmentService.
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlanWithFlatRule(tenantId, planId, 0.05m,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = CompensationTransaction.Ingest(
+                tenantId, "REF-FLAT", payeeId, Money.Of(1000m, Currency),
+                TxDate, TransactionSource.Manual, "user",
+                Guid.NewGuid(), Now, Guid.NewGuid());
+
+            var attainmentStub = new StubQuotaAttainmentService();
+            var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db, attainmentStub);
+            var credits = await svc.AllocateAsync(tx);
+
+            credits.Should().HaveCount(1);
+            credits[0].CreditedAmount.Amount.Should().Be(50m); // 1000 * 5%
+            attainmentStub.CallCount.Should().Be(0); // short-circuit: never called for flat plans
         }
     }
 

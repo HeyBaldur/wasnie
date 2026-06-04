@@ -4,7 +4,6 @@ using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
-using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Infrastructure.Services.Imports;
@@ -137,6 +136,14 @@ public sealed class TransactionImportValidationService(
             var amountIssue = TransactionFieldValidators.ValidateAmount(amountStr, out _);
             if (amountIssue is not null) issues.Add(amountIssue);
 
+            // ── quantity (optional column, defaults to 1 if not mapped or blank) ───────
+            if (mapping.QuantityColumn is not null)
+            {
+                var quantityStr = GetField(row, mapping.QuantityColumn);
+                var quantityIssue = TransactionFieldValidators.ValidateQuantity(quantityStr, out _);
+                if (quantityIssue is not null) issues.Add(quantityIssue);
+            }
+
             // ── currency ──────────────────────────────────────────────────────
             var currency = GetField(row, mapping.CurrencyColumn);
             var currencyIssue = TransactionFieldValidators.ValidateCurrency(currency);
@@ -147,29 +154,36 @@ public sealed class TransactionImportValidationService(
             var dateIssue = TransactionFieldValidators.ValidateTransactionDate(dateStr, today, out _);
             if (dateIssue is not null) issues.Add(dateIssue);
 
-            // ── plan currency check ───────────────────────────────────────────
-            // Only when: payee resolved, currency format valid, date parsed successfully.
-            // If no active assignment covers txDate, currency cannot be validated yet —
-            // the transaction will be Pending until a PlanAssignment is created (Decision #54 skip logic).
+            // ── plan currency check (Pattern B) ──────────────────────────────
+            // Pattern B: currency mismatch is a routing condition, not an error.
+            // If payee has ANY plan in the transaction's currency covering the date → fine, routes there.
+            // If payee has plans covering the date but NONE in the transaction's currency → informational
+            // warning: the transaction will remain Pending until a matching-currency plan is assigned.
             if (!string.IsNullOrWhiteSpace(payeeCode)
                 && payeesByCode.TryGetValue(payeeCode, out var resolvedPayee)
                 && TransactionFieldValidators.ValidateCurrency(currency) is null
                 && TransactionFieldValidators.TryParseDate(dateStr, out var txDateForCurrencyCheck)
                 && assignmentsByPayee.TryGetValue(resolvedPayee.Id, out var payeeAssignments))
             {
-                var assignmentForDate = payeeAssignments.FirstOrDefault(pa =>
+                var assignmentsForDate = payeeAssignments.Where(pa =>
                     pa.EffectivePeriod is not null &&
                     pa.EffectivePeriod.Start <= txDateForCurrencyCheck &&
-                    pa.EffectivePeriod.End >= txDateForCurrencyCheck);
+                    pa.EffectivePeriod.End >= txDateForCurrencyCheck).ToList();
 
-                if (assignmentForDate is not null
-                    && planInfoById.TryGetValue(assignmentForDate.PlanId, out var planInfo)
-                    && !string.Equals(currency, planInfo.Currency, StringComparison.OrdinalIgnoreCase))
+                if (assignmentsForDate.Count > 0)
                 {
-                    issues.Add(Error("currency",
-                        $"Currency mismatch: transaction is in {currency} but payee '{payeeCode}' " +
-                        $"is assigned to plan '{planInfo.Name}' denominated in {planInfo.Currency}.",
-                        IssueCategory.Reference));
+                    var hasCurrencyMatch = assignmentsForDate.Any(pa =>
+                        planInfoById.TryGetValue(pa.PlanId, out var pi) &&
+                        string.Equals(pi.Currency, currency, StringComparison.OrdinalIgnoreCase));
+
+                    if (!hasCurrencyMatch)
+                    {
+                        // No plan in this currency covers the payee's date — informational, not an error.
+                        issues.Add(Warning("currency",
+                            $"Payee '{payeeCode}' has no plan in {currency} covering this date. " +
+                            $"Transaction will remain Pending until a {currency} plan is assigned.",
+                            IssueCategory.Reference));
+                    }
                 }
             }
 
@@ -210,6 +224,9 @@ public sealed class TransactionImportValidationService(
 
     private static ValidationIssue Error(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
         new() { Field = field, Message = msg, Severity = IssueSeverity.Error, Category = cat };
+
+    private static ValidationIssue Warning(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
+        new() { Field = field, Message = msg, Severity = IssueSeverity.Warning, Category = cat };
 
     private static ValidationIssue Warn(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
         new() { Field = field, Message = msg, Severity = IssueSeverity.Warning, Category = cat };

@@ -70,6 +70,31 @@ public static class TransactionFieldValidators
     }
 
     /// <summary>
+    /// Returns null if <paramref name="quantityStr"/> is empty/blank (defaults to 1) or a valid integer >= 1;
+    /// otherwise an error issue. <paramref name="parsed"/> is set to the parsed value (or 1 if blank).
+    /// </summary>
+    public static ValidationIssue? ValidateQuantity(string quantityStr, out int parsed)
+    {
+        if (string.IsNullOrWhiteSpace(quantityStr))
+        {
+            parsed = 1;
+            return null;
+        }
+
+        if (!int.TryParse(quantityStr.Trim(), out parsed))
+            return MakeError("quantity",
+                $"Quantity '{quantityStr}' is not a valid integer.",
+                IssueCategory.Format);
+
+        if (parsed < 1)
+            return MakeError("quantity",
+                $"Quantity '{parsed}' must be a positive integer (minimum 1).",
+                IssueCategory.Format);
+
+        return null;
+    }
+
+    /// <summary>
     /// Parses an ISO 8601 date string (yyyy-MM-dd only). Returns false for any other format.
     /// </summary>
     public static bool TryParseDate(string s, out DateOnly result) =>

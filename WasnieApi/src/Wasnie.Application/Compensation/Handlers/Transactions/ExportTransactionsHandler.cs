@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -96,6 +95,16 @@ public sealed class ExportTransactionsHandler(
         if (p.PayeeId.HasValue)
             query = query.Where(t => t.PayeeId == (Guid?)p.PayeeId.Value);
 
+        if (!string.IsNullOrWhiteSpace(p.Currencies))
+        {
+            var curs = p.Currencies.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Where(s => s.Length == 3)
+                .ToList();
+            if (curs.Count > 0)
+                query = query.Where(t => curs.Contains(t.Amount.Currency));
+        }
+
         // Safety cap: reject exports that would return too many rows.
         var count = await query.CountAsync(cancellationToken);
         if (count > MaxExportRows)
@@ -130,6 +139,7 @@ public sealed class ExportTransactionsHandler(
                 PayeeName: payee?.FullName,
                 Amount: t.Amount.Amount,
                 Currency: t.Amount.Currency,
+                Quantity: t.Quantity,
                 TransactionDate: t.TransactionDate,
                 Source: t.Source.ToString(),
                 Status: t.Status.ToString(),

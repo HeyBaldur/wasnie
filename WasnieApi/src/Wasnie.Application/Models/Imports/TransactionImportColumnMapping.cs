@@ -8,4 +8,5 @@ public sealed class TransactionImportColumnMapping
     public required string CurrencyColumn { get; init; }
     public required string TransactionDateColumn { get; init; }
     public string? ExternalIdColumn { get; init; }
+    public string? QuantityColumn { get; init; }
 }

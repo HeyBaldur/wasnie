@@ -1,0 +1,104 @@
+<div class="ws-lc" (mouseleave)="onSvgMouseLeave()">
+
+  @if (!points().length) {
+    <div class="ws-lc__empty">
+      <span>{{ emptyLabel() }}</span>
+    </div>
+  } @else {
+    <svg
+      #svgEl
+      class="ws-lc__svg"
+      [attr.viewBox]="'0 0 ' + VB_W + ' ' + VB_H"
+      role="img"
+      aria-label="Earnings trend line chart"
+      xmlns="http://www.w3.org/2000/svg"
+      (mousemove)="onSvgMouseMove($event)"
+    >
+      <defs>
+        @for (s of series(); track s.currency) {
+          <linearGradient [attr.id]="gradientId(s)" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" [attr.stop-color]="s.color" stop-opacity="0.20" />
+            <stop offset="100%" [attr.stop-color]="s.color" stop-opacity="0.01" />
+          </linearGradient>
+        }
+      </defs>
+
+      <!-- Y gridlines + labels -->
+      @for (tick of yTicks(); track tick.value) {
+        <line
+          [attr.x1]="ML" [attr.y1]="tick.y"
+          [attr.x2]="VB_W - MR" [attr.y2]="tick.y"
+          class="ws-lc__grid"
+        />
+        @if (tick.value > 0) {
+          <text
+            [attr.x]="ML - 6"
+            [attr.y]="tick.y"
+            text-anchor="end"
+            dominant-baseline="middle"
+            class="ws-lc__axis-label"
+          >{{ tick.value | number: '1.0-0' }}</text>
+        }
+      }
+
+      <!-- X axis labels (month) -->
+      @for (lbl of allLabels(); track lbl; let i = $index) {
+        <text
+          [attr.x]="xToSvg(i, allLabels().length)"
+          [attr.y]="VB_H - 6"
+          text-anchor="middle"
+          class="ws-lc__axis-label"
+        >{{ lbl }}</text>
+      }
+
+      <!-- Area fill + line per series -->
+      @for (s of series(); track s.currency) {
+        <!-- Area -->
+        <path
+          [attr.d]="areaPath(s)"
+          [attr.fill]="'url(#' + gradientId(s) + ')'"
+          class="ws-lc__area"
+        />
+        <!-- Line -->
+        <polyline
+          [attr.points]="polylinePoints(s)"
+          fill="none"
+          [attr.stroke]="s.color"
+          stroke-width="2"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+          class="ws-lc__line"
+        />
+        <!-- Data point dots -->
+        @for (pt of s.points; track pt.label) {
+          <circle
+            [attr.cx]="xToSvg(allLabels().indexOf(pt.label), allLabels().length)"
+            [attr.cy]="yToSvg(pt.value)"
+            r="3.5"
+            [attr.fill]="s.color"
+            class="ws-lc__dot"
+          />
+        }
+      }
+    </svg>
+
+    <!-- Hover tooltip -->
+    @if (tooltipVisible()) {
+      <div
+        class="ws-lc__tooltip"
+        [style.left.%]="tooltipX()"
+      >
+        <p class="ws-lc__tooltip-label">{{ tooltipLabel() }}</p>
+        @for (item of tooltipItems(); track item.currency) {
+          <p class="ws-lc__tooltip-value">
+            <span class="ws-lc__tooltip-dot" [style.background]="item.color"></span>
+            {{ formatValue(item.value, item.currency) }}
+            @if (item.currency) {
+              <span class="ws-lc__tooltip-currency">{{ item.currency }}</span>
+            }
+          </p>
+        }
+      </div>
+    }
+  }
+</div>

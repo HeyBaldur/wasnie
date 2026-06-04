@@ -23,6 +23,10 @@ export const TRANSACTION_FIELD_PATTERNS: Record<string, string[]> = {
     'external id', 'external_id', 'externalid', 'ext id',
     'id externo', 'id zewnętrzny',
   ],
+  quantityColumn: [
+    'quantity', 'qty', 'units', 'count', 'items',
+    'cantidad', 'unidades', 'ilość', 'sztuki',
+  ],
 };
 
 function matchesPhrase(normalized: string, pattern: string): boolean {

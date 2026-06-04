@@ -114,7 +114,7 @@
         </div>
       </div>
 
-      <!-- Row 4: Amount range + Amount sort -->
+      <!-- Row 4: Amount range + Amount sort + Currency -->
       <div class="tx-filter__row">
         <div class="tx-filter__field">
           <ws-input
@@ -138,6 +138,27 @@
             [options]="amountSortOptions"
             [label]="'TRANSACTIONS.FILTER.AMT_SORT' | translate"
           />
+        </div>
+        <div class="tx-filter__field">
+          <ws-select
+            formControlName="currencySearch"
+            [options]="availableCurrencyOptions()"
+            [searchable]="true"
+            [label]="'TRANSACTIONS.FILTER.CURRENCY' | translate"
+            [placeholder]="'TRANSACTIONS.FILTER.CURRENCY_PLACEHOLDER' | translate"
+          />
+          @if (selectedCurrencies().length > 0) {
+            <div class="tx-filter__payee-chips">
+              @for (c of selectedCurrencies(); track c) {
+                <span class="tx-filter__payee-chip">
+                  {{ c }}
+                  <button type="button" class="tx-filter__payee-chip-remove" (click)="removeCurrency(c)">
+                    <app-icon name="x" [size]="11" />
+                  </button>
+                </span>
+              }
+            </div>
+          }
         </div>
       </div>
 

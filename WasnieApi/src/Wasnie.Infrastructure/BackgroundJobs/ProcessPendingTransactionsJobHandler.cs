@@ -49,10 +49,16 @@ public sealed class ProcessPendingTransactionsJobHandler(
             logger.LogInformation(
                 "ProcessPendingTransactionsJob {JobId}: no candidates found. Done.", context.JobId);
             await context.SetResultSummaryAsync(JsonSerializer.Serialize(
-                new { Processed = 0, CreditsCreated = 0, SkippedByOverlapRule = 0,
-                      SkippedByIdempotency = 0, SkippedByValidation = 0,
-                      SkipReasonCounts = new Dictionary<string, int>(),
-                      SkipDetails = Array.Empty<object>() },
+                new
+                {
+                    Processed = 0,
+                    CreditsCreated = 0,
+                    SkippedByOverlapRule = 0,
+                    SkippedByIdempotency = 0,
+                    SkippedByValidation = 0,
+                    SkipReasonCounts = new Dictionary<string, int>(),
+                    SkipDetails = Array.Empty<object>()
+                },
                 new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }), ct);
             return;
         }
@@ -257,7 +263,8 @@ public sealed class ProcessPendingTransactionsJobHandler(
             SkippedByValidation = totalValidationSkips,
             SkipReasonCounts = skipReasonCounts,
             // First 200 skip entries for UI display (protection against unbounded JSON).
-            SkipDetails = skipDetails.Take(200).Select(s => new {
+            SkipDetails = skipDetails.Take(200).Select(s => new
+            {
                 TxId = s.TxId,
                 RefNum = s.RefNum,
                 TxDate = s.TxDate.ToString("yyyy-MM-dd"),
@@ -331,17 +338,36 @@ public sealed class ProcessPendingTransactionsJobHandler(
         var end = assignment.EffectivePeriod.End;
         var payeeId = assignment.PayeeId;
 
+        // Pattern B: only include transactions whose currency matches this plan's currency.
+        var plan = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == assignment.PlanId && p.TenantId == payload.TenantId)
+            .Select(p => new { p.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null) return [];
+
         return await db.CompensationTransactions
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId == payeeId
                      && t.TransactionDate >= start
-                     && t.TransactionDate <= end)
+                     && t.TransactionDate <= end
+                     && t.Amount.Currency == plan.Currency)
             .Select(t => t.Id)
             .ToListAsync(ct);
     }
 
     private async Task<List<Guid>> LoadByPlanAsync(ProcessPendingTransactionsPayload payload, CancellationToken ct)
     {
+        // Pattern B: load plan currency — only transactions in this currency are eligible for this plan.
+        var plan = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == payload.ScopeId && p.TenantId == payload.TenantId)
+            .Select(p => new { p.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null) return [];
+
         // Load full entities to avoid EF Core owned-type projection issues (DateRange is an owned type).
         var assignments = await db.PlanAssignments
             .IgnoreQueryFilters()
@@ -352,15 +378,15 @@ public sealed class ProcessPendingTransactionsJobHandler(
         var activeAssignments = assignments.Where(a => a.EffectivePeriod is not null).ToList();
         if (activeAssignments.Count == 0) return [];
 
-        // Load all pending transactions for these payees in one query (not one query per assignment).
-        // DateRange is an owned type that EF Core 8 doesn't translate reliably in WHERE,
-        // so filter by date in-memory after fetching all pending rows for the payee set.
         var planPayeeIds = activeAssignments.Select(a => a.PayeeId).Distinct().ToList();
 
+        // Pattern B: filter by plan currency so payees with matching-date but different-currency
+        // plans don't produce transactions that will be misrouted or skipped.
         var allPendingForPayees = await db.CompensationTransactions
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId.HasValue
-                     && planPayeeIds.Contains(t.PayeeId!.Value))
+                     && planPayeeIds.Contains(t.PayeeId!.Value)
+                     && t.Amount.Currency == plan.Currency)
             .Select(t => new { t.Id, t.PayeeId, t.TransactionDate })
             .ToListAsync(ct);
 

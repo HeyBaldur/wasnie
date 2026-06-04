@@ -370,9 +370,58 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## CompensationTransaction column addition violations
+
+- ❌ **Adding a new column to `CompensationTransactions` without updating ALL required surfaces** (WI-PROD-QUANTITY-FIELD, 2026-06-04). Missing any one location leads to silent data loss, display gaps, or import/export mismatches. **Checklist when adding a column:** (1) `CompensationTransaction.cs` entity property + domain method params; (2) `CompensationTransactionConfiguration.cs` EF mapping; (3) EF Core migration with appropriate default; (4) `TransactionFieldValidators.cs` shared validator; (5) `TransactionImportColumnMapping` + import validation service + import job handler; (6) `TransactionUpdateColumnMapping` + update validation service + update job handler; (7) `IngestTransactionCommand` + validator + handler; (8) `TransactionDto`; (9) `TransactionExportRow` + `ExportTransactionsHandler` + `TransactionExcelExportService`; (10) `ListTransactionsHandler.ToDto` (via `IngestTransactionHandler.ToDto`); (11) frontend `transaction.model.ts`; (12) frontend create form; (13) frontend list column; (14) `column-auto-detect.ts` patterns; (15) frontend import + update column mapping models; (16) import preview step HTML; (17) `CreditDetailDto` + `GetCreditByIdHandler` if relevant to credits.
+
+---
+
+## Multi-plan currency routing violations
+
+- ❌ **Treating currency mismatch between a transaction and a PlanAssignment as a validation error** (WI-CALC-MULTIPLAN-CURRENCY-MATCH, 2026-06-04 — Decision #65). When a payee has multiple active PlanAssignments, a transaction whose currency doesn't match one plan's currency does NOT belong to that plan — it belongs to the plan whose currency matches. Treating this as an error causes false skip-log entries, badge over-counting, and destroys trust. **Rule (Pattern B):** `PlanAssignmentResolver.Resolve(payeeAssignments, txDate, txCurrency, planCurrencyById)` is the single source of truth for selecting the applicable PlanAssignment. It MUST be used everywhere a "which plan applies?" question is asked: Credit Engine, Process Pending job, badge/eligible predicates, import validator. Currency mismatch at the resolver level → transaction stays Pending (no error, no log noise). A `Warning` (not Error) in the import validator is acceptable when no plan in the transaction's currency exists.
+
+- ❌ **`FirstOrDefault` on PlanAssignments without currency disambiguation** (Decision #65). `payeeAssignments.FirstOrDefault(pa => pa covers txDate)` selects an arbitrary plan when multiple overlap on the same date. The correct query is `PlanAssignmentResolver.Resolve(...)` which applies the currency-match rule first, then the shortest-period tie-break.
+
+---
+
+## Calculated-value invisibility violations
+
+- ❌ **Any value calculated and persisted by the system with no UI to inspect it** (WI-PROD-CREDITS-VISIBILITY, 2026-06-04). Hiding calculations in the database forces users (and developers) to run SQL queries to verify correctness. This destroys trust and makes bugs invisible until they cause a financial error. **Rule:** Every entity that holds a calculated financial value (Credit, Payout, Tax line, etc.) MUST have: (a) a list page filtered/searchable by the relevant dimensions, (b) a detail page showing all 5 of: the result, the source data, the rule/formula applied, a "show your work" step-by-step trace, and audit information. A count or aggregate on a dashboard is not a substitute for inspectability — users need to see individual rows, trace them back to source transactions, and verify the math.
+
+---
+
 ## Financial action opacity violations
 
 - ❌ **Showing a count of affected items before an action without showing which items** (WI-PROD-T-FIX-12, 2026-06-04). A badge that says "3 Pending eligible for processing" without a visible list of those 3 transactions is a black box. In a financial system this destroys trust: the user cannot verify what will be acted on, cannot cross-reference with their Excel records, and cannot detect a misconfiguration before it corrupts commission records. **Rule:** Any "eligible / applicable / affected" count displayed before a user-triggered financial action (Process Pending, batch write, recalculate) MUST be backed by an inline, inspectable list of the exact items the action WILL target. The list MUST use the SAME predicate as the count — if they diverge, the list is misleading. Caps (e.g. "first 200, see filter for rest") are acceptable; a count-only display is not.
+
+---
+
+## Derived-entity currency violations
+
+- ❌ **Using an independent currency for a derived entity whose currency must equal its parent entity's currency** (WI-CALC-A.3-FIX-1, 2026-06-04). Example: a Quota is denominated in its Plan's currency. If the Plan is EUR, the Quota MUST be EUR. Allowing the user to freely pick "PLN" for a Quota on an EUR Plan produces meaningless attainment calculations: `CreditedAmount` (always in Plan currency) is compared against a Quota target in a different currency — the ratio is numerically nonsensical.
+
+  **Rule:** Any entity whose financial calculations are relative to a parent entity MUST enforce that both use the same currency:
+  - Domain layer: `Quota.Create` and `Quota.UpdateDraft` accept `planCurrency` and throw `DomainException` on mismatch.
+  - Application layer: `CreateQuotaHandler` and `UpdateQuotaHandler` load the Plan and pass its Currency to the domain factory/method.
+  - UI layer: The Currency field in Create Quota auto-populates from the selected Plan and is non-editable (disabled reactive form control).
+
+  This pattern extends to: Credits (match Plan currency), Payouts (match Plan currency), and any future derived financial entity.
+
+---
+
+## Quota attainment aggregation violations
+
+- ❌ **Aggregating attainment across Plans for a single Payee** (WI-CALC-A.3, 2026-06-04). Attainment is per-Quota, not per-Payee. A Payee may have multiple Quotas — one per Plan per Period — and each Plan's quota is completely independent. Summing or averaging attainment across Plans has no semantic meaning and produces misleading results. Example: a payee at 80% on Plan A and 50% on Plan B is NOT at 65% overall — each plan's payout is computed independently from its own attainment.
+
+  **Rule:** `IQuotaAttainmentService.ComputeAsync(payeeId, planId, asOfDate)` takes an explicit `planId` — it NEVER aggregates across plans. Callers must invoke it once per Plan. Display components must show one attainment card per Quota.
+
+- ❌ **Calling `IQuotaAttainmentService.ComputeAsync` for Flat or Tiered plans** (WI-CALC-A.3, 2026-06-04). The short-circuit check `PlanUsesAttainment(plan)` in `CreditAllocationService` exists precisely to avoid unnecessary DB round-trips. Removing or bypassing this check would cause one extra DB query per transaction even when the plan has no attainment-based rules.
+
+  **Rule:** Always check `PlanUsesAttainment(plan)` before calling `ComputeAsync`. The method exists on `CreditAllocationService` as a `private static bool`.
+
+- ❌ **Using `CreditedAmount` (the commission) instead of `OriginalAmount` (the transaction revenue) for Revenue-type quota attainment** (WI-CALC-A.3, 2026-06-04). Revenue quota attainment measures how much revenue was generated (the transaction amount), not how much commission was earned. For example, Anna's quota is "sell $50,000". Her attainment = sum of `Credit.OriginalAmount` for the period. Summing `CreditedAmount` (e.g., 5% commission) would produce nonsensical attainment numbers.
+
+  **Rule:** `QuotaAttainmentService.ComputeRevenueAchievedAsync` sums `c.OriginalAmount.Amount`. Never replace with `CreditedAmount`.
 
 ---
 

@@ -10,6 +10,353 @@
 
 ---
 
+## 2026-06-04 — WI-PROD-PAYEE-DASHBOARD-V2: Scroll-único dashboard + tab cleanup
+
+**Strategic change:** Removed Assignments, Quotas, Attainment tabs. New "Overview" is the default landing tab. All list data accessible via bento cards with virtual scroll (IntersectionObserver sentinel). Pacing target line in gauges. Period filter Active/All.
+
+**Research note (industry pattern):** Pacing target line is the standard CaptivateIQ/Xactly feature. In a 30-day quota period, on day 15 the pacing target line sits at 50% — if your attainment bar is to the left of it, you're behind pace. Default to "Active" filter matches CaptivateIQ's default view which hides historical quotas unless explicitly requested.
+
+**Backend (6 files):**
+- `PaginationQuery`: `Period` field added (`"active"` | `"all"`)
+- `ListQuotasByPayeeHandler`: in-memory period filter (`PeriodEnd >= today` for active). Removed EF `ToPagedResultAsync` — does manual pagination on filtered list (avoids owned DateRange SQL WHERE issues).
+- `ListAssignmentsByPayeeHandler`: same pattern. `AssignmentRow` private record replaces `dynamic` for typed in-memory filtering.
+- `GetPayeeDashboardHandler`: accepts `period` param. Returns gauges + trend only (list cards moved to separate endpoints). Period filter: active quotas + last 90 days credits.
+- `GetPayeeCreditsQuery` + `GetPayeeCreditsHandler`: new paginated credits endpoint for payee. `ListCreditsHandler.EnrichPageAsync` promoted to `internal static` for reuse.
+- `PayeesController`: `[period]` on `/dashboard`, new `GET /:id/credits?page&period`
+
+**Frontend (7 files):**
+- `ws-load-more.directive.ts`: new standalone directive using `IntersectionObserver`. Sentinel element at bottom of list emits `wsLoadMore` when enters viewport. Zero new dependencies.
+- `ws-gauge`: new `pacingValue: number | null` input. SVG circle at `x=100−80cos(p×π), y=100−80sin(p×π)`. Shown only for in-progress quotas.
+- `ws-line-chart`: tooltip X clamped to `[8, 75]%` — prevents right-edge overflow.
+- `payees.api.service.ts`: `getPayeeDashboard(period)`, `getPayeeCredits(page, period)` added
+- `payee-detail.component.ts`: entirely rewritten. Tabs: overview|profile|activity. Virtual scroll signals per card (assignments/quotas/credits). `loadMoreX()` pattern triggered by `wsLoadMore`. `computePacing(periodStart, periodEnd)` → pacing fraction for gauge.
+- `payee-detail.component.html`: entirely rewritten. Compact header (initials avatar, name, meta row, actions). Period filter pill toggle. 5 bento cards (2×2 + 1 full-width credits). All list rows clickable via `[routerLink]`. `wsLoadMore` sentinels at bottom of each list card.
+- `payee-detail.component.scss`: entirely rewritten. Compact header, tabs, period filter, bento grid, gauge rows, list rows, credit row grid, virtual scroll helpers. Mobile responsive at ≤700px.
+- `en/es/pl.json`: `PAYEES.DETAIL_TAB_OVERVIEW`, `DASHBOARD.CREDITS_TITLE`, `DASHBOARD.CREDITS_EMPTY`, `DASHBOARD.END_OF_LIST`, `DASHBOARD.PERIOD_ACTIVE`, `DASHBOARD.PERIOD_ALL`
+
+**Tests (+1 net: 785 total):** Updated `GetDashboard_WithQuotaAndAssignment` (list sections now empty — served by separate endpoints); added `GetDashboard_WithPeriodAll`.
+
+**Bundle: 574 KB (unchanged). Both builds clean. NO git.**
+
+---
+
+## 2026-06-04 — WI-PROD-PAYEE-DASHBOARD: Bento dashboard for Attainment tab
+
+**Decision:** Chart.js rejected (not in project; +150KB). Built with native SVG — zero dependencies, zero bundle growth (SVG in lazy payees chunk).
+
+**Backend (5 files):**
+- `PayeeDashboardDto` + `EarningsTrendPointDto`
+- `GetPayeeDashboardQuery` + `GetPayeeDashboardHandler`: composed `GET /api/payees/:id/dashboard`
+  - All four data fetches parallel: quotas, all credits (join TX for date/currency), assignments, plan names
+  - Attainment: in-memory filter by (planId, period) from preloaded credits
+  - Earnings trend: in-memory GROUP BY (year, month, currency) — avoids EF Core owned-type translation issues
+  - Recent quotas: last 5. Recent assignments: last 10.
+- `PayeesController`: new `GET /{payeeId:guid}/dashboard` endpoint
+
+**Frontend (7 new/updated files):**
+- `ws-gauge`: SVG half-circle gauge (path `M 20,100 A 80,80 0 0,1 180,100`, 200×120 viewBox). Inputs: `value` (0–2.0+), `label`. Stroke-dasharray fill: `min(value,1.0) × πR`. Color via CSS vars: brand/success/warning/danger. Animated with CSS transition. ARIA accessible.
+- `ws-line-chart`: SVG polyline chart (560×180 viewBox). Inputs: `points` (label+value+currency?), `emptyLabel`. Multi-currency: up to 3 series in brand/success/warning colors. Y-gridlines + axis labels. Area gradient fill. Hover tooltip via mousemove + floating div. ARIA accessible.
+- Both exported from `shared/ui/index.ts`
+- `payee-dashboard.model.ts`: `PayeeDashboard`, `EarningsTrendPoint`, `DashboardAssignment`
+- `payees.api.service.ts`: `getPayeeDashboard(payeeId)` added
+- `payee-detail.component.ts`: replaces `attainmentResult`/`attainmentLoading` with `dashboardResult`/`dashboardLoading`; new imports `WsCardComponent`, `WsGaugeComponent`, `WsLineChartComponent`; bento helpers added
+- `payee-detail.component.html`: Attainment tab content replaced with 2×2 CSS Grid bento layout
+- `payee-detail.component.scss`: old attainment styles removed; full bento CSS system added (grid, cards, gauge rows, mini progress, list rows, responsive single-column at ≤700px)
+
+**i18n:** `DASHBOARD.*` section added in EN/ES/PL (6 keys: GAUGES_TITLE, TREND_TITLE, TREND_EMPTY, QUOTAS_TITLE, ASSIGNMENTS_TITLE, VIEW_ALL)
+
+**Tests (+3 integration):** `PayeeDashboardEndpointsTests`: 401 (no auth), 200 empty (new payee), 200 with quota+assignment data.
+
+**Zero new dependencies. Both builds clean. 784 tests (333 unit + 451 integration).**
+
+---
+
+## 2026-06-04 — WI-CALC-A.3-FIX-1: Quota-Plan currency invariant
+
+**Root cause:** Create Quota dialog had an independent currency dropdown. Nothing prevented choosing EUR for a Quota whose Plan is PLN — producing nonsensical attainment ratios (PLN credits vs EUR target).
+
+**Domain (1 file):**
+- `Quota.Create`: added optional `planCurrency` param. If provided, throws `DomainException` when `amount.Currency != planCurrency`.
+- `Quota.UpdateDraft`: same `planCurrency` param added.
+- Null/omitted: no validation (backward-compatible for existing calls without planCurrency).
+
+**Application (2 files):**
+- `CreateQuotaHandler`: loads Plan before `Quota.Create`. Passes `plan.Currency` as `planCurrency`. Returns 400 on mismatch (via `Result.Failure`).
+- `UpdateQuotaHandler`: loads Plan (via `quota.PlanId`) before `UpdateDraft`. Passes `plan?.Currency`. Returns 422 on mismatch (existing error path).
+
+**UI (1 component file, 3 i18n files):**
+- `quota-create.component.ts`: currency form control starts `disabled`. Subscribes to `planId.valueChanges` → calls `plansApi.getPlan(planId)` → sets currency value and `planCurrencyLocked` signal. Control stays disabled (grayed out, non-editable). `getRawValue()` still includes disabled control value.
+- Template: WsInput for currency with `[placeholder]` showing "Select a plan first" until a plan is chosen, then shows the plan's ISO 3-letter currency code.
+- EN/ES/PL: `QUOTAS.CURRENCY_LOCKED` + `QUOTAS.CURRENCY_SELECT_PLAN_FIRST` added.
+
+**Tests (+7 net: 333 unit + 448 integration = 781 total):**
+- `QuotaTests.cs` (new, 5 unit tests): `Create` matching/mismatch, `Create` no-planCurrency passthrough, `UpdateDraft` matching/mismatch
+- `QuotasEndpointsTests`: `CreateQuota_CurrencyMismatchWithPlan_Returns400` (new), `UpdateQuota_CurrencyMismatchWithPlan_ReturnsError` (new), `UpdateQuota_ValidRequest_Returns200` updated to use EUR (was USD which was already a mismatch)
+- `QuotaAttainmentServiceTests`: two `Quota.Create` calls updated to pass `planCurrency: Currency`
+
+**Forbidden pattern added:** "Derived-entity currency must equal parent currency — enforce at both domain (factory validates) and UI (locked field) layers."
+
+**Audit query (run manually against dev DB):**
+```sql
+SELECT q.Id, q.QuotaAmount, q.QuotaCurrency, p.Name, p.Currency
+FROM Quotas q JOIN CompensationPlans p ON q.PlanId = p.Id
+WHERE q.QuotaCurrency <> p.Currency;
+```
+Expected: at least 1 row (Quota B from smoke test: EUR on PLN plan). Default: do NOT auto-clean — owner corrects via UI.
+
+**Both builds clean. NO git operations.**
+
+---
+
+## 2026-06-04 — WI-CALC-A.3: Quota Attainment Service
+
+**Strategic context:** A.3 closes the gap between Credits (computed by A.1/A.2) and Payouts (A.4 next). Answers: "what % of her quota has Anna achieved?"
+
+**Test pattern restored:** Pattern is back. +7 tests net (328 unit + 446 integration = 774 total). 2 intentionally skipped remain.
+
+**Domain (1 file):**
+- `AttainmentPercentage` VO: range 0–∞ (no upper cap), `FromAchievedAndTarget(achieved, target)` with target=0 → Zero, `ToPercentString()` → "76%"/"120%", banker's rounding to 4 decimals. Distinct from `Percentage` VO (capped 0–1 for rule rates).
+
+**Application (4 files):**
+- `IQuotaAttainmentService`: single method `ComputeAsync(payeeId, planId, asOfDate, ct)` returning `AttainmentPercentage`
+- `GetPayeeAttainmentQuery` + `GetPayeeAttainmentHandler`: `GET /api/payees/:id/attainment` returning `QuotaAttainmentDto[]` per non-Draft quota (Revenue sums OriginalAmount, Units sums Quantity)
+- `QuotaAttainmentDto`: QuotaId, PlanName, MeasurementType, TargetAmount, AchievedAmount, AttainmentValue, AttainmentPercent, period, status
+
+**Infrastructure (2 files):**
+- `QuotaAttainmentService`: scoped per request, `Dictionary<(Guid,Guid,DateOnly), AttainmentPercentage>` cache (mirrors FieldRequirementService pattern). Quotas loaded in-memory then date-filtered (same DateOnly-on-owned-type workaround as CreditAllocationService). Revenue = sum `Credit.OriginalAmount`, Units = sum `CompensationTransaction.Quantity`.
+- `CreditAllocationService`: `IQuotaAttainmentService` injected; `BuildCredits` → `BuildCreditsAsync`; `PlanUsesAttainment(plan)` short-circuit (only calls `ComputeAsync` when at least one active AttainmentBased rule). Both overloads updated.
+
+**Controller (1 file):**
+- `PayeesController`: `GET /api/payees/{payeeId:guid}/attainment` added
+
+**Frontend (6 files):**
+- `QuotaAttainment` model added to `quota.model.ts`
+- `PayeesApiService.getPayeeAttainment(payeeId)` added
+- `payee-detail.component.ts`: `'attainment'` added to Tab type; `attainmentResult/attainmentLoading` signals; `loadPayeeAttainment()` method; `attainmentColorClass(value)` helper (red <50%, amber 50–79%, green 80–100%, blue ≥100%); `QuotaMeasurementType` enum exposed; `DecimalPipe` imported
+- `payee-detail.component.html`: Attainment tab button + quota cards with target/achieved/progress bar + color coding + empty state
+- `payee-detail.component.scss`: `.attainment-grid`, `.attainment-card`, `.attainment-stat`, `.attainment-progress` with color variants
+- `en.json` + `es.json` + `pl.json`: `PAYEES.DETAIL_TAB_ATTAINMENT`, `PAYEES.ATTAINMENT_TAB_EMPTY`, `ATTAINMENT.*` section (Target, Achieved, Measure_Revenue, Measure_Units, Units)
+
+**Tests (3 new files):**
+- `AttainmentPercentageTests.cs` (unit): 9 cases — equality, from-target-zero, negative-target, negative-achieved, exceeds-100, ToPercentString formats, partial rounding
+- `QuotaAttainmentServiceTests.cs` (integration): 6 cases — Revenue attainment, Units attainment, no quota → Zero, Draft quota → Zero, overlapping periods → shortest wins, credits outside period not counted
+- `CreditAllocationServiceTests.cs`: replaced `AllocateAsync_AttainmentBased_V1Stub_*` with `_UsesRealAttainmentFromService` (stub returns 75% → 7% bracket) + `AllocateAsync_FlatPlan_DoesNotCallAttainmentService` (CallCount=0 short-circuit test)
+- `StubQuotaAttainmentService.cs`: `CallCount` tracking, configurable fixed attainment value
+
+**Forbidden patterns (1 new rule added):**
+- "Attainment is per-Quota, not per-Payee — never aggregate attainment across Plans"
+- "Always check PlanUsesAttainment before calling ComputeAsync"
+- "Use OriginalAmount (transaction revenue) not CreditedAmount (commission) for Revenue-type attainment"
+
+**Key decision:** Revenue quota attainment sums `Credit.OriginalAmount` (the transaction revenue attributed to this payee), NOT `Credit.CreditedAmount` (the commission). The WI spec's reference to "CreditedAmount" was interpreted as "credited/attributed revenue" — the correct domain measure is the original transaction amount.
+
+**Smoke test:** Use Create Quota UI (already functional) to seed a Quota for EMP301 on Test Flat 5% Plan, period May 2026, Revenue, target 50,000 EUR. Open /payees/:id → Attainment tab → see card with progress bar.
+
+**Both builds clean. 774 tests (328 unit + 446 integration). NO git operations.**
+
+---
+
+## 2026-06-04 — WI-PROD-QUANTITY-FIELD: Quantity field + MeasurementType V1 filter
+
+**Strategic decision:** Support Revenue + Units in V1. Margin/ACV/Bookings hidden from Quota creation (enum values preserved for future activation). Quantity field added to CompensationTransactions to enable Units attainment in A.3.
+
+**Backend (17 files):**
+- `CompensationTransaction`: + `Quantity int` property (default 1), + `quantity` param in `Ingest()`, + `newQuantity` param in `ApplyExcelUpdate()`
+- `CompensationTransactionConfiguration`: + `HasDefaultValue(1)` column mapping
+- Migration `P3_AddTransactionQuantity`: `ADD COLUMN Quantity int NOT NULL DEFAULT 1`. All 10K+ existing rows → 1.
+- `TransactionFieldValidators`: + `ValidateQuantity()` — empty→1, non-int or <1→Format error
+- `TransactionImportColumnMapping`: + `QuantityColumn?`; import validation + job handler parse + pass to `Ingest()`
+- `TransactionUpdateColumnMapping` + update validation service (with diff) + update job handler: same
+- `IngestTransactionCommand` + validator (`>= 1`) + handler: Quantity threaded through
+- `TransactionDto`: + `Quantity`; `IngestTransactionHandler.ToDto` updated (ListTransactions via same method)
+- `TransactionExportRow` + `ExportTransactionsHandler` + `TransactionExcelExportService`: Quantity column (col 7, shifts others)
+- `CreditDetailDto`: + `TransactionQuantity`; `GetCreditByIdHandler`: joined from tx
+
+**Frontend (10 files):**
+- `transaction.model.ts`: + `quantity` on Transaction + CreateTransactionRequest
+- `transaction-form`: Quantity input (min: 1, default: 1)
+- `transactions-list`: + Qty column header/cell, colspan updated
+- `column-auto-detect.ts`: + `quantityColumn` patterns (EN/ES/PL)
+- Import + update column mapping models: + `quantityColumn?`
+- Import preview step: + Quantity column (conditional on mapping)
+- `credit.model.ts` + credit detail HTML: + `transactionQuantity` in Section B (shown when > 1)
+- `quota-create.component.ts`: MEASUREMENT_TYPES filtered to Revenue + Units only
+- i18n EN/ES/PL: FIELD_QUANTITY, FIELD_QUANTITY_MIN, COL_QUANTITY, TX_QUANTITY, IMPORTS.TRANSACTIONS.FIELD_QUANTITY
+
+**Build:** Backend clean (0 errors). Frontend production clean. Migration applied to dev DB.
+
+**TODO_TESTS:** See TODO_TESTS section (WI-PROD-QUANTITY-FIELD entry).
+
+---
+
+## 2026-06-04 — WI-PROD-CREDITS-EXPORT: Excel export for /credits + unified button placement
+
+**Consistency principle:** Both /credits and /transactions now have "Export to Excel" in the same position — right-aligned above the table, inline with the count text. Reduces cognitive load for users switching between pages.
+
+**Backend (new):**
+- `Permission.CreditsExport` — granted to TenantAdmin + CompManager.
+- `CreditExportRow` DTO (17 columns: Id, ReferenceNumber, PayeeName, PayeeCode, PlanName, RuleName, OriginalAmount, OriginalCurrency, CreditedAmount, CreditedCurrency, SplitPercentage, Role, AllocatedAt, AllocatedBy, Status, SupersededAt, SupersededBy).
+- `ICreditExcelExportService` + `CreditExcelExportService` (ClosedXML, frozen header row, auto-fit columns).
+- `ExportCreditsQuery` + `ExportCreditsHandler` — uses `ListCreditsHandler.BuildQuery(db, filter)` for FIX-2/FIX-11 predicate sharing. 50k row cap, EXPORT_TOO_LARGE 422 response.
+- `GET /api/credits/export` endpoint added to `CreditsController`.
+- DI registration in Infrastructure.
+
+**Frontend:**
+- `CreditsApiService.exportToExcel(params)` — GET with blob response type.
+- `CreditsStore.toExportParams()` — builds PaginationParams from current filter.
+- `CreditsListComponent.onExport()` + `exporting` signal — same pattern as TransactionsListComponent.
+- Export button placed in the view-toggle row (right side, after spacer).
+- Transactions export button moved from before the filter panel to the count row above the table (new `transactions-list__table-header` flex row).
+- i18n EN/ES/PL: CREDITS.EXPORT.BUTTON + CREDITS.EXPORT.ERROR.
+
+**Build:** Backend Application + Infrastructure: clean. Frontend production: clean.
+
+**TODO_TESTS:** See TODO_TESTS section (WI-PROD-CREDITS-EXPORT entry).
+
+---
+
+## 2026-06-04 — WI-PROD-FILTERS-CURRENCY-RULE-FIX-1: Currency and Rule converted to dropdown
+
+**Problem:** Currency filter shipped as 17 inline toggle buttons (full-width row) instead of the dropdown+chip pattern used by Payee and Plan. Rule filter had the same inline-chip issue. Layout broke the filter panel grid.
+
+**Fix:** Both Currency and Rule now use `ws-select` (the shared primitive) with `[options]` + `[searchable]="true"`. Selection adds a removable chip below the dropdown (exact same pattern as Payee/Plan). The inline toggle-chip CSS was removed from the credits SCSS.
+
+**Layout:** Currency is now a single `ws-select` field in the amount row. Rule is a `ws-select` in its own compact row (still conditional on ≥1 plan selected). Grid restored.
+
+**Changes:** `transaction-filter.component.ts/html` (replaced `activeCurrencies` + toggle-chip pattern → `selectedCurrencies` + `currencySearch` FormControl + `availableCurrencyOptions` computed). `credits-list.component.ts/html/scss` (same for currency + rule: `selectedCurrencies`, `currencySearch`, `ruleSearch`, `availableCurrencyOptions`, `availableRuleOptions`). i18n EN/ES/PL: + `CURRENCY_PLACEHOLDER`, `RULE_PLACEHOLDER`.
+
+**Build:** Frontend production clean. No backend changes.
+
+---
+
+## 2026-06-04 — WI-PROD-FILTERS-CURRENCY-RULE: Currency + Rule filters
+
+**What was done:**
+- Added Currency multi-select (chip-button toggle) to `/credits` filter panel — 17 ISO 4217 codes from `CurrencyConstants.KnownCurrencies`. Backend was already wired; only UI was missing.
+- Added Rule multi-select to `/credits` filter panel — chips appear when ≥1 Plan is selected; loads active rules from `PlansApiService.getPlan()`. Selecting a rule narrows results to credits from that rule's `c.RuleId`. Removing a plan removes its rules from both available and selected sets.
+- Added Currency multi-select (same chip-button pattern) to `/transactions` filter panel.
+- All 3 new filters URL-sync (`?currencies=EUR,PLN`, `?ruleIds=<id>`).
+- Counter cards and By-Payee aggregate for credits already respect all filters via `ListCreditsHandler.BuildQuery` — no extra work needed.
+- FIX-11 8-location checklist verified for each new field.
+
+**Backend changes (no migrations):**
+- `PaginationQuery`: + `Currencies` field.
+- `ListTransactionsHandler`: + currency WHERE predicate (`t.Amount.Currency`).
+- `ExportTransactionsHandler`: + same currency predicate.
+- `CreditFilterQuery`: + `RuleIds` field.
+- `ListCreditsHandler.BuildQuery`: + `WHERE c.RuleId IN (...)` predicate.
+
+**Frontend changes:**
+- `TransactionFilter` interface + `EMPTY_FILTER` + `_buildFilterRecord` + `toExportFilter` + `toQueryParams` + `loadFromQueryParams` + `activeFilterCount`: + `currencies: string[]`.
+- `TransactionFilterComponent` (TS + HTML): new Row 5 with currency chips.
+- `CreditFilter` interface + `EMPTY_CREDIT_FILTER` + `_buildFilterRecord` + `toQueryParams` + `loadFromQueryParams` + `activeFilterCount`: + `ruleIds: string[]`.
+- `CreditsListComponent` (TS + HTML + SCSS): currency toggle chips + rule chip picker (plan-linked).
+- i18n EN/ES/PL: `TRANSACTIONS.FILTER.CURRENCY`, `CREDITS.FILTER.CURRENCY`, `CREDITS.FILTER.RULE`, `CREDITS.FILTER.RULE_NO_RULES`.
+
+**Build:** Backend Application project: clean. Frontend production: clean (pre-existing bundle warning 563KB unchanged).
+
+**TODO_TESTS:** Add filter tests for the 3 new fields per WI-PROD-FILTERS-CURRENCY-RULE (backend predicates + frontend store URL sync + filter component chip toggling).
+
+---
+
+## 2026-06-04 — WI-CALC-MULTIPLAN-CURRENCY-MATCH: Pattern B — multi-plan match by currency
+
+**WI:** WI-CALC-MULTIPLAN-CURRENCY-MATCH
+**Status:** DONE ✅
+**Type:** Backend logic fix — credit engine + badge + import validator.
+
+### Decision #65: Plan resolution by currency match (Pattern B)
+When a payee has multiple active PlanAssignments covering a transaction date, the assignment whose Plan currency matches the transaction currency is the one that applies. Other assignments in different currencies are irrelevant for that transaction. Currency mismatch = routing signal, NOT an error.
+
+Comparison: Xactly/Spiff/CaptivateIQ all implement multi-plan support where the transaction's currency determines which plan receives it. Pattern B is the industry-standard approach.
+
+### Smoke bug chain (fixed)
+1. EMP301 had EUR plan + PLN plan active in May 2026.
+2. 3 PLN transactions for May were Pending.
+3. Badge on PLN plan counted ALL pending for EMP301 in May (EUR + PLN) = misleading.
+4. Process Pending from PLN plan → `FirstOrDefault` picked EUR plan → `DomainException("Currency mismatch")` → transactions skipped with wrong error message referencing wrong plan.
+
+### New `PlanAssignmentResolver` (Application layer)
+`Wasnie.Application.Compensation.Calculation.PlanAssignmentResolver.Resolve()`:
+- Takes pre-loaded `allPayeeAssignments`, `txDate`, `txCurrency`, `planCurrencyById`
+- Returns the unique matching PlanAssignment per Pattern B rules
+- No DB access (pure function on in-memory data)
+- Tie-break: shortest effective period → smallest Id (deterministic)
+
+### All surfaces updated
+1. **`CreditAllocationService`** (both overloads): loads plan currencies, calls resolver instead of `FirstOrDefault`. Keeps currency guard in `BuildCredits` as last-resort defensive check.
+2. **`ProcessPendingJobHandler.LoadByPlanAsync`**: loads plan currency, adds `t.Amount.Currency == plan.Currency` to WHERE clause.
+3. **`ProcessPendingJobHandler.LoadByAssignmentAsync`**: same currency filter added.
+4. **`GetPendingTransactionsCountHandler.CountByPlan` + `CountByAssignment`**: load plan currency, filter by it.
+5. **`GetEligiblePendingTransactionsHandler.LoadByPlanAsync` + `LoadByAssignmentAsync`**: same.
+6. **`TransactionImportValidationService`**: `FirstOrDefault` → check all assignments for date; if any match currency → no issue; if none match → `Warning` (not `Error`) with message "Transaction will remain Pending until a {currency} plan is assigned."
+
+### What's now correct after Pattern B
+- PLN plan badge shows only PLN-currency Pending transactions for its payees in their assignment periods.
+- EUR plan badge shows only EUR-currency Pending transactions.
+- Process Pending from PLN plan processes only PLN transactions — 3 processed, 0 skipped for currency reasons.
+- Import of PLN transactions for EMP301 shows no error; shows a warning only if EMP301 has NO PLN plan at all.
+- Skip log will no longer contain "Currency mismatch" entries (this was the false error).
+
+### TODO_TESTS
+- Integration test: payee with EUR + PLN plans in May; 3 PLN Pending transactions in May; Process Pending with ByPlan scope for PLN plan → processes all 3, creates 3 PLN credits.
+- Integration test: badge count for PLN plan == 3 (not 3 + EUR transactions).
+- Integration test: badge count for EUR plan == EUR transactions only (no PLN ones counted).
+- Integration test: import of PLN transaction for payee with EUR plan → Warning (not Error).
+- Integration test: import of PLN transaction for payee with PLN plan → no issue.
+
+### Build
+- `dotnet build Wasnie.Application` — 0 errors
+- `dotnet build Wasnie.Infrastructure` — 0 errors
+
+---
+
+## 2026-06-04 — WI-PROD-CREDITS-VISIBILITY: Expose credits in UI
+
+**WI:** WI-PROD-CREDITS-VISIBILITY
+**Status:** DONE ✅
+**Type:** Full-stack new feature — backend 4 endpoints + frontend 2 pages.
+
+### Why it exists
+363 active Credits (54,589.15 EUR) confirmed correct via SQL, but invisible in UI. Owner: "Sin visibilidad no hay confianza." Every subsequent phase (Payouts, Dashboards) builds on calculated credits — if users can't inspect them, errors are undetectable until financial damage occurs.
+
+### Visibility principle (new forbidden-pattern rule)
+Every calculated financial entity MUST have: (a) list page with filters, (b) detail page with source data + formula + "show your work" trace + audit info. A dashboard aggregate is NOT a substitute.
+
+### Backend (Application + API layers)
+- `Permission.CreditsRead` + granted to TenantAdmin + CompManager
+- `CreditFilterQuery` — 9 filter params (payeeIds, planIds, status, allocatedFrom/To, amountMin/Max, currencies, reference)
+- `ListCreditsQuery` → handler: Credits + Transaction join (ref), Payee batch-lookup, Plan batch-lookup → `CreditListDto`
+- `GetCreditCountersQuery` → handler: active count, superseded count, per-currency totals of active credits
+- `GetCreditsByPayeeQuery` → handler: groups credits by payee, sums amounts per currency, orders by total desc
+- `GetCreditByIdQuery` → handler: joins Transaction + Payee + Plan; deserializes RuleSnapshot for Section D; builds step-by-step calc display for Flat rate type
+- `GET /api/credits`, `/counters`, `/by-payee`, `/:id`
+
+### Frontend
+- `CreditFilter` type + `CreditsStore` (signals, `_buildFilterRecord` single source of truth per FIX-11 rule)
+- `credits.routes.ts` — `/credits` + `/credits/:id`
+- **List page:** counter cards (active, superseded, totals), filter panel (status/payee/plan/ref/date/amount), view toggle (Table | By Payee), paginated table, By-Payee table with click-to-filter
+- **Detail page:** 5 sections — Summary (credited amount highlighted, status badge, audit fields), Source Transaction (ref + date + amount + payee + link), Plan & Rule (with status badge + link), "How it was calculated" (Flat: base × rate = credit visual trace; raw JSON toggle), Superseded banner
+- Nav: "Credits" entry with `receipt` icon, guarded by `Credits.Read`
+- i18n: ~60 keys in EN/ES/PL
+
+### RuleSnapshot rendering
+- Flat type: structured step-by-step calc display (BaseAmount × 5.00% = CreditedAmount)
+- All types: "View raw snapshot" toggle → pre-formatted JSON
+- TriggerAlways flag handles "no conditions" case cleanly
+
+### TODO_TESTS
+- Integration: GET /api/credits returns 363 active credits matching SQL count
+- Integration: By-Payee returns top earner Agnieszka EMP301 with 37,714.32 EUR
+- Integration: Filter by payeeId=EMP301 returns only EMP301 credits
+- Integration: GET /api/credits/:id returns all 5 section fields correctly
+
+### Build
+- `dotnet build Wasnie.Application` — 0 errors
+- `ng build --configuration production` — clean
+
+---
+
 ## 2026-06-04 — WI-PROD-T-FIX-13: "Open in filter" must show exact eligible list
 
 **WI:** WI-PROD-T-FIX-13

@@ -252,10 +252,11 @@ public sealed class TransactionImportValidationServiceTests
     //  Currency
     // ──────────────────────────────────────────────────────────────────────────
 
+    // "usd" removed: WI-PROD-T-FIX-10 replaced the ^[A-Z]{3}$ regex with CurrencyConstants.KnownCurrencies
+    // (OrdinalIgnoreCase), so lowercase "usd" now matches "USD" and is accepted.
     [Theory]
     [InlineData("US")]
     [InlineData("USDD")]
-    [InlineData("usd")]
     [InlineData("123")]
     [InlineData("")]
     public async Task Validate_InvalidCurrency_ReturnsError(string currency)
@@ -330,10 +331,11 @@ public sealed class TransactionImportValidationServiceTests
         results[0].Issues.Should().Contain(i => i.Field == "transactionDate");
     }
 
+    // WI-PROD-T-FIX-4: only strict ISO 8601 (yyyy-MM-dd) is accepted to prevent DD/MM vs MM/DD ambiguity.
+    // "04/01/2024" and "01/04/2024" were removed — they are now correctly rejected.
     [Theory]
-    [InlineData("2024-04-01")]   // ISO 8601 — primary CSV back-compat
-    [InlineData("04/01/2024")]   // MM/dd/yyyy  → April 1, 2024
-    [InlineData("01/04/2024")]   // dd/MM/yyyy  → April 1, 2024
+    [InlineData("2024-04-01")]
+    [InlineData("2025-05-15")]
     public async Task Validate_ValidDateFormats_NoDateError(string dateStr)
     {
         await using var db = CreateDb(TenantA);
@@ -344,7 +346,7 @@ public sealed class TransactionImportValidationServiceTests
         var results = await sut.ValidateAsync([ValidRow(date: dateStr)], DefaultMapping());
 
         results[0].Issues.Should().NotContain(i => i.Field == "transactionDate",
-            $"'{dateStr}' is a valid date format");
+            $"'{dateStr}' is valid ISO 8601");
     }
 
     [Fact]

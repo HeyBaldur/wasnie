@@ -1,27 +1,110 @@
 @reference "../../../../styles.scss";
 
-.payee-detail {
-  padding: var(--space-8);
-  max-width: 900px;
+// ── Loading / error ─────────────────────────────────────────────────────────
+
+.pd-loading, .pd-error {
+  @apply flex flex-col items-center justify-center gap-4;
+  padding: var(--space-16);
+  color: var(--color-text-secondary);
+}
+
+// ── Compact header ──────────────────────────────────────────────────────────
+
+.pd-header {
+  padding: var(--space-5) var(--space-8) 0;
+  max-width: 1100px;
   margin: 0 auto;
-
-  &--loading, &--error {
-    @apply flex flex-col items-center justify-center gap-4;
-    padding: var(--space-16);
-    color: var(--color-text-secondary);
-  }
 }
 
-.payee-detail__actions {
-  @apply flex items-center gap-2;
+.pd-header__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  margin-bottom: var(--space-4);
+
+  &:hover { color: var(--color-brand); }
 }
 
-.payee-detail__tabs {
-  @apply flex;
+.pd-header__row1 {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+
+.pd-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-18);
+  font-weight: 700;
+  color: var(--color-text-inverse);
+  flex-shrink: 0;
+
+  &--active     { background: var(--color-success); }
+  &--onleave    { background: var(--color-warning); }
+  &--terminated { background: var(--color-text-tertiary); }
+}
+
+.pd-header__title-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.pd-header__name {
+  font-size: var(--font-size-20);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 2px;
+}
+
+.pd-header__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.pd-meta-sep {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.pd-meta-code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.pd-meta-email {
+  color: var(--color-text-link);
+}
+
+.pd-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+// ── Tabs ────────────────────────────────────────────────────────────────────
+
+.pd-tabs {
+  display: flex;
   gap: var(--space-1);
   border-bottom: 1px solid var(--color-border-subtle);
-  margin-top: var(--space-5);
-  margin-bottom: var(--space-6);
+  padding: 0 var(--space-8);
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .tab-btn {
@@ -41,12 +124,302 @@
   }
 }
 
-.payee-detail__body {
-  background: var(--color-bg-surface-deep);
+// ── Page body ────────────────────────────────────────────────────────────────
+
+.pd-body {
+  padding: var(--space-6) var(--space-8);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+// ── Period filter ────────────────────────────────────────────────────────────
+
+.pd-period-filter {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  width: fit-content;
+}
+
+.period-btn {
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-full);
+  transition: all var(--transition-fast);
+
+  &--active {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+// ── Bento grid ───────────────────────────────────────────────────────────────
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+
+  @media (max-width: 700px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bento-card {
+  background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-lg);
-  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+
+  &--skeleton {
+    min-height: 200px;
+    animation: shimmer 1.4s ease infinite;
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-subtle);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: var(--font-size-12);
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  &__link {
+    font-size: var(--font-size-12);
+    color: var(--color-brand);
+    cursor: pointer;
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+  }
+
+  &__body {
+    padding: var(--space-3) var(--space-4);
+    flex: 1;
+    overflow-y: auto;
+    max-height: 300px;
+    // Custom scrollbar — thin, matches surface theme
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-default) transparent;
+  }
 }
+
+// ── Gauge rows ───────────────────────────────────────────────────────────────
+
+.bento-gauge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+
+  &:hover { background: var(--color-bg-surface-raised); }
+
+  & + & { border-top: 1px solid var(--color-border-subtle); }
+}
+
+.bento-gauge-wrap {
+  flex-shrink: 0;
+  width: 88px;
+}
+
+.bento-gauge-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+
+  &__plan {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__period {
+    font-size: var(--font-size-11);
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-2);
+  }
+
+  &__amounts {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-2);
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.bento-stat-lbl {
+  font-size: var(--font-size-10);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+// ── Mini progress bar ─────────────────────────────────────────────────────────
+
+.bento-mini-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  &__track {
+    flex: 1;
+    height: 4px;
+    background: var(--color-bg-surface-sunken);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width var(--transition-normal);
+
+    &.bento-bar--red   { background: var(--color-danger); }
+    &.bento-bar--amber { background: var(--color-warning); }
+    &.bento-bar--green { background: var(--color-success); }
+    &.bento-bar--blue  { background: var(--color-brand); }
+  }
+
+  &__pct {
+    font-size: var(--font-size-11);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+    text-align: right;
+
+    &.bento-bar--red   { color: var(--color-danger); }
+    &.bento-bar--amber { color: var(--color-warning); }
+    &.bento-bar--green { color: var(--color-success); }
+    &.bento-bar--blue  { color: var(--color-brand); }
+  }
+}
+
+// ── List rows (Quotas, Assignments, Credits) ──────────────────────────────────
+
+.bento-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  transition: background var(--transition-fast);
+
+  & + & { border-top: 1px solid var(--color-border-subtle); }
+
+  &.clickable {
+    cursor: pointer;
+
+    &:hover { background: var(--color-bg-surface-raised); }
+  }
+
+  &__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  &__name {
+    font-size: var(--font-size-13);
+    font-weight: 500;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__sub {
+    font-size: var(--font-size-11);
+    color: var(--color-text-tertiary);
+  }
+
+  &__end {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-1);
+    flex-shrink: 0;
+  }
+
+  &__val {
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// ── List card helpers ─────────────────────────────────────────────────────────
+
+.bento-loading {
+  padding: var(--space-3) 0;
+  .skeleton { height: 14px; width: 100%; }
+}
+
+.bento-load-more {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  color: var(--color-brand);
+  background: var(--color-brand-subtle);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  transition: background var(--transition-fast);
+
+  &:hover { background: var(--color-bg-surface-raised); }
+}
+
+.bento-empty {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  padding: var(--space-4) 0;
+  text-align: center;
+}
+
+// ── Profile grid ─────────────────────────────────────────────────────────────
 
 .profile-grid {
   @apply grid gap-5;
@@ -67,58 +440,38 @@
   &__value {
     font-size: var(--font-size-14);
     color: var(--color-text-primary);
-
-    &.mono { font-family: ui-monospace, monospace; font-size: var(--font-size-13); }
+    &.mono { font-family: var(--font-mono); font-size: var(--font-size-13); }
   }
 }
+
+// ── Activity placeholder ──────────────────────────────────────────────────────
 
 .tab-placeholder {
   @apply flex flex-col items-center gap-4;
   padding: var(--space-10);
   color: var(--color-text-tertiary);
 
-  p {
-    font-size: var(--font-size-14);
-    color: var(--color-text-secondary);
-    text-align: center;
-  }
+  p { font-size: var(--font-size-14); color: var(--color-text-secondary); text-align: center; }
 }
 
-.tab-content {
-  @apply flex flex-col gap-4;
+// ── Plan version badge ────────────────────────────────────────────────────────
 
-  &__header {
-    @apply flex justify-end;
-  }
-}
-
-.plan-link {
-  color: var(--color-brand);
-  font-weight: 500;
-  text-decoration: none;
-  @apply flex items-center gap-1;
-
-  &:hover { text-decoration: underline; }
-}
-
-.plan-version {
-  font-size: var(--font-size-11);
+.plan-ver {
+  font-size: var(--font-size-10);
   font-weight: 500;
   color: var(--color-text-tertiary);
   background: var(--color-bg-surface-sunken);
   border-radius: var(--radius-sm);
-  padding: 1px 5px;
+  padding: 1px 4px;
+  margin-left: var(--space-1);
 }
 
-.col-secondary {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-}
+// ── Modals ────────────────────────────────────────────────────────────────────
 
-.col-num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+.terminate-form { padding-top: var(--space-2); }
+.terminate-field-wrap { min-height: 340px; }
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
 .skeleton {
   display: block;
@@ -126,22 +479,12 @@
   width: 200px;
   border-radius: var(--radius-sm);
   background: var(--color-bg-surface-sunken);
-  animation: shimmer 1.4s ease infinite;
 
   &--title { width: 240px; height: 32px; }
+  &--text  { height: 14px; width: 80%; }
 }
 
 @keyframes shimmer {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
-}
-
-.terminate-form {
-  padding-top: var(--space-2);
-}
-
-// Ensures the modal body is tall enough that the datepicker calendar
-// (≈300px) can open downward within the dialog panel without being clipped.
-.terminate-field-wrap {
-  min-height: 340px;
 }

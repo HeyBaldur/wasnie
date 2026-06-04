@@ -1,0 +1,196 @@
+<app-shell>
+  <ws-page-layout
+    icon="coin"
+    [title]="'CREDITS.DETAIL.TITLE' | translate"
+    [subtitle]="creditId"
+  >
+    <ws-button slot="actions" variant="secondary" (click)="goBack()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'CREDITS.DETAIL.BACK' | translate }}
+    </ws-button>
+
+    @if (loading()) {
+      <p class="credit-detail__loading">{{ 'COMMON.LOADING' | translate }}</p>
+    } @else if (error()) {
+      <p class="credit-detail__error">{{ error()! | translate }}</p>
+    } @else if (credit(); as c) {
+
+      <!-- Superseded banner -->
+      @if (c.isSuperseded) {
+        <div class="credit-detail__superseded-banner">
+          <app-icon name="alert-triangle" [size]="16" />
+          <span>
+            {{ 'CREDITS.DETAIL.SUPERSEDED_BANNER' | translate }}
+            @if (c.supersededAt) {
+              {{ ' ' + (c.supersededAt | dateFormat) }}
+            }
+          </span>
+        </div>
+      }
+
+      <!-- Section A — Summary -->
+      <ws-card padding="md" class="credit-detail__section">
+        <h3 class="credit-detail__section-title">{{ 'CREDITS.DETAIL.SECTION_SUMMARY' | translate }}</h3>
+        <dl class="credit-detail__dl">
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.STATUS' | translate }}</dt>
+            <dd>
+              <ws-badge [variant]="statusBadge(c.isSuperseded)">
+                {{ (c.isSuperseded ? 'CREDITS.STATUS_SUPERSEDED' : 'CREDITS.STATUS_ACTIVE') | translate }}
+              </ws-badge>
+            </dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.ALLOCATED_AT' | translate }}</dt>
+            <dd>{{ c.allocatedAt | dateFormat }}</dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.ALLOCATED_BY' | translate }}</dt>
+            <dd class="credit-detail__mono">{{ c.allocatedBy }}</dd>
+          </div>
+          <div class="credit-detail__dl-row credit-detail__dl-row--highlight">
+            <dt>{{ 'CREDITS.DETAIL.CREDITED_AMOUNT' | translate }}</dt>
+            <dd class="credit-detail__amount-large">{{ c.creditedAmount | currencyFormat: c.creditedCurrency }}</dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.ORIGINAL_AMOUNT' | translate }}</dt>
+            <dd>{{ c.originalAmount | currencyFormat: c.originalCurrency }}</dd>
+          </div>
+          @if (c.splitPercentage !== 100) {
+            <div class="credit-detail__dl-row">
+              <dt>{{ 'CREDITS.DETAIL.SPLIT' | translate }}</dt>
+              <dd>{{ c.splitPercentage }}%</dd>
+            </div>
+          }
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.ROLE' | translate }}</dt>
+            <dd>{{ c.role }}</dd>
+          </div>
+          @if (c.isSuperseded && c.supersededBy) {
+            <div class="credit-detail__dl-row">
+              <dt>{{ 'CREDITS.DETAIL.SUPERSEDED_REASON' | translate }}</dt>
+              <dd class="credit-detail__reason">{{ c.supersededBy }}</dd>
+            </div>
+          }
+        </dl>
+      </ws-card>
+
+      <!-- Section B — Source Transaction -->
+      <ws-card padding="md" class="credit-detail__section">
+        <div class="credit-detail__section-header">
+          <h3 class="credit-detail__section-title">{{ 'CREDITS.DETAIL.SECTION_TRANSACTION' | translate }}</h3>
+          <ws-button variant="ghost" size="sm" (click)="openTransaction()">
+            <app-icon name="external-link" [size]="13" />
+            {{ 'CREDITS.DETAIL.VIEW_TRANSACTION' | translate }}
+          </ws-button>
+        </div>
+        <dl class="credit-detail__dl">
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.REFERENCE' | translate }}</dt>
+            <dd class="credit-detail__mono">{{ c.referenceNumber }}</dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.TX_DATE' | translate }}</dt>
+            <dd>{{ c.transactionDate }}</dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.TX_AMOUNT' | translate }}</dt>
+            <dd>{{ c.transactionAmount | currencyFormat: c.transactionCurrency }}</dd>
+          </div>
+          @if (c.transactionQuantity > 1) {
+            <div class="credit-detail__dl-row">
+              <dt>{{ 'CREDITS.DETAIL.TX_QUANTITY' | translate }}</dt>
+              <dd>{{ c.transactionQuantity }}</dd>
+            </div>
+          }
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.TX_STATUS' | translate }}</dt>
+            <dd>{{ c.transactionStatus }}</dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.PAYEE' | translate }}</dt>
+            <dd>
+              @if (c.payeeName) {
+                {{ c.payeeName }}
+                @if (c.payeeCode) { <span class="credit-detail__code">({{ c.payeeCode }})</span> }
+              } @else { — }
+            </dd>
+          </div>
+        </dl>
+      </ws-card>
+
+      <!-- Section C — Plan & Rule -->
+      <ws-card padding="md" class="credit-detail__section">
+        <div class="credit-detail__section-header">
+          <h3 class="credit-detail__section-title">{{ 'CREDITS.DETAIL.SECTION_PLAN' | translate }}</h3>
+          <ws-button variant="ghost" size="sm" (click)="openPlan()">
+            <app-icon name="external-link" [size]="13" />
+            {{ 'CREDITS.DETAIL.VIEW_PLAN' | translate }}
+          </ws-button>
+        </div>
+        <dl class="credit-detail__dl">
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.PLAN_NAME' | translate }}</dt>
+            <dd>
+              {{ c.planName }}
+              <span class="credit-detail__code">v{{ c.planVersion }}</span>
+              <ws-badge [variant]="planStatusBadge(c.planStatus)" size="sm">{{ c.planStatus }}</ws-badge>
+            </dd>
+          </div>
+          <div class="credit-detail__dl-row">
+            <dt>{{ 'CREDITS.DETAIL.RULE_NAME' | translate }}</dt>
+            <dd>{{ c.ruleName }}</dd>
+          </div>
+        </dl>
+      </ws-card>
+
+      <!-- Section D — Rule Snapshot (show your work) -->
+      <ws-card padding="md" class="credit-detail__section">
+        <h3 class="credit-detail__section-title">{{ 'CREDITS.DETAIL.SECTION_SNAPSHOT' | translate }}</h3>
+
+        <!-- Structured rendering for Flat rate -->
+        @if (c.rateTableType === 'Flat' && calculation(); as calc) {
+          <div class="credit-detail__calculation">
+            <div class="credit-detail__calc-step">
+              <span class="credit-detail__calc-label">{{ 'CREDITS.DETAIL.CALC_BASE' | translate }}</span>
+              <span class="credit-detail__calc-value">{{ calc.base | currencyFormat: calc.currency }}</span>
+            </div>
+            <span class="credit-detail__calc-op">×</span>
+            <div class="credit-detail__calc-step">
+              <span class="credit-detail__calc-label">{{ 'CREDITS.DETAIL.CALC_RATE' | translate }}</span>
+              <span class="credit-detail__calc-value credit-detail__calc-rate">{{ rateDisplay() }}</span>
+            </div>
+            <span class="credit-detail__calc-op">=</span>
+            <div class="credit-detail__calc-step credit-detail__calc-step--result">
+              <span class="credit-detail__calc-label">{{ 'CREDITS.DETAIL.CALC_RESULT' | translate }}</span>
+              <span class="credit-detail__calc-value credit-detail__calc-result">{{ calc.result | currencyFormat: calc.currency }}</span>
+            </div>
+          </div>
+        }
+
+        <div class="credit-detail__snapshot-row">
+          @if (c.triggerAlways) {
+            <p class="credit-detail__trigger-always">{{ 'CREDITS.DETAIL.TRIGGER_ALWAYS' | translate }}</p>
+          } @else if (c.triggerSummary) {
+            <div class="credit-detail__trigger">
+              <span class="credit-detail__trigger-label">{{ 'CREDITS.DETAIL.TRIGGER_CONDITIONS' | translate }}</span>
+              <span class="credit-detail__trigger-summary">{{ c.triggerSummary }}</span>
+            </div>
+          }
+          <button
+            type="button"
+            class="credit-detail__snapshot-toggle"
+            (click)="snapshotExpanded.set(!snapshotExpanded())"
+          >
+            <app-icon [name]="snapshotExpanded() ? 'chevron-up' : 'chevron-down'" [size]="12" />
+            {{ (snapshotExpanded() ? 'CREDITS.DETAIL.HIDE_SNAPSHOT' : 'CREDITS.DETAIL.VIEW_SNAPSHOT') | translate }}
+          </button>
+        </div>
+        @if (snapshotExpanded()) {
+          <pre class="credit-detail__snapshot-json">{{ c.ruleSnapshotJson }}</pre>
+        }
+      </ws-card>
+
+    }
+  </ws-page-layout>
+</app-shell>

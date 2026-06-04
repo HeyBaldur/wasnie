@@ -42,10 +42,10 @@
             formControlName="amount"
             [error]="hasError('amount', 'required') ? 'VALIDATION.REQUIRED' : hasError('amount', 'min') ? 'QUOTAS.FIELD_AMOUNT_MIN' : ''"
           />
-          <ws-select
+          <ws-input
             label="QUOTAS.FIELD_CURRENCY"
             formControlName="currency"
-            [options]="currencies"
+            [placeholder]="planCurrencyLocked() ? '' : ('QUOTAS.CURRENCY_SELECT_PLAN_FIRST' | translate)"
           />
         </div>
 

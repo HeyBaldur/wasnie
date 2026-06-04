@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -52,6 +51,15 @@ public sealed class GetPendingTransactionsCountHandler(
 
         if (assignment is null || assignment.EffectivePeriod is null) return 0;
 
+        // Pattern B: load plan currency — only transactions in this currency are eligible.
+        var plan = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == assignment.PlanId)
+            .Select(p => new { p.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null) return 0;
+
         var start = assignment.EffectivePeriod.Start;
         var end = assignment.EffectivePeriod.End;
         var payeeId = assignment.PayeeId;
@@ -60,12 +68,22 @@ public sealed class GetPendingTransactionsCountHandler(
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId == payeeId
                      && t.TransactionDate >= start
-                     && t.TransactionDate <= end)
+                     && t.TransactionDate <= end
+                     && t.Amount.Currency == plan.Currency)
             .CountAsync(ct);
     }
 
     private static async Task<int> CountByPlan(IApplicationDbContext db, Guid planId, CancellationToken ct)
     {
+        // Pattern B: load plan currency — only transactions in this currency are eligible.
+        var plan = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == planId)
+            .Select(p => new { p.Currency })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null) return 0;
+
         // Load full entities — EF Core owned-type (DateRange) cannot be projected in Select.
         var assignments = await db.PlanAssignments
             .IgnoreQueryFilters()
@@ -74,7 +92,6 @@ public sealed class GetPendingTransactionsCountHandler(
 
         if (assignments.Count == 0) return 0;
 
-        // Union approach: count all Pending txns for any payee+period in this plan's assignments.
         var total = 0;
         foreach (var a in assignments.Where(a => a.EffectivePeriod is not null))
         {
@@ -86,7 +103,8 @@ public sealed class GetPendingTransactionsCountHandler(
                 .Where(t => t.Status == CompensationTransactionStatus.Pending
                          && t.PayeeId == payeeId
                          && t.TransactionDate >= start
-                         && t.TransactionDate <= end)
+                         && t.TransactionDate <= end
+                         && t.Amount.Currency == plan.Currency)
                 .CountAsync(ct);
         }
 

@@ -1,5 +1,4 @@
 using MediatR;
-using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Transactions;
 using Wasnie.Application.Models.Calculation;

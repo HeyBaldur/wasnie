@@ -1,6 +1,6 @@
 # Wasnie — Project Status
 
-**Last updated:** 2026-06-04 — WI-PROD-T-FIX-13 Done. "Open in filter" on eligible table now uses `refs=ref1,ref2,...` (exact reference numbers, same as skip log pattern) instead of payeeIds — filter result matches badge count exactly. Removed obsolete `filterPayeeId` input. Truncation note shown when > 100 refs. Build clean. Eligible Pending transactions now visible before processing: new `GET /api/transactions/eligible-pending` endpoint (same predicates as badge, max 200 rows, full context), `ProcessPendingComponent` renders inline table (skip-log visual style) with show/hide toggle + "Open in transaction filter" button. Applies to all 3 surfaces (Plan detail, Assignment detail, Transactions list). New forbidden-pattern: count-only display before financial action is forbidden. Build clean. Critical filter bug fixed: `payeeIds` was missing from `_buildFilterRecord` in `TransactionsStore`, causing the transactions list API call to silently ignore the payee filter (returning any payee's transactions instead of the selected payee's). Fix: one-line addition of `payeeIds` to `_buildFilterRecord`. New forbidden-pattern rule added to `14-forbidden-patterns.md` documenting the 8-location checklist for new filter fields. Build clean (frontend + backend).
+**Last updated:** 2026-06-04 — WI-PROD-PAYEE-DASHBOARD-V2 Done. Tabs: Overview (default)|Profile|Activity. Assignments/Quotas/Attainment tabs removed. Virtual scroll (IntersectionObserver sentinel, zero deps). Pacing line in ws-gauge. Period filter Active/All. 5 bento cards with click-through navigation. 785 tests (333+452). Both builds clean. WI-PROD-PAYEE-DASHBOARD (V1) Done (earlier same session). Attainment tab transformed to 2×2 bento dashboard: SVG half-circle gauges (ws-gauge), SVG line chart (ws-line-chart), compact quotas list, compact assignments list. Composed `GET /api/payees/:id/dashboard` endpoint. Zero new dependencies. 784 tests (333 unit + 451 integration). Both builds clean. WI-CALC-A.3-FIX-1 Done (earlier same session). Quota-Plan currency invariant enforced: domain throws on mismatch, CreateQuotaHandler/UpdateQuotaHandler load plan and pass planCurrency, UI auto-populates currency from selected plan (disabled field). 333 unit + 448 integration = 781 tests. Both builds clean. WI-CALC-A.3 Done (earlier same session). `IQuotaAttainmentService` (scoped per-request cache, Revenue/Units), `AttainmentPercentage` VO (0–∞), `CreditAllocationService` wired to real attainment (short-circuit for Flat/Tiered), `GET /api/payees/:id/attainment` endpoint, Attainment tab on /payees/:id (quota cards + color-coded progress bars). Revenue sums `Credit.OriginalAmount`; Units sums `CompensationTransaction.Quantity`. Test pattern restored: 328 unit + 446 integration = 774 total (+7 net). Both builds clean. WI-PROD-QUANTITY-FIELD Done (earlier same day). `Quantity int NOT NULL DEFAULT 1` added to CompensationTransactions across all 17 backend + 10 frontend surfaces. Migration applied (all existing rows → 1). MeasurementType dropdown in Create Quota filtered to Revenue + Units only (V1 scope). Forbidden-patterns checklist rule added. Build clean. WI-PROD-CREDITS-EXPORT Done (earlier same day). GET /api/credits/export with shared predicate (ListCreditsHandler.BuildQuery), 50k cap, 17-column xlsx via ClosedXML. Export button on /credits view-toggle row (right-aligned); Transactions export button moved from above-filter to count-row above table. Both pages now symmetrical. Build clean. WI-PROD-FILTERS-CURRENCY-RULE-FIX-1 Done (earlier same day). Currency and Rule filters converted from inline toggle-chip rows to ws-select dropdown + removable chip pattern (matching Payee/Plan). Layout restored. Build clean. WI-PROD-FILTERS-CURRENCY-RULE Done (earlier same day). Currency multi-select filter (17 ISO chip-buttons, URL sync) added to /credits and /transactions filter panels. Rule multi-select (plan-linked chip picker) added to /credits — appears when ≥1 Plan is selected, loads active rules via PlansApiService, filters credits by c.RuleId. All 3 filters wired through FIX-11 8-location checklist; counter cards + By-Payee respect them automatically. No migrations. Build clean. WI-CALC-MULTIPLAN-CURRENCY-MATCH Done (also 2026-06-04): Pattern B adopted (Decision #65): plan selection by currency match. New `PlanAssignmentResolver.Resolve()` is single source of truth for which plan applies. All 4 surfaces updated: CreditAllocationService (both overloads), ProcessPendingJobHandler (LoadByPlan + LoadByAssignment), badge/eligible predicates (CountByPlan + CountByAssignment), import validator (Error → Warning). Currency mismatch no longer an error — it's a routing signal. Smoke bug fixed: PLN transactions for EMP301 now route to PLN plan, not EUR plan. Build clean. Three polish fixes on /credits: (1) counter cards → filter gap unified to --space-3; (2) Table button icon changed from unknown `table` to registered `list`; (3) toggle converted from custom pill CSS to `ws-button` with variant switching (primary=active / secondary=inactive). Build clean. New `/credits` page: list with 8 filters (payee, plan, status, date, amount, currency, reference), counter cards, By-Payee aggregate view. New `/credits/:id` detail page with 5 sections: Summary, Source Transaction, Plan & Rule, "How it was calculated" (Flat rate step-by-step trace + raw snapshot toggle), Superseded banner. New `Credits.Read` permission + nav entry. Backend: 3 endpoints (list, counters, by-payee, detail). Exposes 363 active + 1 superseded credits (54,589.15 EUR). Build clean. "Open in filter" on eligible table now uses `refs=ref1,ref2,...` (exact reference numbers, same as skip log pattern) instead of payeeIds — filter result matches badge count exactly. Removed obsolete `filterPayeeId` input. Truncation note shown when > 100 refs. Build clean. Eligible Pending transactions now visible before processing: new `GET /api/transactions/eligible-pending` endpoint (same predicates as badge, max 200 rows, full context), `ProcessPendingComponent` renders inline table (skip-log visual style) with show/hide toggle + "Open in transaction filter" button. Applies to all 3 surfaces (Plan detail, Assignment detail, Transactions list). New forbidden-pattern: count-only display before financial action is forbidden. Build clean. Critical filter bug fixed: `payeeIds` was missing from `_buildFilterRecord` in `TransactionsStore`, causing the transactions list API call to silently ignore the payee filter (returning any payee's transactions instead of the selected payee's). Fix: one-line addition of `payeeIds` to `_buildFilterRecord`. New forbidden-pattern rule added to `14-forbidden-patterns.md` documenting the 8-location checklist for new filter fields. Build clean (frontend + backend).
 **Updated by:** Rodolfo Calvo (WI-PROD-T)
 **Purpose:** Single source of truth for "where Wasnie is right now." Read this first when resuming work.
 
@@ -119,7 +119,7 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## Active work / current focus
 
-**Right now we are:** End-of-day 2026-06-03. WI-PROD-T-FIX-10 DONE. Currency whitelist: new `CurrencyConstants` (17 ISO 4217 codes). `TransactionFieldValidators.ValidateCurrency` uses whitelist — XXX/ABC/ZZZ now rejected in both IMPORT and UPDATE. `CreatePlanCommandValidator` also restricted to same whitelist. UPDATE preview Step 3 unified with IMPORT: 4 stat cards (fixed wrong first-card value), functional filter tabs (All/Will Update/No Changes/Errors), category badges on issues rows, matched table CSS. i18n keys added (EN/ES/PL). Backend: 312 unit + 438 integration. Both builds clean. Next: WI-CALC-A.3 (Quota Attainment Service).
+**Right now we are:** End-of-day 2026-06-04. WI-PROD-PAYEE-DASHBOARD-V2 DONE. /payees/:id completely redesigned: compact header, 3 tabs, Overview with 5 bento cards + virtual scroll + pacing gauges + period filter. 785 tests. Both builds clean. Next: WI-CALC-A.4 (Payout Engine). Bento dashboard live on /payees/:id → Attainment tab. ws-gauge + ws-line-chart SVG primitives added to shared UI. 784 tests. Both builds clean. Next: WI-CALC-A.4 (Payout Engine). Quota currency invariant enforced. 781 tests. Both builds clean. Next: WI-CALC-A.4 (Payout Engine). Audit query should be run manually against dev DB to find pre-existing mismatched Quotas. Quota Attainment Service live: real attainment replaces 1.0m stub in CreditAllocationService. Attainment tab on /payees/:id. 774 backend tests. Both builds clean. Next: WI-CALC-A.4 (Payout Engine).
 
 **Most recent significant work (2026-06-03 — WI-PROD-T: Export + Re-upload + Process Pending skip fix):**
 - **Part 1 — Process Pending skip:** `ProcessPendingTransactionsJobHandler` now catches `DomainException` per-transaction (currency mismatch etc.), skips the transaction (stays Pending), logs reason. Job completes normally with skip counts. `BackgroundJobRecord.ResultSummary` (nvarchar(max) nullable) added via migration `20260603093913_AddJobResultSummary`. `JobStatusDto` + `JobContext` extended. UI: `ProcessPendingComponent` shows skip count + expandable log of skipped transaction IDs + reasons. i18n EN/ES/PL.
@@ -291,7 +291,67 @@ For full audit: `docs/audit/Audit_Findings.md` | Backlog: `docs/audit/Audit_Back
 
 ## TODO_TESTS — Deferred test backfill
 
+### WI-PROD-QUANTITY-FIELD — Quantity field
+
+**Backend unit tests:**
+- `TransactionFieldValidators.ValidateQuantity("")` → null, parsed=1
+- `ValidateQuantity("3")` → null, parsed=3
+- `ValidateQuantity("0")` → Error, Format
+- `ValidateQuantity("-1")` → Error, Format
+- `ValidateQuantity("abc")` → Error, Format
+- `CompensationTransaction.Ingest(quantity: 0)` → throws DomainException
+- `ApplyExcelUpdate(newQuantity: -1)` → throws DomainException
+
+**Backend integration tests:**
+- `IngestTransactionHandler`: Quantity=5 round-trips through API → stored and returned in DTO
+- `TransactionImportJobHandler`: CSV row with Quantity=3 → transaction.Quantity=3; blank → 1
+- `UpdateTransactionsFromExcelJobHandler`: Quantity change 1→5 → diff in preview, applied in execute
+- `ExportTransactionsHandler`: Quantity column present in xlsx output
+
+**Frontend:**
+- `transaction-form`: Quantity field renders, min=1 validation rejects 0
+- `TransactionsStore`: Quantity passed through createTransaction request
+
+---
+
+### WI-PROD-CREDITS-EXPORT — Credits Excel export
+
+**Backend integration tests:**
+- `ExportCreditsHandler`: seed 5 credits with 2 payees + 1 plan → export → verify row count and column values.
+- `ExportCreditsHandler`: filter Status=Active → superseded credit excluded.
+- `ExportCreditsHandler`: filter Currencies=PLN → only PLN credits included.
+- `ExportCreditsHandler`: count > 50,000 → returns EXPORT_TOO_LARGE failure.
+- `ExportCreditsHandler`: predicate alignment — same filter as list endpoint → same count.
+- `GET /api/credits/export`: 401 (no auth), 403 (Manager role has no CreditsExport), 200 with blob (TenantAdmin).
+
+**Frontend tests:**
+- `CreditsStore.toExportParams()`: filter with payeeIds + currencies → correct PaginationParams.filters mapping.
+- `CreditsListComponent.onExport()`: triggers API call, sets exporting true/false, triggers blob download.
+
+---
+
 These tests were explicitly deferred by owner instruction on 2026-06-03 (WI-PROD-I.2). Add in a dedicated test WI before the first paying customer.
+
+### WI-PROD-FILTERS-CURRENCY-RULE — Currency + Rule filters
+
+**Backend integration tests:**
+- `ListTransactionsHandler`: `Currencies=EUR` → returns only EUR transactions; `Currencies=EUR,PLN` → returns both.
+- `ExportTransactionsHandler`: same `Currencies` predicate produces same row count as list endpoint.
+- `ListCreditsHandler.BuildQuery`: `RuleIds=<guid>` → returns only credits where `c.RuleId == guid`.
+- `GetCreditCountersHandler` + `GetCreditsByPayeeHandler`: verify they respect `Currencies` and `RuleIds` (both go through `BuildQuery`).
+
+**Frontend store tests:**
+- `TransactionsStore._buildFilterRecord`: `currencies: ['EUR', 'PLN']` → `currencies: 'EUR,PLN'` in record.
+- `TransactionsStore.toQueryParams`: `currencies: ['EUR']` → `currencies: 'EUR'` in URL params.
+- `TransactionsStore.loadFromQueryParams`: `?currencies=EUR,PLN` → `f.currencies = ['EUR', 'PLN']`.
+- `CreditsStore._buildFilterRecord`: `ruleIds: ['<id>']` → `ruleIds: '<id>'` in record.
+- `CreditsStore.toQueryParams` + `loadFromQueryParams`: round-trip for `ruleIds`.
+
+**Frontend component tests:**
+- `TransactionFilterComponent`: currency chip toggles (add/remove, multi-select pattern).
+- `CreditsListComponent`: currency chip toggles; rule chips appear when plan is selected; rule chips hidden when no plan.
+
+---
 
 ### WI-PROD-T-FIX-9 — UPDATE wizard currency + field validation
 

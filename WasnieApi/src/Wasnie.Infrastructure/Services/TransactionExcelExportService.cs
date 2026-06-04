@@ -14,6 +14,7 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
         "PayeeName",
         "Amount",
         "Currency",
+        "Quantity",
         "TransactionDate",
         "Source",
         "Status [read-only]",
@@ -49,10 +50,11 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
             ws.Cell(excelRow, 4).Value = row.PayeeName ?? string.Empty;
             ws.Cell(excelRow, 5).Value = row.Amount;
             ws.Cell(excelRow, 6).Value = row.Currency;
-            ws.Cell(excelRow, 7).Value = row.TransactionDate.ToString("yyyy-MM-dd");
-            ws.Cell(excelRow, 8).Value = row.Source;
-            ws.Cell(excelRow, 9).Value = row.Status;
-            ws.Cell(excelRow, 10).Value = row.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            ws.Cell(excelRow, 7).Value = row.Quantity;
+            ws.Cell(excelRow, 8).Value = row.TransactionDate.ToString("yyyy-MM-dd");
+            ws.Cell(excelRow, 9).Value = row.Source;
+            ws.Cell(excelRow, 10).Value = row.Status;
+            ws.Cell(excelRow, 11).Value = row.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
         }
 
         // Auto-fit columns

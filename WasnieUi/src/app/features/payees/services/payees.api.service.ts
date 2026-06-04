@@ -55,4 +55,20 @@ export class PayeesApiService {
     return this.http.get<PagedResult<import('../../quotas/models/quota.model').QuotaSummary>>(
       `${this.base}/${payeeId}/quotas`, { params: buildHttpParams(params) });
   }
+
+  getPayeeAttainment(payeeId: string): Observable<import('../../quotas/models/quota.model').QuotaAttainment[]> {
+    return this.http.get<import('../../quotas/models/quota.model').QuotaAttainment[]>(
+      `${this.base}/${payeeId}/attainment`);
+  }
+
+  getPayeeDashboard(payeeId: string, period = 'active'): Observable<import('../models/payee-dashboard.model').PayeeDashboard> {
+    return this.http.get<import('../models/payee-dashboard.model').PayeeDashboard>(
+      `${this.base}/${payeeId}/dashboard`, { params: { period } });
+  }
+
+  getPayeeCredits(payeeId: string, page: number, period = 'active'): Observable<import('../../../shared/models/pagination.models').PagedResult<import('../../credits/models/credit.model').CreditListItem>> {
+    return this.http.get<import('../../../shared/models/pagination.models').PagedResult<import('../../credits/models/credit.model').CreditListItem>>(
+      `${this.base}/${payeeId}/credits`,
+      { params: { page: String(page), pageSize: '10', period } });
+  }
 }

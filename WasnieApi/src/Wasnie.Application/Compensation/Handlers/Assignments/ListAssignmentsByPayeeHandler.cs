@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -11,11 +12,10 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
-public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
+public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService, IClock clock)
     : IRequestHandler<ListAssignmentsByPayeeQuery, Result<PagedResult<PlanAssignmentDto>>>
 {
-    private static readonly HashSet<string> AllowedSortFields =
-        new(StringComparer.OrdinalIgnoreCase) { "effectivestart", "planname" };
+    private sealed record AssignmentRow(Wasnie.Domain.Compensation.Assignments.PlanAssignment Assignment, string PlanName, int PlanVersion);
 
     public async Task<Result<PagedResult<PlanAssignmentDto>>> Handle(
         ListAssignmentsByPayeeQuery request,
@@ -24,36 +24,41 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
 
-        var joined = db.PlanAssignments
-            .Where(a => a.PayeeId == request.PayeeId)
-            .Join(
-                db.CompensationPlans,
-                a => a.PlanId,
-                pl => pl.Id,
-                (a, pl) => new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version });
+        // Load all assignments for this payee with plan info in-memory.
+        // DateOnly period filtering on owned DateRange is unreliable in SQL WHERE.
+        var allJoined = await (
+            from a in db.PlanAssignments.Where(a => a.PayeeId == request.PayeeId)
+            join pl in db.CompensationPlans on a.PlanId equals pl.Id
+            select new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version }
+        ).ToListAsync(cancellationToken);
 
-        // Filters
+        var today = DateOnly.FromDateTime(clock.UtcNow);
+
+        // Apply status filter
+        var filtered = allJoined.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(p.Status) &&
             Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
-            joined = joined.Where(x => x.Assignment.Status == status);
+            filtered = filtered.Where(x => x.Assignment.Status == status);
+
+        // Apply period filter: "active" = EffectiveEnd >= today
+        if (string.Equals(p.Period, "active", StringComparison.OrdinalIgnoreCase))
+            filtered = filtered.Where(x => x.Assignment.EffectivePeriod.End >= today);
 
         // Sort
-        var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "effectivestart";
-        var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+        var desc = !string.Equals(p.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
+        var sortedList = desc
+            ? filtered.OrderByDescending(x => x.Assignment.EffectivePeriod.Start).ToList()
+            : filtered.OrderBy(x => x.Assignment.EffectivePeriod.Start).ToList();
 
-        var sorted = sortBy switch
-        {
-            "planname" => desc ? joined.OrderByDescending(x => x.PlanName) : joined.OrderBy(x => x.PlanName),
-            _ => desc ? joined.OrderByDescending(x => x.Assignment.EffectivePeriod.Start) : joined.OrderBy(x => x.Assignment.EffectivePeriod.Start),
-        };
-
-        var totalCount = await sorted.CountAsync(cancellationToken);
-        var items = await sorted
+        var totalCount = sortedList.Count;
+        var pageItems = sortedList
             .Skip((p.Page - 1) * p.PageSize)
             .Take(p.PageSize)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
-        var dtos = items.Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion)).ToList();
+        var dtos = pageItems
+            .Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion))
+            .ToList();
 
         return Result<PagedResult<PlanAssignmentDto>>.Success(new PagedResult<PlanAssignmentDto>
         {

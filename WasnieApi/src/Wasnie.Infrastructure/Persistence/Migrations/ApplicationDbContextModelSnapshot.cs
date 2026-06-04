@@ -314,9 +314,6 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
-                    b.Property<string>("ResultSummary")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("HandlerType")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -332,6 +329,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("ProgressTotal")
                         .HasColumnType("int");
+
+                    b.Property<string>("ResultSummary")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("StartedAtUtc")
                         .HasColumnType("datetime2");
@@ -802,6 +802,11 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("PayeeId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("ReferenceNumber")
                         .IsRequired()

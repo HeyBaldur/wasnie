@@ -1,8 +1,9 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { Observable, firstValueFrom, map } from 'rxjs';
+import { Observable, firstValueFrom, map, switchMap, filter } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { QuotasStore } from '../state/quotas.store';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
@@ -20,16 +21,11 @@ import {
   type DateRange,
 } from '../../../shared/ui';
 
-const CURRENCIES: SelectOption[] = [
-  'USD', 'EUR', 'GBP', 'PLN', 'CAD', 'AUD',
-].map((c) => ({ value: c, label: c }));
-
+// V1: only Revenue and Units are supported (transaction data model).
+// Margin, ACV, Bookings require additional transaction fields — activate in a future WI.
 const MEASUREMENT_TYPES: SelectOption[] = [
   { value: String(QuotaMeasurementType.Revenue), label: 'QUOTAS.MEASUREMENT_REVENUE' },
-  { value: String(QuotaMeasurementType.Margin), label: 'QUOTAS.MEASUREMENT_MARGIN' },
   { value: String(QuotaMeasurementType.Units), label: 'QUOTAS.MEASUREMENT_UNITS' },
-  { value: String(QuotaMeasurementType.ACV), label: 'QUOTAS.MEASUREMENT_ACV' },
-  { value: String(QuotaMeasurementType.Bookings), label: 'QUOTAS.MEASUREMENT_BOOKINGS' },
 ];
 
 @Component({
@@ -57,12 +53,13 @@ export class QuotaCreateComponent implements OnInit {
   private readonly plansApi = inject(PlansApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly saving = signal(false);
-  readonly currencies = CURRENCIES;
   readonly measurementTypes = MEASUREMENT_TYPES;
   readonly preselectedPayeeOption = signal<SelectOption | null>(null);
   readonly returnTo = signal<string | null>(null);
+  readonly planCurrencyLocked = signal(false);
 
   readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -82,7 +79,7 @@ export class QuotaCreateComponent implements OnInit {
     planId: ['', Validators.required],
     measurementType: [String(QuotaMeasurementType.Revenue), Validators.required],
     amount: [0, [Validators.required, Validators.min(0.01)]],
-    currency: ['USD', Validators.required],
+    currency: [{ value: '', disabled: true }, Validators.required],
     dateRange: [null as DateRange | null, Validators.required],
     notes: ['', Validators.maxLength(500)],
   });
@@ -105,6 +102,23 @@ export class QuotaCreateComponent implements OnInit {
         });
       }
     }
+
+    // When a plan is selected, auto-set the currency to the plan's currency (field stays disabled).
+    this.form.controls.planId.valueChanges.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(planId => {
+      if (!planId) {
+        this.form.controls.currency.setValue('');
+        this.planCurrencyLocked.set(false);
+        return;
+      }
+      this.plansApi.getPlan(planId).pipe(
+        takeUntilDestroyed(this.destroyRef)
+      ).subscribe(plan => {
+        this.form.controls.currency.setValue(plan.currency);
+        this.planCurrencyLocked.set(true);
+      });
+    });
   }
 
   async onSubmit(): Promise<void> {

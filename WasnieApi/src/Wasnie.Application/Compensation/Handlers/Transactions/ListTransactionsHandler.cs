@@ -108,6 +108,16 @@ public sealed class ListTransactionsHandler(
                 query = query.Where(t => refList.Contains(t.ReferenceNumber));
         }
 
+        if (!string.IsNullOrWhiteSpace(p.Currencies))
+        {
+            var curs = p.Currencies.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Where(s => s.Length == 3)
+                .ToList();
+            if (curs.Count > 0)
+                query = query.Where(t => curs.Contains(t.Amount.Currency));
+        }
+
         // ── Sort ────────────────────────────────────────────────────────────────
 
         // AmountSort overrides SortBy when present.

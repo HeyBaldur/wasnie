@@ -7,7 +7,6 @@ using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
-using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -22,17 +21,20 @@ public sealed class CreditAllocationService : ICreditAllocationService
     private readonly IGuidGenerator _guidGenerator;
     private readonly IClock _clock;
     private readonly ILogger<CreditAllocationService> _logger;
+    private readonly IQuotaAttainmentService _quotaAttainmentService;
 
     public CreditAllocationService(
         IApplicationDbContext db,
         IGuidGenerator guidGenerator,
         IClock clock,
-        ILogger<CreditAllocationService> logger)
+        ILogger<CreditAllocationService> logger,
+        IQuotaAttainmentService quotaAttainmentService)
     {
         _db = db;
         _guidGenerator = guidGenerator;
         _clock = clock;
         _logger = logger;
+        _quotaAttainmentService = quotaAttainmentService;
     }
 
     /// <inheritdoc/>
@@ -65,12 +67,20 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 pa.PayeeId == payeeIdVal)
             .ToListAsync(ct);
 
-        var assignment = allPayeeAssignments
-            .FirstOrDefault(pa =>
-                pa.Status == AssignmentStatus.Active &&
-                pa.EffectivePeriod is not null &&
-                pa.EffectivePeriod.Start <= txDate &&
-                pa.EffectivePeriod.End >= txDate);
+        // Pattern B: load plan currencies so the resolver can match by currency.
+        var assignmentPlanIds = allPayeeAssignments.Select(a => a.PlanId).Distinct().ToList();
+        var planCurrencyById = assignmentPlanIds.Count > 0
+            ? (await _db.CompensationPlans
+                .IgnoreQueryFilters()
+                .Where(p => p.TenantId == tenantId && assignmentPlanIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Currency })
+                .ToListAsync(ct))
+                .ToDictionary(p => p.Id, p => p.Currency)
+            : new Dictionary<Guid, string>();
+
+        // Pattern B resolution: pick the assignment whose plan currency matches the transaction currency.
+        var assignment = PlanAssignmentResolver.Resolve(
+            allPayeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
         if (assignment is null) return Array.Empty<Credit>();
 
@@ -84,11 +94,11 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
         if (plan is null) return Array.Empty<Credit>();
 
-        return BuildCredits(transaction, assignment, plan);
+        return await BuildCreditsAsync(transaction, assignment, plan, ct);
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyList<Credit>> AllocateAsync(
+    public async Task<IReadOnlyList<Credit>> AllocateAsync(
         CompensationTransaction transaction,
         IReadOnlyDictionary<Guid, IReadOnlyList<PlanAssignment>> assignmentsByPayee,
         IReadOnlyDictionary<Guid, CompensationPlan> plansById,
@@ -96,41 +106,43 @@ public sealed class CreditAllocationService : ICreditAllocationService
     {
         // Decision #44: unassigned transactions never produce Credits.
         if (transaction.PayeeId == null)
-            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+            return Array.Empty<Credit>();
 
         // Only Pending transactions get processed.
         if (transaction.Status != CompensationTransactionStatus.Pending)
-            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+            return Array.Empty<Credit>();
 
         var payeeIdVal = transaction.PayeeId.Value;
         var txDate = transaction.TransactionDate;
 
         // Resolve assignment from the caller-supplied pre-loaded dictionary (no DB query).
         if (!assignmentsByPayee.TryGetValue(payeeIdVal, out var payeeAssignments))
-            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+            return Array.Empty<Credit>();
 
-        var assignment = payeeAssignments.FirstOrDefault(pa =>
-            pa.Status == AssignmentStatus.Active &&
-            pa.EffectivePeriod is not null &&
-            pa.EffectivePeriod.Start <= txDate &&
-            pa.EffectivePeriod.End >= txDate);
+        // Pattern B: build planCurrencyById from the pre-loaded plans dictionary (no DB query).
+        var planCurrencyById = plansById.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+
+        // Pattern B resolution: pick the assignment whose plan currency matches the transaction currency.
+        var assignment = PlanAssignmentResolver.Resolve(
+            payeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
         if (assignment is null)
-            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+            return Array.Empty<Credit>();
 
         // Resolve plan from the caller-supplied pre-loaded dictionary (no DB query).
         if (!plansById.TryGetValue(assignment.PlanId, out var plan))
-            return Task.FromResult<IReadOnlyList<Credit>>(Array.Empty<Credit>());
+            return Array.Empty<Credit>();
 
-        return Task.FromResult(BuildCredits(transaction, assignment, plan));
+        return await BuildCreditsAsync(transaction, assignment, plan, ct);
     }
 
     // ── Shared credit-building logic ──────────────────────────────────────────
 
-    private IReadOnlyList<Credit> BuildCredits(
+    private async Task<IReadOnlyList<Credit>> BuildCreditsAsync(
         CompensationTransaction transaction,
         PlanAssignment assignment,
-        CompensationPlan plan)
+        CompensationPlan plan,
+        CancellationToken ct)
     {
         // Multi-tenant guard.
         if (plan.TenantId != transaction.TenantId ||
@@ -149,6 +161,16 @@ public sealed class CreditAllocationService : ICreditAllocationService
         var txDate = transaction.TransactionDate;
         var credits = new List<Credit>();
 
+        // Short-circuit: only call ComputeAsync when at least one active rule uses attainment.
+        // This avoids a DB round-trip for Flat/Tiered plans (the common case).
+        var attainmentPct = 1.0m; // default — only used when PlanUsesAttainment is true
+        if (PlanUsesAttainment(plan))
+        {
+            var attainment = await _quotaAttainmentService.ComputeAsync(
+                transaction.PayeeId!.Value, plan.Id, txDate, ct);
+            attainmentPct = attainment.Value;
+        }
+
         // Decision #41: filter rules by EffectivePeriod at runtime.
         var applicableRules = plan.Rules
             .Where(r => r.IsActive &&
@@ -163,7 +185,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 continue;
 
             var baseAmount = transaction.Amount;
-            var commissionAmount = ComputeCommission(baseAmount, rule.RateTable);
+            var commissionAmount = ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
             commissionAmount = ApplyModifier(commissionAmount, baseAmount, rule.Modifier);
             commissionAmount = ApplyCap(commissionAmount, rule.Cap);
             commissionAmount = ApplyFloor(commissionAmount, rule.Floor);
@@ -193,6 +215,9 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
         return credits;
     }
+
+    private static bool PlanUsesAttainment(CompensationPlan plan) =>
+        plan.Rules.Any(r => r.IsActive && r.RateTable.Type == RateTableType.AttainmentBased);
 
     // ── Trigger evaluation ────────────────────────────────────────────────────
 
@@ -302,16 +327,14 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
     // ── Commission computation ────────────────────────────────────────────────
 
-    private static Money ComputeCommission(Money baseAmount, RateTable rateTable)
+    private static Money ComputeCommission(Money baseAmount, RateTable rateTable, decimal attainmentPct)
     {
         return rateTable.Type switch
         {
             RateTableType.Flat => baseAmount.Multiply(rateTable.FlatRate!.Value),
             RateTableType.Tiered => ComputeTieredCommission(baseAmount, rateTable.Tiers!),
             RateTableType.AttainmentBased =>
-                // TODO WI-CALC-A.2: replace with real attainment from IQuotaAttainmentService.
-                // V1 stub: treat attainment as 100% (picks bracket containing 1.0).
-                ComputeAttainmentCommission(baseAmount, rateTable.AttainmentTiers!, attainmentPct: 1.0m),
+                ComputeAttainmentCommission(baseAmount, rateTable.AttainmentTiers!, attainmentPct),
             _ => throw new DomainException($"Unsupported RateTableType: {rateTable.Type}")
         };
     }

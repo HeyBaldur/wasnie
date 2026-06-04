@@ -18,6 +18,7 @@ public sealed class IngestTransactionCommandValidator : AbstractValidator<Ingest
             .WithMessage("PayeeId must not be an empty GUID when provided.");
         RuleFor(x => x.Amount).GreaterThan(0m);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
+        RuleFor(x => x.Quantity).GreaterThanOrEqualTo(1).WithMessage("Quantity must be at least 1.");
         RuleFor(x => x.TransactionDate)
             .GreaterThanOrEqualTo(MinDate)
             .WithMessage($"TransactionDate cannot be before {MinDate:yyyy-MM-dd}.");

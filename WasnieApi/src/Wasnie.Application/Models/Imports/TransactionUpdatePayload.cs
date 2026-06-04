@@ -5,7 +5,8 @@ public sealed record TransactionUpdateColumnMapping(
     string? AmountColumn,
     string? CurrencyColumn,
     string? TransactionDateColumn,
-    string? PayeeCodeColumn);
+    string? PayeeCodeColumn,
+    string? QuantityColumn = null);
 
 public sealed record TransactionUpdatePayload(
     Guid TenantId,

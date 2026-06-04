@@ -24,3 +24,5 @@ export { WsWizardStepComponent } from './ws-wizard/ws-wizard-step.component';
 export { WsStatCardComponent, type StatCardVariant } from './ws-stat-card/ws-stat-card.component';
 export { WsDataTableComponent, type WsColumn } from './ws-data-table/ws-data-table.component';
 export { WsPaginationComponent } from './ws-pagination/ws-pagination.component';
+export { WsGaugeComponent } from './ws-gauge/ws-gauge.component';
+export { WsLineChartComponent, type LineChartPoint } from './ws-line-chart/ws-line-chart.component';

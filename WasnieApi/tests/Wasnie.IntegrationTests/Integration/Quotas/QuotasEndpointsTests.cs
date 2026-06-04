@@ -140,6 +140,51 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateQuota_CurrencyMismatchWithPlan_Returns400()
+    {
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA); // EUR plan
+
+        var request = new
+        {
+            payeeId = payee.Id,
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "PLN", // PLN quota on EUR plan — mismatch
+            periodStart = "2025-01-01",
+            periodEnd = "2025-03-31"
+        };
+
+        var response = await _clientA.PostAsJsonAsync("/api/quotas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateQuota_CurrencyMismatchWithPlan_ReturnsError()
+    {
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA); // EUR plan
+        var quota = await CreateQuotaAsync(_clientA, payee.Id, plan.Id); // EUR quota
+
+        var request = new
+        {
+            quotaId = quota.Id,
+            measurementType = 0,
+            amount = 20000m,
+            currency = "PLN", // PLN update on EUR plan — mismatch
+            periodStart = "2025-01-01",
+            periodEnd = "2025-03-31"
+        };
+
+        var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
+
+        // Domain exception is caught and returned as Failure → 422 UnprocessableEntity
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task CreateQuota_ZeroAmount_Returns400()
     {
         var payee = await CreatePayeeAsync(_clientA);
@@ -211,7 +256,7 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
     public async Task UpdateQuota_ValidRequest_Returns200()
     {
         var payee = await CreatePayeeAsync(_clientA);
-        var plan = await CreateActivePlanAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA); // EUR plan
         var quota = await CreateQuotaAsync(_clientA, payee.Id, plan.Id);
 
         var request = new
@@ -219,7 +264,7 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
             quotaId = quota.Id,
             measurementType = 0,
             amount = 20000m,
-            currency = "USD",
+            currency = "EUR", // must match plan currency
             periodStart = "2025-01-01",
             periodEnd = "2025-03-31"
         };
@@ -229,7 +274,7 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<QuotaSummaryResponse>();
         body!.Amount.Should().Be(20000m);
-        body.Currency.Should().Be("USD");
+        body.Currency.Should().Be("EUR");
     }
 
     [Fact]

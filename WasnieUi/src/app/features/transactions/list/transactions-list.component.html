@@ -25,25 +25,6 @@
       />
     </div>
 
-    <!-- Export to Excel (only when there are filtered results) -->
-    @if ((store.totalCount() > 0) && ('Transactions.Export' | hasPermission)) {
-      <div class="transactions-list__export-row">
-        <ws-button
-          variant="ghost"
-          size="sm"
-          [disabled]="exporting()"
-          [loading]="exporting()"
-          (click)="onExport()"
-        >
-          <app-icon name="file-excel" [size]="14" />
-          {{ 'TRANSACTIONS.EXPORT.BUTTON' | translate }}
-        </ws-button>
-        @if (exportError()) {
-          <span class="transactions-list__export-error">{{ exportError()! | translate }}</span>
-        }
-      </div>
-    }
-
     <!-- Advanced filter panel -->
     <app-transaction-filter
       [filter]="store.filter()"
@@ -64,19 +45,23 @@
       </div>
     }
 
-    <!-- Result count header -->
-    @if (!store.loading() && store.unfilteredTotal() !== null) {
-      <p class="transactions-list__count">
-        @if (store.hasActiveFilters()) {
-          {{ 'TRANSACTIONS.COUNT_FILTERED' | translate:{
-            showing: store.transactions().length,
-            filtered: store.totalCount(),
-            total: store.unfilteredTotal()
-          } }}
-        } @else {
-          {{ 'TRANSACTIONS.COUNT_TOTAL' | translate:{ total: store.totalCount() } }}
+    <!-- Export row -->
+    @if ((store.totalCount() > 0) && ('Transactions.Export' | hasPermission)) {
+      <div class="transactions-list__export-row">
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [disabled]="exporting()"
+          [loading]="exporting()"
+          (click)="onExport()"
+        >
+          <app-icon name="file-excel" [size]="14" />
+          {{ 'TRANSACTIONS.EXPORT.BUTTON' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="transactions-list__export-error">{{ exportError()! | translate }}</span>
         }
-      </p>
+      </div>
     }
 
     @if (!store.loading() && store.transactions().length === 0 && !store.hasActiveFilters()) {
@@ -97,6 +82,7 @@
               <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_INGESTED' | translate }}</th>
               <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
+              <th class="col-num">{{ 'TRANSACTIONS.COL_QUANTITY' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
               <th *hasPermission="'Transactions.Update'" class="col-actions"></th>
             </tr>
@@ -111,12 +97,13 @@
                   <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--short"></span></td>
                   <td><span class="skeleton skeleton--badge"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
                   <td></td>
                 </tr>
               }
             } @else if (store.transactions().length === 0) {
               <tr>
-                <td colspan="7">
+                <td colspan="8">
                   <ws-table-empty messageKey="TRANSACTIONS.EMPTY_FILTER_TITLE" />
                 </td>
               </tr>
@@ -137,6 +124,7 @@
                   <td class="col-secondary">{{ tx.transactionDate | dateFormat }}</td>
                   <td class="col-secondary">{{ tx.ingestedAt | dateFormat }}</td>
                   <td class="col-num">{{ tx.amount | currencyFormat: tx.currency }}</td>
+                  <td class="col-num">{{ tx.quantity }}</td>
                   <td>
                     <ws-badge [variant]="statusVariant(tx.status)">
                       {{ statusKey(tx.status) | translate }}

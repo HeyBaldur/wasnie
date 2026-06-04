@@ -28,7 +28,7 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db, 
             .Where(t => refNumbers.Contains(t.ReferenceNumber))
             .Select(t => new ExistingTxProjection(
                 t.Id, t.ReferenceNumber, t.Amount.Amount, t.Amount.Currency,
-                t.TransactionDate, t.PayeeId, t.Status))
+                t.Quantity, t.TransactionDate, t.PayeeId, t.Status))
             .ToDictionaryAsync(t => t.ReferenceNumber, StringComparer.OrdinalIgnoreCase, ct);
 
         // Pre-load payees — include IsActive for inactive warning (mirrors IMPORT behavior).
@@ -156,6 +156,24 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db, 
                 }
             }
 
+            if (mapping.QuantityColumn is not null)
+            {
+                var quantityStr = GetField(row, mapping.QuantityColumn);
+                if (!string.IsNullOrWhiteSpace(quantityStr))
+                {
+                    var quantityIssue = TransactionFieldValidators.ValidateQuantity(quantityStr, out var newQty);
+                    if (quantityIssue is not null)
+                        issues.Add(quantityIssue);
+                    else if (newQty != existing.Quantity)
+                        diffs.Add(new FieldDiff
+                        {
+                            FieldName = "Quantity",
+                            OldValue = existing.Quantity.ToString(CultureInfo.InvariantCulture),
+                            NewValue = newQty.ToString(CultureInfo.InvariantCulture),
+                        });
+                }
+            }
+
             if (mapping.PayeeCodeColumn is not null)
             {
                 var newCode = GetField(row, mapping.PayeeCodeColumn).Trim();
@@ -237,5 +255,5 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db, 
 
     private sealed record ExistingTxProjection(
         Guid Id, string ReferenceNumber, decimal Amount, string Currency,
-        DateOnly TransactionDate, Guid? PayeeId, CompensationTransactionStatus Status);
+        int Quantity, DateOnly TransactionDate, Guid? PayeeId, CompensationTransactionStatus Status);
 }
