@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Compensation.Queries.Credits;
+using Wasnie.Application.Compensation.Queries.Transactions;
 
 namespace Wasnie.Api.Controllers;
 
@@ -36,5 +37,19 @@ public sealed class CreditsController(IMediator mediator) : ControllerBase
     {
         var result = await mediator.Send(new GetCreditByIdQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
+    [HttpGet("export")]
+    public async Task<IActionResult> Export([FromQuery] CreditFilterQuery filter, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ExportCreditsQuery(filter), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error?.StartsWith("EXPORT_TOO_LARGE:", StringComparison.Ordinal) == true)
+                return UnprocessableEntity(new { message = result.Error });
+            return BadRequest(new { message = result.Error });
+        }
+        var export = result.Value!;
+        return File(export.Bytes, export.ContentType, export.FileName);
     }
 }

@@ -188,7 +188,7 @@
       }
     </ws-card>
 
-    <!-- View toggle: Table | By Payee -->
+    <!-- View toggle: Table | By Payee + Export button -->
     <div class="credits-list__view-toggle">
       <ws-button
         [variant]="viewMode() === 'table' ? 'primary' : 'secondary'"
@@ -209,21 +209,26 @@
         <app-icon name="users" [size]="14" />
         {{ 'CREDITS.VIEW_BY_PAYEE' | translate }}
       </ws-button>
+      <span class="credits-list__view-spacer"></span>
+      @if (store.totalCount() > 0) {
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [disabled]="exporting()"
+          [loading]="exporting()"
+          (click)="onExport()"
+        >
+          <app-icon name="file-excel" [size]="14" />
+          {{ 'CREDITS.EXPORT.BUTTON' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="credits-list__export-error">{{ exportError()! | translate }}</span>
+        }
+      }
     </div>
 
     <!-- ── TABLE VIEW ── -->
     @if (viewMode() === 'table') {
-      @if (!store.loading() && store.unfilteredTotal() !== null) {
-        <p class="credits-list__count">
-          @if (store.hasActiveFilters()) {
-            {{ 'CREDITS.COUNT_FILTERED' | translate:{
-              showing: store.items().length, filtered: store.totalCount(), total: store.unfilteredTotal()
-            } }}
-          } @else {
-            {{ 'CREDITS.COUNT_TOTAL' | translate:{ total: store.totalCount() } }}
-          }
-        </p>
-      }
 
       <ws-table>
         <table>

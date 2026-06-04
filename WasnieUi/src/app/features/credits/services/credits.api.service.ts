@@ -25,4 +25,8 @@ export class CreditsApiService {
   getById(id: string): Observable<CreditDetail> {
     return this.http.get<CreditDetail>(`${this.base}/${id}`);
   }
+
+  exportToExcel(params: PaginationParams): Observable<Blob> {
+    return this.http.get(`${this.base}/export`, { params: buildHttpParams(params), responseType: 'blob' as const });
+  }
 }

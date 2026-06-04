@@ -16,7 +16,7 @@ public static class RolePermissions
             Permission.TransactionsCreate, Permission.TransactionsRead, Permission.TransactionsUpdate,
             Permission.TransactionsProcessPending,
             Permission.TransactionsExport, Permission.TransactionsUpdateFromExcel,
-            Permission.CreditsRead,
+            Permission.CreditsRead, Permission.CreditsExport,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
             Permission.SettingsUpdate,
         };
@@ -33,7 +33,7 @@ public static class RolePermissions
             Permission.TransactionsCreate, Permission.TransactionsRead, Permission.TransactionsUpdate,
             Permission.TransactionsProcessPending,
             Permission.TransactionsExport, Permission.TransactionsUpdateFromExcel,
-            Permission.CreditsRead,
+            Permission.CreditsRead, Permission.CreditsExport,
             Permission.ImportsExecute, Permission.ReportsViewAll,
         };
 

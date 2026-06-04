@@ -623,6 +623,10 @@
       "RULE_PLACEHOLDER": "Seleccionar regla…",
       "RULE_NO_RULES": "No hay reglas activas en el/los plan(es) seleccionado(s)."
     },
+    "EXPORT": {
+      "BUTTON": "Exportar a Excel",
+      "ERROR": "Exportación fallida. Por favor, inténtalo de nuevo."
+    },
     "DETAIL": {
       "TITLE": "Detalle de Crédito",
       "BACK": "Volver a Créditos",

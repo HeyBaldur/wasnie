@@ -116,10 +116,11 @@
     margin-bottom: var(--space-2);
   }
 
-  &__count {
-    font-size: var(--font-size-13);
-    color: var(--color-text-secondary);
-    margin: 0 0 var(--space-2);
+  &__view-spacer { flex: 1; }
+
+  &__export-error {
+    font-size: var(--font-size-12);
+    color: var(--color-danger);
   }
 
   &__loading {

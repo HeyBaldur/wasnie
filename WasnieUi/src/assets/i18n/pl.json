@@ -623,6 +623,10 @@
       "RULE_PLACEHOLDER": "Wybierz regułę…",
       "RULE_NO_RULES": "Brak aktywnych reguł w wybranym planie lub planach."
     },
+    "EXPORT": {
+      "BUTTON": "Eksportuj do Excela",
+      "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
+    },
     "DETAIL": {
       "TITLE": "Szczegóły Kredytu",
       "BACK": "Powrót do Kredytów",

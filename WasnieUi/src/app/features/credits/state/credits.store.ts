@@ -161,6 +161,16 @@ export class CreditsStore {
   setPage(n: number): void { this.page.set(n); }
   setPageSize(n: number): void { this.pageSize.set(n); this.page.set(1); }
 
+  // Returns params for the GET /api/credits/export endpoint (same shape as list params).
+  toExportParams(): PaginationParams {
+    const filters = CreditsStore._buildFilterRecord(this.filter());
+    return {
+      page: 1,
+      pageSize: 1,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+    };
+  }
+
   // URL sync
   toQueryParams(): Record<string, string> {
     const f = this.filter();

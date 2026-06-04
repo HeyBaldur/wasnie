@@ -773,6 +773,10 @@
       "RULE_PLACEHOLDER": "Select rule…",
       "RULE_NO_RULES": "No active rules in selected plan(s)."
     },
+    "EXPORT": {
+      "BUTTON": "Export to Excel",
+      "ERROR": "Export failed. Please try again."
+    },
     "DETAIL": {
       "TITLE": "Credit Detail",
       "BACK": "Back to Credits",

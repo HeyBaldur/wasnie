@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -12,6 +13,7 @@ import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
+import { CreditsApiService } from '../services/credits.api.service';
 import { CreditsStore, CreditFilter, CreditStatus, EMPTY_CREDIT_FILTER } from '../state/credits.store';
 import { CreditByPayee } from '../models/credit.model';
 import {
@@ -46,6 +48,7 @@ import {
 })
 export class CreditsListComponent implements OnInit {
   readonly store = inject(CreditsStore);
+  private readonly api = inject(CreditsApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly payeesApi = inject(PayeesApiService);
@@ -291,6 +294,38 @@ export class CreditsListComponent implements OnInit {
       },
       error: () => this.rulesLoading.set(false),
     });
+  }
+
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
+  private static readonly EXPORT_CONFIRM_THRESHOLD = 50_000;
+
+  async onExport(): Promise<void> {
+    if (this.exporting()) return;
+
+    const total = this.store.totalCount();
+    if (total > CreditsListComponent.EXPORT_CONFIRM_THRESHOLD) {
+      const msg = `This export contains ${total.toLocaleString()} rows and may take a moment. Continue?`;
+      if (!window.confirm(msg)) return;
+    }
+
+    this.exporting.set(true);
+    this.exportError.set(null);
+    try {
+      const blob = await firstValueFrom(this.api.exportToExcel(this.store.toExportParams()));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `credits-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      this.exportError.set('CREDITS.EXPORT.ERROR');
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   setViewMode(mode: 'table' | 'byPayee'): void {

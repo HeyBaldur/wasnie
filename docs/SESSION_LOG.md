@@ -10,6 +10,32 @@
 
 ---
 
+## 2026-06-04 — WI-PROD-CREDITS-EXPORT: Excel export for /credits + unified button placement
+
+**Consistency principle:** Both /credits and /transactions now have "Export to Excel" in the same position — right-aligned above the table, inline with the count text. Reduces cognitive load for users switching between pages.
+
+**Backend (new):**
+- `Permission.CreditsExport` — granted to TenantAdmin + CompManager.
+- `CreditExportRow` DTO (17 columns: Id, ReferenceNumber, PayeeName, PayeeCode, PlanName, RuleName, OriginalAmount, OriginalCurrency, CreditedAmount, CreditedCurrency, SplitPercentage, Role, AllocatedAt, AllocatedBy, Status, SupersededAt, SupersededBy).
+- `ICreditExcelExportService` + `CreditExcelExportService` (ClosedXML, frozen header row, auto-fit columns).
+- `ExportCreditsQuery` + `ExportCreditsHandler` — uses `ListCreditsHandler.BuildQuery(db, filter)` for FIX-2/FIX-11 predicate sharing. 50k row cap, EXPORT_TOO_LARGE 422 response.
+- `GET /api/credits/export` endpoint added to `CreditsController`.
+- DI registration in Infrastructure.
+
+**Frontend:**
+- `CreditsApiService.exportToExcel(params)` — GET with blob response type.
+- `CreditsStore.toExportParams()` — builds PaginationParams from current filter.
+- `CreditsListComponent.onExport()` + `exporting` signal — same pattern as TransactionsListComponent.
+- Export button placed in the view-toggle row (right side, after spacer).
+- Transactions export button moved from before the filter panel to the count row above the table (new `transactions-list__table-header` flex row).
+- i18n EN/ES/PL: CREDITS.EXPORT.BUTTON + CREDITS.EXPORT.ERROR.
+
+**Build:** Backend Application + Infrastructure: clean. Frontend production: clean.
+
+**TODO_TESTS:** See TODO_TESTS section (WI-PROD-CREDITS-EXPORT entry).
+
+---
+
 ## 2026-06-04 — WI-PROD-FILTERS-CURRENCY-RULE-FIX-1: Currency and Rule converted to dropdown
 
 **Problem:** Currency filter shipped as 17 inline toggle buttons (full-width row) instead of the dropdown+chip pattern used by Payee and Plan. Rule filter had the same inline-chip issue. Layout broke the filter panel grid.
