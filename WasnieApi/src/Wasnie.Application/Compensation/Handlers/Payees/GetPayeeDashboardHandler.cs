@@ -115,12 +115,15 @@ public sealed class GetPayeeDashboardHandler(
         }
 
         // ── Card 2: Earnings trend (last 12 months, not affected by period filter) ─
+        // Uses CreditedAmount (what the payee earned = commission), NOT OriginalAmount (raw revenue).
+        // OriginalAmount inflates "earnings" by 1/rate (e.g. 20× for a 5% flat plan). Same bug
+        // as A.3-FIX-2 in QuotaAttainmentService — different query, same root cause.
         var trendCutoff = today.AddMonths(-12);
         var allCreditsForTrend = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
             where c.PayeeId == payeeId && c.SupersededAt == null && t.TransactionDate >= trendCutoff
-            select new { c.OriginalAmount.Amount, c.OriginalAmount.Currency, t.TransactionDate }
+            select new { c.CreditedAmount.Amount, c.CreditedAmount.Currency, t.TransactionDate }
         ).ToListAsync(cancellationToken);
 
         var trend = allCreditsForTrend

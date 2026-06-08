@@ -392,7 +392,15 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ## Quota attainment query violations
 
-- ❌ **Summing `Credit.OriginalAmount` for Revenue quota attainment** (WI-CALC-A.3-FIX-2, 2026-06-04). `OriginalAmount` is the raw transaction revenue; `CreditedAmount` is what the payee actually earned (commission). A Revenue quota target is denominated as a commission target. Using `OriginalAmount` inflates attainment by `1 / commission_rate` (e.g. 20× for a 5% flat plan), making a 1.37% achiever appear at 27%. **Rule:** Attainment queries for Revenue measurement type MUST sum `CreditedAmount` — never `OriginalAmount`. The distinction: OriginalAmount is for understanding revenue volume; CreditedAmount is the earned value to compare against a quota target.
+- ❌ **Using `Credit.OriginalAmount` in any query that computes what a payee EARNED** (WI-CALC-A.3-FIX-2, 2026-06-04; extended in V3-FIX-2, 2026-06-08). `OriginalAmount` is the raw transaction revenue (what the company received from the customer). `CreditedAmount` is what the payee actually earned (the commission). Using `OriginalAmount` inflates the result by `1 / commission_rate` — for a 5% flat plan this is ×20. The bug has appeared in two independent queries (QuotaAttainmentService, GetPayeeDashboardHandler Earnings Trend); treat every new "earnings" aggregation as suspicious until proven correct.
+
+  **Rule:** Any aggregation, summary, or chart that shows a payee's **earnings, compensation, or commission** MUST use `CreditedAmount`. `OriginalAmount` is ONLY legitimate when explicitly displaying the source transaction amount alongside the credit (detail page, export columns that show both values). Verify by checking: if the result equals `CreditedAmount × 20` (for a 5% plan), you have the wrong field.
+
+  **Audit:** See `docs/architecture/15-aggregation-audit-checklist.md` for the full list of aggregation endpoints and their verified status. Every new aggregation endpoint MUST be added to this checklist before merge.
+
+  **Historical cases:**
+  - QuotaAttainmentService Revenue path — fixed in A.3-FIX-2.
+  - GetPayeeDashboardHandler Earnings Trend — fixed in V3-FIX-2.
 
 - ❌ **Attainment queries that omit the `CreditedCurrency == quota.Amount.Currency` filter** (WI-CALC-A.3-FIX-2, 2026-06-04). Without this filter, EUR and PLN credits are both counted toward a EUR quota. The result is an amount in mixed currencies that has no meaning. **Rule:** Every attainment query MUST filter `c.CreditedAmount.Currency == quotaCurrency` so only credits denominated in the quota's currency contribute to the achieved amount.
 

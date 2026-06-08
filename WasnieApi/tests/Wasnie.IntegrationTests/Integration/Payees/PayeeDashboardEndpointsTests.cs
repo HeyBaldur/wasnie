@@ -176,6 +176,55 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetDashboard_EarningsTrend_ShowsCreditedAmountNotOriginalAmount()
+    {
+        // Regression guard for V3-FIX-2: Earnings Trend chart was using OriginalAmount (raw revenue)
+        // instead of CreditedAmount (earned commission), inflating by 1/rate (20× for a 5% plan).
+        // This test seeds a transaction with a known OriginalAmount, processes it (creating a Credit),
+        // then verifies the trend amount equals CreditedAmount, not OriginalAmount.
+        var payeeId = await CreatePayeeAsync("EMP-TREND-001");
+        var planId = await CreateActivePlanAsync("EUR");  // 5% flat plan
+        await CreateAssignmentAsync(payeeId, planId);
+
+        // Create a transaction with OriginalAmount = €1,000 (CreditedAmount will be €50 = 5%)
+        var txReq = new
+        {
+            payeeId, referenceNumber = "TREND-REF-001",
+            amount = 1000m, currency = "EUR",
+            transactionDate = "2026-06-01", quantity = 1
+        };
+        var txResp = await _clientA.PostAsJsonAsync("/api/transactions", txReq);
+        txResp.EnsureSuccessStatusCode();
+
+        // Process pending to allocate credit
+        var processReq = new { scope = 0, scopeId = planId };  // ByPlan scope
+        var processResp = await _clientA.PostAsJsonAsync("/api/transactions/process-pending", processReq);
+        processResp.EnsureSuccessStatusCode();
+
+        // Allow job to complete (may be async; poll for up to 5s)
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(500);
+            var dash = await (await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=ytd"))
+                .Content.ReadFromJsonAsync<DashboardResponse>();
+            if (dash?.EarningsTrend.Any() == true) break;
+        }
+
+        var response = await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=ytd");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<DashboardResponse>();
+        body!.EarningsTrend.Should().NotBeEmpty("credit was allocated");
+
+        var junePoint = body.EarningsTrend.FirstOrDefault(p => p.Month == 6 && p.Year == 2026);
+        junePoint.Should().NotBeNull("a June 2026 credit was seeded");
+        // CreditedAmount = 5% of 1,000 = 50; OriginalAmount = 1,000.
+        // If amount is 1,000 we hit the bug; if 50 the fix is working.
+        junePoint!.Amount.Should().BeApproximately(50m, 1m,
+            because: "Earnings Trend must show CreditedAmount (€50) not OriginalAmount (€1,000)");
+        junePoint.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
     public async Task GetPayeeQuotas_WithPeriodYtd_IncludesPastAndCurrentPeriodQuotas()
     {
         // Regression guard for V3-FIX-1: the period param MUST reach the quotas endpoint.
@@ -310,9 +359,11 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
 
     private sealed record DashboardResponse(
         AttainmentItemResponse[] AttainmentItems,
-        object[] EarningsTrend,
+        EarningsTrendResponse[] EarningsTrend,
         object[] RecentQuotas,
         object[] RecentAssignments);
+
+    private sealed record EarningsTrendResponse(int Year, int Month, string MonthLabel, decimal Amount, string Currency);
 
     private sealed record AttainmentItemResponse(
         Guid QuotaId,

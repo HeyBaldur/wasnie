@@ -30,10 +30,10 @@ import {
   WsConfirmationModalComponent,
   WsTableEmptyComponent,
   WsGaugeComponent,
-  WsLineChartComponent,
+  WsBarChartComponent,
   WsSegmentedControlComponent,
   WsTooltipDirective,
-  type LineChartPoint,
+  type BarChartPoint,
   type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
@@ -64,7 +64,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     WsConfirmationModalComponent,
     WsTableEmptyComponent,
     WsGaugeComponent,
-    WsLineChartComponent,
+    WsBarChartComponent,
     WsSegmentedControlComponent,
     WsTooltipDirective,
   ],
@@ -105,25 +105,6 @@ export class PayeeDetailComponent implements OnInit {
   readonly invalidQuotaCount = computed(() =>
     (this.dashboard()?.attainmentItems ?? []).filter(a => !a.isCurrencyValid).length
   );
-
-  readonly chartHighlightLabels = computed((): string[] => {
-    const period = this.period();
-    const today = new Date();
-    const monthAbbr = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
-    if (period === 'this-month') return [monthAbbr(today)];
-    if (period === 'last-month') {
-      const last = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      return [monthAbbr(last)];
-    }
-    if (period === 'ytd') {
-      const labels: string[] = [];
-      for (let m = 0; m <= today.getMonth(); m++) {
-        labels.push(monthAbbr(new Date(today.getFullYear(), m, 1)));
-      }
-      return labels;
-    }
-    return [];
-  });
 
   readonly editModalOpen = signal(false);
   readonly terminateModalOpen = signal(false);
@@ -274,8 +255,34 @@ export class PayeeDetailComponent implements OnInit {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  trendChartPoints(trend: EarningsTrendPoint[]): LineChartPoint[] {
-    return trend.map(p => ({ label: p.monthLabel, value: p.amount, currency: p.currency }));
+  trendBarPoints(trend: EarningsTrendPoint[]): BarChartPoint[] {
+    if (!trend.length) return [];
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1; // 1-based
+
+    // V1: show only the dominant currency (highest total across all months).
+    // This avoids mixing EUR + PLN amounts in the same bar axis.
+    const totalByCurrency = new Map<string, number>();
+    for (const p of trend) {
+      totalByCurrency.set(p.currency, (totalByCurrency.get(p.currency) ?? 0) + p.amount);
+    }
+    const dominantCurrency = [...totalByCurrency.entries()]
+      .reduce((a, b) => a[1] >= b[1] ? a : b)[0];
+
+    const byMonth = new Map<string, EarningsTrendPoint>();
+    for (const p of trend) {
+      if (p.currency === dominantCurrency) byMonth.set(`${p.year}-${p.month}`, p);
+    }
+
+    return [...byMonth.values()]
+      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+      .map(p => ({
+        label: p.monthLabel,
+        value: p.amount,
+        currency: p.currency,
+        isCurrent: p.year === currentYear && p.month === currentMonth,
+      }));
   }
 
   /** Compute pacing fraction for a currently-active quota period. */

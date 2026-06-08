@@ -10,6 +10,64 @@
 
 ---
 
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-3: Earnings Trend line chart → bar chart
+
+**Design decision:** Bar charts communicate discrete monthly buckets; line charts imply interpolation between continuous values. Monthly earnings are bucketed amounts — bars are the industry standard. Owner request confirmed.
+
+**New component: `ws-bar-chart`** — pure SVG, zero deps, CSS-variable themed, mirrors `ws-line-chart` structure.
+- `points: BarChartPoint[]` input (label, value, currency, isCurrent optional)
+- Current month bar: `var(--color-brand)` full opacity. Past months: same token at 35% opacity.
+- X-axis label for current month bolded in brand color.
+- Zero-value months: 2px stub so the slot is visible.
+- Tooltip: same clamp [8%, 75%] as line chart to prevent card overflow.
+- Multi-currency V1: selects dominant currency (highest total), renders only that series.
+- Empty state when all points are 0 or empty.
+- Accessibility: `role="img"`, `aria-label`, `<title>` per bar.
+- Exported from shared UI barrel as `WsBarChartComponent, type BarChartPoint`.
+
+**`ws-line-chart` is preserved** — removed from `payee-detail.component.ts` imports (no longer needed there), but component files untouched.
+
+**Component cleanup:**
+- Removed `WsLineChartComponent` from `payee-detail` imports (was `NG8113` warning).
+- Removed `chartHighlightLabels` computed (was line chart specific — no longer needed).
+- Removed `trendChartPoints()` helper. Added `trendBarPoints()` with `isCurrent` flag computed client-side from `EarningsTrendPoint.year/month`.
+
+**No backend changes** — `EarningsTrendPointDto` already has `Year`, `Month`, `MonthLabel`, `Amount`, `Currency`. `IsCurrent` derived client-side.
+
+**Tests:** `ws-bar-chart.component.spec.ts` — 10 unit tests: N bars from N points, hasData logic, empty state, current/past styling, zero-value stub height, tooltip X clamp for first and last bucket, formatValue (currency and plain).
+
+**Test count: 350 backend unit + 455 integration + 2 skip = 807. 10 new frontend bar-chart specs (176 total, 10 pre-existing TransactionsListComponent failures unchanged). Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-2: Earnings Trend chart 20× inflation (OriginalAmount bug)
+
+**Root cause (Step 0 diagnosis):** The Earnings Trend aggregation in `GetPayeeDashboardHandler` selected `c.OriginalAmount.Amount` and `c.OriginalAmount.Currency` from Credits. `OriginalAmount` is the raw transaction revenue (what the company received); `CreditedAmount` is the payee's commission (what they earned). For a 5% flat plan, OriginalAmount = CreditedAmount × 20. This is the exact same bug as A.3-FIX-2 (QuotaAttainmentService), just in a different query. A.3-FIX-2 fixed one occurrence; this WI found and fixed the second.
+
+The join (`c.TransactionId == t.Id`) is a correct 1:1 join — no Cartesian product. The inflation is purely a field mismatch.
+
+**Full aggregation audit (all endpoints):**
+- Earnings Trend (GetPayeeDashboardHandler): ❌ BROKEN → fixed here
+- Attainment gauges (GetPayeeDashboardHandler, inline): ✓ correct (CreditedAmount)
+- QuotaAttainmentService Revenue: ✓ correct (fixed in A.3-FIX-2)
+- QuotaAttainmentService Units: ✓ correct (Quantity)
+- GetPayeeAttainmentHandler: ✓ correct (CreditedAmount)
+- Credit counters (GetCreditCountersHandler): ✓ correct (CreditedAmount)
+- Credits by-payee (GetCreditsByPayeeHandler): ✓ correct (CreditedAmount)
+- ListCreditsHandler sort/display: ✓ intentional (shows both OriginalAmount and CreditedAmount in list/export)
+
+**Fix:** 1-line change in `GetPayeeDashboardHandler.cs`: `c.OriginalAmount.*` → `c.CreditedAmount.*` in the trend query.
+
+**New doc:** `docs/architecture/15-aggregation-audit-checklist.md` — full table of all aggregation endpoints with verified status, procedure for adding new endpoints, and guidance on when to re-audit.
+
+**Tests:** Integration regression guard `GetDashboard_EarningsTrend_ShowsCreditedAmountNotOriginalAmount` — seeds €1,000 transaction, processes (5% flat → €50 credit), verifies trend shows €50 not €1,000. `DashboardResponse.EarningsTrend` typed from `object[]` to `EarningsTrendResponse[]`.
+
+**Forbidden-pattern rule updated:** Extended "Summing OriginalAmount" rule to cover ALL payee earnings aggregations, not just quota attainment. References the new audit checklist.
+
+**Test count: 350 unit + 455 integration + 2 skip = 807. Frontend build clean. Both builds clean.**
+
+---
+
 ## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-1: Quotas + Assignments cards period filtering inconsistency
 
 **Root cause (found in Step 0):** `buildHttpParams` (the shared HTTP-params utility) only serializes the typed fields of `PaginationParams` (`page`, `pageSize`, `sortBy`, `sortOrder`, `search`, `filters`). The payee-detail component passed `period: this.period()` as an extra property using `as any` to suppress the TypeScript error. `buildHttpParams` silently dropped it — the backend never received the `?period=` param. `PeriodHelper.ComputeDateRange(null, today)` then defaulted to `"this-month"` (the hard-coded default for null), causing all past-period quotas and assignments to be excluded on "Year to Date", "Last Month", and "All Time" selections.

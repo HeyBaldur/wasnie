@@ -26,3 +26,4 @@ export { WsDataTableComponent, type WsColumn } from './ws-data-table/ws-data-tab
 export { WsPaginationComponent } from './ws-pagination/ws-pagination.component';
 export { WsGaugeComponent } from './ws-gauge/ws-gauge.component';
 export { WsLineChartComponent, type LineChartPoint } from './ws-line-chart/ws-line-chart.component';
+export { WsBarChartComponent, type BarChartPoint } from './ws-bar-chart/ws-bar-chart.component';

@@ -210,10 +210,9 @@
                 <span class="bento-card__title">{{ 'DASHBOARD.TREND_TITLE' | translate }}</span>
               </div>
               <div class="bento-card__body">
-                <ws-line-chart
-                  [points]="trendChartPoints(dashboard()?.earningsTrend ?? [])"
+                <ws-bar-chart
+                  [points]="trendBarPoints(dashboard()?.earningsTrend ?? [])"
                   [emptyLabel]="'DASHBOARD.TREND_EMPTY' | translate"
-                  [highlightLabels]="chartHighlightLabels()"
                 />
               </div>
             </div>
