@@ -431,8 +431,8 @@
   },
   "DASHBOARD": {
     "GAUGES_TITLE": "Realizacja Kwot",
-    "TREND_TITLE": "Trend Zarobków (12 miesięcy)",
-    "TREND_EMPTY": "Brak historii kredytów dla tego beneficjenta.",
+    "TREND_TITLE": "Trend Sprzedaży (12 miesięcy)",
+    "TREND_EMPTY": "Brak historii sprzedaży dla tego beneficjenta.",
     "QUOTAS_TITLE": "Kwoty",
     "ASSIGNMENTS_TITLE": "Przypisania",
     "CREDITS_TITLE": "Ostatnie Kredyty",

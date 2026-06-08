@@ -23,14 +23,15 @@
     stroke-linecap="round"
   />
 
-  <!-- Value fill -->
+  <!-- Value fill — stroke-linecap="butt" prevents the round-cap dot artifact
+       at very low attainment values (< ~5%) where the cap is wider than the arc. -->
   <path
     class="ws-gauge__fill"
     [attr.d]="trackPath"
     fill="none"
     [attr.stroke]="fillColor()"
     stroke-width="14"
-    stroke-linecap="round"
+    stroke-linecap="butt"
     [attr.stroke-dasharray]="fillDashArray()"
     stroke-dashoffset="0"
   />

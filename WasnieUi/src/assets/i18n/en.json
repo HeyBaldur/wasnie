@@ -431,8 +431,8 @@
   },
   "DASHBOARD": {
     "GAUGES_TITLE": "Quota Attainment",
-    "TREND_TITLE": "Earnings Trend (12 months)",
-    "TREND_EMPTY": "No credit history yet for this payee.",
+    "TREND_TITLE": "Sales Trend (12 months)",
+    "TREND_EMPTY": "No sales history yet for this payee.",
     "QUOTAS_TITLE": "Quotas",
     "ASSIGNMENTS_TITLE": "Assignments",
     "CREDITS_TITLE": "Recent Credits",

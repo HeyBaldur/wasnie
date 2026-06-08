@@ -28,6 +28,15 @@
     stroke-width: 1;
   }
 
+  // Thin dashed vertical line that appears above the hovered bar — acts as a tooltip stem
+  &__column-indicator {
+    stroke: var(--color-brand);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
   &__axis-label {
     font-size: 10px;
     fill: var(--color-text-tertiary);
@@ -39,30 +48,39 @@
     }
   }
 
+  // Small colored underline beneath the current month label
+  &__current-accent {
+    fill: var(--color-brand);
+  }
+
   &__bar {
-    // Current month: solid accent bar
+    // Current month: solid accent bar — immediately identifiable
     &--current {
       fill: var(--color-brand);
       fill-opacity: 1;
-    }
-
-    // Past months: same token, reduced opacity for visual hierarchy
-    &--past {
-      fill: var(--color-brand);
-      fill-opacity: 0.35;
       transition: fill-opacity var(--transition-fast);
 
       &:hover {
-        fill-opacity: 0.55;
+        fill-opacity: 0.85;
+      }
+    }
+
+    // Past months: significantly reduced opacity for clear visual hierarchy
+    &--past {
+      fill: var(--color-brand);
+      fill-opacity: 0.22;
+      transition: fill-opacity var(--transition-fast);
+
+      &:hover {
+        fill-opacity: 0.45;
       }
     }
   }
 
-  // ── Tooltip — same structure as ws-line-chart ─────────────────────────────
+  // ── Tooltip ──────────────────────────────────────────────────────────────────
 
   &__tooltip {
     position: absolute;
-    top: 10%;
     transform: translateX(-50%);
     background: var(--color-bg-surface-raised);
     border: 1px solid var(--color-border-default);
@@ -73,6 +91,24 @@
     z-index: 10;
     min-width: 100px;
     white-space: nowrap;
+
+    // Right-anchored: grows to the left, no centering transform needed
+    &--right {
+      transform: none;
+    }
+  }
+
+  // Downward-pointing arrow at tooltip bottom connecting it visually to the bar
+  &__tooltip-arrow {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+    border-top-color: var(--color-bg-surface-raised);
+    margin-top: -1px; // overlap the border
   }
 
   &__tooltip-label {

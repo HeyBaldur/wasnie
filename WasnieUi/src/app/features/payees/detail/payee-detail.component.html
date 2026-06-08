@@ -135,7 +135,7 @@
                   {{ 'DASHBOARD.GAUGES_TITLE' | translate }}
                   <span class="bento-card__counter">· {{ dashboard()?.attainmentItems?.length ?? 0 }} {{ periodCounterLabel() | translate }}</span>
                 </span>
-                <a class="bento-card__link" [routerLink]="['/quotas']" [queryParams]="{ payeeId: payee.id }">
+                <a class="bento-card__link" [routerLink]="['/quotas']" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
@@ -144,11 +144,10 @@
                   <p class="bento-empty">{{ 'DASHBOARD.ATTAINMENT_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
                 } @else {
                   @for (a of dashboard()!.attainmentItems; track a.quotaId) {
-                    <div class="bento-gauge-row"
-                         [class.bento-gauge-row--invalid]="!a.isCurrencyValid"
-                         role="link" tabindex="0"
-                         [routerLink]="['/quotas', a.quotaId]"
-                         (keydown.enter)="$any($event.target).click()">
+                    <a class="bento-gauge-row"
+                       [class.bento-gauge-row--invalid]="!a.isCurrencyValid"
+                       [routerLink]="['/quotas', a.quotaId]"
+                       target="_blank" rel="noopener noreferrer">
                       <div class="bento-gauge-wrap" [class.bento-gauge-wrap--faded]="!a.isCurrencyValid">
                         <ws-gauge
                           [value]="a.attainmentValue"
@@ -198,7 +197,7 @@
                           </span>
                         </div>
                       </div>
-                    </div>
+                    </a>
                   }
                 }
               </div>
@@ -211,7 +210,7 @@
               </div>
               <div class="bento-card__body">
                 <ws-bar-chart
-                  [points]="trendBarPoints(dashboard()?.earningsTrend ?? [])"
+                  [points]="trendBarPoints(dashboard()?.salesTrend ?? [])"
                   [emptyLabel]="'DASHBOARD.TREND_EMPTY' | translate"
                 />
               </div>
@@ -224,7 +223,7 @@
                   {{ 'DASHBOARD.QUOTAS_TITLE' | translate }}
                   <span class="bento-card__counter">· {{ quotasTotal() }} {{ periodCounterLabel() | translate }}</span>
                 </span>
-                <a class="bento-card__link" [routerLink]="['/quotas']" [queryParams]="{ payeeId: payee.id }">
+                <a class="bento-card__link" [routerLink]="['/quotas']" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
@@ -233,11 +232,10 @@
                   <p class="bento-empty">{{ 'DASHBOARD.QUOTAS_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
                 }
                 @for (q of quotas(); track q.id) {
-                  <div class="bento-list-row clickable"
-                       [class.bento-list-row--invalid]="!q.isCurrencyValid"
-                       role="link" tabindex="0"
-                       [routerLink]="['/quotas', q.id]"
-                       (keydown.enter)="$any($event.target).click()">
+                  <a class="bento-list-row clickable"
+                     [class.bento-list-row--invalid]="!q.isCurrencyValid"
+                     [routerLink]="['/quotas', q.id]"
+                     target="_blank" rel="noopener noreferrer">
                     <div class="bento-list-row__main">
                       <span class="bento-list-row__name">{{ q.planName }}</span>
                       <span class="bento-list-row__sub">{{ q.periodStart | dateFormat }} – {{ q.periodEnd | dateFormat }}</span>
@@ -259,7 +257,7 @@
                         {{ temporalKey(q.periodStart, q.periodEnd, q.isCurrencyValid) | translate }}
                       </ws-badge>
                     </div>
-                  </div>
+                  </a>
                 }
                 @if (quotasLoading()) {
                   <div class="bento-loading"><span class="skeleton skeleton--text"></span></div>
@@ -279,15 +277,18 @@
                   {{ 'DASHBOARD.ASSIGNMENTS_TITLE' | translate }}
                   <span class="bento-card__counter">· {{ assignmentsTotal() }} {{ periodCounterLabel() | translate }}</span>
                 </span>
+                <a class="bento-card__link" [routerLink]="['/assignments']" target="_blank" rel="noopener noreferrer">
+                  {{ 'DASHBOARD.VIEW_ALL' | translate }} →
+                </a>
               </div>
               <div class="bento-card__body">
                 @if (!assignments().length && !assignmentsLoading()) {
                   <p class="bento-empty">{{ 'DASHBOARD.ASSIGNMENTS_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
                 }
                 @for (a of assignments(); track a.id) {
-                  <div class="bento-list-row clickable" role="link" tabindex="0"
-                       [routerLink]="['/plans', a.planId]"
-                       (keydown.enter)="$any($event.target).click()">
+                  <a class="bento-list-row clickable"
+                     [routerLink]="['/plans', a.planId]"
+                     target="_blank" rel="noopener noreferrer">
                     <div class="bento-list-row__main">
                       <span class="bento-list-row__name">
                         {{ a.planName }}
@@ -300,7 +301,7 @@
                         {{ temporalKey(a.effectiveStart, a.effectiveEnd) | translate }}
                       </ws-badge>
                     </div>
-                  </div>
+                  </a>
                 }
                 @if (assignmentsLoading()) {
                   <div class="bento-loading"><span class="skeleton skeleton--text"></span></div>
@@ -320,7 +321,7 @@
                   {{ 'DASHBOARD.CREDITS_TITLE' | translate }}
                   <span class="bento-card__counter">· {{ creditsTotal() }} {{ periodCounterLabel() | translate }}</span>
                 </span>
-                <a class="bento-card__link" [routerLink]="['/credits']" [queryParams]="{ payeeId: payee.id }">
+                <a class="bento-card__link" [routerLink]="['/credits']" [queryParams]="{ payeeIds: payee.id }" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>

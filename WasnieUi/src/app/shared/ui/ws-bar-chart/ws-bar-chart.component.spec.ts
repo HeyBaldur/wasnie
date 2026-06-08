@@ -10,6 +10,14 @@ function make12Months(currentIdx = 5): BarChartPoint[] {
   return months.map((m, i) => makePoint(m, i === currentIdx ? 342.76 : 100, i === currentIdx));
 }
 
+/** Simulate a mousemove over a given SVG X position. */
+function moveMouse(component: WsBarChartComponent, svgX: number): void {
+  const mockRect = { left: 0, width: 560, top: 0, height: 180 };
+  const svgEl = { getBoundingClientRect: () => mockRect } as unknown as SVGSVGElement;
+  (component as any).svgEl = { nativeElement: svgEl };
+  component.onSvgMouseMove({ clientX: svgX, clientY: 0 } as MouseEvent);
+}
+
 describe('WsBarChartComponent', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<WsBarChartComponent>>;
   let component: WsBarChartComponent;
@@ -23,12 +31,13 @@ describe('WsBarChartComponent', () => {
     component = fixture.componentInstance;
   });
 
+  // ── Core rendering ─────────────────────────────────────────────────────────
+
   it('renders N bars from N data points', () => {
     fixture.componentRef.setInput('points', make12Months());
     fixture.detectChanges();
 
-    const bars = component.bars();
-    expect(bars.length).toBe(12);
+    expect(component.bars().length).toBe(12);
   });
 
   it('hasData is false when all values are 0', () => {
@@ -51,17 +60,17 @@ describe('WsBarChartComponent', () => {
     fixture.componentRef.setInput('emptyLabel', 'No earnings yet');
     fixture.detectChanges();
 
-    const html: string = fixture.nativeElement.innerHTML;
-    expect(html).toContain('No earnings yet');
     expect(fixture.nativeElement.querySelector('svg')).toBeNull();
+    expect(fixture.nativeElement.innerHTML).toContain('No earnings yet');
   });
 
-  it('current month bar has ws-bc__bar--current class; others have ws-bc__bar--past', () => {
+  // ── Current month highlight ────────────────────────────────────────────────
+
+  it('current month bar has isCurrent = true; all others false', () => {
     fixture.componentRef.setInput('points', make12Months(5));
     fixture.detectChanges();
 
-    const bars = component.bars();
-    bars.forEach((bar, i) => {
+    component.bars().forEach((bar, i) => {
       if (i === 5) {
         expect(bar.point.isCurrent).toBeTrue();
       } else {
@@ -70,53 +79,76 @@ describe('WsBarChartComponent', () => {
     });
   });
 
-  it('zero-value bar has minimum height (stub, not invisible)', () => {
+  // ── Zero-value bars ────────────────────────────────────────────────────────
+
+  it('zero-value bar has minimum height stub (not invisible)', () => {
     const pts = [makePoint('Jan', 0), makePoint('Feb', 500), makePoint('Mar', 0)];
     fixture.componentRef.setInput('points', pts);
     fixture.detectChanges();
 
     const bars = component.bars();
-    // Jan and Mar have value 0 — they should still have height >= 2
-    expect(bars[0].height).toBeGreaterThanOrEqual(2);
-    expect(bars[2].height).toBeGreaterThanOrEqual(2);
-    // Feb (500) should be taller than the stubs
-    expect(bars[1].height).toBeGreaterThan(bars[0].height);
+    expect(bars[0].height).toBeGreaterThanOrEqual(2); // Jan stub
+    expect(bars[2].height).toBeGreaterThanOrEqual(2); // Mar stub
+    expect(bars[1].height).toBeGreaterThan(bars[0].height); // Feb is taller
   });
 
-  it('tooltip X is clamped to [8, 75]% for first bucket', () => {
-    const pts = make12Months();
+  // ── Tooltip positioning ────────────────────────────────────────────────────
+
+  it('hovering first bucket (left edge): uses left anchor', () => {
+    fixture.componentRef.setInput('points', make12Months());
+    fixture.detectChanges();
+
+    // First bucket center ≈ 52 + 0*41 + 20 = 72 SVG units → 12.9% of 560
+    moveMouse(component, 72);
+
+    expect(component.tooltipVisible()).toBeTrue();
+    expect(component.tooltipLeft()).not.toBeNull(); // left-anchored
+    expect(component.tooltipRight()).toBeNull();
+  });
+
+  it('hovering last bucket (right edge): uses right anchor to prevent overflow', () => {
+    fixture.componentRef.setInput('points', make12Months());
+    fixture.detectChanges();
+
+    // Last bucket (index 11) center ≈ 52 + 11*41 + 20 = 523 SVG units → 93.4% of 560 → right-anchor
+    moveMouse(component, 523);
+
+    expect(component.tooltipVisible()).toBeTrue();
+    expect(component.tooltipRight()).not.toBeNull(); // right-anchored
+    expect(component.tooltipLeft()).toBeNull();
+  });
+
+  it('tooltip top is computed from bar position, not fixed', () => {
+    const pts = [makePoint('Jan', 0), makePoint('Feb', 500)];
     fixture.componentRef.setInput('points', pts);
     fixture.detectChanges();
 
-    // Simulate mouse over the first bucket (far left)
-    const mockEvent = { clientX: 0, clientY: 0 } as MouseEvent;
+    // Hover Jan (value 0 → short stub, bar top near chart bottom)
+    moveMouse(component, 52 + 0 * (component.chartW() / 2) + component.bucketW() / 2);
+    const topJan = component.tooltipTop();
 
-    const svgRect = { left: 0, width: 560, top: 0, height: 180 };
-    const svgEl = { getBoundingClientRect: () => svgRect } as unknown as SVGSVGElement;
-    (component as any).svgEl = { nativeElement: svgEl };
+    // Hover Feb (value 500 → tall bar, bar top near chart top)
+    moveMouse(component, 52 + 1 * (component.chartW() / 2) + component.bucketW() / 2);
+    const topFeb = component.tooltipTop();
 
-    component.onSvgMouseMove(mockEvent);
-    // Tooltip X should be clamped to at least 8%
-    expect(component.tooltipX()).toBeGreaterThanOrEqual(8);
+    // Taller bar means bar.y is smaller → tooltipTop should be smaller (closer to top of card)
+    expect(topFeb).toBeLessThan(topJan);
   });
 
-  it('tooltip X is clamped to 75% for last bucket', () => {
-    const pts = make12Months();
-    fixture.componentRef.setInput('points', pts);
+  it('column indicator X is set when hovering', () => {
+    fixture.componentRef.setInput('points', make12Months());
     fixture.detectChanges();
 
-    // Simulate mouse at the far right (beyond VB_W)
-    const mockEvent = { clientX: 560, clientY: 0 } as MouseEvent;
-    const svgRect = { left: 0, width: 560, top: 0, height: 180 };
-    const svgEl = { getBoundingClientRect: () => svgRect } as unknown as SVGSVGElement;
-    (component as any).svgEl = { nativeElement: svgEl };
+    moveMouse(component, 200);
+    expect(component.columnIndicatorX()).not.toBeNull();
 
-    component.onSvgMouseMove(mockEvent);
-    expect(component.tooltipX()).toBeLessThanOrEqual(75);
+    component.onSvgMouseLeave();
+    expect(component.columnIndicatorX()).toBeNull();
   });
+
+  // ── Format helpers ─────────────────────────────────────────────────────────
 
   it('formatValue returns currency-formatted string', () => {
-    // 342.76 rounds to 343 with 0 decimal places; assert currency symbol is present
     const result = component.formatValue(342, 'EUR');
     expect(result).toContain('342');
     expect(result).toContain('€');

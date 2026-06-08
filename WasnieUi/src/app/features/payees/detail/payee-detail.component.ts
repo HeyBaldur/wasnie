@@ -13,7 +13,7 @@ import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
 import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
-import { PayeeDashboard, EarningsTrendPoint } from '../models/payee-dashboard.model';
+import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
 import { Payee, PayeeStatus } from '../models/payee.model';
 import { PayeeFormComponent } from '../form/payee-form.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
@@ -184,7 +184,7 @@ export class PayeeDetailComponent implements OnInit {
       const result = await firstValueFrom(this.payeesApi.getPayeeDashboard(this.payeeId, this.period()));
       this.dashboard.set(result);
     } catch {
-      this.dashboard.set({ attainmentItems: [], earningsTrend: [], recentQuotas: [], recentAssignments: [] });
+      this.dashboard.set({ attainmentItems: [], salesTrend: [], recentQuotas: [], recentAssignments: [] });
     } finally {
       this.dashboardLoading.set(false);
       // Load list cards after dashboard
@@ -255,7 +255,7 @@ export class PayeeDetailComponent implements OnInit {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  trendBarPoints(trend: EarningsTrendPoint[]): BarChartPoint[] {
+  trendBarPoints(trend: SalesTrendPoint[]): BarChartPoint[] {
     if (!trend.length) return [];
     const today = new Date();
     const currentYear = today.getFullYear();
@@ -270,7 +270,7 @@ export class PayeeDetailComponent implements OnInit {
     const dominantCurrency = [...totalByCurrency.entries()]
       .reduce((a, b) => a[1] >= b[1] ? a : b)[0];
 
-    const byMonth = new Map<string, EarningsTrendPoint>();
+    const byMonth = new Map<string, SalesTrendPoint>();
     for (const p of trend) {
       if (p.currency === dominantCurrency) byMonth.set(`${p.year}-${p.month}`, p);
     }

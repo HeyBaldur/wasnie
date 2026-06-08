@@ -44,7 +44,7 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
         var body = await response.Content.ReadFromJsonAsync<DashboardResponse>();
         body.Should().NotBeNull();
         body!.AttainmentItems.Should().BeEmpty();
-        body.EarningsTrend.Should().BeEmpty();
+        body.SalesTrend.Should().BeEmpty();
         body.RecentQuotas.Should().BeEmpty();
         body.RecentAssignments.Should().BeEmpty();
     }
@@ -68,7 +68,7 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
         // RecentQuotas and RecentAssignments are now empty — lists served by separate paginated endpoints
         body.RecentQuotas.Should().BeEmpty();
         body.RecentAssignments.Should().BeEmpty();
-        body.EarningsTrend.Should().BeEmpty(); // no credits seeded
+        body.SalesTrend.Should().BeEmpty(); // no credits seeded
     }
 
     [Fact]
@@ -176,17 +176,16 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetDashboard_EarningsTrend_ShowsCreditedAmountNotOriginalAmount()
+    public async Task GetDashboard_SalesTrend_ShowsTransactionAmountNotCreditedAmount()
     {
-        // Regression guard for V3-FIX-2: Earnings Trend chart was using OriginalAmount (raw revenue)
-        // instead of CreditedAmount (earned commission), inflating by 1/rate (20× for a 5% plan).
-        // This test seeds a transaction with a known OriginalAmount, processes it (creating a Credit),
-        // then verifies the trend amount equals CreditedAmount, not OriginalAmount.
+        // Regression guard for WI-CALC-A.3-FIX-4: Sales Trend chart must show Transaction.Amount
+        // (gross sales = €1,000) not CreditedAmount (commission = €50 for a 5% plan).
+        // This is the Sales Quota semantic: bars represent what was sold, not what was earned.
         var payeeId = await CreatePayeeAsync("EMP-TREND-001");
         var planId = await CreateActivePlanAsync("EUR");  // 5% flat plan
         await CreateAssignmentAsync(payeeId, planId);
 
-        // Create a transaction with OriginalAmount = €1,000 (CreditedAmount will be €50 = 5%)
+        // Create a transaction with Amount = €1,000 (CreditedAmount will be €50 = 5%)
         var txReq = new
         {
             payeeId, referenceNumber = "TREND-REF-001",
@@ -207,20 +206,20 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
             await Task.Delay(500);
             var dash = await (await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=ytd"))
                 .Content.ReadFromJsonAsync<DashboardResponse>();
-            if (dash?.EarningsTrend.Any() == true) break;
+            if (dash?.SalesTrend.Any() == true) break;
         }
 
         var response = await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=ytd");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<DashboardResponse>();
-        body!.EarningsTrend.Should().NotBeEmpty("credit was allocated");
+        body!.SalesTrend.Should().NotBeEmpty("credit was allocated");
 
-        var junePoint = body.EarningsTrend.FirstOrDefault(p => p.Month == 6 && p.Year == 2026);
+        var junePoint = body.SalesTrend.FirstOrDefault(p => p.Month == 6 && p.Year == 2026);
         junePoint.Should().NotBeNull("a June 2026 credit was seeded");
-        // CreditedAmount = 5% of 1,000 = 50; OriginalAmount = 1,000.
-        // If amount is 1,000 we hit the bug; if 50 the fix is working.
-        junePoint!.Amount.Should().BeApproximately(50m, 1m,
-            because: "Earnings Trend must show CreditedAmount (€50) not OriginalAmount (€1,000)");
+        // Transaction.Amount = €1,000; CreditedAmount = €50.
+        // Sales Trend must show the sale amount (€1,000), not the commission (€50).
+        junePoint!.Amount.Should().BeApproximately(1000m, 1m,
+            because: "Sales Trend must show Transaction.Amount (€1,000) not CreditedAmount (€50)");
         junePoint.Currency.Should().Be("EUR");
     }
 
@@ -359,11 +358,11 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
 
     private sealed record DashboardResponse(
         AttainmentItemResponse[] AttainmentItems,
-        EarningsTrendResponse[] EarningsTrend,
+        SalesTrendResponse[] SalesTrend,
         object[] RecentQuotas,
         object[] RecentAssignments);
 
-    private sealed record EarningsTrendResponse(int Year, int Month, string MonthLabel, decimal Amount, string Currency);
+    private sealed record SalesTrendResponse(int Year, int Month, string MonthLabel, decimal Amount, string Currency);
 
     private sealed record AttainmentItemResponse(
         Guid QuotaId,

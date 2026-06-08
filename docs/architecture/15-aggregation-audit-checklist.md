@@ -13,14 +13,20 @@ Aggregation over financial data is the highest-risk area for silent data-corrupt
 
 ## The canonical Wasnie aggregation rule
 
-When computing what a payee **earned** (their compensation/commission):
+Two distinct aggregation semantics coexist in the system:
 
+**1. Sales Quota attainment (Revenue measure type)** — measures gross sales:
+- ✅ Use **`Transaction.Amount`** — the gross sale amount (e.g. €19,850 transaction).
+- ❌ Never use `CreditedAmount` — that is the commission (e.g. €993 at 5%), not the sale.
+- Credit serves only as the plan-routing oracle; we traverse Credit→Transaction to get the sale amount.
+
+**2. Commission/earnings display** — shows what the payee earned:
 - ✅ Use **`CreditedAmount`** — what the payee was actually compensated.
-- ❌ Never use **`OriginalAmount`** — that is the raw transaction revenue (sale price).
+- ❌ Never use `OriginalAmount` — that is the raw transaction revenue (sale price), not the commission.
 
-`CreditedAmount = OriginalAmount × commission_rate`. Using OriginalAmount inflates the result by `1 / commission_rate` (e.g., ×20 for a 5% flat plan).
+`CreditedAmount = OriginalAmount × commission_rate`. Using OriginalAmount inflates earnings by `1 / commission_rate` (e.g., ×20 for a 5% flat plan).
 
-`OriginalAmount` is legitimate only when explicitly displaying the **source transaction amount** alongside the credit (e.g., the credit detail page, export columns that show both).
+`OriginalAmount` and `Transaction.Amount` are legitimate only when explicitly displaying the **source transaction amount** alongside the credit (e.g., the credit detail page, export columns that show both).
 
 ---
 
@@ -40,10 +46,10 @@ For each aggregation endpoint:
 
 | Endpoint | Handler | Aggregation | Field used | Status | Last audited | Notes |
 |---|---|---|---|---|---|---|
-| GET /payees/:id/dashboard — attainment gauges | `GetPayeeDashboardHandler` | In-memory SUM | `allCredits` loaded via `c.CreditedAmount.*` | ✓ Correct | 2026-06-08 | |
-| GET /payees/:id/dashboard — earnings trend | `GetPayeeDashboardHandler` | DB query → in-memory GroupBy | `c.CreditedAmount.Amount` | ✓ Correct | 2026-06-08 | **Fixed in V3-FIX-2**; was using OriginalAmount (20× inflation) |
-| GET /payees/:id/attainment | `GetPayeeAttainmentHandler` | DB query SUM | `c.CreditedAmount.Amount` + currency filter | ✓ Correct | 2026-06-08 | |
-| QuotaAttainmentService — Revenue | `QuotaAttainmentService` | DB query SUM | `c.CreditedAmount.Amount` + currency filter | ✓ Correct | 2026-06-08 | **Fixed in A.3-FIX-2**; was using OriginalAmount |
+| GET /payees/:id/dashboard — attainment gauges | `GetPayeeDashboardHandler` | In-memory SUM | `t.Amount.Amount` (Transaction.Amount, Sales Quota) | ✓ Correct | 2026-06-08 | **Updated in A.3-FIX-4** from CreditedAmount to Transaction.Amount |
+| GET /payees/:id/dashboard — sales trend | `GetPayeeDashboardHandler` | DB query → in-memory GroupBy | `t.Amount.Amount` (Transaction.Amount) | ✓ Correct | 2026-06-08 | **Updated in A.3-FIX-4**; renamed from Earnings Trend; shows gross sales not commission |
+| GET /payees/:id/attainment | `GetPayeeAttainmentHandler` | DB query SUM | `t.Amount.Amount` + `t.Amount.Currency` filter | ✓ Correct | 2026-06-08 | **Updated in A.3-FIX-4** from CreditedAmount to Transaction.Amount |
+| QuotaAttainmentService — Revenue | `QuotaAttainmentService` | DB query SUM | `t.Amount.Amount` + `t.Amount.Currency` filter | ✓ Correct | 2026-06-08 | **Updated in A.3-FIX-4** to Sales Quota; was CreditedAmount (Earnings Quota) |
 | QuotaAttainmentService — Units | `QuotaAttainmentService` | DB query SUM | `t.Quantity` | ✓ Correct | 2026-06-08 | |
 | GET /credits (counters) | `GetCreditCountersHandler` | DB query → in-memory GroupBy | `c.CreditedAmount.Amount` | ✓ Correct | 2026-06-08 | |
 | GET /credits/by-payee | `GetCreditsByPayeeHandler` | DB query → in-memory GroupBy | `c.CreditedAmount.Amount` | ✓ Correct | 2026-06-08 | |

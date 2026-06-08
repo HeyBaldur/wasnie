@@ -75,11 +75,11 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
         return AttainmentPercentage.FromAchievedAndTarget(achieved, target);
     }
 
-    // Revenue: sum CreditedAmount of non-superseded Credits whose source transaction date
-    // falls within the quota period AND whose currency matches the quota's currency.
-    // CreditedAmount is what the payee earned (commission); the quota target is a commission
-    // target, so we must compare like-for-like. Using OriginalAmount (raw transaction revenue)
-    // inflates the result by 1/rate (e.g. 20x for a 5% plan) — that was the original bug.
+    // Revenue (Sales Quota): sum Transaction.Amount of non-superseded Credits whose source
+    // transaction date falls within the quota period AND whose currency matches the quota's currency.
+    // Uses Transaction.Amount (gross sales) NOT CreditedAmount (commission). Industry-standard:
+    // "Anna should sell €25k this month" → Achieved = sum of transaction revenues.
+    // Credit serves as the plan-routing oracle; we sum t.Amount (the sale) not c.CreditedAmount (the commission).
     private async Task<decimal> ComputeRevenueAchievedAsync(
         Guid payeeId,
         Guid planId,
@@ -94,10 +94,10 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
             where c.PayeeId == payeeId
                && c.PlanId == planId
                && c.SupersededAt == null
-               && c.CreditedAmount.Currency == quotaCurrency
+               && t.Amount.Currency == quotaCurrency
                && t.TransactionDate >= periodStart
                && t.TransactionDate <= periodEnd
-            select c.CreditedAmount.Amount
+            select t.Amount.Amount
         ).ToListAsync(ct);
 
         return amounts.Sum();

@@ -402,6 +402,14 @@ If you're about to write code that matches any pattern here, STOP. Either you're
   - QuotaAttainmentService Revenue path — fixed in A.3-FIX-2.
   - GetPayeeDashboardHandler Earnings Trend — fixed in V3-FIX-2.
 
+- ❌ **Using `CreditedAmount` (commission) instead of `Transaction.Amount` (gross sale) for Revenue-type quota attainment** (WI-CALC-A.3-FIX-4, 2026-06-08). Revenue quota attainment uses the **Sales Quota** semantic: "Anna should sell €25,000 this month." Her achieved value = SUM of `Transaction.Amount` for processed transactions in the quota period, NOT SUM of `CreditedAmount` (which would be the commission, e.g. €1,250 at 5%). Using `CreditedAmount` understates attainment by the commission rate — a €19,850 sale against a €25,000 target reads as 4% instead of 79%.
+
+  **Rule:** `QuotaAttainmentService.ComputeRevenueAchievedAsync`, `GetPayeeAttainmentHandler`, and `GetPayeeDashboardHandler` Revenue attainment paths ALL MUST use `t.Amount.Amount` (Transaction.Amount) via the Credit→Transaction JOIN. Credit serves as the plan-routing oracle only — traverse it to find which transactions belong to the plan, then sum the transaction amounts. Currency filter: `t.Amount.Currency == quotaCurrency` (NOT `c.CreditedAmount.Currency`).
+
+  If a future use case demands earnings-based (commission) attainment, introduce an explicit `AttainmentBasis` enum field on `Quota` (`SalesRevenue` vs `EarnedCommission`) — do NOT silently change the meaning.
+
+  **Applies to:** `QuotaAttainmentService`, `GetPayeeAttainmentHandler`, `GetPayeeDashboardHandler` attainment gauge section, and any future attainment handler for Revenue measure type.
+
 - ❌ **Attainment queries that omit the `CreditedCurrency == quota.Amount.Currency` filter** (WI-CALC-A.3-FIX-2, 2026-06-04). Without this filter, EUR and PLN credits are both counted toward a EUR quota. The result is an amount in mixed currencies that has no meaning. **Rule:** Every attainment query MUST filter `c.CreditedAmount.Currency == quotaCurrency` so only credits denominated in the quota's currency contribute to the achieved amount.
 
 - ❌ **Attainment queries that do not bound by the Quota's own `PeriodStart..PeriodEnd`** (WI-CALC-A.3-FIX-2, 2026-06-04). Credits from a prior or future period for the same Payee+Plan must NOT bleed into a quota's attainment. The period filter `t.TransactionDate >= periodStart && t.TransactionDate <= periodEnd` is mandatory on the JOINED transaction — not on the credit itself. Verify with `ToQueryString()` that the generated SQL contains the period WHERE clause and does NOT produce a Cartesian product. Include a unit test covering the case: same payee, same plan, credits in multiple periods, expected attainment in each period independent of the others.
@@ -452,6 +460,31 @@ If you're about to write code that matches any pattern here, STOP. Either you're
   **Canonical example:** `QuotaAttainmentDto.IsCurrencyValid` — when a quota's currency does not match its plan's currency, `CreditedAmount` will always be filtered to 0. The dashboard shows `IsCurrencyValid: false` and renders a `⚠ Invalid (currency mismatch)` chip with tooltip: "This quota's currency (EUR) does not match its plan's currency (PLN). Close and recreate to fix."
 
   **Future WI:** A `/admin/data-quality` page listing all invalid quotas tenant-wide is planned but out of scope for V1.
+
+---
+
+## MeasurementType picker filter violations
+
+- ❌ **Showing Margin, Attainment, or Custom as selectable `MeasurementType` options in any V1 form** (WI-PROD-MEASURETYPE-FILTER-RULES, 2026-06-08). Only Revenue and Units are supported in V1 — the other types require transaction field extensions not yet built. A user who creates a Rule with `MeasurementType=Margin` cannot create a corresponding Quota (the Quota picker blocks it), making the Rule unusable for attainment calculation. The inconsistency is a trust-destroying UI contract violation.
+
+  **Rule:** Every surface that exposes a `MeasurementType` picker MUST filter the dropdown to show only Revenue and Units. Surfaces list (keep up to date when adding new surfaces):
+  - Create Quota: `quota-create.component.ts` — `MEASUREMENT_TYPES` constant
+  - Create Rule / Edit Rule: `rule-form.component.ts` — `measurementTypeOptions` property
+
+  **Enum values are kept intact in code** — do NOT delete or comment out `Margin`, `Attainment`, `Custom` from `MeasurementType` or `QuotaMeasurementType`. They are valid domain values reserved for future activation. Only the UI picker filters them; the backend accepts all values.
+
+  **Pattern to follow** (mirror `quota-create.component.ts`):
+  ```typescript
+  // V1: only Revenue and Units are supported. Margin, Attainment, and Custom
+  // require additional transaction fields — activate in a future WI.
+  // FILTER MUST apply to every MeasurementType picker surface; see 14-forbidden-patterns.md.
+  readonly measurementTypeOptions: SelectOption[] = [
+    { label: 'PLANS.MEASUREMENT_REVENUE', value: MeasurementType.Revenue },
+    { label: 'PLANS.MEASUREMENT_UNITS', value: MeasurementType.Units },
+  ];
+  ```
+
+  **To activate a hidden type in a future WI:** (1) Remove it from the filter in EVERY surface listed above simultaneously — never activate in one surface without the others. (2) Add the required transaction fields. (3) Update the surfaces list in this rule.
 
 ---
 

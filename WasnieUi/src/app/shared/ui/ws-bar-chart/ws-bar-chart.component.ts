@@ -80,11 +80,15 @@ export class WsBarChartComponent {
   // ── Tooltip ──────────────────────────────────────────────────────────────────
 
   readonly tooltipVisible = signal(false);
-  readonly tooltipX = signal(0);
+  readonly tooltipLeft = signal<number | null>(null);   // % from left edge (null = use right)
+  readonly tooltipRight = signal<number | null>(null);  // % from right edge (null = use left)
+  readonly tooltipTop = signal(10);                     // % from top of card
   readonly tooltipLabel = signal('');
   readonly tooltipValue = signal(0);
   readonly tooltipCurrency = signal('');
   readonly tooltipIsEmpty = signal(false);
+  /** SVG X coordinate of hovered bucket center — used for the column indicator. */
+  readonly columnIndicatorX = signal<number | null>(null);
 
   @ViewChild('svgEl') svgEl?: ElementRef<SVGSVGElement>;
 
@@ -98,13 +102,31 @@ export class WsBarChartComponent {
     if (!pts.length) return;
 
     // Which bucket is the cursor in?
-    const idx = Math.max(0, Math.min(pts.length - 1, Math.floor((svgX - this.ML) / this.bucketW())));
+    const bW = this.bucketW();
+    const idx = Math.max(0, Math.min(pts.length - 1, Math.floor((svgX - this.ML) / bW)));
     const p = pts[idx];
+    const bar = this.bars()[idx];
 
-    // Tooltip X: center of bucket, clamped [8%, 75%] to stay within card bounds
-    const bucketCenterX = this.ML + idx * this.bucketW() + this.bucketW() / 2;
-    const rawPct = (bucketCenterX / this.VB_W) * 100;
-    this.tooltipX.set(Math.min(Math.max(rawPct, 8), 75));
+    // Column indicator — vertical reference line at bucket center
+    const bucketCenterX = this.ML + idx * bW + bW / 2;
+    this.columnIndicatorX.set(bucketCenterX);
+
+    // Tooltip horizontal: center on bucket when space allows; right-anchor near right edge
+    const bucketPct = (bucketCenterX / this.VB_W) * 100;
+    if (bucketPct > 65) {
+      // Right-side anchor: tooltip grows to the left from the bar center
+      this.tooltipLeft.set(null);
+      this.tooltipRight.set(Math.max(2, 100 - bucketPct));
+    } else {
+      // Center anchor: tooltip centered on bar
+      this.tooltipLeft.set(Math.max(5, bucketPct));
+      this.tooltipRight.set(null);
+    }
+
+    // Tooltip vertical: position above the bar's top, clamped so it doesn't escape card
+    const barTopPct = (bar.y / this.VB_H) * 100;
+    this.tooltipTop.set(Math.max(2, barTopPct - 20));
+
     this.tooltipLabel.set(p.label);
     this.tooltipValue.set(p.value);
     this.tooltipCurrency.set(p.currency ?? '');
@@ -114,6 +136,7 @@ export class WsBarChartComponent {
 
   onSvgMouseLeave(): void {
     this.tooltipVisible.set(false);
+    this.columnIndicatorX.set(null);
   }
 
   formatValue(value: number, currency: string): string {

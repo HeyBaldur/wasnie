@@ -39,7 +39,16 @@
         class="ws-bc__grid"
       />
 
-      <!-- Bars + X-axis labels -->
+      <!-- Column indicator: thin dashed vertical line above hovered bar -->
+      @if (columnIndicatorX(); as cx) {
+        <line
+          [attr.x1]="cx" [attr.y1]="MT"
+          [attr.x2]="cx" [attr.y2]="MT + chartH()"
+          class="ws-bc__column-indicator"
+        />
+      }
+
+      <!-- Bars + X-axis labels + current month accent -->
       @for (bar of bars(); track bar.index) {
         <rect
           [attr.x]="bar.x"
@@ -52,9 +61,20 @@
           <title>{{ bar.point.label }}: {{ formatValue(bar.point.value, bar.point.currency ?? '') }}</title>
         </rect>
 
+        <!-- Current month: small underline accent below label -->
+        @if (bar.point.isCurrent) {
+          <rect
+            [attr.x]="barLabelX(bar.index) - 10"
+            [attr.y]="VB_H - 4"
+            width="20" height="3"
+            rx="1"
+            class="ws-bc__current-accent"
+          />
+        }
+
         <text
           [attr.x]="barLabelX(bar.index)"
-          [attr.y]="VB_H - 6"
+          [attr.y]="VB_H - 9"
           text-anchor="middle"
           class="ws-bc__axis-label"
           [class.ws-bc__axis-label--current]="bar.point.isCurrent"
@@ -64,7 +84,13 @@
 
     <!-- Hover tooltip -->
     @if (tooltipVisible()) {
-      <div class="ws-bc__tooltip" [style.left.%]="tooltipX()">
+      <div
+        class="ws-bc__tooltip"
+        [class.ws-bc__tooltip--right]="tooltipRight() !== null"
+        [style.left]="tooltipLeft() !== null ? tooltipLeft() + '%' : null"
+        [style.right]="tooltipRight() !== null ? tooltipRight() + '%' : null"
+        [style.top.%]="tooltipTop()"
+      >
         <p class="ws-bc__tooltip-label">{{ tooltipLabel() }}</p>
         <p class="ws-bc__tooltip-value">
           @if (tooltipIsEmpty()) {
@@ -76,6 +102,7 @@
             }
           }
         </p>
+        <div class="ws-bc__tooltip-arrow"></div>
       </div>
     }
   }

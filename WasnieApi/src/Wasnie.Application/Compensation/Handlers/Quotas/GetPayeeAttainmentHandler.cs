@@ -101,10 +101,10 @@ public sealed class GetPayeeAttainmentHandler(
             where c.PayeeId == payeeId
                && c.PlanId == planId
                && c.SupersededAt == null
-               && c.CreditedAmount.Currency == quotaCurrency
+               && t.Amount.Currency == quotaCurrency
                && t.TransactionDate >= start
                && t.TransactionDate <= end
-            select c.CreditedAmount.Amount
+            select t.Amount.Amount
         ).ToListAsync(ct);
         return amounts.Sum();
     }

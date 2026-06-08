@@ -45,7 +45,8 @@ public sealed class GetPayeeDashboardHandler(
             .ToList();
 
         // ── Load all non-superseded credits for this payee ───────────────────
-        // No period filter here — attainment is computed against each quota's own period boundaries
+        // No period filter here — attainment is computed against each quota's own period boundaries.
+        // TxAmount = gross transaction revenue (Sales Quota semantic, not commission).
         var allCredits = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
@@ -53,8 +54,8 @@ public sealed class GetPayeeDashboardHandler(
             select new
             {
                 c.PlanId,
-                c.CreditedAmount.Amount,
-                c.CreditedAmount.Currency,
+                TxAmount = t.Amount.Amount,
+                Currency = t.Amount.Currency,
                 t.TransactionDate
             }
         ).ToListAsync(cancellationToken);
@@ -93,7 +94,7 @@ public sealed class GetPayeeDashboardHandler(
                                 r.Currency == quotaCurrency &&
                                 r.TransactionDate >= start &&
                                 r.TransactionDate <= end)
-                    .Sum(r => r.Amount);
+                    .Sum(r => r.TxAmount);
             }
 
             var attainment = AttainmentPercentage.FromAchievedAndTarget(achieved, quota.Amount.Amount);
@@ -114,21 +115,20 @@ public sealed class GetPayeeDashboardHandler(
                 PlanCurrency: planCurrency));
         }
 
-        // ── Card 2: Earnings trend (last 12 months, not affected by period filter) ─
-        // Uses CreditedAmount (what the payee earned = commission), NOT OriginalAmount (raw revenue).
-        // OriginalAmount inflates "earnings" by 1/rate (e.g. 20× for a 5% flat plan). Same bug
-        // as A.3-FIX-2 in QuotaAttainmentService — different query, same root cause.
+        // ── Card 2: Sales trend (last 12 months, not affected by period filter) ──
+        // Uses Transaction.Amount (gross sales) to match the Sales Quota semantic.
+        // Credit serves as the plan-routing oracle; bars represent sales generated, not commission earned.
         var trendCutoff = today.AddMonths(-12);
         var allCreditsForTrend = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
             where c.PayeeId == payeeId && c.SupersededAt == null && t.TransactionDate >= trendCutoff
-            select new { c.CreditedAmount.Amount, c.CreditedAmount.Currency, t.TransactionDate }
+            select new { Amount = t.Amount.Amount, Currency = t.Amount.Currency, t.TransactionDate }
         ).ToListAsync(cancellationToken);
 
         var trend = allCreditsForTrend
             .GroupBy(r => new { r.TransactionDate.Year, r.TransactionDate.Month, r.Currency })
-            .Select(g => new EarningsTrendPointDto(
+            .Select(g => new SalesTrendPointDto(
                 Year: g.Key.Year,
                 Month: g.Key.Month,
                 MonthLabel: new DateTime(g.Key.Year, g.Key.Month, 1)
@@ -141,7 +141,7 @@ public sealed class GetPayeeDashboardHandler(
         return Result<PayeeDashboardDto>.Success(new PayeeDashboardDto(
             attainmentItems,
             trend,
-            Array.Empty<QuotaSummaryDto>(),       // lists served by separate paginated endpoints
+            Array.Empty<QuotaSummaryDto>(),
             Array.Empty<PlanAssignmentSummaryDto>()));
     }
 

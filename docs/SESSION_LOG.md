@@ -8,6 +8,72 @@
 
 ## Sessions (newest first)
 
+## 2026-06-08 — WI-CALC-A.3-FIX-4: Sales Quota semantic (Transaction.Amount, not CreditedAmount)
+
+**Completed:** Quota attainment semantic changed from Earnings Quota to Sales Quota for Revenue measure type.
+
+**Root cause / motivation:** Smoke 2026-06-08 — Agnieszka has a €19,850.55 transaction against a €25,000 quota target (Plan Test Flat 5%). Dashboard showed 5% attainment (was computing €992.53 commission / €25,000). Expected ~79% (€19,850 / €25,000). Industry standard (Xactly, CaptivateIQ, Spiff): default is Sales Quota (gross sales vs target), not Earnings Quota (commission vs target).
+
+**Files changed:**
+- `WasnieApi/src/Wasnie.Infrastructure/Compensation/Calculation/QuotaAttainmentService.cs` — `ComputeRevenueAchievedAsync`: `select c.CreditedAmount.Amount` → `select t.Amount.Amount`; currency filter changed to `t.Amount.Currency`
+- `WasnieApi/src/Wasnie.Application/Compensation/Handlers/Quotas/GetPayeeAttainmentHandler.cs` — Revenue branch: same change
+- `WasnieApi/src/Wasnie.Application/Compensation/Handlers/Payees/GetPayeeDashboardHandler.cs` — (a) attainment `allCredits` query: added `TxAmount = t.Amount.Amount`; sum changed to `TxAmount`; (b) trend query: `c.CreditedAmount.*` → `t.Amount.*`; (c) `EarningsTrendPointDto` → `SalesTrendPointDto`
+- `WasnieApi/src/Wasnie.Application/Compensation/DTOs/PayeeDashboardDto.cs` — `EarningsTrendPointDto` → `SalesTrendPointDto`, `EarningsTrend` → `SalesTrend`
+- `WasnieUi/src/app/features/payees/models/payee-dashboard.model.ts` — `EarningsTrendPoint` → `SalesTrendPoint`, `earningsTrend` → `salesTrend`
+- `WasnieUi/src/app/features/payees/detail/payee-detail.component.ts` — import + fallback + method signature updated
+- `WasnieUi/src/app/features/payees/detail/payee-detail.component.html` — `earningsTrend` → `salesTrend`
+- `WasnieUi/src/assets/i18n/en.json` — TREND_TITLE: "Earnings Trend (12 months)" → "Sales Trend (12 months)"
+- `WasnieUi/src/assets/i18n/es.json` — "Tendencia de Ventas (12 meses)"
+- `WasnieUi/src/assets/i18n/pl.json` — "Trend Sprzedaży (12 miesięcy)"
+- `WasnieApi/tests/.../QuotaAttainmentServiceTests.cs` — 4 Revenue tests: expected values updated to Transaction.Amount sums
+- `WasnieApi/tests/.../PayeeDashboardEndpointsTests.cs` — renamed `EarningsTrend` refs to `SalesTrend`; trend regression test flipped: expects €1,000 (Transaction.Amount) not €50 (CreditedAmount)
+- `docs/architecture/14-forbidden-patterns.md` — new rule: Revenue attainment MUST use `Transaction.Amount`
+- `docs/architecture/15-aggregation-audit-checklist.md` — 4 rows updated; canonical rule clarified with two-semantic distinction
+
+**Tests:** 10/10 QuotaAttainmentService + 13/13 PayeeDashboard = 23/23 pass. Both builds clean.
+
+**Decision logged:** Revenue Quota default is Sales Quota. If Earnings Quota needed in future, add `AttainmentBasis enum { SalesRevenue, EarnedCommission }` to Quota entity — never silently change the meaning.
+
+**Next:** WI-CALC-A.4 (Payout Engine).
+
+---
+
+## 2026-06-08 — WI-PROD-MEASURETYPE-FILTER-RULES: Apply Revenue+Units filter to Create/Edit Rule
+
+**Problem:** Create Rule at `/plans/:id/rules/new` (and Edit Rule at `/plans/:id/rules/:ruleId`) showed all 5 `MeasurementType` enum values (Revenue, Units, Margin, Attainment, Custom). Create Quota already filtered to Revenue + Units only. A user could create a Rule with `Margin` but could never create a matching Quota — the Rule would be permanently unusable.
+
+**Root cause:** `rule-form.component.ts` built `measurementTypeOptions` via `Object.entries(MeasurementType)` (dynamic, full enum). Create Quota used a hardcoded `SelectOption[]` constant (filtered). Different construction pattern in the two forms.
+
+**Audit of other surfaces:**
+- Create Quota — ✅ already filtered
+- Create Rule / Edit Rule — ❌ fixed in this WI (same component, `isEdit` flag)
+- Payee Detail — ✅ read-only display (no picker)
+- Quota Detail — ✅ read-only display (no picker)
+
+**Changes:**
+- `rule-form.component.ts`: replaced dynamic `Object.entries` with static `SelectOption[]` array containing Revenue + Units only. Added V1 comment and pointer to forbidden-pattern rule.
+- `rule-form.component.spec.ts`: 2 new tests — `measurementTypeOptions` contains exactly Revenue and Units; does not contain Margin, Attainment, or Custom.
+- `docs/architecture/14-forbidden-patterns.md`: new "MeasurementType picker filter violations" rule with surfaces list, activation procedure, and code pattern.
+- `docs/PROJECT_STATUS.md`: updated.
+
+**Test count:** 13/13 rule-form specs pass (11 existing + 2 new). Build clean (pre-existing warnings unchanged). Backend permissive by design — enum values intact.
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-4: Visual polish — gauge dot + bar tooltip + current highlight
+
+**Issue 1 — Gauge orphan dot (root cause):** `<path stroke-linecap="round" stroke-width="14">` at 1% attainment produces a stroke of 2.51 SVG units with round caps of radius 7 — the cap is wider than the arc, creating a disconnected circular dot at position (20, 100). Fix: `stroke-linecap="butt"` on the fill path eliminates the cap dot. The arc terminus no longer has a round cap but the flat end is hidden at the track's start, invisible at high values.
+
+**Issue 2 — Bar tooltip not tracking bar position:** The original tooltip used `left.%` = bucket center clamped [8%, 75%]. For the June bar (bucket 11/12, center at 93.5% of SVG), the tooltip was clamped to 75%, appearing 18% left of the bar with no visual connection. Fix: right-anchor mode for bars past 65% (`right.% = 100 - bucketPct`; no `translateX(-50%)`). Left-anchor mode for bars before 65% (same as before). Tooltip Y now tracks bar top position (`top = max(2, barTopPct - 20)%`). A downward-pointing CSS arrow (`::` after pseudo-element) at the tooltip bottom connects it visually to the bar.
+
+**Issue 3 — Column indicator:** Added a thin dashed `<line>` in SVG at the hovered bucket's center X, spanning the full chart height, styled with `stroke: var(--color-brand); stroke-dasharray: 3 3; opacity: 0.4`. Acts as a visual stem linking tooltip to bar.
+
+**Issue 4 — Current month contrast:** Reduced past bar `fill-opacity` from 0.35 → 0.22 for stronger contrast against the current bar (full opacity). Added `ws-bc__current-accent` — a 20×3px brand-colored rectangle below the current month's X-axis label — as a secondary visual indicator. Existing bold brand-color label text retained.
+
+**Tests:** Updated `ws-bar-chart.component.spec.ts` — 12 tests (was 10): added `hovering last bucket right-anchors tooltip` and `tooltipTop tracks bar position`. All 12 pass.
+
+**Test count: 350 backend unit + 455 integration + 2 skip = 807. 12 frontend bar-chart specs. Both builds clean.**
+
 ---
 
 ## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-3: Earnings Trend line chart → bar chart
