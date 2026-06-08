@@ -48,11 +48,9 @@ export const routes: Routes = [
   },
   {
     path: 'payouts',
-    canActivate: [authGuard, hasPermissionGuard('Reports.ViewAll')],
-    loadComponent: () =>
-      import('./features/payouts/payouts.component').then(
-        (m) => m.PayoutsComponent
-      ),
+    canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
+    loadChildren: () =>
+      import('./features/payouts/payouts.routes').then((m) => m.payoutsRoutes),
   },
   {
     path: 'quotas',

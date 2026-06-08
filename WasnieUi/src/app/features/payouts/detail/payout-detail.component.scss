@@ -1,0 +1,121 @@
+.payout-detail {
+  &__loading {
+    padding: var(--space-4);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-13);
+  }
+
+  &__error {
+    color: var(--color-danger);
+  }
+
+  &__action-error {
+    margin-bottom: var(--space-4);
+
+    p {
+      color: var(--color-danger);
+      font-size: var(--font-size-13);
+    }
+  }
+
+  &__banner {
+    margin-bottom: var(--space-4);
+  }
+
+  &__banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  &__banner-title {
+    font-weight: 600;
+    margin-bottom: var(--space-1);
+  }
+
+  &__banner-desc {
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
+  }
+
+  &__banner-paid-msg {
+    color: var(--color-success);
+    font-size: var(--font-size-13);
+  }
+
+  &__banner-disputed-msg {
+    color: var(--color-warning);
+    font-size: var(--font-size-13);
+  }
+
+  &__summary, &__lines, &__audit {
+    margin-bottom: var(--space-4);
+  }
+
+  &__section-title {
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    margin-bottom: var(--space-4);
+    color: var(--color-text-primary);
+  }
+
+  &__summary-grid, &__audit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+
+    &--total {
+      grid-column: 1 / -1;
+    }
+  }
+
+  &__label {
+    font-size: var(--font-size-12);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__value {
+    font-size: var(--font-size-13);
+    color: var(--color-text-primary);
+  }
+
+  &__code {
+    color: var(--color-text-secondary);
+  }
+
+  &__total {
+    font-size: var(--font-size-24);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__col-right {
+    text-align: right;
+  }
+
+  &__num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__total-row td {
+    border-top: 2px solid var(--color-border-default);
+    padding-top: var(--space-2);
+  }
+
+  &__empty {
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
+    font-style: italic;
+  }
+}

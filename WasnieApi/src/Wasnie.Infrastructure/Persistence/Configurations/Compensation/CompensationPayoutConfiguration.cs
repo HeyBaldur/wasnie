@@ -14,6 +14,7 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
 
         builder.Property(p => p.TenantId).IsRequired();
         builder.Property(p => p.PayeeId).IsRequired();
+        builder.Property(p => p.PlanId).IsRequired();
         builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(p => p.CalculatedAt).IsRequired();
         builder.Property(p => p.CalculatedBy).IsRequired().HasMaxLength(450);
@@ -45,5 +46,10 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(p => new { p.TenantId, p.PayeeId });
+
+        // IX_CompensationPayouts_Live is a unique filtered index on
+        // (TenantId, PayeeId, PlanId, PeriodStart, PeriodEnd) WHERE Status NOT IN ('Paid','Disputed').
+        // It cannot be expressed via HasIndex because PeriodStart/PeriodEnd are owned-type columns.
+        // The index is created via raw SQL in migration A4_AddPayoutPlanId.
     }
 }

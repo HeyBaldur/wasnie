@@ -8,6 +8,39 @@
 
 ## Sessions (newest first)
 
+## 2026-06-08 — WI-A5-PAYOUTS-UI: Design system consistency fixes (payouts list + calculate modal)
+
+**Completed:** Multiple design-system violations fixed across `payouts-list` and `payout-detail` components following user review session.
+
+**Fixes applied:**
+- `icon="money"` → `icon="receipt"` on both list and detail page headers (`money` not in icon registry)
+- `icon="play"` → `icon="zap"` on Calculate Payouts button (`play` not in icon registry)
+- All `--spacing-X` tokens → `--space-X` throughout both SCSS files (only `--space-X` exists)
+- Font tokens `--font-size-xs/sm/base/2xl` → numeric equivalents (`--font-size-12/13/14/24`)
+- Font-weight tokens `--font-weight-semibold/bold/medium` → literal values (`600`, `700`, `500`)
+- Color tokens with fallback literals (e.g. `var(--color-bg-danger-subtle, #fff5f5)`) → proper tokens (`--color-danger-bg`, `--color-danger-border`, `--color-danger`)
+- Filter chips: moved from shared bottom row into each respective filter-field div; styled as brand-colored pills (`--color-brand-subtle` bg, `--color-brand` border/color, `--radius-full`) matching credits canonical pattern
+- Filter layout: changed from CSS grid to flex (`display: flex; flex-wrap: wrap`) matching credits canonical pattern
+- Banner accents on payout-detail: replaced CSS `border-left` with `WsCard accent` input (`accent="brand/success/warning/danger"`)
+- Removed unused imports: `DecimalPipe`, `WsInputComponent`, `WsTableEmptyComponent`
+- Modal subtitle: moved from `<p class="modal-subtitle">` in body to `[description]` input on `<ws-modal>`
+- Modal form local grid: added `.payouts-list__modal-period` (2-col grid) for date pickers instead of relying on non-global `ws-form-grid`
+- **Date picker mutual exclusion:** added `viewChild<WsDatePickerComponent>` refs (`#startPicker`, `#endPicker`) + `effect()` + `untracked()` in constructor to close sibling when one opens. Workaround for `stopPropagation()` inside the date picker template that prevents `@HostListener('document:click')` from firing on siblings
+- **Modal input visibility in dark mode:** wrapped modal `<form>` in `.payouts-list__modal-form` div styled with `background: var(--color-bg-surface-raised)` + border + border-radius + padding — identical to `.form-card` pattern in `transaction-create`. Without this, inputs (`--color-bg-surface`) are invisible against the modal body (also `--color-bg-surface` = same `#161c28` in dark theme)
+
+**Files changed:**
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.ts`
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.html`
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.scss`
+- `WasnieUi/src/app/features/payouts/detail/payout-detail.component.html`
+- `WasnieUi/src/app/features/payouts/detail/payout-detail.component.scss`
+
+**Build:** `ng build --configuration production` clean. No new errors. Pre-existing warnings unchanged (unused imports in other components, bundle budget).
+
+**Next:** Verify visually in browser (localhost:4200/payouts). Then continue WI-A5 remaining scope (approve / mark-paid flows, PDF export).
+
+---
+
 ## 2026-06-08 — WI-CALC-A.3-FIX-4: Sales Quota semantic (Transaction.Amount, not CreditedAmount)
 
 **Completed:** Quota attainment semantic changed from Earnings Quota to Sales Quota for Revenue measure type.

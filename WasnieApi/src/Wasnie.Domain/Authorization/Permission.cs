@@ -33,6 +33,12 @@ public static class Permission
     public const string TransactionsExport = "Transactions.Export";
     public const string TransactionsUpdateFromExcel = "Transactions.UpdateFromExcel";
 
+    public const string PayoutsRead = "Payouts.Read";
+    public const string PayoutsCalculate = "Payouts.Calculate";
+    public const string PayoutsApprove = "Payouts.Approve";
+    public const string PayoutsMarkPaid = "Payouts.MarkPaid";
+    public const string PayoutsExport = "Payouts.Export";
+
     public const string ImportsExecute = "Imports.Execute";
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";
