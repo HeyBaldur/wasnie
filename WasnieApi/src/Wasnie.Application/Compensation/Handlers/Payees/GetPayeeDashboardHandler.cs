@@ -50,8 +50,8 @@ public sealed class GetPayeeDashboardHandler(
             select new
             {
                 c.PlanId,
-                c.OriginalAmount.Amount,
-                c.OriginalAmount.Currency,
+                c.CreditedAmount.Amount,
+                c.CreditedAmount.Currency,
                 t.TransactionDate
             }
         ).ToListAsync(cancellationToken);
@@ -83,8 +83,10 @@ public sealed class GetPayeeDashboardHandler(
             }
             else
             {
+                var quotaCurrency = quota.Amount.Currency;
                 achieved = allCredits
                     .Where(r => r.PlanId == pId &&
+                                r.Currency == quotaCurrency &&
                                 r.TransactionDate >= start &&
                                 r.TransactionDate <= end)
                     .Sum(r => r.Amount);

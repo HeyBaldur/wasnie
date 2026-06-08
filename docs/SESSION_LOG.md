@@ -10,6 +10,29 @@
 
 ---
 
+## 2026-06-04 — WI-CALC-A.3-FIX-2: Critical quota attainment inflation bug
+
+**Root cause:** `QuotaAttainmentService`, `GetPayeeAttainmentHandler`, and `GetPayeeDashboardHandler` all summed `Credit.OriginalAmount` (raw transaction revenue) for Revenue quota attainment. A Revenue quota target is a commission target. Using revenue inflates attainment by `1/rate` — for a 5% plan this is exactly 20×. The "20× January credits" coincidence in the bug report was a red herring; the ratio is `1/commission_rate = 1/0.05 = 20`, not a Cartesian product.
+
+**Fix (3 service/handler files):**
+- `QuotaAttainmentService.ComputeRevenueAchievedAsync`: `c.OriginalAmount.Amount` → `c.CreditedAmount.Amount`; added `quotaCurrency` parameter + `c.CreditedAmount.Currency == quotaCurrency` filter; updated comment.
+- `GetPayeeAttainmentHandler.ComputeAchievedAsync`: same field change + currency filter.
+- `GetPayeeDashboardHandler.Handle`: `allCredits` projection changed to `c.CreditedAmount.*`; Revenue in-memory path adds `r.Currency == quota.Amount.Currency` filter.
+
+**Tests (+3, all passing):**
+- `ComputeAsync_Revenue_ReturnsCorrectAttainment` updated: assertion changed from 0.7543 (OriginalAmount-based) to 0.0377 (CreditedAmount-based). Prior assertion accidentally validated the bug.
+- `ComputeAsync_Revenue_MultiPeriodCredits_OnlyCountsCorrectPeriod` (new): Jan + Jun credits, Jun-Jul quota → only Jun CreditedAmount counted.
+- `ComputeAsync_Revenue_CurrencyFilter_ExcludesWrongCurrency` (new): EUR + PLN credits, EUR quota → only EUR counted.
+- `ComputeAsync_Revenue_AgnieszkaScenario_NotInflatedBy20x` (new): exact reported scenario — 20 Jan credits + 3 Jun credits, Jun-Jul quota. Asserts result < 0.02 (not the 0.27 bug value). Guards that we never regress to the 20× inflation.
+
+**Forbidden-patterns rule added:** Three new entries under "Quota attainment query violations" in `14-forbidden-patterns.md`: OriginalAmount for Revenue quotas is forbidden; currency filter is mandatory; period bounds are mandatory.
+
+**Test count: 333 unit + 455 integration + 2 skipped = 788 (was 785). Both builds clean.**
+
+**Regression caught by:** Live smoke on 2026-06-04 (UI vs. DB comparison). Automated tests missed it because seed data used the same commission rate that made the 20× relationship implicit.
+
+---
+
 ## 2026-06-04 — WI-PROD-PAYEE-DASHBOARD-V2: Scroll-único dashboard + tab cleanup
 
 **Strategic change:** Removed Assignments, Quotas, Attainment tabs. New "Overview" is the default landing tab. All list data accessible via bento cards with virtual scroll (IntersectionObserver sentinel). Pacing target line in gauges. Period filter Active/All.

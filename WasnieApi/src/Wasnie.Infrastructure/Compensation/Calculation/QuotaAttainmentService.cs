@@ -70,32 +70,34 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
 
         decimal achieved = quota.MeasurementType == QuotaMeasurementType.Units
             ? await ComputeUnitsAchievedAsync(payeeId, planId, periodStart, periodEnd, ct)
-            : await ComputeRevenueAchievedAsync(payeeId, planId, periodStart, periodEnd, ct);
+            : await ComputeRevenueAchievedAsync(payeeId, planId, periodStart, periodEnd, quota.Amount.Currency, ct);
 
         return AttainmentPercentage.FromAchievedAndTarget(achieved, target);
     }
 
-    // Revenue: sum CreditedAmount of non-superseded Credits whose source transaction
-    // date falls within the quota period. TransactionDate is a direct column —
-    // the comparison translates correctly to SQL.
+    // Revenue: sum CreditedAmount of non-superseded Credits whose source transaction date
+    // falls within the quota period AND whose currency matches the quota's currency.
+    // CreditedAmount is what the payee earned (commission); the quota target is a commission
+    // target, so we must compare like-for-like. Using OriginalAmount (raw transaction revenue)
+    // inflates the result by 1/rate (e.g. 20x for a 5% plan) — that was the original bug.
     private async Task<decimal> ComputeRevenueAchievedAsync(
         Guid payeeId,
         Guid planId,
         DateOnly periodStart,
         DateOnly periodEnd,
+        string quotaCurrency,
         CancellationToken ct)
     {
-        // Sum OriginalAmount — the transaction revenue attributed to this payee.
-        // CreditedAmount is the commission (a fraction of OriginalAmount) and is irrelevant to quota attainment.
         var amounts = await (
             from c in _db.Credits
             join t in _db.CompensationTransactions on c.TransactionId equals t.Id
             where c.PayeeId == payeeId
                && c.PlanId == planId
                && c.SupersededAt == null
+               && c.CreditedAmount.Currency == quotaCurrency
                && t.TransactionDate >= periodStart
                && t.TransactionDate <= periodEnd
-            select c.OriginalAmount.Amount
+            select c.CreditedAmount.Amount
         ).ToListAsync(ct);
 
         return amounts.Sum();

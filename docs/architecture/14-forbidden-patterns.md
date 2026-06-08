@@ -390,6 +390,16 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Quota attainment query violations
+
+- ❌ **Summing `Credit.OriginalAmount` for Revenue quota attainment** (WI-CALC-A.3-FIX-2, 2026-06-04). `OriginalAmount` is the raw transaction revenue; `CreditedAmount` is what the payee actually earned (commission). A Revenue quota target is denominated as a commission target. Using `OriginalAmount` inflates attainment by `1 / commission_rate` (e.g. 20× for a 5% flat plan), making a 1.37% achiever appear at 27%. **Rule:** Attainment queries for Revenue measurement type MUST sum `CreditedAmount` — never `OriginalAmount`. The distinction: OriginalAmount is for understanding revenue volume; CreditedAmount is the earned value to compare against a quota target.
+
+- ❌ **Attainment queries that omit the `CreditedCurrency == quota.Amount.Currency` filter** (WI-CALC-A.3-FIX-2, 2026-06-04). Without this filter, EUR and PLN credits are both counted toward a EUR quota. The result is an amount in mixed currencies that has no meaning. **Rule:** Every attainment query MUST filter `c.CreditedAmount.Currency == quotaCurrency` so only credits denominated in the quota's currency contribute to the achieved amount.
+
+- ❌ **Attainment queries that do not bound by the Quota's own `PeriodStart..PeriodEnd`** (WI-CALC-A.3-FIX-2, 2026-06-04). Credits from a prior or future period for the same Payee+Plan must NOT bleed into a quota's attainment. The period filter `t.TransactionDate >= periodStart && t.TransactionDate <= periodEnd` is mandatory on the JOINED transaction — not on the credit itself. Verify with `ToQueryString()` that the generated SQL contains the period WHERE clause and does NOT produce a Cartesian product. Include a unit test covering the case: same payee, same plan, credits in multiple periods, expected attainment in each period independent of the others.
+
+---
+
 ## Financial action opacity violations
 
 - ❌ **Showing a count of affected items before an action without showing which items** (WI-PROD-T-FIX-12, 2026-06-04). A badge that says "3 Pending eligible for processing" without a visible list of those 3 transactions is a black box. In a financial system this destroys trust: the user cannot verify what will be acted on, cannot cross-reference with their Excel records, and cannot detect a misconfiguration before it corrupts commission records. **Rule:** Any "eligible / applicable / affected" count displayed before a user-triggered financial action (Process Pending, batch write, recalculate) MUST be backed by an inline, inspectable list of the exact items the action WILL target. The list MUST use the SAME predicate as the count — if they diverge, the list is misleading. Caps (e.g. "first 200, see filter for rest") are acceptable; a count-only display is not.

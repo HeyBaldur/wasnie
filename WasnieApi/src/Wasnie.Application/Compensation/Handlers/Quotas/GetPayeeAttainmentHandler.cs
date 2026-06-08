@@ -90,15 +90,17 @@ public sealed class GetPayeeAttainmentHandler(
             return quantities.Sum();
         }
 
+        var quotaCurrency = quota.Amount.Currency;
         var amounts = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
             where c.PayeeId == payeeId
                && c.PlanId == planId
                && c.SupersededAt == null
+               && c.CreditedAmount.Currency == quotaCurrency
                && t.TransactionDate >= start
                && t.TransactionDate <= end
-            select c.OriginalAmount.Amount
+            select c.CreditedAmount.Amount
         ).ToListAsync(ct);
         return amounts.Sum();
     }
