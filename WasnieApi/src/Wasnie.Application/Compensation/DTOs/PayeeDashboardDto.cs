@@ -2,11 +2,11 @@ namespace Wasnie.Application.Compensation.DTOs;
 
 public sealed record PayeeDashboardDto(
     IReadOnlyList<QuotaAttainmentDto> AttainmentItems,
-    IReadOnlyList<EarningsTrendPointDto> EarningsTrend,
+    IReadOnlyList<SalesTrendPointDto> SalesTrend,
     IReadOnlyList<QuotaSummaryDto> RecentQuotas,
     IReadOnlyList<PlanAssignmentSummaryDto> RecentAssignments);
 
-public sealed record EarningsTrendPointDto(
+public sealed record SalesTrendPointDto(
     int Year,
     int Month,
     string MonthLabel,

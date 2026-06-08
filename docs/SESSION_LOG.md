@@ -8,6 +8,240 @@
 
 ## Sessions (newest first)
 
+## 2026-06-08 — WI-CALC-A.3-FIX-4: Sales Quota semantic (Transaction.Amount, not CreditedAmount)
+
+**Completed:** Quota attainment semantic changed from Earnings Quota to Sales Quota for Revenue measure type.
+
+**Root cause / motivation:** Smoke 2026-06-08 — Agnieszka has a €19,850.55 transaction against a €25,000 quota target (Plan Test Flat 5%). Dashboard showed 5% attainment (was computing €992.53 commission / €25,000). Expected ~79% (€19,850 / €25,000). Industry standard (Xactly, CaptivateIQ, Spiff): default is Sales Quota (gross sales vs target), not Earnings Quota (commission vs target).
+
+**Files changed:**
+- `WasnieApi/src/Wasnie.Infrastructure/Compensation/Calculation/QuotaAttainmentService.cs` — `ComputeRevenueAchievedAsync`: `select c.CreditedAmount.Amount` → `select t.Amount.Amount`; currency filter changed to `t.Amount.Currency`
+- `WasnieApi/src/Wasnie.Application/Compensation/Handlers/Quotas/GetPayeeAttainmentHandler.cs` — Revenue branch: same change
+- `WasnieApi/src/Wasnie.Application/Compensation/Handlers/Payees/GetPayeeDashboardHandler.cs` — (a) attainment `allCredits` query: added `TxAmount = t.Amount.Amount`; sum changed to `TxAmount`; (b) trend query: `c.CreditedAmount.*` → `t.Amount.*`; (c) `EarningsTrendPointDto` → `SalesTrendPointDto`
+- `WasnieApi/src/Wasnie.Application/Compensation/DTOs/PayeeDashboardDto.cs` — `EarningsTrendPointDto` → `SalesTrendPointDto`, `EarningsTrend` → `SalesTrend`
+- `WasnieUi/src/app/features/payees/models/payee-dashboard.model.ts` — `EarningsTrendPoint` → `SalesTrendPoint`, `earningsTrend` → `salesTrend`
+- `WasnieUi/src/app/features/payees/detail/payee-detail.component.ts` — import + fallback + method signature updated
+- `WasnieUi/src/app/features/payees/detail/payee-detail.component.html` — `earningsTrend` → `salesTrend`
+- `WasnieUi/src/assets/i18n/en.json` — TREND_TITLE: "Earnings Trend (12 months)" → "Sales Trend (12 months)"
+- `WasnieUi/src/assets/i18n/es.json` — "Tendencia de Ventas (12 meses)"
+- `WasnieUi/src/assets/i18n/pl.json` — "Trend Sprzedaży (12 miesięcy)"
+- `WasnieApi/tests/.../QuotaAttainmentServiceTests.cs` — 4 Revenue tests: expected values updated to Transaction.Amount sums
+- `WasnieApi/tests/.../PayeeDashboardEndpointsTests.cs` — renamed `EarningsTrend` refs to `SalesTrend`; trend regression test flipped: expects €1,000 (Transaction.Amount) not €50 (CreditedAmount)
+- `docs/architecture/14-forbidden-patterns.md` — new rule: Revenue attainment MUST use `Transaction.Amount`
+- `docs/architecture/15-aggregation-audit-checklist.md` — 4 rows updated; canonical rule clarified with two-semantic distinction
+
+**Tests:** 10/10 QuotaAttainmentService + 13/13 PayeeDashboard = 23/23 pass. Both builds clean.
+
+**Decision logged:** Revenue Quota default is Sales Quota. If Earnings Quota needed in future, add `AttainmentBasis enum { SalesRevenue, EarnedCommission }` to Quota entity — never silently change the meaning.
+
+**Next:** WI-CALC-A.4 (Payout Engine).
+
+---
+
+## 2026-06-08 — WI-PROD-MEASURETYPE-FILTER-RULES: Apply Revenue+Units filter to Create/Edit Rule
+
+**Problem:** Create Rule at `/plans/:id/rules/new` (and Edit Rule at `/plans/:id/rules/:ruleId`) showed all 5 `MeasurementType` enum values (Revenue, Units, Margin, Attainment, Custom). Create Quota already filtered to Revenue + Units only. A user could create a Rule with `Margin` but could never create a matching Quota — the Rule would be permanently unusable.
+
+**Root cause:** `rule-form.component.ts` built `measurementTypeOptions` via `Object.entries(MeasurementType)` (dynamic, full enum). Create Quota used a hardcoded `SelectOption[]` constant (filtered). Different construction pattern in the two forms.
+
+**Audit of other surfaces:**
+- Create Quota — ✅ already filtered
+- Create Rule / Edit Rule — ❌ fixed in this WI (same component, `isEdit` flag)
+- Payee Detail — ✅ read-only display (no picker)
+- Quota Detail — ✅ read-only display (no picker)
+
+**Changes:**
+- `rule-form.component.ts`: replaced dynamic `Object.entries` with static `SelectOption[]` array containing Revenue + Units only. Added V1 comment and pointer to forbidden-pattern rule.
+- `rule-form.component.spec.ts`: 2 new tests — `measurementTypeOptions` contains exactly Revenue and Units; does not contain Margin, Attainment, or Custom.
+- `docs/architecture/14-forbidden-patterns.md`: new "MeasurementType picker filter violations" rule with surfaces list, activation procedure, and code pattern.
+- `docs/PROJECT_STATUS.md`: updated.
+
+**Test count:** 13/13 rule-form specs pass (11 existing + 2 new). Build clean (pre-existing warnings unchanged). Backend permissive by design — enum values intact.
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-4: Visual polish — gauge dot + bar tooltip + current highlight
+
+**Issue 1 — Gauge orphan dot (root cause):** `<path stroke-linecap="round" stroke-width="14">` at 1% attainment produces a stroke of 2.51 SVG units with round caps of radius 7 — the cap is wider than the arc, creating a disconnected circular dot at position (20, 100). Fix: `stroke-linecap="butt"` on the fill path eliminates the cap dot. The arc terminus no longer has a round cap but the flat end is hidden at the track's start, invisible at high values.
+
+**Issue 2 — Bar tooltip not tracking bar position:** The original tooltip used `left.%` = bucket center clamped [8%, 75%]. For the June bar (bucket 11/12, center at 93.5% of SVG), the tooltip was clamped to 75%, appearing 18% left of the bar with no visual connection. Fix: right-anchor mode for bars past 65% (`right.% = 100 - bucketPct`; no `translateX(-50%)`). Left-anchor mode for bars before 65% (same as before). Tooltip Y now tracks bar top position (`top = max(2, barTopPct - 20)%`). A downward-pointing CSS arrow (`::` after pseudo-element) at the tooltip bottom connects it visually to the bar.
+
+**Issue 3 — Column indicator:** Added a thin dashed `<line>` in SVG at the hovered bucket's center X, spanning the full chart height, styled with `stroke: var(--color-brand); stroke-dasharray: 3 3; opacity: 0.4`. Acts as a visual stem linking tooltip to bar.
+
+**Issue 4 — Current month contrast:** Reduced past bar `fill-opacity` from 0.35 → 0.22 for stronger contrast against the current bar (full opacity). Added `ws-bc__current-accent` — a 20×3px brand-colored rectangle below the current month's X-axis label — as a secondary visual indicator. Existing bold brand-color label text retained.
+
+**Tests:** Updated `ws-bar-chart.component.spec.ts` — 12 tests (was 10): added `hovering last bucket right-anchors tooltip` and `tooltipTop tracks bar position`. All 12 pass.
+
+**Test count: 350 backend unit + 455 integration + 2 skip = 807. 12 frontend bar-chart specs. Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-3: Earnings Trend line chart → bar chart
+
+**Design decision:** Bar charts communicate discrete monthly buckets; line charts imply interpolation between continuous values. Monthly earnings are bucketed amounts — bars are the industry standard. Owner request confirmed.
+
+**New component: `ws-bar-chart`** — pure SVG, zero deps, CSS-variable themed, mirrors `ws-line-chart` structure.
+- `points: BarChartPoint[]` input (label, value, currency, isCurrent optional)
+- Current month bar: `var(--color-brand)` full opacity. Past months: same token at 35% opacity.
+- X-axis label for current month bolded in brand color.
+- Zero-value months: 2px stub so the slot is visible.
+- Tooltip: same clamp [8%, 75%] as line chart to prevent card overflow.
+- Multi-currency V1: selects dominant currency (highest total), renders only that series.
+- Empty state when all points are 0 or empty.
+- Accessibility: `role="img"`, `aria-label`, `<title>` per bar.
+- Exported from shared UI barrel as `WsBarChartComponent, type BarChartPoint`.
+
+**`ws-line-chart` is preserved** — removed from `payee-detail.component.ts` imports (no longer needed there), but component files untouched.
+
+**Component cleanup:**
+- Removed `WsLineChartComponent` from `payee-detail` imports (was `NG8113` warning).
+- Removed `chartHighlightLabels` computed (was line chart specific — no longer needed).
+- Removed `trendChartPoints()` helper. Added `trendBarPoints()` with `isCurrent` flag computed client-side from `EarningsTrendPoint.year/month`.
+
+**No backend changes** — `EarningsTrendPointDto` already has `Year`, `Month`, `MonthLabel`, `Amount`, `Currency`. `IsCurrent` derived client-side.
+
+**Tests:** `ws-bar-chart.component.spec.ts` — 10 unit tests: N bars from N points, hasData logic, empty state, current/past styling, zero-value stub height, tooltip X clamp for first and last bucket, formatValue (currency and plain).
+
+**Test count: 350 backend unit + 455 integration + 2 skip = 807. 10 new frontend bar-chart specs (176 total, 10 pre-existing TransactionsListComponent failures unchanged). Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-2: Earnings Trend chart 20× inflation (OriginalAmount bug)
+
+**Root cause (Step 0 diagnosis):** The Earnings Trend aggregation in `GetPayeeDashboardHandler` selected `c.OriginalAmount.Amount` and `c.OriginalAmount.Currency` from Credits. `OriginalAmount` is the raw transaction revenue (what the company received); `CreditedAmount` is the payee's commission (what they earned). For a 5% flat plan, OriginalAmount = CreditedAmount × 20. This is the exact same bug as A.3-FIX-2 (QuotaAttainmentService), just in a different query. A.3-FIX-2 fixed one occurrence; this WI found and fixed the second.
+
+The join (`c.TransactionId == t.Id`) is a correct 1:1 join — no Cartesian product. The inflation is purely a field mismatch.
+
+**Full aggregation audit (all endpoints):**
+- Earnings Trend (GetPayeeDashboardHandler): ❌ BROKEN → fixed here
+- Attainment gauges (GetPayeeDashboardHandler, inline): ✓ correct (CreditedAmount)
+- QuotaAttainmentService Revenue: ✓ correct (fixed in A.3-FIX-2)
+- QuotaAttainmentService Units: ✓ correct (Quantity)
+- GetPayeeAttainmentHandler: ✓ correct (CreditedAmount)
+- Credit counters (GetCreditCountersHandler): ✓ correct (CreditedAmount)
+- Credits by-payee (GetCreditsByPayeeHandler): ✓ correct (CreditedAmount)
+- ListCreditsHandler sort/display: ✓ intentional (shows both OriginalAmount and CreditedAmount in list/export)
+
+**Fix:** 1-line change in `GetPayeeDashboardHandler.cs`: `c.OriginalAmount.*` → `c.CreditedAmount.*` in the trend query.
+
+**New doc:** `docs/architecture/15-aggregation-audit-checklist.md` — full table of all aggregation endpoints with verified status, procedure for adding new endpoints, and guidance on when to re-audit.
+
+**Tests:** Integration regression guard `GetDashboard_EarningsTrend_ShowsCreditedAmountNotOriginalAmount` — seeds €1,000 transaction, processes (5% flat → €50 credit), verifies trend shows €50 not €1,000. `DashboardResponse.EarningsTrend` typed from `object[]` to `EarningsTrendResponse[]`.
+
+**Forbidden-pattern rule updated:** Extended "Summing OriginalAmount" rule to cover ALL payee earnings aggregations, not just quota attainment. References the new audit checklist.
+
+**Test count: 350 unit + 455 integration + 2 skip = 807. Frontend build clean. Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-1: Quotas + Assignments cards period filtering inconsistency
+
+**Root cause (found in Step 0):** `buildHttpParams` (the shared HTTP-params utility) only serializes the typed fields of `PaginationParams` (`page`, `pageSize`, `sortBy`, `sortOrder`, `search`, `filters`). The payee-detail component passed `period: this.period()` as an extra property using `as any` to suppress the TypeScript error. `buildHttpParams` silently dropped it — the backend never received the `?period=` param. `PeriodHelper.ComputeDateRange(null, today)` then defaulted to `"this-month"` (the hard-coded default for null), causing all past-period quotas and assignments to be excluded on "Year to Date", "Last Month", and "All Time" selections.
+
+The Dashboard card (Attainment Gauges) and Credits card were unaffected because they call the API directly with raw `HttpParams` objects, bypassing `buildHttpParams`.
+
+**Fix:**
+1. `pagination.models.ts` — added `period?: string` to `PaginationParams` interface.
+2. `build-http-params.ts` — added `if (params.period) p = p.set('period', params.period);`.
+3. `payee-detail.component.ts` — removed both `as any` casts from `loadMoreQuotas` and `loadMoreAssignments` (now type-safe).
+4. Pre-existing test fixture fixes: added `quantity: 1` to 5 Transaction mock objects across 3 spec files that were already broken since WI-PROD-QUANTITY-FIELD added the required field.
+
+**Tests:**
+- `build-http-params.spec.ts` (7 new unit tests): period included/omitted, all 4 period values, filters coexist, empty params, regression for the original bug.
+- `PayeeDashboardEndpointsTests` (+3): `GetPayeeQuotas_WithPeriodYtd_IncludesPastAndCurrentPeriodQuotas`, `GetPayeeQuotas_WithPeriodThisMonth_ExcludesPastPeriodQuotas`, `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments`.
+
+**Forbidden-patterns rule:** Updated "Time-scoped UI control consistency violations" with canonical intersection rule. Added new entry for `as any` bypass of PaginationParams.
+
+**Test count: 350 backend unit + 455 integration + 2 skip = 807. 7 new frontend buildHttpParams specs (166 total, 10 pre-existing failures in TransactionsListComponent — pre-existing `f.currencies not iterable`). Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-CALC-A.3-FIX-3: Detect and warn on Quota-Plan currency mismatch
+
+**Context:** Pre-FIX-1 bad data. Agnieszka has a EUR quota on a PLN plan. `CreditedAmount` is always filtered to 0 for that quota (correct math). But the user sees "€0 / 0%" with no explanation — they could reasonably wonder why the Recent Credits card shows 213 EUR credits while the gauge shows nothing. This is a degenerate-zero visibility problem.
+
+**Backend changes (2 DTOs + 3 handlers):**
+- `QuotaAttainmentDto`: added `IsCurrencyValid: bool, PlanCurrency: string` (required params).
+- `QuotaSummaryDto`: added `IsCurrencyValid: bool = true, PlanCurrency: string = ""` (default params — all other callers compile unchanged).
+- `GetPayeeDashboardHandler`: plan query extended from `{ p.Id, p.Name }` to `{ p.Id, p.Name, p.Currency }`. `IsCurrencyValid` computed as `OrdinalIgnoreCase.Equals(quota.Currency, plan.Currency)`.
+- `GetPayeeAttainmentHandler`: same plan-query extension + flag computation.
+- `ListQuotasByPayeeHandler`: same — now computes flag for the compact Quotas list card too.
+
+**Frontend changes:**
+- `quota.model.ts`: `isCurrencyValid: boolean` + `planCurrency: string` added to both `QuotaAttainment` and `QuotaSummary` interfaces.
+- `payee-detail.component.ts`: `WsTooltipDirective` imported; `invalidQuotaCount` computed signal; `temporalVariant` / `temporalKey` accept optional `isCurrencyValid` param (false → returns `warning` / `DASHBOARD.CHIP_INVALID`); `currencyMismatchTooltip(quotaCurrency, planCurrency)` helper.
+- Attainment card: invalid gauge row gets amber left-border + `bento-gauge-wrap--faded`; warning badge with tooltip below plan name; mini bar forced amber.
+- Quotas list card: `--invalid` left-border + `isCurrencyValid` passed to `temporalVariant`/`temporalKey`.
+- Banner above bento grid when `invalidQuotaCount() > 0`.
+- SCSS: `.bento-invalid-banner`, `.bento-gauge-row--invalid`, `.bento-gauge-wrap--faded`, `.bento-list-row--invalid`.
+- i18n: `CHIP_INVALID` + `INVALID_QUOTA_BANNER` added in EN/ES/PL.
+
+**Click-through:** warning chip row navigates to `/quotas/:quotaId` (detail page). No inline edit for Active quotas — correct path is Close + delete + recreate. Future `/admin/data-quality` noted in TODO.
+
+**Tests (+8 unit, +2 integration):**
+- `QuotaCurrencyValidityTests` (8 unit): theory covering matched, mismatched, case-insensitive, empty-plan-currency edge cases; explicit regression guard for EUR-on-PLN scenario.
+- `PayeeDashboardEndpointsTests`: `IsCurrencyValid` field on `AttainmentItemResponse`; 2 new tests — `QuotaCurrencyMatchesPlan_IsCurrencyValidIsTrue` + `QuotaCurrencyMismatch_IsCurrencyValidIsTrue` (for PLN-PLN).
+
+**Forbidden-pattern rule added:** "Degenerate-zero visibility violations — when a calculated field returns 0 due to bad data rather than absence of activity, the API MUST expose a validity flag and the UI MUST render a visible warning."
+
+**Test count: 350 unit (342+8) + 455 integration + 2 skip = 807. Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3: Period selector + consistent filtering + temporal chips
+
+**Motivation:** V2 smoke revealed two problems: (1) the Active/All toggle was inconsistent — Quotas and Assignments read it, Credits interpreted "active" as last-90-days instead of the same time window, and the Earnings Trend ignored it entirely; (2) "Active" is semantically ambiguous. CaptivateIQ/Xactly/Spiff use period selectors as the industry standard.
+
+**Changes:**
+
+**Backend:**
+- New `PeriodHelper.ComputeDateRange(period, today)` in `Wasnie.Application/Common/Helpers/`. Maps `this-month|last-month|ytd|all-time` (+ legacy `active`→this-month, `all`→all-time) to `(DateOnly? From, DateOnly? To)`. Single source of truth.
+- `GetPayeeDashboardHandler`: replaced `isActive/cutoff` with `PeriodHelper`. Quota filter now uses period intersection (`Period.End >= from && Period.Start <= to`). Attainment computation uses each quota's own period (not the selector range) — consistent with the WI spec. Credits for attainment loaded without period cutoff (accuracy first).
+- `ListQuotasByPayeeHandler`: replaced `Period.End >= today` with intersection filter using `PeriodHelper`.
+- `ListAssignmentsByPayeeHandler`: same intersection filter pattern.
+- `GetPayeeCreditsHandler`: replaced `AllocatedAt >= cutoff` with `TransactionDate` range filter via subquery into `CompensationTransactions`. Credits now scope by when the transaction happened, not when the credit was allocated.
+- `PayeesController`: default period changed from `"active"` to `"this-month"`.
+
+**Frontend:**
+- `WsLineChart`: new `highlightLabels: string[]` input + `highlightBand` computed. Renders a translucent `--color-brand-subtle` rect over the selected period columns.
+- `PayeeDetailComponent`: `period` signal changed from `'active'|'all'` to `'this-month'|'last-month'|'ytd'|'all-time'`. Active/All toggle replaced with `WsSegmentedControl` (4 options). URL sync updated. Added `periodCounterLabel`, `chartHighlightLabels`, `temporalVariant`, `temporalKey` helpers.
+- Card titles: contextual counter badges (`· N in this month`).
+- Quotas card: temporal chips (In Progress=success, Upcoming=info, Closed=neutral) replace old DB status chips.
+- Assignments card: same temporal chips.
+- Empty states: period-aware messages.
+- i18n: new DASHBOARD keys in EN/ES/PL (`PERIOD_*`, `COUNTER_*`, `CHIP_*`, `*_EMPTY`).
+
+**Tests:**
+- `PeriodHelperTests` (9 unit tests): this-month, last-month, ytd, all-time, legacy aliases (active/all), null default, unknown string, edge case Jan 1 → Dec of prior year.
+- `PayeeDashboardEndpointsTests` (4 new + 1 updated): renamed `WithPeriodAll` → `WithPeriodAllTime`, added `DefaultPeriodIsThisMonth_QuotaSpanningYearStillAppears`, `WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded`, `WithPeriodYtd_IncludesQuotaForThisYear`.
+
+**Forbidden-patterns rule added:** "Time-scoped UI controls MUST apply consistently to ALL data shown in the same view."
+
+**Test count: 342 unit (333 prior + 9 PeriodHelper) + 455 integration + 2 skipped = 799. Both builds clean.**
+
+---
+
+## 2026-06-04 — WI-CALC-A.3-FIX-2: Critical quota attainment inflation bug
+
+**Root cause:** `QuotaAttainmentService`, `GetPayeeAttainmentHandler`, and `GetPayeeDashboardHandler` all summed `Credit.OriginalAmount` (raw transaction revenue) for Revenue quota attainment. A Revenue quota target is a commission target. Using revenue inflates attainment by `1/rate` — for a 5% plan this is exactly 20×. The "20× January credits" coincidence in the bug report was a red herring; the ratio is `1/commission_rate = 1/0.05 = 20`, not a Cartesian product.
+
+**Fix (3 service/handler files):**
+- `QuotaAttainmentService.ComputeRevenueAchievedAsync`: `c.OriginalAmount.Amount` → `c.CreditedAmount.Amount`; added `quotaCurrency` parameter + `c.CreditedAmount.Currency == quotaCurrency` filter; updated comment.
+- `GetPayeeAttainmentHandler.ComputeAchievedAsync`: same field change + currency filter.
+- `GetPayeeDashboardHandler.Handle`: `allCredits` projection changed to `c.CreditedAmount.*`; Revenue in-memory path adds `r.Currency == quota.Amount.Currency` filter.
+
+**Tests (+3, all passing):**
+- `ComputeAsync_Revenue_ReturnsCorrectAttainment` updated: assertion changed from 0.7543 (OriginalAmount-based) to 0.0377 (CreditedAmount-based). Prior assertion accidentally validated the bug.
+- `ComputeAsync_Revenue_MultiPeriodCredits_OnlyCountsCorrectPeriod` (new): Jan + Jun credits, Jun-Jul quota → only Jun CreditedAmount counted.
+- `ComputeAsync_Revenue_CurrencyFilter_ExcludesWrongCurrency` (new): EUR + PLN credits, EUR quota → only EUR counted.
+- `ComputeAsync_Revenue_AgnieszkaScenario_NotInflatedBy20x` (new): exact reported scenario — 20 Jan credits + 3 Jun credits, Jun-Jul quota. Asserts result < 0.02 (not the 0.27 bug value). Guards that we never regress to the 20× inflation.
+
+**Forbidden-patterns rule added:** Three new entries under "Quota attainment query violations" in `14-forbidden-patterns.md`: OriginalAmount for Revenue quotas is forbidden; currency filter is mandatory; period bounds are mandatory.
+
+**Test count: 333 unit + 455 integration + 2 skipped = 788 (was 785). Both builds clean.**
+
+**Regression caught by:** Live smoke on 2026-06-04 (UI vs. DB comparison). Automated tests missed it because seed data used the same commission rate that made the 20× relationship implicit.
+
 ---
 
 ## 2026-06-04 — WI-PROD-PAYEE-DASHBOARD-V2: Scroll-único dashboard + tab cleanup

@@ -23,6 +23,16 @@
         }
       </defs>
 
+      <!-- Period highlight band -->
+      @if (highlightBand(); as band) {
+        <rect
+          class="ws-lc__highlight"
+          [attr.x]="band.x" [attr.y]="band.y"
+          [attr.width]="band.width" [attr.height]="band.height"
+          rx="3"
+        />
+      }
+
       <!-- Y gridlines + labels -->
       @for (tick of yTicks(); track tick.value) {
         <line

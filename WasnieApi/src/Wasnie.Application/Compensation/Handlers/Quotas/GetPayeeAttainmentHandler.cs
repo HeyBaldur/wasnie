@@ -34,12 +34,12 @@ public sealed class GetPayeeAttainmentHandler(
             return Result<IReadOnlyList<QuotaAttainmentDto>>.Success(
                 Array.Empty<QuotaAttainmentDto>());
 
-        // Load plan names in one query.
+        // Load plan names + currencies in one query.
         var planIds = quotas.Select(q => q.PlanId).Distinct().ToList();
-        var planNameById = await db.CompensationPlans
+        var planInfoById = await db.CompensationPlans
             .Where(p => planIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name })
-            .ToDictionaryAsync(p => p.Id, p => p.Name, cancellationToken);
+            .Select(p => new { p.Id, p.Name, p.Currency })
+            .ToDictionaryAsync(p => p.Id, p => (p.Name, p.Currency), cancellationToken);
 
         var dtos = new List<QuotaAttainmentDto>(quotas.Count);
 
@@ -47,11 +47,13 @@ public sealed class GetPayeeAttainmentHandler(
         {
             var achieved = await ComputeAchievedAsync(request.PayeeId, quota, cancellationToken);
             var attainment = AttainmentPercentage.FromAchievedAndTarget(achieved, quota.Amount.Amount);
+            var planInfo = planInfoById.GetValueOrDefault(quota.PlanId, (Name: string.Empty, Currency: string.Empty));
+            var isCurrencyValid = string.Equals(quota.Amount.Currency, planInfo.Currency, StringComparison.OrdinalIgnoreCase);
 
             dtos.Add(new QuotaAttainmentDto(
                 QuotaId: quota.Id,
                 PlanId: quota.PlanId,
-                PlanName: planNameById.GetValueOrDefault(quota.PlanId, string.Empty),
+                PlanName: planInfo.Name,
                 MeasurementType: quota.MeasurementType,
                 TargetAmount: quota.Amount.Amount,
                 Currency: quota.Amount.Currency,
@@ -60,7 +62,9 @@ public sealed class GetPayeeAttainmentHandler(
                 AttainmentPercent: attainment.ToPercentString(),
                 PeriodStart: quota.Period.Start,
                 PeriodEnd: quota.Period.End,
-                Status: quota.Status.ToString()));
+                Status: quota.Status.ToString(),
+                IsCurrencyValid: isCurrencyValid,
+                PlanCurrency: planInfo.Currency));
         }
 
         return Result<IReadOnlyList<QuotaAttainmentDto>>.Success(dtos);
@@ -90,15 +94,17 @@ public sealed class GetPayeeAttainmentHandler(
             return quantities.Sum();
         }
 
+        var quotaCurrency = quota.Amount.Currency;
         var amounts = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
             where c.PayeeId == payeeId
                && c.PlanId == planId
                && c.SupersededAt == null
+               && t.Amount.Currency == quotaCurrency
                && t.TransactionDate >= start
                && t.TransactionDate <= end
-            select c.OriginalAmount.Amount
+            select t.Amount.Amount
         ).ToListAsync(ct);
         return amounts.Sum();
     }

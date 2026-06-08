@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -40,9 +41,12 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
             Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
             filtered = filtered.Where(x => x.Assignment.Status == status);
 
-        // Apply period filter: "active" = EffectiveEnd >= today
-        if (string.Equals(p.Period, "active", StringComparison.OrdinalIgnoreCase))
-            filtered = filtered.Where(x => x.Assignment.EffectivePeriod.End >= today);
+        // Apply period intersection filter — assignment period [Start, End] must intersect [from, to]
+        var (from, to) = PeriodHelper.ComputeDateRange(p.Period, today);
+        if (from.HasValue || to.HasValue)
+            filtered = filtered.Where(x =>
+                (!from.HasValue || x.Assignment.EffectivePeriod.End >= from.Value) &&
+                (!to.HasValue || x.Assignment.EffectivePeriod.Start <= to.Value));
 
         // Sort
         var desc = !string.Equals(p.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);

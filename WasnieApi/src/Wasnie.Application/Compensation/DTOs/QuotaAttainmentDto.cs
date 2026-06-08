@@ -14,4 +14,6 @@ public sealed record QuotaAttainmentDto(
     string AttainmentPercent,
     DateOnly PeriodStart,
     DateOnly PeriodEnd,
-    string Status);
+    string Status,
+    bool IsCurrencyValid,
+    string PlanCurrency);

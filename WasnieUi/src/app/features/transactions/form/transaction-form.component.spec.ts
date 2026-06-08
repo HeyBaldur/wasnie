@@ -24,6 +24,7 @@ describe('TransactionFormComponent', () => {
     ingestedAt: '2024-01-15T10:00:00Z',
     source: TransactionSource.Manual,
     status: TransactionStatus.Pending,
+    quantity: 1,
   };
 
   beforeEach(async () => {
@@ -120,6 +121,7 @@ describe('TransactionFormComponent', () => {
       transactionDate: '2024-01-15',
       amount: 500,
       currency: 'USD',
+      quantity: 1,
     });
   }));
 

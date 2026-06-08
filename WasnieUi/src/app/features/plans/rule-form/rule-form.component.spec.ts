@@ -74,6 +74,46 @@ function makePlan(rule: Rule): Plan {
 // Test suite
 // ---------------------------------------------------------------------------
 
+describe('RuleFormComponent — MeasurementType picker filter (V1)', () => {
+  function configureMinimalModule(plan: Plan): void {
+    const planSignal = signal<Plan | null>(plan);
+    TestBed.configureTestingModule({
+      imports: [RuleFormComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: PlansStore,
+          useValue: { selectedPlan: planSignal as unknown as PlansStore['selectedPlan'], loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()) },
+        },
+        { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: (k: string) => k === 'planId' ? PLAN_ID : null } } } },
+      ],
+    });
+    TestBed.overrideComponent(RuleFormComponent, { set: { imports: [ReactiveFormsModule, TranslateModule], template: `<form [formGroup]="form"></form>` } });
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('measurementTypeOptions contains exactly Revenue and Units', () => {
+    configureMinimalModule(makePlan(makeApiRule()));
+    const comp = TestBed.createComponent(RuleFormComponent).componentInstance;
+    expect(comp.measurementTypeOptions.length).toBe(2);
+    expect(comp.measurementTypeOptions.map(o => o.value)).toContain(MeasurementType.Revenue);
+    expect(comp.measurementTypeOptions.map(o => o.value)).toContain(MeasurementType.Units);
+  });
+
+  it('measurementTypeOptions does not contain Margin, Attainment, or Custom', () => {
+    configureMinimalModule(makePlan(makeApiRule()));
+    const comp = TestBed.createComponent(RuleFormComponent).componentInstance;
+    const values = comp.measurementTypeOptions.map(o => o.value);
+    expect(values).not.toContain(MeasurementType.Margin);
+    expect(values).not.toContain(MeasurementType.Attainment);
+    expect(values).not.toContain(MeasurementType.Custom);
+  });
+});
+
 describe('RuleFormComponent — enum rehydration from string API values', () => {
   let storeMock: Partial<PlansStore>;
 

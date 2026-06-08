@@ -390,6 +390,32 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Quota attainment query violations
+
+- ❌ **Using `Credit.OriginalAmount` in any query that computes what a payee EARNED** (WI-CALC-A.3-FIX-2, 2026-06-04; extended in V3-FIX-2, 2026-06-08). `OriginalAmount` is the raw transaction revenue (what the company received from the customer). `CreditedAmount` is what the payee actually earned (the commission). Using `OriginalAmount` inflates the result by `1 / commission_rate` — for a 5% flat plan this is ×20. The bug has appeared in two independent queries (QuotaAttainmentService, GetPayeeDashboardHandler Earnings Trend); treat every new "earnings" aggregation as suspicious until proven correct.
+
+  **Rule:** Any aggregation, summary, or chart that shows a payee's **earnings, compensation, or commission** MUST use `CreditedAmount`. `OriginalAmount` is ONLY legitimate when explicitly displaying the source transaction amount alongside the credit (detail page, export columns that show both values). Verify by checking: if the result equals `CreditedAmount × 20` (for a 5% plan), you have the wrong field.
+
+  **Audit:** See `docs/architecture/15-aggregation-audit-checklist.md` for the full list of aggregation endpoints and their verified status. Every new aggregation endpoint MUST be added to this checklist before merge.
+
+  **Historical cases:**
+  - QuotaAttainmentService Revenue path — fixed in A.3-FIX-2.
+  - GetPayeeDashboardHandler Earnings Trend — fixed in V3-FIX-2.
+
+- ❌ **Using `CreditedAmount` (commission) instead of `Transaction.Amount` (gross sale) for Revenue-type quota attainment** (WI-CALC-A.3-FIX-4, 2026-06-08). Revenue quota attainment uses the **Sales Quota** semantic: "Anna should sell €25,000 this month." Her achieved value = SUM of `Transaction.Amount` for processed transactions in the quota period, NOT SUM of `CreditedAmount` (which would be the commission, e.g. €1,250 at 5%). Using `CreditedAmount` understates attainment by the commission rate — a €19,850 sale against a €25,000 target reads as 4% instead of 79%.
+
+  **Rule:** `QuotaAttainmentService.ComputeRevenueAchievedAsync`, `GetPayeeAttainmentHandler`, and `GetPayeeDashboardHandler` Revenue attainment paths ALL MUST use `t.Amount.Amount` (Transaction.Amount) via the Credit→Transaction JOIN. Credit serves as the plan-routing oracle only — traverse it to find which transactions belong to the plan, then sum the transaction amounts. Currency filter: `t.Amount.Currency == quotaCurrency` (NOT `c.CreditedAmount.Currency`).
+
+  If a future use case demands earnings-based (commission) attainment, introduce an explicit `AttainmentBasis` enum field on `Quota` (`SalesRevenue` vs `EarnedCommission`) — do NOT silently change the meaning.
+
+  **Applies to:** `QuotaAttainmentService`, `GetPayeeAttainmentHandler`, `GetPayeeDashboardHandler` attainment gauge section, and any future attainment handler for Revenue measure type.
+
+- ❌ **Attainment queries that omit the `CreditedCurrency == quota.Amount.Currency` filter** (WI-CALC-A.3-FIX-2, 2026-06-04). Without this filter, EUR and PLN credits are both counted toward a EUR quota. The result is an amount in mixed currencies that has no meaning. **Rule:** Every attainment query MUST filter `c.CreditedAmount.Currency == quotaCurrency` so only credits denominated in the quota's currency contribute to the achieved amount.
+
+- ❌ **Attainment queries that do not bound by the Quota's own `PeriodStart..PeriodEnd`** (WI-CALC-A.3-FIX-2, 2026-06-04). Credits from a prior or future period for the same Payee+Plan must NOT bleed into a quota's attainment. The period filter `t.TransactionDate >= periodStart && t.TransactionDate <= periodEnd` is mandatory on the JOINED transaction — not on the credit itself. Verify with `ToQueryString()` that the generated SQL contains the period WHERE clause and does NOT produce a Cartesian product. Include a unit test covering the case: same payee, same plan, credits in multiple periods, expected attainment in each period independent of the others.
+
+---
+
 ## Financial action opacity violations
 
 - ❌ **Showing a count of affected items before an action without showing which items** (WI-PROD-T-FIX-12, 2026-06-04). A badge that says "3 Pending eligible for processing" without a visible list of those 3 transactions is a black box. In a financial system this destroys trust: the user cannot verify what will be acted on, cannot cross-reference with their Excel records, and cannot detect a misconfiguration before it corrupts commission records. **Rule:** Any "eligible / applicable / affected" count displayed before a user-triggered financial action (Process Pending, batch write, recalculate) MUST be backed by an inline, inspectable list of the exact items the action WILL target. The list MUST use the SAME predicate as the count — if they diverge, the list is misleading. Caps (e.g. "first 200, see filter for rest") are acceptable; a count-only display is not.
@@ -422,6 +448,55 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 - ❌ **Using `CreditedAmount` (the commission) instead of `OriginalAmount` (the transaction revenue) for Revenue-type quota attainment** (WI-CALC-A.3, 2026-06-04). Revenue quota attainment measures how much revenue was generated (the transaction amount), not how much commission was earned. For example, Anna's quota is "sell $50,000". Her attainment = sum of `Credit.OriginalAmount` for the period. Summing `CreditedAmount` (e.g., 5% commission) would produce nonsensical attainment numbers.
 
   **Rule:** `QuotaAttainmentService.ComputeRevenueAchievedAsync` sums `c.OriginalAmount.Amount`. Never replace with `CreditedAmount`.
+
+---
+
+## Degenerate-zero visibility violations
+
+- ❌ **Displaying a calculated financial value that can be zero due to bad data without surfacing the bad-data condition** (WI-CALC-A.3-FIX-3, 2026-06-08). When a field returns zero (or null, or a default) because of a data-integrity problem rather than genuine absence of activity, displaying the raw zero with no explanation is a trust-destroying UX. The user sees "€0 / 0%" and cannot determine whether the payee genuinely earned nothing or whether the number is meaningless.
+
+  **Rule:** When a calculated field can return a degenerate value due to bad data rather than absence of activity, the API MUST expose a validity flag (`IsCurrencyValid`, `IsQuotaActive`, etc.) alongside the value. The UI MUST render a visible warning when the flag is false — a chip, banner, or tooltip that explains what is wrong and how to fix it. Never display 0% without context when the zero is caused by a configuration error.
+
+  **Canonical example:** `QuotaAttainmentDto.IsCurrencyValid` — when a quota's currency does not match its plan's currency, `CreditedAmount` will always be filtered to 0. The dashboard shows `IsCurrencyValid: false` and renders a `⚠ Invalid (currency mismatch)` chip with tooltip: "This quota's currency (EUR) does not match its plan's currency (PLN). Close and recreate to fix."
+
+  **Future WI:** A `/admin/data-quality` page listing all invalid quotas tenant-wide is planned but out of scope for V1.
+
+---
+
+## MeasurementType picker filter violations
+
+- ❌ **Showing Margin, Attainment, or Custom as selectable `MeasurementType` options in any V1 form** (WI-PROD-MEASURETYPE-FILTER-RULES, 2026-06-08). Only Revenue and Units are supported in V1 — the other types require transaction field extensions not yet built. A user who creates a Rule with `MeasurementType=Margin` cannot create a corresponding Quota (the Quota picker blocks it), making the Rule unusable for attainment calculation. The inconsistency is a trust-destroying UI contract violation.
+
+  **Rule:** Every surface that exposes a `MeasurementType` picker MUST filter the dropdown to show only Revenue and Units. Surfaces list (keep up to date when adding new surfaces):
+  - Create Quota: `quota-create.component.ts` — `MEASUREMENT_TYPES` constant
+  - Create Rule / Edit Rule: `rule-form.component.ts` — `measurementTypeOptions` property
+
+  **Enum values are kept intact in code** — do NOT delete or comment out `Margin`, `Attainment`, `Custom` from `MeasurementType` or `QuotaMeasurementType`. They are valid domain values reserved for future activation. Only the UI picker filters them; the backend accepts all values.
+
+  **Pattern to follow** (mirror `quota-create.component.ts`):
+  ```typescript
+  // V1: only Revenue and Units are supported. Margin, Attainment, and Custom
+  // require additional transaction fields — activate in a future WI.
+  // FILTER MUST apply to every MeasurementType picker surface; see 14-forbidden-patterns.md.
+  readonly measurementTypeOptions: SelectOption[] = [
+    { label: 'PLANS.MEASUREMENT_REVENUE', value: MeasurementType.Revenue },
+    { label: 'PLANS.MEASUREMENT_UNITS', value: MeasurementType.Units },
+  ];
+  ```
+
+  **To activate a hidden type in a future WI:** (1) Remove it from the filter in EVERY surface listed above simultaneously — never activate in one surface without the others. (2) Add the required transaction fields. (3) Update the surfaces list in this rule.
+
+---
+
+## Time-scoped UI control consistency violations
+
+- ❌ **A period selector, date filter, or any time-scoped UI control that applies to only some cards in the same view** (WI-PROD-PAYEE-DASHBOARD-V3, 2026-06-08; strengthened in V3-FIX-1, 2026-06-08). When a control filters data by time, every data section shown in the same view MUST respect that filter consistently.
+
+  **Rule:** Time-scoped UI controls MUST apply consistently to ALL data shown in the same view. **The intersection rule (`Period.Start <= rangeTo AND Period.End >= rangeFrom`) is the canonical definition.** Every card must use it. NEVER apply additional silent filters like `Status = Active` or `today within period` on top of the range filter unless the same filter applies to ALL cards in the view. Define the `[From, To]` date range once on the backend using a shared helper (`PeriodHelper.ComputeDateRange`) and pass it to every section.
+
+  **Canonical reference:** `PeriodHelper.ComputeDateRange` in `Wasnie.Application/Common/Helpers/`. All four dashboard card endpoints use it. Quotas and assignments filter by period intersection (`Period.Start <= rangeTo && Period.End >= rangeFrom`); Credits filter by `TransactionDate in [rangeFrom, rangeTo]`.
+
+- ❌ **Passing filter parameters to a paginated API service via top-level object properties not declared in `PaginationParams`** (WI-PROD-PAYEE-DASHBOARD-V3-FIX-1, 2026-06-08). `buildHttpParams` only serializes the fields declared in the `PaginationParams` interface (`page`, `pageSize`, `sortBy`, `sortOrder`, `search`, `period`, `filters`). Any extra property passed via `as any` is silently dropped and never reaches the backend. **Rule:** Every query parameter a paginated endpoint needs MUST be declared in `PaginationParams` and handled in `buildHttpParams`. Never use `as any` to bypass the type system for API call params.
 
 ---
 

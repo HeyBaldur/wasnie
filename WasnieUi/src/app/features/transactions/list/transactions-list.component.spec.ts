@@ -84,6 +84,7 @@ describe('TransactionsListComponent', () => {
       status: TransactionStatus.Pending,
       payeeName: 'Anna Kowalska',
       payeeEmployeeCode: 'EMP001',
+      quantity: 1,
     };
 
     TestBed.overrideProvider(TransactionsStore, {
@@ -112,6 +113,7 @@ describe('TransactionsListComponent', () => {
       status: TransactionStatus.Pending,
       payeeName: null,
       payeeEmployeeCode: null,
+      quantity: 1,
     };
 
     TestBed.overrideProvider(TransactionsStore, {
@@ -142,6 +144,7 @@ describe('TransactionsListComponent', () => {
       status: TransactionStatus.Pending,
       payeeName: '',
       payeeEmployeeCode: null,
+      quantity: 1,
     };
 
     TestBed.overrideProvider(TransactionsStore, {

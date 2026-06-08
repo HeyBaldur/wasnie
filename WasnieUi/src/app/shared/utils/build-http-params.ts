@@ -10,6 +10,7 @@ export function buildHttpParams(params?: PaginationParams): HttpParams {
   if (params.search) p = p.set('search', params.search);
   if (params.sortBy) p = p.set('sortBy', params.sortBy);
   if (params.sortOrder) p = p.set('sortOrder', params.sortOrder);
+  if (params.period) p = p.set('period', params.period);
   if (params.filters) {
     Object.entries(params.filters).forEach(([key, value]) => {
       p = p.set(key, value);

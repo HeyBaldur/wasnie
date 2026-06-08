@@ -79,9 +79,13 @@ export class RuleFormComponent implements OnInit {
   readonly ConditionOperator = ConditionOperator;
   readonly ConditionValueType = ConditionValueType;
 
-  readonly measurementTypeOptions: SelectOption[] = Object.entries(MeasurementType)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({ label: `PLANS.MEASUREMENT_${k.toUpperCase()}`, value: v as number }));
+  // V1: only Revenue and Units are supported. Margin, Attainment, and Custom
+  // require additional transaction fields — activate in a future WI.
+  // FILTER MUST apply to every MeasurementType picker surface; see 14-forbidden-patterns.md.
+  readonly measurementTypeOptions: SelectOption[] = [
+    { label: 'PLANS.MEASUREMENT_REVENUE', value: MeasurementType.Revenue },
+    { label: 'PLANS.MEASUREMENT_UNITS', value: MeasurementType.Units },
+  ];
 
   readonly aggregationOptions: SelectOption[] = Object.entries(MeasurementAggregation)
     .filter(([, v]) => typeof v === 'number')

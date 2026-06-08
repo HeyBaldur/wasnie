@@ -1,6 +1,6 @@
 import { QuotaAttainment, QuotaSummary } from '../../quotas/models/quota.model';
 
-export interface EarningsTrendPoint {
+export interface SalesTrendPoint {
   year: number;
   month: number;
   monthLabel: string;
@@ -20,7 +20,7 @@ export interface DashboardAssignment {
 
 export interface PayeeDashboard {
   attainmentItems: QuotaAttainment[];
-  earningsTrend: EarningsTrendPoint[];
+  salesTrend: SalesTrendPoint[];
   recentQuotas: QuotaSummary[];
   recentAssignments: DashboardAssignment[];
 }

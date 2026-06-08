@@ -52,23 +52,24 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             period, "test-user", Guid.NewGuid(), Now, Guid.NewGuid());
 
     // Seeds a Credit record whose source transaction falls on the given date with the given amount.
+    // currency defaults to EUR; pass a different value to test cross-currency filtering.
     private async Task SeedCreditAsync(
         Wasnie.Infrastructure.Persistence.ApplicationDbContext db,
         Guid tenantId, Guid payeeId, Guid planId, Guid ruleId,
-        decimal amount, DateOnly txDate)
+        decimal amount, DateOnly txDate, string currency = "EUR")
     {
         var tx = CompensationTransaction.Ingest(
             tenantId, $"REF-{Guid.NewGuid():N}", payeeId,
-            Money.Of(amount, Currency), txDate,
+            Money.Of(amount, currency), txDate,
             TransactionSource.Manual, "test", Guid.NewGuid(), Now, Guid.NewGuid());
-        tx.MarkCalculated(1, Money.Of(amount * 0.05m, Currency), "test", Now, Guid.NewGuid());
+        tx.MarkCalculated(1, Money.Of(amount * 0.05m, currency), "test", Now, Guid.NewGuid());
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync();
 
         var snapshot = RuleSnapshot.Freeze(ruleId, planId, 1, "Flat Rule",
             RateTable.Flat(0.05m), Trigger.Always(), Now);
         var credit = Credit.Allocate(tenantId, tx.Id, payeeId, planId, ruleId,
-            snapshot, Money.Of(amount, Currency), Money.Of(amount * 0.05m, Currency),
+            snapshot, Money.Of(amount, currency), Money.Of(amount * 0.05m, currency),
             Percentage.FromPercent(100), CreditRole.Primary,
             "test", Guid.NewGuid(), Now, Guid.NewGuid());
         db.Credits.Add(credit);
@@ -96,7 +97,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 50_000m, period));
             await db.SaveChangesAsync();
 
-            // Seed 37,714.32 EUR in credits within the period
+            // Seed two credits within the period (Transaction.Amount 30k and 7,714.32; CreditedAmount = 5% each).
+            // Revenue attainment (Sales Quota) sums Transaction.Amount: 30,000 + 7,714.32 = 37,714.32 EUR.
             await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId, 30_000m, new DateOnly(2026, 5, 10));
             await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId, 7_714.32m, new DateOnly(2026, 5, 20));
         }
@@ -106,7 +108,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var svc = new QuotaAttainmentService(db);
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 25));
 
-            result.Value.Should().Be(0.7543m); // (37714.32 / 50000) rounded to 4 decimals
+            // Transaction.Amount total = 37,714.32 EUR; target = 50,000 EUR → 37714.32/50000 = 0.7543
+            result.Value.Should().Be(0.7543m);
             result.ToPercentString().Should().Be("75%");
         }
     }
@@ -295,6 +298,159 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
             result.Should().Be(AttainmentPercentage.Zero); // 0 credits inside May
+        }
+    }
+
+    // ── WI-CALC-A.3-FIX-2: multi-period regression guard ─────────────────────
+
+    /// <summary>
+    /// Reproduces the reported bug: same payee+plan has credits in Jan AND Jun.
+    /// A quota for Jun-Jul must only count Jun CreditedAmount — not bleed Jan credits.
+    /// Old code (using OriginalAmount) also failed this because of the wrong field.
+    /// </summary>
+    [Fact]
+    public async Task ComputeAsync_Revenue_MultiPeriodCredits_OnlyCountsCorrectPeriod()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var janPeriod = DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 31));
+        var junPeriod = DateRange.Of(new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 31));
+        Guid ruleId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlan(tenantId, planId,
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            ruleId = plan.Rules.First().Id;
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31))));
+            // Only the Jun-Jul quota is Active (Jan quota omitted — testing isolation without it).
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 500m, junPeriod));
+            await db.SaveChangesAsync();
+
+            // 5 Jan credits: amount=100 each → Jan Transaction.Amount total = 500 EUR (outside Jun quota)
+            for (var i = 0; i < 5; i++)
+                await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId,
+                    100m, new DateOnly(2026, 1, 15));
+
+            // 3 Jun credits: amount=500 each → Jun Transaction.Amount total = 1,500 EUR
+            for (var i = 0; i < 3; i++)
+                await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId,
+                    500m, new DateOnly(2026, 6, 15));
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 6, 20));
+
+            // Jun Transaction.Amount = 1,500 EUR; target = 500 EUR → 1500/500 = 3.0000 (overachievement)
+            result.Value.Should().Be(3.0m);
+            result.ToPercentString().Should().Be("300%");
+        }
+    }
+
+    /// <summary>
+    /// Currency filter: credits in PLN must not count toward a EUR quota,
+    /// even if they fall within the quota period.
+    /// </summary>
+    [Fact]
+    public async Task ComputeAsync_Revenue_CurrencyFilter_ExcludesWrongCurrency()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+        Guid ruleId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlan(tenantId, planId, period);
+            ruleId = plan.Rules.First().Id;
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId, period));
+            // EUR quota with target 1,000 EUR
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 1_000m, period));
+            await db.SaveChangesAsync();
+
+            // EUR credit: Transaction.Amount = 2,000 EUR → counts toward EUR quota
+            await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId,
+                2_000m, new DateOnly(2026, 5, 10), "EUR");
+
+            // PLN credit (wrong currency): Transaction.Amount = 5,000 PLN — must be excluded
+            await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId,
+                5_000m, new DateOnly(2026, 5, 15), "PLN");
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 20));
+
+            // Only EUR transaction counts: 2,000 EUR / 1,000 EUR target = 2.0000 (overachievement)
+            result.Value.Should().Be(2.0m);
+            result.ToPercentString().Should().Be("200%");
+        }
+    }
+
+    /// <summary>
+    /// Agnieszka-scenario integration test: 20 Jan credits + 3 Jun credits on the same plan.
+    /// The Jun-Jul quota must see only the Jun Transaction.Amount — not Jan credits.
+    /// Updated for WI-CALC-A.3-FIX-4: Revenue attainment sums Transaction.Amount (Sales Quota).
+    /// </summary>
+    [Fact]
+    public async Task ComputeAsync_Revenue_AgnieszkaScenario_SumsTransactionAmountForCorrectPeriod()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var junPeriod = DateRange.Of(new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 31));
+        Guid ruleId;
+
+        // Jun credit amounts match real data: 3 credits whose Transaction.Amount ≈ 2,285 EUR each
+        // → total Jun Transaction.Amount = 6,855 EUR → 6,855 / 25,000 = 27.42%
+        const decimal junTxAmount = 2_285m;
+        var expectedJunTxTotal = junTxAmount * 3; // 6,855
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlan(tenantId, planId,
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            ruleId = plan.Rules.First().Id;
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31))));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 25_000m, junPeriod));
+            await db.SaveChangesAsync();
+
+            // 20 Jan 2026 credits — these must NOT bleed into the Jun quota
+            for (var i = 0; i < 20; i++)
+                await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId,
+                    140.196m, new DateOnly(2026, 1, 15));
+
+            // 3 Jun 2026 credits — only these should count
+            for (var i = 0; i < 3; i++)
+                await SeedCreditAsync(db, tenantId, payeeId, planId, ruleId,
+                    junTxAmount, new DateOnly(2026, 6, 15));
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 6, 20));
+
+            // Expected: Jun Transaction.Amount / 25,000 target = 6,855 / 25,000 = 0.2742
+            var expectedAttainment = Math.Round(expectedJunTxTotal / 25_000m, 4, MidpointRounding.ToEven);
+            result.Value.Should().Be(expectedAttainment);
+
+            // Must include only Jun transactions — Jan tx total would inflate to 0.2742 + 20*140.196/25000
+            result.Value.Should().BeGreaterThan(0.2m);
+            result.Value.Should().BeLessThan(0.5m); // still reasonable — not the full 100%+ territory
         }
     }
 }

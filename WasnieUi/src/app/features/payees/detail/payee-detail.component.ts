@@ -13,7 +13,7 @@ import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
 import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
-import { PayeeDashboard, EarningsTrendPoint } from '../models/payee-dashboard.model';
+import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
 import { Payee, PayeeStatus } from '../models/payee.model';
 import { PayeeFormComponent } from '../form/payee-form.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
@@ -30,12 +30,16 @@ import {
   WsConfirmationModalComponent,
   WsTableEmptyComponent,
   WsGaugeComponent,
-  WsLineChartComponent,
-  type LineChartPoint,
+  WsBarChartComponent,
+  WsSegmentedControlComponent,
+  WsTooltipDirective,
+  type BarChartPoint,
+  type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
 
 type Tab = 'overview' | 'profile' | 'activity';
+type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 
 @Component({
   selector: 'app-payee-detail',
@@ -60,7 +64,9 @@ type Tab = 'overview' | 'profile' | 'activity';
     WsConfirmationModalComponent,
     WsTableEmptyComponent,
     WsGaugeComponent,
-    WsLineChartComponent,
+    WsBarChartComponent,
+    WsSegmentedControlComponent,
+    WsTooltipDirective,
   ],
   templateUrl: './payee-detail.component.html',
   styleUrl: './payee-detail.component.scss',
@@ -77,8 +83,31 @@ export class PayeeDetailComponent implements OnInit {
   readonly QuotaMeasurementType = QuotaMeasurementType;
 
   readonly payeeId = this.route.snapshot.paramMap.get('payeeId')!;
+  // Stable timestamp for the component's lifetime — prevents NG0100 from
+  // computePacing() returning slightly-different floats on each CD pass.
+  private readonly _nowMs = Date.now();
   readonly activeTab = signal<Tab>('overview');
-  readonly period = signal<'active' | 'all'>('active');
+  readonly period = signal<PeriodKey>('this-month');
+
+  readonly periodOptions: SegOption[] = [
+    { value: 'this-month', label: 'DASHBOARD.PERIOD_THIS_MONTH' },
+    { value: 'last-month', label: 'DASHBOARD.PERIOD_LAST_MONTH' },
+    { value: 'ytd',        label: 'DASHBOARD.PERIOD_YTD' },
+    { value: 'all-time',   label: 'DASHBOARD.PERIOD_ALL_TIME' },
+  ];
+
+  readonly periodCounterLabel = computed(() => {
+    switch (this.period()) {
+      case 'this-month': return 'DASHBOARD.COUNTER_THIS_MONTH';
+      case 'last-month': return 'DASHBOARD.COUNTER_LAST_MONTH';
+      case 'ytd':        return 'DASHBOARD.COUNTER_YTD';
+      case 'all-time':   return 'DASHBOARD.COUNTER_ALL_TIME';
+    }
+  });
+
+  readonly invalidQuotaCount = computed(() =>
+    (this.dashboard()?.attainmentItems ?? []).filter(a => !a.isCurrencyValid).length
+  );
 
   readonly editModalOpen = signal(false);
   readonly terminateModalOpen = signal(false);
@@ -118,9 +147,9 @@ export class PayeeDetailComponent implements OnInit {
   ngOnInit(): void {
     this.store.loadPayee(this.payeeId);
 
-    // Read period from URL before loading so the first fetch uses the correct filter
-    const p = this.route.snapshot.queryParamMap.get('period');
-    if (p === 'all') this.period.set('all');
+    // Read period from URL; default is this-month
+    const p = this.route.snapshot.queryParamMap.get('period') as PeriodKey | null;
+    if (p === 'last-month' || p === 'ytd' || p === 'all-time') this.period.set(p);
 
     this.loadOverview();
   }
@@ -133,8 +162,8 @@ export class PayeeDetailComponent implements OnInit {
 
   // ── Period filter ─────────────────────────────────────────────────────────
 
-  setPeriod(p: 'active' | 'all'): void {
-    this.period.set(p);
+  setPeriod(p: string): void {
+    this.period.set(p as PeriodKey);
     this.router.navigate([], { queryParams: { period: p }, queryParamsHandling: 'merge', replaceUrl: true });
     this.resetAndLoad();
   }
@@ -158,7 +187,7 @@ export class PayeeDetailComponent implements OnInit {
       const result = await firstValueFrom(this.payeesApi.getPayeeDashboard(this.payeeId, this.period()));
       this.dashboard.set(result);
     } catch {
-      this.dashboard.set({ attainmentItems: [], earningsTrend: [], recentQuotas: [], recentAssignments: [] });
+      this.dashboard.set({ attainmentItems: [], salesTrend: [], recentQuotas: [], recentAssignments: [] });
     } finally {
       this.dashboardLoading.set(false);
       // Load list cards after dashboard
@@ -181,7 +210,7 @@ export class PayeeDetailComponent implements OnInit {
           sortBy: 'effectivestart',
           sortOrder: 'desc',
           period: this.period(),
-        } as any)
+        })
       );
       this.assignments.update(prev => [...prev, ...result.items]);
       this.assignmentsTotal.set(result.totalCount);
@@ -202,7 +231,7 @@ export class PayeeDetailComponent implements OnInit {
           sortBy: 'periodstart',
           sortOrder: 'desc',
           period: this.period(),
-        } as any)
+        })
       );
       this.quotas.update(prev => [...prev, ...result.items]);
       this.quotasTotal.set(result.totalCount);
@@ -229,17 +258,42 @@ export class PayeeDetailComponent implements OnInit {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  trendChartPoints(trend: EarningsTrendPoint[]): LineChartPoint[] {
-    return trend.map(p => ({ label: p.monthLabel, value: p.amount, currency: p.currency }));
+  trendBarPoints(trend: SalesTrendPoint[]): BarChartPoint[] {
+    if (!trend.length) return [];
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1; // 1-based
+
+    // V1: show only the dominant currency (highest total across all months).
+    // This avoids mixing EUR + PLN amounts in the same bar axis.
+    const totalByCurrency = new Map<string, number>();
+    for (const p of trend) {
+      totalByCurrency.set(p.currency, (totalByCurrency.get(p.currency) ?? 0) + p.amount);
+    }
+    const dominantCurrency = [...totalByCurrency.entries()]
+      .reduce((a, b) => a[1] >= b[1] ? a : b)[0];
+
+    const byMonth = new Map<string, SalesTrendPoint>();
+    for (const p of trend) {
+      if (p.currency === dominantCurrency) byMonth.set(`${p.year}-${p.month}`, p);
+    }
+
+    return [...byMonth.values()]
+      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+      .map(p => ({
+        label: p.monthLabel,
+        value: p.amount,
+        currency: p.currency,
+        isCurrent: p.year === currentYear && p.month === currentMonth,
+      }));
   }
 
   /** Compute pacing fraction for a currently-active quota period. */
   computePacing(periodStart: string, periodEnd: string): number | null {
     const start = new Date(periodStart).getTime();
     const end = new Date(periodEnd).getTime();
-    const now = Date.now();
-    if (now < start || now > end) return null;
-    return Math.min(1, Math.max(0, (now - start) / (end - start)));
+    if (this._nowMs < start || this._nowMs > end) return null;
+    return Math.min(1, Math.max(0, (this._nowMs - start) / (end - start)));
   }
 
   gaugeColorClass(value: number): string {
@@ -321,6 +375,28 @@ export class PayeeDetailComponent implements OnInit {
       case 'Draft': return 'neutral';
       default: return 'warning';
     }
+  }
+
+  // Temporal chip: derives state from entity period vs today, not DB status.
+  // If isCurrencyValid is false, returns the warning/invalid state regardless.
+  temporalVariant(start: string, end: string, isCurrencyValid = true): BadgeVariant {
+    if (!isCurrencyValid) return 'warning';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (new Date(end) < today)   return 'neutral';  // Closed
+    if (new Date(start) > today) return 'info';     // Upcoming
+    return 'success';                               // In Progress
+  }
+
+  temporalKey(start: string, end: string, isCurrencyValid = true): string {
+    if (!isCurrencyValid) return 'DASHBOARD.CHIP_INVALID';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (new Date(end) < today)   return 'DASHBOARD.CHIP_CLOSED';
+    if (new Date(start) > today) return 'DASHBOARD.CHIP_UPCOMING';
+    return 'DASHBOARD.CHIP_IN_PROGRESS';
+  }
+
+  currencyMismatchTooltip(quotaCurrency: string, planCurrency: string): string {
+    return `Currency mismatch: quota is ${quotaCurrency} but plan is ${planCurrency}. Close and recreate this quota to fix.`;
   }
 
   hasTerminateError(field: string, error: string): boolean {
