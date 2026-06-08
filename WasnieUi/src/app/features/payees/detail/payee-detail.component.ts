@@ -83,6 +83,9 @@ export class PayeeDetailComponent implements OnInit {
   readonly QuotaMeasurementType = QuotaMeasurementType;
 
   readonly payeeId = this.route.snapshot.paramMap.get('payeeId')!;
+  // Stable timestamp for the component's lifetime — prevents NG0100 from
+  // computePacing() returning slightly-different floats on each CD pass.
+  private readonly _nowMs = Date.now();
   readonly activeTab = signal<Tab>('overview');
   readonly period = signal<PeriodKey>('this-month');
 
@@ -289,9 +292,8 @@ export class PayeeDetailComponent implements OnInit {
   computePacing(periodStart: string, periodEnd: string): number | null {
     const start = new Date(periodStart).getTime();
     const end = new Date(periodEnd).getTime();
-    const now = Date.now();
-    if (now < start || now > end) return null;
-    return Math.min(1, Math.max(0, (now - start) / (end - start)));
+    if (this._nowMs < start || this._nowMs > end) return null;
+    return Math.min(1, Math.max(0, (this._nowMs - start) / (end - start)));
   }
 
   gaugeColorClass(value: number): string {
