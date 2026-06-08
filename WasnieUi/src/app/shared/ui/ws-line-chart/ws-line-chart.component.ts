@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, HostListener, input, signal, ViewChild } from '@angular/core';
+import { Component, computed, ElementRef, input, signal, ViewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 
 export interface LineChartPoint {
@@ -30,6 +30,7 @@ const SERIES_COLORS = [
 export class WsLineChartComponent {
   readonly points = input<LineChartPoint[]>([]);
   readonly emptyLabel = input('');
+  readonly highlightLabels = input<string[]>([]);
 
   // Chart drawing constants
   readonly VB_W = 560;
@@ -84,6 +85,22 @@ export class WsLineChartComponent {
       value: max * f,
       y: this.yToSvg(max * f),
     }));
+  });
+
+  readonly highlightBand = computed(() => {
+    const hlLabels = this.highlightLabels();
+    if (!hlLabels.length) return null;
+    const allLbls = this.allLabels();
+    const total = allLbls.length;
+    if (!total) return null;
+    const indices = hlLabels.map(l => allLbls.indexOf(l)).filter(i => i >= 0);
+    if (!indices.length) return null;
+    const first = Math.min(...indices);
+    const last = Math.max(...indices);
+    const halfCol = total > 1 ? this.chartW() / (2 * (total - 1)) : this.chartW() / 2;
+    const x = this.xToSvg(first, total) - halfCol;
+    const width = this.xToSvg(last, total) + halfCol - x;
+    return { x: Math.max(this.ML, x), width, y: this.MT, height: this.chartH() };
   });
 
   xToSvg(index: number, total: number): number {

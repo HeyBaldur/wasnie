@@ -13,9 +13,10 @@ const mockTransaction: Transaction = {
   amount: 500,
   currency: 'USD',
   transactionDate: '2024-01-15',
-    ingestedAt: '2024-01-15T10:00:00Z',
+  ingestedAt: '2024-01-15T10:00:00Z',
   source: TransactionSource.Manual,
   status: TransactionStatus.Pending,
+  quantity: 1,
 };
 
 const mockPagedResult: PagedResult<Transaction> = {
@@ -82,6 +83,7 @@ describe('TransactionsStore', () => {
       amount: 500,
       currency: 'USD',
       transactionDate: '2024-01-15',
+      quantity: 1,
     });
 
     expect(apiSpy.create).toHaveBeenCalledTimes(1);

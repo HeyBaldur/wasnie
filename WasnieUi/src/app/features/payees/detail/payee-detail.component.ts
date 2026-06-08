@@ -31,11 +31,15 @@ import {
   WsTableEmptyComponent,
   WsGaugeComponent,
   WsLineChartComponent,
+  WsSegmentedControlComponent,
+  WsTooltipDirective,
   type LineChartPoint,
+  type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
 
 type Tab = 'overview' | 'profile' | 'activity';
+type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 
 @Component({
   selector: 'app-payee-detail',
@@ -61,6 +65,8 @@ type Tab = 'overview' | 'profile' | 'activity';
     WsTableEmptyComponent,
     WsGaugeComponent,
     WsLineChartComponent,
+    WsSegmentedControlComponent,
+    WsTooltipDirective,
   ],
   templateUrl: './payee-detail.component.html',
   styleUrl: './payee-detail.component.scss',
@@ -78,7 +84,46 @@ export class PayeeDetailComponent implements OnInit {
 
   readonly payeeId = this.route.snapshot.paramMap.get('payeeId')!;
   readonly activeTab = signal<Tab>('overview');
-  readonly period = signal<'active' | 'all'>('active');
+  readonly period = signal<PeriodKey>('this-month');
+
+  readonly periodOptions: SegOption[] = [
+    { value: 'this-month', label: 'DASHBOARD.PERIOD_THIS_MONTH' },
+    { value: 'last-month', label: 'DASHBOARD.PERIOD_LAST_MONTH' },
+    { value: 'ytd',        label: 'DASHBOARD.PERIOD_YTD' },
+    { value: 'all-time',   label: 'DASHBOARD.PERIOD_ALL_TIME' },
+  ];
+
+  readonly periodCounterLabel = computed(() => {
+    switch (this.period()) {
+      case 'this-month': return 'DASHBOARD.COUNTER_THIS_MONTH';
+      case 'last-month': return 'DASHBOARD.COUNTER_LAST_MONTH';
+      case 'ytd':        return 'DASHBOARD.COUNTER_YTD';
+      case 'all-time':   return 'DASHBOARD.COUNTER_ALL_TIME';
+    }
+  });
+
+  readonly invalidQuotaCount = computed(() =>
+    (this.dashboard()?.attainmentItems ?? []).filter(a => !a.isCurrencyValid).length
+  );
+
+  readonly chartHighlightLabels = computed((): string[] => {
+    const period = this.period();
+    const today = new Date();
+    const monthAbbr = (d: Date) => d.toLocaleString('en-US', { month: 'short' });
+    if (period === 'this-month') return [monthAbbr(today)];
+    if (period === 'last-month') {
+      const last = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      return [monthAbbr(last)];
+    }
+    if (period === 'ytd') {
+      const labels: string[] = [];
+      for (let m = 0; m <= today.getMonth(); m++) {
+        labels.push(monthAbbr(new Date(today.getFullYear(), m, 1)));
+      }
+      return labels;
+    }
+    return [];
+  });
 
   readonly editModalOpen = signal(false);
   readonly terminateModalOpen = signal(false);
@@ -118,9 +163,9 @@ export class PayeeDetailComponent implements OnInit {
   ngOnInit(): void {
     this.store.loadPayee(this.payeeId);
 
-    // Read period from URL before loading so the first fetch uses the correct filter
-    const p = this.route.snapshot.queryParamMap.get('period');
-    if (p === 'all') this.period.set('all');
+    // Read period from URL; default is this-month
+    const p = this.route.snapshot.queryParamMap.get('period') as PeriodKey | null;
+    if (p === 'last-month' || p === 'ytd' || p === 'all-time') this.period.set(p);
 
     this.loadOverview();
   }
@@ -133,8 +178,8 @@ export class PayeeDetailComponent implements OnInit {
 
   // ── Period filter ─────────────────────────────────────────────────────────
 
-  setPeriod(p: 'active' | 'all'): void {
-    this.period.set(p);
+  setPeriod(p: string): void {
+    this.period.set(p as PeriodKey);
     this.router.navigate([], { queryParams: { period: p }, queryParamsHandling: 'merge', replaceUrl: true });
     this.resetAndLoad();
   }
@@ -181,7 +226,7 @@ export class PayeeDetailComponent implements OnInit {
           sortBy: 'effectivestart',
           sortOrder: 'desc',
           period: this.period(),
-        } as any)
+        })
       );
       this.assignments.update(prev => [...prev, ...result.items]);
       this.assignmentsTotal.set(result.totalCount);
@@ -202,7 +247,7 @@ export class PayeeDetailComponent implements OnInit {
           sortBy: 'periodstart',
           sortOrder: 'desc',
           period: this.period(),
-        } as any)
+        })
       );
       this.quotas.update(prev => [...prev, ...result.items]);
       this.quotasTotal.set(result.totalCount);
@@ -321,6 +366,28 @@ export class PayeeDetailComponent implements OnInit {
       case 'Draft': return 'neutral';
       default: return 'warning';
     }
+  }
+
+  // Temporal chip: derives state from entity period vs today, not DB status.
+  // If isCurrencyValid is false, returns the warning/invalid state regardless.
+  temporalVariant(start: string, end: string, isCurrencyValid = true): BadgeVariant {
+    if (!isCurrencyValid) return 'warning';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (new Date(end) < today)   return 'neutral';  // Closed
+    if (new Date(start) > today) return 'info';     // Upcoming
+    return 'success';                               // In Progress
+  }
+
+  temporalKey(start: string, end: string, isCurrencyValid = true): string {
+    if (!isCurrencyValid) return 'DASHBOARD.CHIP_INVALID';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (new Date(end) < today)   return 'DASHBOARD.CHIP_CLOSED';
+    if (new Date(start) > today) return 'DASHBOARD.CHIP_UPCOMING';
+    return 'DASHBOARD.CHIP_IN_PROGRESS';
+  }
+
+  currencyMismatchTooltip(quotaCurrency: string, planCurrency: string): string {
+    return `Currency mismatch: quota is ${quotaCurrency} but plan is ${planCurrency}. Close and recreate this quota to fix.`;
   }
 
   hasTerminateError(field: string, error: string): boolean {

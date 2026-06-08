@@ -23,6 +23,11 @@
     overflow: visible;
   }
 
+  &__highlight {
+    fill: var(--color-brand-subtle);
+    opacity: 0.45;
+  }
+
   &__grid {
     stroke: var(--color-border-subtle);
     stroke-width: 1;

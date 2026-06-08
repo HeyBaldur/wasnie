@@ -17,4 +17,6 @@ public sealed record QuotaSummaryDto(
     DateOnly PeriodEnd,
     string Status,
     string? Notes,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    bool IsCurrencyValid = true,
+    string PlanCurrency = "");

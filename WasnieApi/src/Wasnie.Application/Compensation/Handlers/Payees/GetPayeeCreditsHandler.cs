@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -24,16 +25,22 @@ public sealed class GetPayeeCreditsHandler(
         await authorizationService.RequireAsync(Permission.CreditsRead, cancellationToken);
 
         var payeeId = request.PayeeId;
-        var isActive = !string.Equals(request.Period, "all", StringComparison.OrdinalIgnoreCase);
+        var today = DateOnly.FromDateTime(clock.UtcNow);
+        var (from, to) = PeriodHelper.ComputeDateRange(request.Period, today);
 
         var query = db.Credits
             .Where(c => c.PayeeId == payeeId && c.SupersededAt == null);
 
-        // Period filter: "active" = allocated within last 90 days
-        if (isActive)
+        // Period filter: scope credits by the underlying transaction's TransactionDate.
+        // This is consistent with how quotas and assignments are scoped.
+        if (from.HasValue || to.HasValue)
         {
-            var cutoff = clock.UtcNowOffset.AddDays(-90);
-            query = query.Where(c => c.AllocatedAt >= cutoff);
+            var validTxIds = db.CompensationTransactions
+                .Where(t =>
+                    (!from.HasValue || t.TransactionDate >= from.Value) &&
+                    (!to.HasValue || t.TransactionDate <= to.Value))
+                .Select(t => t.Id);
+            query = query.Where(c => validTxIds.Contains(c.TransactionId));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);

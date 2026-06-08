@@ -435,6 +435,30 @@ If you're about to write code that matches any pattern here, STOP. Either you're
 
 ---
 
+## Degenerate-zero visibility violations
+
+- ❌ **Displaying a calculated financial value that can be zero due to bad data without surfacing the bad-data condition** (WI-CALC-A.3-FIX-3, 2026-06-08). When a field returns zero (or null, or a default) because of a data-integrity problem rather than genuine absence of activity, displaying the raw zero with no explanation is a trust-destroying UX. The user sees "€0 / 0%" and cannot determine whether the payee genuinely earned nothing or whether the number is meaningless.
+
+  **Rule:** When a calculated field can return a degenerate value due to bad data rather than absence of activity, the API MUST expose a validity flag (`IsCurrencyValid`, `IsQuotaActive`, etc.) alongside the value. The UI MUST render a visible warning when the flag is false — a chip, banner, or tooltip that explains what is wrong and how to fix it. Never display 0% without context when the zero is caused by a configuration error.
+
+  **Canonical example:** `QuotaAttainmentDto.IsCurrencyValid` — when a quota's currency does not match its plan's currency, `CreditedAmount` will always be filtered to 0. The dashboard shows `IsCurrencyValid: false` and renders a `⚠ Invalid (currency mismatch)` chip with tooltip: "This quota's currency (EUR) does not match its plan's currency (PLN). Close and recreate to fix."
+
+  **Future WI:** A `/admin/data-quality` page listing all invalid quotas tenant-wide is planned but out of scope for V1.
+
+---
+
+## Time-scoped UI control consistency violations
+
+- ❌ **A period selector, date filter, or any time-scoped UI control that applies to only some cards in the same view** (WI-PROD-PAYEE-DASHBOARD-V3, 2026-06-08; strengthened in V3-FIX-1, 2026-06-08). When a control filters data by time, every data section shown in the same view MUST respect that filter consistently.
+
+  **Rule:** Time-scoped UI controls MUST apply consistently to ALL data shown in the same view. **The intersection rule (`Period.Start <= rangeTo AND Period.End >= rangeFrom`) is the canonical definition.** Every card must use it. NEVER apply additional silent filters like `Status = Active` or `today within period` on top of the range filter unless the same filter applies to ALL cards in the view. Define the `[From, To]` date range once on the backend using a shared helper (`PeriodHelper.ComputeDateRange`) and pass it to every section.
+
+  **Canonical reference:** `PeriodHelper.ComputeDateRange` in `Wasnie.Application/Common/Helpers/`. All four dashboard card endpoints use it. Quotas and assignments filter by period intersection (`Period.Start <= rangeTo && Period.End >= rangeFrom`); Credits filter by `TransactionDate in [rangeFrom, rangeTo]`.
+
+- ❌ **Passing filter parameters to a paginated API service via top-level object properties not declared in `PaginationParams`** (WI-PROD-PAYEE-DASHBOARD-V3-FIX-1, 2026-06-08). `buildHttpParams` only serializes the fields declared in the `PaginationParams` interface (`page`, `pageSize`, `sortBy`, `sortOrder`, `search`, `period`, `filters`). Any extra property passed via `as any` is silently dropped and never reaches the backend. **Rule:** Every query parameter a paginated endpoint needs MUST be declared in `PaginationParams` and handled in `buildHttpParams`. Never use `as any` to bypass the type system for API call params.
+
+---
+
 ## Claude Code autonomy violations
 
 - ❌ Claude Code performing ANY git operation (file 13, R13.2)

@@ -10,6 +10,93 @@
 
 ---
 
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3-FIX-1: Quotas + Assignments cards period filtering inconsistency
+
+**Root cause (found in Step 0):** `buildHttpParams` (the shared HTTP-params utility) only serializes the typed fields of `PaginationParams` (`page`, `pageSize`, `sortBy`, `sortOrder`, `search`, `filters`). The payee-detail component passed `period: this.period()` as an extra property using `as any` to suppress the TypeScript error. `buildHttpParams` silently dropped it — the backend never received the `?period=` param. `PeriodHelper.ComputeDateRange(null, today)` then defaulted to `"this-month"` (the hard-coded default for null), causing all past-period quotas and assignments to be excluded on "Year to Date", "Last Month", and "All Time" selections.
+
+The Dashboard card (Attainment Gauges) and Credits card were unaffected because they call the API directly with raw `HttpParams` objects, bypassing `buildHttpParams`.
+
+**Fix:**
+1. `pagination.models.ts` — added `period?: string` to `PaginationParams` interface.
+2. `build-http-params.ts` — added `if (params.period) p = p.set('period', params.period);`.
+3. `payee-detail.component.ts` — removed both `as any` casts from `loadMoreQuotas` and `loadMoreAssignments` (now type-safe).
+4. Pre-existing test fixture fixes: added `quantity: 1` to 5 Transaction mock objects across 3 spec files that were already broken since WI-PROD-QUANTITY-FIELD added the required field.
+
+**Tests:**
+- `build-http-params.spec.ts` (7 new unit tests): period included/omitted, all 4 period values, filters coexist, empty params, regression for the original bug.
+- `PayeeDashboardEndpointsTests` (+3): `GetPayeeQuotas_WithPeriodYtd_IncludesPastAndCurrentPeriodQuotas`, `GetPayeeQuotas_WithPeriodThisMonth_ExcludesPastPeriodQuotas`, `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments`.
+
+**Forbidden-patterns rule:** Updated "Time-scoped UI control consistency violations" with canonical intersection rule. Added new entry for `as any` bypass of PaginationParams.
+
+**Test count: 350 backend unit + 455 integration + 2 skip = 807. 7 new frontend buildHttpParams specs (166 total, 10 pre-existing failures in TransactionsListComponent — pre-existing `f.currencies not iterable`). Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-CALC-A.3-FIX-3: Detect and warn on Quota-Plan currency mismatch
+
+**Context:** Pre-FIX-1 bad data. Agnieszka has a EUR quota on a PLN plan. `CreditedAmount` is always filtered to 0 for that quota (correct math). But the user sees "€0 / 0%" with no explanation — they could reasonably wonder why the Recent Credits card shows 213 EUR credits while the gauge shows nothing. This is a degenerate-zero visibility problem.
+
+**Backend changes (2 DTOs + 3 handlers):**
+- `QuotaAttainmentDto`: added `IsCurrencyValid: bool, PlanCurrency: string` (required params).
+- `QuotaSummaryDto`: added `IsCurrencyValid: bool = true, PlanCurrency: string = ""` (default params — all other callers compile unchanged).
+- `GetPayeeDashboardHandler`: plan query extended from `{ p.Id, p.Name }` to `{ p.Id, p.Name, p.Currency }`. `IsCurrencyValid` computed as `OrdinalIgnoreCase.Equals(quota.Currency, plan.Currency)`.
+- `GetPayeeAttainmentHandler`: same plan-query extension + flag computation.
+- `ListQuotasByPayeeHandler`: same — now computes flag for the compact Quotas list card too.
+
+**Frontend changes:**
+- `quota.model.ts`: `isCurrencyValid: boolean` + `planCurrency: string` added to both `QuotaAttainment` and `QuotaSummary` interfaces.
+- `payee-detail.component.ts`: `WsTooltipDirective` imported; `invalidQuotaCount` computed signal; `temporalVariant` / `temporalKey` accept optional `isCurrencyValid` param (false → returns `warning` / `DASHBOARD.CHIP_INVALID`); `currencyMismatchTooltip(quotaCurrency, planCurrency)` helper.
+- Attainment card: invalid gauge row gets amber left-border + `bento-gauge-wrap--faded`; warning badge with tooltip below plan name; mini bar forced amber.
+- Quotas list card: `--invalid` left-border + `isCurrencyValid` passed to `temporalVariant`/`temporalKey`.
+- Banner above bento grid when `invalidQuotaCount() > 0`.
+- SCSS: `.bento-invalid-banner`, `.bento-gauge-row--invalid`, `.bento-gauge-wrap--faded`, `.bento-list-row--invalid`.
+- i18n: `CHIP_INVALID` + `INVALID_QUOTA_BANNER` added in EN/ES/PL.
+
+**Click-through:** warning chip row navigates to `/quotas/:quotaId` (detail page). No inline edit for Active quotas — correct path is Close + delete + recreate. Future `/admin/data-quality` noted in TODO.
+
+**Tests (+8 unit, +2 integration):**
+- `QuotaCurrencyValidityTests` (8 unit): theory covering matched, mismatched, case-insensitive, empty-plan-currency edge cases; explicit regression guard for EUR-on-PLN scenario.
+- `PayeeDashboardEndpointsTests`: `IsCurrencyValid` field on `AttainmentItemResponse`; 2 new tests — `QuotaCurrencyMatchesPlan_IsCurrencyValidIsTrue` + `QuotaCurrencyMismatch_IsCurrencyValidIsTrue` (for PLN-PLN).
+
+**Forbidden-pattern rule added:** "Degenerate-zero visibility violations — when a calculated field returns 0 due to bad data rather than absence of activity, the API MUST expose a validity flag and the UI MUST render a visible warning."
+
+**Test count: 350 unit (342+8) + 455 integration + 2 skip = 807. Both builds clean.**
+
+---
+
+## 2026-06-08 — WI-PROD-PAYEE-DASHBOARD-V3: Period selector + consistent filtering + temporal chips
+
+**Motivation:** V2 smoke revealed two problems: (1) the Active/All toggle was inconsistent — Quotas and Assignments read it, Credits interpreted "active" as last-90-days instead of the same time window, and the Earnings Trend ignored it entirely; (2) "Active" is semantically ambiguous. CaptivateIQ/Xactly/Spiff use period selectors as the industry standard.
+
+**Changes:**
+
+**Backend:**
+- New `PeriodHelper.ComputeDateRange(period, today)` in `Wasnie.Application/Common/Helpers/`. Maps `this-month|last-month|ytd|all-time` (+ legacy `active`→this-month, `all`→all-time) to `(DateOnly? From, DateOnly? To)`. Single source of truth.
+- `GetPayeeDashboardHandler`: replaced `isActive/cutoff` with `PeriodHelper`. Quota filter now uses period intersection (`Period.End >= from && Period.Start <= to`). Attainment computation uses each quota's own period (not the selector range) — consistent with the WI spec. Credits for attainment loaded without period cutoff (accuracy first).
+- `ListQuotasByPayeeHandler`: replaced `Period.End >= today` with intersection filter using `PeriodHelper`.
+- `ListAssignmentsByPayeeHandler`: same intersection filter pattern.
+- `GetPayeeCreditsHandler`: replaced `AllocatedAt >= cutoff` with `TransactionDate` range filter via subquery into `CompensationTransactions`. Credits now scope by when the transaction happened, not when the credit was allocated.
+- `PayeesController`: default period changed from `"active"` to `"this-month"`.
+
+**Frontend:**
+- `WsLineChart`: new `highlightLabels: string[]` input + `highlightBand` computed. Renders a translucent `--color-brand-subtle` rect over the selected period columns.
+- `PayeeDetailComponent`: `period` signal changed from `'active'|'all'` to `'this-month'|'last-month'|'ytd'|'all-time'`. Active/All toggle replaced with `WsSegmentedControl` (4 options). URL sync updated. Added `periodCounterLabel`, `chartHighlightLabels`, `temporalVariant`, `temporalKey` helpers.
+- Card titles: contextual counter badges (`· N in this month`).
+- Quotas card: temporal chips (In Progress=success, Upcoming=info, Closed=neutral) replace old DB status chips.
+- Assignments card: same temporal chips.
+- Empty states: period-aware messages.
+- i18n: new DASHBOARD keys in EN/ES/PL (`PERIOD_*`, `COUNTER_*`, `CHIP_*`, `*_EMPTY`).
+
+**Tests:**
+- `PeriodHelperTests` (9 unit tests): this-month, last-month, ytd, all-time, legacy aliases (active/all), null default, unknown string, edge case Jan 1 → Dec of prior year.
+- `PayeeDashboardEndpointsTests` (4 new + 1 updated): renamed `WithPeriodAll` → `WithPeriodAllTime`, added `DefaultPeriodIsThisMonth_QuotaSpanningYearStillAppears`, `WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded`, `WithPeriodYtd_IncludesQuotaForThisYear`.
+
+**Forbidden-patterns rule added:** "Time-scoped UI controls MUST apply consistently to ALL data shown in the same view."
+
+**Test count: 342 unit (333 prior + 9 PeriodHelper) + 455 integration + 2 skipped = 799. Both builds clean.**
+
+---
+
 ## 2026-06-04 — WI-CALC-A.3-FIX-2: Critical quota attainment inflation bug
 
 **Root cause:** `QuotaAttainmentService`, `GetPayeeAttainmentHandler`, and `GetPayeeDashboardHandler` all summed `Credit.OriginalAmount` (raw transaction revenue) for Revenue quota attainment. A Revenue quota target is a commission target. Using revenue inflates attainment by `1/rate` — for a 5% plan this is exactly 20×. The "20× January credits" coincidence in the bug report was a red herring; the ratio is `1/commission_rate = 1/0.05 = 20`, not a Cartesian product.

@@ -90,7 +90,7 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("{payeeId:guid}/dashboard")]
-    public async Task<IActionResult> GetDashboard(Guid payeeId, [FromQuery] string period = "active", CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetDashboard(Guid payeeId, [FromQuery] string period = "this-month", CancellationToken cancellationToken = default)
     {
         var result = await mediator.Send(new GetPayeeDashboardQuery(payeeId, period), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });

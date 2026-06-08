@@ -24,6 +24,8 @@ export interface QuotaSummary {
   status: QuotaStatus;
   notes: string | null;
   createdAt: string;
+  isCurrencyValid: boolean;
+  planCurrency: string;
 }
 
 export interface CreateQuotaRequest {
@@ -60,6 +62,8 @@ export interface QuotaAttainment {
   periodStart: string;
   periodEnd: string;
   status: QuotaStatus;
+  isCurrencyValid: boolean;
+  planCurrency: string;
 }
 
 export interface QuotaListParams {

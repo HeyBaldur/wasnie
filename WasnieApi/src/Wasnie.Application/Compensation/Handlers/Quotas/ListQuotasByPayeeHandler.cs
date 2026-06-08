@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -33,10 +34,13 @@ public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db, IAuthoriz
             Enum.TryParse<QuotaStatus>(p.Status, ignoreCase: true, out var status))
             filtered = filtered.Where(q => q.Status == status);
 
-        // Apply period filter: "active" = PeriodEnd >= today (current or future quotas)
+        // Apply period intersection filter — quota period [Start, End] must intersect [from, to]
         var today = DateOnly.FromDateTime(clock.UtcNow);
-        if (string.Equals(p.Period, "active", StringComparison.OrdinalIgnoreCase))
-            filtered = filtered.Where(q => q.Period.End >= today);
+        var (from, to) = PeriodHelper.ComputeDateRange(p.Period, today);
+        if (from.HasValue || to.HasValue)
+            filtered = filtered.Where(q =>
+                (!from.HasValue || q.Period.End >= from.Value) &&
+                (!to.HasValue || q.Period.Start <= to.Value));
 
         var filteredList = filtered.ToList();
         var totalCount = filteredList.Count;
@@ -45,26 +49,32 @@ public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db, IAuthoriz
             .Take(p.PageSize)
             .ToList();
 
-        // Load plan names for the page
+        // Load plan names + currencies for the page — both needed for validity check
         var planIds = pageItems.Select(q => q.PlanId).Distinct().ToList();
-        var planNameById = planIds.Count > 0
+        var planInfoById = planIds.Count > 0
             ? await db.CompensationPlans
                 .Where(pl => planIds.Contains(pl.Id))
-                .Select(pl => new { pl.Id, pl.Name })
-                .ToDictionaryAsync(pl => pl.Id, pl => pl.Name, cancellationToken)
-            : new Dictionary<Guid, string>();
+                .Select(pl => new { pl.Id, pl.Name, pl.Currency })
+                .ToDictionaryAsync(pl => pl.Id, pl => (pl.Name, pl.Currency), cancellationToken)
+            : new Dictionary<Guid, (string Name, string Currency)>();
 
         var payee = await db.Payees.FirstOrDefaultAsync(x => x.Id == request.PayeeId, cancellationToken);
 
-        var dtos = pageItems.Select(q => new QuotaSummaryDto(
-            q.Id, q.TenantId, q.PayeeId,
-            payee?.FullName ?? string.Empty,
-            payee?.EmployeeCode ?? string.Empty,
-            q.PlanId,
-            planNameById.GetValueOrDefault(q.PlanId, string.Empty),
-            q.MeasurementType, q.Amount.Amount, q.Amount.Currency,
-            q.Period.Start, q.Period.End, q.Status.ToString(), q.Notes, q.CreatedAt))
-            .ToList();
+        var dtos = pageItems.Select(q =>
+        {
+            var planInfo = planInfoById.GetValueOrDefault(q.PlanId, (Name: string.Empty, Currency: string.Empty));
+            var isCurrencyValid = string.Equals(q.Amount.Currency, planInfo.Currency, StringComparison.OrdinalIgnoreCase);
+            return new QuotaSummaryDto(
+                q.Id, q.TenantId, q.PayeeId,
+                payee?.FullName ?? string.Empty,
+                payee?.EmployeeCode ?? string.Empty,
+                q.PlanId,
+                planInfo.Name,
+                q.MeasurementType, q.Amount.Amount, q.Amount.Currency,
+                q.Period.Start, q.Period.End, q.Status.ToString(), q.Notes, q.CreatedAt,
+                IsCurrencyValid: isCurrencyValid,
+                PlanCurrency: planInfo.Currency);
+        }).ToList();
 
         return Result<PagedResult<QuotaSummaryDto>>.Success(new PagedResult<QuotaSummaryDto>
         {

@@ -2,6 +2,7 @@ using System.Globalization;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payees;
@@ -29,7 +30,7 @@ public sealed class GetPayeeDashboardHandler(
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
         var payeeId = request.PayeeId;
-        var isActive = !string.Equals(request.Period, "all", StringComparison.OrdinalIgnoreCase);
+        var (rangeFrom, rangeTo) = PeriodHelper.ComputeDateRange(request.Period, today);
 
         // ── Load quotas (period filter in-memory — owned DateRange) ───────────
         var allQuotas = await db.Quotas
@@ -37,12 +38,14 @@ public sealed class GetPayeeDashboardHandler(
             .OrderByDescending(q => q.Period.Start)
             .ToListAsync(cancellationToken);
 
-        var quotas = isActive
-            ? allQuotas.Where(q => q.Period.End >= today).ToList()
-            : allQuotas;
+        // Intersection filter: quota period [Start, End] intersects selected range [rangeFrom, rangeTo]
+        var quotas = allQuotas.Where(q =>
+            (!rangeFrom.HasValue || q.Period.End >= rangeFrom.Value) &&
+            (!rangeTo.HasValue || q.Period.Start <= rangeTo.Value))
+            .ToList();
 
         // ── Load all non-superseded credits for this payee ───────────────────
-        var cutoff = isActive ? today.AddDays(-90) : (DateOnly?)null;
+        // No period filter here — attainment is computed against each quota's own period boundaries
         var allCredits = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
@@ -56,17 +59,14 @@ public sealed class GetPayeeDashboardHandler(
             }
         ).ToListAsync(cancellationToken);
 
-        if (cutoff.HasValue)
-            allCredits = allCredits.Where(r => r.TransactionDate >= cutoff.Value).ToList();
-
-        // ── Load plan names for quotas ────────────────────────────────────────
+        // ── Load plan names + currencies for quotas ───────────────────────────
         var planIds = quotas.Select(q => q.PlanId).Distinct().ToList();
-        var planNameById = planIds.Count > 0
+        var planInfoById = planIds.Count > 0
             ? await db.CompensationPlans
                 .Where(p => planIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Name })
-                .ToDictionaryAsync(p => p.Id, p => p.Name, cancellationToken)
-            : new Dictionary<Guid, string>();
+                .Select(p => new { p.Id, p.Name, p.Currency })
+                .ToDictionaryAsync(p => p.Id, p => (p.Name, p.Currency), cancellationToken)
+            : new Dictionary<Guid, (string Name, string Currency)>();
 
         // ── Card 1: Attainment gauges ─────────────────────────────────────────
         var attainmentItems = new List<QuotaAttainmentDto>(quotas.Count());
@@ -75,6 +75,10 @@ public sealed class GetPayeeDashboardHandler(
             var start = quota.Period.Start;
             var end = quota.Period.End;
             var pId = quota.PlanId;
+
+            var planInfo = planInfoById.GetValueOrDefault(quota.PlanId, (Name: string.Empty, Currency: string.Empty));
+            var planCurrency = planInfo.Currency;
+            var isCurrencyValid = string.Equals(quota.Amount.Currency, planCurrency, StringComparison.OrdinalIgnoreCase);
 
             decimal achieved;
             if (quota.MeasurementType == QuotaMeasurementType.Units)
@@ -96,7 +100,7 @@ public sealed class GetPayeeDashboardHandler(
             attainmentItems.Add(new QuotaAttainmentDto(
                 QuotaId: quota.Id,
                 PlanId: quota.PlanId,
-                PlanName: planNameById.GetValueOrDefault(quota.PlanId, string.Empty),
+                PlanName: planInfo.Name,
                 MeasurementType: quota.MeasurementType,
                 TargetAmount: quota.Amount.Amount,
                 Currency: quota.Amount.Currency,
@@ -105,7 +109,9 @@ public sealed class GetPayeeDashboardHandler(
                 AttainmentPercent: attainment.ToPercentString(),
                 PeriodStart: quota.Period.Start,
                 PeriodEnd: quota.Period.End,
-                Status: quota.Status.ToString()));
+                Status: quota.Status.ToString(),
+                IsCurrencyValid: isCurrencyValid,
+                PlanCurrency: planCurrency));
         }
 
         // ── Card 2: Earnings trend (last 12 months, not affected by period filter) ─

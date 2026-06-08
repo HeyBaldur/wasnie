@@ -17,4 +17,6 @@ export interface PaginationParams {
   sortOrder?: 'asc' | 'desc';
   search?: string;
   filters?: Record<string, string>;
+  /** Dashboard period selector value — passed to backend PaginationQuery.Period. */
+  period?: string;
 }
