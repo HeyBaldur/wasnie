@@ -25,6 +25,11 @@ public sealed class GetPayoutByIdHandler(
         if (payout is null)
             return Result<PayoutDto>.Failure("Payout not found.");
 
+        var planName = await db.CompensationPlans
+            .Where(p => p.Id == payout.PlanId)
+            .Select(p => p.Name)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
         var lines = payout.Lines.Select(l => new PayoutLineDto(
             Id: l.Id,
             CreditId: l.CreditId,
@@ -42,6 +47,7 @@ public sealed class GetPayoutByIdHandler(
             PayeeName: payout.PayeeSnapshot.FullName,
             PayeeCode: payout.PayeeSnapshot.EmployeeCode,
             PlanId: payout.PlanId,
+            PlanName: planName,
             PeriodStart: payout.Period.Start,
             PeriodEnd: payout.Period.End,
             TotalCommissionAmount: payout.TotalCommission.Amount,

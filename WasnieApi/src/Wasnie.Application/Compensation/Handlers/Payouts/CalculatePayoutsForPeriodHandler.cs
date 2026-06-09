@@ -30,7 +30,7 @@ public sealed class CalculatePayoutsForPeriodHandler(
             return Result<CalculatePayoutsResult>.Failure("PeriodStart must be on or before PeriodEnd.");
 
         var tenantId = tenantContext.TenantId;
-        var actor = currentUser.UserId ?? "system";
+        var actor = currentUser.Email ?? currentUser.UserId ?? "system";
         var now = clock.UtcNowOffset;
 
         // Load all active assignments for the tenant (in-memory DateOnly filtering — see Decision #40).
@@ -210,6 +210,7 @@ public sealed class CalculatePayoutsForPeriodHandler(
                 assignment.PayeeSnapshot,
                 DateRange.Of(intersectionStart, intersectionEnd),
                 lineSpecs,
+                planCurrency,
                 actor,
                 guid.NewGuid(),
                 now,

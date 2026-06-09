@@ -24,6 +24,7 @@ public sealed record PayoutDto(
     string PayeeName,
     string PayeeCode,
     Guid PlanId,
+    string PlanName,
     DateOnly PeriodStart,
     DateOnly PeriodEnd,
     decimal TotalCommissionAmount,

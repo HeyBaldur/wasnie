@@ -32,19 +32,25 @@ public sealed class CompensationPayout : AggregateRoot
         PayeeReference payeeSnapshot,
         DateRange period,
         IReadOnlyList<PayoutLineSpec> lineSpecs,
+        string fallbackCurrency,
         string calculatedBy,
         Guid id,
         DateTimeOffset now,
         Guid eventId,
         Func<Guid> newId)
     {
+        if (string.IsNullOrWhiteSpace(fallbackCurrency))
+            throw new DomainException(
+                "A determinable currency is required to calculate a payout. " +
+                "Ensure the plan has a currency configured.");
+
         // Always create a new Money instance — never reuse a spec's reference, which may be
         // an owned-type instance already tracked by EF Core on a different aggregate.
         var totalCommission = lineSpecs.Count > 0
             ? Money.Of(
                 lineSpecs.Sum(l => l.CommissionAmount.Amount),
                 lineSpecs[0].CommissionAmount.Currency)
-            : Money.Zero("USD");
+            : Money.Zero(fallbackCurrency);
 
         var payout = new CompensationPayout
         {

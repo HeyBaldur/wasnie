@@ -111,6 +111,10 @@ export class PayoutDetailComponent implements OnInit {
     }
   }
 
+  openPlan(planId: string): void {
+    window.open(`/plans/${planId}`, '_blank');
+  }
+
   async onExportPdf(): Promise<void> {
     if (this.exporting()) return;
     this.exporting.set(true);

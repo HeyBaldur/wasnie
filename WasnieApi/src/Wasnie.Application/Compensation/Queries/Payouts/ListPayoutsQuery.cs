@@ -19,6 +19,7 @@ public sealed record PayoutFilterQuery
     public string? Currencies { get; init; }   // comma-separated 3-letter codes
     public DateOnly? PeriodFrom { get; init; } // payouts where PeriodStart >= this
     public DateOnly? PeriodTo { get; init; }   // payouts where PeriodEnd <= this
+    public bool ExcludeZero { get; init; } = false; // exclude payouts with TotalCommission = 0
 }
 
 public sealed record ListPayoutsQuery(PayoutFilterQuery Filter)

@@ -926,7 +926,13 @@
       "CURRENCY": "Moneda",
       "CURRENCY_PLACEHOLDER": "Añadir moneda…",
       "PERIOD_FROM": "Período desde",
-      "PERIOD_TO": "Período hasta"
+      "PERIOD_TO": "Período hasta",
+      "PERIOD_THIS_MONTH": "Este mes",
+      "PERIOD_LAST_MONTH": "Mes anterior",
+      "PERIOD_YTD": "Año hasta la fecha",
+      "PERIOD_ALL_TIME": "Todo el tiempo",
+      "HIDE_ZERO_ON": "Ocultando $0",
+      "HIDE_ZERO_OFF": "Mostrar todos"
     },
     "ACTION_APPROVE": "Aprobar",
     "ACTION_MARK_PAID": "Marcar como pagado",

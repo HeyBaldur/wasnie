@@ -926,7 +926,13 @@
       "CURRENCY": "Currency",
       "CURRENCY_PLACEHOLDER": "Add currency…",
       "PERIOD_FROM": "Period from",
-      "PERIOD_TO": "Period to"
+      "PERIOD_TO": "Period to",
+      "PERIOD_THIS_MONTH": "This month",
+      "PERIOD_LAST_MONTH": "Last month",
+      "PERIOD_YTD": "Year to date",
+      "PERIOD_ALL_TIME": "All time",
+      "HIDE_ZERO_ON": "Hiding $0",
+      "HIDE_ZERO_OFF": "Show all"
     },
     "ACTION_APPROVE": "Approve",
     "ACTION_MARK_PAID": "Mark as paid",

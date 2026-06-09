@@ -11,6 +11,7 @@ export interface PayoutFilter {
   currencies: string[];
   periodFrom: string | null;
   periodTo: string | null;
+  hideZero: boolean;
 }
 
 export const EMPTY_PAYOUT_FILTER: PayoutFilter = {
@@ -20,6 +21,7 @@ export const EMPTY_PAYOUT_FILTER: PayoutFilter = {
   currencies: [],
   periodFrom: null,
   periodTo: null,
+  hideZero: true,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -87,6 +89,7 @@ export class PayoutsStore {
     if (f.currencies.length > 0) p['currencies'] = f.currencies.join(',');
     if (f.periodFrom) p['periodFrom'] = f.periodFrom;
     if (f.periodTo) p['periodTo'] = f.periodTo;
+    if (f.hideZero) p['excludeZero'] = 'true';
     return p;
   }
 
@@ -164,6 +167,7 @@ export class PayoutsStore {
     if (f.currencies.length > 0) p['currencies'] = f.currencies.join(',');
     if (f.periodFrom) p['pFrom'] = f.periodFrom;
     if (f.periodTo) p['pTo'] = f.periodTo;
+    if (!f.hideZero) p['hz'] = '0';
     return p;
   }
 
@@ -176,6 +180,7 @@ export class PayoutsStore {
     if (params['currencies']) f.currencies = params['currencies'].split(',').filter(Boolean);
     if (params['pFrom']) f.periodFrom = params['pFrom'];
     if (params['pTo']) f.periodTo = params['pTo'];
+    if (params['hz'] === '0') f.hideZero = false;
     this.filter.set(f);
   }
 }

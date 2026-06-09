@@ -29,10 +29,13 @@ public sealed class CompensationPayoutTests
             CommissionAmount: Money.Of(commission, currency),
             AppliedModifiers: []);
 
-    private static CompensationPayout Calculate(IReadOnlyList<PayoutLineSpec>? specs = null) =>
+    private static CompensationPayout Calculate(
+        IReadOnlyList<PayoutLineSpec>? specs = null,
+        string fallbackCurrency = "EUR") =>
         CompensationPayout.Calculate(
             TenantId, PayeeId, PlanId, Snapshot, Period,
             specs ?? [MakeLineSpec(100m)],
+            fallbackCurrency,
             "test-user",
             Guid.NewGuid(), Now, Guid.NewGuid(),
             () => Guid.NewGuid());
@@ -78,10 +81,37 @@ public sealed class CompensationPayoutTests
     [Fact]
     public void Calculate_NoLines_TotalCommissionIsZero()
     {
-        var payout = Calculate([]);
+        var payout = Calculate([], fallbackCurrency: "EUR");
 
         payout.TotalCommission.Amount.Should().Be(0m);
+        payout.TotalCommission.Currency.Should().Be("EUR");
         payout.Lines.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Calculate_NoLines_UsesFallbackCurrencyNotUsd()
+    {
+        var payout = Calculate([], fallbackCurrency: "PLN");
+
+        payout.TotalCommission.Currency.Should().Be("PLN");
+        payout.TotalCommission.Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public void Calculate_EmptyFallbackCurrency_ThrowsDomainException()
+    {
+        var act = () => Calculate([], fallbackCurrency: "");
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("*currency*");
+    }
+
+    [Fact]
+    public void Calculate_WhitespaceFallbackCurrency_ThrowsDomainException()
+    {
+        var act = () => Calculate([], fallbackCurrency: "  ");
+
+        act.Should().Throw<DomainException>();
     }
 
     [Fact]

@@ -28,6 +28,31 @@
 
     <!-- Filter panel -->
     <ws-card variant="raised" padding="sm" class="payouts-list__filter">
+
+      <!-- Period selector + actions — always visible -->
+      <div class="payouts-list__toolbar">
+        <ws-segmented-control
+          [options]="periodOptions"
+          [(value)]="activePeriod"
+          (valueChange)="setPeriod($event)"
+        />
+        <div class="payouts-list__toolbar-actions">
+          @if (store.hasActiveFilters()) {
+            <ws-button variant="ghost" size="sm" (click)="clearFilters()">
+              {{ 'PAYOUTS.FILTER.CLEAR' | translate }}
+            </ws-button>
+          }
+          <ws-button
+            size="sm"
+            [variant]="hideZero() ? 'secondary' : 'ghost'"
+            (click)="toggleHideZero()"
+          >
+            <app-icon name="ban" [size]="13" />
+            {{ (hideZero() ? 'PAYOUTS.FILTER.HIDE_ZERO_ON' : 'PAYOUTS.FILTER.HIDE_ZERO_OFF') | translate }}
+          </ws-button>
+        </div>
+      </div>
+
       <div class="payouts-list__filter-header" (click)="filterOpen.set(!filterOpen())">
         <span class="payouts-list__filter-title">
           <app-icon name="filter" [size]="14" />
@@ -37,11 +62,6 @@
           <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
         }
         <span class="payouts-list__filter-spacer"></span>
-        @if (store.hasActiveFilters()) {
-          <ws-button variant="ghost" size="sm" (click)="$event.stopPropagation(); clearFilters()">
-            {{ 'PAYOUTS.FILTER.CLEAR' | translate }}
-          </ws-button>
-        }
         <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
       </div>
 
@@ -209,7 +229,7 @@
                   <ws-button
                     variant="ghost"
                     size="sm"
-                    [routerLink]="['/payouts', payout.id]"
+                    (click)="viewPayout(payout.id)"
                   >
                     {{ 'PAYOUTS.ACTION_VIEW' | translate }}
                   </ws-button>

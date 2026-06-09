@@ -926,7 +926,13 @@
       "CURRENCY": "Waluta",
       "CURRENCY_PLACEHOLDER": "Dodaj walutę…",
       "PERIOD_FROM": "Okres od",
-      "PERIOD_TO": "Okres do"
+      "PERIOD_TO": "Okres do",
+      "PERIOD_THIS_MONTH": "Bieżący miesiąc",
+      "PERIOD_LAST_MONTH": "Poprzedni miesiąc",
+      "PERIOD_YTD": "Od początku roku",
+      "PERIOD_ALL_TIME": "Cały czas",
+      "HIDE_ZERO_ON": "Ukrywanie $0",
+      "HIDE_ZERO_OFF": "Pokaż wszystkie"
     },
     "ACTION_APPROVE": "Zatwierdź",
     "ACTION_MARK_PAID": "Oznacz jako wypłaconą",

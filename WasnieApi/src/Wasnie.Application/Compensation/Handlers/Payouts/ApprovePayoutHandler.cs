@@ -25,7 +25,7 @@ public sealed class ApprovePayoutHandler(
         try
         {
             payout.Approve(
-                currentUser.UserId ?? "system",
+                currentUser.Email ?? currentUser.UserId ?? "system",
                 clock.UtcNowOffset,
                 guid.NewGuid());
 

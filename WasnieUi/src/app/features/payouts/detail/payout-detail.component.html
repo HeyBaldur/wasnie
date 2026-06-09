@@ -98,7 +98,7 @@
           </div>
           <div class="payout-detail__field">
             <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.PLAN' | translate }}</span>
-            <span class="payout-detail__value">{{ p.planName }}</span>
+            <span class="payout-detail__value"><ws-button variant="link" size="sm" (click)="openPlan(p.planId)">{{ p.planName }}</ws-button></span>
           </div>
           <div class="payout-detail__field">
             <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.PERIOD' | translate }}</span>

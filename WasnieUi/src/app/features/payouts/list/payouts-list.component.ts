@@ -1,10 +1,10 @@
 import {
   Component, computed, effect, inject, OnInit, signal, DestroyRef, untracked, viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { distinctUntilChanged, map, switchMap } from 'rxjs/operators';
+import { distinctUntilChanged, map, switchMap, takeWhile } from 'rxjs/operators';
 import { firstValueFrom, interval } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
@@ -32,18 +32,22 @@ import {
   WsPaginationComponent,
   WsModalComponent,
   WsConfirmationModalComponent,
+  WsSegmentedControlComponent,
   type BadgeVariant,
   type SelectOption,
+  type SegOption,
 } from '../../../shared/ui';
+
+type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 
 @Component({
   selector: 'app-payouts-list',
   standalone: true,
   imports: [
-    AppShellComponent, RouterLink, ReactiveFormsModule, TranslateModule,
+    AppShellComponent, ReactiveFormsModule, TranslateModule,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
-    WsSelectComponent, WsDatePickerComponent,
+    WsSelectComponent, WsDatePickerComponent, WsSegmentedControlComponent,
     WsPageLayoutComponent, WsTableComponent, WsTableEmptyComponent,
     WsPaginationComponent, WsModalComponent, WsConfirmationModalComponent,
   ],
@@ -71,6 +75,16 @@ export class PayoutsListComponent implements OnInit {
   readonly calculatePhase = signal<'form' | 'running' | 'done'>('form');
   readonly calculateResult = signal<CalculateJobResult | null>(null);
   readonly calculateError = signal<string | null>(null);
+
+  readonly activePeriod = signal<PeriodKey>('this-month');
+  readonly hideZero = signal(true);
+
+  readonly periodOptions: SegOption[] = [
+    { value: 'this-month', label: 'PAYOUTS.FILTER.PERIOD_THIS_MONTH' },
+    { value: 'last-month', label: 'PAYOUTS.FILTER.PERIOD_LAST_MONTH' },
+    { value: 'ytd',        label: 'PAYOUTS.FILTER.PERIOD_YTD' },
+    { value: 'all-time',   label: 'PAYOUTS.FILTER.PERIOD_ALL_TIME' },
+  ];
 
   constructor() {
     effect(() => {
@@ -144,11 +158,30 @@ export class PayoutsListComponent implements OnInit {
 
   ngOnInit(): void {
     const qp = this.route.snapshot.queryParams as Record<string, string>;
-    if (Object.keys(qp).length > 0) {
+    const hasUrlParams = Object.keys(qp).length > 0;
+
+    if (hasUrlParams) {
       this.store.loadFromQueryParams(qp);
+      // Restore period key from URL if present; fall back to 'all-time' for custom date ranges.
+      if (qp['period'] && ['this-month', 'last-month', 'ytd', 'all-time'].includes(qp['period'])) {
+        this.activePeriod.set(qp['period'] as PeriodKey);
+      } else if (qp['pFrom'] || qp['pTo']) {
+        this.activePeriod.set('all-time');
+      }
+      this.hideZero.set(qp['hz'] !== '0');
+    } else {
+      // Default: current month, hide zeros.
+      this._applyPeriod('this-month');
     }
+
     this._syncFormFromStore();
     this._wireFormSubscriptions();
+
+    // Resolve plan names for any IDs restored from URL params that aren't yet cached.
+    const uncachedPlanIds = this.store.filter().planIds.filter(id => !this._planCache.has(id));
+    if (uncachedPlanIds.length > 0) {
+      void this._resolvePlanNames(uncachedPlanIds);
+    }
   }
 
   private _syncFormFromStore(): void {
@@ -231,14 +264,73 @@ export class PayoutsListComponent implements OnInit {
     this._setFilter({ currencies: this.store.filter().currencies.filter(x => x !== code) });
   }
 
+  setPeriod(key: string): void {
+    this.activePeriod.set(key as PeriodKey);
+    const { from, to } = this._computePeriodDates(key as PeriodKey);
+    this._setFilter({ periodFrom: from, periodTo: to });
+    this.form.patchValue({ periodFrom: from, periodTo: to }, { emitEvent: false });
+    this._syncUrl();
+  }
+
+  toggleHideZero(): void {
+    const next = !this.hideZero();
+    this.hideZero.set(next);
+    this._setFilter({ hideZero: next });
+  }
+
   clearFilters(): void {
     this.store.clearFilters();
-    this.form.reset({ status: 'All', periodFrom: null, periodTo: null,
+    this.activePeriod.set('this-month');
+    this.hideZero.set(true);
+    const { from, to } = this._computePeriodDates('this-month');
+    this.store.setFilter({ periodFrom: from, periodTo: to, hideZero: true });
+    this.form.reset({ status: 'All', periodFrom: from, periodTo: to,
       payeeSearch: '', planSearch: '', currencySearch: '' });
     this.selectedPayees.set([]);
     this.selectedPlans.set([]);
     this.selectedCurrencies.set([]);
     this._syncUrl();
+  }
+
+  private _applyPeriod(key: PeriodKey): void {
+    const { from, to } = this._computePeriodDates(key);
+    this.store.setFilter({ periodFrom: from, periodTo: to });
+  }
+
+  private _computePeriodDates(key: PeriodKey): { from: string | null; to: string | null } {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+
+    switch (key) {
+      case 'this-month':
+        return { from: `${yyyy}-${mm}-01`, to: todayStr };
+      case 'last-month': {
+        const first = new Date(yyyy, today.getMonth() - 1, 1);
+        const last = new Date(yyyy, today.getMonth(), 0);
+        const f = `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}-01`;
+        const t = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+        return { from: f, to: t };
+      }
+      case 'ytd':
+        return { from: `${yyyy}-01-01`, to: todayStr };
+      case 'all-time':
+        return { from: null, to: null };
+    }
+  }
+
+  private async _resolvePlanNames(planIds: string[]): Promise<void> {
+    const results = await Promise.all(
+      planIds.map(id =>
+        firstValueFrom(this.plansApi.getPlan(id)).then(p => ({ id, label: `${p.name} v${p.version}` })).catch(() => null)
+      )
+    );
+    results.forEach(r => { if (r) this._planCache.set(r.id, r.label); });
+    this.selectedPlans.update(ps =>
+      ps.map(p => ({ ...p, label: this._planCache.get(p.id) ?? p.label }))
+    );
   }
 
   async onBulkApprove(): Promise<void> {
@@ -280,6 +372,7 @@ export class PayoutsListComponent implements OnInit {
   private _pollJob(jobId: string): void {
     interval(2000).pipe(
       switchMap(() => this.api.getJobStatus(jobId)),
+      takeWhile(s => s.state === 'Pending' || s.state === 'Running', /* inclusive */ true),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
       next: (status: PayoutJobStatus) => {
@@ -290,7 +383,6 @@ export class PayoutsListComponent implements OnInit {
           this.calculatePhase.set('form');
           this.calculating.set(false);
         }
-        // Pending / Running — keep polling
       },
       error: () => {
         this.calculateError.set('PAYOUTS.CALCULATE_ERROR');
@@ -333,12 +425,18 @@ export class PayoutsListComponent implements OnInit {
     return `PAYOUTS.STATUS_${status.toUpperCase()}`;
   }
 
+  viewPayout(id: string): void {
+    window.open(`/payouts/${id}`, '_blank');
+  }
+
   formatPeriod(start: string, end: string): string {
     return `${start} → ${end}`;
   }
 
   private _syncUrl(): void {
     const qp = this.store.toQueryParams();
+    const period = this.activePeriod();
+    if (period !== 'this-month') qp['period'] = period;
     const suffix = Object.keys(qp).length > 0
       ? '?' + new URLSearchParams(qp).toString() : '';
     window.history.replaceState(null, '', window.location.pathname + suffix);

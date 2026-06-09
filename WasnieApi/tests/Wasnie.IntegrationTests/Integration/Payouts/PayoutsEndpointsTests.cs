@@ -208,6 +208,42 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         result.Errors.Should().HaveCount(1);
     }
 
+    // ── List: period filter ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ListPayouts_FilterByPeriod_ReturnsOnlyMatchingPayouts()
+    {
+        // Seed one payout in Jan–Mar 2026 (default seed period) and one in Apr–Jun 2026.
+        await SeedCalculatedPayoutAsync();
+        await SeedCalculatedPayoutAsync(period: DateRange.Of(
+            new DateOnly(2026, 4, 1), new DateOnly(2026, 6, 30)));
+
+        // Filter to Apr–Jun only.
+        var response = await _clientA.GetAsync(
+            "/api/payouts?periodFrom=2026-04-01&periodTo=2026-06-30");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadPagedResultAsync<PayoutListItemDto>();
+        result.Items.Should().HaveCount(1);
+        result.Items[0].PeriodStart.Should().Be(new DateOnly(2026, 4, 1));
+    }
+
+    [Fact]
+    public async Task ListPayouts_ExcludeZero_OmitsZeroAmountPayouts()
+    {
+        await SeedCalculatedPayoutAsync(lineCount: 1);     // non-zero
+        await SeedCalculatedPayoutAsync(lineCount: 0);     // zero-amount
+
+        var allResponse = await _clientA.GetAsync("/api/payouts");
+        var all = await allResponse.Content.ReadPagedResultAsync<PayoutListItemDto>();
+        all.TotalCount.Should().Be(2);
+
+        var filteredResponse = await _clientA.GetAsync("/api/payouts?excludeZero=true");
+        var filtered = await filteredResponse.Content.ReadPagedResultAsync<PayoutListItemDto>();
+        filtered.Items.Should().HaveCount(1);
+        filtered.Items[0].TotalCommissionAmount.Should().BeGreaterThan(0);
+    }
+
     // ── Calculate (job enqueue) ───────────────────────────────────────────────
 
     [Fact]
@@ -234,7 +270,9 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPayouts");
     }
 
-    private async Task<CompensationPayout> SeedCalculatedPayoutAsync(int lineCount = 1)
+    private async Task<CompensationPayout> SeedCalculatedPayoutAsync(
+        int lineCount = 1,
+        DateRange? period = null)
     {
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -242,7 +280,7 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         var payeeId = Guid.NewGuid();
         var planId = Guid.NewGuid();
         var snapshot = PayeeReference.Snapshot(payeeId, "Test Payee", "TST-001");
-        var period = DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 31));
+        period ??= DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 31));
 
         var specs = Enumerable.Range(0, lineCount)
             .Select(_ => new PayoutLineSpec(
@@ -261,6 +299,7 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
             payeeSnapshot: snapshot,
             period: period,
             lineSpecs: specs,
+            fallbackCurrency: "EUR",
             calculatedBy: "test",
             id: Guid.NewGuid(),
             now: DateTimeOffset.UtcNow,

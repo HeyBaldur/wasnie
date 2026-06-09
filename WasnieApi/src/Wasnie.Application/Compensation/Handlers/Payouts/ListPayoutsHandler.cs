@@ -61,6 +61,9 @@ public sealed class ListPayoutsHandler(
         if (f.PeriodTo.HasValue)
             query = query.Where(p => p.Period.End <= f.PeriodTo.Value);
 
+        if (f.ExcludeZero)
+            query = query.Where(p => p.TotalCommission.Amount > 0);
+
         var sortBy = f.SortBy?.ToLowerInvariant() ?? "updatedat";
         var desc = !string.Equals(f.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
 

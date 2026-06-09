@@ -65,6 +65,12 @@ public sealed class IdentityService(
         return user?.Email;
     }
 
+    public async Task<string?> FindEmailByUserIdAsync(string userId)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        return user?.Email;
+    }
+
     public async Task<IList<string>> GetUserRolesAsync(string userId)
     {
         var user = await userManager.FindByIdAsync(userId);

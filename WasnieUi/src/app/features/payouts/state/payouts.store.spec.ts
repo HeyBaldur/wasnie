@@ -30,7 +30,7 @@ const makePaged = (items: PayoutListItem[]) => ({
   totalPages: 1,
   hasNextPage: false,
   hasPreviousPage: false,
-  unfilteredTotal: null,
+  unfilteredTotal: undefined,
 });
 
 describe('PayoutsStore', () => {
@@ -154,6 +154,7 @@ describe('PayoutsStore', () => {
       currencies: ['EUR', 'PLN'],
       periodFrom: '2026-01-01',
       periodTo: '2026-03-31',
+      hideZero: true,
     };
     store.setFilter(f);
 
@@ -168,6 +169,18 @@ describe('PayoutsStore', () => {
     expect(restored.currencies).toEqual(['EUR', 'PLN']);
     expect(restored.periodFrom).toBe('2026-01-01');
     expect(restored.periodTo).toBe('2026-03-31');
+    expect(restored.hideZero).toBeTrue();
+  });
+
+  it('toQueryParams / loadFromQueryParams round-trip preserves hideZero=false', () => {
+    store.setFilter({ hideZero: false });
+
+    const params = store.toQueryParams();
+    expect(params['hz']).toBe('0');
+
+    store.clearFilters();
+    store.loadFromQueryParams(params);
+    expect(store.filter().hideZero).toBeFalse();
   });
 
   // ── Error handling ────────────────────────────────────────────────────────
@@ -181,9 +194,16 @@ describe('PayoutsStore', () => {
 });
 
 describe('PayoutsStore._buildFilterRecord', () => {
-  it('omits empty/default fields', () => {
+  it('emits excludeZero=true by default (hideZero is on by default)', () => {
     const record = PayoutsStore._buildFilterRecord(EMPTY_PAYOUT_FILTER);
-    expect(Object.keys(record)).toEqual([]);
+    expect(record['excludeZero']).toBe('true');
+    // Only excludeZero should be present for the empty filter
+    expect(Object.keys(record)).toEqual(['excludeZero']);
+  });
+
+  it('omits excludeZero when hideZero is false', () => {
+    const record = PayoutsStore._buildFilterRecord({ ...EMPTY_PAYOUT_FILTER, hideZero: false });
+    expect(record['excludeZero']).toBeUndefined();
   });
 
   it('includes status when not All', () => {

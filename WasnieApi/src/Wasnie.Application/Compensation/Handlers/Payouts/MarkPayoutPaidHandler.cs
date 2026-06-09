@@ -24,7 +24,7 @@ public sealed class MarkPayoutPaidHandler(
         try
         {
             payout.MarkPaid(
-                currentUser.UserId ?? "system",
+                currentUser.Email ?? currentUser.UserId ?? "system",
                 clock.UtcNowOffset);
 
             await db.SaveChangesAsync(cancellationToken);
