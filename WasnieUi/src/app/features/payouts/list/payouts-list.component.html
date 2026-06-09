@@ -16,6 +16,17 @@
           <ws-badge variant="brand" size="sm">{{ store.selectedCalculatedIds().length }}</ws-badge>
         </ws-button>
       }
+      @if (store.selectedApprovedIds().length > 0) {
+        <ws-button
+          *hasPermission="'Payouts.MarkPaid'"
+          variant="secondary"
+          [disabled]="bulkMarkPaiding()"
+          (click)="bulkMarkPaidConfirmOpen.set(true)"
+        >
+          {{ 'PAYOUTS.BULK_MARK_PAID' | translate }}
+          <ws-badge variant="success" size="sm">{{ store.selectedApprovedIds().length }}</ws-badge>
+        </ws-button>
+      }
       <ws-button
         *hasPermission="'Payouts.Calculate'"
         variant="primary"
@@ -370,13 +381,150 @@
   </ng-container>
 </ws-modal>
 
-<ws-confirmation-modal
-  [(isOpen)]="bulkApproveConfirmOpen"
-  [title]="'PAYOUTS.BULK_APPROVE_CONFIRM_TITLE' | translate"
-  [message]="'PAYOUTS.BULK_APPROVE_CONFIRM' | translate: { count: store.selectedCalculatedIds().length }"
-  [confirmLabel]="'PAYOUTS.BULK_APPROVE' | translate"
-  [cancelLabel]="'COMMON.CANCEL' | translate"
-  [loading]="bulkApproving()"
-  (confirmed)="onBulkApprove()"
-  (cancelled)="bulkApproveConfirmOpen.set(false)"
-/>
+<!-- Bulk Approve — rich confirmation modal (reversible tone — no irreversibility warning) -->
+<ws-modal
+  [isOpen]="bulkApproveConfirmOpen()"
+  (isOpenChange)="bulkApproveConfirmOpen.set($event)"
+  [title]="'PAYOUTS.BULK_APPROVE_CONFIRM_TITLE' | translate: { count: store.bulkApproveSummary().count }"
+  [closable]="!bulkApproving()"
+>
+  <div class="payouts-list__bulk-body">
+
+    <!-- 1. Count sentence (reversible tone) -->
+    <p class="payouts-list__bulk-intro">
+      {{ 'PAYOUTS.BULK_APPROVE_BODY' | translate: { count: store.bulkApproveSummary().count } }}
+    </p>
+
+    <!-- 2. Payee list (scrollable, each name links to payee detail) -->
+    <div class="payouts-list__bulk-section">
+      <p class="payouts-list__bulk-section-label">{{ 'PAYOUTS.BULK_APPROVE_PAYEES' | translate }}</p>
+      <div class="payouts-list__payee-scroll">
+        @for (payee of store.bulkApproveSummary().payees; track payee.payeeId) {
+          <div class="payouts-list__payee-scroll-entry">
+            <span class="payouts-list__payee-name-col">
+              <a
+                class="payouts-list__payee-link"
+                href="/payees/{{ payee.payeeId }}"
+                target="_blank"
+                rel="noopener"
+              >{{ payee.payeeName }}</a>
+              @if (payee.payeeCode) {
+                <span class="payouts-list__payee-code-tag">({{ payee.payeeCode }})</span>
+              }
+            </span>
+            <span class="payouts-list__payee-period-col">
+              {{ payee.periodStart | dateFormat }} – {{ payee.periodEnd | dateFormat }}
+            </span>
+            <span class="payouts-list__payee-amount-col">
+              {{ payee.amount | currencyFormat: payee.currency }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- 3. Skip warning — only when non-Calculated payouts are in the selection -->
+    @if (store.bulkApproveSummary().skippedCount > 0) {
+      <p class="payouts-list__bulk-skip">
+        <app-icon name="info" [size]="14" />
+        {{ 'PAYOUTS.BULK_APPROVE_SKIP_WARNING' | translate: { skipped: store.bulkApproveSummary().skippedCount } }}
+      </p>
+    }
+
+  </div>
+
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="bulkApproving()" (click)="bulkApproveConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="bulkApproving()" (click)="onBulkApprove()">
+      {{ 'PAYOUTS.BULK_APPROVE_CONFIRM_BTN' | translate: { count: store.bulkApproveSummary().count } }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Bulk Mark as Paid — rich confirmation modal (irreversible tone) -->
+<ws-modal
+  [isOpen]="bulkMarkPaidConfirmOpen()"
+  (isOpenChange)="bulkMarkPaidConfirmOpen.set($event)"
+  [title]="'PAYOUTS.BULK_MARK_PAID_TITLE' | translate: { count: store.bulkMarkPaidSummary().count }"
+  [closable]="!bulkMarkPaiding()"
+>
+  <div class="payouts-list__bulk-body">
+
+    <!-- 1. Count sentence -->
+    <p class="payouts-list__bulk-intro">
+      {{ 'PAYOUTS.BULK_MARK_PAID_BODY' | translate: { count: store.bulkMarkPaidSummary().count } }}
+    </p>
+
+    <!-- 2. Totals by currency -->
+    <div class="payouts-list__bulk-section">
+      <p class="payouts-list__bulk-section-label">{{ 'PAYOUTS.BULK_MARK_PAID_TOTALS' | translate }}</p>
+      <ul class="payouts-list__bulk-totals-list">
+        @for (entry of bulkMarkPaidTotals(); track entry.currency) {
+          <li>{{ entry.amount | currencyFormat: entry.currency }}</li>
+        }
+      </ul>
+    </div>
+
+    <!-- 3. Payee list (scrollable, each name links to payee detail) -->
+    <div class="payouts-list__bulk-section">
+      <p class="payouts-list__bulk-section-label">{{ 'PAYOUTS.BULK_MARK_PAID_PAYEES' | translate }}</p>
+      <div class="payouts-list__payee-scroll">
+        @for (payee of store.bulkMarkPaidSummary().payees; track payee.payeeId) {
+          <div class="payouts-list__payee-scroll-entry">
+            <span class="payouts-list__payee-name-col">
+              <a
+                class="payouts-list__payee-link"
+                href="/payees/{{ payee.payeeId }}"
+                target="_blank"
+                rel="noopener"
+              >{{ payee.payeeName }}</a>
+              @if (payee.payeeCode) {
+                <span class="payouts-list__payee-code-tag">({{ payee.payeeCode }})</span>
+              }
+            </span>
+            <span class="payouts-list__payee-period-col">
+              {{ payee.periodStart | dateFormat }} – {{ payee.periodEnd | dateFormat }}
+            </span>
+            <span class="payouts-list__payee-amount-col">
+              {{ payee.amount | currencyFormat: payee.currency }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- 4. Irreversibility warning (mark-paid only) -->
+    <p class="payouts-list__bulk-warning">
+      <app-icon name="alert-triangle" [size]="14" />
+      {{ 'PAYOUTS.BULK_MARK_PAID_IRREVERSIBLE' | translate }}
+    </p>
+
+    <!-- 5. Skip warning — only when non-Approved payouts are in the selection -->
+    @if (store.bulkMarkPaidSummary().skippedCount > 0) {
+      <p class="payouts-list__bulk-skip">
+        <app-icon name="info" [size]="14" />
+        {{ 'PAYOUTS.BULK_MARK_PAID_SKIP_WARNING' | translate: { skipped: store.bulkMarkPaidSummary().skippedCount } }}
+      </p>
+    }
+
+  </div>
+
+  <ng-container slot="footer">
+    <ws-button
+      variant="ghost"
+      [disabled]="bulkMarkPaiding()"
+      (click)="bulkMarkPaidConfirmOpen.set(false)"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button
+      variant="primary"
+      [disabled]="bulkMarkPaiding()"
+      (click)="onBulkMarkPaid()"
+    >
+      {{ 'PAYOUTS.BULK_MARK_PAID_CONFIRM' | translate: { count: store.bulkMarkPaidSummary().count } }}
+    </ws-button>
+  </ng-container>
+</ws-modal>

@@ -49,6 +49,15 @@ export interface BulkApproveResult {
   errors: string[];
 }
 
+export interface BulkMarkPaidRequest {
+  payoutIds: string[];
+}
+
+export interface BulkMarkPaidResult {
+  paid: number;
+  errors: string[];
+}
+
 export interface CalculateJobConflict {
   payeeId: string;
   payeeName: string;

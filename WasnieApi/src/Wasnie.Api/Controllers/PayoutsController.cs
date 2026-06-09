@@ -83,6 +83,16 @@ public sealed class PayoutsController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    // POST /api/payouts/bulk-mark-paid
+    [HttpPost("bulk-mark-paid")]
+    public async Task<IActionResult> BulkMarkPaid(
+        [FromBody] BulkMarkPaidRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new BulkMarkPaidCommand(body.PayoutIds), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     // GET /api/payouts/{id}/export/pdf
     [HttpGet("{id:guid}/export/pdf")]
     public async Task<IActionResult> ExportPdf(Guid id, CancellationToken cancellationToken)
@@ -102,3 +112,4 @@ public sealed record CalculatePayoutsRequest(
     Guid? PayeeIdFilter = null);
 
 public sealed record BulkApproveRequest(IReadOnlyList<Guid> PayoutIds);
+public sealed record BulkMarkPaidRequest(IReadOnlyList<Guid> PayoutIds);

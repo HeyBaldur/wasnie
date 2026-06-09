@@ -64,4 +64,23 @@ describe('CurrencyFormatPipe', () => {
     const result = pipe.transform(50, '   ');
     expect(result).toContain('???');
   });
+
+  it('preserves trailing zero — EUR 15934.6 shows two decimal places', () => {
+    const result = pipe.transform(15934.6, 'EUR');
+    // Must end in ".60", not ".6" — minimumFractionDigits must not be overridden to 0
+    expect(result).toMatch(/15[,.]?934[,.]?60/);
+    expect(result).not.toMatch(/15[,.]?934[,.]?6[^0]/);
+  });
+
+  it('always shows two decimal places for EUR whole amounts', () => {
+    const result = pipe.transform(1000, 'EUR');
+    expect(result).toMatch(/1[,.]?000[,.]?00/);
+  });
+
+  it('shows zero decimal places for JPY — currency native fraction digits', () => {
+    const result = pipe.transform(15935, 'JPY');
+    // JPY has 0 standard fraction digits — must not show ".00" or ".0"
+    expect(result).not.toContain('.');
+    expect(result).toContain('15');
+  });
 });

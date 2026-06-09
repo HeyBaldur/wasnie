@@ -35,3 +35,8 @@ public sealed record BulkApprovePayoutsCommand(IReadOnlyList<Guid> PayoutIds)
     : IRequest<Result<BulkApproveResult>>;
 
 public sealed record BulkApproveResult(int Approved, IReadOnlyList<string> Errors);
+
+public sealed record BulkMarkPaidCommand(IReadOnlyList<Guid> PayoutIds)
+    : IRequest<Result<BulkMarkPaidResult>>;
+
+public sealed record BulkMarkPaidResult(int Paid, IReadOnlyList<string> Errors);

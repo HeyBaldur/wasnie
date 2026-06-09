@@ -31,7 +31,6 @@ import {
   WsTableEmptyComponent,
   WsPaginationComponent,
   WsModalComponent,
-  WsConfirmationModalComponent,
   WsSegmentedControlComponent,
   type BadgeVariant,
   type SelectOption,
@@ -49,7 +48,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
     WsSelectComponent, WsDatePickerComponent, WsSegmentedControlComponent,
     WsPageLayoutComponent, WsTableComponent, WsTableEmptyComponent,
-    WsPaginationComponent, WsModalComponent, WsConfirmationModalComponent,
+    WsPaginationComponent, WsModalComponent,
   ],
   templateUrl: './payouts-list.component.html',
   styleUrl: './payouts-list.component.scss',
@@ -71,6 +70,8 @@ export class PayoutsListComponent implements OnInit {
   readonly calculateModalOpen = signal(false);
   readonly bulkApproveConfirmOpen = signal(false);
   readonly bulkApproving = signal(false);
+  readonly bulkMarkPaidConfirmOpen = signal(false);
+  readonly bulkMarkPaiding = signal(false);
   readonly calculating = signal(false);
   readonly calculatePhase = signal<'form' | 'running' | 'done'>('form');
   readonly calculateResult = signal<CalculateJobResult | null>(null);
@@ -331,6 +332,25 @@ export class PayoutsListComponent implements OnInit {
     this.selectedPlans.update(ps =>
       ps.map(p => ({ ...p, label: this._planCache.get(p.id) ?? p.label }))
     );
+  }
+
+  readonly bulkMarkPaidTotals = computed(() => {
+    const { totalsByCurrency } = this.store.bulkMarkPaidSummary();
+    return [...totalsByCurrency.entries()].map(([currency, amount]) => ({ currency, amount }));
+  });
+
+  async onBulkMarkPaid(): Promise<void> {
+    const ids = this.store.selectedApprovedIds();
+    if (ids.length === 0 || this.bulkMarkPaiding()) return;
+    this.bulkMarkPaidConfirmOpen.set(false);
+    this.bulkMarkPaiding.set(true);
+    try {
+      await firstValueFrom(this.api.bulkMarkPaid({ payoutIds: ids }));
+      this.store.clearSelection();
+      await this.store.reload();
+    } finally {
+      this.bulkMarkPaiding.set(false);
+    }
   }
 
   async onBulkApprove(): Promise<void> {

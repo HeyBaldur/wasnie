@@ -8,6 +8,50 @@
 
 ## Sessions (newest first)
 
+## 2026-06-09 — WI-A5.4-A5.5 Bulk Modal Payee Rows
+
+**Completed in this session:**
+- **WI A.5.4 — Bulk Confirmation Modals: Scrollable Payee List + Clickable Payees:**
+  - Both bulk modals (approve + mark-paid) converted from `WsConfirmationModal` to rich `WsModal`
+  - Scrollable payee list (`max-height: 200px`), each name an `<a href="/payees/:id" target="_blank" rel="noopener">` — modal stays open
+  - `payeeNames: string[]` → `payees: [{payeeId, payeeName, payeeCode}]` in both summaries
+  - `bulkApproveSummary` computed added to store (`selectedCalculatedItems` private)
+  - Tone differentiation: approve = reversible (no irreversibility warning), mark-paid = irreversible (keeps `__bulk-warning`)
+  - 8/8 tests pass
+- **WI A.5.5 — Bulk Modal Payee Rows: Period + Amount (disambiguation):**
+  - `CurrencyFormatPipe` global fix: removed `minimumFractionDigits: 0` (and `maximumFractionDigits: 2`); EUR/USD/PLN → 2 decimals, JPY → 0 decimals via CLDR defaults
+  - 3 new pipe tests: trailing-zero (`€15,934.60`), always-2-decimal (`€1,000.00`), JPY 0-decimal (`¥15,935`)
+  - Store extended: `payees[]` in both summaries now includes `periodStart`, `periodEnd`, `amount`, `currency` (from in-memory items, no fetch)
+  - Template: each payee row is 3-column grid — name link (with code tag) | `dateFormat:'medium'` period range | `currencyFormat` amount
+  - SCSS `__payee-scroll-entry`: flex → grid (`minmax(0,2fr) minmax(0,2fr) minmax(0,1fr)`); mobile breakpoint at 480px collapses to 2-col with period spanning full width
+  - Spec updated: `EMPTY_BULK_*_SUMMARY` shapes and store test assertions include the 4 new fields
+  - 12/12 CurrencyFormatPipe tests pass; 8/8 payouts store + component tests pass; production build clean
+
+**Key decisions:**
+- `'medium'` date format (not `'short'`) — consistent with main list, avoids M/D vs D/M locale ambiguity for PL/ES users
+- Do NOT hardcode `minimumFractionDigits: 2` — JPY and other zero-decimal currencies must work correctly
+- Grid layout (not flex) for column alignment — financial readability in confirmation modal is critical
+
+## 2026-06-09 — WI-A5.3-BULK-MARK-PAID + WI-A4/A5 fixes
+
+**Completed in this session:**
+- **View Statement new tab** — changed from `[routerLink]` to `window.open('/payouts/:id', '_blank')`
+- **Plan field empty on detail page** — `PlanName` was missing from `PayoutDto`; added lookup in `GetPayoutByIdHandler` and `ExportPayoutPdfHandler`
+- **Poll-loop infinite API calls** — `_pollJob` had no terminal stop condition; fixed with `takeWhile(s => Pending|Running, inclusive=true)`; 3 regression tests added
+- **PDF actor GUID** — forward fix (store email via `currentUser.Email`) + backward resolution (`ResolveActorDisplayAsync` via `IIdentityService.FindEmailByUserIdAsync`) in `ExportPayoutPdfHandler`
+- **WI A.5.3 — Bulk Mark as Paid:**
+  - Backend: `BulkMarkPaidCommand` + `BulkMarkPaidResult` (in `ListPayoutsQuery.cs`), `BulkMarkPaidHandler` (IClock, catches DomainException per item), `POST /api/payouts/bulk-mark-paid` endpoint
+  - Store: `selectedApprovedIds`, `selectedApprovedItems` (private), `bulkMarkPaidSummary` (totals by currency map, payee names, skipped count — all in-memory)
+  - Component: `bulkMarkPaidTotals` computed, `onBulkMarkPaid()` using `store.reload()` directly (no polling)
+  - Template: "Mark as paid" button (hidden via `*hasPermission="Payouts.MarkPaid"`, badge count), rich WsModal with all 5 elements
+  - i18n: EN/ES/PL complete
+  - Tests: 3 integration (happy path, mixed statuses, 401) + 3 frontend unit (success, no-op, error) — 6/6 pass
+
+**Key decisions:**
+- Modal uses full `WsModal` not `WsConfirmationModal` to accommodate 5 required elements
+- `bulkMarkPaidSummary` in store (not component) for testability and single source of truth
+- `totalsByCurrency` computed as `Map<string, number>` in store; component converts to array for `@for`
+
 ## 2026-06-08 — WI-A5-PAYOUTS-UI: Design system consistency fixes (payouts list + calculate modal)
 
 **Completed:** Multiple design-system violations fixed across `payouts-list` and `payout-detail` components following user review session.

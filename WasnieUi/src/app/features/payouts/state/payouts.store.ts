@@ -60,6 +60,46 @@ export class PayoutsStore {
     )
   );
 
+  readonly selectedApprovedIds = computed(() =>
+    [...this.selectedIds()].filter(id =>
+      this.items().find(i => i.id === id)?.status === 'Approved'
+    )
+  );
+
+  private readonly selectedCalculatedItems = computed(() =>
+    this.items().filter(i => this.selectedIds().has(i.id) && i.status === 'Calculated')
+  );
+
+  private readonly selectedApprovedItems = computed(() =>
+    this.items().filter(i => this.selectedIds().has(i.id) && i.status === 'Approved')
+  );
+
+  readonly bulkApproveSummary = computed(() => {
+    const items = this.selectedCalculatedItems();
+    return {
+      count: items.length,
+      payees: items.map(i => ({ payeeId: i.payeeId, payeeName: i.payeeName, payeeCode: i.payeeCode, periodStart: i.periodStart, periodEnd: i.periodEnd, amount: i.totalCommissionAmount, currency: i.totalCommissionCurrency })),
+      skippedCount: this.selectedIds().size - items.length,
+    };
+  });
+
+  readonly bulkMarkPaidSummary = computed(() => {
+    const items = this.selectedApprovedItems();
+    const totalsByCurrency = new Map<string, number>();
+    for (const item of items) {
+      totalsByCurrency.set(
+        item.totalCommissionCurrency,
+        (totalsByCurrency.get(item.totalCommissionCurrency) ?? 0) + item.totalCommissionAmount,
+      );
+    }
+    return {
+      count: items.length,
+      payees: items.map(i => ({ payeeId: i.payeeId, payeeName: i.payeeName, payeeCode: i.payeeCode, periodStart: i.periodStart, periodEnd: i.periodEnd, amount: i.totalCommissionAmount, currency: i.totalCommissionCurrency })),
+      totalsByCurrency,
+      skippedCount: this.selectedIds().size - items.length,
+    };
+  });
+
   readonly activeFilterCount = computed(() => {
     const f = this.filter();
     let n = 0;

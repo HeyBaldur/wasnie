@@ -7,6 +7,8 @@ import { JobState } from '../../imports/transactions/models/transaction-import.m
 import {
   BulkApproveRequest,
   BulkApproveResult,
+  BulkMarkPaidRequest,
+  BulkMarkPaidResult,
   CalculatePayoutsRequest,
   PayoutDetail,
   PayoutListItem,
@@ -48,6 +50,10 @@ export class PayoutsApiService {
 
   bulkApprove(body: BulkApproveRequest): Observable<BulkApproveResult> {
     return this.http.post<BulkApproveResult>(`${this.base}/bulk-approve`, body);
+  }
+
+  bulkMarkPaid(body: BulkMarkPaidRequest): Observable<BulkMarkPaidResult> {
+    return this.http.post<BulkMarkPaidResult>(`${this.base}/bulk-mark-paid`, body);
   }
 
   getJobStatus(jobId: string): Observable<PayoutJobStatus> {

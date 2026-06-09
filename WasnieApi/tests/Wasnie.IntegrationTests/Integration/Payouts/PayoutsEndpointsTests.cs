@@ -208,6 +208,58 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         result.Errors.Should().HaveCount(1);
     }
 
+    // ── Bulk Mark Paid ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BulkMarkPaid_MultipleApproved_MarksAllPaid()
+    {
+        var p1 = await SeedCalculatedPayoutAsync();
+        var p2 = await SeedCalculatedPayoutAsync();
+        await _clientA.PostAsync($"/api/payouts/{p1.Id}/approve", null);
+        await _clientA.PostAsync($"/api/payouts/{p2.Id}/approve", null);
+
+        var response = await _clientA.PostAsJsonAsync(
+            "/api/payouts/bulk-mark-paid",
+            new { payoutIds = new[] { p1.Id, p2.Id } });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<BulkMarkPaidResultResponse>();
+        result!.Paid.Should().Be(2);
+        result.Errors.Should().BeEmpty();
+
+        // Verify state persisted
+        var detail = await (await _clientA.GetAsync($"/api/payouts/{p1.Id}"))
+            .Content.ReadFromJsonAsync<PayoutDto>();
+        detail!.Status.Should().Be("Paid");
+    }
+
+    [Fact]
+    public async Task BulkMarkPaid_MixedStatuses_PaysApprovedSkipsOthers()
+    {
+        var approved = await SeedCalculatedPayoutAsync();
+        var calculated = await SeedCalculatedPayoutAsync(); // not approved — should be skipped
+        await _clientA.PostAsync($"/api/payouts/{approved.Id}/approve", null);
+
+        var response = await _clientA.PostAsJsonAsync(
+            "/api/payouts/bulk-mark-paid",
+            new { payoutIds = new[] { approved.Id, calculated.Id } });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<BulkMarkPaidResultResponse>();
+        result!.Paid.Should().Be(1);
+        result.Errors.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task BulkMarkPaid_WithoutToken_Returns401()
+    {
+        var response = await _fixture.Factory.CreateClient().PostAsJsonAsync(
+            "/api/payouts/bulk-mark-paid",
+            new { payoutIds = Array.Empty<Guid>() });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
     // ── List: period filter ───────────────────────────────────────────────────
 
     [Fact]
@@ -313,5 +365,6 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
 
     private sealed record ErrorResponse(string Message);
     private sealed record BulkApproveResultResponse(int Approved, List<string> Errors);
+    private sealed record BulkMarkPaidResultResponse(int Paid, List<string> Errors);
     private sealed record JobIdResponse(Guid JobId);
 }
