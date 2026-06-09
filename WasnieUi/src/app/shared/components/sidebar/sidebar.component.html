@@ -57,6 +57,7 @@
             class="sidebar__nav-link"
             [class.sidebar__nav-link--active]="isNavActive(settingsItem.path)"
             [title]="!sidebarState.isExpanded() ? (settingsItem.labelKey | translate) : ''"
+            target="_blank"
           >
             <app-icon [name]="settingsItem.icon" [size]="18" />
             @if (sidebarState.isExpanded()) {

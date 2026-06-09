@@ -177,7 +177,7 @@
           *hasPermission="'Payouts.Export'"
           variant="ghost"
           size="sm"
-          [disabled]="exporting()"
+          [disabled]="exporting() || store.loading()"
           [loading]="exporting()"
           (click)="onExport()"
         >
@@ -355,11 +355,13 @@
             {{ 'PAYOUTS.WARNINGS_TITLE' | translate }}
           </p>
           <p class="payouts-list__result-section-desc">{{ 'PAYOUTS.WARNINGS_DESC' | translate }}</p>
-          <ul class="payouts-list__result-list">
-            @for (w of result.warnings; track w.payeeId) {
-              <li>{{ w.payeeName }} — {{ w.pendingTransactionCount }} pending transaction(s)</li>
-            }
-          </ul>
+          <div class="payouts-list__payee-scroll">
+            <ul class="payouts-list__result-list">
+              @for (w of result.warnings; track w.payeeId) {
+                <li>{{ w.payeeName }} — {{ w.pendingTransactionCount }} pending transaction(s)</li>
+              }
+            </ul>
+          </div>
         </div>
       }
 
@@ -370,11 +372,13 @@
             {{ 'PAYOUTS.CONFLICTS_TITLE' | translate }}
           </p>
           <p class="payouts-list__result-section-desc">{{ 'PAYOUTS.CONFLICTS_DESC' | translate }}</p>
-          <ul class="payouts-list__result-list">
-            @for (c of result.conflicts; track c.payeeId) {
-              <li>{{ c.payeeName }} — {{ c.periodStart }} → {{ c.periodEnd }} ({{ c.status }})</li>
-            }
-          </ul>
+          <div class="payouts-list__payee-scroll">
+            <ul class="payouts-list__result-list">
+              @for (c of result.conflicts; track c.payeeId) {
+                <li>{{ c.payeeName }} — {{ c.periodStart }} → {{ c.periodEnd }} ({{ c.status }})</li>
+              }
+            </ul>
+          </div>
         </div>
       }
     </div>

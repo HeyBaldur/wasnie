@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using ClosedXML.Excel;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -475,6 +476,39 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         var aBytes = await responseA.Content.ReadAsByteArrayAsync();
 
         aBytes.Length.Should().BeGreaterThan(allBytes.Length);
+    }
+
+    // ── Export: row count matches list totalCount ─────────────────────────────
+
+    [Fact]
+    public async Task ExportPayouts_RowCountMatchesListTotalCount_ForSameFilter()
+    {
+        // Seed 4 payouts all within January 2026.
+        var jan = DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 31));
+        await SeedCalculatedPayoutAsync(period: jan);
+        await SeedCalculatedPayoutAsync(period: jan);
+        await SeedCalculatedPayoutAsync(period: jan);
+        await SeedCalculatedPayoutAsync(period: jan);
+
+        const string filter = "periodFrom=2026-01-01&periodTo=2026-01-31";
+
+        // List must report 4 total rows for that period.
+        var listResp = await _clientA.GetAsync($"/api/payouts?{filter}&pageSize=100");
+        listResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var listed = await listResp.Content.ReadPagedResultAsync<PayoutListItemDto>();
+        listed.TotalCount.Should().Be(4);
+
+        // Export with the identical filter must contain exactly 4 data rows in the xlsx.
+        var exportResp = await _clientA.GetAsync($"/api/payouts/export?{filter}");
+        exportResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await exportResp.Content.ReadAsByteArrayAsync();
+
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        var ws = wb.Worksheet(1);
+        // RowsUsed() counts all non-empty rows including the header; subtract 1.
+        var dataRowCount = ws.RowsUsed().Count() - 1;
+        dataRowCount.Should().Be(listed.TotalCount,
+            because: "export with the same filter must contain exactly as many data rows as list.totalCount");
     }
 
     private sealed record ErrorResponse(string Message);

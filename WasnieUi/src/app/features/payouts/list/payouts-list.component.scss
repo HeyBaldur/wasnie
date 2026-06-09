@@ -313,6 +313,13 @@
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md);
     background: var(--color-bg-surface-sunken);
+
+    // When a plain result-list lives inside the scroll box (calculate result modal),
+    // add top/bottom breathing room so items aren't flush against the border.
+    .payouts-list__result-list {
+      padding-top: var(--space-2);
+      padding-bottom: var(--space-2);
+    }
   }
 
   &__payee-scroll-entry {

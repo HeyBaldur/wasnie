@@ -144,6 +144,36 @@ describe('PayoutsStore', () => {
     expect(store.selectedCount()).toBe(0);
   });
 
+  // ── toExportParams — race-condition guard ─────────────────────────────────
+
+  it('toExportParams returns filter used for the last completed load', async () => {
+    apiSpy.list.and.returnValue(of(makePaged([makeItem('p1')])));
+    store.setFilter({ periodFrom: '2026-01-01', periodTo: '2026-01-31' });
+    await store.reload();
+
+    const params = store.toExportParams();
+
+    expect(params['periodFrom']).toBe('2026-01-01');
+    expect(params['periodTo']).toBe('2026-01-31');
+  });
+
+  it('toExportParams keeps last loaded filter when filter signal changes before the next load completes', async () => {
+    // Simulate the race: user navigates back, ngOnInit resets period synchronously,
+    // but pagedResult still shows the previous load's data.
+    apiSpy.list.and.returnValue(of(makePaged([makeItem('p1')])));
+    store.setFilter({ periodFrom: '2026-01-01', periodTo: '2026-01-31' });
+    await store.reload(); // _lastLoadedFilter = January
+
+    // ngOnInit-equivalent: filter signal updated synchronously to this-month.
+    // The new load has NOT completed yet — we don't call reload() again.
+    store.setFilter({ periodFrom: '2026-06-01', periodTo: '2026-06-09' });
+
+    // Export must use January (last loaded), NOT June (pending in-transition filter).
+    const params = store.toExportParams();
+    expect(params['periodFrom']).toBe('2026-01-01');
+    expect(params['periodTo']).toBe('2026-01-31');
+  });
+
   // ── Query param round-trip ────────────────────────────────────────────────
 
   it('toQueryParams / loadFromQueryParams round-trip preserves all fields', () => {

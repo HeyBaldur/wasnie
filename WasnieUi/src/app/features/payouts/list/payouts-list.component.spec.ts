@@ -54,7 +54,7 @@ function makeStoreMock(): jasmine.SpyObj<PayoutsStore> {
   m.totalCount.and.returnValue(0);
   m.totalPages.and.returnValue(1);
   m.toQueryParams.and.returnValue({});
-  m.toExportParams.and.returnValue({ page: 1, pageSize: 1 });
+  m.toExportParams.and.returnValue({ excludeZero: 'true' });
   m.reload.and.returnValue(Promise.resolve());
   return m;
 }
@@ -338,7 +338,7 @@ describe('PayoutsListComponent — onExport', () => {
 
     await component.onExport();
 
-    expect(apiSpy.exportToExcel).toHaveBeenCalledOnceWith({ page: 1, pageSize: 1 });
+    expect(apiSpy.exportToExcel).toHaveBeenCalledOnceWith({ excludeZero: 'true' });
     expect(anchorSpy.download).toMatch(/^payouts-export-\d{4}-\d{2}-\d{2}\.xlsx$/);
     expect(anchorSpy.click).toHaveBeenCalledTimes(1);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake');

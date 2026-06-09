@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
@@ -66,9 +66,11 @@ export class PayoutsApiService {
     });
   }
 
-  exportToExcel(params: PaginationParams): Observable<Blob> {
+  exportToExcel(filters: Record<string, string>): Observable<Blob> {
+    let params = new HttpParams();
+    Object.entries(filters).forEach(([k, v]) => { params = params.set(k, v); });
     return this.http.get(`${this.base}/export`, {
-      params: buildHttpParams(params),
+      params,
       responseType: 'blob' as const,
     });
   }

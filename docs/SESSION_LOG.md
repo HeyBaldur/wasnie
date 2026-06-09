@@ -8,6 +8,46 @@
 
 ## Sessions (newest first)
 
+## 2026-06-09 — Calculate modal scrollable lists + Credits alignment fix
+
+**Phase:** A (Payouts/Credits polish — post-context-compaction continuation)
+
+**What we did:**
+
+- **Calculate Payouts result modal — scrollable lists:** Applied the existing `payouts-list__payee-scroll` SCSS pattern (already present from A.5.4 bulk modals) to the warnings and conflicts lists inside the calculate result modal. Previously the lists could overflow unbounded inside the modal body. Each `<ul class="payouts-list__result-list">` is now wrapped in `<div class="payouts-list__payee-scroll">` (both warning section and conflict/skipped section). Added a nested rule inside `&__payee-scroll` in `payouts-list.component.scss` to give `__result-list` `padding-top`/`padding-bottom: var(--space-2)` when it lives inside the scroll box — items are not flush against the border. Title, description, and action button remain outside the scroll wrapper and are always visible regardless of list length. No new CSS invented; reuses the existing `max-height: 200px; overflow-y: auto; border; border-radius; background: var(--color-bg-surface-sunken)` definition.
+
+- **Credits list — Status filter alignment fix (one-line fix):** The Status `<ws-select>` was wrapped in an external `<label class="credits-list__filter-label">` element, while the adjacent Reference `<ws-input>` renders its label internally via the `[label]` input prop. The height difference between the external label block and the ws-input internal label caused vertical misalignment between the two filter fields. Fix: removed the external `<label>` element and added `[label]="'CREDITS.FILTER.STATUS' | translate"` directly on `<ws-select>` — `ws-select` already has `readonly label = input('')`. Zero behavior change; `tsc --noEmit` → 0 errors.
+
+**Files changed:**
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.html` — `<div class="payouts-list__payee-scroll">` wrapping the `<ul>` in both the warning section and the conflict/skipped section of the calculate result modal
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.scss` — nested `.payouts-list__result-list { padding-top: var(--space-2); padding-bottom: var(--space-2); }` rule inside `&__payee-scroll`
+- `WasnieUi/src/app/features/credits/list/credits-list.component.html` — Status ws-select: external `<label>` removed; `[label]` prop added directly to `<ws-select>`
+
+**Tests:** Visual-only fixes; no test changes. Frontend 31/31 pass. Backend unchanged. `tsc --noEmit` 0 errors.
+
+**Lesson confirmed:** Small alignment bugs (`ws-select` vs `ws-input` label rendering) are caught only by visual inspection or user report — not by any automated test. Rule: before reporting any filter row as Done, visually compare all fields in the same row for consistent label height.
+
+---
+
+## 2026-06-09 — A.5.6 Excel export race-condition fix
+
+**Phase:** A (Payout Engine bug fix)
+
+**Root cause:** `PayoutsStore` (singleton) stores `filter` signal and `pagedResult` separately. On navigating back to the payouts page, `ngOnInit` calls `_applyPeriod('this-month')` → `setFilter()` updates the `filter` signal **synchronously**. The Angular effect that re-runs `_loadList` is scheduled **asynchronously** (next scheduler tick). Between those two events, `pagedResult` still holds old data (e.g. January payouts) while `filter()` already has the new period (June 2026). If the user clicked Export in that ~100–500 ms window, `toExportParams()` read `filter()` (June) → backend returned 0 rows → xlsx with headers only. Intermittent because it only triggers on return navigation when the store has prior state.
+
+**Changes:**
+- `payouts.store.ts`: added `_lastLoadedFilter = signal<PayoutFilter | null>(null)` (private). Set to `{ ...f }` (shallow copy, prevents later mutation) after each successful `_loadList`. `toExportParams()` now returns `Record<string, string>` (no page/pageSize noise) derived from `_lastLoadedFilter() ?? filter()`.
+- `payouts.api.service.ts`: `exportToExcel(filters: Record<string, string>)` builds `HttpParams` directly without `buildHttpParams` — no `page`/`pageSize` sent to the export endpoint.
+- `payouts-list.component.html`: export button `[disabled]="exporting() || store.loading()"` — second layer blocking export during list reload.
+- `payouts.store.spec.ts`: 2 new unit tests — one verifying `toExportParams` returns the last loaded filter, one reproducing the exact race window (setFilter after reload without completing a new reload).
+- `PayoutsEndpointsTests.cs`: `ExportPayouts_RowCountMatchesListTotalCount_ForSameFilter` — seeds 4 payouts, calls list and export with same filter, parses xlsx with ClosedXML and asserts `RowsUsed().Count() - 1 == TotalCount`. Replaces the misleading `bytes.Length > 2000` proxy tests.
+
+**Test counts:** 31/31 frontend unit tests pass. Backend 0 errors.
+
+**Deferred:** Integration test run against the real DB not performed (dev server running). Run before next release.
+
+---
+
 ## 2026-06-09 — Payouts refinement (A.5.1–A.5.6) + Pay Run design + full smoke
 
 **Phase:** A (Payout Engine sub-WIs)

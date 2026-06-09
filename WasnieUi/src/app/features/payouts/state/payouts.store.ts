@@ -37,6 +37,10 @@ export class PayoutsStore {
   readonly filter = signal<PayoutFilter>({ ...EMPTY_PAYOUT_FILTER });
 
   readonly pagedResult = signal<PagedResult<PayoutListItem> | null>(null);
+  // Tracks the filter used for the last COMPLETED list load. toExportParams() reads from
+  // here instead of filter() so that an in-progress filter change (e.g. ngOnInit resetting
+  // the period) cannot produce an export that diverges from the data currently on screen.
+  private readonly _lastLoadedFilter = signal<PayoutFilter | null>(null);
 
   // Bulk selection
   readonly selectedIds = signal<Set<string>>(new Set());
@@ -146,6 +150,7 @@ export class PayoutsStore {
       };
       const data = await firstValueFrom(this.api.list(params));
       this.pagedResult.set(data);
+      this._lastLoadedFilter.set({ ...f });
       // Clear selection for rows no longer on screen
       const currentIds = new Set(data.items.map(i => i.id));
       this.selectedIds.update(sel => {
@@ -198,13 +203,13 @@ export class PayoutsStore {
     );
   }
 
-  toExportParams(): PaginationParams {
-    const filters = PayoutsStore._buildFilterRecord(this.filter());
-    return {
-      page: 1,
-      pageSize: 1,
-      filters: Object.keys(filters).length > 0 ? filters : undefined,
-    };
+  toExportParams(): Record<string, string> {
+    // Use the filter from the last completed load, not the current filter() signal.
+    // filter() is updated synchronously by setFilter() (e.g. ngOnInit resetting the
+    // period), while pagedResult still holds the previous data — if the user exports
+    // in that window they would get a query against the NEW filter on OLD displayed rows.
+    const f = this._lastLoadedFilter() ?? this.filter();
+    return PayoutsStore._buildFilterRecord(f);
   }
 
   toQueryParams(): Record<string, string> {
