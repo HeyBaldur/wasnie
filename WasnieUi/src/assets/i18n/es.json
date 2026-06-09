@@ -1010,6 +1010,10 @@
       "MARK_PAID_ERROR": "No se pudo marcar el pago como realizado.",
       "EXPORT_SUCCESS": "PDF exportado.",
       "EXPORT_ERROR": "Error al exportar el PDF."
+    },
+    "EXPORT": {
+      "BUTTON": "Exportar a Excel",
+      "ERROR": "Error al exportar. Inténtalo de nuevo."
     }
   },
   "SETTINGS": {

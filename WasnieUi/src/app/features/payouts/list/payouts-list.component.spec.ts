@@ -27,7 +27,7 @@ const EMPTY_BULK_MARK_PAID_SUMMARY = { count: 0, payees: [] as { payeeId: string
 function makeStoreMock(): jasmine.SpyObj<PayoutsStore> {
   const m = jasmine.createSpyObj<PayoutsStore>('PayoutsStore', [
     'setFilter', 'clearFilters', 'setPage', 'setPageSize',
-    'loadFromQueryParams', 'toQueryParams', 'clearSelection',
+    'loadFromQueryParams', 'toQueryParams', 'toExportParams', 'clearSelection',
     'toggleSelect', 'toggleSelectAll', 'reload',
     // signal-like accessors (called as functions in the component)
     'filter', 'items', 'loading', 'error', 'selectedIds',
@@ -54,6 +54,7 @@ function makeStoreMock(): jasmine.SpyObj<PayoutsStore> {
   m.totalCount.and.returnValue(0);
   m.totalPages.and.returnValue(1);
   m.toQueryParams.and.returnValue({});
+  m.toExportParams.and.returnValue({ page: 1, pageSize: 1 });
   m.reload.and.returnValue(Promise.resolve());
   return m;
 }
@@ -77,7 +78,7 @@ describe('PayoutsListComponent — poll-loop regression', () => {
 
   beforeEach(() => {
     apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
-      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf',
+      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf', 'exportToExcel',
     ]);
     apiSpy.list.and.returnValue(of(EMPTY_PAGE));
 
@@ -167,7 +168,7 @@ describe('PayoutsListComponent — onBulkMarkPaid', () => {
 
   beforeEach(() => {
     apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
-      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf',
+      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf', 'exportToExcel',
     ]);
     apiSpy.list.and.returnValue(of(EMPTY_PAGE));
 
@@ -285,6 +286,80 @@ describe('PayoutsStore — bulkApproveSummary', () => {
       { payeeId: 'payee-1', payeeName: 'Alice Smith', payeeCode: 'EMP-001', periodStart: '2026-01-01', periodEnd: '2026-03-31', amount: 100, currency: 'EUR' },
       { payeeId: 'payee-2', payeeName: 'Bob Jones',   payeeCode: 'EMP-002', periodStart: '2026-01-01', periodEnd: '2026-03-31', amount: 100, currency: 'EUR' },
     ]);
+  });
+});
+
+// ─── Export Excel ─────────────────────────────────────────────────────────────
+describe('PayoutsListComponent — onExport', () => {
+  let component: PayoutsListComponent;
+  let apiSpy: jasmine.SpyObj<PayoutsApiService>;
+  let storeMock: jasmine.SpyObj<PayoutsStore>;
+
+  beforeEach(() => {
+    apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
+      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf', 'exportToExcel',
+    ]);
+    apiSpy.list.and.returnValue(of(EMPTY_PAGE));
+
+    storeMock = makeStoreMock();
+
+    TestBed.configureTestingModule({
+      imports: [PayoutsListComponent],
+      providers: [
+        { provide: PayoutsApiService, useValue: apiSpy },
+        { provide: PayoutsStore,      useValue: storeMock },
+        { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
+        { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
+        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} } } },
+        { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
+      ],
+    });
+
+    TestBed.overrideComponent(PayoutsListComponent, {
+      set: { template: '<div></div>', imports: [] },
+    });
+
+    const fixture = TestBed.createComponent(PayoutsListComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('calls exportToExcel with store export params and triggers blob download', async () => {
+    const mockBlob = new Blob(['fake-xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    apiSpy.exportToExcel.and.returnValue(of(mockBlob));
+    storeMock.totalCount.and.returnValue(5);
+
+    const anchorSpy = jasmine.createSpyObj('a', ['click']);
+    spyOn(document, 'createElement').and.returnValue(anchorSpy as unknown as HTMLAnchorElement);
+    spyOn(document.body, 'appendChild');
+    spyOn(document.body, 'removeChild');
+    spyOn(URL, 'createObjectURL').and.returnValue('blob:fake');
+    spyOn(URL, 'revokeObjectURL');
+
+    await component.onExport();
+
+    expect(apiSpy.exportToExcel).toHaveBeenCalledOnceWith({ page: 1, pageSize: 1 });
+    expect(anchorSpy.download).toMatch(/^payouts-export-\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(anchorSpy.click).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake');
+    expect(component.exporting()).toBe(false);
+    expect(component.exportError()).toBeNull();
+  });
+
+  it('is a no-op when already exporting', async () => {
+    component.exporting.set(true);
+    await component.onExport();
+    expect(apiSpy.exportToExcel).not.toHaveBeenCalled();
+  });
+
+  it('sets exportError and resets exporting on API failure', async () => {
+    apiSpy.exportToExcel.and.returnValue(throwError(() => new Error('network')) as Observable<Blob>);
+    storeMock.totalCount.and.returnValue(1);
+
+    try { await component.onExport(); } catch { /* expected */ }
+
+    expect(component.exportError()).toBe('PAYOUTS.EXPORT.ERROR');
+    expect(component.exporting()).toBe(false);
   });
 });
 

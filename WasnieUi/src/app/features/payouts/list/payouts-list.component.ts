@@ -334,6 +334,38 @@ export class PayoutsListComponent implements OnInit {
     );
   }
 
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
+  private static readonly EXPORT_CONFIRM_THRESHOLD = 50_000;
+
+  async onExport(): Promise<void> {
+    if (this.exporting()) return;
+
+    const total = this.store.totalCount();
+    if (total > PayoutsListComponent.EXPORT_CONFIRM_THRESHOLD) {
+      const msg = `This export contains ${total.toLocaleString()} rows and may take a moment. Continue?`;
+      if (!window.confirm(msg)) return;
+    }
+
+    this.exporting.set(true);
+    this.exportError.set(null);
+    try {
+      const blob = await firstValueFrom(this.api.exportToExcel(this.store.toExportParams()));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payouts-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      this.exportError.set('PAYOUTS.EXPORT.ERROR');
+    } finally {
+      this.exporting.set(false);
+    }
+  }
+
   readonly bulkMarkPaidTotals = computed(() => {
     const { totalsByCurrency } = this.store.bulkMarkPaidSummary();
     return [...totalsByCurrency.entries()].map(([currency, amount]) => ({ currency, amount }));

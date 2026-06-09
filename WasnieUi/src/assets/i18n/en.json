@@ -1010,6 +1010,10 @@
       "MARK_PAID_ERROR": "Could not mark payout as paid.",
       "EXPORT_SUCCESS": "PDF exported.",
       "EXPORT_ERROR": "PDF export failed."
+    },
+    "EXPORT": {
+      "BUTTON": "Export to Excel",
+      "ERROR": "Export failed. Please try again."
     }
   },
   "SETTINGS": {

@@ -40,3 +40,9 @@ public sealed record BulkMarkPaidCommand(IReadOnlyList<Guid> PayoutIds)
     : IRequest<Result<BulkMarkPaidResult>>;
 
 public sealed record BulkMarkPaidResult(int Paid, IReadOnlyList<string> Errors);
+
+/// <summary>
+/// Returns an .xlsx file containing all Payouts matching the given filter (no pagination).
+/// </summary>
+public sealed record ExportPayoutsQuery(PayoutFilterQuery Filter)
+    : IRequest<Result<ExportResult>>;

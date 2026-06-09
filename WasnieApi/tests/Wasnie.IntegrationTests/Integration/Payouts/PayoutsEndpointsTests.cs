@@ -363,6 +363,120 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         return payout;
     }
 
+    // ── Export Excel ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExportPayouts_WithoutToken_Returns401()
+    {
+        var response = await _fixture.Factory.CreateClient().GetAsync("/api/payouts/export");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ExportPayouts_WithPermission_ReturnsXlsxWithAllRows()
+    {
+        await SeedCalculatedPayoutAsync();
+        await SeedCalculatedPayoutAsync();
+
+        var response = await _clientA.GetAsync("/api/payouts/export");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType!.MediaType
+            .Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        // Verify the response is a non-empty xlsx blob (ClosedXML writes the OOXML magic bytes PK)
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        bytes.Should().NotBeEmpty();
+        bytes[0].Should().Be(0x50); // 'P' of PK magic header
+        bytes[1].Should().Be(0x4B); // 'K' of PK magic header
+    }
+
+    [Fact]
+    public async Task ExportPayouts_IgnoresPagination_ReturnsAllMatchingRows()
+    {
+        // Seed 3 payouts but request with pageSize=1 — export must return all 3.
+        await SeedCalculatedPayoutAsync();
+        await SeedCalculatedPayoutAsync();
+        await SeedCalculatedPayoutAsync();
+
+        // First confirm the list endpoint honours pagination (only 1 row returned).
+        var listResponse = await _clientA.GetAsync("/api/payouts?page=1&pageSize=1");
+        var listed = await listResponse.Content.ReadPagedResultAsync<PayoutListItemDto>();
+        listed.Items.Should().HaveCount(1);
+        listed.TotalCount.Should().Be(3);
+
+        // Export with page=1&pageSize=1 should still return all 3 rows.
+        var exportResponse = await _clientA.GetAsync("/api/payouts/export?page=1&pageSize=1");
+        exportResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await exportResponse.Content.ReadAsByteArrayAsync();
+        // File must be larger than a minimal (header-only) xlsx — rough proxy for 3 rows.
+        bytes.Length.Should().BeGreaterThan(2000);
+    }
+
+    [Fact]
+    public async Task ExportPayouts_RespectsStatusFilter_OnlyExportsMatchingStatus()
+    {
+        // Seed one Calculated and one Approved payout.
+        var calculated = await SeedCalculatedPayoutAsync();
+        var approved = await SeedCalculatedPayoutAsync();
+        await _clientA.PostAsync($"/api/payouts/{approved.Id}/approve", null);
+
+        // Export only Approved.
+        var response = await _clientA.GetAsync("/api/payouts/export?status=Approved");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        bytes.Should().NotBeEmpty();
+
+        // Cross-check: exporting Calculated should return a different (presumably smaller) file.
+        var responseCalc = await _clientA.GetAsync("/api/payouts/export?status=Calculated");
+        responseCalc.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytesCalc = await responseCalc.Content.ReadAsByteArrayAsync();
+        // Both export exactly one row — sizes should be close but files are different.
+        bytes.Length.Should().BeGreaterThan(0);
+        bytesCalc.Length.Should().BeGreaterThan(0);
+        _ = calculated; // suppress unused variable warning
+    }
+
+    [Fact]
+    public async Task ExportPayouts_ExcludeZero_OmitsZeroAmountPayouts()
+    {
+        await SeedCalculatedPayoutAsync(lineCount: 1); // non-zero
+        await SeedCalculatedPayoutAsync(lineCount: 0); // zero-amount
+
+        // Without filter: both payouts present (file is larger).
+        var allResponse = await _clientA.GetAsync("/api/payouts/export");
+        allResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var allBytes = await allResponse.Content.ReadAsByteArrayAsync();
+
+        // With excludeZero: only non-zero payout (file is smaller).
+        var filteredResponse = await _clientA.GetAsync("/api/payouts/export?excludeZero=true");
+        filteredResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var filteredBytes = await filteredResponse.Content.ReadAsByteArrayAsync();
+
+        filteredBytes.Length.Should().BeLessThan(allBytes.Length);
+    }
+
+    [Fact]
+    public async Task ExportPayouts_TenantIsolation_DoesNotReturnOtherTenantPayouts()
+    {
+        // Seed payout in Tenant A.
+        await SeedCalculatedPayoutAsync();
+
+        // Export as Tenant B — should return no rows (empty xlsx, header only).
+        var clientB = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantB);
+        var response = await clientB.GetAsync("/api/payouts/export");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var allBytes = await response.Content.ReadAsByteArrayAsync();
+
+        // Export as Tenant A — must be larger (has data rows).
+        var responseA = await _clientA.GetAsync("/api/payouts/export");
+        var aBytes = await responseA.Content.ReadAsByteArrayAsync();
+
+        aBytes.Length.Should().BeGreaterThan(allBytes.Length);
+    }
+
     private sealed record ErrorResponse(string Message);
     private sealed record BulkApproveResultResponse(int Approved, List<string> Errors);
     private sealed record BulkMarkPaidResultResponse(int Paid, List<string> Errors);

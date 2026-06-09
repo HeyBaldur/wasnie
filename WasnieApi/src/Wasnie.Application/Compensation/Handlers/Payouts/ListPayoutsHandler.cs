@@ -23,46 +23,7 @@ public sealed class ListPayoutsHandler(
         await authorizationService.RequireAsync(Permission.PayoutsRead, cancellationToken);
 
         var f = request.Filter;
-        var query = db.CompensationPayouts.AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(f.Status) &&
-            f.Status != "All" &&
-            Enum.TryParse<CompensationPayoutStatus>(f.Status, out var status))
-        {
-            query = query.Where(p => p.Status == status);
-        }
-
-        if (!string.IsNullOrWhiteSpace(f.PayeeIds))
-        {
-            var ids = ParseGuids(f.PayeeIds);
-            if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PayeeId));
-        }
-
-        if (!string.IsNullOrWhiteSpace(f.PlanIds))
-        {
-            var ids = ParseGuids(f.PlanIds);
-            if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PlanId));
-        }
-
-        if (!string.IsNullOrWhiteSpace(f.Currencies))
-        {
-            var curs = f.Currencies.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim().ToUpperInvariant())
-                .Where(s => s.Length == 3)
-                .ToList();
-            if (curs.Count > 0)
-                query = query.Where(p => curs.Contains(p.TotalCommission.Currency));
-        }
-
-        // Period filters on owned-type columns — expressed inline for EF SQL translation.
-        if (f.PeriodFrom.HasValue)
-            query = query.Where(p => p.Period.Start >= f.PeriodFrom.Value);
-
-        if (f.PeriodTo.HasValue)
-            query = query.Where(p => p.Period.End <= f.PeriodTo.Value);
-
-        if (f.ExcludeZero)
-            query = query.Where(p => p.TotalCommission.Amount > 0);
+        var query = BuildQuery(db, f);
 
         var sortBy = f.SortBy?.ToLowerInvariant() ?? "updatedat";
         var desc = !string.Equals(f.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
@@ -119,6 +80,52 @@ public sealed class ListPayoutsHandler(
             Page = paged.Page,
             PageSize = paged.PageSize,
         });
+    }
+
+    internal static IQueryable<CompensationPayout> BuildQuery(
+        IApplicationDbContext db, PayoutFilterQuery f)
+    {
+        var query = db.CompensationPayouts.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(f.Status) &&
+            f.Status != "All" &&
+            Enum.TryParse<CompensationPayoutStatus>(f.Status, out var status))
+        {
+            query = query.Where(p => p.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(f.PayeeIds))
+        {
+            var ids = ParseGuids(f.PayeeIds);
+            if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PayeeId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(f.PlanIds))
+        {
+            var ids = ParseGuids(f.PlanIds);
+            if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PlanId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(f.Currencies))
+        {
+            var curs = f.Currencies.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Where(s => s.Length == 3)
+                .ToList();
+            if (curs.Count > 0)
+                query = query.Where(p => curs.Contains(p.TotalCommission.Currency));
+        }
+
+        if (f.PeriodFrom.HasValue)
+            query = query.Where(p => p.Period.Start >= f.PeriodFrom.Value);
+
+        if (f.PeriodTo.HasValue)
+            query = query.Where(p => p.Period.End <= f.PeriodTo.Value);
+
+        if (f.ExcludeZero)
+            query = query.Where(p => p.TotalCommission.Amount > 0);
+
+        return query;
     }
 
     private static List<Guid> ParseGuids(string? input)

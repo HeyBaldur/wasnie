@@ -1010,6 +1010,10 @@
       "MARK_PAID_ERROR": "Nie udało się oznaczyć wypłaty jako zrealizowanej.",
       "EXPORT_SUCCESS": "PDF wyeksportowany.",
       "EXPORT_ERROR": "Eksport PDF nie powiódł się."
+    },
+    "EXPORT": {
+      "BUTTON": "Eksportuj do Excel",
+      "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
     }
   },
   "SETTINGS": {

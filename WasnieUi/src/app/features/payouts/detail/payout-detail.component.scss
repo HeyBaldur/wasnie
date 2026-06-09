@@ -42,11 +42,13 @@
   &__banner-paid-msg {
     color: var(--color-success);
     font-size: var(--font-size-13);
+    font-weight: 700;
   }
 
   &__banner-disputed-msg {
     color: var(--color-warning);
     font-size: var(--font-size-13);
+    font-weight: 700;
   }
 
   &__summary, &__lines, &__audit {

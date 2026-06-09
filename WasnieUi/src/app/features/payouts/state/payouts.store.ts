@@ -198,6 +198,15 @@ export class PayoutsStore {
     );
   }
 
+  toExportParams(): PaginationParams {
+    const filters = PayoutsStore._buildFilterRecord(this.filter());
+    return {
+      page: 1,
+      pageSize: 1,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+    };
+  }
+
   toQueryParams(): Record<string, string> {
     const f = this.filter();
     const p: Record<string, string> = {};

@@ -16,6 +16,14 @@
     gap: var(--space-2);
   }
 
+  &__export-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
   &__filter-header {
     display: flex;
     align-items: center;
@@ -262,6 +270,11 @@
     color: var(--color-danger);
     font-size: var(--font-size-13);
     margin-top: var(--space-2);
+  }
+
+  &__export-error {
+    color: var(--color-danger);
+    font-size: var(--font-size-12);
   }
 
   // ── Shared: bulk confirmation modal body ─────────────────────────────────────

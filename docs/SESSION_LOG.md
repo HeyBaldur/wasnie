@@ -8,6 +8,54 @@
 
 ## Sessions (newest first)
 
+## 2026-06-09 — Payouts refinement (A.5.1–A.5.6) + Pay Run design + full smoke
+
+**Phase:** A (Payout Engine sub-WIs)
+
+**What we did:**
+
+- **A.5.1 Interim Mitigation (3 bugs + 2 features):**
+  - Bug 1: Filter chip showed raw plan GUID when restoring from URL params → resolved name via `PlansApiService`.
+  - Bug 2 (ROOT CAUSE): `CompensationPayout.Calculate()` had `Money.Zero("USD")` hardcoded → all $0 payouts saved as USD regardless of plan currency. Fixed: `fallbackCurrency` required parameter; `DomainException` if blank; no silent default. Decision #67.
+  - Bug 3: Payout list now starts filtered to current month by default.
+  - Feature: `ExcludeZero` server-side toggle (`ListPayoutsHandler`).
+  - Feature: `PayoutStatus` chip on list; plan name link on detail page.
+- **A.5.2:** Filter bar polish (Dashboard V3 pattern). Critical fix: `_pollJob` had no stop condition → infinite API call loop (visible only in DevTools Network, not in tests). Fixed with `takeWhile(inclusive=true)`. 3 regression tests.
+- **A.5.3 Bulk Mark Paid:** `BulkMarkPaidCommand` + handler (`IClock`, catches `DomainException` per item, skips non-Approved, reports conflicts). `POST /api/payouts/bulk-mark-paid`. "Mark as paid (N)" button + rich `WsModal` (5 mandatory elements: count, per-currency totals, scrollable payee list, irreversibility warning, skip notice). 3 backend integration + 3 frontend unit tests.
+- **A.5.4:** Both bulk modals upgraded from `WsConfirmationModal` to rich `WsModal`. Scrollable payee list; names clickable → `/payees/:id` new tab. Approve = reversible (no irreversibility warning). Mark-paid = irreversible (warning present). Decision #69.
+- **A.5.5:** Payee rows in both modals extended to 3-column grid: name link | `dateFormat:'medium'` period | `currencyFormat` amount. `CurrencyFormatPipe` global fix: removed `minimumFractionDigits: 0`; uses CLDR native fraction digits (EUR/USD/PLN→2, JPY→0). Decision #68. 3 new pipe tests.
+- **A.5.6 Excel export (Payouts):** `PayoutExportRow`, `IPayoutExcelExportService` / `PayoutExcelExportService` (ClosedXML, 11 cols, frozen header, auto-fit). `ExportPayoutsHandler` reusing `ListPayoutsHandler.BuildQuery`. `GET /api/payouts/export`, 50k cap, `Permission.PayoutsExport`. Frontend: `exporting` signal, `onExport()` blob download, export button above table (matching Transactions pattern). 5 backend integration + 3 frontend unit tests. (5 integration tests pending rebuild after DLL lock from running API process.)
+- **Smoke test — full payout flow (browser + DevTools Network):** Calculate (EUR, 5% flat, line-by-line, total cuadra), Calculated→Approved→Paid, bulk approve (idempotent: protects Approved/Paid, reports conflicts), `ExcludeZero` toggle, infinite-loop bug confirmed fixed. All green.
+- **Pay Run design:** `docs/Pay_Run_Model.md` written and approved. 6 decisions closed (Decision #66). A.6 is next.
+
+**Key decisions:**
+- #66 — Pay Run model approved; `docs/Pay_Run_Model.md` is the design reference.
+- #67 — `Money.Zero` requires explicit currency; `DomainException` if blank; no hardcoded default.
+- #68 — `CurrencyFormatPipe`: CLDR native fraction digits; never hardcode `minimumFractionDigits`.
+- #69 — Bulk modals 5 elements for irreversible actions; reversible actions omit irreversibility warning.
+- #70 — Quotas not required for flat-rate commission; only for AttainmentBased plans.
+- #71 — Payouts Excel export = list-view export; aggregated payroll export is a separate future WI.
+- #72 — Pay Run UI: master→detail in separate pages (not expandable tree).
+- #73 — UI quality: study and replicate canonical sections; never improvise mid-build.
+
+**Files:**
+- Backend: `CompensationPayout.cs`, `CalculatePayoutsForPeriodHandler.cs`, `ListPayoutsHandler.cs` (BuildQuery extracted), `ExportPayoutsHandler.cs` (new), `BulkMarkPaidHandler.cs` (new), `PayoutExcelExportService.cs` (new), `PayoutsController.cs` (+2 endpoints), `PayoutExportRow.cs`, `IPayoutExcelExportService.cs`, `DependencyInjection.cs`.
+- Frontend: `payouts-list.component.{ts,html,scss}`, `payouts.store.ts`, `payouts.api.service.ts`, `currency-format.pipe.ts` + spec.
+- i18n: EN/ES/PL (`PAYOUTS.EXPORT`, `PAYOUTS.BULK_MARK_PAID`, filter keys).
+- Docs: `docs/Pay_Run_Model.md` (new, approved).
+
+**What's next:**
+- Smoke A.5.6 (stop API process → rebuild → run 5 new integration tests).
+- Optional: WI to fix ~11 pre-existing red tests before A.6 so regressions are visible.
+- WI-CALC-A.6: Pay Run implementation. Step 0 read-only + reconcile against Product Master Spec first.
+
+**Notes / lessons:**
+- **Infinite-loop bug invisible to automated tests.** The `_pollJob` waterfall of hundreds of identical API calls was only visible in DevTools Network. No test caught it because Angular tests mock HTTP and don't observe timing. Signals reactivity loops REQUIRE real browser smoke. Add polling components to the pre-release smoke checklist.
+- **Money.Zero with hardcoded currency is a silent data bug.** Compiled fine, all tests passed, UI showed $0 normally — but the currency field in the DB was wrong. Only discovered by querying the DB directly. Rule enforced at domain level: `Money.Zero(currency)` always requires the caller to provide currency from context.
+- **Step 0 prevents touching working code.** Verifying Credits export already existed before A.5.6 saved work and avoided breaking a live feature.
+
+---
+
 ## 2026-06-09 — WI-A5.4-A5.5 Bulk Modal Payee Rows
 
 **Completed in this session:**

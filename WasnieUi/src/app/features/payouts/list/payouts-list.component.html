@@ -170,6 +170,26 @@
       }
     </ws-card>
 
+    <!-- Export row -->
+    @if (store.totalCount() > 0) {
+      <div class="payouts-list__export-row">
+        <ws-button
+          *hasPermission="'Payouts.Export'"
+          variant="ghost"
+          size="sm"
+          [disabled]="exporting()"
+          [loading]="exporting()"
+          (click)="onExport()"
+        >
+          <app-icon name="file-excel" [size]="14" />
+          {{ 'PAYOUTS.EXPORT.BUTTON' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="payouts-list__export-error">{{ exportError()! | translate }}</span>
+        }
+      </div>
+    }
+
     <!-- Table -->
     <ws-table>
       <table>

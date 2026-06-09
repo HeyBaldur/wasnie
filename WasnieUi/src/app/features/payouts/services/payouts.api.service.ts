@@ -65,4 +65,11 @@ export class PayoutsApiService {
       responseType: 'blob' as const,
     });
   }
+
+  exportToExcel(params: PaginationParams): Observable<Blob> {
+    return this.http.get(`${this.base}/export`, {
+      params: buildHttpParams(params),
+      responseType: 'blob' as const,
+    });
+  }
 }

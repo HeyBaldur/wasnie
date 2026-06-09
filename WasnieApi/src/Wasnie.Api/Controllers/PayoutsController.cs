@@ -93,6 +93,22 @@ public sealed class PayoutsController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    // GET /api/payouts/export
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(
+        [FromQuery] PayoutFilterQuery filter, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ExportPayoutsQuery(filter), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error?.StartsWith("EXPORT_TOO_LARGE:", StringComparison.Ordinal) == true)
+                return UnprocessableEntity(new { message = result.Error });
+            return BadRequest(new { message = result.Error });
+        }
+        var export = result.Value!;
+        return File(export.Bytes, export.ContentType, export.FileName);
+    }
+
     // GET /api/payouts/{id}/export/pdf
     [HttpGet("{id:guid}/export/pdf")]
     public async Task<IActionResult> ExportPdf(Guid id, CancellationToken cancellationToken)
