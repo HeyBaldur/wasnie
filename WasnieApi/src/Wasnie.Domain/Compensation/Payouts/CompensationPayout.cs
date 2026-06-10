@@ -9,6 +9,7 @@ namespace Wasnie.Domain.Compensation.Payouts;
 public sealed class CompensationPayout : AggregateRoot
 {
     public Guid TenantId { get; private set; }
+    public Guid? PayRunId { get; private set; }
     public Guid PayeeId { get; private set; }
     public Guid PlanId { get; private set; }
     public PayeeReference PayeeSnapshot { get; private set; } = null!;
@@ -109,6 +110,32 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Paid;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    /// <summary>
+    /// Associates this payout with a PayRun. Called by the engine after creating or re-running a payout.
+    /// Idempotent when called with the same payRunId.
+    /// </summary>
+    public void AssignToRun(Guid payRunId)
+    {
+        if (PayRunId.HasValue && PayRunId.Value != payRunId)
+            throw new DomainException(
+                $"Payout {Id} is already assigned to a different PayRun ({PayRunId.Value}).");
+        PayRunId = payRunId;
+    }
+
+    /// <summary>
+    /// Reverts an Approved payout back to Calculated when its PayRun is reopened.
+    /// Only valid for Approved status — Paid and Disputed are not reverted.
+    /// </summary>
+    public void RevertToCalculated(string updatedBy, DateTimeOffset now)
+    {
+        if (Status != CompensationPayoutStatus.Approved)
+            throw new DomainException("Only Approved payouts can be reverted to Calculated.");
+
+        Status = CompensationPayoutStatus.Calculated;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

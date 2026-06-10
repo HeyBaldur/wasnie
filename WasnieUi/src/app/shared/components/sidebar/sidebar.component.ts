@@ -71,7 +71,7 @@ export class SidebarComponent {
         { path: '/payees', labelKey: 'NAV.PAYEES', icon: 'users', permission: 'Payees.Read' },
         { path: '/transactions', labelKey: 'NAV.TRANSACTIONS', icon: 'arrows-exchange', permission: 'Transactions.Read' },
         { path: '/credits', labelKey: 'NAV.CREDITS', icon: 'receipt', permission: 'Credits.Read' },
-        { path: '/payouts', labelKey: 'NAV.PAYOUTS', icon: 'coin', permission: 'Reports.ViewAll' },
+        { path: '/pay-runs', labelKey: 'NAV.PAY_RUNS', icon: 'coin', permission: 'Reports.ViewAll' },
       ],
     },
   ];

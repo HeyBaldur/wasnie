@@ -47,6 +47,12 @@ export const routes: Routes = [
       import('./features/credits/credits.routes').then((m) => m.creditsRoutes),
   },
   {
+    path: 'pay-runs',
+    canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
+    loadChildren: () =>
+      import('./features/pay-runs/pay-runs.routes').then((m) => m.payRunsRoutes),
+  },
+  {
     path: 'payouts',
     canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
     loadChildren: () =>

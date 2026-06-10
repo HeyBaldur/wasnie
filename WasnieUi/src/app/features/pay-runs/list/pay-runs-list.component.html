@@ -1,0 +1,234 @@
+<app-shell>
+  <ws-page-layout
+    icon="coin"
+    [title]="'PAY_RUNS.TITLE' | translate"
+    [subtitle]="'PAY_RUNS.SUBTITLE' | translate"
+  >
+    <!-- Header actions -->
+    <ng-container slot="actions">
+      <ws-button
+        *hasPermission="'Payouts.Calculate'"
+        variant="primary"
+        [disabled]="store.loading()"
+        (click)="calculateModalOpen.set(true)"
+      >
+        <app-icon name="zap" [size]="14" />
+        {{ 'PAY_RUNS.ACTION_CALCULATE' | translate }}
+      </ws-button>
+    </ng-container>
+
+    <!-- Filter card -->
+    <ws-card variant="raised" padding="sm" class="pay-runs-list__filter">
+      <div class="pay-runs-list__toolbar">
+        <ws-segmented-control
+          [options]="periodOptions"
+          [(value)]="activePeriod"
+          (valueChange)="setPeriod($event)"
+        />
+        <div class="pay-runs-list__toolbar-right">
+          <form [formGroup]="form">
+            <ws-select
+              formControlName="status"
+              [options]="statusOptions"
+              [placeholder]="'PAY_RUNS.FILTER.STATUS_ALL' | translate"
+            />
+          </form>
+        </div>
+      </div>
+    </ws-card>
+
+    <!-- Table -->
+    <ws-table>
+      <table>
+        <thead>
+          <tr>
+            <th>{{ 'PAY_RUNS.COL_PERIOD' | translate }}</th>
+            <th>{{ 'PAY_RUNS.COL_STATUS' | translate }}</th>
+            <th>{{ 'PAY_RUNS.COL_PAYEES' | translate }}</th>
+            <th class="pay-runs-list__col-right">{{ 'PAY_RUNS.COL_TOTALS' | translate }}</th>
+            <th>{{ 'PAY_RUNS.COL_CREATED' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (store.loading()) {
+            @for (row of skeletonRows; track row) {
+              <tr class="pay-runs-list__skeleton-row">
+                <td colspan="5"><div class="ws-skeleton ws-skeleton--line"></div></td>
+              </tr>
+            }
+          } @else if (store.items().length === 0) {
+            <tr>
+              <td colspan="5">
+                <ws-table-empty
+                  [messageKey]="store.filter().status !== 'All' || store.filter().periodFrom ? 'PAY_RUNS.EMPTY_FILTER_TITLE' : 'PAY_RUNS.EMPTY_TITLE'"
+                />
+              </td>
+            </tr>
+          } @else {
+            @for (run of store.items(); track run.id) {
+              <tr class="pay-runs-list__row" (click)="navigateToRun(run.id)" tabindex="0" (keydown.enter)="navigateToRun(run.id)">
+                <!-- Period -->
+                <td>
+                  <div class="pay-runs-list__period">
+                    <span class="pay-runs-list__period-start">{{ run.periodStart | dateFormat }}</span>
+                    <span class="pay-runs-list__period-sep">→</span>
+                    <span>{{ run.periodEnd | dateFormat }}</span>
+                  </div>
+                </td>
+                <!-- Status -->
+                <td>
+                  <ws-badge [variant]="statusBadge(run.status)">
+                    {{ 'PAY_RUNS.STATUS_' + run.status.toUpperCase() | translate }}
+                  </ws-badge>
+                </td>
+                <!-- Payee counts -->
+                <td>
+                  <span class="pay-runs-list__payee-count">
+                    {{ 'PAY_RUNS.PAYEE_COUNT' | translate: { paidPayeeCount: run.paidPayeeCount, payeeCount: run.payeeCount } }}
+                  </span>
+                </td>
+                <!-- Per-currency totals (Pattern B — each currency on its own line) -->
+                <td class="pay-runs-list__col-right">
+                  <div class="pay-runs-list__totals">
+                    @for (entry of totalAmountsEntries(run); track entry.currency) {
+                      <span class="pay-runs-list__total-line">
+                        {{ entry.amount | currencyFormat: entry.currency }}
+                      </span>
+                    }
+                    @if (totalAmountsEntries(run).length === 0) {
+                      <span class="pay-runs-list__total-zero">—</span>
+                    }
+                  </div>
+                </td>
+                <!-- Created -->
+                <td>
+                  <span class="pay-runs-list__created-by">{{ run.createdBy }}</span>
+                  <span class="pay-runs-list__created-at">{{ run.createdAt | dateFormat }}</span>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </ws-table>
+
+    @if (!store.loading() && store.totalCount() > 0) {
+      <ws-pagination
+        [currentPage]="store.page()"
+        [totalPages]="store.totalPages()"
+        [totalCount]="store.totalCount()"
+        [pageSize]="store.pageSize()"
+        (pageChange)="store.setPage($event)"
+        (pageSizeChange)="store.setPageSize($event)"
+      />
+    }
+
+  </ws-page-layout>
+</app-shell>
+
+<!-- Calculate Pay Run Modal (form → done, no polling loop) -->
+<ws-modal
+  [isOpen]="calculateModalOpen()"
+  (isOpenChange)="closeCalculateModal()"
+  [title]="'PAY_RUNS.CALCULATE_TITLE' | translate"
+  [description]="calculatePhase() === 'form' ? ('PAY_RUNS.CALCULATE_SUBTITLE' | translate) : ''"
+  [closable]="!calculating()"
+>
+  <!-- Phase: form -->
+  @if (calculatePhase() === 'form') {
+    <div class="pay-runs-list__modal-form">
+      <form [formGroup]="calculateForm">
+        <div class="pay-runs-list__modal-period">
+          <ws-date-picker
+            #startPicker
+            formControlName="periodStart"
+            [label]="'PAY_RUNS.CALCULATE_PERIOD_FROM' | translate"
+          />
+          <ws-date-picker
+            #endPicker
+            formControlName="periodEnd"
+            [label]="'PAY_RUNS.CALCULATE_PERIOD_TO' | translate"
+          />
+        </div>
+        @if (calculateError()) {
+          <p class="pay-runs-list__error">{{ calculateError()! | translate }}</p>
+        }
+      </form>
+    </div>
+  }
+
+  <!-- Phase: done -->
+  @if (calculatePhase() === 'done' && calculateResult(); as result) {
+    <div class="pay-runs-list__modal-result">
+      <div class="pay-runs-list__result-summary">
+        <app-icon
+          [name]="result.payoutsCreated > 0 ? 'check-circle' : 'info'"
+          [size]="20"
+          [class]="result.payoutsCreated > 0 ? 'pay-runs-list__result-icon--success' : 'pay-runs-list__result-icon--neutral'"
+        />
+        <p class="pay-runs-list__result-count">
+          @if (result.payoutsCreated > 0) {
+            {{ 'PAY_RUNS.CALCULATE_CREATED' | translate: { count: result.payoutsCreated } }}
+          } @else {
+            {{ 'PAY_RUNS.CALCULATE_NO_PAYOUTS' | translate }}
+          }
+        </p>
+      </div>
+
+      @if (result.warnings.length > 0) {
+        <div class="pay-runs-list__result-section pay-runs-list__result-section--warning">
+          <p class="pay-runs-list__result-section-title">
+            <app-icon name="alert-triangle" [size]="14" />
+            {{ 'PAY_RUNS.WARNINGS_TITLE' | translate }}
+          </p>
+          <p class="pay-runs-list__result-section-desc">{{ 'PAY_RUNS.WARNINGS_DESC' | translate }}</p>
+          <div class="pay-runs-list__payee-scroll">
+            <ul class="pay-runs-list__result-list">
+              @for (w of result.warnings; track w.payeeId) {
+                <li>{{ w.payeeName }} — {{ w.pendingTransactionCount }} pending transaction(s)</li>
+              }
+            </ul>
+          </div>
+        </div>
+      }
+
+      @if (result.conflicts.length > 0) {
+        <div class="pay-runs-list__result-section pay-runs-list__result-section--info">
+          <p class="pay-runs-list__result-section-title">
+            <app-icon name="info" [size]="14" />
+            {{ 'PAY_RUNS.CONFLICTS_TITLE' | translate }}
+          </p>
+          <p class="pay-runs-list__result-section-desc">{{ 'PAY_RUNS.CONFLICTS_DESC' | translate }}</p>
+          <div class="pay-runs-list__payee-scroll">
+            <ul class="pay-runs-list__result-list">
+              @for (c of result.conflicts; track c.payeeId) {
+                <li>{{ c.payeeName }} — {{ c.periodStart }} → {{ c.periodEnd }} ({{ c.status }})</li>
+              }
+            </ul>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <ng-container slot="footer">
+    @if (calculatePhase() === 'form') {
+      <ws-button variant="ghost" [disabled]="calculating()" (click)="closeCalculateModal()">
+        {{ 'COMMON.CANCEL' | translate }}
+      </ws-button>
+      <ws-button
+        variant="primary"
+        [disabled]="!calculateForm.value.periodStart || !calculateForm.value.periodEnd || calculating()"
+        [loading]="calculating()"
+        (click)="onCalculate()"
+      >
+        {{ 'PAY_RUNS.CALCULATE_RUN' | translate }}
+      </ws-button>
+    }
+    @if (calculatePhase() === 'done') {
+      <ws-button variant="primary" (click)="closeCalculateModal()">
+        {{ 'COMMON.DONE' | translate }}
+      </ws-button>
+    }
+  </ng-container>
+</ws-modal>

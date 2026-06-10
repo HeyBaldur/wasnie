@@ -13,6 +13,7 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
         builder.HasKey(p => p.Id);
 
         builder.Property(p => p.TenantId).IsRequired();
+        builder.Property(p => p.PayRunId).IsRequired(false);
         builder.Property(p => p.PayeeId).IsRequired();
         builder.Property(p => p.PlanId).IsRequired();
         builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
@@ -45,11 +46,22 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
             .HasForeignKey(l => l.PayoutId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // FK to PayRun — nullable (orphan payouts have PayRunId = NULL).
+        // Restrict: a PayRun with linked payouts cannot be deleted — paid runs are
+        // immutable history and severing the payout↔run link is an audit hole.
+        builder.HasOne<PayRun>()
+            .WithMany()
+            .HasForeignKey(p => p.PayRunId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(p => new { p.TenantId, p.PayeeId });
 
-        // IX_CompensationPayouts_Live is a unique filtered index on
-        // (TenantId, PayeeId, PlanId, PeriodStart, PeriodEnd) WHERE Status NOT IN ('Paid','Disputed').
-        // It cannot be expressed via HasIndex because PeriodStart/PeriodEnd are owned-type columns.
-        // The index is created via raw SQL in migration A4_AddPayoutPlanId.
+        // IX_CompensationPayouts_Live: unique filtered index.
+        // Since A4 it covered (TenantId, PayeeId, PlanId, PeriodStart, PeriodEnd) WHERE Status not Paid/Disputed.
+        // Since A6 it covers (TenantId, PayRunId, PayeeId, PlanId) WHERE Status not Paid/Disputed AND PayRunId IS NOT NULL.
+        // PeriodStart/PeriodEnd are owned-type columns; the new index uses direct columns only, so it
+        // could be expressed via HasIndex — but it is kept as raw SQL in migration A6_AddPayRun to be
+        // consistent with the A4 pattern and to keep the filter clause explicit and reviewable.
     }
 }

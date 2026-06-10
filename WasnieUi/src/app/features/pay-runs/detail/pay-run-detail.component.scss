@@ -1,0 +1,218 @@
+.pay-run-detail {
+  &__error-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    color: var(--color-danger);
+    font-size: var(--font-size-13);
+    margin-bottom: var(--space-3);
+  }
+
+  &__summary-card {
+    margin-bottom: var(--space-4);
+  }
+
+  &__skeleton-summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  &__summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-5) var(--space-6);
+    padding: var(--space-2);
+  }
+
+  &__summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  &__summary-label {
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__summary-value {
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+  }
+
+  &__period {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-size-14);
+    font-weight: 500;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+  }
+
+  &__period-sep {
+    color: var(--color-text-tertiary);
+  }
+
+  &__totals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  &__total-line {
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+  }
+
+  &__total-zero {
+    color: var(--color-text-tertiary);
+    font-size: var(--font-size-14);
+  }
+
+  // ── Payouts sub-table ──────────────────────────────────────────────────────
+
+  &__payouts-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+  }
+
+  &__section-title {
+    font-size: var(--font-size-15);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  &__col-right {
+    text-align: right;
+  }
+
+  &__skeleton-row td {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  &__payout-row {
+    cursor: pointer;
+
+    &:hover td {
+      background: var(--color-bg-surface-raised);
+    }
+
+    &:focus {
+      outline: none;
+
+      td:first-child { box-shadow: inset 2px 0 0 var(--color-brand); }
+    }
+  }
+
+  &__payee-name {
+    display: block;
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  &__payee-code {
+    display: block;
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+  }
+
+  &__payout-period {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-size-13);
+    white-space: nowrap;
+  }
+
+  &__payout-total {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+
+  &__back-row {
+    margin-top: var(--space-5);
+  }
+
+  // ── Action confirmation modals ─────────────────────────────────────────────
+
+  &__modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  &__modal-intro {
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  &__modal-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  &__modal-section-label {
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0;
+  }
+
+  &__totals-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      font-size: var(--font-size-24);
+      font-weight: 700;
+      color: var(--color-text-primary);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+      margin-bottom: var(--space-1);
+      &:last-child { margin-bottom: 0; }
+    }
+  }
+
+  &__modal-warning {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-13);
+    font-weight: 500;
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  &__modal-skip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-info-bg);
+    border: 1px solid var(--color-info);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+}

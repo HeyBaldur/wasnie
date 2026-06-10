@@ -37,6 +37,7 @@ public static class Permission
     public const string PayoutsCalculate = "Payouts.Calculate";
     public const string PayoutsApprove = "Payouts.Approve";
     public const string PayoutsMarkPaid = "Payouts.MarkPaid";
+    public const string PayoutsReopen = "Payouts.Reopen";
     public const string PayoutsExport = "Payouts.Export";
 
     public const string ImportsExecute = "Imports.Execute";

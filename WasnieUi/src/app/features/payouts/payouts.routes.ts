@@ -3,10 +3,10 @@ import { authGuard } from '../../core/guards/auth.guard';
 
 export const payoutsRoutes: Routes = [
   {
+    // Flat payout list retired — redirect to the pay-runs entry point.
     path: '',
-    canActivate: [authGuard],
-    loadComponent: () =>
-      import('./list/payouts-list.component').then((m) => m.PayoutsListComponent),
+    redirectTo: '/pay-runs',
+    pathMatch: 'full',
   },
   {
     path: ':id',

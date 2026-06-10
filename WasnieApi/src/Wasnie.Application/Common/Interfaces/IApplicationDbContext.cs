@@ -34,6 +34,7 @@ public interface IApplicationDbContext
     DbSet<CompensationTransaction> CompensationTransactions { get; }
     DbSet<Credit> Credits { get; }
     DbSet<CompensationPayout> CompensationPayouts { get; }
+    DbSet<PayRun> PayRuns { get; }
 
     DatabaseFacade Database { get; }
 
