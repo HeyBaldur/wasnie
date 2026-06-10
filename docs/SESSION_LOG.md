@@ -8,6 +8,85 @@
 
 ## Sessions (newest first)
 
+## 2026-06-10 — WI-DASHBOARD: Visual redesign + i18n fix
+
+**Phase:** A.7 — Admin Dashboard (continuation)
+
+**What we did:**
+
+**i18n fix (CRITICAL):**
+- Root cause: duplicate `"DASHBOARD"` JSON top-level key in `en.json`, `es.json`, `pl.json` — JSON parsers silently use the last one, so the second block (payee-dashboard keys) overwrote the first (admin-dashboard keys), leaving all 23 admin keys unresolvable.
+- Fix: removed the first block in each file; merged the 23 missing admin-dashboard keys into the surviving second block.
+- Keys added per locale: TITLE, SUBTITLE, BAND_ACTION, BAND_PERIOD, BAND_TREND, PAYRUNS_DRAFT, PAYOUTS_PENDING_APPROVAL, PAYOUTS_APPROVED_UNPAID, ALL_CLEAR, VIEW_FILTERED, TRANSACTIONS_PERIOD, PAYOUTS_PERIOD, CREDITS_PERIOD, AVG_ATTAINMENT, ACTIVE_PLANS, ACTIVE_QUOTAS, PAYEES_ACTIVE, PAYEES_INACTIVE_LABEL, TREND_VS, TREND_PRIOR, TREND_NO_BASE, ACTIVITY_FEED, ACTIVITY_EMPTY.
+
+**Trend edge case:**
+- Backend sends real `changePercent` even when prior amount is near-zero (e.g. 0.01 EUR → +38,043%). No backend change needed.
+- `trendIsNoBase()` guard: `changePercent === null || Math.abs(changePercent) > 500` — shows `TREND_NO_BASE` label instead of absurd %.
+
+**UI redesign (frontend-only):**
+- Action band: 3-card grid with `ws-card[variant=interactive][accent=warning|none]`; count as large number (font-size-32/weight-800); per-currency list for pending-approval + approved-unpaid; green ALL_CLEAR badge when count=0; "View filtered →" footer link.
+- Band header badge shows `pendingActionCount()` (sum of draft + pending + 1 if any approved-unpaid currency).
+- Period band: `financial-grid` (3 cols: payouts/transactions/credits with ccy-list pattern B) + `stats-row` (3 stat-cards + 1 attainment card with `ws-gauge`).
+- Stats row uses custom `ws-card > a.stat-card` pattern instead of `ws-stat-card` — enables font-size-32/weight-800 matching action cards visually.
+- Activity feed: avatar initials + two-line layout (actor+time top row, action+resource bottom row); `actorShortName()` strips @domain (max 18 chars); `formatActivityAction()` snake_case→3 words; `shortResource()` truncates at 28 chars. CSS: `min-width:0` on `.feed__content` (flex child) + `text-overflow:ellipsis; white-space:nowrap` — prevents email/handler-name line wraps.
+- Trend band: per-currency `ws-bar-chart` (2 bars: prior + current); delta badge with color (success/danger); prior period row at 55% opacity.
+- All styles: design-system tokens only, zero hard-coded values.
+
+**Tests:**
+- 34/34 dashboard spec tests pass (added helpers: actorShortName, formatActivityAction, shortResource, pendingActionCount, trendBarPoints; fixed off-by-one in shortResource expectation `slice(0,26)` = 26 chars + '…').
+- `ng build --configuration production` clean (pre-existing budget warning only).
+
+**Decisions:**
+- `ws-stat-card` bypassed for stats row — input constraints prevent font-size-32; custom `ws-card > stat-card` pattern preferred.
+- `shortResource` truncates at `slice(0, 26)` giving 27-char total (26 + '…') for strings >28 chars.
+
+## 2026-06-10 — WI-DASHBOARD: Admin Dashboard real backend KPIs (replaces 100% hardcoded mockup)
+
+**Phase:** A.7 — Admin Dashboard
+
+**What we did:**
+
+**Backend:**
+- `PeriodHelper` extended with `ComputePriorPeriodRange`, `GetPeriodLabel`, `GetPriorPeriodLabel` (this-month→last-month, last-month→2 months ago, ytd→prior year same range, all-time→null).
+- `DashboardSummaryDto` + sub-DTOs: `DashboardActionBandDto`, `DashboardPeriodBandDto`, `DashboardTrendBandDto`, `DashboardTrendPointDto`, `DashboardActivityItemDto`.
+- `GetDashboardSummaryQuery` + `GetDashboardSummaryHandler`: Banda 1 (draft pay runs, payouts pending approval, approved-unpaid), Banda 2 (transactions count/volume, payouts total, credits count/total, avg quota attainment, active plans/quotas/payees), Banda 3 trend (current vs prior period, per-currency changePercent + direction), activity feed (top 10 AuditLog entries).
+- Anti-Cartesian attainment: quotas and credits loaded in separate queries, matched in-memory per quota.
+- Pattern B enforced throughout: every monetary value is `IReadOnlyList<CurrencyTotalDto>` — never summed across currencies.
+- `DashboardController`: `GET /api/dashboard?period=` with `[Authorize]` + `Permission.ReportsViewAll`.
+- Decision: Plans pending approval KPI removed — `Plan.Status` only has Draft/Active/Archived; adding PendingApproval would be false semantics.
+- AuditLog write-path verified (SyncAuditDispatcher, 4 background handlers) — activity feed uses real data.
+- `TestDatabaseFixture.ResetDashboardDataAsync()`: omits AuditLog (immutability trigger prevents DELETE).
+
+**Backend tests:**
+- 15 `PeriodHelperPriorPeriodTests` (all pass): ComputePriorPeriodRange, GetPeriodLabel, GetPriorPeriodLabel.
+- 7 `DashboardEndpointsTests` (integration): 401 without token, empty-tenant all zeros, multi-tenant isolation (ActivePlansCount A=1/B=0), payees snapshot, anti-Cartesian attainment (2 quotas 50%+100%=75% — mandatory test), TrendBand present for this-month, TrendBand null for all-time.
+
+**Frontend:**
+- `DashboardSummary` TypeScript model + sub-interfaces in `dashboard.models.ts`.
+- `DashboardService.getSummary(period)` — single HTTP call.
+- `DashboardStore`: `period`, `loading`, `error`, `summary` signals; `actionBand`, `periodBand`, `trendBand`, `activityFeed`, `hasPendingActions` computed; effect triggers `_load(period)` on period change; `setPeriod()` + `reload()`.
+- `DashboardComponent` rebuilt with 3-banda structure: action grid (3-col), period grid (2-col inside main 1fr+300px layout), trend grid (auto-fill minmax 180px), activity feed panel.
+- `WsSegmentedControl` period selector (this-month / last-month / ytd / all-time).
+- Pure helpers: `relativeTime()`, `actionCardAccent()`, `amountsAccent()`, `trendIcon()`, `trackByCurrency()`.
+- Removed unused `WsEmptyStateComponent` import (was triggering NG8113 warning).
+
+**i18n:** EN/ES/PL `DASHBOARD.*` keys replaced entirely — 25 new keys across all 3 files.
+
+**Frontend tests:** 15/15 pass — `DashboardComponent` helpers (relativeTime: mins/hours/days, actionCardAccent, amountsAccent) + `DashboardStore` signal behavior (period default, setPeriod, hasPendingActions computed with real data, computed defaults on null summary).
+
+**Build:** `ng build --configuration production` clean — no errors, only pre-existing warnings (bundle budget, pre-existing NG8113 in other components).
+
+**Deferred:**
+- None. Activity feed with real AuditLog data implemented. All bands implemented.
+
+**Key decisions:**
+- Plans pending approval KPI removed (Plan.Status has no PendingApproval value — false semantics).
+- Activity feed: real AuditLog data only; no placeholders (write-path confirmed).
+- Payees active/inactive: current snapshot (`Payee.IsActive`), not period-filtered.
+- TrendBand: server-side, prior period computed in handler; null for all-time period.
+
+---
+
 ## 2026-06-10 — A.6 Pay Run COMPLETE (Phases 5 UI + 6 filters/export) + full browser smoke
 
 **Phase:** A.6 — MILESTONE: entire Pay Run subsystem done. A.4→A.6 payout engine complete.

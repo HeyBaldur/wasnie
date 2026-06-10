@@ -1,79 +1,368 @@
-<app-shell>
-  <div class="page">
-    <ws-page-header
-      title="DASHBOARD.TITLE"
-      subtitle="DASHBOARD.SUBTITLE"
+﻿<app-shell>
+  <ws-page-layout
+    icon="dashboard"
+    [title]="'DASHBOARD.TITLE' | translate"
+    [subtitle]="'DASHBOARD.SUBTITLE' | translate"
+    maxWidth="wide"
+  >
+    <ws-segmented-control
+      slot="actions"
+      [options]="periodOptions"
+      [value]="store.period()"
+      (valueChange)="onPeriodChange($event)"
     />
 
-    <div class="kpi-grid">
-      @for (kpi of kpis; track kpi.labelKey) {
-        <ws-card variant="default" padding="md">
-          <div class="kpi-card">
-            <div class="kpi-card__header">
-              <span class="kpi-card__label">{{ kpi.labelKey | translate }}</span>
-              <div class="kpi-card__icon-wrap">
-                <app-icon [name]="kpi.icon" [size]="17" />
-              </div>
-            </div>
-            <div class="kpi-card__value">{{ kpi.value }}</div>
-            <div
-              class="kpi-card__trend"
-              [class.kpi-card__trend--positive]="kpi.positive === true"
-              [class.kpi-card__trend--negative]="kpi.positive === false"
-            >
-              <app-icon
-                [name]="kpi.positive === true ? 'trend-up' : kpi.positive === false ? 'trend-up' : 'trend-neutral'"
-                [size]="13"
-              />
-              {{ kpi.trend }} vs last period
-            </div>
-          </div>
-        </ws-card>
+    <!-- ── Banda 1: Requires action — full-width, 3 equal cols ───────────── -->
+    <div class="band-hd">
+      <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_ACTION' | translate }}</span>
+      @if (!store.loading() && pendingActionCount() > 0) {
+        <ws-badge variant="warning" size="sm">{{ pendingActionCount() }}</ws-badge>
       }
     </div>
 
-    <div class="dashboard-body">
-      <div class="cards-grid">
-        @for (card of cards; track card.titleKey) {
-          <ws-card variant="interactive" padding="md" [accent]="card.accent">
-            <a [routerLink]="card.route" class="metric-card">
-              <div class="metric-card__header">
-                <div class="metric-card__icon">
-                  <app-icon [name]="card.icon" [size]="16" />
+    <div class="action-grid">
+
+      <ws-card variant="interactive" padding="sm"
+        [accent]="actionCardAccent(store.actionBand()?.draftPayRunsCount ?? 0)">
+        <a [routerLink]="['/pay-runs']" [queryParams]="{ status: 'Draft' }" class="kpi-card">
+          <div class="kpi-card__top">
+            <div class="kpi-card__icon-box"
+              [class.kpi-card__icon-box--warn]="(store.actionBand()?.draftPayRunsCount ?? 0) > 0">
+              <app-icon name="document-text" [size]="18" />
+            </div>
+            <span class="kpi-card__lbl">{{ 'DASHBOARD.PAYRUNS_DRAFT' | translate }}</span>
+          </div>
+          <div class="kpi-card__value">
+            @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
+            @else { {{ store.actionBand()?.draftPayRunsCount ?? 0 }} }
+          </div>
+          <div class="kpi-card__foot">
+            @if (!store.loading() && (store.actionBand()?.draftPayRunsCount ?? 0) === 0) {
+              <ws-badge variant="success" size="sm">{{ 'DASHBOARD.ALL_CLEAR' | translate }}</ws-badge>
+            }
+            <span class="kpi-card__link">
+              {{ 'DASHBOARD.VIEW_FILTERED' | translate }}
+              <app-icon name="external-link" [size]="10" />
+            </span>
+          </div>
+        </a>
+      </ws-card>
+
+      <ws-card variant="interactive" padding="sm"
+        [accent]="actionCardAccent(store.actionBand()?.payoutsPendingApprovalCount ?? 0)">
+        <a [routerLink]="['/payouts']" [queryParams]="{ status: 'Calculated' }" class="kpi-card">
+          <div class="kpi-card__top">
+            <div class="kpi-card__icon-box"
+              [class.kpi-card__icon-box--warn]="(store.actionBand()?.payoutsPendingApprovalCount ?? 0) > 0">
+              <app-icon name="coin" [size]="18" />
+            </div>
+            <span class="kpi-card__lbl">{{ 'DASHBOARD.PAYOUTS_PENDING_APPROVAL' | translate }}</span>
+          </div>
+          <div class="kpi-card__value">
+            @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
+            @else { {{ store.actionBand()?.payoutsPendingApprovalCount ?? 0 }} }
+          </div>
+          @if (!store.loading()) {
+            <div class="ccy-list ccy-list--sm">
+              @for (t of store.actionBand()?.payoutsPendingApprovalByCurrency ?? []; track t.currency) {
+                <div class="ccy-row">
+                  <span class="ccy-row__code">{{ t.currency }}</span>
+                  <span class="ccy-row__amount">{{ t.amount | currencyFormat: t.currency }}</span>
                 </div>
-                <span class="metric-card__title">{{ card.titleKey | translate }}</span>
+              }
+            </div>
+          }
+          <div class="kpi-card__foot">
+            @if (!store.loading() && (store.actionBand()?.payoutsPendingApprovalCount ?? 0) === 0) {
+              <ws-badge variant="success" size="sm">{{ 'DASHBOARD.ALL_CLEAR' | translate }}</ws-badge>
+            }
+            <span class="kpi-card__link">
+              {{ 'DASHBOARD.VIEW_FILTERED' | translate }}
+              <app-icon name="external-link" [size]="10" />
+            </span>
+          </div>
+        </a>
+      </ws-card>
+
+      <ws-card variant="interactive" padding="sm"
+        [accent]="amountsAccent(store.actionBand()?.payoutsApprovedUnpaidByCurrency ?? [])">
+        <a [routerLink]="['/payouts']" [queryParams]="{ status: 'Approved' }" class="kpi-card">
+          <div class="kpi-card__top">
+            <div class="kpi-card__icon-box"
+              [class.kpi-card__icon-box--warn]="(store.actionBand()?.payoutsApprovedUnpaidByCurrency?.length ?? 0) > 0">
+              <app-icon name="coin" [size]="18" />
+            </div>
+            <span class="kpi-card__lbl">{{ 'DASHBOARD.PAYOUTS_APPROVED_UNPAID' | translate }}</span>
+          </div>
+          @if (store.loading()) {
+            <span class="skeleton skeleton--num"></span>
+          } @else {
+            <div class="ccy-list ccy-list--hero">
+              @for (t of store.actionBand()?.payoutsApprovedUnpaidByCurrency ?? []; track t.currency) {
+                <div class="ccy-row">
+                  <span class="ccy-row__code">{{ t.currency }}</span>
+                  <span class="ccy-row__amount ccy-row__amount--xl">{{ t.amount | currencyFormat: t.currency }}</span>
+                </div>
+              } @empty {
+                <div class="kpi-card__value">0</div>
+              }
+            </div>
+          }
+          <div class="kpi-card__foot">
+            @if (!store.loading() && (store.actionBand()?.payoutsApprovedUnpaidByCurrency?.length ?? 0) === 0) {
+              <ws-badge variant="success" size="sm">{{ 'DASHBOARD.ALL_CLEAR' | translate }}</ws-badge>
+            }
+            <span class="kpi-card__link">
+              {{ 'DASHBOARD.VIEW_FILTERED' | translate }}
+              <app-icon name="external-link" [size]="10" />
+            </span>
+          </div>
+        </a>
+      </ws-card>
+
+    </div>
+
+    <!-- ── Banda 2: Period KPIs (left 1fr) + Activity feed (right 360px) ─── -->
+    <div class="dash-main">
+
+      <div>
+        <div class="band-hd">
+          <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_PERIOD' | translate }}</span>
+          @if (store.summary()?.periodLabel) {
+            <span class="band-hd__chip">{{ store.summary()!.periodLabel }}</span>
+          }
+        </div>
+
+        <!-- ONE unified grid — all 7 period KPI cards, repeat(3, 1fr) ─────── -->
+        <div class="period-grid">
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/payouts']" class="kpi-card">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="coin" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.PAYOUTS_PERIOD' | translate }}</span>
               </div>
-              <div class="metric-card__count">{{ card.count }}</div>
-              <div class="metric-card__sub">{{ card.subtitle }}</div>
-              <span class="metric-card__link">
-                {{ 'DASHBOARD.VIEW_ALL' | translate }}
-                <app-icon name="external-link" [size]="11" />
+              <div class="ccy-list ccy-list--hero">
+                @for (t of store.periodBand()?.payoutsTotalByCurrency ?? []; track t.currency) {
+                  <div class="ccy-row">
+                    <span class="ccy-row__code">{{ t.currency }}</span>
+                    <span class="ccy-row__amount ccy-row__amount--xl">{{ t.amount | currencyFormat: t.currency }}</span>
+                  </div>
+                } @empty {
+                  <span class="kpi-card__dash">—</span>
+                }
+              </div>
+              <span class="kpi-card__link kpi-card__link--sm">
+                {{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" />
               </span>
             </a>
           </ws-card>
-        }
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/transactions']" class="kpi-card">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="arrows-exchange" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.TRANSACTIONS_PERIOD' | translate }}</span>
+              </div>
+              <div class="kpi-card__value">{{ store.periodBand()?.transactionsCount ?? 0 }}</div>
+              <div class="ccy-list ccy-list--sm">
+                @for (t of store.periodBand()?.transactionsVolumeByCurrency ?? []; track t.currency) {
+                  <div class="ccy-row">
+                    <span class="ccy-row__code">{{ t.currency }}</span>
+                    <span class="ccy-row__amount">{{ t.amount | currencyFormat: t.currency }}</span>
+                  </div>
+                }
+              </div>
+              <span class="kpi-card__link kpi-card__link--sm">
+                {{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" />
+              </span>
+            </a>
+          </ws-card>
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/credits']" class="kpi-card">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="currency" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.CREDITS_PERIOD' | translate }}</span>
+              </div>
+              <div class="kpi-card__value">{{ store.periodBand()?.creditsCount ?? 0 }}</div>
+              <div class="ccy-list ccy-list--sm">
+                @for (t of store.periodBand()?.creditsTotalByCurrency ?? []; track t.currency) {
+                  <div class="ccy-row">
+                    <span class="ccy-row__code">{{ t.currency }}</span>
+                    <span class="ccy-row__amount">{{ t.amount | currencyFormat: t.currency }}</span>
+                  </div>
+                }
+              </div>
+              <span class="kpi-card__link kpi-card__link--sm">
+                {{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" />
+              </span>
+            </a>
+          </ws-card>
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/plans']" class="kpi-card">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="plans" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.ACTIVE_PLANS' | translate }}</span>
+              </div>
+              <div class="kpi-card__value">{{ store.periodBand()?.activePlansCount ?? 0 }}</div>
+            </a>
+          </ws-card>
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/quotas']" class="kpi-card">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="target" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.ACTIVE_QUOTAS' | translate }}</span>
+              </div>
+              <div class="kpi-card__value">{{ store.periodBand()?.activeQuotasCount ?? 0 }}</div>
+            </a>
+          </ws-card>
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/payees']" class="kpi-card"
+              [class.kpi-card--warn]="(store.periodBand()?.payeesInactiveCount ?? 0) > 0">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="users" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.PAYEES_ACTIVE' | translate }}</span>
+              </div>
+              <div class="kpi-card__value">{{ store.periodBand()?.payeesActiveCount ?? 0 }}</div>
+              @if ((store.periodBand()?.payeesInactiveCount ?? 0) > 0) {
+                <ws-badge variant="warning" size="sm">
+                  {{ store.periodBand()!.payeesInactiveCount }} {{ 'DASHBOARD.PAYEES_INACTIVE_LABEL' | translate }}
+                </ws-badge>
+              }
+            </a>
+          </ws-card>
+
+          <ws-card variant="flat" padding="sm">
+            <a [routerLink]="['/quotas']" class="kpi-card kpi-card--gauge">
+              <div class="kpi-card__top">
+                <div class="kpi-card__icon-box">
+                  <app-icon name="target" [size]="18" />
+                </div>
+                <span class="kpi-card__lbl">{{ 'DASHBOARD.AVG_ATTAINMENT' | translate }}</span>
+              </div>
+              @if (store.periodBand()?.avgQuotaAttainmentPercent !== null && store.periodBand()?.avgQuotaAttainmentPercent !== undefined) {
+                <div class="kpi-card__gauge">
+                  <ws-gauge [value]="attainmentGaugeValue()" />
+                </div>
+                <div class="kpi-card__pct">
+                  {{ store.periodBand()!.avgQuotaAttainmentPercent! | number:'1.0-1' }}%
+                </div>
+              } @else {
+                <div class="kpi-card__dash">—</div>
+              }
+            </a>
+          </ws-card>
+
+        </div>
       </div>
 
-      <ws-card variant="flat" padding="none" class="activity-panel">
-        <div class="activity-panel__header">
-          <h3 class="activity-panel__title">
-            <app-icon name="activity" [size]="16" />
-            {{ 'DASHBOARD.ACTIVITY_FEED' | translate }}
-          </h3>
-        </div>
-        <ul class="activity-list">
-          @for (item of activity; track item.textKey) {
-            <li class="activity-item">
-              <div class="activity-item__avatar">{{ item.initials }}</div>
-              <div class="activity-item__body">
-                <p class="activity-item__text">{{ item.textKey | translate }}</p>
-              </div>
-              <span class="activity-item__time">{{ item.time }}</span>
-            </li>
+      <!-- Activity feed — 360px fixed, max-height 480px, scrollable ───────── -->
+      <aside class="dash-feed">
+        <ws-card variant="flat" padding="none">
+          <div class="feed__header">
+            <span class="feed__title">
+              <app-icon name="activity" [size]="14" />
+              {{ 'DASHBOARD.ACTIVITY_FEED' | translate }}
+            </span>
+          </div>
+
+          @if (store.activityFeed().length === 0 && !store.loading()) {
+            <div class="feed__empty">
+              <app-icon name="activity" [size]="22" />
+              <span>{{ 'DASHBOARD.ACTIVITY_EMPTY' | translate }}</span>
+            </div>
+          } @else {
+            <div class="feed__scroll">
+              <ul class="feed__list">
+                @for (item of store.activityFeed(); track item.timestampUtc) {
+                  <li class="feed__item">
+                    <div class="feed__avatar">{{ item.actorInitials }}</div>
+                    <div class="feed__content">
+                      <div class="feed__top-row">
+                        <span class="feed__actor">{{ actorShortName(item.actorEmail) }}</span>
+                        <span class="feed__time">{{ relativeTime(item.timestampUtc) }}</span>
+                      </div>
+                      <div class="feed__desc">
+                        {{ formatActivityAction(item.action) }}
+                        @if (shortResource(item.resourceDisplayName); as res) {
+                          <span class="feed__resource">{{ res }}</span>
+                        }
+                      </div>
+                    </div>
+                  </li>
+                }
+              </ul>
+            </div>
           }
-        </ul>
-      </ws-card>
+        </ws-card>
+      </aside>
+
     </div>
 
-  </div>
+    <!-- ── Banda 3: Trend — 2 fixed cols ─────────────────────────────────── -->
+    @if (store.trendBand() && store.trendBand()!.commissionTrend.length > 0) {
+      <div class="band-hd band-hd--mt">
+        <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_TREND' | translate }}</span>
+        <span class="band-hd__chip">
+          {{ store.trendBand()!.currentPeriodLabel }}
+          {{ 'DASHBOARD.TREND_VS' | translate }}
+          {{ store.trendBand()!.priorPeriodLabel }}
+        </span>
+      </div>
+      <div class="trend-grid">
+        @for (point of store.trendBand()!.commissionTrend; track point.currency) {
+          <ws-card variant="flat" padding="sm">
+            <div class="trend-card">
+              <div class="trend-card__head">
+                <ws-badge variant="neutral" size="sm">{{ point.currency }}</ws-badge>
+                <span
+                  class="trend-card__delta"
+                  [class.trend-card__delta--up]="point.direction === 'up' && !trendIsNoBase(point)"
+                  [class.trend-card__delta--down]="point.direction === 'down' && !trendIsNoBase(point)"
+                >
+                  @if (!trendIsNoBase(point)) {
+                    <app-icon [name]="trendIcon(point.direction)" [size]="11"
+                      [class.trend-icon--down]="point.direction === 'down'" />
+                    {{ trendChangeFormatted(point) }}
+                  } @else {
+                    {{ 'DASHBOARD.TREND_NO_BASE' | translate }}
+                  }
+                </span>
+              </div>
+              <ws-bar-chart
+                [points]="trendBarPoints(point, store.trendBand()!.currentPeriodLabel, store.trendBand()!.priorPeriodLabel)"
+              />
+              <div class="trend-card__amounts">
+                <div class="trend-card__amount-row">
+                  <span class="trend-card__period-lbl">{{ store.trendBand()!.currentPeriodLabel }}</span>
+                  <span class="trend-card__amount">{{ point.currentAmount | currencyFormat: point.currency }}</span>
+                </div>
+                <div class="trend-card__amount-row trend-card__amount-row--prior">
+                  <span class="trend-card__period-lbl">{{ 'DASHBOARD.TREND_PRIOR' | translate }}: {{ store.trendBand()!.priorPeriodLabel }}</span>
+                  <span class="trend-card__amount trend-card__amount--prior">{{ point.priorAmount | currencyFormat: point.currency }}</span>
+                </div>
+              </div>
+            </div>
+          </ws-card>
+        }
+      </div>
+    }
+
+  </ws-page-layout>
 </app-shell>

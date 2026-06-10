@@ -1,0 +1,336 @@
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Helpers;
+using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.DTOs;
+using Wasnie.Application.Compensation.Queries.Dashboard;
+using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Payees;
+using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Domain.Compensation.Quotas;
+
+namespace Wasnie.Application.Compensation.Handlers.Dashboard;
+
+public sealed class GetDashboardSummaryHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IClock clock)
+    : IRequestHandler<GetDashboardSummaryQuery, Result<DashboardSummaryDto>>
+{
+    private const int ActivityFeedLimit = 10;
+
+    public async Task<Result<DashboardSummaryDto>> Handle(
+        GetDashboardSummaryQuery request, CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.ReportsViewAll, cancellationToken);
+
+        var today = DateOnly.FromDateTime(clock.UtcNow);
+        var period = request.Period;
+
+        var (from, to) = PeriodHelper.ComputeDateRange(period, today);
+        var (priorFrom, priorTo) = PeriodHelper.ComputePriorPeriodRange(period, today);
+        var periodLabel = PeriodHelper.GetPeriodLabel(period, today);
+        var priorLabel = PeriodHelper.GetPriorPeriodLabel(period, today);
+
+        var actionBand = await BuildActionBandAsync(cancellationToken);
+        var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
+        var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
+            ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, periodLabel, priorLabel, cancellationToken)
+            : null;
+        var activityFeed = await BuildActivityFeedAsync(cancellationToken);
+
+        return Result<DashboardSummaryDto>.Success(new DashboardSummaryDto(
+            PeriodLabel: periodLabel,
+            ActionBand: actionBand,
+            PeriodBand: periodBand,
+            TrendBand: trendBand,
+            ActivityFeed: activityFeed));
+    }
+
+    // ── Banda 1 — period-independent action items ─────────────────────────────
+
+    private async Task<DashboardActionBandDto> BuildActionBandAsync(CancellationToken ct)
+    {
+        var draftPayRuns = await db.PayRuns
+            .CountAsync(r => r.Status == PayRunStatus.Draft, ct);
+
+        // Payouts pending approval = Status.Calculated; grouped by currency for Pattern B
+        var pendingRaw = await db.CompensationPayouts
+            .Where(p => p.Status == CompensationPayoutStatus.Calculated)
+            .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })
+            .ToListAsync(ct);
+
+        var pendingCount = pendingRaw.Count;
+        var pendingByCurrency = pendingRaw
+            .GroupBy(p => p.Currency)
+            .Select(g => new CurrencyTotalDto(g.Sum(p => p.Amount), g.Key))
+            .OrderBy(t => t.Currency)
+            .ToList();
+
+        // Approved but not yet paid = Status.Approved
+        var approvedUnpaidRaw = await db.CompensationPayouts
+            .Where(p => p.Status == CompensationPayoutStatus.Approved)
+            .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })
+            .ToListAsync(ct);
+
+        var approvedUnpaidByCurrency = approvedUnpaidRaw
+            .GroupBy(p => p.Currency)
+            .Select(g => new CurrencyTotalDto(g.Sum(p => p.Amount), g.Key))
+            .OrderBy(t => t.Currency)
+            .ToList();
+
+        return new DashboardActionBandDto(
+            DraftPayRunsCount: draftPayRuns,
+            PayoutsPendingApprovalCount: pendingCount,
+            PayoutsPendingApprovalByCurrency: pendingByCurrency,
+            PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency);
+    }
+
+    // ── Banda 2 — period-filtered state ──────────────────────────────────────
+
+    private async Task<DashboardPeriodBandDto> BuildPeriodBandAsync(
+        DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        // Transactions
+        var txQuery = db.CompensationTransactions.AsQueryable();
+        if (from.HasValue) txQuery = txQuery.Where(t => t.TransactionDate >= from.Value);
+        if (to.HasValue) txQuery = txQuery.Where(t => t.TransactionDate <= to.Value);
+
+        var txCount = await txQuery.CountAsync(ct);
+        var txVolumeRaw = await txQuery
+            .Select(t => new { t.Amount.Amount, t.Amount.Currency })
+            .ToListAsync(ct);
+        var txVolume = txVolumeRaw
+            .GroupBy(t => t.Currency)
+            .Select(g => new CurrencyTotalDto(g.Sum(t => t.Amount), g.Key))
+            .OrderBy(t => t.Currency)
+            .ToList();
+
+        // Payouts by period intersection
+        var payoutsInPeriod = await PayoutsInPeriodRawAsync(from, to, ct);
+        var payoutsByCurrency = payoutsInPeriod
+            .GroupBy(p => p.Currency)
+            .Select(g => new CurrencyTotalDto(g.Sum(p => p.Amount), g.Key))
+            .OrderBy(t => t.Currency)
+            .ToList();
+
+        // Credits allocated in period (AllocatedAt)
+        var creditsQuery = db.Credits.Where(c => c.SupersededAt == null);
+        if (from.HasValue)
+        {
+            var fromDto = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            creditsQuery = creditsQuery.Where(c => c.AllocatedAt >= fromDto);
+        }
+        if (to.HasValue)
+        {
+            var toDto = to.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            creditsQuery = creditsQuery.Where(c => c.AllocatedAt <= toDto);
+        }
+
+        var creditsCount = await creditsQuery.CountAsync(ct);
+        var creditsRaw = await creditsQuery
+            .Select(c => new { c.CreditedAmount.Amount, c.CreditedAmount.Currency })
+            .ToListAsync(ct);
+        var creditsByCurrency = creditsRaw
+            .GroupBy(c => c.Currency)
+            .Select(g => new CurrencyTotalDto(g.Sum(c => c.Amount), g.Key))
+            .OrderBy(t => t.Currency)
+            .ToList();
+
+        // Avg quota attainment — anti-Cartesian: load quotas + credits separately, match in-memory
+        var avgAttainment = await ComputeAvgAttainmentAsync(from, to, ct);
+
+        // Active plans (current state, not period-filtered)
+        var activePlans = await db.CompensationPlans
+            .CountAsync(p => p.Status == PlanStatus.Active, ct);
+
+        // Active quotas (current state)
+        var activeQuotas = await db.Quotas
+            .CountAsync(q => q.Status == QuotaStatus.Active, ct);
+
+        // Payees: IsActive is the platform eligibility flag; snapshot of current state
+        var payeesActive = await db.Payees.CountAsync(p => p.IsActive, ct);
+        var payeesInactive = await db.Payees.CountAsync(p => !p.IsActive, ct);
+
+        return new DashboardPeriodBandDto(
+            TransactionsCount: txCount,
+            TransactionsVolumeByCurrency: txVolume,
+            PayoutsTotalByCurrency: payoutsByCurrency,
+            CreditsCount: creditsCount,
+            CreditsTotalByCurrency: creditsByCurrency,
+            AvgQuotaAttainmentPercent: avgAttainment,
+            ActivePlansCount: activePlans,
+            ActiveQuotasCount: activeQuotas,
+            PayeesActiveCount: payeesActive,
+            PayeesInactiveCount: payeesInactive);
+    }
+
+    // ── Banda 3 — trend (current vs prior) ───────────────────────────────────
+
+    private static bool BuildTrendBandEnabled(DateOnly? priorFrom, DateOnly? priorTo) =>
+        priorFrom.HasValue && priorTo.HasValue;
+
+    private async Task<DashboardTrendBandDto> BuildTrendBandAsync(
+        DateOnly? from, DateOnly? to,
+        DateOnly priorFrom, DateOnly priorTo,
+        string currentLabel, string priorLabel,
+        CancellationToken ct)
+    {
+        var currentRaw = await PayoutsInPeriodRawAsync(from, to, ct);
+        var priorRaw = await PayoutsInPeriodRawAsync(priorFrom, priorTo, ct);
+
+        var currentByCurrency = currentRaw
+            .GroupBy(p => p.Currency)
+            .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount));
+
+        var priorByCurrency = priorRaw
+            .GroupBy(p => p.Currency)
+            .ToDictionary(g => g.Key, g => g.Sum(p => p.Amount));
+
+        // Build trend points for all currencies that appear in either period
+        var allCurrencies = currentByCurrency.Keys.Union(priorByCurrency.Keys).OrderBy(c => c).ToList();
+
+        var trendPoints = allCurrencies.Select(currency =>
+        {
+            var current = currentByCurrency.GetValueOrDefault(currency, 0m);
+            var prior = priorByCurrency.GetValueOrDefault(currency, 0m);
+            decimal? changePercent = prior == 0m ? null : Math.Round((current - prior) / prior * 100m, 2);
+            var direction = changePercent switch
+            {
+                null => "neutral",
+                > 0 => "up",
+                < 0 => "down",
+                _ => "neutral",
+            };
+            return new DashboardTrendPointDto(currency, current, prior, changePercent, direction);
+        }).ToList();
+
+        return new DashboardTrendBandDto(currentLabel, priorLabel, trendPoints);
+    }
+
+    // Shared helper: load payout amounts by currency for a date range (period intersection)
+    private async Task<List<(decimal Amount, string Currency)>> PayoutsInPeriodRawAsync(
+        DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        var q = db.CompensationPayouts.AsQueryable();
+        // Period intersection: payout.Period.End >= from AND payout.Period.Start <= to
+        if (from.HasValue) q = q.Where(p => p.Period.End >= from.Value);
+        if (to.HasValue) q = q.Where(p => p.Period.Start <= to.Value);
+
+        var raw = await q
+            .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })
+            .ToListAsync(ct);
+
+        return raw.Select(p => (p.Amount, p.Currency)).ToList();
+    }
+
+    // ── Avg quota attainment — anti-Cartesian ─────────────────────────────────
+    // Doc 15 invariant: credits joined to transactions is 1:1 (Credit.TransactionId FK).
+    // We load quotas and all relevant credits in two separate queries; matching is in-memory.
+    // This avoids any join that could multiply rows across the quota-credit relationship.
+    private async Task<decimal?> ComputeAvgAttainmentAsync(
+        DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        var quotas = await db.Quotas
+            .Where(q => q.Status == QuotaStatus.Active)
+            .Where(q =>
+                (!from.HasValue || q.Period.End >= from.Value) &&
+                (!to.HasValue || q.Period.Start <= to.Value))
+            .Select(q => new
+            {
+                q.PayeeId,
+                q.PlanId,
+                Target = q.Amount.Amount,
+                Currency = q.Amount.Currency,
+                q.Period.Start,
+                q.Period.End,
+                q.MeasurementType,
+            })
+            .ToListAsync(ct);
+
+        if (quotas.Count == 0) return null;
+
+        // Load all non-superseded credits with their transaction dates and amounts in one query.
+        // No quota join here — matching is done in-memory below (no Cartesian risk).
+        var allCredits = await (
+            from c in db.Credits
+            join t in db.CompensationTransactions on c.TransactionId equals t.Id
+            where c.SupersededAt == null
+            select new
+            {
+                c.PayeeId,
+                c.PlanId,
+                TxAmount = t.Amount.Amount,
+                Currency = t.Amount.Currency,
+                Quantity = t.Quantity,
+                t.TransactionDate,
+            }
+        ).ToListAsync(ct);
+
+        var attainments = new List<decimal>(quotas.Count);
+        foreach (var q in quotas)
+        {
+            decimal achieved;
+            if (q.MeasurementType == QuotaMeasurementType.Units)
+            {
+                achieved = allCredits
+                    .Where(c => c.PayeeId == q.PayeeId && c.PlanId == q.PlanId
+                                && c.TransactionDate >= q.Start && c.TransactionDate <= q.End)
+                    .Sum(c => (decimal)c.Quantity);
+            }
+            else
+            {
+                achieved = allCredits
+                    .Where(c => c.PayeeId == q.PayeeId && c.PlanId == q.PlanId
+                                && c.Currency == q.Currency
+                                && c.TransactionDate >= q.Start && c.TransactionDate <= q.End)
+                    .Sum(c => c.TxAmount);
+            }
+
+            if (q.Target > 0m)
+                attainments.Add(Math.Round(achieved / q.Target * 100m, 4));
+        }
+
+        if (attainments.Count == 0) return null;
+        return Math.Round(attainments.Sum() / attainments.Count, 2);
+    }
+
+    // ── Activity feed from AuditLog ───────────────────────────────────────────
+
+    private async Task<IReadOnlyList<DashboardActivityItemDto>> BuildActivityFeedAsync(CancellationToken ct)
+    {
+        var logs = await db.AuditLogs
+            .OrderByDescending(l => l.TimestampUtc)
+            .Take(ActivityFeedLimit)
+            .Select(l => new
+            {
+                l.TimestampUtc,
+                l.ActorEmail,
+                l.Action,
+                l.ResourceType,
+                l.ResourceDisplayName,
+            })
+            .ToListAsync(ct);
+
+        return logs.Select(l => new DashboardActivityItemDto(
+            TimestampUtc: l.TimestampUtc,
+            ActorEmail: l.ActorEmail,
+            ActorInitials: BuildInitials(l.ActorEmail),
+            Action: l.Action,
+            ResourceType: l.ResourceType,
+            ResourceDisplayName: l.ResourceDisplayName))
+            .ToList();
+    }
+
+    private static string BuildInitials(string email)
+    {
+        var local = email.Split('@')[0];
+        var parts = local.Split(['.', '_', '-'], StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}"
+            : local.Length >= 2 ? local[..2].ToUpperInvariant() : local.ToUpperInvariant();
+    }
+}

@@ -141,6 +141,22 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPlans");
     }
 
+    public async Task ResetDashboardDataAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        // AuditLogs cannot be deleted (immutability trigger) — tests don't assert exact counts.
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PayoutLines");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPayouts");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PayRuns");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Credits");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationTransactions");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM PlanAssignments");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Quotas");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM CompensationPlans");
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM Payees");
+    }
+
     public async Task ResetImportsAsync()
     {
         using var scope = Factory.Services.CreateScope();
