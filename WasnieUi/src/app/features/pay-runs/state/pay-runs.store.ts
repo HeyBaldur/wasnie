@@ -69,6 +69,19 @@ export class PayRunsStore {
     }
   }
 
+  readonly activeFilterCount = computed(() => {
+    const f = this.filter();
+    let n = 0;
+    if (f.status !== 'All') n++;
+    if (f.periodFrom || f.periodTo) n++;
+    return n;
+  });
+
+  toExportParams(): Record<string, string> {
+    const f = this._lastLoadedFilter() ?? this.filter();
+    return PayRunsStore._buildFilterRecord(f);
+  }
+
   setFilter(partial: Partial<PayRunFilter>): void {
     this.filter.update(f => ({ ...f, ...partial }));
     this.page.set(1);

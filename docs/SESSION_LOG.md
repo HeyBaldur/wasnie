@@ -8,6 +8,32 @@
 
 ## Sessions (newest first)
 
+## 2026-06-10 — A.6 Fase 6: Filters + Excel Export on Pay Run list & detail
+
+**Phase:** A.6 — Filters + Export
+
+**What we did:**
+
+**Backend:**
+- Extended `PayoutFilterQuery` with `PayRunId?`, `AmountMin?`, `AmountMax?` (nullable, non-breaking).
+- Made `ListPayoutsHandler.BuildQuery()` `static internal` — shared by list, detail, and export handlers (zero duplicated filter logic).
+- Rewrote `GetPayRunByIdHandler` to map `PayRunPayoutsDetailFilter` → `PayoutFilterQuery` and call `ListPayoutsHandler.BuildQuery()`.
+- Created `ExportPayRunsHandler` + `IPayRunExcelExportService` / `PayRunExcelExportService` (ClosedXML, two-pass dynamic currency columns, Pattern B — no cross-currency sum).
+- Added `GET /api/pay-runs/export` endpoint to `PayRunsController`.
+- Fixed `PayRunExportTests.cs`: replaced reference to `private sealed class PayRunEngineTests.DirectSender` with a self-contained local `DirectSender` class inside the test class. 11 new integration tests.
+
+**Frontend:**
+- `pay-run.model.ts`: `PayRunPayoutsDetailFilter` interface + `EMPTY_PAYOUTS_DETAIL_FILTER`.
+- `pay-runs.api.service.ts`: `getById()` now accepts full `PayRunPayoutsDetailFilter`; added `exportPayRuns()` and `exportRunPayouts()`.
+- `pay-runs.store.ts`: `toExportParams()` (reads `_lastLoadedFilter() ?? filter()`) + `activeFilterCount` computed.
+- `pay-run-detail.store.ts`: fully rewritten with `PayRunPayoutsDetailFilter`, `_lastLoadedFilter` race guard, `toExportParams()`, `setFilter()`, `clearFilters()`, `setExcludeZero()`, `activeFilterCount`.
+- `pay-runs-list.component`: Export to Excel button (`Payouts.Export` gate), `onExport()`.
+- `pay-run-detail.component`: collapsible filter bar (status, period from/to, amountMin/max, payee chips via WsSelect searchFn, plan chips), Export to Excel button, `onExportPayouts()`.
+- EN/ES/PL i18n: `PAY_RUNS.DETAIL.FILTER.*` + `PAY_RUNS.DETAIL.EXPORT.*` + `PAY_RUNS.EXPORT.*`.
+- 43/43 frontend unit tests pass; `ng build` production clean.
+
+**Deferred:** Backend integration tests require Docker for Testcontainers — run manually in CI.
+
 ## 2026-06-09 — Payouts refinement (A.5.1–A.5.6) + export race fix + Pay Run design + A.6 Fases 1–4 + full smoke
 
 **Phase:** A (Payout Engine — sesión larga completa)

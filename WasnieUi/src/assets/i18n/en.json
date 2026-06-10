@@ -1038,7 +1038,9 @@
       "PERIOD_THIS_MONTH": "This month",
       "PERIOD_LAST_MONTH": "Last month",
       "PERIOD_YTD": "Year to date",
-      "PERIOD_ALL_TIME": "All time"
+      "PERIOD_ALL_TIME": "All time",
+      "PERIOD_FROM": "From",
+      "PERIOD_TO": "To"
     },
     "ACTION_CALCULATE": "Calculate Pay Run",
     "ACTION_APPROVE": "Approve run",
@@ -1091,7 +1093,33 @@
       "REOPEN_CONFIRM_TITLE": "Reopen pay run?",
       "REOPEN_CONFIRM_BODY": "Reopening this run will revert all {{payeeCount}} payout(s) to Calculated status.",
       "REOPEN_CONFIRM_BTN": "Reopen run",
-      "REOPEN_ERROR": "Could not reopen pay run."
+      "REOPEN_ERROR": "Could not reopen pay run.",
+      "FILTER": {
+        "TITLE": "Filter payouts",
+        "CLEAR": "Clear filters",
+        "STATUS": "Status",
+        "STATUS_ALL": "All statuses",
+        "STATUS_CALCULATED": "Calculated",
+        "STATUS_APPROVED": "Approved",
+        "STATUS_PAID": "Paid",
+        "STATUS_DISPUTED": "Disputed",
+        "PERIOD_FROM": "Payout period from",
+        "PERIOD_TO": "Payout period to",
+        "AMOUNT_MIN": "Amount min",
+        "AMOUNT_MAX": "Amount max",
+        "PAYEE": "Payee",
+        "PAYEE_SEARCH": "Search payees…",
+        "PLAN": "Plan",
+        "PLAN_SEARCH": "Search plans…"
+      },
+      "EXPORT": {
+        "ACTION": "Export to Excel",
+        "ERROR": "Export failed. Please try again."
+      }
+    },
+    "EXPORT": {
+      "ACTION": "Export to Excel",
+      "ERROR": "Export failed. Please try again."
     }
   },
   "SETTINGS": {

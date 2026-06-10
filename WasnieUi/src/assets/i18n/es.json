@@ -1038,7 +1038,9 @@
       "PERIOD_THIS_MONTH": "Este mes",
       "PERIOD_LAST_MONTH": "Mes anterior",
       "PERIOD_YTD": "Año hasta la fecha",
-      "PERIOD_ALL_TIME": "Todo el tiempo"
+      "PERIOD_ALL_TIME": "Todo el tiempo",
+      "PERIOD_FROM": "Desde",
+      "PERIOD_TO": "Hasta"
     },
     "ACTION_CALCULATE": "Calcular ciclo de pago",
     "ACTION_APPROVE": "Aprobar ciclo",
@@ -1091,7 +1093,33 @@
       "REOPEN_CONFIRM_TITLE": "¿Reabrir ciclo de pago?",
       "REOPEN_CONFIRM_BODY": "Reabrir este ciclo revertirá los {{payeeCount}} pago(s) al estado Calculado.",
       "REOPEN_CONFIRM_BTN": "Reabrir ciclo",
-      "REOPEN_ERROR": "No se pudo reabrir el ciclo de pago."
+      "REOPEN_ERROR": "No se pudo reabrir el ciclo de pago.",
+      "FILTER": {
+        "TITLE": "Filtrar pagos",
+        "CLEAR": "Limpiar filtros",
+        "STATUS": "Estado",
+        "STATUS_ALL": "Todos los estados",
+        "STATUS_CALCULATED": "Calculado",
+        "STATUS_APPROVED": "Aprobado",
+        "STATUS_PAID": "Pagado",
+        "STATUS_DISPUTED": "Disputado",
+        "PERIOD_FROM": "Período de pago desde",
+        "PERIOD_TO": "Período de pago hasta",
+        "AMOUNT_MIN": "Monto mínimo",
+        "AMOUNT_MAX": "Monto máximo",
+        "PAYEE": "Beneficiario",
+        "PAYEE_SEARCH": "Buscar beneficiarios…",
+        "PLAN": "Plan",
+        "PLAN_SEARCH": "Buscar planes…"
+      },
+      "EXPORT": {
+        "ACTION": "Exportar a Excel",
+        "ERROR": "Error al exportar. Inténtelo de nuevo."
+      }
+    },
+    "EXPORT": {
+      "ACTION": "Exportar a Excel",
+      "ERROR": "Error al exportar. Inténtelo de nuevo."
     }
   },
   "SETTINGS": {

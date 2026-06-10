@@ -24,6 +24,30 @@ export interface PayRunDetail extends PayRunListItem {
   payouts: PagedResult<PayoutListItem>;
 }
 
+export interface PayRunPayoutsDetailFilter {
+  status: string | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  amountMin: number | null;
+  amountMax: number | null;
+  payeeIds: string[];
+  planIds: string[];
+  currencies: string[];
+  excludeZero: boolean;
+}
+
+export const EMPTY_PAYOUTS_DETAIL_FILTER: PayRunPayoutsDetailFilter = {
+  status: null,
+  periodFrom: null,
+  periodTo: null,
+  amountMin: null,
+  amountMax: null,
+  payeeIds: [],
+  planIds: [],
+  currencies: [],
+  excludeZero: true,
+};
+
 export interface CalculatePayRunRequest {
   periodStart: string;
   periodEnd: string;

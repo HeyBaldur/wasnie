@@ -1038,7 +1038,9 @@
       "PERIOD_THIS_MONTH": "Bieżący miesiąc",
       "PERIOD_LAST_MONTH": "Poprzedni miesiąc",
       "PERIOD_YTD": "Od początku roku",
-      "PERIOD_ALL_TIME": "Cały czas"
+      "PERIOD_ALL_TIME": "Cały czas",
+      "PERIOD_FROM": "Od",
+      "PERIOD_TO": "Do"
     },
     "ACTION_CALCULATE": "Oblicz cykl wypłat",
     "ACTION_APPROVE": "Zatwierdź cykl",
@@ -1091,7 +1093,33 @@
       "REOPEN_CONFIRM_TITLE": "Otworzyć ponownie cykl wypłat?",
       "REOPEN_CONFIRM_BODY": "Ponowne otwarcie tego cyklu cofnie {{payeeCount}} wypłatę(-y) do statusu Obliczone.",
       "REOPEN_CONFIRM_BTN": "Otwórz ponownie",
-      "REOPEN_ERROR": "Nie udało się ponownie otworzyć cyklu wypłat."
+      "REOPEN_ERROR": "Nie udało się ponownie otworzyć cyklu wypłat.",
+      "FILTER": {
+        "TITLE": "Filtruj wypłaty",
+        "CLEAR": "Wyczyść filtry",
+        "STATUS": "Status",
+        "STATUS_ALL": "Wszystkie statusy",
+        "STATUS_CALCULATED": "Obliczone",
+        "STATUS_APPROVED": "Zatwierdzone",
+        "STATUS_PAID": "Wypłacone",
+        "STATUS_DISPUTED": "Kwestionowane",
+        "PERIOD_FROM": "Okres wypłaty od",
+        "PERIOD_TO": "Okres wypłaty do",
+        "AMOUNT_MIN": "Kwota minimalna",
+        "AMOUNT_MAX": "Kwota maksymalna",
+        "PAYEE": "Beneficjent",
+        "PAYEE_SEARCH": "Szukaj beneficjentów…",
+        "PLAN": "Plan",
+        "PLAN_SEARCH": "Szukaj planów…"
+      },
+      "EXPORT": {
+        "ACTION": "Eksportuj do Excela",
+        "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
+      }
+    },
+    "EXPORT": {
+      "ACTION": "Eksportuj do Excela",
+      "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
     }
   },
   "SETTINGS": {

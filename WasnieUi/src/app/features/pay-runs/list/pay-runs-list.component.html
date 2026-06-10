@@ -7,6 +7,16 @@
     <!-- Header actions -->
     <ng-container slot="actions">
       <ws-button
+        *hasPermission="'Payouts.Export'"
+        variant="ghost"
+        [disabled]="store.loading() || exporting()"
+        [loading]="exporting()"
+        (click)="onExport()"
+      >
+        <app-icon name="download" [size]="14" />
+        {{ 'PAY_RUNS.EXPORT.ACTION' | translate }}
+      </ws-button>
+      <ws-button
         *hasPermission="'Payouts.Calculate'"
         variant="primary"
         [disabled]="store.loading()"
@@ -17,24 +27,33 @@
       </ws-button>
     </ng-container>
 
+    @if (exportError()) {
+      <ws-card variant="raised" class="pay-runs-list__export-error">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ exportError()! | translate }}
+      </ws-card>
+    }
+
     <!-- Filter card -->
     <ws-card variant="raised" padding="sm" class="pay-runs-list__filter">
-      <div class="pay-runs-list__toolbar">
-        <ws-segmented-control
-          [options]="periodOptions"
-          [(value)]="activePeriod"
-          (valueChange)="setPeriod($event)"
-        />
-        <div class="pay-runs-list__toolbar-right">
-          <form [formGroup]="form">
+      <form [formGroup]="form">
+        <div class="pay-runs-list__toolbar">
+          <ws-segmented-control
+            [options]="periodOptions"
+            [(value)]="activePeriod"
+            (valueChange)="setPeriod($event)"
+          />
+          <div class="pay-runs-list__toolbar-right">
+            <ws-date-picker #filterFromPicker formControlName="periodFrom" />
+            <ws-date-picker #filterToPicker formControlName="periodTo" />
             <ws-select
               formControlName="status"
               [options]="statusOptions"
               [placeholder]="'PAY_RUNS.FILTER.STATUS_ALL' | translate"
             />
-          </form>
+          </div>
         </div>
-      </div>
+      </form>
     </ws-card>
 
     <!-- Table -->

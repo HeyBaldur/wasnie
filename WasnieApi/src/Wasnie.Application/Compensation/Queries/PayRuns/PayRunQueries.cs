@@ -1,6 +1,7 @@
 using MediatR;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
+using Wasnie.Application.Compensation.Queries.Transactions;
 using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Compensation.Queries.PayRuns;
@@ -24,7 +25,20 @@ public sealed record PayRunPayoutsFilter
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
     public bool ExcludeZero { get; init; } = false;
+
+    // Rich filter fields — mirrors PayoutFilterQuery (PayRunId is injected by the handler).
+    public string? PayeeIds { get; init; }
+    public string? PlanIds { get; init; }
+    public string? Status { get; init; }
+    public string? Currencies { get; init; }
+    public DateOnly? PeriodFrom { get; init; }
+    public DateOnly? PeriodTo { get; init; }
+    public decimal? AmountMin { get; init; }
+    public decimal? AmountMax { get; init; }
 }
 
 public sealed record GetPayRunByIdQuery(Guid Id, PayRunPayoutsFilter PayoutsFilter)
     : IRequest<Result<PayRunDetailDto>>;
+
+public sealed record ExportPayRunsQuery(PayRunFilterQuery Filter)
+    : IRequest<Result<ExportResult>>;

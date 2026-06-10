@@ -5,9 +5,9 @@ using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Handlers.Payouts;
 using Wasnie.Application.Compensation.Queries.PayRuns;
+using Wasnie.Application.Compensation.Queries.Payouts;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
-using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.PayRuns;
 
@@ -27,16 +27,23 @@ public sealed class GetPayRunByIdHandler(
         if (payRun is null)
             return Result<PayRunDetailDto>.Failure("Pay run not found.");
 
-        // Load payouts for this run with optional zero-exclusion.
+        // Build the payout sub-query via the shared BuildQuery, with PayRunId pre-set.
         var f = request.PayoutsFilter;
-        var payoutsQuery = db.CompensationPayouts
-            .Where(p => p.PayRunId == request.Id
-                     && p.Status != CompensationPayoutStatus.Disputed);
-
-        if (f.ExcludeZero)
-            payoutsQuery = payoutsQuery.Where(p => p.TotalCommission.Amount > 0);
-
-        payoutsQuery = payoutsQuery.OrderByDescending(p => p.TotalCommission.Amount);
+        var payoutFilter = new PayoutFilterQuery
+        {
+            PayRunId   = request.Id,
+            PayeeIds   = f.PayeeIds,
+            PlanIds    = f.PlanIds,
+            Status     = f.Status,
+            Currencies = f.Currencies,
+            PeriodFrom = f.PeriodFrom,
+            PeriodTo   = f.PeriodTo,
+            AmountMin  = f.AmountMin,
+            AmountMax  = f.AmountMax,
+            ExcludeZero = f.ExcludeZero,
+        };
+        var payoutsQuery = ListPayoutsHandler.BuildQuery(db, payoutFilter)
+            .OrderByDescending(p => p.TotalCommission.Amount);
 
         var totalCount = await payoutsQuery.CountAsync(cancellationToken);
         var payoutPage = await payoutsQuery

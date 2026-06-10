@@ -22,19 +22,7 @@ public sealed class ListPayRunsHandler(
         await authorizationService.RequireAsync(Permission.PayoutsRead, cancellationToken);
 
         var f = request.Filter;
-        var query = db.PayRuns.AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(f.Status) &&
-            Enum.TryParse<PayRunStatus>(f.Status, out var status))
-        {
-            query = query.Where(r => r.Status == status);
-        }
-
-        if (f.PeriodFrom.HasValue)
-            query = query.Where(r => r.PeriodStart >= f.PeriodFrom.Value);
-
-        if (f.PeriodTo.HasValue)
-            query = query.Where(r => r.PeriodEnd <= f.PeriodTo.Value);
+        var query = BuildQuery(db, f);
 
         query = string.Equals(f.SortOrder, "asc", StringComparison.OrdinalIgnoreCase)
             ? query.OrderBy(r => r.PeriodStart)
@@ -65,5 +53,23 @@ public sealed class ListPayRunsHandler(
             Page = paged.Page,
             PageSize = paged.PageSize,
         });
+    }
+
+    internal static IQueryable<Wasnie.Domain.Compensation.Payouts.PayRun> BuildQuery(
+        IApplicationDbContext db, PayRunFilterQuery f)
+    {
+        var query = db.PayRuns.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(f.Status) &&
+            Enum.TryParse<PayRunStatus>(f.Status, out var status))
+            query = query.Where(r => r.Status == status);
+
+        if (f.PeriodFrom.HasValue)
+            query = query.Where(r => r.PeriodStart >= f.PeriodFrom.Value);
+
+        if (f.PeriodTo.HasValue)
+            query = query.Where(r => r.PeriodEnd <= f.PeriodTo.Value);
+
+        return query;
     }
 }

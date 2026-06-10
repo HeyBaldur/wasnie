@@ -1,4 +1,14 @@
 .pay-runs-list {
+  &__export-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    color: var(--color-danger);
+    font-size: var(--font-size-13);
+    margin-bottom: var(--space-3);
+  }
+
   &__filter {
     margin-bottom: var(--space-3);
   }
@@ -6,7 +16,6 @@
   &__toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-3);
     flex-wrap: wrap;
   }
@@ -15,7 +24,20 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-width: 160px;
+    flex-wrap: wrap;
+
+    ws-date-picker {
+      width: 148px;
+    }
+
+    ws-select {
+      width: 160px;
+    }
+
+    ::ng-deep .ws-select__value,
+    ::ng-deep .ws-select__option {
+      font-weight: 600;
+    }
   }
 
   &__col-right {

@@ -64,6 +64,22 @@ public sealed class PayRunsController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(new ReopenPayRunCommand(id), cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
     }
+
+    // GET /api/pay-runs/export
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(
+        [FromQuery] PayRunFilterQuery filter, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ExportPayRunsQuery(filter), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.Error?.StartsWith("EXPORT_TOO_LARGE:", StringComparison.Ordinal) == true)
+                return UnprocessableEntity(new { message = result.Error });
+            return BadRequest(new { message = result.Error });
+        }
+        var export = result.Value!;
+        return File(export.Bytes, export.ContentType, export.FileName);
+    }
 }
 
 public sealed record CalculatePayRunRequest(DateOnly PeriodStart, DateOnly PeriodEnd);

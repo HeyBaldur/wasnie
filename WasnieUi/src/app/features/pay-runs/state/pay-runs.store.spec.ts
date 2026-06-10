@@ -158,6 +158,52 @@ describe('PayRunsStore', () => {
     expect(apiSpy.list.calls.count()).toBe(callsBefore + 1);
   });
 
+  // ── activeFilterCount ────────────────────────────────────────────────────
+
+  it('activeFilterCount is 0 for empty filter', () => {
+    expect(store.activeFilterCount()).toBe(0);
+  });
+
+  it('activeFilterCount increments for status', () => {
+    store.setFilter({ status: 'Draft' });
+    expect(store.activeFilterCount()).toBe(1);
+  });
+
+  it('activeFilterCount increments for period (one field counts as one)', () => {
+    store.setFilter({ periodFrom: '2026-01-01' });
+    expect(store.activeFilterCount()).toBe(1);
+    store.setFilter({ periodTo: '2026-12-31' });
+    expect(store.activeFilterCount()).toBe(1); // from + to = still 1 "period" filter
+  });
+
+  it('activeFilterCount is 2 for status + period', () => {
+    store.setFilter({ status: 'Paid', periodFrom: '2026-01-01' });
+    expect(store.activeFilterCount()).toBe(2);
+  });
+
+  // ── toExportParams ────────────────────────────────────────────────────────
+
+  it('toExportParams falls back to filter() when no load has completed yet', () => {
+    store.setFilter({ status: 'Approved' });
+    // No completed load → falls back to filter()
+    const params = store.toExportParams();
+    expect(params['status']).toBe('Approved');
+  });
+
+  it('toExportParams uses _lastLoadedFilter after a completed load', async () => {
+    apiSpy.list.and.returnValue(of(makePaged([makeRun('r1')])));
+    store.setFilter({ status: 'Draft', periodFrom: '2026-06-01', periodTo: '2026-06-30' });
+    await store.reload();
+
+    // Now change filter without completing a load.
+    store.setFilter({ status: 'Paid' });
+
+    // toExportParams should still read the completed-load filter.
+    const params = store.toExportParams();
+    expect(params['status']).toBe('Draft');
+    expect(params['periodFrom']).toBe('2026-06-01');
+  });
+
   // ── Error handling ────────────────────────────────────────────────────────
 
   it('error signal is set when API call fails', async () => {

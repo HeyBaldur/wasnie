@@ -20,6 +20,13 @@ public sealed record PayoutFilterQuery
     public DateOnly? PeriodFrom { get; init; } // payouts where PeriodStart >= this
     public DateOnly? PeriodTo { get; init; }   // payouts where PeriodEnd <= this
     public bool ExcludeZero { get; init; } = false; // exclude payouts with TotalCommission = 0
+
+    // Optional: restrict to a specific pay run (used by the detail export and run-detail sub-table).
+    public Guid? PayRunId { get; init; }
+
+    // Optional: filter by payout total commission amount.
+    public decimal? AmountMin { get; init; }
+    public decimal? AmountMax { get; init; }
 }
 
 public sealed record ListPayoutsQuery(PayoutFilterQuery Filter)

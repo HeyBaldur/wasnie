@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { PayRunDetailStore } from './pay-run-detail.store';
 import { PayRunsApiService } from '../services/pay-runs.api.service';
-import { PayRunDetail } from '../models/pay-run.model';
+import { EMPTY_PAYOUTS_DETAIL_FILTER, PayRunDetail } from '../models/pay-run.model';
 import { PayoutListItem } from '../../payouts/models/payout.model';
 
 const makePagedPayouts = (items: PayoutListItem[] = []) => ({
@@ -59,8 +59,12 @@ describe('PayRunDetailStore', () => {
     expect(store.status()).toBeNull();
   });
 
-  it('should have excludeZero=true by default', () => {
+  it('should have excludeZero=true by default (from EMPTY_PAYOUTS_DETAIL_FILTER)', () => {
     expect(store.excludeZero()).toBeTrue();
+  });
+
+  it('should start with empty filter and zero activeFilterCount', () => {
+    expect(store.activeFilterCount()).toBe(0);
   });
 
   // ── load ──────────────────────────────────────────────────────────────────
@@ -73,10 +77,12 @@ describe('PayRunDetailStore', () => {
     expect(store.loading()).toBeFalse();
   });
 
-  it('load calls getById with runId, page, pageSize, excludeZero', async () => {
+  it('load calls getById with runId, filter, page, pageSize', async () => {
     await store.load('run-abc');
 
-    expect(apiSpy.getById).toHaveBeenCalledOnceWith('run-abc', 1, 25, true);
+    expect(apiSpy.getById).toHaveBeenCalledOnceWith(
+      'run-abc', EMPTY_PAYOUTS_DETAIL_FILTER, 1, 25
+    );
   });
 
   it('error is set when load fails', async () => {
@@ -114,13 +120,13 @@ describe('PayRunDetailStore', () => {
   it('markPaidSummary exposes paidPayeeCount as count', async () => {
     await store.load('run-1');
     const s = store.markPaidSummary();
-    expect(s.count).toBe(8); // paidPayeeCount from makeRun()
+    expect(s.count).toBe(8);
   });
 
   it('markPaidSummary exposes zeroPayoutCount as skippedCount', async () => {
     await store.load('run-1');
     const s = store.markPaidSummary();
-    expect(s.skippedCount).toBe(2); // zeroPayoutCount from makeRun()
+    expect(s.skippedCount).toBe(2);
   });
 
   it('markPaidSummary exposes per-currency totalAmounts', async () => {
@@ -146,25 +152,78 @@ describe('PayRunDetailStore', () => {
     expect(entries).toContain(jasmine.objectContaining({ currency: 'PLN', amount: 3000 }));
   });
 
-  // ── excludeZero toggle ────────────────────────────────────────────────────
+  // ── excludeZero / setExcludeZero ──────────────────────────────────────────
 
-  it('setExcludeZero calls getById with new excludeZero value and resets page to 1', async () => {
+  it('setExcludeZero updates excludeZero flag and refetches with page 1', async () => {
     await store.load('run-1');
-    store.setPage(3); // advance to page 3 manually (simulated, doesn't call _fetch again without await)
-    store.page.set(3); // set directly since setPage also calls _fetch
+    store.page.set(3);
     apiSpy.getById.calls.reset();
 
     store.setExcludeZero(false);
-    // Wait for the async _fetch to complete
     await new Promise(r => setTimeout(r, 0));
 
     expect(store.excludeZero()).toBeFalse();
     expect(store.page()).toBe(1);
-    expect(apiSpy.getById).toHaveBeenCalledWith('run-1', 1, 25, false);
+    const call = apiSpy.getById.calls.mostRecent();
+    expect(call.args[0]).toBe('run-1');
+    expect((call.args[1] as { excludeZero: boolean }).excludeZero).toBeFalse();
   });
 
-  // ── reload fires exactly once after action ───────────────────────────────
-  // Regression guard: actions must call reload() once, not in a loop.
+  // ── setFilter ─────────────────────────────────────────────────────────────
+
+  it('setFilter updates filter fields and increments activeFilterCount', async () => {
+    await store.load('run-1');
+    apiSpy.getById.calls.reset();
+
+    store.setFilter({ status: 'Approved', periodFrom: '2026-01-01' });
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(store.filter().status).toBe('Approved');
+    expect(store.filter().periodFrom).toBe('2026-01-01');
+    expect(store.activeFilterCount()).toBe(2);
+    expect(apiSpy.getById).toHaveBeenCalledTimes(1);
+  });
+
+  it('clearFilters resets all fields and calls getById once', async () => {
+    await store.load('run-1');
+    store.setFilter({ status: 'Paid', amountMin: 100 });
+    await new Promise(r => setTimeout(r, 0));
+    apiSpy.getById.calls.reset();
+
+    store.clearFilters();
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(store.activeFilterCount()).toBe(0);
+    expect(store.filter().status).toBeNull();
+    expect(apiSpy.getById).toHaveBeenCalledTimes(1);
+  });
+
+  // ── toExportParams — race-condition guard ─────────────────────────────────
+
+  it('toExportParams returns params from last loaded filter, not in-flight filter()', async () => {
+    await store.load('run-1');
+    // Simulate an in-flight filter change that hasn't completed a load yet.
+    store.filter.set({ ...EMPTY_PAYOUTS_DETAIL_FILTER, status: 'Approved' });
+
+    // _lastLoadedFilter still has the original (empty) filter.
+    const params = store.toExportParams();
+    // status from _lastLoadedFilter (empty) should not appear.
+    expect(params['status']).toBeUndefined();
+  });
+
+  it('toExportParams falls back to filter() when no load has completed', () => {
+    store.filter.set({ ...EMPTY_PAYOUTS_DETAIL_FILTER, status: 'Paid' });
+    const params = store.toExportParams();
+    expect(params['status']).toBe('Paid');
+  });
+
+  it('toExportParams includes excludeZero=true when set', async () => {
+    await store.load('run-1');
+    const params = store.toExportParams();
+    expect(params['excludeZero']).toBe('true');
+  });
+
+  // ── reload fires exactly once ─────────────────────────────────────────────
 
   it('reload calls getById exactly once', async () => {
     await store.load('run-1');

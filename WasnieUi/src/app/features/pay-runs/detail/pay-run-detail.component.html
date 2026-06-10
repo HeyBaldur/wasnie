@@ -4,7 +4,7 @@
     [title]="store.run() ? (store.run()!.periodStart | dateFormat) + ' → ' + (store.run()!.periodEnd | dateFormat) : '…'"
     [subtitle]="'PAY_RUNS.TITLE' | translate"
   >
-    <!-- Back link + header actions -->
+    <!-- Header actions -->
     <ng-container slot="actions">
       <!-- Draft actions -->
       @if (store.isDraft() && !store.loading()) {
@@ -61,6 +61,13 @@
       <ws-card variant="raised" class="pay-run-detail__error-banner">
         <app-icon name="alert-circle" [size]="16" />
         {{ actionError()! | translate }}
+      </ws-card>
+    }
+
+    @if (exportError()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ exportError()! | translate }}
       </ws-card>
     }
 
@@ -144,16 +151,137 @@
     <!-- Payouts sub-table toolbar -->
     <div class="pay-run-detail__payouts-toolbar">
       <span class="pay-run-detail__section-title">{{ 'PAY_RUNS.DETAIL.SECTION_PAYOUTS' | translate }}</span>
-      <ws-button
-        size="sm"
-        [variant]="store.excludeZero() ? 'secondary' : 'ghost'"
-        [disabled]="store.loading()"
-        (click)="store.setExcludeZero(!store.excludeZero())"
-      >
-        <app-icon name="ban" [size]="13" />
-        {{ (store.excludeZero() ? 'PAY_RUNS.DETAIL.HIDE_ZERO_ON' : 'PAY_RUNS.DETAIL.HIDE_ZERO_OFF') | translate }}
-      </ws-button>
+      <div class="pay-run-detail__payouts-toolbar-right">
+        <ws-button
+          size="sm"
+          [variant]="store.excludeZero() ? 'secondary' : 'ghost'"
+          [disabled]="store.loading()"
+          (click)="store.setExcludeZero(!store.excludeZero())"
+        >
+          <app-icon name="ban" [size]="13" />
+          {{ (store.excludeZero() ? 'PAY_RUNS.DETAIL.HIDE_ZERO_ON' : 'PAY_RUNS.DETAIL.HIDE_ZERO_OFF') | translate }}
+        </ws-button>
+        <ws-button
+          *hasPermission="'Payouts.Export'"
+          size="sm"
+          variant="ghost"
+          [disabled]="store.loading() || exporting()"
+          [loading]="exporting()"
+          (click)="onExportPayouts()"
+        >
+          <app-icon name="download" [size]="13" />
+          {{ 'PAY_RUNS.DETAIL.EXPORT.ACTION' | translate }}
+        </ws-button>
+      </div>
     </div>
+
+    <!-- Collapsible filter panel for payouts sub-table -->
+    <ws-card variant="raised" padding="sm" class="pay-run-detail__filter-panel">
+      <div class="pay-run-detail__filter-header" (click)="filterOpen.set(!filterOpen())">
+        <span class="pay-run-detail__filter-title">
+          <app-icon name="filter" [size]="14" />
+          {{ 'PAY_RUNS.DETAIL.FILTER.TITLE' | translate }}
+        </span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
+        }
+        <span class="pay-run-detail__filter-spacer"></span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-button size="sm" variant="ghost" (click)="$event.stopPropagation(); clearFilters()">
+            {{ 'PAY_RUNS.DETAIL.FILTER.CLEAR' | translate }}
+          </ws-button>
+        }
+        <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+      </div>
+
+      @if (filterOpen()) {
+        <form [formGroup]="filterForm" class="pay-run-detail__filter-body">
+
+          <!-- Row 1: Status + Period from/to -->
+          <div class="pay-run-detail__filter-row">
+            <div class="pay-run-detail__filter-field">
+              <ws-select
+                formControlName="status"
+                [options]="payoutStatusOptions"
+                [placeholder]="'PAY_RUNS.DETAIL.FILTER.STATUS_ALL' | translate"
+                [label]="'PAY_RUNS.DETAIL.FILTER.STATUS' | translate"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field">
+              <ws-date-picker
+                formControlName="periodFrom"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PERIOD_FROM' | translate"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field">
+              <ws-date-picker
+                formControlName="periodTo"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PERIOD_TO' | translate"
+              />
+            </div>
+          </div>
+
+          <!-- Row 2: Amount range + Payee + Plan search -->
+          <div class="pay-run-detail__filter-row">
+            <div class="pay-run-detail__filter-field">
+              <ws-input
+                formControlName="amountMin"
+                type="number"
+                [label]="'PAY_RUNS.DETAIL.FILTER.AMOUNT_MIN' | translate"
+                [placeholder]="'0'"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field">
+              <ws-input
+                formControlName="amountMax"
+                type="number"
+                [label]="'PAY_RUNS.DETAIL.FILTER.AMOUNT_MAX' | translate"
+                [placeholder]="'∞'"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field pay-run-detail__filter-field--wide">
+              <ws-select
+                formControlName="payeeSearch"
+                [options]="[]"
+                [searchFn]="payeeSearchFn"
+                [placeholder]="'PAY_RUNS.DETAIL.FILTER.PAYEE_SEARCH' | translate"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PAYEE' | translate"
+              />
+              @if (selectedPayees().length > 0) {
+                <div class="pay-run-detail__chips">
+                  @for (p of selectedPayees(); track p.id) {
+                    <span class="pay-run-detail__chip">
+                      {{ p.label }}
+                      <button type="button" class="pay-run-detail__chip-remove" (click)="removePayee(p.id)" aria-label="Remove">×</button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+            <div class="pay-run-detail__filter-field pay-run-detail__filter-field--wide">
+              <ws-select
+                formControlName="planSearch"
+                [options]="[]"
+                [searchFn]="planSearchFn"
+                [placeholder]="'PAY_RUNS.DETAIL.FILTER.PLAN_SEARCH' | translate"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PLAN' | translate"
+              />
+              @if (selectedPlans().length > 0) {
+                <div class="pay-run-detail__chips">
+                  @for (p of selectedPlans(); track p.id) {
+                    <span class="pay-run-detail__chip">
+                      {{ p.label }}
+                      <button type="button" class="pay-run-detail__chip-remove" (click)="removePlan(p.id)" aria-label="Remove">×</button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+        </form>
+      }
+    </ws-card>
 
     <!-- Payouts table -->
     <ws-table>
@@ -178,7 +306,7 @@
             <tr>
               <td colspan="5">
                 <ws-table-empty
-                  [messageKey]="store.excludeZero() ? 'PAY_RUNS.DETAIL.EMPTY_FILTER' : 'PAY_RUNS.DETAIL.EMPTY_TITLE'"
+                  [messageKey]="store.activeFilterCount() > 0 || store.excludeZero() ? 'PAY_RUNS.DETAIL.EMPTY_FILTER' : 'PAY_RUNS.DETAIL.EMPTY_TITLE'"
                 />
               </td>
             </tr>

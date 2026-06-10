@@ -83,6 +83,7 @@ public static class DependencyInjection
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
         services.AddScoped<IPayoutPdfExportService, PayoutPdfExportService>();
         services.AddScoped<IPayoutExcelExportService, PayoutExcelExportService>();
+        services.AddScoped<IPayRunExcelExportService, PayRunExcelExportService>();
         services.AddScoped<IFieldRequirementService, FieldRequirementService>();
         services.AddScoped<IImportCacheService, ImportCacheService>();
         services.AddScoped<IFileParserService, FileParserService>();

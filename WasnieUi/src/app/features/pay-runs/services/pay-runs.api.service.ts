@@ -8,6 +8,7 @@ import {
   CalculatePayRunResult,
   PayRunDetail,
   PayRunListItem,
+  PayRunPayoutsDetailFilter,
 } from '../models/pay-run.model';
 
 @Injectable({ providedIn: 'root' })
@@ -21,12 +22,32 @@ export class PayRunsApiService {
     });
   }
 
-  getById(id: string, page = 1, pageSize = 25, excludeZero = false): Observable<PayRunDetail> {
+  getById(id: string, filter: PayRunPayoutsDetailFilter, page = 1, pageSize = 25): Observable<PayRunDetail> {
     let params = new HttpParams()
       .set('page', String(page))
       .set('pageSize', String(pageSize));
-    if (excludeZero) params = params.set('excludeZero', 'true');
+    if (filter.excludeZero) params = params.set('excludeZero', 'true');
+    if (filter.status) params = params.set('status', filter.status);
+    if (filter.periodFrom) params = params.set('periodFrom', filter.periodFrom);
+    if (filter.periodTo) params = params.set('periodTo', filter.periodTo);
+    if (filter.amountMin != null) params = params.set('amountMin', String(filter.amountMin));
+    if (filter.amountMax != null) params = params.set('amountMax', String(filter.amountMax));
+    if (filter.payeeIds.length > 0) params = params.set('payeeIds', filter.payeeIds.join(','));
+    if (filter.planIds.length > 0) params = params.set('planIds', filter.planIds.join(','));
+    if (filter.currencies.length > 0) params = params.set('currencies', filter.currencies.join(','));
     return this.http.get<PayRunDetail>(`${this.base}/${id}`, { params });
+  }
+
+  exportPayRuns(filterParams: Record<string, string>): Observable<Blob> {
+    let params = new HttpParams();
+    Object.entries(filterParams).forEach(([k, v]) => { params = params.set(k, v); });
+    return this.http.get(`${this.base}/export`, { params, responseType: 'blob' as const });
+  }
+
+  exportRunPayouts(runId: string, filterParams: Record<string, string>): Observable<Blob> {
+    let params = new HttpParams().set('payRunId', runId);
+    Object.entries(filterParams).forEach(([k, v]) => { params = params.set(k, v); });
+    return this.http.get('/api/payouts/export', { params, responseType: 'blob' as const });
   }
 
   calculate(body: CalculatePayRunRequest): Observable<CalculatePayRunResult> {

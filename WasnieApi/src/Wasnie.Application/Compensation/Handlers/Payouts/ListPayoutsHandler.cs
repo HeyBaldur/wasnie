@@ -87,6 +87,9 @@ public sealed class ListPayoutsHandler(
     {
         var query = db.CompensationPayouts.AsQueryable();
 
+        if (f.PayRunId.HasValue)
+            query = query.Where(p => p.PayRunId == f.PayRunId.Value);
+
         if (!string.IsNullOrWhiteSpace(f.Status) &&
             f.Status != "All" &&
             Enum.TryParse<CompensationPayoutStatus>(f.Status, out var status))
@@ -121,6 +124,12 @@ public sealed class ListPayoutsHandler(
 
         if (f.PeriodTo.HasValue)
             query = query.Where(p => p.Period.End <= f.PeriodTo.Value);
+
+        if (f.AmountMin.HasValue)
+            query = query.Where(p => p.TotalCommission.Amount >= f.AmountMin.Value);
+
+        if (f.AmountMax.HasValue)
+            query = query.Where(p => p.TotalCommission.Amount <= f.AmountMax.Value);
 
         if (f.ExcludeZero)
             query = query.Where(p => p.TotalCommission.Amount > 0);
