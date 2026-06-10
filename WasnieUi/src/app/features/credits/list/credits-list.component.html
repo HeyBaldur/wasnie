@@ -50,10 +50,10 @@
           <!-- Row 1: Status + Reference -->
           <div class="credits-list__filter-row">
             <div class="credits-list__filter-field">
-              <label class="credits-list__filter-label">{{ 'CREDITS.FILTER.STATUS' | translate }}</label>
               <ws-select
                 formControlName="status"
                 [options]="statusOptions"
+                [label]="'CREDITS.FILTER.STATUS' | translate"
               />
             </div>
             <div class="credits-list__filter-field credits-list__filter-field--wide">

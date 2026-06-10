@@ -8,6 +8,367 @@
 
 ## Sessions (newest first)
 
+## 2026-06-10 — A.6 Pay Run COMPLETE (Phases 5 UI + 6 filters/export) + full browser smoke
+
+**Phase:** A.6 — MILESTONE: entire Pay Run subsystem done. A.4→A.6 payout engine complete.
+
+**What we did:**
+
+**Fase 5 — Pay Run UI (continued from 2026-06-09 session, smoke-validated this session):**
+- Routes: `/pay-runs` (PayRunListComponent) + `/pay-runs/:id` (PayRunDetailComponent). `/payouts/:id` unchanged. `/payouts` redirects to `/pay-runs`. Sidebar entry: `/payouts`→`/pay-runs` ("Pay Runs" / "Ciclos de pago" / "Cykle wypłat").
+- `PayRunsStore` (global, `_lastLoadedFilter` race guard, `toExportParams()`) + `PayRunDetailStore` (component-scoped via `providers: []`, no singleton, `_lastLoadedFilter` race guard, `setFilter()`, `clearFilters()`, `setExcludeZero()`, `activeFilterCount`).
+- Calculate is SYNC — `onCalculate()` awaits `firstValueFrom(api.calculate(...))`, no Hangfire job, no polling loop (eliminates the A.5.2 infinite-loop risk by design, Decision #81).
+- Action modals with tone differentiation per Decision #69: Approve/Reopen (reversible → no irreversibility warning); MarkPaid (irreversible → 5 mandatory elements: count in title+body, per-currency totals, scrollable payee list, irreversibility warning, skip warning when non-Approved payouts selected).
+- Run header: Pattern B per-currency totals (€ and PLN on separate lines, no cross-currency sum); `payeeCount` + `paidPayeeCount` as distinct counters; audit fields (created/approved/paid + actor name).
+- i18n EN/ES/PL complete. RBAC gating via `*hasPermission` throughout.
+- **Smoke (browser + DevTools):** full cycle calculate→Draft→Approve→Approved→Reopen→Draft→Approve→MarkPaid→Paid verified. Pattern B (€ and PLN in separate lines) ✓. Two payee counts (e.g. 6 paid · 9 total) ✓. Audit fields (created/approved/paid + actor) ✓. A Paid payout (Adrián #2) stayed Paid through Approve AND Reopen (terminal state protection both directions) ✓.
+
+**Fase 6 — Filters + Excel Export:**
+
+*Backend:*
+- Extended `PayoutFilterQuery` with `PayRunId?`, `AmountMin?`, `AmountMax?` (nullable, non-breaking).
+- Made `ListPayoutsHandler.BuildQuery()` `static internal` — shared by list handler, detail handler, and both export handlers. Zero duplicated filter logic.
+- Rewrote `GetPayRunByIdHandler` to map `PayRunPayoutsDetailFilter` → `PayoutFilterQuery` and call `BuildQuery()`.
+- Created `ExportPayRunsHandler` + `IPayRunExcelExportService` / `PayRunExcelExportService` (ClosedXML, two-pass dynamic currency columns, Pattern B — never sums across currencies). `GET /api/pay-runs/export` endpoint added to `PayRunsController`.
+- `ExportPayoutsHandler` gains `PayRunId` filter — detail export reuses existing endpoint with run scoping.
+- Fixed `PayRunExportTests.cs`: replaced inaccessible `PayRunEngineTests.DirectSender` (private sealed class) with a self-contained local `DirectSender`. 11 new integration tests.
+
+*Frontend:*
+- `PayRunPayoutsDetailFilter` model + `EMPTY_PAYOUTS_DETAIL_FILTER` constant.
+- `pay-runs.api.service.ts`: `getById()` accepts full `PayRunPayoutsDetailFilter`; added `exportPayRuns()` + `exportRunPayouts()` → both return `Observable<Blob>`.
+- `pay-runs.store.ts`: `toExportParams()` (`_lastLoadedFilter() ?? filter()` race guard) + `activeFilterCount` computed.
+- `pay-run-detail.store.ts`: fully rewritten with filter signals, `_lastLoadedFilter` race guard, `toExportParams()`, `setFilter()`, `clearFilters()`, `setExcludeZero()`, `activeFilterCount`.
+- **List page:** manual date range pickers (from/to `WsDatePicker`, no label — compact mode; mutual exclusion effect; segment resets to "All time" when manual date entered; patchValue emitEvent:false to avoid double store.setFilter); default period this-month (first→last day of current month, Decision #83 bug-fix); Export to Excel button (`Payouts.Export` gate, blob download via ephemeral anchor).
+- **Detail page:** collapsible filter bar (status `WsSelect`, period from/to `WsDatePicker`, amountMin/amountMax `WsInput`, payee chips via `WsSelect searchFn`, plan chips, hide-$0 toggle); Export to Excel button; filter badge count shown on collapsed header.
+- EN/ES/PL i18n: `PAY_RUNS.DETAIL.FILTER.*` + `PAY_RUNS.DETAIL.EXPORT.*` + `PAY_RUNS.EXPORT.*` + `PAY_RUNS.FILTER.PERIOD_FROM/TO`.
+- 43/43 frontend unit tests pass; `ng build` production clean.
+
+**Key decisions:**
+- #80 — Pay Run routes + sidebar redirect: `/pay-runs` and `/pay-runs/:id`; `/payouts`→`/pay-runs` redirect; flat payout list not resurrected as standalone page.
+- #81 — Calculate is SYNC (no Hangfire job, no polling); eliminates infinite-loop risk by design.
+- #82 — Historical query capability lives within Pay Run screens (manual date pickers + detail filter bar); no separate `/payouts` page.
+- #83 — Step 0 calibration by risk: skip for low-risk additive work (filters, UI, export); mandatory for money/schema/state (migrations, engine, domain transitions, Permission grants).
+
+**Files:**
+
+*Backend A.6 Fase 6:*
+- `Wasnie.Application/Compensation/DTOs/PayRunDto.cs` (extended with filter support)
+- `Wasnie.Application/Compensation/Queries/PayRuns/` (new GetPayRunByIdQuery extended)
+- `Wasnie.Application/Compensation/Handlers/PayRuns/ExportPayRunsHandler.cs` (new)
+- `Wasnie.Infrastructure/Compensation/PayRunExcelExportService.cs` (new)
+- `Wasnie.Application/Compensation/Queries/Payouts/` (PayoutFilterQuery extended)
+- `Wasnie.Application/Compensation/Handlers/Payouts/ListPayoutsHandler.cs` (BuildQuery static internal)
+- `Wasnie.Application/Compensation/Handlers/Payouts/ExportPayoutsHandler.cs` (PayRunId filter)
+- `Wasnie.Api/Controllers/PayRunsController.cs` (Export endpoint)
+- `tests/Wasnie.IntegrationTests/Compensation/PayRunExportTests.cs` (11 new tests)
+
+*Frontend A.6 Fases 5+6:*
+- `pay-runs/models/pay-run.model.ts` (PayRunPayoutsDetailFilter + EMPTY constant)
+- `pay-runs/services/pay-runs.api.service.ts` (getById filter, exportPayRuns, exportRunPayouts)
+- `pay-runs/state/pay-runs.store.ts` (toExportParams race guard, activeFilterCount)
+- `pay-runs/state/pay-run-detail.store.ts` (full rewrite)
+- `pay-runs/list/pay-runs-list.component.{ts,html,scss}` (date pickers, export button, default period fix)
+- `pay-runs/detail/pay-run-detail.component.{ts,html,scss}` (filter bar, export button)
+- `pay-runs/state/pay-run-detail.store.spec.ts` (rewritten)
+- `pay-runs/state/pay-runs.store.spec.ts` (extended)
+- `assets/i18n/en.json`, `es.json`, `pl.json` (PAY_RUNS.DETAIL.FILTER.*, PAY_RUNS.EXPORT.*, etc.)
+
+**What's next:**
+- Commit branch `WI-A4-PAYOUT-ENGINE` (user-driven — Claude Code never runs git commands).
+- Post-A.6 roadmap: aggregated payroll export WI; email notification on run close (Resend + recipient settings + tier limits); WI-UX-GUIDANCE; clawbacks WI; pre-customer production hardening (red test cleanup, WI-PROD-N upload security, rate limit manual verification).
+
+**Notes / lessons:**
+- **Timing/reactivity bugs remain invisible to automated tests.** The stale filter default (list defaulting to last-month instead of this-month) and the `_lastLoadedFilter` race condition were only caught in browser smoke, not in the Angular test suite. Rule: any component with period initialization or store reconstruction must be included in the smoke checklist pre-release.
+- **Vigilance over multi-item requests.** In Fase 6 the manual date pickers (periodFrom/periodTo) on the LIST screen were omitted from the first implementation pass — the WI's central requirement (querying a run from January 2022 while in 2026) was missed until the user pointed it out explicitly. When a prompt has multiple items, verify each one against the final output before reporting done.
+- **Step 0 calibrated by risk (Decision #83):** Skip for additive/UI/export work; mandatory for money/schema/state work. Validated across A.6 — Fases 5+6 needed no Step 0; Fases 1–4 (Domain + Migration + Engine) benefited from it.
+
+---
+
+## 2026-06-09 — Payouts refinement (A.5.1–A.5.6) + export race fix + Pay Run design + A.6 Fases 1–4 + full smoke
+
+**Phase:** A (Payout Engine — sesión larga completa)
+
+**What we did:**
+
+Sesión larga con dos arcos: (1) refinamiento y validación del subsistema de Payouts (A.5.1–A.5.6 + fix de race del export), con smoke test manual completo en navegador (todo verde); (2) diseño aprobado del modelo Pay Run e implementación de A.6 Fases 1–4 (Domain + Migration + Engine + Tests). Fase 5 UI queda pendiente.
+
+**Arco 1 — Payouts refinement (A.5.1–A.5.6 + export race fix):**
+
+- **A.5.1 Interim Mitigation:** (1) Chip de filtro mostraba GUID del plan al restaurar desde URL → resolver nombre via `PlansApiService`. (2) ROOT CAUSE: `Money.Zero("USD")` hardcodeado en `CompensationPayout.Calculate()` → todos los payouts $0 guardados como USD independientemente de la divisa del plan. Fix: parámetro requerido `fallbackCurrency`; `DomainException` si vacío; sin default silencioso (Decision #67). (3) Lista arranca filtrada al mes actual. (4) Toggle `ExcludeZero` server-side.
+- **A.5.2:** Polish barra de filtros (Dashboard V3 pattern). FIX CRÍTICO: `_pollJob` sin condición de parada → bucle infinito de llamadas al API (solo visible en DevTools Network, NO en tests). Fix: `takeWhile(inclusive=true)`; 3 regression tests.
+- **A.5.3 Bulk Mark Paid:** `BulkMarkPaidCommand` + handler (`IClock`, catches `DomainException` por item, salta no-Approved, reporta conflictos). `POST /api/payouts/bulk-mark-paid`. Botón "Mark as paid (N)" + rich `WsModal` con 5 elementos obligatorios (Decision #69). 3 backend + 3 frontend tests.
+- **A.5.4:** Ambos modales bulk elevados a rich `WsModal`; listas scrollables; nombres clicables → `/payees/:id` nueva pestaña. Approve = reversible (sin advertencia de irreversibilidad). Mark-paid = irreversible (con advertencia).
+- **A.5.5:** Filas de payee en ambos modales: grid 3 columnas (nombre link | periodo | monto). `CurrencyFormatPipe` fix global: CLDR native fraction digits — EUR/USD/PLN→2 decimales, JPY→0 (Decision #68). 3 nuevos tests del pipe; 12/12 pasan.
+- **A.5.6 Excel export (Payouts):** `GET /api/payouts/export` reutilizando `ListPayoutsHandler.BuildQuery`; 50k cap; `Permission.PayoutsExport`; ClosedXML 11 cols; botón Export sobre la tabla (igual que Transactions). 5 integration + 3 frontend tests.
+- **FIX race del export:** Root cause: `PayoutsStore` singleton. En navegación de retorno, `ngOnInit` actualiza `filter()` síncronamente mientras el effect de `_loadList` aún no corrió; `pagedResult` muestra datos anteriores. Si el usuario clicaba Export en ese intervalo, `toExportParams()` leía el filtro nuevo (en transición) → 0 filas en el xlsx. Fix: señal `_lastLoadedFilter` (copia al completar carga); `toExportParams()` lee `_lastLoadedFilter() ?? filter()`; Export deshabilitado mientras `loading()`. 2 unit tests que reproducen la race + 1 integration test que parsea el xlsx real y compara `TotalCount`. Verificado en smoke: export coincide con la lista (All time = 11 filas, May1-Jun8 = 5 filas).
+- **Smoke test completo (browser + DevTools Network):** Calculate (EUR, 5% flat, line-by-line, total cuadra), Calculated→Approved→Paid, bulk approve (idempotente: protege Approved/Paid, reporta conflictos), `ExcludeZero` toggle, loop infinito confirmado resuelto. Todo verde.
+
+**Arco 2 — Pay Run design + A.6 Fases 1–4:**
+
+- **Diseño Pay Run (Decision #66):** `docs/Pay_Run_Model.md` aprobado con 6 decisiones cerradas.
+- **Step 0 + Reconciliación (Decisions #74–#79):** 3 gaps con el Spec (ninguno bloqueante). 6 decisiones de implementación cerradas — índice UNIQUE, PayRunId nullable sin backfill, Permission.PayoutsReopen, unique (TenantId, PeriodStart, PeriodEnd), CalculatePayRunCommand wraps ISender, FK ON DELETE RESTRICT.
+- **Fase 1 — Domain:** `PayRunStatus` enum (Draft/Approved/Paid) + `PayRun` aggregate (Open/Approve/MarkPaid/Reopen/UpdateRollUps + Cartesian guard) + 3 domain events + `CompensationPayout` extendido (PayRunId, AssignToRun, RevertToCalculated). 16 unit tests, todos green.
+- **Fase 2 — Migration:** `20260609132110_A6_AddPayRun` — tabla `PayRuns`, columna `PayRunId` nullable, índices, FK `ON DELETE RESTRICT`, reconstrucción `IX_CompensationPayouts_Live`. Designer + snapshot consistentes; aplicada a DB local.
+- **Fase 3 — Engine + API:** 6 endpoints. `CalculatePayRunHandler` envuelve motor A.4 via ISender. `UpdateRollUps` en cada transición de estado. Roll-ups = GROUP BY currency puro (sin joins, anti-Cartesian). `Permission.PayoutsReopen` añadido.
+- **Fase 4 — Integration Tests:** 20 tests en 5 grupos: idempotencia (4), state machine valid (3) + invalid (3), roll-ups/anti-Cartesian (3), multi-tenant (2), permission gates (5). Todos pasan. Totales: 387 unit + 134 integration = **521** (518 pass; 1 fallo pre-existente `AssignmentsEndpointsTests`; 2 skip). Build limpio.
+
+**Key decisions:**
+- #66 — Pay Run model aprobado; `docs/Pay_Run_Model.md` es la referencia de diseño.
+- #67 — `Money.Zero` con divisa siempre requerida; `DomainException` si vacío; nunca hardcodear la divisa.
+- #68 — `CurrencyFormatPipe`: CLDR native fraction digits; nunca hardcodear `minimumFractionDigits`.
+- #69 — Modales bulk: 5 elementos obligatorios para acciones irreversibles; reversibles omiten el aviso de irreversibilidad.
+- #70 — Quotas NO requeridas para comisión flat-rate; solo para `AttainmentBased`.
+- #71 — Export de payouts = export de la vista lista (uno por payout); payroll export es WI separado post-A.6.
+- #72 — UI Pay Run: master→detail en páginas separadas (no árbol expandible).
+- #73 — Calidad UI: estudiar y replicar la sección canónica antes de construir nueva UI.
+- #74–#79 — Step 0 A.6: índice UNIQUE con `<>`, PayRunId nullable, Permission.PayoutsReopen, unique por periodo, CalculatePayRunCommand wraps ISender, FK RESTRICT.
+
+**Files:**
+- Backend payouts: `CompensationPayout.cs`, `CalculatePayoutsForPeriodHandler.cs`, `ListPayoutsHandler.cs`, `ExportPayoutsHandler.cs` (new), `BulkMarkPaidHandler.cs` (new), `PayoutExcelExportService.cs` (new), `PayoutsController.cs` (+2 endpoints)
+- Frontend payouts: `payouts-list.component.{ts,html,scss}`, `payouts.store.ts` (`_lastLoadedFilter` + `selectedApprovedIds`), `payouts.api.service.ts`, `currency-format.pipe.ts` + spec
+- Backend A.6: `PayRun.cs`, `PayRunStatus.cs`, 3 domain events, `PayRunConfiguration.cs`, `20260609132110_A6_AddPayRun.cs` + Designer + Snapshot, `PayRunsController.cs`, 6 handlers, 2 queries, 2 DTOs, `CompensationPayoutConfiguration.cs`, `IApplicationDbContext.cs`, `ApplicationDbContext.cs`
+- Tests: `PayRunTests.cs` (16 unit), `PayRunEngineTests.cs` (20 integration), nuevos unit + integration por WI de A.5.x
+- Docs: `docs/Pay_Run_Model.md` (nuevo, aprobado)
+- i18n: EN/ES/PL actualizado para features de payouts
+
+**What's next:**
+- **A.6 Fase 5 UI (PRÓXIMA SESIÓN):** `PayRunListComponent` + `PayRunDetailComponent` + `PayRunsStore` + `PayRunDetailStore` + modales de acción por run + sidebar `/payouts`→`/pay-runs` + i18n EN+ES+PL. Reusar componentes existentes. Evitar la race de filtro stale (lección de A.5.6) en los stores nuevos.
+- Opcional antes de Fase 5: WI de limpieza de ~11 tests rojos pre-existentes.
+- Post-A.6: payroll export agregado; infra Resend + email notification al cerrar run + settings de destinatarios + límites por tier; adjustments/clawbacks WI; WI-UX-GUIDANCE.
+
+**Notes / lessons:**
+- **Loops de reactividad/timing NO aparecen en tests automatizados.** El bucle infinito de `_pollJob` (A.5.2) y la race de filtro stale en export (A.5.6) fueron completamente invisibles en el test suite de Angular — solo visibles en DevTools Network durante smoke manual. La reactividad de signals y los polls REQUIEREN smoke real de navegador. Regla: añadir componentes con polling y stores con filtros reconstruidos al checklist de smoke pre-release.
+- **`Money.Zero` con divisa hardcodeada es un bug de datos silencioso.** Compilaba bien, todos los tests pasaban, la UI mostraba $0 correctamente — pero la columna `Currency` en la DB tenía el valor incorrecto. Solo se descubrió consultando la DB directamente. Regla reforzada al nivel de dominio: `Money.Zero(currency)` siempre requiere la divisa derivada del contexto del plan, nunca un literal de cadena.
+- **Step 0 evita tocar código que funciona.** Verificar que el export de Credits ya existía (A.5.6) ahorró trabajo y evitó romper una feature en producción.
+- **La race de `_lastLoadedFilter` puede estar latente en `CreditsStore` y `TransactionsStore`** si comparten el patrón singleton-store + filtro reconstruido. Auditar antes de dar Fase 5 por cerrada.
+
+---
+
+## 2026-06-09 — WI A.6 Fase 4 (Pay Run Engine Integration Tests)
+
+**Phase:** A.6 — Pay Run Model (Fase 4 Integration Tests)
+
+**What we did:**
+
+Created `tests/Wasnie.IntegrationTests/Compensation/PayRunEngineTests.cs` — 20 integration tests using the same Testcontainers MsSql fixture as `PayoutEngineTests`. All 20 pass.
+
+**Test coverage (5 groups):**
+1. **Idempotency (4 tests):** `CalculatePayRun` first call creates Draft + assigns PayRunId; second call on Draft reuses same run (no duplicate row); Approved run blocks recalculation; Paid run blocks recalculation.
+2. **State machine — valid (3 tests):** Draft→Approved cascade (all Calculated payouts → Approved); Approved→Paid cascade; Approved→Draft Reopen cascade (payouts reverted to Calculated via `RevertToCalculated()`).
+3. **State machine — invalid (3 tests):** Reopen on Paid returns clean failure (no exception, no state mutation); MarkPaid on Draft rejected; Approve on Paid rejected.
+4. **Roll-ups (3 tests):** Single-currency TotalAmounts correct (1000×10%=100 EUR); zero-payout PayeeCount includes $0 payees but PaidPayeeCount/TotalAmounts exclude them; explicit Cartesian-guard test — 5 credits of 100 EUR = 500 EUR (not 500×N).
+5. **Multi-tenant (2 tests):** Tenant A cannot see Tenant B's run via `HasQueryFilter` or `GetPayRunByIdHandler`; two tenants can both create runs for the same period (unique index is per-tenant).
+6. **Permission gates (5 tests):** `AlwaysForbidAuth` stub confirms ForbiddenException with correct permission string for Calculate, Approve, MarkPaid, Reopen, and List.
+
+**Infrastructure added:**
+- `DirectSender` — inline `ISender` implementation that routes `CalculatePayoutsForPeriodCommand` directly to `CalculatePayoutsForPeriodHandler` (same `db` context), avoiding full DI container.
+- `AlwaysAllowAuth` / `AlwaysForbidAuth` — `IAuthorizationService` stubs.
+- `FixedUser` — `ICurrentUserService` stub (mirrors `PayoutEngineTests.FixedCurrentUser`).
+
+**Test counts:** 387 unit + 134 integration = **521 total** (518 pass; 1 pre-existing `Assignments` failure; 2 skip). Build clean.
+
+**Pending:** Fase 5 UI — `PayRunListComponent` at `/pay-runs`, `PayRunDetailComponent` at `/pay-runs/:id`, two new stores, run-level action modals (Approve/MarkPaid irreversibility warning/Reopen), sidebar `/payouts`→`/pay-runs`, full i18n EN+ES+PL.
+
+## 2026-06-09 — WI A.6 Fase 1+2+3 (Pay Run Domain, Migration, Engine)
+
+**Phase:** A.6 — Pay Run Model (Fase 1 Domain + Fase 2 Migration + Fase 3 Engine)
+
+**What we did:**
+
+**Fase 1 — Domain (16 new unit tests, all green):**
+- `PayRunStatus.cs` enum (Draft/Approved/Paid)
+- `PayRunApprovedEvent`, `PayRunPaidEvent`, `PayRunReopenedEvent` domain events
+- `PayRun.cs` aggregate — `Open()`, `Approve()`, `MarkPaid()`, `Reopen()`, `UpdateRollUps()` (pure function, CARTESIAN GUARD)
+- `CompensationPayout.cs` extended — `PayRunId?`, `AssignToRun()` (idempotent), `RevertToCalculated()`
+- `PayRunTests.cs` — 16 tests: state machine (valid+invalid transitions, Paid lock), roll-up computation (multi-currency, zero-payee, anti-Cartesian), audit fields
+
+**Fase 2 — Migration (applied, snapshot consistent):**
+- `PayRunConfiguration.cs` — `TotalAmounts` as JSON (nvarchar max), `date` columns, unique index `(TenantId, PeriodStart, PeriodEnd)`
+- `CompensationPayoutConfiguration.cs` — `PayRunId` nullable, FK with `ON DELETE RESTRICT` (runs with payouts cannot be deleted — audit trail preserved)
+- `IApplicationDbContext` + `ApplicationDbContext` updated — `DbSet<PayRun>`, query filter, `ApplyConfiguration`
+- Migration `20260609132110_A6_AddPayRun` generated via EF tools, Designer.cs + snapshot consistent. Raw SQL: drops A4 `IX_CompensationPayouts_Live`, creates new one: `(TenantId, PayRunId, PayeeId, PlanId) WHERE Status <> 'Paid' AND Status <> 'Disputed' AND PayRunId IS NOT NULL`. Migration applied to local DB.
+
+**Fase 3 — Engine + API:**
+- `Permission.PayoutsReopen` added; TenantAdmin + CompManager both granted
+- Commands: `CalculatePayRunCommand`, `ApprovePayRunCommand`, `MarkPayRunPaidCommand`, `ReopenPayRunCommand`
+- Queries: `ListPayRunsQuery`, `GetPayRunByIdQuery` (with paginated payout sub-list)
+- DTOs: `PayRunListItemDto`, `PayRunDetailDto`
+- Handlers: `CalculatePayRunHandler` (finds/creates Draft run, wraps existing per-payout engine via ISender, assigns PayRunId, recomputes roll-ups), `ApprovePayRunHandler` (cascades Calculated→Approved), `MarkPayRunPaidHandler` (cascades Approved→Paid), `ReopenPayRunHandler` (cascades Approved→Calculated via `RevertToCalculated()`), `ListPayRunsHandler`, `GetPayRunByIdHandler`
+- `PayRunsController` — 6 endpoints: GET /api/pay-runs, GET /api/pay-runs/:id, POST /api/pay-runs/calculate, POST /api/pay-runs/:id/approve, POST /api/pay-runs/:id/mark-paid, POST /api/pay-runs/:id/reopen
+
+**Test count: 387 unit (all pass). Build clean, 0 errors, 0 warnings.**
+
+**What's pending (Fase 4+5):**
+- Integration tests: multi-tenant isolation, state machine invalid-transition 400s, anti-Cartesian roll-up, permission gates
+- Fase 5 UI: `/pay-runs` list page, `/pay-runs/:id` detail page, two new stores, run-level action modals, sidebar update
+
+---
+
+## 2026-06-09 — Calculate modal scrollable lists + Credits alignment fix
+
+**Phase:** A (Payouts/Credits polish — post-context-compaction continuation)
+
+**What we did:**
+
+- **Calculate Payouts result modal — scrollable lists:** Applied the existing `payouts-list__payee-scroll` SCSS pattern (already present from A.5.4 bulk modals) to the warnings and conflicts lists inside the calculate result modal. Previously the lists could overflow unbounded inside the modal body. Each `<ul class="payouts-list__result-list">` is now wrapped in `<div class="payouts-list__payee-scroll">` (both warning section and conflict/skipped section). Added a nested rule inside `&__payee-scroll` in `payouts-list.component.scss` to give `__result-list` `padding-top`/`padding-bottom: var(--space-2)` when it lives inside the scroll box — items are not flush against the border. Title, description, and action button remain outside the scroll wrapper and are always visible regardless of list length. No new CSS invented; reuses the existing `max-height: 200px; overflow-y: auto; border; border-radius; background: var(--color-bg-surface-sunken)` definition.
+
+- **Credits list — Status filter alignment fix (one-line fix):** The Status `<ws-select>` was wrapped in an external `<label class="credits-list__filter-label">` element, while the adjacent Reference `<ws-input>` renders its label internally via the `[label]` input prop. The height difference between the external label block and the ws-input internal label caused vertical misalignment between the two filter fields. Fix: removed the external `<label>` element and added `[label]="'CREDITS.FILTER.STATUS' | translate"` directly on `<ws-select>` — `ws-select` already has `readonly label = input('')`. Zero behavior change; `tsc --noEmit` → 0 errors.
+
+**Files changed:**
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.html` — `<div class="payouts-list__payee-scroll">` wrapping the `<ul>` in both the warning section and the conflict/skipped section of the calculate result modal
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.scss` — nested `.payouts-list__result-list { padding-top: var(--space-2); padding-bottom: var(--space-2); }` rule inside `&__payee-scroll`
+- `WasnieUi/src/app/features/credits/list/credits-list.component.html` — Status ws-select: external `<label>` removed; `[label]` prop added directly to `<ws-select>`
+
+**Tests:** Visual-only fixes; no test changes. Frontend 31/31 pass. Backend unchanged. `tsc --noEmit` 0 errors.
+
+**Lesson confirmed:** Small alignment bugs (`ws-select` vs `ws-input` label rendering) are caught only by visual inspection or user report — not by any automated test. Rule: before reporting any filter row as Done, visually compare all fields in the same row for consistent label height.
+
+---
+
+## 2026-06-09 — A.5.6 Excel export race-condition fix
+
+**Phase:** A (Payout Engine bug fix)
+
+**Root cause:** `PayoutsStore` (singleton) stores `filter` signal and `pagedResult` separately. On navigating back to the payouts page, `ngOnInit` calls `_applyPeriod('this-month')` → `setFilter()` updates the `filter` signal **synchronously**. The Angular effect that re-runs `_loadList` is scheduled **asynchronously** (next scheduler tick). Between those two events, `pagedResult` still holds old data (e.g. January payouts) while `filter()` already has the new period (June 2026). If the user clicked Export in that ~100–500 ms window, `toExportParams()` read `filter()` (June) → backend returned 0 rows → xlsx with headers only. Intermittent because it only triggers on return navigation when the store has prior state.
+
+**Changes:**
+- `payouts.store.ts`: added `_lastLoadedFilter = signal<PayoutFilter | null>(null)` (private). Set to `{ ...f }` (shallow copy, prevents later mutation) after each successful `_loadList`. `toExportParams()` now returns `Record<string, string>` (no page/pageSize noise) derived from `_lastLoadedFilter() ?? filter()`.
+- `payouts.api.service.ts`: `exportToExcel(filters: Record<string, string>)` builds `HttpParams` directly without `buildHttpParams` — no `page`/`pageSize` sent to the export endpoint.
+- `payouts-list.component.html`: export button `[disabled]="exporting() || store.loading()"` — second layer blocking export during list reload.
+- `payouts.store.spec.ts`: 2 new unit tests — one verifying `toExportParams` returns the last loaded filter, one reproducing the exact race window (setFilter after reload without completing a new reload).
+- `PayoutsEndpointsTests.cs`: `ExportPayouts_RowCountMatchesListTotalCount_ForSameFilter` — seeds 4 payouts, calls list and export with same filter, parses xlsx with ClosedXML and asserts `RowsUsed().Count() - 1 == TotalCount`. Replaces the misleading `bytes.Length > 2000` proxy tests.
+
+**Test counts:** 31/31 frontend unit tests pass. Backend 0 errors.
+
+**Deferred:** Integration test run against the real DB not performed (dev server running). Run before next release.
+
+---
+
+## 2026-06-09 — Payouts refinement (A.5.1–A.5.6) + Pay Run design + full smoke
+
+**Phase:** A (Payout Engine sub-WIs)
+
+**What we did:**
+
+- **A.5.1 Interim Mitigation (3 bugs + 2 features):**
+  - Bug 1: Filter chip showed raw plan GUID when restoring from URL params → resolved name via `PlansApiService`.
+  - Bug 2 (ROOT CAUSE): `CompensationPayout.Calculate()` had `Money.Zero("USD")` hardcoded → all $0 payouts saved as USD regardless of plan currency. Fixed: `fallbackCurrency` required parameter; `DomainException` if blank; no silent default. Decision #67.
+  - Bug 3: Payout list now starts filtered to current month by default.
+  - Feature: `ExcludeZero` server-side toggle (`ListPayoutsHandler`).
+  - Feature: `PayoutStatus` chip on list; plan name link on detail page.
+- **A.5.2:** Filter bar polish (Dashboard V3 pattern). Critical fix: `_pollJob` had no stop condition → infinite API call loop (visible only in DevTools Network, not in tests). Fixed with `takeWhile(inclusive=true)`. 3 regression tests.
+- **A.5.3 Bulk Mark Paid:** `BulkMarkPaidCommand` + handler (`IClock`, catches `DomainException` per item, skips non-Approved, reports conflicts). `POST /api/payouts/bulk-mark-paid`. "Mark as paid (N)" button + rich `WsModal` (5 mandatory elements: count, per-currency totals, scrollable payee list, irreversibility warning, skip notice). 3 backend integration + 3 frontend unit tests.
+- **A.5.4:** Both bulk modals upgraded from `WsConfirmationModal` to rich `WsModal`. Scrollable payee list; names clickable → `/payees/:id` new tab. Approve = reversible (no irreversibility warning). Mark-paid = irreversible (warning present). Decision #69.
+- **A.5.5:** Payee rows in both modals extended to 3-column grid: name link | `dateFormat:'medium'` period | `currencyFormat` amount. `CurrencyFormatPipe` global fix: removed `minimumFractionDigits: 0`; uses CLDR native fraction digits (EUR/USD/PLN→2, JPY→0). Decision #68. 3 new pipe tests.
+- **A.5.6 Excel export (Payouts):** `PayoutExportRow`, `IPayoutExcelExportService` / `PayoutExcelExportService` (ClosedXML, 11 cols, frozen header, auto-fit). `ExportPayoutsHandler` reusing `ListPayoutsHandler.BuildQuery`. `GET /api/payouts/export`, 50k cap, `Permission.PayoutsExport`. Frontend: `exporting` signal, `onExport()` blob download, export button above table (matching Transactions pattern). 5 backend integration + 3 frontend unit tests. (5 integration tests pending rebuild after DLL lock from running API process.)
+- **Smoke test — full payout flow (browser + DevTools Network):** Calculate (EUR, 5% flat, line-by-line, total cuadra), Calculated→Approved→Paid, bulk approve (idempotent: protects Approved/Paid, reports conflicts), `ExcludeZero` toggle, infinite-loop bug confirmed fixed. All green.
+- **Pay Run design:** `docs/Pay_Run_Model.md` written and approved. 6 decisions closed (Decision #66). A.6 is next.
+
+**Key decisions:**
+- #66 — Pay Run model approved; `docs/Pay_Run_Model.md` is the design reference.
+- #67 — `Money.Zero` requires explicit currency; `DomainException` if blank; no hardcoded default.
+- #68 — `CurrencyFormatPipe`: CLDR native fraction digits; never hardcode `minimumFractionDigits`.
+- #69 — Bulk modals 5 elements for irreversible actions; reversible actions omit irreversibility warning.
+- #70 — Quotas not required for flat-rate commission; only for AttainmentBased plans.
+- #71 — Payouts Excel export = list-view export; aggregated payroll export is a separate future WI.
+- #72 — Pay Run UI: master→detail in separate pages (not expandable tree).
+- #73 — UI quality: study and replicate canonical sections; never improvise mid-build.
+
+**Files:**
+- Backend: `CompensationPayout.cs`, `CalculatePayoutsForPeriodHandler.cs`, `ListPayoutsHandler.cs` (BuildQuery extracted), `ExportPayoutsHandler.cs` (new), `BulkMarkPaidHandler.cs` (new), `PayoutExcelExportService.cs` (new), `PayoutsController.cs` (+2 endpoints), `PayoutExportRow.cs`, `IPayoutExcelExportService.cs`, `DependencyInjection.cs`.
+- Frontend: `payouts-list.component.{ts,html,scss}`, `payouts.store.ts`, `payouts.api.service.ts`, `currency-format.pipe.ts` + spec.
+- i18n: EN/ES/PL (`PAYOUTS.EXPORT`, `PAYOUTS.BULK_MARK_PAID`, filter keys).
+- Docs: `docs/Pay_Run_Model.md` (new, approved).
+
+**What's next:**
+- Smoke A.5.6 (stop API process → rebuild → run 5 new integration tests).
+- Optional: WI to fix ~11 pre-existing red tests before A.6 so regressions are visible.
+- WI-CALC-A.6: Pay Run implementation. Step 0 read-only + reconcile against Product Master Spec first.
+
+**Notes / lessons:**
+- **Infinite-loop bug invisible to automated tests.** The `_pollJob` waterfall of hundreds of identical API calls was only visible in DevTools Network. No test caught it because Angular tests mock HTTP and don't observe timing. Signals reactivity loops REQUIRE real browser smoke. Add polling components to the pre-release smoke checklist.
+- **Money.Zero with hardcoded currency is a silent data bug.** Compiled fine, all tests passed, UI showed $0 normally — but the currency field in the DB was wrong. Only discovered by querying the DB directly. Rule enforced at domain level: `Money.Zero(currency)` always requires the caller to provide currency from context.
+- **Step 0 prevents touching working code.** Verifying Credits export already existed before A.5.6 saved work and avoided breaking a live feature.
+
+---
+
+## 2026-06-09 — WI-A5.4-A5.5 Bulk Modal Payee Rows
+
+**Completed in this session:**
+- **WI A.5.4 — Bulk Confirmation Modals: Scrollable Payee List + Clickable Payees:**
+  - Both bulk modals (approve + mark-paid) converted from `WsConfirmationModal` to rich `WsModal`
+  - Scrollable payee list (`max-height: 200px`), each name an `<a href="/payees/:id" target="_blank" rel="noopener">` — modal stays open
+  - `payeeNames: string[]` → `payees: [{payeeId, payeeName, payeeCode}]` in both summaries
+  - `bulkApproveSummary` computed added to store (`selectedCalculatedItems` private)
+  - Tone differentiation: approve = reversible (no irreversibility warning), mark-paid = irreversible (keeps `__bulk-warning`)
+  - 8/8 tests pass
+- **WI A.5.5 — Bulk Modal Payee Rows: Period + Amount (disambiguation):**
+  - `CurrencyFormatPipe` global fix: removed `minimumFractionDigits: 0` (and `maximumFractionDigits: 2`); EUR/USD/PLN → 2 decimals, JPY → 0 decimals via CLDR defaults
+  - 3 new pipe tests: trailing-zero (`€15,934.60`), always-2-decimal (`€1,000.00`), JPY 0-decimal (`¥15,935`)
+  - Store extended: `payees[]` in both summaries now includes `periodStart`, `periodEnd`, `amount`, `currency` (from in-memory items, no fetch)
+  - Template: each payee row is 3-column grid — name link (with code tag) | `dateFormat:'medium'` period range | `currencyFormat` amount
+  - SCSS `__payee-scroll-entry`: flex → grid (`minmax(0,2fr) minmax(0,2fr) minmax(0,1fr)`); mobile breakpoint at 480px collapses to 2-col with period spanning full width
+  - Spec updated: `EMPTY_BULK_*_SUMMARY` shapes and store test assertions include the 4 new fields
+  - 12/12 CurrencyFormatPipe tests pass; 8/8 payouts store + component tests pass; production build clean
+
+**Key decisions:**
+- `'medium'` date format (not `'short'`) — consistent with main list, avoids M/D vs D/M locale ambiguity for PL/ES users
+- Do NOT hardcode `minimumFractionDigits: 2` — JPY and other zero-decimal currencies must work correctly
+- Grid layout (not flex) for column alignment — financial readability in confirmation modal is critical
+
+## 2026-06-09 — WI-A5.3-BULK-MARK-PAID + WI-A4/A5 fixes
+
+**Completed in this session:**
+- **View Statement new tab** — changed from `[routerLink]` to `window.open('/payouts/:id', '_blank')`
+- **Plan field empty on detail page** — `PlanName` was missing from `PayoutDto`; added lookup in `GetPayoutByIdHandler` and `ExportPayoutPdfHandler`
+- **Poll-loop infinite API calls** — `_pollJob` had no terminal stop condition; fixed with `takeWhile(s => Pending|Running, inclusive=true)`; 3 regression tests added
+- **PDF actor GUID** — forward fix (store email via `currentUser.Email`) + backward resolution (`ResolveActorDisplayAsync` via `IIdentityService.FindEmailByUserIdAsync`) in `ExportPayoutPdfHandler`
+- **WI A.5.3 — Bulk Mark as Paid:**
+  - Backend: `BulkMarkPaidCommand` + `BulkMarkPaidResult` (in `ListPayoutsQuery.cs`), `BulkMarkPaidHandler` (IClock, catches DomainException per item), `POST /api/payouts/bulk-mark-paid` endpoint
+  - Store: `selectedApprovedIds`, `selectedApprovedItems` (private), `bulkMarkPaidSummary` (totals by currency map, payee names, skipped count — all in-memory)
+  - Component: `bulkMarkPaidTotals` computed, `onBulkMarkPaid()` using `store.reload()` directly (no polling)
+  - Template: "Mark as paid" button (hidden via `*hasPermission="Payouts.MarkPaid"`, badge count), rich WsModal with all 5 elements
+  - i18n: EN/ES/PL complete
+  - Tests: 3 integration (happy path, mixed statuses, 401) + 3 frontend unit (success, no-op, error) — 6/6 pass
+
+**Key decisions:**
+- Modal uses full `WsModal` not `WsConfirmationModal` to accommodate 5 required elements
+- `bulkMarkPaidSummary` in store (not component) for testability and single source of truth
+- `totalsByCurrency` computed as `Map<string, number>` in store; component converts to array for `@for`
+
+## 2026-06-08 — WI-A5-PAYOUTS-UI: Design system consistency fixes (payouts list + calculate modal)
+
+**Completed:** Multiple design-system violations fixed across `payouts-list` and `payout-detail` components following user review session.
+
+**Fixes applied:**
+- `icon="money"` → `icon="receipt"` on both list and detail page headers (`money` not in icon registry)
+- `icon="play"` → `icon="zap"` on Calculate Payouts button (`play` not in icon registry)
+- All `--spacing-X` tokens → `--space-X` throughout both SCSS files (only `--space-X` exists)
+- Font tokens `--font-size-xs/sm/base/2xl` → numeric equivalents (`--font-size-12/13/14/24`)
+- Font-weight tokens `--font-weight-semibold/bold/medium` → literal values (`600`, `700`, `500`)
+- Color tokens with fallback literals (e.g. `var(--color-bg-danger-subtle, #fff5f5)`) → proper tokens (`--color-danger-bg`, `--color-danger-border`, `--color-danger`)
+- Filter chips: moved from shared bottom row into each respective filter-field div; styled as brand-colored pills (`--color-brand-subtle` bg, `--color-brand` border/color, `--radius-full`) matching credits canonical pattern
+- Filter layout: changed from CSS grid to flex (`display: flex; flex-wrap: wrap`) matching credits canonical pattern
+- Banner accents on payout-detail: replaced CSS `border-left` with `WsCard accent` input (`accent="brand/success/warning/danger"`)
+- Removed unused imports: `DecimalPipe`, `WsInputComponent`, `WsTableEmptyComponent`
+- Modal subtitle: moved from `<p class="modal-subtitle">` in body to `[description]` input on `<ws-modal>`
+- Modal form local grid: added `.payouts-list__modal-period` (2-col grid) for date pickers instead of relying on non-global `ws-form-grid`
+- **Date picker mutual exclusion:** added `viewChild<WsDatePickerComponent>` refs (`#startPicker`, `#endPicker`) + `effect()` + `untracked()` in constructor to close sibling when one opens. Workaround for `stopPropagation()` inside the date picker template that prevents `@HostListener('document:click')` from firing on siblings
+- **Modal input visibility in dark mode:** wrapped modal `<form>` in `.payouts-list__modal-form` div styled with `background: var(--color-bg-surface-raised)` + border + border-radius + padding — identical to `.form-card` pattern in `transaction-create`. Without this, inputs (`--color-bg-surface`) are invisible against the modal body (also `--color-bg-surface` = same `#161c28` in dark theme)
+
+**Files changed:**
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.ts`
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.html`
+- `WasnieUi/src/app/features/payouts/list/payouts-list.component.scss`
+- `WasnieUi/src/app/features/payouts/detail/payout-detail.component.html`
+- `WasnieUi/src/app/features/payouts/detail/payout-detail.component.scss`
+
+**Build:** `ng build --configuration production` clean. No new errors. Pre-existing warnings unchanged (unused imports in other components, bundle budget).
+
+**Next:** Verify visually in browser (localhost:4200/payouts). Then continue WI-A5 remaining scope (approve / mark-paid flows, PDF export).
+
+---
+
 ## 2026-06-08 — WI-CALC-A.3-FIX-4: Sales Quota semantic (Transaction.Amount, not CreditedAmount)
 
 **Completed:** Quota attainment semantic changed from Earnings Quota to Sales Quota for Revenue measure type.

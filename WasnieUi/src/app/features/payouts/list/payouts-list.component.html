@@ -1,0 +1,554 @@
+<app-shell>
+  <ws-page-layout
+    icon="receipt"
+    [title]="'PAYOUTS.TITLE' | translate"
+    [subtitle]="'PAYOUTS.SUBTITLE' | translate"
+  >
+    <!-- Header actions -->
+    <ng-container slot="actions">
+      @if (store.selectedCalculatedIds().length > 0) {
+        <ws-button
+          variant="secondary"
+          [disabled]="bulkApproving()"
+          (click)="bulkApproveConfirmOpen.set(true)"
+        >
+          {{ 'PAYOUTS.BULK_APPROVE' | translate }}
+          <ws-badge variant="brand" size="sm">{{ store.selectedCalculatedIds().length }}</ws-badge>
+        </ws-button>
+      }
+      @if (store.selectedApprovedIds().length > 0) {
+        <ws-button
+          *hasPermission="'Payouts.MarkPaid'"
+          variant="secondary"
+          [disabled]="bulkMarkPaiding()"
+          (click)="bulkMarkPaidConfirmOpen.set(true)"
+        >
+          {{ 'PAYOUTS.BULK_MARK_PAID' | translate }}
+          <ws-badge variant="success" size="sm">{{ store.selectedApprovedIds().length }}</ws-badge>
+        </ws-button>
+      }
+      <ws-button
+        *hasPermission="'Payouts.Calculate'"
+        variant="primary"
+        (click)="calculateModalOpen.set(true)"
+      >
+        <app-icon name="zap" [size]="14" />
+        {{ 'PAYOUTS.CALCULATE_TITLE' | translate }}
+      </ws-button>
+    </ng-container>
+
+    <!-- Filter panel -->
+    <ws-card variant="raised" padding="sm" class="payouts-list__filter">
+
+      <!-- Period selector + actions — always visible -->
+      <div class="payouts-list__toolbar">
+        <ws-segmented-control
+          [options]="periodOptions"
+          [(value)]="activePeriod"
+          (valueChange)="setPeriod($event)"
+        />
+        <div class="payouts-list__toolbar-actions">
+          @if (store.hasActiveFilters()) {
+            <ws-button variant="ghost" size="sm" (click)="clearFilters()">
+              {{ 'PAYOUTS.FILTER.CLEAR' | translate }}
+            </ws-button>
+          }
+          <ws-button
+            size="sm"
+            [variant]="hideZero() ? 'secondary' : 'ghost'"
+            (click)="toggleHideZero()"
+          >
+            <app-icon name="ban" [size]="13" />
+            {{ (hideZero() ? 'PAYOUTS.FILTER.HIDE_ZERO_ON' : 'PAYOUTS.FILTER.HIDE_ZERO_OFF') | translate }}
+          </ws-button>
+        </div>
+      </div>
+
+      <div class="payouts-list__filter-header" (click)="filterOpen.set(!filterOpen())">
+        <span class="payouts-list__filter-title">
+          <app-icon name="filter" [size]="14" />
+          {{ 'PAYOUTS.FILTER.TITLE' | translate }}
+        </span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
+        }
+        <span class="payouts-list__filter-spacer"></span>
+        <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+      </div>
+
+      @if (filterOpen()) {
+        <form [formGroup]="form" class="payouts-list__filter-body">
+
+          <!-- Row 1: Status + Period From + Period To -->
+          <div class="payouts-list__filter-row">
+            <div class="payouts-list__filter-field">
+              <ws-select
+                formControlName="status"
+                [label]="'PAYOUTS.FILTER.STATUS' | translate"
+                [options]="statusOptions"
+              />
+            </div>
+            <div class="payouts-list__filter-field">
+              <ws-date-picker
+                formControlName="periodFrom"
+                [label]="'PAYOUTS.FILTER.PERIOD_FROM' | translate"
+              />
+            </div>
+            <div class="payouts-list__filter-field">
+              <ws-date-picker
+                formControlName="periodTo"
+                [label]="'PAYOUTS.FILTER.PERIOD_TO' | translate"
+              />
+            </div>
+          </div>
+
+          <!-- Row 2: Payee + Plan + Currency (with chips inside each field) -->
+          <div class="payouts-list__filter-row">
+            <div class="payouts-list__filter-field payouts-list__filter-field--wide">
+              <ws-select
+                formControlName="payeeSearch"
+                [label]="'PAYOUTS.FILTER.PAYEE' | translate"
+                [placeholder]="'PAYOUTS.FILTER.PAYEE_PLACEHOLDER' | translate"
+                [searchFn]="payeeSearchFn"
+              />
+              @if (selectedPayees().length > 0) {
+                <div class="payouts-list__chips">
+                  @for (p of selectedPayees(); track p.id) {
+                    <span class="payouts-list__chip">
+                      {{ p.label }}
+                      <button type="button" class="payouts-list__chip-remove" (click)="removePayee(p.id)">
+                        <app-icon name="x" [size]="11" />
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+            <div class="payouts-list__filter-field payouts-list__filter-field--wide">
+              <ws-select
+                formControlName="planSearch"
+                [label]="'PAYOUTS.FILTER.PLAN' | translate"
+                [placeholder]="'PAYOUTS.FILTER.PLAN_PLACEHOLDER' | translate"
+                [searchFn]="planSearchFn"
+              />
+              @if (selectedPlans().length > 0) {
+                <div class="payouts-list__chips">
+                  @for (p of selectedPlans(); track p.id) {
+                    <span class="payouts-list__chip">
+                      {{ p.label }}
+                      <button type="button" class="payouts-list__chip-remove" (click)="removePlan(p.id)">
+                        <app-icon name="x" [size]="11" />
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+            <div class="payouts-list__filter-field">
+              <ws-select
+                formControlName="currencySearch"
+                [label]="'PAYOUTS.FILTER.CURRENCY' | translate"
+                [placeholder]="'PAYOUTS.FILTER.CURRENCY_PLACEHOLDER' | translate"
+                [options]="availableCurrencyOptions()"
+              />
+              @if (selectedCurrencies().length > 0) {
+                <div class="payouts-list__chips">
+                  @for (c of selectedCurrencies(); track c) {
+                    <span class="payouts-list__chip">
+                      {{ c }}
+                      <button type="button" class="payouts-list__chip-remove" (click)="removeCurrency(c)">
+                        <app-icon name="x" [size]="11" />
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+        </form>
+      }
+    </ws-card>
+
+    <!-- Export row -->
+    @if (store.totalCount() > 0) {
+      <div class="payouts-list__export-row">
+        <ws-button
+          *hasPermission="'Payouts.Export'"
+          variant="ghost"
+          size="sm"
+          [disabled]="exporting() || store.loading()"
+          [loading]="exporting()"
+          (click)="onExport()"
+        >
+          <app-icon name="file-excel" [size]="14" />
+          {{ 'PAYOUTS.EXPORT.BUTTON' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="payouts-list__export-error">{{ exportError()! | translate }}</span>
+        }
+      </div>
+    }
+
+    <!-- Table -->
+    <ws-table>
+      <table>
+        <thead>
+          <tr>
+            <th class="payouts-list__col-check">
+              <input
+                type="checkbox"
+                [checked]="store.allSelected()"
+                [indeterminate]="store.selectedCount() > 0 && !store.allSelected()"
+                (change)="store.toggleSelectAll()"
+              />
+            </th>
+            <th>{{ 'PAYOUTS.COL_PAYEE' | translate }}</th>
+            <th>{{ 'PAYOUTS.COL_PLAN' | translate }}</th>
+            <th>{{ 'PAYOUTS.COL_PERIOD' | translate }}</th>
+            <th class="payouts-list__col-right">{{ 'PAYOUTS.COL_TOTAL' | translate }}</th>
+            <th>{{ 'PAYOUTS.COL_STATUS' | translate }}</th>
+            <th>{{ 'PAYOUTS.COL_ACTIONS' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (store.loading()) {
+            @for (row of skeletonRows; track row) {
+              <tr class="payouts-list__skeleton-row">
+                <td colspan="7"><div class="ws-skeleton ws-skeleton--line"></div></td>
+              </tr>
+            }
+          } @else if (store.items().length === 0) {
+            <tr>
+              <td colspan="7">
+                <ws-table-empty
+                  [messageKey]="store.hasActiveFilters() ? 'PAYOUTS.EMPTY_FILTER' : 'PAYOUTS.EMPTY_TITLE'"
+                />
+              </td>
+            </tr>
+          } @else {
+            @for (payout of store.items(); track payout.id) {
+              <tr [class.payouts-list__row--selected]="store.selectedIds().has(payout.id)">
+                <td class="payouts-list__col-check">
+                  <input
+                    type="checkbox"
+                    [checked]="store.selectedIds().has(payout.id)"
+                    (change)="store.toggleSelect(payout.id)"
+                  />
+                </td>
+                <td>
+                  <span class="payouts-list__payee-name">{{ payout.payeeName }}</span>
+                  <span class="payouts-list__payee-code">{{ payout.payeeCode }}</span>
+                </td>
+                <td>{{ payout.planName }}</td>
+                <td>
+                  <div class="payouts-list__period">
+                    <span>{{ payout.periodStart | dateFormat }}</span>
+                    <span class="payouts-list__period-sep">→</span>
+                    <span>{{ payout.periodEnd | dateFormat }}</span>
+                  </div>
+                </td>
+                <td class="payouts-list__col-right payouts-list__total">
+                  {{ payout.totalCommissionAmount | currencyFormat: payout.totalCommissionCurrency }}
+                </td>
+                <td>
+                  <ws-badge [variant]="statusBadge(payout.status)">
+                    {{ statusLabel(payout.status) | translate }}
+                  </ws-badge>
+                </td>
+                <td class="payouts-list__actions">
+                  <ws-button
+                    variant="ghost"
+                    size="sm"
+                    (click)="viewPayout(payout.id)"
+                  >
+                    {{ 'PAYOUTS.ACTION_VIEW' | translate }}
+                  </ws-button>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </ws-table>
+
+    @if (!store.loading() && store.totalCount() > 0) {
+      <ws-pagination
+        [currentPage]="store.page()"
+        [totalPages]="store.totalPages()"
+        [totalCount]="store.totalCount()"
+        [pageSize]="store.pageSize()"
+        (pageChange)="store.setPage($event)"
+        (pageSizeChange)="store.setPageSize($event)"
+      />
+    }
+
+  </ws-page-layout>
+</app-shell>
+
+<!-- Calculate Payouts Modal -->
+<ws-modal
+  [isOpen]="calculateModalOpen()"
+  (isOpenChange)="closeCalculateModal()"
+  [title]="'PAYOUTS.CALCULATE_TITLE' | translate"
+  [description]="calculatePhase() === 'form' ? ('PAYOUTS.CALCULATE_SUBTITLE' | translate) : ''"
+  [closable]="calculatePhase() !== 'running'"
+>
+  <!-- Phase: form -->
+  @if (calculatePhase() === 'form') {
+    <div class="payouts-list__modal-form">
+      <form [formGroup]="calculateForm">
+        <div class="payouts-list__modal-period">
+          <ws-date-picker
+            #startPicker
+            formControlName="periodStart"
+            [label]="'PAYOUTS.CALCULATE_PERIOD_FROM' | translate"
+          />
+          <ws-date-picker
+            #endPicker
+            formControlName="periodEnd"
+            [label]="'PAYOUTS.CALCULATE_PERIOD_TO' | translate"
+          />
+        </div>
+        <div class="payouts-list__modal-field">
+          <ws-select
+            formControlName="payeeFilter"
+            [label]="'PAYOUTS.CALCULATE_PAYEE_FILTER' | translate"
+            [placeholder]="'PAYOUTS.CALCULATE_PAYEE_PLACEHOLDER' | translate"
+            [searchFn]="payeeSearchFn"
+          />
+        </div>
+        @if (calculateError()) {
+          <p class="payouts-list__error">{{ calculateError()! | translate }}</p>
+        }
+      </form>
+    </div>
+  }
+
+  <!-- Phase: running -->
+  @if (calculatePhase() === 'running') {
+    <div class="payouts-list__modal-running">
+      <div class="payouts-list__spinner"></div>
+      <p class="payouts-list__running-msg">{{ 'PAYOUTS.CALCULATE_RUNNING' | translate }}</p>
+    </div>
+  }
+
+  <!-- Phase: done -->
+  @if (calculatePhase() === 'done' && calculateResult(); as result) {
+    <div class="payouts-list__modal-result">
+      <div class="payouts-list__result-summary">
+        <app-icon [name]="result.payoutsCreated > 0 ? 'check-circle' : 'info'" [size]="20"
+          [class]="result.payoutsCreated > 0 ? 'payouts-list__result-icon--success' : 'payouts-list__result-icon--neutral'" />
+        <p class="payouts-list__result-count">
+          @if (result.payoutsCreated > 0) {
+            {{ 'PAYOUTS.CALCULATE_CREATED' | translate: { count: result.payoutsCreated } }}
+          } @else {
+            {{ 'PAYOUTS.CALCULATE_NO_PAYOUTS' | translate }}
+          }
+        </p>
+      </div>
+
+      @if (result.warnings.length > 0) {
+        <div class="payouts-list__result-section payouts-list__result-section--warning">
+          <p class="payouts-list__result-section-title">
+            <app-icon name="alert-triangle" [size]="14" />
+            {{ 'PAYOUTS.WARNINGS_TITLE' | translate }}
+          </p>
+          <p class="payouts-list__result-section-desc">{{ 'PAYOUTS.WARNINGS_DESC' | translate }}</p>
+          <div class="payouts-list__payee-scroll">
+            <ul class="payouts-list__result-list">
+              @for (w of result.warnings; track w.payeeId) {
+                <li>{{ w.payeeName }} — {{ w.pendingTransactionCount }} pending transaction(s)</li>
+              }
+            </ul>
+          </div>
+        </div>
+      }
+
+      @if (result.conflicts.length > 0) {
+        <div class="payouts-list__result-section payouts-list__result-section--info">
+          <p class="payouts-list__result-section-title">
+            <app-icon name="info" [size]="14" />
+            {{ 'PAYOUTS.CONFLICTS_TITLE' | translate }}
+          </p>
+          <p class="payouts-list__result-section-desc">{{ 'PAYOUTS.CONFLICTS_DESC' | translate }}</p>
+          <div class="payouts-list__payee-scroll">
+            <ul class="payouts-list__result-list">
+              @for (c of result.conflicts; track c.payeeId) {
+                <li>{{ c.payeeName }} — {{ c.periodStart }} → {{ c.periodEnd }} ({{ c.status }})</li>
+              }
+            </ul>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <ng-container slot="footer">
+    @if (calculatePhase() === 'form') {
+      <ws-button variant="ghost" (click)="closeCalculateModal()">
+        {{ 'COMMON.CANCEL' | translate }}
+      </ws-button>
+      <ws-button
+        variant="primary"
+        [disabled]="!calculateForm.value.periodStart || !calculateForm.value.periodEnd || calculating()"
+        (click)="onCalculate()"
+      >
+        {{ 'PAYOUTS.CALCULATE_RUN' | translate }}
+      </ws-button>
+    }
+    @if (calculatePhase() === 'done') {
+      <ws-button variant="primary" (click)="closeCalculateModal()">
+        {{ 'COMMON.DONE' | translate }}
+      </ws-button>
+    }
+  </ng-container>
+</ws-modal>
+
+<!-- Bulk Approve — rich confirmation modal (reversible tone — no irreversibility warning) -->
+<ws-modal
+  [isOpen]="bulkApproveConfirmOpen()"
+  (isOpenChange)="bulkApproveConfirmOpen.set($event)"
+  [title]="'PAYOUTS.BULK_APPROVE_CONFIRM_TITLE' | translate: { count: store.bulkApproveSummary().count }"
+  [closable]="!bulkApproving()"
+>
+  <div class="payouts-list__bulk-body">
+
+    <!-- 1. Count sentence (reversible tone) -->
+    <p class="payouts-list__bulk-intro">
+      {{ 'PAYOUTS.BULK_APPROVE_BODY' | translate: { count: store.bulkApproveSummary().count } }}
+    </p>
+
+    <!-- 2. Payee list (scrollable, each name links to payee detail) -->
+    <div class="payouts-list__bulk-section">
+      <p class="payouts-list__bulk-section-label">{{ 'PAYOUTS.BULK_APPROVE_PAYEES' | translate }}</p>
+      <div class="payouts-list__payee-scroll">
+        @for (payee of store.bulkApproveSummary().payees; track payee.payeeId) {
+          <div class="payouts-list__payee-scroll-entry">
+            <span class="payouts-list__payee-name-col">
+              <a
+                class="payouts-list__payee-link"
+                href="/payees/{{ payee.payeeId }}"
+                target="_blank"
+                rel="noopener"
+              >{{ payee.payeeName }}</a>
+              @if (payee.payeeCode) {
+                <span class="payouts-list__payee-code-tag">({{ payee.payeeCode }})</span>
+              }
+            </span>
+            <span class="payouts-list__payee-period-col">
+              {{ payee.periodStart | dateFormat }} – {{ payee.periodEnd | dateFormat }}
+            </span>
+            <span class="payouts-list__payee-amount-col">
+              {{ payee.amount | currencyFormat: payee.currency }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- 3. Skip warning — only when non-Calculated payouts are in the selection -->
+    @if (store.bulkApproveSummary().skippedCount > 0) {
+      <p class="payouts-list__bulk-skip">
+        <app-icon name="info" [size]="14" />
+        {{ 'PAYOUTS.BULK_APPROVE_SKIP_WARNING' | translate: { skipped: store.bulkApproveSummary().skippedCount } }}
+      </p>
+    }
+
+  </div>
+
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="bulkApproving()" (click)="bulkApproveConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="bulkApproving()" (click)="onBulkApprove()">
+      {{ 'PAYOUTS.BULK_APPROVE_CONFIRM_BTN' | translate: { count: store.bulkApproveSummary().count } }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Bulk Mark as Paid — rich confirmation modal (irreversible tone) -->
+<ws-modal
+  [isOpen]="bulkMarkPaidConfirmOpen()"
+  (isOpenChange)="bulkMarkPaidConfirmOpen.set($event)"
+  [title]="'PAYOUTS.BULK_MARK_PAID_TITLE' | translate: { count: store.bulkMarkPaidSummary().count }"
+  [closable]="!bulkMarkPaiding()"
+>
+  <div class="payouts-list__bulk-body">
+
+    <!-- 1. Count sentence -->
+    <p class="payouts-list__bulk-intro">
+      {{ 'PAYOUTS.BULK_MARK_PAID_BODY' | translate: { count: store.bulkMarkPaidSummary().count } }}
+    </p>
+
+    <!-- 2. Totals by currency -->
+    <div class="payouts-list__bulk-section">
+      <p class="payouts-list__bulk-section-label">{{ 'PAYOUTS.BULK_MARK_PAID_TOTALS' | translate }}</p>
+      <ul class="payouts-list__bulk-totals-list">
+        @for (entry of bulkMarkPaidTotals(); track entry.currency) {
+          <li>{{ entry.amount | currencyFormat: entry.currency }}</li>
+        }
+      </ul>
+    </div>
+
+    <!-- 3. Payee list (scrollable, each name links to payee detail) -->
+    <div class="payouts-list__bulk-section">
+      <p class="payouts-list__bulk-section-label">{{ 'PAYOUTS.BULK_MARK_PAID_PAYEES' | translate }}</p>
+      <div class="payouts-list__payee-scroll">
+        @for (payee of store.bulkMarkPaidSummary().payees; track payee.payeeId) {
+          <div class="payouts-list__payee-scroll-entry">
+            <span class="payouts-list__payee-name-col">
+              <a
+                class="payouts-list__payee-link"
+                href="/payees/{{ payee.payeeId }}"
+                target="_blank"
+                rel="noopener"
+              >{{ payee.payeeName }}</a>
+              @if (payee.payeeCode) {
+                <span class="payouts-list__payee-code-tag">({{ payee.payeeCode }})</span>
+              }
+            </span>
+            <span class="payouts-list__payee-period-col">
+              {{ payee.periodStart | dateFormat }} – {{ payee.periodEnd | dateFormat }}
+            </span>
+            <span class="payouts-list__payee-amount-col">
+              {{ payee.amount | currencyFormat: payee.currency }}
+            </span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- 4. Irreversibility warning (mark-paid only) -->
+    <p class="payouts-list__bulk-warning">
+      <app-icon name="alert-triangle" [size]="14" />
+      {{ 'PAYOUTS.BULK_MARK_PAID_IRREVERSIBLE' | translate }}
+    </p>
+
+    <!-- 5. Skip warning — only when non-Approved payouts are in the selection -->
+    @if (store.bulkMarkPaidSummary().skippedCount > 0) {
+      <p class="payouts-list__bulk-skip">
+        <app-icon name="info" [size]="14" />
+        {{ 'PAYOUTS.BULK_MARK_PAID_SKIP_WARNING' | translate: { skipped: store.bulkMarkPaidSummary().skippedCount } }}
+      </p>
+    }
+
+  </div>
+
+  <ng-container slot="footer">
+    <ws-button
+      variant="ghost"
+      [disabled]="bulkMarkPaiding()"
+      (click)="bulkMarkPaidConfirmOpen.set(false)"
+    >
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button
+      variant="primary"
+      [disabled]="bulkMarkPaiding()"
+      (click)="onBulkMarkPaid()"
+    >
+      {{ 'PAYOUTS.BULK_MARK_PAID_CONFIRM' | translate: { count: store.bulkMarkPaidSummary().count } }}
+    </ws-button>
+  </ng-container>
+</ws-modal>

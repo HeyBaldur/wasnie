@@ -47,12 +47,16 @@ export const routes: Routes = [
       import('./features/credits/credits.routes').then((m) => m.creditsRoutes),
   },
   {
+    path: 'pay-runs',
+    canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
+    loadChildren: () =>
+      import('./features/pay-runs/pay-runs.routes').then((m) => m.payRunsRoutes),
+  },
+  {
     path: 'payouts',
-    canActivate: [authGuard, hasPermissionGuard('Reports.ViewAll')],
-    loadComponent: () =>
-      import('./features/payouts/payouts.component').then(
-        (m) => m.PayoutsComponent
-      ),
+    canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
+    loadChildren: () =>
+      import('./features/payouts/payouts.routes').then((m) => m.payoutsRoutes),
   },
   {
     path: 'quotas',

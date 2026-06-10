@@ -1,0 +1,457 @@
+<app-shell>
+  <ws-page-layout
+    icon="coin"
+    [title]="store.run() ? (store.run()!.periodStart | dateFormat) + ' → ' + (store.run()!.periodEnd | dateFormat) : '…'"
+    [subtitle]="'PAY_RUNS.TITLE' | translate"
+  >
+    <!-- Header actions -->
+    <ng-container slot="actions">
+      <!-- Draft actions -->
+      @if (store.isDraft() && !store.loading()) {
+        <ws-button
+          *hasPermission="'Payouts.Calculate'"
+          variant="secondary"
+          [disabled]="actioning()"
+          [routerLink]="['/pay-runs']"
+          (click)="$event.stopPropagation()"
+        >
+          {{ 'COMMON.BACK' | translate }}
+        </ws-button>
+        <ws-button
+          *hasPermission="'Payouts.Approve'"
+          variant="primary"
+          [disabled]="actioning()"
+          [loading]="actioning()"
+          (click)="approveConfirmOpen.set(true)"
+        >
+          {{ 'PAY_RUNS.ACTION_APPROVE' | translate }}
+        </ws-button>
+      }
+      <!-- Approved actions -->
+      @if (store.isApproved() && !store.loading()) {
+        <ws-button
+          *hasPermission="'Payouts.Reopen'"
+          variant="secondary"
+          [disabled]="actioning()"
+          (click)="reopenConfirmOpen.set(true)"
+        >
+          {{ 'PAY_RUNS.ACTION_REOPEN' | translate }}
+        </ws-button>
+        <ws-button
+          *hasPermission="'Payouts.MarkPaid'"
+          variant="primary"
+          [disabled]="actioning()"
+          [loading]="actioning()"
+          (click)="markPaidConfirmOpen.set(true)"
+        >
+          {{ 'PAY_RUNS.ACTION_MARK_PAID' | translate }}
+        </ws-button>
+      }
+    </ng-container>
+
+    <!-- Error banner -->
+    @if (store.error()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ store.error()! | translate }}
+      </ws-card>
+    }
+
+    @if (actionError()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ actionError()! | translate }}
+      </ws-card>
+    }
+
+    @if (exportError()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ exportError()! | translate }}
+      </ws-card>
+    }
+
+    <!-- Run summary card -->
+    <ws-card class="pay-run-detail__summary-card">
+      @if (store.loading() && !store.run()) {
+        <div class="pay-run-detail__skeleton-summary">
+          <div class="ws-skeleton ws-skeleton--line" style="width:200px"></div>
+          <div class="ws-skeleton ws-skeleton--line" style="width:120px"></div>
+        </div>
+      } @else if (store.run(); as run) {
+        <div class="pay-run-detail__summary-grid">
+
+          <!-- Period -->
+          <div class="pay-run-detail__summary-item">
+            <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.PERIOD' | translate }}</span>
+            <div class="pay-run-detail__period">
+              <span>{{ run.periodStart | dateFormat }}</span>
+              <span class="pay-run-detail__period-sep">→</span>
+              <span>{{ run.periodEnd | dateFormat }}</span>
+            </div>
+          </div>
+
+          <!-- Status -->
+          <div class="pay-run-detail__summary-item">
+            <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.STATUS' | translate }}</span>
+            <ws-badge [variant]="runStatusBadge(run.status)">
+              {{ 'PAY_RUNS.STATUS_' + run.status.toUpperCase() | translate }}
+            </ws-badge>
+          </div>
+
+          <!-- Payee counts -->
+          <div class="pay-run-detail__summary-item">
+            <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.PAYEE_COUNT' | translate }}</span>
+            <span class="pay-run-detail__summary-value">
+              {{ 'PAY_RUNS.DETAIL.PAYEE_COUNT_VALUE' | translate: { paidPayeeCount: run.paidPayeeCount, payeeCount: run.payeeCount } }}
+            </span>
+          </div>
+
+          <!-- Per-currency totals (Pattern B) -->
+          <div class="pay-run-detail__summary-item">
+            <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.TOTALS' | translate }}</span>
+            <div class="pay-run-detail__totals">
+              @for (entry of store.totalAmountsEntries(); track entry.currency) {
+                <span class="pay-run-detail__total-line">
+                  {{ entry.amount | currencyFormat: entry.currency }}
+                </span>
+              }
+              @if (store.totalAmountsEntries().length === 0) {
+                <span class="pay-run-detail__total-zero">—</span>
+              }
+            </div>
+          </div>
+
+          <!-- Audit: created -->
+          <div class="pay-run-detail__summary-item">
+            <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.CREATED_AT' | translate }}</span>
+            <span class="pay-run-detail__summary-value">{{ run.createdAt | dateFormat }} · {{ run.createdBy }}</span>
+          </div>
+
+          <!-- Audit: approved (only when present) -->
+          @if (run.approvedAt) {
+            <div class="pay-run-detail__summary-item">
+              <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.APPROVED_AT' | translate }}</span>
+              <span class="pay-run-detail__summary-value">{{ run.approvedAt | dateFormat }} · {{ run.approvedBy }}</span>
+            </div>
+          }
+
+          <!-- Audit: paid (only when present) -->
+          @if (run.paidAt) {
+            <div class="pay-run-detail__summary-item">
+              <span class="pay-run-detail__summary-label">{{ 'PAY_RUNS.DETAIL.PAID_AT' | translate }}</span>
+              <span class="pay-run-detail__summary-value">{{ run.paidAt | dateFormat }} · {{ run.paidBy }}</span>
+            </div>
+          }
+
+        </div>
+      }
+    </ws-card>
+
+    <!-- Payouts sub-table toolbar -->
+    <div class="pay-run-detail__payouts-toolbar">
+      <span class="pay-run-detail__section-title">{{ 'PAY_RUNS.DETAIL.SECTION_PAYOUTS' | translate }}</span>
+      <div class="pay-run-detail__payouts-toolbar-right">
+        <ws-button
+          size="sm"
+          [variant]="store.excludeZero() ? 'secondary' : 'ghost'"
+          [disabled]="store.loading()"
+          (click)="store.setExcludeZero(!store.excludeZero())"
+        >
+          <app-icon name="ban" [size]="13" />
+          {{ (store.excludeZero() ? 'PAY_RUNS.DETAIL.HIDE_ZERO_ON' : 'PAY_RUNS.DETAIL.HIDE_ZERO_OFF') | translate }}
+        </ws-button>
+        <ws-button
+          *hasPermission="'Payouts.Export'"
+          size="sm"
+          variant="ghost"
+          [disabled]="store.loading() || exporting()"
+          [loading]="exporting()"
+          (click)="onExportPayouts()"
+        >
+          <app-icon name="download" [size]="13" />
+          {{ 'PAY_RUNS.DETAIL.EXPORT.ACTION' | translate }}
+        </ws-button>
+      </div>
+    </div>
+
+    <!-- Collapsible filter panel for payouts sub-table -->
+    <ws-card variant="raised" padding="sm" class="pay-run-detail__filter-panel">
+      <div class="pay-run-detail__filter-header" (click)="filterOpen.set(!filterOpen())">
+        <span class="pay-run-detail__filter-title">
+          <app-icon name="filter" [size]="14" />
+          {{ 'PAY_RUNS.DETAIL.FILTER.TITLE' | translate }}
+        </span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
+        }
+        <span class="pay-run-detail__filter-spacer"></span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-button size="sm" variant="ghost" (click)="$event.stopPropagation(); clearFilters()">
+            {{ 'PAY_RUNS.DETAIL.FILTER.CLEAR' | translate }}
+          </ws-button>
+        }
+        <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+      </div>
+
+      @if (filterOpen()) {
+        <form [formGroup]="filterForm" class="pay-run-detail__filter-body">
+
+          <!-- Row 1: Status + Period from/to -->
+          <div class="pay-run-detail__filter-row">
+            <div class="pay-run-detail__filter-field">
+              <ws-select
+                formControlName="status"
+                [options]="payoutStatusOptions"
+                [placeholder]="'PAY_RUNS.DETAIL.FILTER.STATUS_ALL' | translate"
+                [label]="'PAY_RUNS.DETAIL.FILTER.STATUS' | translate"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field">
+              <ws-date-picker
+                formControlName="periodFrom"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PERIOD_FROM' | translate"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field">
+              <ws-date-picker
+                formControlName="periodTo"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PERIOD_TO' | translate"
+              />
+            </div>
+          </div>
+
+          <!-- Row 2: Amount range + Payee + Plan search -->
+          <div class="pay-run-detail__filter-row">
+            <div class="pay-run-detail__filter-field">
+              <ws-input
+                formControlName="amountMin"
+                type="number"
+                [label]="'PAY_RUNS.DETAIL.FILTER.AMOUNT_MIN' | translate"
+                [placeholder]="'0'"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field">
+              <ws-input
+                formControlName="amountMax"
+                type="number"
+                [label]="'PAY_RUNS.DETAIL.FILTER.AMOUNT_MAX' | translate"
+                [placeholder]="'∞'"
+              />
+            </div>
+            <div class="pay-run-detail__filter-field pay-run-detail__filter-field--wide">
+              <ws-select
+                formControlName="payeeSearch"
+                [options]="[]"
+                [searchFn]="payeeSearchFn"
+                [placeholder]="'PAY_RUNS.DETAIL.FILTER.PAYEE_SEARCH' | translate"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PAYEE' | translate"
+              />
+              @if (selectedPayees().length > 0) {
+                <div class="pay-run-detail__chips">
+                  @for (p of selectedPayees(); track p.id) {
+                    <span class="pay-run-detail__chip">
+                      {{ p.label }}
+                      <button type="button" class="pay-run-detail__chip-remove" (click)="removePayee(p.id)" aria-label="Remove">×</button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+            <div class="pay-run-detail__filter-field pay-run-detail__filter-field--wide">
+              <ws-select
+                formControlName="planSearch"
+                [options]="[]"
+                [searchFn]="planSearchFn"
+                [placeholder]="'PAY_RUNS.DETAIL.FILTER.PLAN_SEARCH' | translate"
+                [label]="'PAY_RUNS.DETAIL.FILTER.PLAN' | translate"
+              />
+              @if (selectedPlans().length > 0) {
+                <div class="pay-run-detail__chips">
+                  @for (p of selectedPlans(); track p.id) {
+                    <span class="pay-run-detail__chip">
+                      {{ p.label }}
+                      <button type="button" class="pay-run-detail__chip-remove" (click)="removePlan(p.id)" aria-label="Remove">×</button>
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+        </form>
+      }
+    </ws-card>
+
+    <!-- Payouts table -->
+    <ws-table>
+      <table>
+        <thead>
+          <tr>
+            <th>{{ 'PAY_RUNS.DETAIL.COL_PAYEE' | translate }}</th>
+            <th>{{ 'PAY_RUNS.DETAIL.COL_PLAN' | translate }}</th>
+            <th>{{ 'PAY_RUNS.DETAIL.COL_PERIOD' | translate }}</th>
+            <th class="pay-run-detail__col-right">{{ 'PAY_RUNS.DETAIL.COL_TOTAL' | translate }}</th>
+            <th>{{ 'PAY_RUNS.DETAIL.COL_STATUS' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (store.loading()) {
+            @for (row of skeletonRows; track row) {
+              <tr class="pay-run-detail__skeleton-row">
+                <td colspan="5"><div class="ws-skeleton ws-skeleton--line"></div></td>
+              </tr>
+            }
+          } @else if (store.payoutItems().length === 0) {
+            <tr>
+              <td colspan="5">
+                <ws-table-empty
+                  [messageKey]="store.activeFilterCount() > 0 || store.excludeZero() ? 'PAY_RUNS.DETAIL.EMPTY_FILTER' : 'PAY_RUNS.DETAIL.EMPTY_TITLE'"
+                />
+              </td>
+            </tr>
+          } @else {
+            @for (payout of store.payoutItems(); track payout.id) {
+              <tr class="pay-run-detail__payout-row" (click)="viewPayout(payout.id)" tabindex="0" (keydown.enter)="viewPayout(payout.id)">
+                <td>
+                  <span class="pay-run-detail__payee-name">{{ payout.payeeName }}</span>
+                  <span class="pay-run-detail__payee-code">{{ payout.payeeCode }}</span>
+                </td>
+                <td>{{ payout.planName }}</td>
+                <td>
+                  <div class="pay-run-detail__payout-period">
+                    <span>{{ payout.periodStart | dateFormat }}</span>
+                    <span class="pay-run-detail__period-sep">→</span>
+                    <span>{{ payout.periodEnd | dateFormat }}</span>
+                  </div>
+                </td>
+                <td class="pay-run-detail__col-right pay-run-detail__payout-total">
+                  {{ payout.totalCommissionAmount | currencyFormat: payout.totalCommissionCurrency }}
+                </td>
+                <td>
+                  <ws-badge [variant]="payoutStatusBadge(payout.status)">
+                    {{ 'PAYOUTS.STATUS_' + payout.status.toUpperCase() | translate }}
+                  </ws-badge>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </ws-table>
+
+    @if (!store.loading() && store.payoutTotalCount() > 0) {
+      <ws-pagination
+        [currentPage]="store.page()"
+        [totalPages]="store.payoutTotalPages()"
+        [totalCount]="store.payoutTotalCount()"
+        [pageSize]="store.pageSize()"
+        (pageChange)="store.setPage($event)"
+      />
+    }
+
+    <!-- Back link at bottom -->
+    <div class="pay-run-detail__back-row">
+      <ws-button variant="ghost" size="sm" [routerLink]="['/pay-runs']">
+        <app-icon name="chevron-left" [size]="14" />
+        {{ 'PAY_RUNS.DETAIL.BACK' | translate }}
+      </ws-button>
+    </div>
+
+  </ws-page-layout>
+</app-shell>
+
+<!-- Approve run modal (REVERSIBLE — no irreversibility warning) -->
+<ws-modal
+  [isOpen]="approveConfirmOpen()"
+  (isOpenChange)="approveConfirmOpen.set($event)"
+  [title]="'PAY_RUNS.DETAIL.APPROVE_CONFIRM_TITLE' | translate"
+  [closable]="!actioning()"
+>
+  <div class="pay-run-detail__modal-body">
+    <p class="pay-run-detail__modal-intro">
+      {{ 'PAY_RUNS.DETAIL.APPROVE_CONFIRM_BODY' | translate: { payeeCount: store.run()?.payeeCount ?? 0 } }}
+    </p>
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="actioning()" (click)="approveConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="actioning()" [loading]="actioning()" (click)="onApprove()">
+      {{ 'PAY_RUNS.DETAIL.APPROVE_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Mark run as paid modal (IRREVERSIBLE — show warning, totals, skip count) -->
+<ws-modal
+  [isOpen]="markPaidConfirmOpen()"
+  (isOpenChange)="markPaidConfirmOpen.set($event)"
+  [title]="'PAY_RUNS.DETAIL.MARK_PAID_CONFIRM_TITLE' | translate"
+  [closable]="!actioning()"
+>
+  <div class="pay-run-detail__modal-body">
+
+    <!-- Count sentence -->
+    <p class="pay-run-detail__modal-intro">
+      {{ 'PAY_RUNS.DETAIL.MARK_PAID_CONFIRM_BODY' | translate: { count: store.markPaidSummary().count } }}
+    </p>
+
+    <!-- Per-currency totals -->
+    @if (store.markPaidSummary().totalAmounts.length > 0) {
+      <div class="pay-run-detail__modal-section">
+        <p class="pay-run-detail__modal-section-label">{{ 'PAY_RUNS.DETAIL.MARK_PAID_TOTALS' | translate }}</p>
+        <ul class="pay-run-detail__totals-list">
+          @for (entry of store.markPaidSummary().totalAmounts; track entry.currency) {
+            <li>{{ entry.amount | currencyFormat: entry.currency }}</li>
+          }
+        </ul>
+      </div>
+    }
+
+    <!-- Skip notice ($0 payouts) -->
+    @if (store.markPaidSummary().skippedCount > 0) {
+      <p class="pay-run-detail__modal-skip">
+        <app-icon name="info" [size]="14" />
+        {{ 'PAY_RUNS.DETAIL.MARK_PAID_SKIP_WARNING' | translate: { skipped: store.markPaidSummary().skippedCount } }}
+      </p>
+    }
+
+    <!-- Irreversibility warning -->
+    <p class="pay-run-detail__modal-warning">
+      <app-icon name="alert-triangle" [size]="14" />
+      {{ 'PAY_RUNS.DETAIL.MARK_PAID_IRREVERSIBLE' | translate }}
+    </p>
+
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="actioning()" (click)="markPaidConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="actioning()" [loading]="actioning()" (click)="onMarkPaid()">
+      {{ 'PAY_RUNS.DETAIL.MARK_PAID_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Reopen run modal (REVERSIBLE — no irreversibility warning) -->
+<ws-modal
+  [isOpen]="reopenConfirmOpen()"
+  (isOpenChange)="reopenConfirmOpen.set($event)"
+  [title]="'PAY_RUNS.DETAIL.REOPEN_CONFIRM_TITLE' | translate"
+  [closable]="!actioning()"
+>
+  <div class="pay-run-detail__modal-body">
+    <p class="pay-run-detail__modal-intro">
+      {{ 'PAY_RUNS.DETAIL.REOPEN_CONFIRM_BODY' | translate: { payeeCount: store.run()?.payeeCount ?? 0 } }}
+    </p>
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="actioning()" (click)="reopenConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="secondary" [disabled]="actioning()" [loading]="actioning()" (click)="onReopen()">
+      {{ 'PAY_RUNS.DETAIL.REOPEN_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>

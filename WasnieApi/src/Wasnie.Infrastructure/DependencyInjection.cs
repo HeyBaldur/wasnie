@@ -81,6 +81,9 @@ public static class DependencyInjection
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
+        services.AddScoped<IPayoutPdfExportService, PayoutPdfExportService>();
+        services.AddScoped<IPayoutExcelExportService, PayoutExcelExportService>();
+        services.AddScoped<IPayRunExcelExportService, PayRunExcelExportService>();
         services.AddScoped<IFieldRequirementService, FieldRequirementService>();
         services.AddScoped<IImportCacheService, ImportCacheService>();
         services.AddScoped<IFileParserService, FileParserService>();
@@ -119,6 +122,7 @@ public static class DependencyInjection
         services.AddScoped<IJobHandler<TransactionImportPayload>, TransactionImportJobHandler>();
         services.AddScoped<IJobHandler<ProcessPendingTransactionsPayload>, ProcessPendingTransactionsJobHandler>();
         services.AddScoped<IJobHandler<TransactionUpdatePayload>, UpdateTransactionsFromExcelJobHandler>();
+        services.AddScoped<IJobHandler<CalculatePayoutsPayload>, CalculatePayoutsJobHandler>();
 
         services.AddIdentity<IdentityUser, IdentityRole>(options =>
             {

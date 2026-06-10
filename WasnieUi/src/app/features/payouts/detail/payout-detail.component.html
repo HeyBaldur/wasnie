@@ -1,0 +1,213 @@
+<app-shell>
+  <ws-page-layout
+    icon="receipt"
+    [title]="'PAYOUTS.DETAIL.TITLE' | translate"
+    [subtitle]="(payout()?.payeeName ?? '') + ' · ' + (payout()?.periodStart ?? '') + ' → ' + (payout()?.periodEnd ?? '')"
+  >
+    <ng-container slot="actions">
+      <ws-button variant="ghost" [routerLink]="['/payouts']">
+        <app-icon name="arrow-left" [size]="14" />
+        {{ 'PAYOUTS.DETAIL.BACK' | translate }}
+      </ws-button>
+      <ws-button
+        *hasPermission="'Payouts.Export'"
+        variant="secondary"
+        [disabled]="exporting()"
+        (click)="onExportPdf()"
+      >
+        <app-icon name="download" [size]="14" />
+        {{ 'PAYOUTS.ACTION_EXPORT_PDF' | translate }}
+      </ws-button>
+    </ng-container>
+
+    @if (loading()) {
+      <div class="payout-detail__loading">
+        <div class="ws-skeleton ws-skeleton--block"></div>
+      </div>
+    } @else if (error()) {
+      <ws-card>
+        <p class="payout-detail__error">{{ error()! | translate }}</p>
+      </ws-card>
+    } @else if (payout(); as p) {
+
+      <!-- Action error -->
+      @if (actionError()) {
+        <ws-card variant="flat" accent="danger" class="payout-detail__action-error">
+          <p>{{ actionError()! | translate }}</p>
+        </ws-card>
+      }
+
+      <!-- Approval banner -->
+      @if (isCalculated()) {
+        <ws-card variant="raised" accent="brand" class="payout-detail__banner">
+          <div class="payout-detail__banner-content">
+            <div>
+              <p class="payout-detail__banner-title">{{ 'PAYOUTS.DETAIL.BANNER_APPROVE_TITLE' | translate }}</p>
+              <p class="payout-detail__banner-desc">{{ 'PAYOUTS.DETAIL.BANNER_APPROVE_DESC' | translate }}</p>
+            </div>
+            <ws-button
+              *hasPermission="'Payouts.Approve'"
+              variant="primary"
+              [disabled]="approving()"
+              (click)="approveConfirmOpen.set(true)"
+            >
+              {{ 'PAYOUTS.ACTION_APPROVE' | translate }}
+            </ws-button>
+          </div>
+        </ws-card>
+      }
+
+      @if (isApproved()) {
+        <ws-card variant="raised" accent="success" class="payout-detail__banner">
+          <div class="payout-detail__banner-content">
+            <div>
+              <p class="payout-detail__banner-title">{{ 'PAYOUTS.DETAIL.BANNER_PAID_TITLE' | translate }}</p>
+              <p class="payout-detail__banner-desc">{{ 'PAYOUTS.DETAIL.BANNER_PAID_DESC' | translate }}</p>
+            </div>
+            <ws-button
+              *hasPermission="'Payouts.MarkPaid'"
+              variant="primary"
+              [disabled]="markingPaid()"
+              (click)="markPaidConfirmOpen.set(true)"
+            >
+              {{ 'PAYOUTS.ACTION_MARK_PAID' | translate }}
+            </ws-button>
+          </div>
+        </ws-card>
+      }
+
+      @if (isPaid()) {
+        <ws-card variant="flat" accent="success" class="payout-detail__banner">
+          <p class="payout-detail__banner-paid-msg">{{ 'PAYOUTS.DETAIL.BANNER_PAID_DONE' | translate }}</p>
+        </ws-card>
+      }
+
+      @if (isDisputed()) {
+        <ws-card variant="flat" accent="warning" class="payout-detail__banner">
+          <p class="payout-detail__banner-disputed-msg">{{ 'PAYOUTS.DETAIL.BANNER_DISPUTED' | translate }}</p>
+        </ws-card>
+      }
+
+      <!-- Summary card -->
+      <ws-card class="payout-detail__summary">
+        <h3 class="payout-detail__section-title">{{ 'PAYOUTS.DETAIL.SECTION_SUMMARY' | translate }}</h3>
+        <div class="payout-detail__summary-grid">
+          <div class="payout-detail__field">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.PAYEE' | translate }}</span>
+            <span class="payout-detail__value">{{ p.payeeName }} <span class="payout-detail__code">({{ p.payeeCode }})</span></span>
+          </div>
+          <div class="payout-detail__field">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.PLAN' | translate }}</span>
+            <span class="payout-detail__value"><ws-button variant="link" size="sm" (click)="openPlan(p.planId)">{{ p.planName }}</ws-button></span>
+          </div>
+          <div class="payout-detail__field">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.PERIOD' | translate }}</span>
+            <span class="payout-detail__value">
+              {{ p.periodStart | dateFormat }} → {{ p.periodEnd | dateFormat }}
+            </span>
+          </div>
+          <div class="payout-detail__field">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.STATUS' | translate }}</span>
+            <ws-badge [variant]="statusBadge()">{{ 'PAYOUTS.STATUS_' + p.status.toUpperCase() | translate }}</ws-badge>
+          </div>
+          <div class="payout-detail__field payout-detail__field--total">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.TOTAL' | translate }}</span>
+            <span class="payout-detail__total">
+              {{ p.totalCommissionAmount | currencyFormat: p.totalCommissionCurrency }}
+            </span>
+          </div>
+        </div>
+      </ws-card>
+
+      <!-- Commission lines -->
+      <ws-card class="payout-detail__lines">
+        <h3 class="payout-detail__section-title">{{ 'PAYOUTS.DETAIL.SECTION_LINES' | translate }}</h3>
+        @if (p.lines.length === 0) {
+          <p class="payout-detail__empty">{{ 'PAYOUTS.DETAIL.NO_LINES' | translate }}</p>
+        } @else {
+          <ws-table>
+            <table>
+              <thead>
+                <tr>
+                  <th>{{ 'PAYOUTS.DETAIL.COL_RULE' | translate }}</th>
+                  <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_BASE' | translate }}</th>
+                  <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_COMMISSION' | translate }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of p.lines; track line.id) {
+                  <tr>
+                    <td>{{ line.ruleName }}</td>
+                    <td class="payout-detail__col-right payout-detail__num">
+                      {{ line.baseAmount | currencyFormat: line.baseCurrency }}
+                    </td>
+                    <td class="payout-detail__col-right payout-detail__num">
+                      {{ line.commissionAmount | currencyFormat: line.commissionCurrency }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="payout-detail__total-row">
+                  <td><strong>Total</strong></td>
+                  <td></td>
+                  <td class="payout-detail__col-right payout-detail__num">
+                    <strong>{{ p.totalCommissionAmount | currencyFormat: p.totalCommissionCurrency }}</strong>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </ws-table>
+        }
+      </ws-card>
+
+      <!-- Audit trail -->
+      <ws-card class="payout-detail__audit">
+        <h3 class="payout-detail__section-title">{{ 'PAYOUTS.DETAIL.SECTION_AUDIT' | translate }}</h3>
+        <div class="payout-detail__audit-grid">
+          <div class="payout-detail__field">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.CALCULATED_AT' | translate }}</span>
+            <span class="payout-detail__value">{{ p.calculatedAt | dateFormat }}</span>
+          </div>
+          <div class="payout-detail__field">
+            <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.CALCULATED_BY' | translate }}</span>
+            <span class="payout-detail__value">{{ p.calculatedBy }}</span>
+          </div>
+          @if (p.updatedAt !== p.calculatedAt) {
+            <div class="payout-detail__field">
+              <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.UPDATED_AT' | translate }}</span>
+              <span class="payout-detail__value">{{ p.updatedAt | dateFormat }}</span>
+            </div>
+            <div class="payout-detail__field">
+              <span class="payout-detail__label">{{ 'PAYOUTS.DETAIL.UPDATED_BY' | translate }}</span>
+              <span class="payout-detail__value">{{ p.updatedBy }}</span>
+            </div>
+          }
+        </div>
+      </ws-card>
+
+    }
+  </ws-page-layout>
+</app-shell>
+
+<ws-confirmation-modal
+  [(isOpen)]="approveConfirmOpen"
+  [title]="'PAYOUTS.DETAIL.APPROVE_CONFIRM_TITLE' | translate"
+  [message]="'PAYOUTS.DETAIL.APPROVE_CONFIRM_MSG' | translate"
+  [confirmLabel]="'PAYOUTS.ACTION_APPROVE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  [loading]="approving()"
+  (confirmed)="onApprove()"
+  (cancelled)="approveConfirmOpen.set(false)"
+/>
+
+<ws-confirmation-modal
+  [(isOpen)]="markPaidConfirmOpen"
+  [title]="'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_TITLE' | translate"
+  [message]="'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_MSG' | translate"
+  [confirmLabel]="'PAYOUTS.ACTION_MARK_PAID' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  [loading]="markingPaid()"
+  (confirmed)="onMarkPaid()"
+  (cancelled)="markPaidConfirmOpen.set(false)"
+/>

@@ -51,6 +51,7 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<CompensationTransaction> CompensationTransactions => Set<CompensationTransaction>();
     public Microsoft.EntityFrameworkCore.DbSet<Credit> Credits => Set<Credit>();
     public Microsoft.EntityFrameworkCore.DbSet<CompensationPayout> CompensationPayouts => Set<CompensationPayout>();
+    public Microsoft.EntityFrameworkCore.DbSet<PayRun> PayRuns => Set<PayRun>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -72,6 +73,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new CreditConfiguration());
         builder.ApplyConfiguration(new CompensationPayoutConfiguration());
         builder.ApplyConfiguration(new PayoutLineConfiguration());
+        builder.ApplyConfiguration(new PayRunConfiguration());
         builder.ApplyConfiguration(new ImportAuditConfiguration());
         builder.ApplyConfiguration(new AuditLogConfiguration());
         builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
@@ -87,6 +89,7 @@ public sealed class ApplicationDbContext(
         builder.Entity<CompensationTransaction>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Credit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<CompensationPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<PayRun>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

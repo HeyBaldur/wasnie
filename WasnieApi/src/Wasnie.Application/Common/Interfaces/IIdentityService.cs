@@ -14,6 +14,8 @@ public interface IIdentityService
 
     Task<string?> FindUserIdByEmailAsync(string email);
 
+    Task<string?> FindEmailByUserIdAsync(string userId);
+
     Task<IList<string>> GetUserRolesAsync(string userId);
 
     Task<string?> GetTenantIdClaimAsync(string userId);

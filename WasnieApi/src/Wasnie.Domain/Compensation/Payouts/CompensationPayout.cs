@@ -9,7 +9,9 @@ namespace Wasnie.Domain.Compensation.Payouts;
 public sealed class CompensationPayout : AggregateRoot
 {
     public Guid TenantId { get; private set; }
+    public Guid? PayRunId { get; private set; }
     public Guid PayeeId { get; private set; }
+    public Guid PlanId { get; private set; }
     public PayeeReference PayeeSnapshot { get; private set; } = null!;
     public DateRange Period { get; private set; } = null!;
     public Money TotalCommission { get; private set; } = null!;
@@ -27,24 +29,36 @@ public sealed class CompensationPayout : AggregateRoot
     public static CompensationPayout Calculate(
         Guid tenantId,
         Guid payeeId,
+        Guid planId,
         PayeeReference payeeSnapshot,
         DateRange period,
-        IReadOnlyList<PayoutLine> lines,
+        IReadOnlyList<PayoutLineSpec> lineSpecs,
+        string fallbackCurrency,
         string calculatedBy,
         Guid id,
         DateTimeOffset now,
         Guid eventId,
         Func<Guid> newId)
     {
-        var totalCommission = lines.Count > 0
-            ? lines.Skip(1).Aggregate(lines[0].CommissionAmount, (acc, l) => acc.Add(l.CommissionAmount))
-            : Money.Zero("USD");
+        if (string.IsNullOrWhiteSpace(fallbackCurrency))
+            throw new DomainException(
+                "A determinable currency is required to calculate a payout. " +
+                "Ensure the plan has a currency configured.");
+
+        // Always create a new Money instance — never reuse a spec's reference, which may be
+        // an owned-type instance already tracked by EF Core on a different aggregate.
+        var totalCommission = lineSpecs.Count > 0
+            ? Money.Of(
+                lineSpecs.Sum(l => l.CommissionAmount.Amount),
+                lineSpecs[0].CommissionAmount.Currency)
+            : Money.Zero(fallbackCurrency);
 
         var payout = new CompensationPayout
         {
             Id = id,
             TenantId = tenantId,
             PayeeId = payeeId,
+            PlanId = planId,
             PayeeSnapshot = payeeSnapshot,
             Period = period,
             TotalCommission = totalCommission,
@@ -55,16 +69,16 @@ public sealed class CompensationPayout : AggregateRoot
             UpdatedBy = calculatedBy
         };
 
-        foreach (var line in lines)
+        foreach (var spec in lineSpecs)
         {
             payout._lines.Add(PayoutLine.Create(
                 payout.Id,
-                line.CreditId,
-                line.RuleId,
-                line.RuleName,
-                line.BaseAmount,
-                line.CommissionAmount,
-                line.AppliedModifiers,
+                spec.CreditId,
+                spec.RuleId,
+                spec.RuleName,
+                spec.BaseAmount,
+                spec.CommissionAmount,
+                spec.AppliedModifiers,
                 newId()));
         }
 
@@ -96,6 +110,32 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Paid;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    /// <summary>
+    /// Associates this payout with a PayRun. Called by the engine after creating or re-running a payout.
+    /// Idempotent when called with the same payRunId.
+    /// </summary>
+    public void AssignToRun(Guid payRunId)
+    {
+        if (PayRunId.HasValue && PayRunId.Value != payRunId)
+            throw new DomainException(
+                $"Payout {Id} is already assigned to a different PayRun ({PayRunId.Value}).");
+        PayRunId = payRunId;
+    }
+
+    /// <summary>
+    /// Reverts an Approved payout back to Calculated when its PayRun is reopened.
+    /// Only valid for Approved status — Paid and Disputed are not reverted.
+    /// </summary>
+    public void RevertToCalculated(string updatedBy, DateTimeOffset now)
+    {
+        if (Status != CompensationPayoutStatus.Approved)
+            throw new DomainException("Only Approved payouts can be reverted to Calculated.");
+
+        Status = CompensationPayoutStatus.Calculated;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

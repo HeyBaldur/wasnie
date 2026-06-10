@@ -560,7 +560,13 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<Guid?>("PayRunId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("PayeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PlanId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Status")
@@ -581,9 +587,78 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PayRunId");
+
                     b.HasIndex("TenantId", "PayeeId");
 
                     b.ToTable("CompensationPayouts", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Payouts.PayRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset?>("PaidAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PaidBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("PaidPayeeCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PayeeCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TotalAmounts")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ZeroPayoutCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("IX_PayRuns_TenantId");
+
+                    b.HasIndex("TenantId", "PeriodStart", "PeriodEnd")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PayRuns_Unique");
+
+                    b.ToTable("PayRuns", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Payouts.PayoutLine", b =>
@@ -1375,6 +1450,11 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Payouts.CompensationPayout", b =>
                 {
+                    b.HasOne("Wasnie.Domain.Compensation.Payouts.PayRun", null)
+                        .WithMany()
+                        .HasForeignKey("PayRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.PayeeReference", "PayeeSnapshot", b1 =>
                         {
                             b1.Property<Guid>("CompensationPayoutId")

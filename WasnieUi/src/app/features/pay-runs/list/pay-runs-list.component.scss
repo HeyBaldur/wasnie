@@ -1,0 +1,221 @@
+.pay-runs-list {
+  &__export-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    color: var(--color-danger);
+    font-size: var(--font-size-13);
+    margin-bottom: var(--space-3);
+  }
+
+  &__filter {
+    margin-bottom: var(--space-3);
+  }
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  &__toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+
+    ws-date-picker {
+      width: 148px;
+    }
+
+    ws-select {
+      width: 160px;
+    }
+
+    ::ng-deep .ws-select__value,
+    ::ng-deep .ws-select__option {
+      font-weight: 600;
+    }
+  }
+
+  &__col-right {
+    text-align: right;
+  }
+
+  &__row {
+    cursor: pointer;
+
+    &:hover td {
+      background: var(--color-bg-surface-raised);
+    }
+
+    &:focus {
+      outline: none;
+
+      td:first-child { box-shadow: inset 2px 0 0 var(--color-brand); }
+    }
+  }
+
+  &__skeleton-row td {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  &__period {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-size-14);
+    white-space: nowrap;
+  }
+
+  &__period-start {
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+
+  &__period-sep {
+    color: var(--color-text-tertiary);
+  }
+
+  &__payee-count {
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  &__totals {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-1);
+  }
+
+  &__total-line {
+    font-size: var(--font-size-14);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+  }
+
+  &__total-zero {
+    color: var(--color-text-tertiary);
+  }
+
+  &__created-by {
+    display: block;
+    font-size: var(--font-size-13);
+    color: var(--color-text-primary);
+  }
+
+  &__created-at {
+    display: block;
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+  }
+
+  // ── Calculate modal ────────────────────────────────────────────────────────
+
+  &__modal-form {
+    background: var(--color-bg-surface-raised);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+  }
+
+  &__modal-period {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
+
+  &__error {
+    color: var(--color-danger);
+    font-size: var(--font-size-13);
+    margin-top: var(--space-2);
+  }
+
+  &__modal-result {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  &__result-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--color-bg-surface-raised);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+  }
+
+  &__result-icon--success { color: var(--color-success); }
+  &__result-icon--neutral { color: var(--color-text-secondary); }
+
+  &__result-count {
+    font-size: var(--font-size-15);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  &__result-section {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    border-left: 3px solid;
+
+    &--warning {
+      background: var(--color-warning-bg);
+      border-color: var(--color-warning);
+    }
+
+    &--info {
+      background: var(--color-info-bg);
+      border-color: var(--color-info);
+    }
+  }
+
+  &__result-section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-1);
+  }
+
+  &__result-section-desc {
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
+  }
+
+  &__payee-scroll {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-surface-sunken);
+
+    .pay-runs-list__result-list {
+      padding-top: var(--space-2);
+      padding-bottom: var(--space-2);
+    }
+  }
+
+  &__result-list {
+    padding-left: var(--space-4);
+    margin: 0;
+
+    li {
+      font-size: var(--font-size-13);
+      color: var(--color-text-primary);
+      margin-bottom: var(--space-1);
+      &:last-child { margin-bottom: 0; }
+    }
+  }
+}

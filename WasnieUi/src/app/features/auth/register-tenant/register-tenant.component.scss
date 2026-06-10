@@ -191,11 +191,11 @@
 }
 
 .auth-page__subline {
-  font-size: clamp(1rem, 1.2vw, 1.25rem);
+  font-size: clamp(0.8rem, 0.95vw, 0.9rem);
   color: rgba(255, 255, 255, 0.88);
   line-height: 1.65;
   margin: 0;
-  max-width: 400px;
+  max-width: 520px;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
 }
 
