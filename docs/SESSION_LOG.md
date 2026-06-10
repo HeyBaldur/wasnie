@@ -8,31 +8,81 @@
 
 ## Sessions (newest first)
 
-## 2026-06-10 — A.6 Fase 6: Filters + Excel Export on Pay Run list & detail
+## 2026-06-10 — A.6 Pay Run COMPLETE (Phases 5 UI + 6 filters/export) + full browser smoke
 
-**Phase:** A.6 — Filters + Export
+**Phase:** A.6 — MILESTONE: entire Pay Run subsystem done. A.4→A.6 payout engine complete.
 
 **What we did:**
 
-**Backend:**
-- Extended `PayoutFilterQuery` with `PayRunId?`, `AmountMin?`, `AmountMax?` (nullable, non-breaking).
-- Made `ListPayoutsHandler.BuildQuery()` `static internal` — shared by list, detail, and export handlers (zero duplicated filter logic).
-- Rewrote `GetPayRunByIdHandler` to map `PayRunPayoutsDetailFilter` → `PayoutFilterQuery` and call `ListPayoutsHandler.BuildQuery()`.
-- Created `ExportPayRunsHandler` + `IPayRunExcelExportService` / `PayRunExcelExportService` (ClosedXML, two-pass dynamic currency columns, Pattern B — no cross-currency sum).
-- Added `GET /api/pay-runs/export` endpoint to `PayRunsController`.
-- Fixed `PayRunExportTests.cs`: replaced reference to `private sealed class PayRunEngineTests.DirectSender` with a self-contained local `DirectSender` class inside the test class. 11 new integration tests.
+**Fase 5 — Pay Run UI (continued from 2026-06-09 session, smoke-validated this session):**
+- Routes: `/pay-runs` (PayRunListComponent) + `/pay-runs/:id` (PayRunDetailComponent). `/payouts/:id` unchanged. `/payouts` redirects to `/pay-runs`. Sidebar entry: `/payouts`→`/pay-runs` ("Pay Runs" / "Ciclos de pago" / "Cykle wypłat").
+- `PayRunsStore` (global, `_lastLoadedFilter` race guard, `toExportParams()`) + `PayRunDetailStore` (component-scoped via `providers: []`, no singleton, `_lastLoadedFilter` race guard, `setFilter()`, `clearFilters()`, `setExcludeZero()`, `activeFilterCount`).
+- Calculate is SYNC — `onCalculate()` awaits `firstValueFrom(api.calculate(...))`, no Hangfire job, no polling loop (eliminates the A.5.2 infinite-loop risk by design, Decision #81).
+- Action modals with tone differentiation per Decision #69: Approve/Reopen (reversible → no irreversibility warning); MarkPaid (irreversible → 5 mandatory elements: count in title+body, per-currency totals, scrollable payee list, irreversibility warning, skip warning when non-Approved payouts selected).
+- Run header: Pattern B per-currency totals (€ and PLN on separate lines, no cross-currency sum); `payeeCount` + `paidPayeeCount` as distinct counters; audit fields (created/approved/paid + actor name).
+- i18n EN/ES/PL complete. RBAC gating via `*hasPermission` throughout.
+- **Smoke (browser + DevTools):** full cycle calculate→Draft→Approve→Approved→Reopen→Draft→Approve→MarkPaid→Paid verified. Pattern B (€ and PLN in separate lines) ✓. Two payee counts (e.g. 6 paid · 9 total) ✓. Audit fields (created/approved/paid + actor) ✓. A Paid payout (Adrián #2) stayed Paid through Approve AND Reopen (terminal state protection both directions) ✓.
 
-**Frontend:**
-- `pay-run.model.ts`: `PayRunPayoutsDetailFilter` interface + `EMPTY_PAYOUTS_DETAIL_FILTER`.
-- `pay-runs.api.service.ts`: `getById()` now accepts full `PayRunPayoutsDetailFilter`; added `exportPayRuns()` and `exportRunPayouts()`.
-- `pay-runs.store.ts`: `toExportParams()` (reads `_lastLoadedFilter() ?? filter()`) + `activeFilterCount` computed.
-- `pay-run-detail.store.ts`: fully rewritten with `PayRunPayoutsDetailFilter`, `_lastLoadedFilter` race guard, `toExportParams()`, `setFilter()`, `clearFilters()`, `setExcludeZero()`, `activeFilterCount`.
-- `pay-runs-list.component`: Export to Excel button (`Payouts.Export` gate), `onExport()`.
-- `pay-run-detail.component`: collapsible filter bar (status, period from/to, amountMin/max, payee chips via WsSelect searchFn, plan chips), Export to Excel button, `onExportPayouts()`.
-- EN/ES/PL i18n: `PAY_RUNS.DETAIL.FILTER.*` + `PAY_RUNS.DETAIL.EXPORT.*` + `PAY_RUNS.EXPORT.*`.
+**Fase 6 — Filters + Excel Export:**
+
+*Backend:*
+- Extended `PayoutFilterQuery` with `PayRunId?`, `AmountMin?`, `AmountMax?` (nullable, non-breaking).
+- Made `ListPayoutsHandler.BuildQuery()` `static internal` — shared by list handler, detail handler, and both export handlers. Zero duplicated filter logic.
+- Rewrote `GetPayRunByIdHandler` to map `PayRunPayoutsDetailFilter` → `PayoutFilterQuery` and call `BuildQuery()`.
+- Created `ExportPayRunsHandler` + `IPayRunExcelExportService` / `PayRunExcelExportService` (ClosedXML, two-pass dynamic currency columns, Pattern B — never sums across currencies). `GET /api/pay-runs/export` endpoint added to `PayRunsController`.
+- `ExportPayoutsHandler` gains `PayRunId` filter — detail export reuses existing endpoint with run scoping.
+- Fixed `PayRunExportTests.cs`: replaced inaccessible `PayRunEngineTests.DirectSender` (private sealed class) with a self-contained local `DirectSender`. 11 new integration tests.
+
+*Frontend:*
+- `PayRunPayoutsDetailFilter` model + `EMPTY_PAYOUTS_DETAIL_FILTER` constant.
+- `pay-runs.api.service.ts`: `getById()` accepts full `PayRunPayoutsDetailFilter`; added `exportPayRuns()` + `exportRunPayouts()` → both return `Observable<Blob>`.
+- `pay-runs.store.ts`: `toExportParams()` (`_lastLoadedFilter() ?? filter()` race guard) + `activeFilterCount` computed.
+- `pay-run-detail.store.ts`: fully rewritten with filter signals, `_lastLoadedFilter` race guard, `toExportParams()`, `setFilter()`, `clearFilters()`, `setExcludeZero()`, `activeFilterCount`.
+- **List page:** manual date range pickers (from/to `WsDatePicker`, no label — compact mode; mutual exclusion effect; segment resets to "All time" when manual date entered; patchValue emitEvent:false to avoid double store.setFilter); default period this-month (first→last day of current month, Decision #83 bug-fix); Export to Excel button (`Payouts.Export` gate, blob download via ephemeral anchor).
+- **Detail page:** collapsible filter bar (status `WsSelect`, period from/to `WsDatePicker`, amountMin/amountMax `WsInput`, payee chips via `WsSelect searchFn`, plan chips, hide-$0 toggle); Export to Excel button; filter badge count shown on collapsed header.
+- EN/ES/PL i18n: `PAY_RUNS.DETAIL.FILTER.*` + `PAY_RUNS.DETAIL.EXPORT.*` + `PAY_RUNS.EXPORT.*` + `PAY_RUNS.FILTER.PERIOD_FROM/TO`.
 - 43/43 frontend unit tests pass; `ng build` production clean.
 
-**Deferred:** Backend integration tests require Docker for Testcontainers — run manually in CI.
+**Key decisions:**
+- #80 — Pay Run routes + sidebar redirect: `/pay-runs` and `/pay-runs/:id`; `/payouts`→`/pay-runs` redirect; flat payout list not resurrected as standalone page.
+- #81 — Calculate is SYNC (no Hangfire job, no polling); eliminates infinite-loop risk by design.
+- #82 — Historical query capability lives within Pay Run screens (manual date pickers + detail filter bar); no separate `/payouts` page.
+- #83 — Step 0 calibration by risk: skip for low-risk additive work (filters, UI, export); mandatory for money/schema/state (migrations, engine, domain transitions, Permission grants).
+
+**Files:**
+
+*Backend A.6 Fase 6:*
+- `Wasnie.Application/Compensation/DTOs/PayRunDto.cs` (extended with filter support)
+- `Wasnie.Application/Compensation/Queries/PayRuns/` (new GetPayRunByIdQuery extended)
+- `Wasnie.Application/Compensation/Handlers/PayRuns/ExportPayRunsHandler.cs` (new)
+- `Wasnie.Infrastructure/Compensation/PayRunExcelExportService.cs` (new)
+- `Wasnie.Application/Compensation/Queries/Payouts/` (PayoutFilterQuery extended)
+- `Wasnie.Application/Compensation/Handlers/Payouts/ListPayoutsHandler.cs` (BuildQuery static internal)
+- `Wasnie.Application/Compensation/Handlers/Payouts/ExportPayoutsHandler.cs` (PayRunId filter)
+- `Wasnie.Api/Controllers/PayRunsController.cs` (Export endpoint)
+- `tests/Wasnie.IntegrationTests/Compensation/PayRunExportTests.cs` (11 new tests)
+
+*Frontend A.6 Fases 5+6:*
+- `pay-runs/models/pay-run.model.ts` (PayRunPayoutsDetailFilter + EMPTY constant)
+- `pay-runs/services/pay-runs.api.service.ts` (getById filter, exportPayRuns, exportRunPayouts)
+- `pay-runs/state/pay-runs.store.ts` (toExportParams race guard, activeFilterCount)
+- `pay-runs/state/pay-run-detail.store.ts` (full rewrite)
+- `pay-runs/list/pay-runs-list.component.{ts,html,scss}` (date pickers, export button, default period fix)
+- `pay-runs/detail/pay-run-detail.component.{ts,html,scss}` (filter bar, export button)
+- `pay-runs/state/pay-run-detail.store.spec.ts` (rewritten)
+- `pay-runs/state/pay-runs.store.spec.ts` (extended)
+- `assets/i18n/en.json`, `es.json`, `pl.json` (PAY_RUNS.DETAIL.FILTER.*, PAY_RUNS.EXPORT.*, etc.)
+
+**What's next:**
+- Commit branch `WI-A4-PAYOUT-ENGINE` (user-driven — Claude Code never runs git commands).
+- Post-A.6 roadmap: aggregated payroll export WI; email notification on run close (Resend + recipient settings + tier limits); WI-UX-GUIDANCE; clawbacks WI; pre-customer production hardening (red test cleanup, WI-PROD-N upload security, rate limit manual verification).
+
+**Notes / lessons:**
+- **Timing/reactivity bugs remain invisible to automated tests.** The stale filter default (list defaulting to last-month instead of this-month) and the `_lastLoadedFilter` race condition were only caught in browser smoke, not in the Angular test suite. Rule: any component with period initialization or store reconstruction must be included in the smoke checklist pre-release.
+- **Vigilance over multi-item requests.** In Fase 6 the manual date pickers (periodFrom/periodTo) on the LIST screen were omitted from the first implementation pass — the WI's central requirement (querying a run from January 2022 while in 2026) was missed until the user pointed it out explicitly. When a prompt has multiple items, verify each one against the final output before reporting done.
+- **Step 0 calibrated by risk (Decision #83):** Skip for additive/UI/export work; mandatory for money/schema/state work. Validated across A.6 — Fases 5+6 needed no Step 0; Fases 1–4 (Domain + Migration + Engine) benefited from it.
+
+---
 
 ## 2026-06-09 — Payouts refinement (A.5.1–A.5.6) + export race fix + Pay Run design + A.6 Fases 1–4 + full smoke
 
