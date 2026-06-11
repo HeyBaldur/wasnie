@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard } from './core/guards/auth.guard';
+import { planGuard } from './core/guards/plan.guard';
 import { hasPermissionGuard } from './core/auth/guards/has-permission.guard';
 import { environment } from '../environments/environment';
 
@@ -15,8 +15,13 @@ export const routes: Routes = [
       import('./features/auth/auth.routes').then((m) => m.authRoutes),
   },
   {
+    path: 'onboarding',
+    loadChildren: () =>
+      import('./features/subscription/subscription.routes').then((m) => m.subscriptionRoutes),
+  },
+  {
     path: 'dashboard',
-    canActivate: [authGuard],
+    canActivate: [planGuard],
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then(
         (m) => m.DashboardComponent
@@ -24,55 +29,61 @@ export const routes: Routes = [
   },
   {
     path: 'plans',
-    canActivate: [authGuard, hasPermissionGuard('Plans.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Plans.Read')],
     loadChildren: () =>
       import('./features/plans/plans.routes').then((m) => m.plansRoutes),
   },
   {
     path: 'payees',
-    canActivate: [authGuard, hasPermissionGuard('Payees.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Payees.Read')],
     loadChildren: () =>
       import('./features/payees/payees.routes').then((m) => m.payeesRoutes),
   },
   {
     path: 'transactions',
-    canActivate: [authGuard, hasPermissionGuard('Transactions.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Transactions.Read')],
     loadChildren: () =>
       import('./features/transactions/transactions.routes').then((m) => m.transactionsRoutes),
   },
   {
     path: 'credits',
-    canActivate: [authGuard, hasPermissionGuard('Credits.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Credits.Read')],
     loadChildren: () =>
       import('./features/credits/credits.routes').then((m) => m.creditsRoutes),
   },
   {
     path: 'pay-runs',
-    canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Payouts.Read')],
     loadChildren: () =>
       import('./features/pay-runs/pay-runs.routes').then((m) => m.payRunsRoutes),
   },
   {
     path: 'payouts',
-    canActivate: [authGuard, hasPermissionGuard('Payouts.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Payouts.Read')],
     loadChildren: () =>
       import('./features/payouts/payouts.routes').then((m) => m.payoutsRoutes),
   },
   {
     path: 'quotas',
-    canActivate: [authGuard, hasPermissionGuard('Quotas.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Quotas.Read')],
     loadChildren: () =>
       import('./features/quotas/quotas.routes').then((m) => m.quotasRoutes),
   },
   {
     path: 'assignments',
-    canActivate: [authGuard, hasPermissionGuard('Assignments.Read')],
+    canActivate: [planGuard, hasPermissionGuard('Assignments.Read')],
     loadChildren: () =>
       import('./features/assignments/assignments.routes').then((m) => m.assignmentsRoutes),
   },
   {
+    path: 'subscription',
+    canActivate: [planGuard, hasPermissionGuard('Subscription.Manage')],
+    loadChildren: () =>
+      import('./features/subscription/subscription.routes').then((m) => m.manageSubscriptionRoutes),
+  },
+  {
     path: 'admin',
-    canActivate: [authGuard, hasPermissionGuard('Subscription.Manage')],
+    canActivate: [planGuard, hasPermissionGuard('Subscription.Manage')],
     loadComponent: () =>
       import('./features/admin/admin.component').then(
         (m) => m.AdminComponent
@@ -80,7 +91,7 @@ export const routes: Routes = [
   },
   {
     path: 'forbidden',
-    canActivate: [authGuard],
+    canActivate: [planGuard],
     loadComponent: () =>
       import('./features/forbidden/forbidden.component').then(
         (m) => m.ForbiddenComponent

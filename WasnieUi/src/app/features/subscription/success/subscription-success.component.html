@@ -1,0 +1,44 @@
+<div class="success-shell">
+  <header class="success-header">
+    <div class="success-header__brand">
+      <div class="success-header__monogram">
+        <img src="wasnie_logo.png" alt="Wasnie" />
+      </div>
+      <span class="success-header__name">{{ 'APP.NAME' | translate }}</span>
+    </div>
+  </header>
+
+  <main class="success-body">
+    <div class="success-card">
+
+      @if (confirmed()) {
+        <div class="success-icon success-icon--ok" aria-hidden="true">✓</div>
+        <h1 class="success-title">{{ 'ONBOARDING.SUCCESS_TITLE' | translate }}</h1>
+        <p class="success-message">{{ 'ONBOARDING.SUCCESS_CONFIRMED' | translate }}</p>
+        <ws-button variant="primary" (click)="enterApp()">
+          {{ 'ONBOARDING.SUCCESS_ENTER' | translate }}
+        </ws-button>
+      } @else if (timedOut()) {
+        <div class="success-icon success-icon--warn" aria-hidden="true">⏳</div>
+        <h1 class="success-title">{{ 'ONBOARDING.SUCCESS_TITLE' | translate }}</h1>
+        <p class="success-message">{{ 'ONBOARDING.SUCCESS_TIMEOUT' | translate }}</p>
+        <div class="success-actions">
+          <ws-button variant="primary" (click)="enterApp()">
+            {{ 'ONBOARDING.SUCCESS_ENTER' | translate }}
+          </ws-button>
+          <ws-button variant="ghost" (click)="backToWizard()">
+            {{ 'ONBOARDING.SUCCESS_CANCEL_BACK' | translate }}
+          </ws-button>
+        </div>
+      } @else {
+        <div class="success-spinner" role="status" aria-label="Loading"></div>
+        <h1 class="success-title">{{ 'ONBOARDING.SUCCESS_TITLE' | translate }}</h1>
+        <p class="success-message">{{ 'ONBOARDING.SUCCESS_CONFIRMING' | translate }}</p>
+        <ws-button variant="ghost" (click)="backToWizard()">
+          {{ 'ONBOARDING.SUCCESS_CANCEL_BACK' | translate }}
+        </ws-button>
+      }
+
+    </div>
+  </main>
+</div>

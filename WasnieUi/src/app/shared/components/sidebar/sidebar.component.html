@@ -104,6 +104,19 @@
         <span class="sidebar__section-label">{{ 'NAV.SECTION_SETTINGS' | translate }}</span>
       }
       <ul class="sidebar__nav">
+        <li *hasPermission="subscriptionItem.permission" class="sidebar__nav-item">
+          <a
+            [routerLink]="subscriptionItem.path"
+            class="sidebar__nav-link"
+            [class.sidebar__nav-link--active]="isNavActive(subscriptionItem.path)"
+            [title]="!sidebarState.isExpanded() ? (subscriptionItem.labelKey | translate) : ''"
+          >
+            <app-icon [name]="subscriptionItem.icon" [size]="18" />
+            @if (sidebarState.isExpanded()) {
+              <span class="sidebar__nav-label">{{ subscriptionItem.labelKey | translate }}</span>
+            }
+          </a>
+        </li>
         <li *hasPermission="settingsItem.permission" class="sidebar__nav-item">
           <a
             [routerLink]="settingsItem.path"

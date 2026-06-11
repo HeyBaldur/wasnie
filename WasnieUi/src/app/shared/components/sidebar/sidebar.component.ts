@@ -142,6 +142,7 @@ export class SidebarComponent {
     },
   ];
 
+  readonly subscriptionItem: NavItem = { path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
 
   logout(): void {

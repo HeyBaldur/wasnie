@@ -73,6 +73,20 @@ public static class DependencyInjection
                 "Imports:PayeeMaxRows must be between 1 and 100,000.")
             .ValidateOnStart();
 
+        services.AddOptions<StripeOptions>()
+            .Bind(configuration.GetSection(StripeOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.SecretKey),
+                "Stripe:SecretKey is required. Set it in appsettings.Development.json (dev) or as an environment variable (prod).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.PublishableKey),
+                "Stripe:PublishableKey is required. Set it in appsettings.Development.json (dev) or as an environment variable (prod).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.WebhookSecret),
+                "Stripe:WebhookSecret is required. Run 'stripe listen' to get your whsec_ and add it to appsettings.Development.json.")
+            .ValidateOnStart();
+
+        services.AddScoped<ISubscriptionPlanService, StripeSubscriptionPlanService>();
+        services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
+        services.AddScoped<IStripeWebhookService, StripeWebhookService>();
+
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();
         services.AddScoped<IAuditService, AuditService>();

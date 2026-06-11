@@ -7,4 +7,5 @@ public sealed record CurrentUserDto(
     Guid TenantId,
     string TenantSlug,
     string Tier,
+    bool HasSelectedPlan,
     IReadOnlyList<string> Permissions);

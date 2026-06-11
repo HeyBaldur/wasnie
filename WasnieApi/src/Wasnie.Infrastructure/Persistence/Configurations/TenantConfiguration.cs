@@ -32,5 +32,9 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         builder.Property(t => t.Tier)
             .IsRequired();
+
+        builder.Property(t => t.HasSelectedPlan)
+            .IsRequired()
+            .HasDefaultValue(false);
     }
 }

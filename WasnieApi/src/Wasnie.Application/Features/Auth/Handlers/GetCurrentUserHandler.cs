@@ -21,7 +21,7 @@ public sealed class GetCurrentUserHandler(
 
         var role = claimsService.GetRole() ?? string.Empty;
         var permissions = RolePermissions.GetPermissions(role).ToList();
-        var tier = tenant?.Tier.ToString() ?? "Growth";
+        var tier = tenant?.Tier.ToString() ?? "Free";
 
         return new CurrentUserDto(
             UserId: currentUser.UserId ?? string.Empty,
@@ -30,6 +30,7 @@ public sealed class GetCurrentUserHandler(
             TenantId: tenantContext.TenantId,
             TenantSlug: tenant?.Slug ?? string.Empty,
             Tier: tier,
+            HasSelectedPlan: tenant?.HasSelectedPlan ?? false,
             Permissions: permissions);
     }
 }

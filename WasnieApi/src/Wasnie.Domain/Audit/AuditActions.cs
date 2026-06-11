@@ -48,6 +48,10 @@ public static class AuditActions
     // Settings (Rule 5.1.5 — configuration changes)
     public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";
 
+    // Subscription
+    public const string PlanSelected = "PLAN_SELECTED";
+    public const string SubscriptionActivated = "SUBSCRIPTION_ACTIVATED";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

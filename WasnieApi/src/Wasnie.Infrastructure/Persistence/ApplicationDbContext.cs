@@ -15,6 +15,7 @@ using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Identity;
 using Wasnie.Domain.Settings;
+using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence.Configurations;
 using Wasnie.Infrastructure.Persistence.Configurations.BackgroundJobs;
 using Wasnie.Infrastructure.Persistence.Configurations.Compensation;
@@ -52,6 +53,8 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<Credit> Credits => Set<Credit>();
     public Microsoft.EntityFrameworkCore.DbSet<CompensationPayout> CompensationPayouts => Set<CompensationPayout>();
     public Microsoft.EntityFrameworkCore.DbSet<PayRun> PayRuns => Set<PayRun>();
+    public Microsoft.EntityFrameworkCore.DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
+    public Microsoft.EntityFrameworkCore.DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -77,6 +80,8 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new ImportAuditConfiguration());
         builder.ApplyConfiguration(new AuditLogConfiguration());
         builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
+        builder.ApplyConfiguration(new UserSubscriptionConfiguration());
+        builder.ApplyConfiguration(new ProcessedStripeEventConfiguration());
 
         builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<FieldRequirementSetting>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
@@ -93,6 +98,7 @@ public sealed class ApplicationDbContext(
         builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<UserSubscription>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

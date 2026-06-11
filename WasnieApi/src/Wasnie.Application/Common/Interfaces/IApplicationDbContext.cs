@@ -11,6 +11,7 @@ using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Entities;
 using Wasnie.Domain.Identity;
 using Wasnie.Domain.Settings;
+using Wasnie.Domain.Subscription;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
 
 namespace Wasnie.Application.Common.Interfaces;
@@ -35,6 +36,8 @@ public interface IApplicationDbContext
     DbSet<Credit> Credits { get; }
     DbSet<CompensationPayout> CompensationPayouts { get; }
     DbSet<PayRun> PayRuns { get; }
+    DbSet<UserSubscription> UserSubscriptions { get; }
+    DbSet<ProcessedStripeEvent> ProcessedStripeEvents { get; }
 
     DatabaseFacade Database { get; }
 

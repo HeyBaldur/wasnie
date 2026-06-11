@@ -63,7 +63,7 @@ export class RegisterTenantComponent {
 
     this.authService.registerTenant(this.form.getRawValue()).subscribe({
       next: () => {
-        this.currentUser.refresh().subscribe(() => this.router.navigateByUrl('/dashboard'));
+        this.currentUser.refresh().subscribe(() => this.router.navigateByUrl('/onboarding/plan'));
       },
       error: (err: HttpErrorResponse) => {
         this.error.set(err?.error?.message ?? this.translate.instant('ERRORS.GENERIC'));

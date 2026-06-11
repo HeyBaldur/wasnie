@@ -8,6 +8,156 @@
 
 ## Sessions (newest first)
 
+## 2026-06-11 — WI-STRIPE-FASE-2: Stripe Checkout + Webhook + Tier Activation
+
+**Completed:**
+- Backend: `ProcessedStripeEvent` idempotency entity + `A10_AddProcessedStripeEvents` migration (PK: EventId varchar(100), no tenant filter — global system table).
+- `IStripeCheckoutService` / `StripeCheckoutService`: creates Stripe Hosted Checkout Session; `Metadata["tenantId"]` set server-side; success/cancel URLs from `FrontendBaseUrl` config.
+- `IStripeWebhookService` / `StripeWebhookService`: `ConstructEvent` signature verification → idempotency check → `EventTypes.CheckoutSessionCompleted` handler → `UpdateFromStripe` + `tenant.SelectPlan()` saved atomically with `ProcessedStripeEvent` — audit logged after main save to preserve atomicity.
+- `POST /checkout` (Authorize) + `POST /webhook` (AllowAnonymous, raw body) endpoints in `SubscriptionController`.
+- `WebhookSecret` + `FrontendBaseUrl` in `StripeOptions`; values in `appsettings.Development.json` (gitignored).
+- 7 new unit tests for `StripeWebhookService` using manual HMAC-SHA256 signatures (Stripe.net v52 has no `GenerateTestHeaderString`).
+- Frontend: `SubscriptionService.createCheckout(priceId)`. Wizard `selectPaid()` → checkout API → `redirect()` (DOCUMENT-injected protected method). New `SubscriptionSuccessComponent` polls `GET /api/subscription/current` every 2s (up to 30s) then shows confirmed/timeout state. Route `/onboarding/success` with `authGuard` only. EN/ES/PL i18n (7 keys).
+
+**Key fixes during implementation:**
+- `Events.CheckoutSessionCompleted` → `EventTypes.CheckoutSessionCompleted` (Stripe.net v52).
+- `Subscription.CurrentPeriodStart/End` → `SubscriptionItem.CurrentPeriodStart/End` (moved in v52).
+- Karma DISCONNECTED (test 20/29): `window.location.href = url` in wizard caused Chrome Headless to actually navigate away. Fixed by extracting to `protected redirect(url)` + `spyOn` in test.
+- Karma DISCONNECTED (success spec): `setInterval` + 1500ms `setTimeout` pending in `fakeAsync`. Fixed by `StubComponent` router routes + `flush()` to clear macrotasks.
+
+**Tests:** 418 backend unit pass; 29/29 frontend subscription tests pass. Both builds clean.
+
+**Deferred to Fase 3:** Customer portal; `customer.subscription.updated` / `customer.subscription.deleted` / `invoice.payment_failed` events.
+
+**User must do:**
+1. Add real Stripe ProductIds to `appsettings.Development.json` `Stripe:ProductTierMap`.
+2. Run `stripe listen --forward-to https://localhost:5001/api/subscription/webhook` and paste `whsec_...` into `Stripe:WebhookSecret`.
+
+---
+
+## 2026-06-11 — WI-STRIPE-TIER-MAP: mapeo ProductId→Tier por config
+
+**Problem:** `GET /api/subscription/plans` returned only Free. 3 paid Stripe products (Starter €299, Growth €799, Scale €1,299) were silently discarded because `product.Metadata["tier"]` was missing (metadata = `{}`).
+
+**Root cause:** `StripeSubscriptionPlanService.TryMapPrice` required `product.Metadata["tier"]` — no fallback.
+
+**Fix:** `StripeOptions.ProductTierMap: Dictionary<string,string>` (ProductId→Tier name). Precedence: metadata["tier"] first (forward-compat if user adds it to Stripe later) → `ProductTierMap[productId]` → WARNING + discard.
+
+**Architecture:** `ResolveTier()` extracted as `internal static` method. `InternalsVisibleTo("Wasnie.UnitTests")` + `ProjectReference` to Infrastructure in unit test project.
+
+**Tests:** 6 new unit tests in `StripeProductMappingTests` (6/6 pass): config map resolves, metadata resolves, metadata beats config, empty metadata falls back, unknown → null, unknown → warning logged.
+
+**Config:** User must add 3 real Stripe ProductIds to `Stripe:ProductTierMap` in `appsettings.Development.json`. Placeholders added (`REPLACE_WITH_*`). Template in `appsettings.json` updated too.
+
+**Counts:** Backend 566 total (unchanged — no integration tests for this WI; unit tests now 572). Frontend unchanged.
+
+## 2026-06-11 — WI-WIZARD-SUBSCRIPTION + UserSubscriptions tabla (continuación)
+
+### UserSubscriptions — tabla local espejo del estado de suscripción
+- `UserSubscription` entity (Domain) con `SubscriptionStatus` enum (Active/PastDue/Canceled/Incomplete/Trialing)
+- Campos: TenantId FK único, Tier, Status, BillingEmail, Stripe IDs (nullable), period/billing dates (nullable), CreatedAt/UpdatedAt (IClock via now param)
+- `UserSubscription.CreateFree(id, tenantId, billingEmail, now)` factory method
+- `UpdateFromStripe(...)` + `Cancel(...)` para Fase 3 webhooks
+- EF: `UserSubscriptionConfiguration` (unique index TenantId, FK cascade), `HasQueryFilter(TenantId)`, registrado en `ApplicationDbContext`
+- Migración `A9_AddUserSubscriptions` generada y aplicada a BD
+- `SelectFreePlanHandler` actualizado: crea `UserSubscription` (idempotente) + llama `tenant.SelectPlan(Tier.Free)`. IClock restaurado.
+- `GET /api/subscription/current` → `GetCurrentSubscriptionQuery` + `GetCurrentSubscriptionHandler` + `UserSubscriptionDto`
+- 10 nuevos integration tests (auth, crea fila, setea flag, idempotente, get current, 404 antes de plan, multi-tenant, guard scenario)
+- **Fix test isolation**: `UserSubscriptionEndpointsTests` tiene `InitializeAsync` + `DisposeAsync` que ambos restauran `Tier=Enterprise` (valor 4) para TenantA/B — evita que `Tier=Free` del `select-free` se escape a otras clases de tests
+
+### Frontend Manage Subscription
+- `SubscriptionService.getCurrent()` añadido; `CurrentSubscription` interface
+- `ManageSubscriptionComponent` (`/subscription`): plan actual (tier, status badge, email), nota Free, 3 upgrade cards con "Coming soon"/disabled
+- Ruta `/subscription` en `app.routes.ts` (gated `Subscription.Manage`)
+- Sidebar: `subscriptionItem` (credit-card icon) en footer junto a Settings
+- i18n EN/ES/PL: `NAV.SUBSCRIPTION` + bloque `SUBSCRIPTION` completo (19 claves)
+
+### Step 0 decisión
+- `UserSubscription` row = fuente de verdad canónica. `Tenant.HasSelectedPlan` = cache/flag derivado.
+- Flujo: sign-up → wizard → elegir Free → crea fila → `HasSelectedPlan=true` → entra app. Cerrar sesión sin elegir → no hay fila → al volver el guard manda de nuevo al wizard.
+- Fase 2/3 pendiente: checkout Stripe → llenar Stripe IDs + webhooks que llaman `UpdateFromStripe()`
+
+## 2026-06-11 — WI-WIZARD-SUBSCRIPTION + WI-STRIPE-FASE-1 + noAuthGuard + WI-EXCEL-MONEY-FORMAT
+
+### WI-WIZARD-SUBSCRIPTION — Mandatory plan-selection wizard
+- `HasSelectedPlan: bool` on `Tenant` entity (default false); `Tenant.SelectPlan(Tier)` sets both Tier and HasSelectedPlan atomically
+- EF migration `A8_AddTenantHasSelectedPlan` generated
+- `SelectFreePlanCommand/Handler` → saves plan, logs `PLAN_SELECTED` audit event
+- `POST /api/subscription/select-free` endpoint
+- `CurrentUserDto.HasSelectedPlan` added; `GET /auth/me` returns it
+- `planGuard`: unauthenticated → /auth/login; no plan → /onboarding/plan; has plan → allow. Replaces `authGuard` on all app routes
+- `onboardingGuard`: has plan → /dashboard; no auth → /auth/login; no plan → allow
+- `SubscriptionWizardComponent`: 4-card grid, Free interactive, paid "Coming soon"/disabled, loading skeleton, error state with retry, signal-based
+- `/onboarding/plan` route; post-registration redirect updated to `/onboarding/plan`
+- i18n EN/ES/PL complete (12 new keys each)
+- 17 new frontend unit tests (component + guards); 378 total (373 pass, 5 pre-existing)
+- Backend: 556 total (551 pass, 3 pre-existing)
+- `SelectFreePlanHandler.cs` build fixes: added missing `using Wasnie.Application.Common.DTOs`, removed unused `IClock clock` parameter
+
+### WI-STRIPE-FASE-1 — Stripe credentials + plans endpoint
+- `StripeOptions` (SecretKey + PublishableKey) validated at startup via `IOptions<T>`
+- `StripeSubscriptionPlanService`: fetches Stripe prices, maps `product.Metadata["tier"]` → TierLimits, prepends synthetic Free plan
+- `GET /api/subscription/plans` (Authorize) — secret key never in any response
+- `GET /api/subscription/config` — publishable key only
+- `StripeUnavailableException` → 503 via middleware
+- 8 new integration tests; `Stripe.net 52.0.0` added
+- `Tenant.Create()` default changed to `Tier.Free`
+
+### noAuthGuard
+- Authenticated users navigating to /auth/login or /auth/register are redirected to /dashboard
+
+### WI-EXCEL-MONEY-FORMAT
+- Fixed scientific notation on monetary columns in 4 Excel export services (ClosedXML `NumberFormat.Format = "#,##0.00"`)
+
+## 2026-06-11 — WI-STRIPE-FASE-1
+
+### Decisiones de arquitectura
+- Stripe es fuente de verdad de precio/producto. Los límites de funcionalidad siguen en `TierLimits.cs` (domain).
+- `Free` es **sintético** — no vive en Stripe. El endpoint lo prepend hardcodeado con valores de `TierLimits.Limits[Tier.Free]`.
+- Mapeo: `product.Metadata["tier"]` → parse a enum `Tier` → `TierLimits.Limits[tier]` → `MaxPayees/MaxPlans`.
+- `StripeOptions` validado en startup (`ValidateOnStart()`); falla inmediato si las keys no están configuradas.
+- `StripeUnavailableException` → middleware → 503 (nunca expone el mensaje de Stripe al cliente en prod).
+- El secret key **jamás** aparece en ninguna respuesta de API. Confirmado por tests explícitos.
+
+### Archivos creados/modificados
+**Application:**
+- `Common/Options/StripeOptions.cs` — `SecretKey` + `PublishableKey` con validación
+- `Common/Interfaces/ISubscriptionPlanService.cs` — `GetPlansAsync(Tier currentTier)`
+- `Common/Exceptions/StripeUnavailableException.cs` — excepción propia → 503 via middleware
+- `Features/Subscription/DTOs/SubscriptionPlanDto.cs` — shape del wizard
+- `Features/Subscription/Queries/GetSubscriptionPlansQuery.cs` — MediatR query
+- `Features/Subscription/Handlers/GetSubscriptionPlansHandler.cs` — lee tenant.Tier, llama servicio
+
+**Infrastructure:**
+- `Wasnie.Infrastructure.csproj` — `Stripe.net 52.0.0` añadido
+- `Services/StripeSubscriptionPlanService.cs` — consulta precios activos de Stripe, filtra por metadata `tier`, ordena por precio, prepend Free sintético
+- `DependencyInjection.cs` — registro de `StripeOptions` + `ISubscriptionPlanService`
+
+**Api:**
+- `Controllers/SubscriptionController.cs` — `GET /api/subscription/plans` + `GET /api/subscription/config`
+- `Middleware/ExceptionHandlingMiddleware.cs` — `StripeUnavailableException` → 503
+- `appsettings.Development.template.json` — bloque `Stripe` con placeholders (commiteado)
+
+**Domain:**
+- `Entities/Tenant.cs` — `Tenant.Create()` arranca en `Tier.Free` (era `Tier.Growth`)
+
+**Tests:**
+- `Integration/Subscription/SubscriptionEndpointsTests.cs` — 8 tests (auth 401, shape de 4 planes, secret key never in response × 2, 503 en Stripe caído, publishable key en config)
+- `Infrastructure/TestWebApplicationFactory.cs` — Stripe placeholder keys para startup validation
+
+### Secretos
+- `appsettings.Development.json` (gitignoreado): bloque `Stripe.SecretKey` / `Stripe.PublishableKey` → el usuario añade sus claves `sk_test_` / `pk_test_` manualmente
+- `appsettings.Production.json` (gitignoreado): idem pero apunta a Azure App Service Application Settings / Key Vault
+- Confirmado: NINGUNA key real está en el repo
+
+### Pendiente (fases siguientes)
+- Fase 2: Checkout → `POST /api/subscription/checkout-session` (Stripe Checkout Session)
+- Fase 3: Webhook → `POST /api/stripe/webhook` (signature verification, `customer.subscription.updated` → `tenant.SetTier()`)
+- Fase 4: Wizard UI en Angular post-sign-up
+- Nota: `Tenant.Create()` ahora arranca en `Tier.Free`; el tenant de dev existente sigue en `Growth` hasta que se ejecute `tenant.SetTier()` vía wizard
+
+---
+
 ## 2026-06-11 — WI-EXCEL-MONEY-FORMAT
 
 ### Problem

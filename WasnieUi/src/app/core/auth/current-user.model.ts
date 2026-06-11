@@ -7,5 +7,6 @@ export interface CurrentUser {
   tenantId: string;
   tenantSlug: string;
   tier: Tier;
+  hasSelectedPlan: boolean;
   permissions: string[];
 }

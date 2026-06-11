@@ -1,0 +1,101 @@
+<app-shell>
+  <div class="subscription-page">
+    <ws-page-header
+      [title]="'SUBSCRIPTION.MANAGE_TITLE' | translate"
+      [subtitle]="'SUBSCRIPTION.MANAGE_SUBTITLE' | translate"
+    />
+
+    @if (loading()) {
+      <div class="subscription-skeleton">
+        <div class="subscription-skeleton__card"></div>
+        <div class="subscription-skeleton__card subscription-skeleton__card--wide"></div>
+      </div>
+    }
+
+    @if (!loading() && loadError()) {
+      <ws-card class="subscription-error">
+        <p class="subscription-error__msg">{{ 'SUBSCRIPTION.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </ws-card>
+    }
+
+    @if (!loading() && !loadError() && subscription()) {
+      <!-- Current plan card -->
+      <ws-card class="current-plan-card">
+        <div class="current-plan-card__header">
+          <div class="current-plan-card__title-row">
+            <h2 class="current-plan-card__plan-name">{{ subscription()!.tier }}</h2>
+            <ws-badge [variant]="statusVariant" size="sm">
+              {{ ('SUBSCRIPTION.STATUS_' + subscription()!.status.toUpperCase()) | translate }}
+            </ws-badge>
+          </div>
+          <p class="current-plan-card__email">
+            {{ 'SUBSCRIPTION.BILLING_EMAIL' | translate }}: {{ subscription()!.billingEmail }}
+          </p>
+        </div>
+
+        @if (!isFree && subscription()!.currentPeriodEnd) {
+          <div class="current-plan-card__billing">
+            <div class="current-plan-card__billing-item">
+              <span class="current-plan-card__billing-label">{{ 'SUBSCRIPTION.CURRENT_PERIOD' | translate }}</span>
+              <span class="current-plan-card__billing-value">
+                {{ subscription()!.currentPeriodStart | date:'mediumDate' }} –
+                {{ subscription()!.currentPeriodEnd | date:'mediumDate' }}
+              </span>
+            </div>
+            @if (subscription()!.nextBillingDate) {
+              <div class="current-plan-card__billing-item">
+                <span class="current-plan-card__billing-label">{{ 'SUBSCRIPTION.NEXT_BILLING' | translate }}</span>
+                <span class="current-plan-card__billing-value">
+                  {{ subscription()!.nextBillingDate | date:'mediumDate' }}
+                </span>
+              </div>
+            }
+          </div>
+        }
+
+        @if (isFree) {
+          <p class="current-plan-card__free-note">{{ 'SUBSCRIPTION.FREE_NOTE' | translate }}</p>
+        }
+      </ws-card>
+
+      <!-- Upgrade section -->
+      @if (isFree && upgradePlans.length > 0) {
+        <div class="upgrade-section">
+          <h3 class="upgrade-section__title">{{ 'SUBSCRIPTION.UPGRADE_TITLE' | translate }}</h3>
+          <p class="upgrade-section__desc">{{ 'SUBSCRIPTION.UPGRADE_DESC' | translate }}</p>
+          <div class="upgrade-plans-grid">
+            @for (plan of upgradePlans; track plan.tier) {
+              <ws-card
+                class="upgrade-plan-card"
+                [class.upgrade-plan-card--featured]="plan.tier === 'Growth'"
+              >
+                <div class="upgrade-plan-card__badge-row">
+                  <ws-badge variant="neutral" size="sm">{{ 'SUBSCRIPTION.COMING_SOON' | translate }}</ws-badge>
+                </div>
+                <h4 class="upgrade-plan-card__name">{{ plan.name }}</h4>
+                <div class="upgrade-plan-card__price">
+                  <span class="upgrade-plan-card__amount">€{{ plan.price }}</span>
+                  <span class="upgrade-plan-card__interval">/ {{ plan.interval }}</span>
+                </div>
+                <ul class="upgrade-plan-card__features">
+                  <li>
+                    <span class="upgrade-plan-card__feature-val">{{ maxPayeesDisplay(plan) }}</span>
+                    {{ 'ONBOARDING.FEATURE_PAYEES' | translate }}
+                  </li>
+                  <li>
+                    <span class="upgrade-plan-card__feature-val">{{ maxPlansDisplay(plan) }}</span>
+                    {{ 'ONBOARDING.FEATURE_PLANS' | translate }}
+                  </li>
+                </ul>
+                <ws-button variant="secondary" [disabled]="true" class="upgrade-plan-card__cta">
+                  {{ 'SUBSCRIPTION.UPGRADE_CTA_SOON' | translate }}
+                </ws-button>
+              </ws-card>
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+</app-shell>

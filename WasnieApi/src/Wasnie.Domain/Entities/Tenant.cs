@@ -9,7 +9,8 @@ public sealed class Tenant : AggregateRoot
     public string Slug { get; private set; } = string.Empty;
     public bool IsActive { get; private set; } = true;
     public DateTimeOffset CreatedAt { get; private set; }
-    public Tier Tier { get; private set; } = Tier.Growth;
+    public Tier Tier { get; private set; } = Tier.Free;
+    public bool HasSelectedPlan { get; private set; } = false;
 
     private Tenant() { }
 
@@ -21,11 +22,17 @@ public sealed class Tenant : AggregateRoot
             Name = name,
             Slug = slug,
             CreatedAt = now,
-            Tier = Tier.Growth,
+            Tier = Tier.Free,
         };
     }
 
     public void Deactivate() => IsActive = false;
 
     public void SetTier(Tier tier) => Tier = tier;
+
+    public void SelectPlan(Tier tier)
+    {
+        Tier = tier;
+        HasSelectedPlan = true;
+    }
 }
