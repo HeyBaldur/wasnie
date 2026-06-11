@@ -1,4 +1,4 @@
-<div class="ws-dt" [style.maxHeight]="maxHeight() || null" [class.ws-dt--scrollable]="!!maxHeight()">
+<div class="ws-dt ws-scroll-thin" [style.maxHeight]="maxHeight() || null" [class.ws-dt--scrollable]="!!maxHeight()">
   <table class="ws-dt__table">
     <colgroup>
       @for (col of columns(); track col.key) {

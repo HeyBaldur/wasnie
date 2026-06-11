@@ -15,6 +15,7 @@ import { TransactionsApiService } from '../services/transactions.api.service';
 import { Transaction, TransactionStatus } from '../models/transaction.model';
 import { AssignPayeeModalComponent } from '../assign-payee-modal/assign-payee-modal.component';
 import { ReassignPayeeModalComponent } from '../reassign-payee-modal/reassign-payee-modal.component';
+import { VoidTransactionModalComponent } from '../void-transaction-modal/void-transaction-modal.component';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -50,6 +51,7 @@ import {
     WsPaginationComponent,
     AssignPayeeModalComponent,
     ReassignPayeeModalComponent,
+    VoidTransactionModalComponent,
     ProcessPendingComponent,
     TransactionFilterComponent,
   ],
@@ -77,6 +79,7 @@ export class TransactionsListComponent implements OnInit {
 
   readonly assignModalOpen = signal(false);
   readonly reassignModalOpen = signal(false);
+  readonly voidModalOpen = signal(false);
   readonly selectedTransaction = signal<Transaction | null>(null);
 
   // Tabs: Eligible removed (never set today — see PROJECT_STATUS decision)
@@ -133,16 +136,28 @@ export class TransactionsListComponent implements OnInit {
     this.reassignModalOpen.set(true);
   }
 
+  openVoid(tx: Transaction): void {
+    this.selectedTransaction.set(tx);
+    this.voidModalOpen.set(true);
+  }
+
   onModalClosed(): void {
     this.assignModalOpen.set(false);
     this.reassignModalOpen.set(false);
+    this.voidModalOpen.set(false);
     this.selectedTransaction.set(null);
   }
 
   isUnassigned(tx: Transaction): boolean { return tx.payeeId === null; }
 
   canReassign(tx: Transaction): boolean {
-    return tx.payeeId !== null && tx.status !== TransactionStatus.Paid;
+    return tx.payeeId !== null
+      && tx.status !== TransactionStatus.Paid
+      && tx.status !== TransactionStatus.Cancelled;
+  }
+
+  canVoid(tx: Transaction): boolean {
+    return tx.status === TransactionStatus.Pending;
   }
 
   goToPage(page: number): void { this.store.setPage(page); }

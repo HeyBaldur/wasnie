@@ -8,6 +8,363 @@
 
 ## Sessions (newest first)
 
+## 2026-06-11 — WI-EXCEL-MONEY-FORMAT
+
+### Problem
+Monetary columns in Excel exports (e.g. `TotalCommissionAmount`) displayed in scientific notation (`9.88407E+11`).
+
+### Root cause
+ClosedXML sets cell type to Number when a `decimal` is assigned but applies no display format. Excel's default for unformatted numbers that exceed column width is scientific notation.
+
+### Fix
+Applied `cell.Style.NumberFormat.Format = "#,##0.00"` to every monetary cell in all four services:
+- `PayoutExcelExportService` — col 7 `TotalCommissionAmount`
+- `TransactionExcelExportService` — col 5 `Amount`
+- `CreditExcelExportService` — col 7 `OriginalAmount`, col 9 `CreditedAmount`, col 11 `SplitPercentage`
+- `PayRunExcelExportService` — dynamic columns 14+ (`Amount_{CURRENCY}`)
+
+`Wasnie.Infrastructure` builds clean (0 errors, 0 warnings).
+
+---
+
+## 2026-06-11 — WI-TAB-SESSION-SYNC
+
+### Step 0 — Current state audit
+- **Token storage**: `localStorage` key `wasnie_session` (JSON) — shared across same-origin tabs. No sessionStorage concern; cross-tab approach applies directly.
+- **Inactivity timer**: `InactivityService` — 28 min idle + 2 min countdown warning. One independent timer per tab (root cause of problem 1).
+- **Logout**: `AuthService.logout()` clears signal + localStorage. `forceLogout(true)` additionally saves return URL to sessionStorage.
+- **401 detection**: HTTP error interceptor with auto-refresh + concurrent request queuing (`SessionRefreshService`).
+- **Cross-tab communication**: None — no BroadcastChannel, storage events, or SharedWorker in use.
+
+### Implemented
+
+**New: `TabSyncService`** (`src/app/core/services/tab-sync.service.ts`)
+- Thin BroadcastChannel wrapper. Channel name `wasnie-session` (same-origin scoped by BroadcastChannel spec).
+- Falls back to localStorage storage events (`wasnie:tab-sync`) for environments without BroadcastChannel.
+- `NgZone.run()` wraps incoming messages to re-enter Angular's zone (BroadcastChannel fires outside zone.js).
+- Emits and accepts only `TabSyncMessage = { type: 'activity' | 'logout' | 'session-expired' }` — auth tokens never transmitted.
+- `VALID_TYPES` set validates incoming messages; malformed JSON silently ignored.
+
+**Modified: `AuthService`**
+- Added `clearSessionSilent()` — clears `_currentUser` signal + `localStorage.removeItem`, no broadcast. Called when reacting to remote events to prevent re-broadcast loops.
+- `logout()` = `clearSessionSilent()` + `tabSync.broadcast({ type: 'logout' })` (guarded: only if `wasAuthenticated`).
+- `forceLogout()` = optional state save + `clearSessionSilent()` + `tabSync.broadcast({ type: 'session-expired' })` (guarded). No longer delegates to `logout()`.
+
+**Modified: `InactivityService`**
+- Injects `TabSyncService`.
+- `resetTimer()` now calls `_broadcastActivity()` — throttled to one broadcast per 5 s via `_lastActivityBroadcast` timestamp (prevents channel flooding from high-frequency mousemove events).
+- `start()` subscribes `_syncSub` to `tabSync.messages$`.
+- `stop()` unsubscribes and nullifies `_syncSub`.
+- `_handleTabSync(msg)`: `'activity'` → close any open warning + restart idle timer (so any tab's activity extends session for all); `'logout'` → `_applyRemoteLogout(false)`; `'session-expired'` → `_applyRemoteLogout(true)`.
+- `_applyRemoteLogout(showToast)`: calls `this.stop()` + `authService.clearSessionSilent()` (not `logout()`) + optional toast + redirect. Using `clearSessionSilent()` prevents the remote-logout handler from re-broadcasting.
+
+### Smoke checklist (manual)
+- Open 2 tabs → logout in Tab A → Tab B silently redirects to login (no toast).
+- Let both tabs idle for 28 min → warning appears in both → dismiss in one → warning dismissed in both.
+- Stay active in Tab A → Tab B never opens the warning (activity messages reset its timer).
+- Let all tabs idle 28 min + 2 min → all expire with toast simultaneously.
+- 401 in one tab → all tabs redirect to login with session-expired toast.
+
+### Tests
+- `tab-sync.service.spec.ts` — 11 tests: BroadcastChannel path (opens named channel, postMessage, incoming messages, close on destroy) + localStorage fallback (setItem on broadcast, storage event → messages$, rejects unknown types and malformed JSON).
+- `cross-tab-session.spec.ts` — 16 tests: sync reactions (logout/session-expired/no-rebroadcast/unsubscribe-on-stop), timer reactions (activity resets idle timer, activity dismisses warning — fakeAsync with start inside each it), throttle (first broadcast, rapid burst stays at 1, second broadcast after interval, no broadcast when warning open), AuthService broadcast (logout/forceLogout/clearSessionSilent/guard).
+
+### Build & test results
+- `ng build --configuration production`: clean (0 new errors or warnings)
+- `ng test --no-watch`: 359 total — 354 pass, 5 fail (all 5 pre-existing `ProcessPendingComponent` HTTP-mock teardown failures)
+
+## 2026-06-11 — WI-PAYOUTS-MENU-AND-STALE
+
+### Completed
+**Problem 1 — Stale data on /payouts re-navigation**
+
+Root cause: `PayoutsStore` is `@Injectable({ providedIn: 'root' })` (singleton) and loads exclusively through a constructor `effect()` that fires only when a signal changes. Re-navigating to `/payouts` without changing the filter (same `this-month` dates) leaves the signal unchanged → effect silent → stale data shown. A hard browser refresh re-instantiated the singleton, masking the bug.
+
+Fix: Added `void this.store.reload()` at the end of `ngOnInit()` in `payouts-list.component.ts` — one unconditional fresh load per route activation. Since `ngOnInit` only runs on component creation (not on signal changes), this cannot create a reload loop.
+
+Spec updates:
+- Added `storeMock.reload.calls.reset()` after `fixture.detectChanges()` in the poll-loop and onBulkMarkPaid `beforeEach` blocks (6 tests were measuring reload calls starting from 1 instead of 0).
+- Added new test: `calls store.reload() exactly once on route activation regardless of filter state`.
+
+Note: identical stale pattern exists in `pay-runs-list.component.ts` and `credits-list.component.ts` (both singleton stores + effect-only loading, no `reload()` in `ngOnInit`). Not fixed by this WI — reported for future WI.
+
+**Problem 2 — Payouts missing from sidebar**
+
+Converted the flat "Pay Runs" `NavItem` into a collapsible `NavGroupEntry` with two children: Pay Runs → `/pay-runs` (icon: `coin`) and Payouts → `/payouts` (icon: `layers`).
+
+Changed files:
+- `sidebar.component.ts`: Added `NavGroupEntry` interface and `NavEntry = NavItem | NavGroupEntry` union. Added `expandedGroups: Signal<Set<string>>`, `constructor()` with `effect()` that auto-expands any group containing the active route (prevents arriving at `/payouts` with the group closed). Added `toggleGroup`, `isGroupExpanded`, `isGroupActive`, `isNavGroup` methods.
+- `sidebar.component.html`: `@for` loop now branches on `isNavGroup(entry)`. Collapsed sidebar renders group children as flat icon-only links. Expanded sidebar renders a `<button>` group toggle with chevron + a nested `sidebar__nav--sub` `<ul>` for children.
+- `sidebar.component.scss`: Added `.sidebar__nav-group-toggle` (button with `background:none`, full width), `.sidebar__nav-chevron` (`margin-left:auto`), `.sidebar__nav--sub` (sub-list container), `.sidebar__nav-link--sub` (`padding-left:36px`, 13px font).
+
+i18n: `NAV.PAYOUTS` and `NAV.PAY_RUNS` already existed in EN, ES, PL — no changes required.
+
+### Test results
+- `ng build --configuration production`: clean (0 new errors or warnings)
+- `ng test --no-watch`: 332 total — 327 pass, 5 fail (all 5 pre-existing `ProcessPendingComponent` HTTP-mock teardown failures, unchanged since WI-A7)
+
+## 2026-06-11 — WI-AUDIT-CANCELLED-EXCLUSION: Cancelled transactions excluded from all calculations
+
+**Scope:** Read-only audit of all 14 surfaces that query or aggregate transactions; find any that include Cancelled in financial calculations; fix and test.
+
+**Audit results:**
+- 13 surfaces: correct (explicit Pending filter, or structural guarantee, or view/audit context)
+- 1 bug: `GetDashboardSummaryHandler.BuildPeriodBandAsync` — no status filter on `TransactionsCount` / `TransactionsVolumeByCurrency` KPIs
+
+**Key structural guarantee (no separate fix needed):**
+- `Cancel()` is domain-enforced to only work on `Pending` transactions
+- Credits are only created when `Pending → Calculated` (via CreditAllocationService and ProcessPending)
+- Therefore: no Cancelled transaction can ever have Credits → QuotaAttainmentService and CalculatePayoutsForPeriodHandler are safe by construction even without explicit status filters
+
+**Fix applied:**
+- `GetDashboardSummaryHandler.cs` line 175: added `.Where(t => t.Status != CompensationTransactionStatus.Cancelled)` to `txQuery` base
+
+**Test added:**
+- `DashboardEndpointsTests.GetDashboard_PeriodBand_ExcludesCancelledTransactionsFromCountAndVolume`
+- Seeds: 1 valid tx (€1,000) + 1 voided tx (€9,000), same period
+- Asserts: `TransactionsCount == 1` and `TransactionsVolumeByCurrency[0].Amount ≈ 1,000`
+- Result: PASS
+
+**Confirmed invariants:**
+- Cancelled NOT in calculations/aggregations: ✅ all 14 surfaces
+- Cancelled VISIBLE in views/export (ListTransactions, ExportTransactions): ✅ unchanged
+
+**Test counts:** 404/404 unit; 1/1 new integration test; build clean.
+
+## 2026-06-10 — WI-2: Checkbox "Calcular al registrar" en Record Transaction + nota informativa
+
+**Scope:** Add `processImmediately` boolean flag (default=true) to the Record Transaction flow. When unchecked, transaction is saved as Pending with no credit allocation. When checked (default), existing calculation logic runs unchanged.
+
+**Backend changes:**
+- `IngestTransactionCommand`: added `bool ProcessImmediately = true` as defaulted record parameter (backward-compatible API)
+- `IngestTransactionHandler`: wrapped credit allocation + `MarkCalculated` block in `if (request.ProcessImmediately)` guard. Transaction always persisted first; calculation only runs when flag is true.
+- `TransactionProcessImmediatelyTests.cs` (new): 5 integration tests — true→processes (status not Pending), false+payee→Pending, false+null payee→Pending, omit flag→defaults to true, tenant isolation of false flag. All 5 pass.
+- Root cause of test failures: `CreatePayeeAsync` helper was missing `hireDate` field (required by TenantA field requirement settings). Fixed to match the pattern used in `TransactionImportJobTests`.
+
+**Frontend changes:**
+- `CreateTransactionRequest` model: added `processImmediately?: boolean`
+- `transaction-form.component.ts`: added `processImmediately: [true]` to FormGroup; passes flag in `createTransaction` call
+- `transaction-form.component.html`: native `<input type="checkbox">` (no WsCheckbox primitive — design system gap) with `accent-color: var(--color-brand)`; hint text; informative note (lock icon + "Once calculated, amount cannot be edited")
+- `transaction-form.component.scss`: `.process-immediately` + `.form-info-note` with all design-system tokens
+- i18n EN/ES/PL: 3 new keys each — `PROCESS_IMMEDIATELY_LABEL`, `PROCESS_IMMEDIATELY_HINT`, `RECORD_INFO_NOTE`
+- `transaction-form.component.spec.ts`: 2 new tests — checkbox defaults to true; unchecked sends false
+
+**Test counts:** 404/404 unit + 543/548 integration (3 pre-existing Dashboard/Assignments failures unrelated to this WI; 5 new ProcessImmediately integration tests all pass). Build clean.
+
+**Decisions:**
+- Native checkbox used (no WsCheckbox in design system). If WsCheckbox is added in future, replace the native element and update styling. Tracked in DESIGN_SYSTEM gap list.
+- Flag defaults to `true` in both backend record and frontend form — zero behavior change for existing API callers.
+
+---
+
+## 2026-06-10 — WI-A7: Void (anular) Pending transactions with reason + audit trail
+
+**Scope:** Only `Pending` transactions can be voided. Status changes to `Cancelled` with audit fields. Never physical DELETE.
+
+**Backend changes:**
+- `Permission.cs`: added `TransactionsVoid = "Transactions.Void"`
+- `RolePermissions.cs`: `TransactionsVoid` added to TenantAdmin + CompManager
+- `CompensationTransaction.Cancel()`: updated signature to `(string reason, string cancelledBy, DateTimeOffset now, Guid eventId)`. Guards: reason ≥ 3 chars, not already Cancelled, must be Pending. Sets `CancelledBy/At/Reason` + `UpdatedAt`.
+- `TransactionCancelledEvent`: updated to include `Reason`
+- Migration `20260610152410_A7_AddTransactionCancellationFields`: 3 nullable columns (`CancelledAt datetimeoffset`, `CancelledBy nvarchar(450)`, `CancelledReason nvarchar(1000)`) on `CompensationTransactions`
+- `TransactionDto`: 3 new optional fields (`CancelledBy`, `CancelledAt`, `CancelledReason`)
+- `IngestTransactionHandler.ToDto()`: maps the 3 new fields
+- `VoidTransactionCommand`: `IRequest<Result<TransactionDto>>` + `IAuditableCommand`; `AuditAction = "transaction_voided"`, `AuditDisplayName = TransactionId.ToString()`
+- `VoidTransactionHandler`: auth `TransactionsVoid` → load tx → guard active credits → `tx.Cancel()` → save → return DTO
+- `TransactionsController`: `POST /{id}/void` endpoint; domain-block → 409 Conflict, other errors → 400
+
+**Frontend changes:**
+- `transaction.model.ts`: `cancelledBy?`, `cancelledAt?`, `cancelledReason?` on `Transaction`; new `VoidTransactionRequest`
+- `transactions.api.service.ts`: `void(id, request)` → `POST .../void`
+- `transactions.store.ts`: `voidTransaction()` action
+- New `app-void-transaction-modal` (mirrors ReassignPayeeModal): context block, reason textarea (min 3), danger submit button
+- `transactions-list.component.ts`: `voidModalOpen` signal, `openVoid()`, `canVoid()` (Pending only)
+- `transactions-list.component.html`: void button gated by `hasPermission('Transactions.Void')`, cancelled reason shown inline; `app-void-transaction-modal` wired
+- i18n EN/ES/PL: 10 new keys (ACTION_VOID, VOID_MODAL_TITLE, VOID_REASON_LABEL/PLACEHOLDER/REQUIRED/MIN_LENGTH, VOID_SUBMIT, TOAST_VOIDED)
+
+**Tests:**
+- Unit (backend): Updated 11 existing `Cancel()` calls (old 3-param → new 4-param with reason); replaced 2 `WhenEligible` passing tests with `WhenEligible_ThrowsDomainException`; added 3 new tests (SetsCancellationAuditFields, WithEmptyReason, WithShortReason). 404/404 pass.
+- Unit (frontend): 6 new void-modal spec tests (component creation, reasonError, onClose). 4 new canVoid() tests (Pending=true, Calculated/Paid/Cancelled=false). Fixed pre-existing mock bug: `referenceNumbers` + `currencies` missing from filter stub. 324/329 pass (5 pre-existing ProcessPendingComponent failures unchanged).
+
+**Known pre-existing failures (unchanged):** 5 frontend `ProcessPendingComponent` tests; 2 backend integration `PendingByPlanItems` tests.
+
+## 2026-06-10 — WI-DASHBOARD: Pending Approval count 15 vs 1 bug fix
+
+**Root cause confirmed (Step 0 diagnosis):**
+
+`BuildActionBandAsync` queried ALL `Status==Calculated` payouts without filtering `Amount > 0`:
+
+```csharp
+// BEFORE (buggy)
+.Where(p => p.Status == CompensationPayoutStatus.Calculated)
+```
+
+The 15 payouts were: 14 × €0 + 1 × €422.58 = count=15, amount=€422.58. The payouts list defaults to `hideZero=true` (→ `ExcludeZero=true`), so it applies `Amount > 0` server-side — showing only 1. Count and amount came from the SAME query but counted a set that doesn't match the list's default view.
+
+**Multi-tenant isolation confirmed OK**: `CompensationPayout` has `HasQueryFilter(e => e.TenantId == CurrentTenantId)` at `ApplicationDbContext.cs:91`. The 15 payouts were all within the same tenant.
+
+**Other cards audited**:
+- "Approved Not Paid": same pattern bug applied — added `Amount > 0` there too.
+- Period band (Payouts total, Transactions, Credits): amounts-only, $0 contribute nothing to sums. Not affected.
+- Draft Pay Runs, Plans, Payees, Quotas: no payout filtering involved. Not affected.
+
+**Fix**: added `&& p.TotalCommission.Amount > 0` to both Calculated and Approved payout queries in `BuildActionBandAsync`.
+
+**Tests added** (2 backend integration tests):
+1. `ActionBand_PendingApprovalCount_ExcludesZeroAmountPayouts`: seeds 2 payees (1 with €500 payout, 1 with $0), asserts count=1, amount=€500.
+2. `ActionBand_PayoutsPendingApprovalCount_IsTenantScoped`: seeds Calculated payout in Tenant A, asserts dashA=1, dashB=0.
+
+**Files changed**: `GetDashboardSummaryHandler.cs` (2 lines), `DashboardEndpointsTests.cs` (+2 tests).
+
+**Test results**: 23/25 dashboard integration tests pass. 2 pre-existing failures: `GetDashboard_PendingByPlanItems_IsTenantScoped` and `GetDashboard_PendingByPlanItems_TwoPlans_CountsAreNotCartesianMultiplied` — unrelated to this WI, not regressed (touch `BuildPendingByPlanAsync` which was not modified). 402/402 unit tests pass.
+
+## 2026-06-10 — WI-DASHBOARD: relativeTime timezone bug fix
+
+**Root cause:** C# `DateTime` is serialized to JSON without a `Z` suffix (e.g. `"2026-06-10T14:50:00"` instead of `"2026-06-10T14:50:00Z"`). JavaScript's `new Date(str)` treats strings without a timezone marker as *local time*. For a user in CEST (UTC+2) an activity logged at 14:50 UTC was interpreted as 12:50 UTC, producing a 2-hour phantom offset: an event ~0 min ago showed as "2h".
+
+**Fix:** One-line regex guard in `dashboard.component.ts` `relativeTime()`:
+```typescript
+const utcStr = /Z$|[+-]\d{2}:\d{2}$/.test(isoUtc) ? isoUtc : isoUtc + 'Z';
+```
+Appends `Z` when no timezone offset is present so `new Date()` always parses in UTC.
+
+**Test added:** `treats ISO string without Z suffix as UTC (not local time)` — strips `Z` from `toISOString()`, calls `relativeTime()`, expects `"10m"`.
+
+**Files changed:** `dashboard.component.ts` (1 line), `dashboard.component.spec.ts` (+1 test). 53/53 dashboard spec pass.
+
+## 2026-06-10 — WI-DASHBOARD: Payout card links fix
+
+**Causa raíz:** `payouts.routes.ts` tenía `path: '' → redirectTo: '/pay-runs'` desde A.6 (flat list retirada). Los links del dashboard (`/payouts?status=Calculated/Approved`, `/payouts?period=...`) eran correctos en el template pero los query params se perdían en la redirección, aterrizando en `/pay-runs` sin filtro — un pay run individual nunca puede mostrar el mismo total global que la card.
+
+**Fix:** Una línea en `payouts.routes.ts` — `path: ''` carga `PayoutsListComponent` en vez de redirigir. El componente ya tenía `loadFromQueryParams` que lee `status`, `pFrom`/`pTo`, `period` de la URL. No se tocó el template del dashboard.
+
+**Tabla final:**
+- "Pending Approval" → `/payouts?status=Calculated` ✅ (todos los Calculated, período-independiente)
+- "Approved — Not Paid" → `/payouts?status=Approved` ✅ (todos los Approved, período-independiente)
+- "Payouts" (período) → `/payouts?period=...&pFrom=...&pTo=...` ✅ (filtrado al período del dashboard)
+- "Draft Pay Runs" → `/pay-runs?status=Draft` ✅ (correcta desde antes, no tocada)
+
+**Tests:** 3 tests de regresión de template (By.css a.stat-card + comprobación de href). 52/52 dashboard tests pasan.
+
+## 2026-06-10 — WI-DASHBOARD: Pending-by-Plan card
+
+**Phase:** A.7 — Admin Dashboard (action band supplement)
+
+**Completed:**
+- Step 0 audit: confirmed eligibility predicate (`Status==Pending`, Active assignment with EffectivePeriod covering TransactionDate, currency match), confirmed anti-Cartesian approach needed, confirmed plan route `/plans/:planId`, confirmed Assignments tab is internal signal (added `?tab=assignments` URL param support)
+- Backend: `PlanPendingCountDto` + `PendingByPlanItems` added to `DashboardActionBandDto`; `BuildPendingByPlanAsync` in handler — 3 queries, HashSet<Guid> deduplication per plan in-memory
+- Frontend: `PlanPendingItem` interface + `pendingByPlanItems` in `DashboardActionBand`; scrollable card with `ws-scroll-thin`, each row opens plan in new tab at assignments tab; `pendingByPlanTotalCount()` + updated `pendingActionCount()` + `hasPendingActions`; `plan-detail.component.ts` now reads `?tab` from URL and calls `setTab()`
+- i18n: EN/ES/PL keys added (`PENDING_BY_PLAN`, `PENDING_BY_PLAN_DESC`, `PENDING_BY_PLAN_EMPTY`, `PENDING_BY_PLAN_COUNT`)
+- Tests: 3 backend integration (empty, tenant isolation, anti-Cartesian count=1 per plan); 5 new frontend spec tests (pendingByPlanTotalCount×3, pendingActionCount update)
+- Budget: `anyComponentStyle` bumped 12→14kB (dashboard.component.scss was already at limit before this WI)
+- Build: backend API clean; frontend production build clean; 49/49 dashboard tests pass
+
+**Test counts:** Backend API: 0 errors. Frontend: 305 pass, 10 pre-existing failures (TransactionsListComponent `currencies not iterable` — unrelated, pre-existing since A.6).
+
+**Decisions:**
+- Data goes in existing `DashboardActionBandDto` (action band, period-independent) rather than a new endpoint — fewer HTTP calls, same auth gate
+- Count shows distinct Pending TxIds per plan (HashSet) — avoids double-counting if a payee has multiple overlapping assignments to the same plan
+- Dashboard card shows raw Pending count (not filtered by existing credits) — credit exclusion happens at job runtime, dashboard is an indicator
+
+## 2026-06-10 — WI-DASHBOARD: Link audit + fixes
+
+**Phase:** A.7 — Admin Dashboard (link correctness)
+
+**What we did:**
+- Audited every clickable link on the dashboard (9 cards × action/period bands + any View all/View filtered links)
+- Found 7 bugs across two categories: (a) destinations ignoring URL params, (b) wrong/missing query params from the dashboard side
+- Fixed all 7:
+  1. `pay-runs-list.component.ts`: added `ActivatedRoute` injection + URL param reading (`?status`, `?period`) in `ngOnInit` — previously ignored ALL query params
+  2. `dashboard.component.ts`: added `_periodDates()` helper mirroring backend `PeriodHelper.ComputeDateRange`; added `payoutsLinkParams`, `transactionsLinkParams`, `creditsLinkParams` computed signals
+  3. `dashboard.component.html`: Payouts/Transactions/Credits period cards now pass `[queryParams]` with computed date params; Plans/Payees/Quotas cards pass `{ status: 'Active' }`
+  4. `plans-list.component.ts`, `payees-list.component.ts`, `quotas-list.component.ts`: each gained `ActivatedRoute` + `?status` reading in `ngOnInit`
+- Confirmed action band links (Pending Approval → `status=Calculated`, Approved Not Paid → `status=Approved`) were already correct
+- 12 new unit tests for `_periodDates`, `payoutsLinkParams`, `transactionsLinkParams`, `creditsLinkParams`
+- Build clean; 312 total tests (302 ✅, 10 ❌ pre-existing `ProcessPendingComponent` failures)
+
+**Deferred:** Nothing — all links now correct.
+
+---
+
+## 2026-06-10 — WI-DASHBOARD: Visual redesign + i18n fix
+
+**Phase:** A.7 — Admin Dashboard (continuation)
+
+**What we did:**
+
+**i18n fix (CRITICAL):**
+- Root cause: duplicate `"DASHBOARD"` JSON top-level key in `en.json`, `es.json`, `pl.json` — JSON parsers silently use the last one, so the second block (payee-dashboard keys) overwrote the first (admin-dashboard keys), leaving all 23 admin keys unresolvable.
+- Fix: removed the first block in each file; merged the 23 missing admin-dashboard keys into the surviving second block.
+- Keys added per locale: TITLE, SUBTITLE, BAND_ACTION, BAND_PERIOD, BAND_TREND, PAYRUNS_DRAFT, PAYOUTS_PENDING_APPROVAL, PAYOUTS_APPROVED_UNPAID, ALL_CLEAR, VIEW_FILTERED, TRANSACTIONS_PERIOD, PAYOUTS_PERIOD, CREDITS_PERIOD, AVG_ATTAINMENT, ACTIVE_PLANS, ACTIVE_QUOTAS, PAYEES_ACTIVE, PAYEES_INACTIVE_LABEL, TREND_VS, TREND_PRIOR, TREND_NO_BASE, ACTIVITY_FEED, ACTIVITY_EMPTY.
+
+**Trend edge case:**
+- Backend sends real `changePercent` even when prior amount is near-zero (e.g. 0.01 EUR → +38,043%). No backend change needed.
+- `trendIsNoBase()` guard: `changePercent === null || Math.abs(changePercent) > 500` — shows `TREND_NO_BASE` label instead of absurd %.
+
+**UI redesign (frontend-only):**
+- Action band: 3-card grid with `ws-card[variant=interactive][accent=warning|none]`; count as large number (font-size-32/weight-800); per-currency list for pending-approval + approved-unpaid; green ALL_CLEAR badge when count=0; "View filtered →" footer link.
+- Band header badge shows `pendingActionCount()` (sum of draft + pending + 1 if any approved-unpaid currency).
+- Period band: `financial-grid` (3 cols: payouts/transactions/credits with ccy-list pattern B) + `stats-row` (3 stat-cards + 1 attainment card with `ws-gauge`).
+- Stats row uses custom `ws-card > a.stat-card` pattern instead of `ws-stat-card` — enables font-size-32/weight-800 matching action cards visually.
+- Activity feed: avatar initials + two-line layout (actor+time top row, action+resource bottom row); `actorShortName()` strips @domain (max 18 chars); `formatActivityAction()` snake_case→3 words; `shortResource()` truncates at 28 chars. CSS: `min-width:0` on `.feed__content` (flex child) + `text-overflow:ellipsis; white-space:nowrap` — prevents email/handler-name line wraps.
+- Trend band: per-currency `ws-bar-chart` (2 bars: prior + current); delta badge with color (success/danger); prior period row at 55% opacity.
+- All styles: design-system tokens only, zero hard-coded values.
+
+**Tests:**
+- 34/34 dashboard spec tests pass (added helpers: actorShortName, formatActivityAction, shortResource, pendingActionCount, trendBarPoints; fixed off-by-one in shortResource expectation `slice(0,26)` = 26 chars + '…').
+- `ng build --configuration production` clean (pre-existing budget warning only).
+
+**Decisions:**
+- `ws-stat-card` bypassed for stats row — input constraints prevent font-size-32; custom `ws-card > stat-card` pattern preferred.
+- `shortResource` truncates at `slice(0, 26)` giving 27-char total (26 + '…') for strings >28 chars.
+
+## 2026-06-10 — WI-DASHBOARD: Admin Dashboard real backend KPIs (replaces 100% hardcoded mockup)
+
+**Phase:** A.7 — Admin Dashboard
+
+**What we did:**
+
+**Backend:**
+- `PeriodHelper` extended with `ComputePriorPeriodRange`, `GetPeriodLabel`, `GetPriorPeriodLabel` (this-month→last-month, last-month→2 months ago, ytd→prior year same range, all-time→null).
+- `DashboardSummaryDto` + sub-DTOs: `DashboardActionBandDto`, `DashboardPeriodBandDto`, `DashboardTrendBandDto`, `DashboardTrendPointDto`, `DashboardActivityItemDto`.
+- `GetDashboardSummaryQuery` + `GetDashboardSummaryHandler`: Banda 1 (draft pay runs, payouts pending approval, approved-unpaid), Banda 2 (transactions count/volume, payouts total, credits count/total, avg quota attainment, active plans/quotas/payees), Banda 3 trend (current vs prior period, per-currency changePercent + direction), activity feed (top 10 AuditLog entries).
+- Anti-Cartesian attainment: quotas and credits loaded in separate queries, matched in-memory per quota.
+- Pattern B enforced throughout: every monetary value is `IReadOnlyList<CurrencyTotalDto>` — never summed across currencies.
+- `DashboardController`: `GET /api/dashboard?period=` with `[Authorize]` + `Permission.ReportsViewAll`.
+- Decision: Plans pending approval KPI removed — `Plan.Status` only has Draft/Active/Archived; adding PendingApproval would be false semantics.
+- AuditLog write-path verified (SyncAuditDispatcher, 4 background handlers) — activity feed uses real data.
+- `TestDatabaseFixture.ResetDashboardDataAsync()`: omits AuditLog (immutability trigger prevents DELETE).
+
+**Backend tests:**
+- 15 `PeriodHelperPriorPeriodTests` (all pass): ComputePriorPeriodRange, GetPeriodLabel, GetPriorPeriodLabel.
+- 7 `DashboardEndpointsTests` (integration): 401 without token, empty-tenant all zeros, multi-tenant isolation (ActivePlansCount A=1/B=0), payees snapshot, anti-Cartesian attainment (2 quotas 50%+100%=75% — mandatory test), TrendBand present for this-month, TrendBand null for all-time.
+
+**Frontend:**
+- `DashboardSummary` TypeScript model + sub-interfaces in `dashboard.models.ts`.
+- `DashboardService.getSummary(period)` — single HTTP call.
+- `DashboardStore`: `period`, `loading`, `error`, `summary` signals; `actionBand`, `periodBand`, `trendBand`, `activityFeed`, `hasPendingActions` computed; effect triggers `_load(period)` on period change; `setPeriod()` + `reload()`.
+- `DashboardComponent` rebuilt with 3-banda structure: action grid (3-col), period grid (2-col inside main 1fr+300px layout), trend grid (auto-fill minmax 180px), activity feed panel.
+- `WsSegmentedControl` period selector (this-month / last-month / ytd / all-time).
+- Pure helpers: `relativeTime()`, `actionCardAccent()`, `amountsAccent()`, `trendIcon()`, `trackByCurrency()`.
+- Removed unused `WsEmptyStateComponent` import (was triggering NG8113 warning).
+
+**i18n:** EN/ES/PL `DASHBOARD.*` keys replaced entirely — 25 new keys across all 3 files.
+
+**Frontend tests:** 15/15 pass — `DashboardComponent` helpers (relativeTime: mins/hours/days, actionCardAccent, amountsAccent) + `DashboardStore` signal behavior (period default, setPeriod, hasPendingActions computed with real data, computed defaults on null summary).
+
+**Build:** `ng build --configuration production` clean — no errors, only pre-existing warnings (bundle budget, pre-existing NG8113 in other components).
+
+**Deferred:**
+- None. Activity feed with real AuditLog data implemented. All bands implemented.
+
+**Key decisions:**
+- Plans pending approval KPI removed (Plan.Status has no PendingApproval value — false semantics).
+- Activity feed: real AuditLog data only; no placeholders (write-path confirmed).
+- Payees active/inactive: current snapshot (`Payee.IsActive`), not period-filtered.
+- TrendBand: server-side, prior period computed in handler; null for all-time period.
+
+---
+
 ## 2026-06-10 — A.6 Pay Run COMPLETE (Phases 5 UI + 6 filters/export) + full browser smoke
 
 **Phase:** A.6 — MILESTONE: entire Pay Run subsystem done. A.4→A.6 payout engine complete.

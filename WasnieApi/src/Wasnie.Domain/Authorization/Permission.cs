@@ -29,6 +29,7 @@ public static class Permission
     public const string TransactionsCreate = "Transactions.Create";
     public const string TransactionsRead = "Transactions.Read";
     public const string TransactionsUpdate = "Transactions.Update";
+    public const string TransactionsVoid = "Transactions.Void";
     public const string TransactionsProcessPending = "Transactions.ProcessPending";
     public const string TransactionsExport = "Transactions.Export";
     public const string TransactionsUpdateFromExcel = "Transactions.UpdateFromExcel";

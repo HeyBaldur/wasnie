@@ -122,7 +122,37 @@ describe('TransactionFormComponent', () => {
       amount: 500,
       currency: 'USD',
       quantity: 1,
+      processImmediately: true,
     });
+  }));
+
+  it('processImmediately defaults to true (checkbox checked)', () => {
+    const fixture = TestBed.createComponent(TransactionFormComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.form.get('processImmediately')?.value).toBeTrue();
+  });
+
+  it('onSubmit() sends processImmediately=false when checkbox is unchecked', fakeAsync(async () => {
+    const fixture = TestBed.createComponent(TransactionFormComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.form.patchValue({
+      payeeId: 'payee-1',
+      referenceNumber: 'REF-002',
+      transactionDate: '2024-01-15',
+      amount: 100,
+      currency: 'USD',
+      processImmediately: false,
+    });
+
+    await component.onSubmit();
+    tick();
+
+    expect(storeSpy.createTransaction).toHaveBeenCalledWith(
+      jasmine.objectContaining({ processImmediately: false })
+    );
   }));
 
   it('hasError() returns true for touched field with the given error', () => {

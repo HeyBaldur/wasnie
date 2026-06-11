@@ -69,7 +69,11 @@ public sealed class PayRunExcelExportService : IPayRunExcelExportService
             for (var ci = 0; ci < currencies.Count; ci++)
             {
                 if (row.TotalAmounts.TryGetValue(currencies[ci], out var amount))
-                    ws.Cell(excelRow, 14 + ci).Value = amount;
+                {
+                    var amtCell = ws.Cell(excelRow, 14 + ci);
+                    amtCell.Value = amount;
+                    amtCell.Style.NumberFormat.Format = "#,##0.00";
+                }
                 // else: leave cell blank (run has no payouts in this currency).
             }
         }

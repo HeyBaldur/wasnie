@@ -183,6 +183,12 @@ export class PayoutsListComponent implements OnInit {
     if (uncachedPlanIds.length > 0) {
       void this._resolvePlanNames(uncachedPlanIds);
     }
+
+    // Always reload from backend on route activation so re-navigation never shows stale data.
+    // The store is a singleton (providedIn: 'root') and its reactive effect only fires when a
+    // signal changes — if the filter is unchanged from the previous visit, no reload would occur.
+    // This imperative call guarantees exactly one fresh load per route activation.
+    void this.store.reload();
   }
 
   private _syncFormFromStore(): void {

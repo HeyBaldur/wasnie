@@ -59,6 +59,7 @@ export class TransactionFormComponent {
     amount: [0 as number, [Validators.required, Validators.min(0.01)]],
     currency: ['USD', Validators.required],
     quantity: [1 as number, [Validators.required, Validators.min(1)]],
+    processImmediately: [true],
   });
 
   async onSubmit(): Promise<void> {
@@ -76,6 +77,7 @@ export class TransactionFormComponent {
         amount: v.amount,
         currency: v.currency,
         quantity: v.quantity,
+        processImmediately: v.processImmediately,
       });
       this.toast.show('TRANSACTIONS.TOAST_CREATED', 'success');
       this.saved.emit(result);

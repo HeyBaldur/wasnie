@@ -313,6 +313,13 @@
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md);
     background: var(--color-bg-surface-sunken);
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+
+    &::-webkit-scrollbar { width: 6px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 9999px; }
+    &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
 
     // When a plain result-list lives inside the scroll box (calculate result modal),
     // add top/bottom breathing room so items aren't flush against the border.

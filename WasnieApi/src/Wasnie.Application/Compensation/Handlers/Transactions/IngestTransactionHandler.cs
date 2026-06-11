@@ -79,18 +79,21 @@ public sealed class IngestTransactionHandler(
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync(cancellationToken);
 
-        // Allocate credits immediately after ingest (Decision #44: null payee = no credits).
-        var credits = await creditAllocationService.AllocateAsync(tx, cancellationToken);
-        foreach (var credit in credits)
-            db.Credits.Add(credit);
-
-        if (credits.Count > 0)
+        if (request.ProcessImmediately)
         {
-            var total = credits.Skip(1).Aggregate(credits[0].CreditedAmount,
-                (acc, c) => acc.Add(c.CreditedAmount));
-            tx.MarkCalculated(credits.Count, total, currentUser.UserId ?? "system",
-                clock.UtcNowOffset, guid.NewGuid());
-            await db.SaveChangesAsync(cancellationToken);
+            // Allocate credits immediately after ingest (Decision #44: null payee = no credits).
+            var credits = await creditAllocationService.AllocateAsync(tx, cancellationToken);
+            foreach (var credit in credits)
+                db.Credits.Add(credit);
+
+            if (credits.Count > 0)
+            {
+                var total = credits.Skip(1).Aggregate(credits[0].CreditedAmount,
+                    (acc, c) => acc.Add(c.CreditedAmount));
+                tx.MarkCalculated(credits.Count, total, currentUser.UserId ?? "system",
+                    clock.UtcNowOffset, guid.NewGuid());
+                await db.SaveChangesAsync(cancellationToken);
+            }
         }
 
         request.AuditResourceId = tx.Id.ToString();
@@ -102,5 +105,8 @@ public sealed class IngestTransactionHandler(
         new(tx.Id, tx.TenantId, tx.ReferenceNumber, tx.PayeeId,
             tx.Amount.Amount, tx.Amount.Currency, tx.Quantity, tx.TransactionDate,
             tx.Source.ToString(), tx.Status.ToString(), tx.ExternalId,
-            tx.IngestedAt, tx.IngestedBy, tx.UpdatedAt);
+            tx.IngestedAt, tx.IngestedBy, tx.UpdatedAt,
+            CancelledBy: tx.CancelledBy,
+            CancelledAt: tx.CancelledAt,
+            CancelledReason: tx.CancelledReason);
 }

@@ -87,6 +87,10 @@ export class PlanDetailComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    const urlTab = this.route.snapshot.queryParams['tab'] as Tab | undefined;
+    if (urlTab && (['rules', 'versions', 'assignments'] as Tab[]).includes(urlTab)) {
+      this.setTab(urlTab);
+    }
     this.store.loadPlan(this.planId).then(() => {
       const name = this.store.selectedPlan()?.name;
       if (name) this.store.loadVersions(name);

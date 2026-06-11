@@ -26,6 +26,10 @@ public sealed class CompensationTransaction : AggregateRoot
     public DateTimeOffset IngestedAt { get; private set; }
     public string IngestedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
+    // Cancellation audit — populated only when Status == Cancelled
+    public string? CancelledBy { get; private set; }
+    public DateTimeOffset? CancelledAt { get; private set; }
+    public string? CancelledReason { get; private set; }
 
     private CompensationTransaction() { }
 
@@ -199,19 +203,26 @@ public sealed class CompensationTransaction : AggregateRoot
         UpdatedAt = now;
     }
 
-    // Pending → Cancelled, Eligible → Cancelled.
-    // Cancellation of Calculated/Paid requires clawback evaluation (Phase 3).
-    public void Cancel(string updatedBy, DateTimeOffset now, Guid eventId)
+    // Pending → Cancelled.
+    // Only Pending transactions may be voided; Calculated/Paid require clawback (Phase 3).
+    // Reason is mandatory (min 3 chars) and persisted for audit trail.
+    public void Cancel(string reason, string cancelledBy, DateTimeOffset now, Guid eventId)
     {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 3)
+            throw new DomainException("Cancellation reason is required and must be at least 3 characters.");
+
         if (Status == CompensationTransactionStatus.Cancelled)
             throw new DomainException("Transaction is already cancelled.");
 
-        if (Status is CompensationTransactionStatus.Calculated or CompensationTransactionStatus.Paid)
-            throw new DomainException($"Cannot cancel a {Status} transaction — clawback evaluation required (Phase 3).");
+        if (Status is not CompensationTransactionStatus.Pending)
+            throw new DomainException($"Only Pending transactions can be voided. Current status: {Status}.");
 
         Status = CompensationTransactionStatus.Cancelled;
+        CancelledBy = cancelledBy;
+        CancelledAt = now;
+        CancelledReason = reason.Trim();
         UpdatedAt = now;
 
-        RaiseDomainEvent(new TransactionCancelledEvent(eventId, now, Id, TenantId));
+        RaiseDomainEvent(new TransactionCancelledEvent(eventId, now, Id, TenantId, reason.Trim()));
     }
 }

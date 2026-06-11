@@ -16,7 +16,7 @@ const makeStoreMock = (overrides?: Partial<TransactionsStore>) =>
     pageSize: signal(10),
     sortBy: signal('transactiondate'),
     sortOrder: signal<'asc' | 'desc'>('desc'),
-    filter: signal({ reference: '', statuses: [], payeeIds: [], txDateFrom: null, txDateTo: null, ingestedFrom: null, ingestedTo: null, amountMin: null, amountMax: null, unassignedOnly: false, amountSort: null }),
+    filter: signal({ reference: '', statuses: [], payeeIds: [], txDateFrom: null, txDateTo: null, ingestedFrom: null, ingestedTo: null, amountMin: null, amountMax: null, unassignedOnly: false, amountSort: null, referenceNumbers: [], currencies: [] }),
     // Legacy computed aliases
     statusFilter: signal(null),
     statusesFilter: signal([]),
@@ -37,6 +37,7 @@ const makeStoreMock = (overrides?: Partial<TransactionsStore>) =>
     pagedResult: signal(null),
     loadTransactions: jasmine.createSpy(),
     createTransaction: jasmine.createSpy(),
+    voidTransaction: jasmine.createSpy(),
     setFilter: jasmine.createSpy(),
     clearFilters: jasmine.createSpy(),
     setStatusTab: jasmine.createSpy(),
@@ -165,5 +166,36 @@ describe('TransactionsListComponent', () => {
       const fixture = TestBed.createComponent(TransactionsListComponent);
       fixture.detectChanges();
     }).not.toThrow();
+  });
+
+  describe('canVoid()', () => {
+    let component: TransactionsListComponent;
+
+    beforeEach(() => {
+      const fixture = TestBed.createComponent(TransactionsListComponent);
+      component = fixture.componentInstance;
+    });
+
+    const makeTx = (status: TransactionStatus) => ({
+      id: 'tx-v1', tenantId: 't', referenceNumber: 'R', payeeId: 'p',
+      amount: 100, currency: 'EUR', quantity: 1, transactionDate: '2025-01-01',
+      ingestedAt: '2025-01-01T00:00:00Z', source: TransactionSource.Manual, status,
+    });
+
+    it('returns true for Pending transactions', () => {
+      expect(component.canVoid(makeTx(TransactionStatus.Pending))).toBeTrue();
+    });
+
+    it('returns false for Calculated transactions', () => {
+      expect(component.canVoid(makeTx(TransactionStatus.Calculated))).toBeFalse();
+    });
+
+    it('returns false for Paid transactions', () => {
+      expect(component.canVoid(makeTx(TransactionStatus.Paid))).toBeFalse();
+    });
+
+    it('returns false for Cancelled transactions', () => {
+      expect(component.canVoid(makeTx(TransactionStatus.Cancelled))).toBeFalse();
+    });
   });
 });

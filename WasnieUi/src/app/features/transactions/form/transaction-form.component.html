@@ -44,6 +44,30 @@
       [error]="hasError('quantity', 'min') ? 'TRANSACTIONS.FIELD_QUANTITY_MIN' : ''"
     />
 
+    <!-- Process-immediately checkbox -->
+    <div class="process-immediately ws-form-grid__full">
+      <label class="process-immediately__label">
+        <input
+          type="checkbox"
+          class="process-immediately__checkbox"
+          formControlName="processImmediately"
+        />
+        <span>{{ 'TRANSACTIONS.PROCESS_IMMEDIATELY_LABEL' | translate }}</span>
+      </label>
+      <p class="process-immediately__hint">
+        {{ 'TRANSACTIONS.PROCESS_IMMEDIATELY_HINT' | translate }}
+      </p>
+    </div>
+
+    <!-- Informative note: amount cannot be edited once processed -->
+    <div class="form-info-note ws-form-grid__full">
+      <svg class="form-info-note__icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.25"/>
+        <path d="M8 7v4M8 5.5v.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <p class="form-info-note__text">{{ 'TRANSACTIONS.RECORD_INFO_NOTE' | translate }}</p>
+    </div>
+
     <p class="source-info ws-form-grid__full">
       {{ 'TRANSACTIONS.SOURCE_INFO' | translate }}
     </p>

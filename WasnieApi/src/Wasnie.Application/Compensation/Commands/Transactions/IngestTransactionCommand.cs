@@ -12,7 +12,8 @@ public sealed record IngestTransactionCommand(
     decimal Amount,
     string Currency,
     DateOnly TransactionDate,
-    int Quantity = 1) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand
+    int Quantity = 1,
+    bool ProcessImmediately = true) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand
 {
     public string AuditAction => AuditActions.TransactionIngested;
     public string AuditResourceType => ResourceTypes.Transaction;

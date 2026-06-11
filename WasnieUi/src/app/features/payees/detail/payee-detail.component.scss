@@ -225,9 +225,13 @@
     flex: 1;
     overflow-y: auto;
     max-height: 300px;
-    // Custom scrollbar — thin, matches surface theme
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border-default) transparent;
+    scrollbar-color: var(--color-border-strong) transparent;
+
+    &::-webkit-scrollbar { width: 6px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 9999px; }
+    &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
   }
 }
 

@@ -1,7 +1,7 @@
 import {
   Component, DestroyRef, effect, inject, OnInit, signal, untracked, viewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { distinctUntilChanged } from 'rxjs/operators';
@@ -42,6 +42,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 export class PayRunsListComponent implements OnInit {
   readonly store = inject(PayRunsStore);
   private readonly api = inject(PayRunsApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -113,7 +114,24 @@ export class PayRunsListComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this._applyPeriod('this-month');
+    const qp = this.route.snapshot.queryParams as Record<string, string>;
+
+    // Resolve initial status + period from URL params (e.g. ?status=Draft from dashboard)
+    const validStatuses: PayRunStatus[] = ['Draft', 'Approved', 'Paid'];
+    const urlStatus = qp['status'] as PayRunStatus | undefined;
+    const status: PayRunStatus | 'All' =
+      urlStatus && (validStatuses as string[]).includes(urlStatus) ? urlStatus : 'All';
+
+    const validPeriods: PeriodKey[] = ['this-month', 'last-month', 'ytd', 'all-time'];
+    const urlPeriod = qp['period'] as PeriodKey | undefined;
+    const periodKey: PeriodKey =
+      urlPeriod && (validPeriods as string[]).includes(urlPeriod) ? urlPeriod : 'this-month';
+
+    this.activePeriod.set(periodKey);
+    const { from, to } = this._computePeriodDates(periodKey);
+    this.form.patchValue({ status, periodFrom: from, periodTo: to }, { emitEvent: false });
+    this.store.setFilter({ status, periodFrom: from, periodTo: to });
+
     this._wireFormSubscriptions();
   }
 
