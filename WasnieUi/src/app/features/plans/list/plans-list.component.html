@@ -4,7 +4,13 @@
     [title]="'PLANS.TITLE' | translate"
     [subtitle]="'PLANS.SUBTITLE' | translate"
   >
-    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Plans.Create' | hasPermission)">
+    <ws-button
+      slot="actions"
+      variant="primary"
+      [hidden]="!('Plans.Create' | hasPermission)"
+      [class.at-limit]="atPlansLimit()"
+      (click)="onCreatePlan()"
+    >
       <app-icon name="plus" [size]="16" />
       {{ 'PLANS.ACTION_NEW' | translate }}
     </ws-button>

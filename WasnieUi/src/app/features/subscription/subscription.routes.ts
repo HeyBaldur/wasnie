@@ -30,4 +30,12 @@ export const manageSubscriptionRoutes: Routes = [
         (m) => m.ManageSubscriptionComponent
       ),
   },
+  {
+    // Accessible to Canceled users — no subscriptionGuard here.
+    path: 'reactivate',
+    loadComponent: () =>
+      import('./reactivation/subscription-reactivation.component').then(
+        (m) => m.SubscriptionReactivationComponent
+      ),
+  },
 ];

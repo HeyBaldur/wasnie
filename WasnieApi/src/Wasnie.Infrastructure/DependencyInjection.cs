@@ -86,6 +86,7 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionPlanService, StripeSubscriptionPlanService>();
         services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
         services.AddScoped<IStripeWebhookService, StripeWebhookService>();
+        services.AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

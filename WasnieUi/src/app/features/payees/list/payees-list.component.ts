@@ -1,5 +1,5 @@
-import { Component, HostListener, inject, OnInit, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -9,6 +9,9 @@ import { PayeesStore } from '../state/payees.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { PayeeStatus } from '../models/payee.model';
+import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
+import { TierLimitModalService } from '../../../shared/components/tier-limit-modal/tier-limit-modal.service';
+import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -54,6 +57,34 @@ export class PayeesListComponent implements OnInit {
   readonly store = inject(PayeesStore);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly subState = inject(SubscriptionStateService);
+  private readonly tierLimitModal = inject(TierLimitModalService);
+
+  readonly atPayeesLimit = computed(() => {
+    const tier = this.subState.subscription()?.tier ?? 'Free';
+    const max = TIER_LIMITS[tier]?.maxPayees ?? -1;
+    return max !== -1 && this.store.unfilteredTotal() >= max;
+  });
+
+  get payeesTierLimit(): number {
+    const tier = this.subState.subscription()?.tier ?? 'Free';
+    return TIER_LIMITS[tier]?.maxPayees ?? -1;
+  }
+
+  onCreatePayee(): void {
+    if (this.atPayeesLimit()) {
+      const tier = this.subState.subscription()?.tier ?? 'Free';
+      this.tierLimitModal.show({
+        tier,
+        currentCount: this.store.unfilteredTotal(),
+        limit: this.payeesTierLimit,
+        entityKey: 'payees',
+      });
+      return;
+    }
+    void this.router.navigate(['new'], { relativeTo: this.route });
+  }
 
   readonly PayeeStatus = PayeeStatus;
   readonly openMenuId = signal<string | null>(null);

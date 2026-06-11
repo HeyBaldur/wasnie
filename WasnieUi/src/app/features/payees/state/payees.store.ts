@@ -42,6 +42,7 @@ export class PayeesStore {
   readonly payees = computed(() => this.pagedResult()?.items ?? []);
   readonly totalCount = computed(() => this.pagedResult()?.totalCount ?? 0);
   readonly totalPages = computed(() => this.pagedResult()?.totalPages ?? 1);
+  readonly unfilteredTotal = signal<number>(0);
   readonly hasNextPage = computed(() => this.pagedResult()?.hasNextPage ?? false);
   readonly hasPreviousPage = computed(() => this.pagedResult()?.hasPreviousPage ?? false);
 
@@ -90,6 +91,9 @@ export class PayeesStore {
       };
       const data = await firstValueFrom(this.api.getPayees(params));
       this.pagedResult.set(data);
+      if (!search && status === null) {
+        this.unfilteredTotal.set(data.totalCount);
+      }
     } catch {
       this.error.set('ERRORS.GENERIC');
     } finally {

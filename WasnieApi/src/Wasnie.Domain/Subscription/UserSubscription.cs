@@ -70,4 +70,16 @@ public sealed class UserSubscription : AggregateRoot
         CanceledAt = now;
         UpdatedAt = now;
     }
+
+    public void MarkPastDue(DateTimeOffset now)
+    {
+        Status = SubscriptionStatus.PastDue;
+        UpdatedAt = now;
+    }
+
+    public void Recover(DateTimeOffset now)
+    {
+        Status = SubscriptionStatus.Active;
+        UpdatedAt = now;
+    }
 }

@@ -57,6 +57,27 @@ public sealed class SubscriptionController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    [HttpPost("change-plan")]
+    public async Task<IActionResult> ChangePlan(
+        [FromBody] ChangePlanRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ChangePlanCommand(request.TargetTier), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+        var dto = result.Value!;
+        if (dto.Blocked)
+            return Conflict(dto);
+        return Ok(dto);
+    }
+
+    [HttpPost("billing-portal")]
+    public async Task<IActionResult> CreateBillingPortal(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new CreateBillingPortalSessionCommand(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     // No [Authorize] — called by Stripe, not by a user.
     // Security is the webhook signature verification inside webhookService.ProcessAsync.
     [HttpPost("webhook")]
@@ -75,3 +96,5 @@ public sealed class SubscriptionController(
         return result.IsSuccess ? Ok() : BadRequest(new { message = result.Error });
     }
 }
+
+public sealed record ChangePlanRequest(string TargetTier);

@@ -136,7 +136,7 @@
       <app-icon name="arrow-left" [size]="14" />
       {{ 'COMMON.BACK' | translate }}
     </ws-button>
-    <ws-button variant="primary" [disabled]="willImportCount === 0" (click)="onImport()">
+    <ws-button variant="primary" [disabled]="willImportCount === 0 || atPayeesLimit()" (click)="onImport()">
       <app-icon name="upload-cloud" [size]="14" />
       {{ 'IMPORTS.PAYEES.BTN_IMPORT' | translate : { count: willImportCount } }}
     </ws-button>

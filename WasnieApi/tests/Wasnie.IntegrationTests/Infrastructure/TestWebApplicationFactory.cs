@@ -33,6 +33,7 @@ public sealed class TestWebApplicationFactory(string connectionString) : WebAppl
                 // Integration tests replace ISubscriptionPlanService with a mock.
                 ["Stripe:SecretKey"] = "sk_test_integration_test_placeholder",
                 ["Stripe:PublishableKey"] = "pk_test_integration_test_placeholder",
+                ["Stripe:WebhookSecret"] = TestConstants.StripeWebhookSecret,
             });
         });
 

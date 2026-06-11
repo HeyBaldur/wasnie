@@ -11,4 +11,7 @@ internal static class TestConstants
 
     internal const string UserAId = "user-a";
     internal const string UserBId = "user-b";
+
+    // Stripe test webhook secret — used to sign synthetic webhook events in tests.
+    internal const string StripeWebhookSecret = "whsec_test_webhook_secret_for_integration_tests";
 }

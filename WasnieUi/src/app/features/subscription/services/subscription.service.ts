@@ -31,6 +31,15 @@ export interface CurrentSubscription {
   createdAt: string;
 }
 
+export interface ChangePlanResult {
+  pending: boolean;
+  blocked: boolean;
+  blockedReason: string | null;
+  current: number | null;
+  limit: number | null;
+  targetTier: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SubscriptionService {
   private readonly http = inject(HttpClient);
@@ -50,5 +59,13 @@ export class SubscriptionService {
 
   getCurrent(): Observable<CurrentSubscription> {
     return this.http.get<CurrentSubscription>(`${this.base}/current`);
+  }
+
+  changePlan(targetTier: string): Observable<ChangePlanResult> {
+    return this.http.post<ChangePlanResult>(`${this.base}/change-plan`, { targetTier });
+  }
+
+  getBillingPortalUrl(): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.base}/billing-portal`, {});
   }
 }

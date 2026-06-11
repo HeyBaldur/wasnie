@@ -51,6 +51,11 @@ public static class AuditActions
     // Subscription
     public const string PlanSelected = "PLAN_SELECTED";
     public const string SubscriptionActivated = "SUBSCRIPTION_ACTIVATED";
+    public const string SubscriptionUpgraded = "SUBSCRIPTION_UPGRADED";
+    public const string SubscriptionDowngraded = "SUBSCRIPTION_DOWNGRADED";
+    public const string SubscriptionCanceled = "SUBSCRIPTION_CANCELED";
+    public const string SubscriptionPastDue = "SUBSCRIPTION_PAST_DUE";
+    public const string SubscriptionRecovered = "SUBSCRIPTION_RECOVERED";
 
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";

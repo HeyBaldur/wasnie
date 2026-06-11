@@ -162,8 +162,11 @@
   "TIER_LIMIT": {
     "TITLE": "Plan Limit Reached",
     "MESSAGE": "Your {{ tier }} plan allows up to {{ limit }} records. Upgrade to add more.",
+    "MESSAGE_PLANS": "Your {{ tier }} plan allows up to {{ limit }} compensation plans and you already have {{ current }}. Upgrade to create more.",
+    "MESSAGE_PAYEES": "Your {{ tier }} plan allows up to {{ limit }} payees and you already have {{ current }}. Upgrade to add more.",
     "UPGRADE_HINT": "Upgrade your subscription to unlock higher limits.",
-    "UPGRADE": "Upgrade Plan"
+    "UPGRADE": "Upgrade Plan",
+    "MESSAGE_PAYEES_IMPORT": "Your {{ tier }} plan allows up to {{ limit }} payees. You already have {{ current }} and are trying to import {{ incoming }} more. Upgrade to import more payees."
   },
   "PLANS": {
     "TITLE": "Plans",
@@ -1210,9 +1213,30 @@
     "STATUS_CANCELED": "Canceled",
     "STATUS_INCOMPLETE": "Incomplete",
     "STATUS_TRIALING": "Trial",
-    "UPGRADE_TITLE": "Ready to grow?",
+    "UPGRADE_TITLE": "Upgrade your account",
     "UPGRADE_DESC": "Unlock more payees, compensation plans, and advanced features.",
+    "CURRENT_PLAN": "Current plan",
     "COMING_SOON": "Coming soon",
-    "UPGRADE_CTA_SOON": "Coming soon"
+    "UPGRADE_CTA_SOON": "Coming soon",
+    "CHANGE_PLAN": "Change plan",
+    "UPGRADE_BTN": "Upgrade to {{tier}}",
+    "DOWNGRADE_BTN": "Downgrade to {{tier}}",
+    "CHANGE_PENDING": "Plan change initiated. Your plan will update in a moment.",
+    "PLAN_UPDATING": "Updating your plan…",
+    "PLAN_UPDATE_TIMEOUT": "The change may take a moment; refresh the page if it doesn't update automatically.",
+    "CHANGE_ERROR": "Could not change plan. Please try again.",
+    "DOWNGRADE_BLOCKED_PAYEES": "You have {{current}} payees but {{tier}} allows only {{limit}}. Remove payees before downgrading.",
+    "DOWNGRADE_BLOCKED_PLANS": "You have {{current}} compensation plans but {{tier}} allows only {{limit}}. Remove plans before downgrading.",
+    "BLOCKED_TITLE": "Cannot switch to the {{tier}} plan",
+    "BLOCKED_PAYEES_BODY": "Your account currently has {{current}} payees, but the {{tier}} plan supports up to {{limit}}. To downgrade, reduce your active payees to {{limit}} or fewer.",
+    "BLOCKED_PLANS_BODY": "Your account currently has {{current}} compensation plans, but the {{tier}} plan supports up to {{limit}}. To downgrade, remove plans until you have {{limit}} or fewer.",
+    "BLOCKED_ACTION": "You can keep your current plan or contact us via our contact form if you need help.",
+    "BILLING_PORTAL_BTN": "Manage billing & invoices",
+    "BILLING_PORTAL_ERROR": "Could not open billing portal. Please try again.",
+    "PAST_DUE_BANNER_MSG": "Your payment is overdue. Access will be blocked once the grace period ends.",
+    "PAST_DUE_BANNER_CTA": "Update payment method",
+    "REACTIVATION_TITLE": "Subscription required",
+    "REACTIVATION_DESC": "Your subscription has been canceled. Reactivate to continue using Wasnie.",
+    "REACTIVATION_CTA": "Reactivate subscription"
   }
 }

@@ -35,6 +35,7 @@ export class PlansStore {
   readonly plans = computed(() => this.pagedResult()?.items ?? []);
   readonly totalCount = computed(() => this.pagedResult()?.totalCount ?? 0);
   readonly totalPages = computed(() => this.pagedResult()?.totalPages ?? 1);
+  readonly unfilteredTotal = signal<number>(0);
 
   // Legacy compat
   readonly listParams = computed<PlanListParams>(() => ({
@@ -83,6 +84,9 @@ export class PlansStore {
       };
       const data = await firstValueFrom(this.api.getPlans(params));
       this.pagedResult.set(data);
+      if (!search && !status) {
+        this.unfilteredTotal.set(data.totalCount);
+      }
     } catch {
       this.error.set('ERRORS.GENERIC');
     } finally {

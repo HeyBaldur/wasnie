@@ -8,6 +8,160 @@
 
 ## Sessions (newest first)
 
+## 2026-06-11 — WI-IMPORT-TIER-LIMIT: COMPLETE — Excel payee import enforces tier limits (all-or-nothing)
+
+**Status:** COMPLETE. Backend Application + Infrastructure build 0 errors. `ng build --configuration production` clean.
+
+### Problem
+Free account (limit: 5 payees) could import 10 payees via Excel with no enforcement. `PayeeImportExecutionService` was a plain service (not MediatR) — never had `ITierLimitChecker` in its constructor.
+
+### Decision
+All-or-nothing rejection: if `current + incoming > limit`, reject 100% with no DB writes. Return 409 with structured body.
+
+### Backend changes
+- `ITierLimitChecker.cs` — Added `CheckPayeeImportLimitAsync(incomingCount)` + `PayeeImportLimitCheck` record.
+- `TierLimitChecker.cs` — Implemented: counts `db.Payees`, checks `current + incomingCount > MaxPayees`, logs audit, returns structured result (no throw).
+- `ImportValidationModels.cs` — `PayeeImportResult` extended with `Blocked`, `BlockedCurrent`, `BlockedIncoming`, `BlockedLimit`, `BlockedTier`.
+- `PayeeImportExecutionService.cs` — Pre-flight check after `toImport` list built, before any `SaveChangesAsync`. Returns early blocked result.
+- `ImportsController.cs` — `ExecutePayees` returns `Conflict({ blocked, reason, current, incoming, limit, tier })` when blocked.
+
+### Frontend changes
+- `payee-import.models.ts` — `PayeeImportResult` extended with optional blocked fields.
+- `tier-limit-modal.service.ts` — `TierLimitInfo` extended with `incomingCount?`.
+- `tier-limit-modal.component.html` — New import-specific branch: `entityKey='payees' && info.incomingCount` → `MESSAGE_PAYEES_IMPORT`.
+- `importing-step.component.ts` — Catches `HttpErrorResponse` status 409 with `blocked=true`; shows `TierLimitModal` with incomingCount; emits `retryRequested`.
+- `payee-import-wizard.component.ts` — Injects `PayeesStore`, `SubscriptionStateService`, `TIER_LIMITS`; adds `atPayeesLimit` computed.
+- `payee-import-wizard.component.html` — Passes `[atPayeesLimit]` to `<app-preview-step>`.
+- `preview-step.component.ts` — Added `atPayeesLimit = input(false)`.
+- `preview-step.component.html` — Import button disabled when `willImportCount === 0 || atPayeesLimit()`.
+- `en/es/pl.json` — `TIER_LIMIT.MESSAGE_PAYEES_IMPORT` added (params: tier, limit, current, incoming).
+
+### Deferred
+- Integration tests (`PayeeImportEndpointsTests.cs`): Free 0+10→409; Free 3+2→ok; Free 3+5→409; Starter+10→ok; no partial inserts; multi-tenant.
+- Full backend solution build requires stopping running server (PID 5040 holding DLL locks). Application + Infrastructure projects compile clean individually.
+
+---
+
+## 2026-06-11 — WI-TIER-LIMIT-PREVENTIVE: COMPLETE — Preventive tier blocking + professional modal
+
+**Status:** COMPLETE. Build clean (`ng build --configuration production` 0 new errors).
+
+### Changes
+- `src/app/shared/services/tier-limits.ts` — NEW. `TIER_LIMITS` record: Free(1p/5), Starter(5/25), Growth(15/75), Scale(∞/150), Enterprise(∞/∞). `-1` = unlimited.
+- `tier-limit-modal.service.ts` — `TierLimitInfo` extended with `entityKey?: 'plans' | 'payees'`.
+- `tier-limit-modal.component.ts` — Added `Router` injection, `upgrade()` (close + navigate to `/subscription`), `usagePercent(info)` helper.
+- `tier-limit-modal.component.html` — Full redesign: SVG icon (arrow-up circle), entity-specific message (plans/payees/generic), usage bar (dynamic `[style.width.%]`), usage numbers (current/limit), upgrade hint.
+- `tier-limit-modal.component.scss` — New token-based styles. Icon wrap with surface-raised bg, usage bar in brand color, consistent font-size numeric tokens.
+- `plans.store.ts` + `payees.store.ts` — Added `unfilteredTotal = signal<number>(0)`. Set in `_loadInternal` only when `!search && !status` (unfiltered loads).
+- `plans-list.component.ts` — Added `SubscriptionStateService`, `TierLimitModalService`, `TIER_LIMITS`, `Router`; `atPlansLimit` computed signal; `onCreatePlan()` gate method.
+- `plans-list.component.html` — Create button: removed `routerLink="new"`, added `(click)="onCreatePlan()"` + `[class.at-limit]`.
+- `payees-list.component.ts` + `payees-list.component.html` — Same pattern for payees (`atPayeesLimit`, `onCreatePayee()`).
+- `en/es/pl.json` — Added `TIER_LIMIT.MESSAGE_PLANS` and `TIER_LIMIT.MESSAGE_PAYEES`.
+
+### Behavior
+- At limit → button click shows `TierLimitModal` immediately (no form rendered).
+- Below limit → button navigates normally to `new` route.
+- Reactive: after deleting a plan/payee and going below limit, `unfilteredTotal` updates on next unfiltered load and `atPlansLimit`/`atPayeesLimit` recompute.
+- Backend 403 via `forbiddenResponseInterceptor` remains as safety-net fallback.
+
+---
+
+## 2026-06-11 — WI-STRIPE-FASE-3: COMPLETE — Upgrade/Downgrade + Billing Portal + PastDue cycle
+
+**Status:** COMPLETE. Backend + frontend implementados. Ambas builds limpias. Integration tests escritos (requieren restart del server para correr).
+
+### Backend entregado
+
+**Nuevos archivos:**
+- `Wasnie.Application/Common/Interfaces/IStripeSubscriptionManagementService.cs` — interfaz limpia (solo `UpdateSubscriptionAsync` + `CreateBillingPortalSessionAsync`; sin tipos Stripe — Application layer no referencia Stripe.net)
+- `Wasnie.Infrastructure/Services/StripeSubscriptionManagementService.cs` — implementación con `SubscriptionService.UpdateAsync(ProrationBehavior="create_prorations")` + `BillingPortal.SessionService`; `GetSubscriptionWithProductAsync` como método público (no en interfaz, usado por webhook inline)
+- `Wasnie.Application/Features/Subscription/Commands/ChangePlanCommand.cs` + `ChangePlanCommandHandler.cs` — valida tier (`Starter|Growth|Scale`), bloquea downgrade si `db.Payees.CountAsync()` > `TierLimits[target].MaxPayees` o planes > `MaxPlans`; devuelve `{ pending:true }` o `{ blocked:true, reason, current, limit, targetTier }`; tier real cambia SOLO vía webhook
+- `Wasnie.Application/Features/Subscription/Commands/CreateBillingPortalSessionCommand.cs` + `CreateBillingPortalSessionCommandHandler.cs` — requiere `StripeCustomerId`; returnUrl = `{FrontendBaseUrl}/subscription`
+- `Wasnie.Application/Features/Subscription/DTOs/ChangePlanResultDto.cs` + `BillingPortalSessionDto.cs`
+
+**Archivos modificados:**
+- `UserSubscription.cs` — nuevos métodos `MarkPastDue(now)` + `Recover(now)`
+- `AuditActions.cs` — 5 nuevas constantes: `SubscriptionUpgraded/Downgraded/Canceled/PastDue/Recovered`
+- `StripeWebhookService.cs` — 4 nuevos casos en switch: `customer.subscription.updated` (fetch full sub inline, sync tier+status, audit UPGRADED/DOWNGRADED), `customer.subscription.deleted` (Cancel, audit CANCELED), `invoice.payment_failed` (MarkPastDue, audit PAST_DUE), `invoice.payment_succeeded` (recover solo si PastDue, audit RECOVERED; idempotente)
+- `DependencyInjection.cs` — `AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>()`
+- `SubscriptionController.cs` — `POST /change-plan` (409 si blocked, 200 si pending), `POST /billing-portal` (200 + URL)
+
+**Tests:**
+- `ChangePlanEndpointsTests.cs` — auth (401), tiers inválidos (400 Free/Enterprise/invalid), downgrade bloqueado por payees (409 con payload), upgrade válido → 200 pending (Stripe stubbed)
+- `WebhookPhase3Tests.cs` — HMAC signer manual (no `EventUtility.GenerateTestHeaderString` en v52); payment_failed→PastDue (idempotente), payment_succeeded cuando PastDue→Active, payment_succeeded cuando Active→no-op, subscription.deleted→Canceled (idempotente); `Stripe:WebhookSecret` añadido a `TestWebApplicationFactory`; constante `TestConstants.StripeWebhookSecret`
+
+**Decisión importante — Application layer vs Stripe.net:** `IStripeSubscriptionManagementService` en Application NO puede retornar `Stripe.Subscription` (Stripe.net no está referenciado en Application). Interface simplificada a métodos void/string. Webhook handler inlinea la llamada Stripe (`new StripeClient(options.Value.SecretKey)`) igual que `HandleCheckoutSessionCompletedAsync`.
+
+### Frontend entregado
+
+**Nuevos archivos:**
+- `subscription-state.service.ts` — `providedIn: root`; signals: `_subscription`, `_loaded`, computed `isPastDue/isCanceled`; `load()` / `refresh()`
+- `subscription.guard.ts` — `CanActivateFn` async; llama `getCurrent()`, redirige a `/subscription/reactivate` si Canceled; `catchError → of(true)` para no bloquear en error
+- `past-due-banner/` — banner standalone (HTML+TS+SCSS); inyectado en `AppShellComponent` (template + imports); aparece cuando `subState.isPastDue()`; botón "Update payment method" → `getBillingPortalUrl()` → `window.open(_blank)`
+- `reactivation/` — full-page sin `<app-shell>`; mismo patrón visual que `SubscriptionSuccessComponent`; botón → `/onboarding/plan`
+
+**Archivos modificados:**
+- `subscription.service.ts` — `changePlan(targetTier)` + `getBillingPortalUrl()` + interfaz `ChangePlanResult`
+- `manage-subscription.component.ts/html/scss` — botones upgrade/downgrade (primary/secondary según dirección), billing portal button en current-plan-card, `blockedInfo` signal (key + params para `translate:params`), `isUpgrade()` helper, "Coming Soon" eliminado
+- `app-shell.component.ts/html` — inyecta `SubscriptionStateService`; `load()` en `ngOnInit`; `<app-past-due-banner />` entre topbar y main content
+- `subscription.routes.ts` — ruta `/subscription/reactivate` (sin `subscriptionGuard` para que Canceled pueda acceder)
+- `app.routes.ts` — `subscriptionGuard` añadido a todas las rutas protegidas excepto `/subscription` y `/onboarding`
+- `en.json / es.json / pl.json` — 16 nuevas claves: `CHANGE_PLAN/UPGRADE_BTN/DOWNGRADE_BTN/CHANGE_PENDING/CHANGE_ERROR/DOWNGRADE_BLOCKED_PAYEES/DOWNGRADE_BLOCKED_PLANS/BILLING_PORTAL_BTN/BILLING_PORTAL_ERROR/PAST_DUE_BANNER_MSG/PAST_DUE_BANNER_CTA/REACTIVATION_TITLE/REACTIVATION_DESC/REACTIVATION_CTA`
+
+### Próximos pasos
+
+1. Reiniciar el servidor API para correr integration tests en frío
+2. Configurar Stripe Customer Portal en dashboard.stripe.com: plan-changes `OFF`, cancellation `OFF`, invoices `ON`, payment method `ON`
+3. Activar Stripe Smart Retries en la configuración de billing
+
+## 2026-06-11 — WI-STRIPE-FASE-3: Step 0 — Diseño Upgrade/Downgrade + Portal (aprobado, implementando)
+
+**Status:** Step 0 completo y aprobado por el owner. Implementación en curso.
+
+### Decisiones de diseño aprobadas
+
+**Enfoque upgrade/downgrade:** Ambos se aplican de forma inmediata via `SubscriptionService.UpdateAsync()` con `ProrationBehavior = "create_prorations"`. Sin nuevo Checkout; reutiliza el `StripeCustomerId` existente. El cambio de tier en Wasnie se confirma SOLO vía webhook `customer.subscription.updated` (fuente de verdad — mismo patrón que Fase 2). El endpoint devuelve `{ pending: true }`.
+
+**Validación de downgrade (Opción A — bloqueo):** El backend cuenta `db.Payees.CountAsync()` + `db.CompensationPlans.CountAsync()` (todos los registros, igual que `TierLimitChecker`) y compara contra `TierLimits[targetTier]`. Si excede → `409` con `{ blocked: true, reason: "payees"|"plans", current: N, limit: M, targetTier }`. Frontend muestra mensaje accionable con números concretos.
+
+**Criterio de conteo:** Todos los payees/planes (incluidos inactivos/terminados) cuentan contra los límites — consistente con `TierLimitChecker` actual y evita el abuso de "terminar → bajar tier → reactivar".
+
+**Nuevos endpoints:**
+- `POST /api/subscription/change-plan { targetTier }` — upgrade: siempre permitido; downgrade: valida límites primero.
+- `POST /api/subscription/billing-portal` — crea Stripe Billing Portal Session para el `StripeCustomerId` del tenant; devuelve `{ url }`. Frontend redirige para facturas/historial/tarjeta.
+
+**Nuevos handlers de webhook (añadir en `StripeWebhookService`):**
+- `customer.subscription.updated` → `UpdateFromStripe(newTier, newStatus, ...)` + `tenant.SetTier(newTier)`. Dirección del cambio → audit `SUBSCRIPTION_UPGRADED` o `SUBSCRIPTION_DOWNGRADED`.
+- `customer.subscription.deleted` → `subscription.Cancel(now)` + `tenant.SetTier(Tier.Free)` → audit `SUBSCRIPTION_CANCELED`.
+- `invoice.payment_failed` → `subscription.MarkPastDue(now)` (nuevo método de dominio; solo cambia Status, no el tier) → audit `SUBSCRIPTION_PAST_DUE`. Lookup por `StripeCustomerId` via `IgnoreQueryFilters()`.
+
+Los tres deduplicados via tabla `ProcessedStripeEvents` existente. Todos idempotentes.
+
+**Nuevo método de dominio:** `UserSubscription.MarkPastDue(DateTimeOffset now)` — `Status = PastDue`, actualiza `UpdatedAt`. Sin cambio de tier.
+
+**Nuevas acciones de audit:** `SubscriptionUpgraded`, `SubscriptionDowngraded`, `SubscriptionCanceled`, `SubscriptionPastDue`.
+
+**Frontend (`ManageSubscriptionComponent`):**
+- Botones de upgrade a tiers superiores (siempre habilitados).
+- Botones de downgrade a tiers inferiores; si el backend devuelve 409, muestra mensaje bloqueado con uso actual vs límite del destino.
+- Botón "Gestionar facturación" → endpoint billing-portal → `window.location.href` al portal de Stripe.
+- i18n EN/ES/PL completo.
+
+**Configuración del Stripe Customer Portal (el usuario debe hacer en el dashboard de Stripe):**
+
+| Función | Configuración requerida |
+|---|---|
+| Cancelar suscripciones | **DESACTIVAR** |
+| Actualizar plan (cambio de suscripción) | **DESACTIVAR** |
+| Actualizar método de pago | **ACTIVAR** |
+| Ver historial de facturas / descargar PDF | **ACTIVAR** |
+
+URL (test): `https://dashboard.stripe.com/test/settings/billing/portal`
+
+**Tests planificados:** upgrade (mock Stripe + webhook sync); downgrade dentro de límites (permitido); downgrade sobre límites → 409 + mensaje; `customer.subscription.updated` → sync tier; `.deleted` → Canceled + Free; `invoice.payment_failed` → PastDue. Todos idempotentes. Multi-tenant. Build limpio.
+
+---
+
 ## 2026-06-11 — WI-STRIPE-FASE-2: Stripe Checkout + Webhook + Tier Activation
 
 **Completed:**

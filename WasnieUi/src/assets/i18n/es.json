@@ -162,8 +162,11 @@
   "TIER_LIMIT": {
     "TITLE": "Límite del plan alcanzado",
     "MESSAGE": "Tu plan {{ tier }} permite hasta {{ limit }} registros. Actualiza para añadir más.",
+    "MESSAGE_PLANS": "Tu plan {{ tier }} permite hasta {{ limit }} planes de compensación y ya tienes {{ current }}. Actualiza para crear más.",
+    "MESSAGE_PAYEES": "Tu plan {{ tier }} permite hasta {{ limit }} beneficiarios y ya tienes {{ current }}. Actualiza para añadir más.",
     "UPGRADE_HINT": "Actualiza tu suscripción para desbloquear límites más altos.",
-    "UPGRADE": "Actualizar plan"
+    "UPGRADE": "Actualizar plan",
+    "MESSAGE_PAYEES_IMPORT": "Tu plan {{ tier }} permite hasta {{ limit }} beneficiarios. Ya tienes {{ current }} e intentas importar {{ incoming }} más. Actualiza para importar más beneficiarios."
   },
   "PLANS": {
     "TITLE": "Planes",
@@ -1210,9 +1213,30 @@
     "STATUS_CANCELED": "Cancelada",
     "STATUS_INCOMPLETE": "Incompleta",
     "STATUS_TRIALING": "Prueba",
-    "UPGRADE_TITLE": "¿Listo para crecer?",
+    "UPGRADE_TITLE": "Mejora tu cuenta",
     "UPGRADE_DESC": "Desbloquea más vendedores, planes de comisión y funciones avanzadas.",
+    "CURRENT_PLAN": "Plan actual",
     "COMING_SOON": "Próximamente",
-    "UPGRADE_CTA_SOON": "Próximamente"
+    "UPGRADE_CTA_SOON": "Próximamente",
+    "CHANGE_PLAN": "Cambiar plan",
+    "UPGRADE_BTN": "Mejorar a {{tier}}",
+    "DOWNGRADE_BTN": "Reducir a {{tier}}",
+    "CHANGE_PENDING": "Cambio de plan iniciado. Tu plan se actualizará en breve.",
+    "PLAN_UPDATING": "Actualizando tu plan…",
+    "PLAN_UPDATE_TIMEOUT": "El cambio puede tardar un momento; recarga la página si no se actualiza automáticamente.",
+    "CHANGE_ERROR": "No se pudo cambiar el plan. Inténtalo de nuevo.",
+    "DOWNGRADE_BLOCKED_PAYEES": "Tienes {{current}} beneficiarios pero {{tier}} permite solo {{limit}}. Elimina beneficiarios antes de reducir.",
+    "DOWNGRADE_BLOCKED_PLANS": "Tienes {{current}} planes de compensación pero {{tier}} permite solo {{limit}}. Elimina planes antes de reducir.",
+    "BLOCKED_TITLE": "No es posible cambiar al plan {{tier}}",
+    "BLOCKED_PAYEES_BODY": "Tu cuenta tiene actualmente {{current}} beneficiarios, pero el plan {{tier}} admite un máximo de {{limit}}. Para cambiar a este plan, reduce tus beneficiarios activos a {{limit}} o menos.",
+    "BLOCKED_PLANS_BODY": "Tu cuenta tiene actualmente {{current}} planes de compensación, pero el plan {{tier}} admite un máximo de {{limit}}. Para cambiar a este plan, elimina planes hasta tener {{limit}} o menos.",
+    "BLOCKED_ACTION": "Puedes mantener tu plan actual o contactarnos mediante nuestro formulario de contacto si necesitas ayuda.",
+    "BILLING_PORTAL_BTN": "Gestionar facturación y facturas",
+    "BILLING_PORTAL_ERROR": "No se pudo abrir el portal de facturación. Inténtalo de nuevo.",
+    "PAST_DUE_BANNER_MSG": "Tu pago está vencido. El acceso se bloqueará cuando finalice el período de gracia.",
+    "PAST_DUE_BANNER_CTA": "Actualizar método de pago",
+    "REACTIVATION_TITLE": "Suscripción requerida",
+    "REACTIVATION_DESC": "Tu suscripción ha sido cancelada. Reactívala para continuar usando Wasnie.",
+    "REACTIVATION_CTA": "Reactivar suscripción"
   }
 }

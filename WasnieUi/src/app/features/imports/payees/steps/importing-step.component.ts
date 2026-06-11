@@ -1,11 +1,12 @@
-import { Component, OnInit, inject, input, output } from '@angular/core';
+import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { TranslateModule } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { ImportProgressComponent } from '../../shared/import-progress.component';
 import { PayeeImportService } from '../services/payee-import.service';
 import { PayeeImportColumnMapping, PayeeImportResult } from '../models/payee-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
-import { signal } from '@angular/core';
+import { TierLimitModalService } from '../../../../shared/components/tier-limit-modal/tier-limit-modal.service';
 
 @Component({
   selector: 'app-payee-importing-step',
@@ -15,6 +16,7 @@ import { signal } from '@angular/core';
 })
 export class PayeeImportingStepComponent implements OnInit {
   private readonly importService = inject(PayeeImportService);
+  private readonly tierLimitModal = inject(TierLimitModalService);
 
   readonly fileId = input.required<string>();
   readonly columnMapping = input.required<PayeeImportColumnMapping>();
@@ -37,6 +39,18 @@ export class PayeeImportingStepComponent implements OnInit {
       );
       this.completed.emit(result);
     } catch (err) {
+      if (err instanceof HttpErrorResponse && err.status === 409 && err.error?.blocked === true) {
+        const body = err.error;
+        this.tierLimitModal.show({
+          tier: body.tier ?? '',
+          currentCount: body.current ?? 0,
+          limit: body.limit ?? 0,
+          entityKey: 'payees',
+          incomingCount: body.incoming ?? 0,
+        });
+        this.retryRequested.emit();
+        return;
+      }
       this.errorMessage.set(extractApiError(err));
     }
   }

@@ -1,0 +1,21 @@
+<div class="reactivation-shell">
+  <header class="reactivation-header">
+    <div class="reactivation-header__brand">
+      <div class="reactivation-header__monogram">
+        <img src="wasnie_logo.png" alt="Wasnie" />
+      </div>
+      <span class="reactivation-header__name">Wasnie</span>
+    </div>
+  </header>
+
+  <main class="reactivation-body">
+    <ws-card class="reactivation-card">
+      <div class="reactivation-icon" aria-hidden="true">⚠</div>
+      <h1 class="reactivation-title">{{ 'SUBSCRIPTION.REACTIVATION_TITLE' | translate }}</h1>
+      <p class="reactivation-desc">{{ 'SUBSCRIPTION.REACTIVATION_DESC' | translate }}</p>
+      <ws-button variant="primary" (click)="reactivate()">
+        {{ 'SUBSCRIPTION.REACTIVATION_CTA' | translate }}
+      </ws-button>
+    </ws-card>
+  </main>
+</div>

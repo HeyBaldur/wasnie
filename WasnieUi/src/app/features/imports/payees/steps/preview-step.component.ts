@@ -24,6 +24,7 @@ export class PreviewStepComponent {
   readonly fileId = input.required<string>();
   readonly columnMapping = input.required<PayeeImportColumnMapping>();
   readonly validateResponse = input.required<ValidateResponse>();
+  readonly atPayeesLimit = input(false);
 
   readonly importRequested = output<{ skipWarnings: boolean }>();
   readonly back = output<void>();

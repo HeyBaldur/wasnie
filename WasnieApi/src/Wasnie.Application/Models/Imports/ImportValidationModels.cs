@@ -33,6 +33,13 @@ public sealed class PayeeImportResult
     public required int CreatedCount { get; init; }
     public required int SkippedCount { get; init; }
     public required List<PayeeRowValidationResult> SkippedRows { get; init; }
+
+    // Set only when import was rejected by tier limit (Blocked = true). No rows were inserted.
+    public bool Blocked { get; init; }
+    public int BlockedCurrent { get; init; }
+    public int BlockedIncoming { get; init; }
+    public int BlockedLimit { get; init; }
+    public string? BlockedTier { get; init; }
 }
 
 public sealed class ParseResponse

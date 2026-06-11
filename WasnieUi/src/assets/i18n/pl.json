@@ -162,8 +162,11 @@
   "TIER_LIMIT": {
     "TITLE": "Osiągnięto limit planu",
     "MESSAGE": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} rekordów. Ulepsz, aby dodać więcej.",
+    "MESSAGE_PLANS": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} planów wynagrodzeniowych, a już masz {{ current }}. Ulepsz, aby tworzyć więcej.",
+    "MESSAGE_PAYEES": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} pracowników i masz już {{ current }}. Ulepsz, aby dodać więcej.",
     "UPGRADE_HINT": "Ulepsz subskrypcję, aby odblokować wyższe limity.",
-    "UPGRADE": "Ulepsz plan"
+    "UPGRADE": "Ulepsz plan",
+    "MESSAGE_PAYEES_IMPORT": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} pracowników. Masz już {{ current }} i próbujesz zaimportować {{ incoming }} więcej. Ulepsz, aby importować więcej pracowników."
   },
   "PLANS": {
     "TITLE": "Plany",
@@ -1210,9 +1213,30 @@
     "STATUS_CANCELED": "Anulowana",
     "STATUS_INCOMPLETE": "Niekompletna",
     "STATUS_TRIALING": "Próbna",
-    "UPGRADE_TITLE": "Gotowy na więcej?",
+    "UPGRADE_TITLE": "Zmień swój plan",
     "UPGRADE_DESC": "Odblokuj więcej sprzedawców, planów prowizyjnych i zaawansowanych funkcji.",
+    "CURRENT_PLAN": "Aktualny plan",
     "COMING_SOON": "Wkrótce",
-    "UPGRADE_CTA_SOON": "Wkrótce"
+    "UPGRADE_CTA_SOON": "Wkrótce",
+    "CHANGE_PLAN": "Zmień plan",
+    "UPGRADE_BTN": "Ulepsz do {{tier}}",
+    "DOWNGRADE_BTN": "Obniż do {{tier}}",
+    "CHANGE_PENDING": "Zmiana planu zainicjowana. Plan zostanie zaktualizowany za chwilę.",
+    "PLAN_UPDATING": "Aktualizacja planu…",
+    "PLAN_UPDATE_TIMEOUT": "Zmiana może chwilę potrwać; odśwież stronę, jeśli nie zaktualizuje się automatycznie.",
+    "CHANGE_ERROR": "Nie udało się zmienić planu. Spróbuj ponownie.",
+    "DOWNGRADE_BLOCKED_PAYEES": "Masz {{current}} beneficjentów, a {{tier}} pozwala tylko na {{limit}}. Usuń beneficjentów przed obniżeniem planu.",
+    "DOWNGRADE_BLOCKED_PLANS": "Masz {{current}} planów prowizyjnych, a {{tier}} pozwala tylko na {{limit}}. Usuń plany przed obniżeniem.",
+    "BLOCKED_TITLE": "Nie można przejść na plan {{tier}}",
+    "BLOCKED_PAYEES_BODY": "Twoje konto ma obecnie {{current}} beneficjentów, a plan {{tier}} obsługuje maksymalnie {{limit}}. Aby zmienić plan, zmniejsz liczbę aktywnych beneficjentów do {{limit}} lub mniej.",
+    "BLOCKED_PLANS_BODY": "Twoje konto ma obecnie {{current}} planów prowizyjnych, a plan {{tier}} obsługuje maksymalnie {{limit}}. Aby zmienić plan, usuń plany prowizyjne, aż zostanie {{limit}} lub mniej.",
+    "BLOCKED_ACTION": "Możesz pozostać na obecnym planie lub skontaktować się z nami przez formularz kontaktowy, jeśli potrzebujesz pomocy.",
+    "BILLING_PORTAL_BTN": "Zarządzaj rozliczeniami i fakturami",
+    "BILLING_PORTAL_ERROR": "Nie można otworzyć portalu rozliczeniowego. Spróbuj ponownie.",
+    "PAST_DUE_BANNER_MSG": "Twoja płatność jest przeterminowana. Dostęp zostanie zablokowany po zakończeniu okresu karencji.",
+    "PAST_DUE_BANNER_CTA": "Zaktualizuj metodę płatności",
+    "REACTIVATION_TITLE": "Wymagana subskrypcja",
+    "REACTIVATION_DESC": "Twoja subskrypcja została anulowana. Reaktywuj ją, aby kontynuować korzystanie z Wasnie.",
+    "REACTIVATION_CTA": "Reaktywuj subskrypcję"
   }
 }

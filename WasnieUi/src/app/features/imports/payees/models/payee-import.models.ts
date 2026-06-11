@@ -46,6 +46,11 @@ export interface PayeeImportResult {
   createdCount: number;
   skippedCount: number;
   skippedRows: PayeeRowValidationResult[];
+  blocked?: boolean;
+  blockedCurrent?: number;
+  blockedIncoming?: number;
+  blockedLimit?: number;
+  blockedTier?: string;
 }
 
 export interface WizardState {
