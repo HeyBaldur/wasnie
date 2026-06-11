@@ -3,10 +3,12 @@ import { Injectable, signal, computed, inject } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthResult, LoginRequest, RegisterTenantRequest, TokenPair } from '../models/auth.model';
+import { TabSyncService } from './tab-sync.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly tabSync = inject(TabSyncService);
 
   private readonly _currentUser = signal<AuthResult | null>(
     this.loadUserFromStorage()
@@ -47,19 +49,44 @@ export class AuthService {
       );
   }
 
-  logout(): void {
+  /**
+   * Clear auth state without broadcasting to other tabs.
+   * Call this when reacting to a remote logout/session-expired signal to avoid re-broadcasting.
+   */
+  clearSessionSilent(): void {
     this._currentUser.set(null);
     localStorage.removeItem('wasnie_session');
   }
 
+  /**
+   * Voluntary logout — clears session and notifies other tabs ('logout' signal).
+   * Other tabs will silently redirect to login without showing a session-expired toast.
+   */
+  logout(): void {
+    const wasAuthenticated = this.isAuthenticated();
+    this.clearSessionSilent();
+    if (wasAuthenticated) {
+      this.tabSync.broadcast({ type: 'logout' });
+    }
+  }
+
+  /**
+   * Forced session termination (inactivity timer, 401 refresh failure).
+   * Optionally preserves the current URL as return-URL for post-login redirect.
+   * Broadcasts 'session-expired' so other tabs show the expiry toast and redirect.
+   */
   forceLogout(preserveState = true): void {
+    const wasAuthenticated = this.isAuthenticated();
     if (preserveState) {
       const returnUrl = window.location.pathname + window.location.search;
       if (returnUrl.length > 1 && !returnUrl.startsWith('/auth')) {
         sessionStorage.setItem('wasnie:return-url', returnUrl);
       }
     }
-    this.logout();
+    this.clearSessionSilent();
+    if (wasAuthenticated) {
+      this.tabSync.broadcast({ type: 'session-expired' });
+    }
   }
 
   getAccessToken(): string | null {

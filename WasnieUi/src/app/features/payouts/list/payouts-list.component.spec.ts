@@ -105,6 +105,7 @@ describe('PayoutsListComponent — poll-loop regression', () => {
     const fixture = TestBed.createComponent(PayoutsListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges(); // runs ngOnInit
+    storeMock.reload.calls.reset(); // ngOnInit now calls reload() once on activation; reset so poll-loop tests measure only poll-triggered calls
   });
 
   it('stops polling after Succeeded and calls store.reload exactly once', fakeAsync(() => {
@@ -193,6 +194,7 @@ describe('PayoutsListComponent — onBulkMarkPaid', () => {
     const fixture = TestBed.createComponent(PayoutsListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    storeMock.reload.calls.reset(); // ngOnInit calls reload() once on activation; reset so bulk-action tests measure only action-triggered calls
   });
 
   it('calls bulkMarkPaid with approved IDs, clears selection, and reloads once', async () => {
@@ -286,6 +288,49 @@ describe('PayoutsStore — bulkApproveSummary', () => {
       { payeeId: 'payee-1', payeeName: 'Alice Smith', payeeCode: 'EMP-001', periodStart: '2026-01-01', periodEnd: '2026-03-31', amount: 100, currency: 'EUR' },
       { payeeId: 'payee-2', payeeName: 'Bob Jones',   payeeCode: 'EMP-002', periodStart: '2026-01-01', periodEnd: '2026-03-31', amount: 100, currency: 'EUR' },
     ]);
+  });
+});
+
+// ─── Route activation: stale-data prevention ─────────────────────────────────
+//
+// PayoutsStore is providedIn: 'root' (singleton). Its effect() only fires when a
+// signal changes. On re-navigation with the same filter the effect is silent.
+// ngOnInit must call store.reload() once to guarantee a fresh load every time.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('PayoutsListComponent — ngOnInit reload', () => {
+  let storeMock: jasmine.SpyObj<PayoutsStore>;
+  let apiSpy: jasmine.SpyObj<PayoutsApiService>;
+
+  beforeEach(() => {
+    apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
+      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf', 'exportToExcel',
+    ]);
+    apiSpy.list.and.returnValue(of(EMPTY_PAGE));
+    storeMock = makeStoreMock();
+
+    TestBed.configureTestingModule({
+      imports: [PayoutsListComponent],
+      providers: [
+        { provide: PayoutsApiService, useValue: apiSpy },
+        { provide: PayoutsStore,      useValue: storeMock },
+        { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
+        { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
+        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} } } },
+        { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
+      ],
+    });
+
+    TestBed.overrideComponent(PayoutsListComponent, {
+      set: { template: '<div></div>', imports: [] },
+    });
+  });
+
+  it('calls store.reload() exactly once on route activation regardless of filter state', () => {
+    const fixture = TestBed.createComponent(PayoutsListComponent);
+    fixture.componentInstance;
+    fixture.detectChanges(); // triggers ngOnInit
+
+    expect(storeMock.reload).toHaveBeenCalledTimes(1);
   });
 });
 

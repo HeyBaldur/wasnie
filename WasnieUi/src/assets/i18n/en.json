@@ -84,6 +84,7 @@
     "CREDITS": "Credits",
     "PAYOUTS": "Payouts",
     "PAY_RUNS": "Pay Runs",
+    "PAY_GROUP": "Financials",
     "ADMIN": "Settings",
     "IMPORT_TRANSACTIONS": "Import transactions"
   },

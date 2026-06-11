@@ -24,20 +24,74 @@
           <span class="sidebar__section-label">{{ section.sectionKey | translate }}</span>
         }
         <ul class="sidebar__nav">
-          @for (item of section.items; track item.path) {
-            <li *hasPermission="item.permission" class="sidebar__nav-item">
-              <a
-                [routerLink]="item.path"
-                class="sidebar__nav-link"
-                [class.sidebar__nav-link--active]="isNavActive(item.path)"
-                [title]="!sidebarState.isExpanded() ? (item.labelKey | translate) : ''"
-              >
-                <app-icon [name]="item.icon" [size]="18" />
-                @if (sidebarState.isExpanded()) {
-                  <span class="sidebar__nav-label">{{ item.labelKey | translate }}</span>
+          @for (entry of section.items; track $index) {
+            @if (isNavGroup(entry)) {
+              @if (!sidebarState.isExpanded()) {
+                <!-- Collapsed sidebar: render each child as a flat icon-only link -->
+                @for (child of entry.children; track child.path) {
+                  <li *hasPermission="child.permission" class="sidebar__nav-item">
+                    <a
+                      [routerLink]="child.path"
+                      class="sidebar__nav-link"
+                      [class.sidebar__nav-link--active]="isNavActive(child.path)"
+                      [title]="child.labelKey | translate"
+                    >
+                      <app-icon [name]="child.icon" [size]="18" />
+                    </a>
+                  </li>
                 }
-              </a>
-            </li>
+              } @else {
+                <!-- Expanded sidebar: collapsible group toggle + indented sub-items -->
+                <li *hasPermission="entry.permission" class="sidebar__nav-item">
+                  <button
+                    class="sidebar__nav-link sidebar__nav-group-toggle"
+                    [class.sidebar__nav-link--active]="isGroupActive(entry.children)"
+                    (click)="toggleGroup(entry.key)"
+                    type="button"
+                  >
+                    <app-icon [name]="entry.icon" [size]="18" />
+                    <span class="sidebar__nav-label">{{ entry.labelKey | translate }}</span>
+                    <app-icon
+                      class="sidebar__nav-chevron"
+                      [class.sidebar__nav-chevron--open]="isGroupExpanded(entry.key)"
+                      name="chevron-right"
+                      [size]="14"
+                    />
+                  </button>
+                  @if (isGroupExpanded(entry.key)) {
+                    <ul class="sidebar__nav sidebar__nav--sub">
+                      @for (child of entry.children; track child.path) {
+                        <li *hasPermission="child.permission" class="sidebar__nav-item">
+                          <a
+                            [routerLink]="child.path"
+                            class="sidebar__nav-link sidebar__nav-link--sub"
+                            [class.sidebar__nav-link--active]="isNavActive(child.path)"
+                          >
+                            <app-icon [name]="child.icon" [size]="16" />
+                            <span class="sidebar__nav-label">{{ child.labelKey | translate }}</span>
+                          </a>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </li>
+              }
+            } @else {
+              <!-- Regular flat item -->
+              <li *hasPermission="entry.permission" class="sidebar__nav-item">
+                <a
+                  [routerLink]="entry.path"
+                  class="sidebar__nav-link"
+                  [class.sidebar__nav-link--active]="isNavActive(entry.path)"
+                  [title]="!sidebarState.isExpanded() ? (entry.labelKey | translate) : ''"
+                >
+                  <app-icon [name]="entry.icon" [size]="18" />
+                  @if (sidebarState.isExpanded()) {
+                    <span class="sidebar__nav-label">{{ entry.labelKey | translate }}</span>
+                  }
+                </a>
+              </li>
+            }
           }
         </ul>
       </div>

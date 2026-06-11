@@ -84,6 +84,7 @@
     "CREDITS": "Créditos",
     "PAYOUTS": "Pagos",
     "PAY_RUNS": "Ciclos de pago",
+    "PAY_GROUP": "Finanzas",
     "ADMIN": "Configuración",
     "IMPORT_TRANSACTIONS": "Importar transacciones"
   },

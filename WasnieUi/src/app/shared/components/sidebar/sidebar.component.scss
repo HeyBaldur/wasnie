@@ -123,6 +123,39 @@
   @apply truncate;
 }
 
+// ─── Group toggle ─────────────────────────────────────────────────────────────
+// A <button> styled exactly like a nav-link, plus a right-aligned chevron.
+.sidebar__nav-group-toggle {
+  width: calc(100% - 16px);
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+}
+
+.sidebar__nav-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--color-sidebar-muted);
+  transition: transform 200ms ease;
+
+  &--open {
+    transform: rotate(90deg);
+  }
+}
+
+// ─── Sub-navigation (inside an expanded group) ────────────────────────────────
+.sidebar__nav--sub {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 2px;
+}
+
+.sidebar__nav-link--sub {
+  padding-left: 36px;
+  font-size: 13px;
+}
+
 .sidebar__footer {
   @apply shrink-0;
   padding: 8px 0 4px;

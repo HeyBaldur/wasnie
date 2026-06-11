@@ -317,6 +317,30 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
             "Tenant B has no payouts — action band must not leak across tenants");
     }
 
+    // ── Cancelled exclusion from KPIs ───────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_PeriodBand_ExcludesCancelledTransactionsFromCountAndVolume()
+    {
+        var payeeId = await CreatePayeeAsync(_clientA, "DASH-CNCL-001");
+
+        var validTxId = await CreateTransactionAndGetIdAsync(_clientA, payeeId, amount: 1_000m, currency: "EUR");
+        var cancelledTxId = await CreateTransactionAndGetIdAsync(_clientA, payeeId, amount: 9_000m, currency: "EUR");
+
+        await VoidTransactionAsync(_clientA, cancelledTxId);
+
+        var resp = await _clientA.GetAsync("/api/dashboard?period=ytd");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+
+        body!.PeriodBand.TransactionsCount.Should().Be(1,
+            "the Cancelled transaction must not be counted in the period KPI");
+        body.PeriodBand.TransactionsVolumeByCurrency.Should().HaveCount(1);
+        body.PeriodBand.TransactionsVolumeByCurrency[0].Amount
+            .Should().BeApproximately(1_000m, 0.01m,
+                "only the €1,000 valid transaction contributes to volume; the €9,000 Cancelled tx must be excluded");
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -411,6 +435,31 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
             quantity = 1,
         };
         (await client.PostAsJsonAsync("/api/transactions", req)).EnsureSuccessStatusCode();
+    }
+
+    private async Task<Guid> CreateTransactionAndGetIdAsync(
+        HttpClient client, Guid payeeId, decimal amount, string currency = "EUR")
+    {
+        var req = new
+        {
+            payeeId,
+            referenceNumber = $"DASH-TX-{Guid.NewGuid().ToString("N")[..8]}",
+            amount,
+            currency,
+            transactionDate = "2026-06-01",
+            quantity = 1,
+        };
+        var resp = await client.PostAsJsonAsync("/api/transactions", req);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("id").GetGuid();
+    }
+
+    private async Task VoidTransactionAsync(HttpClient client, Guid txId)
+    {
+        var resp = await client.PostAsJsonAsync($"/api/transactions/{txId}/void",
+            new { reason = "cancelled-exclusion audit test" });
+        resp.EnsureSuccessStatusCode();
     }
 
     // ── Response DTOs ───────────────────────────────────────────────────────

@@ -172,7 +172,8 @@ public sealed class GetDashboardSummaryHandler(
         DateOnly? from, DateOnly? to, CancellationToken ct)
     {
         // Transactions
-        var txQuery = db.CompensationTransactions.AsQueryable();
+        var txQuery = db.CompensationTransactions
+            .Where(t => t.Status != CompensationTransactionStatus.Cancelled);
         if (from.HasValue) txQuery = txQuery.Where(t => t.TransactionDate >= from.Value);
         if (to.HasValue) txQuery = txQuery.Where(t => t.TransactionDate <= to.Value);
 

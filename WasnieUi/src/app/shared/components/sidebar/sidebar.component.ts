@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs/operators';
@@ -16,9 +16,20 @@ interface NavItem {
   permission: string;
 }
 
+interface NavGroupEntry {
+  type: 'group';
+  key: string;
+  labelKey: string;
+  icon: string;
+  permission: string;
+  children: NavItem[];
+}
+
+type NavEntry = NavItem | NavGroupEntry;
+
 interface NavSection {
   sectionKey: string;
-  items: NavItem[];
+  items: NavEntry[];
 }
 
 @Component({
@@ -42,6 +53,51 @@ export class SidebarComponent {
     ),
     { initialValue: this.router.url.split('?')[0] },
   );
+
+  readonly expandedGroups = signal<Set<string>>(new Set<string>());
+
+  constructor() {
+    // Auto-expand any group that contains the active route
+    effect(() => {
+      const url = this.currentUrl();
+      for (const section of this.navSections) {
+        for (const entry of section.items) {
+          if (!this.isNavGroup(entry)) continue;
+          const hasActiveChild = entry.children.some(
+            c => url === c.path || url.startsWith(c.path + '/'),
+          );
+          if (hasActiveChild) {
+            this.expandedGroups.update(s => {
+              if (s.has(entry.key)) return s;
+              const next = new Set(s);
+              next.add(entry.key);
+              return next;
+            });
+          }
+        }
+      }
+    });
+  }
+
+  isNavGroup(entry: NavEntry): entry is NavGroupEntry {
+    return (entry as NavGroupEntry).type === 'group';
+  }
+
+  toggleGroup(key: string): void {
+    this.expandedGroups.update(s => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  isGroupExpanded(key: string): boolean {
+    return this.expandedGroups().has(key);
+  }
+
+  isGroupActive(children: NavItem[]): boolean {
+    return children.some(c => this.isNavActive(c.path));
+  }
 
   isNavActive(path: string): boolean {
     const url = this.currentUrl();
@@ -71,7 +127,17 @@ export class SidebarComponent {
         { path: '/payees', labelKey: 'NAV.PAYEES', icon: 'users', permission: 'Payees.Read' },
         { path: '/transactions', labelKey: 'NAV.TRANSACTIONS', icon: 'arrows-exchange', permission: 'Transactions.Read' },
         { path: '/credits', labelKey: 'NAV.CREDITS', icon: 'receipt', permission: 'Credits.Read' },
-        { path: '/pay-runs', labelKey: 'NAV.PAY_RUNS', icon: 'coin', permission: 'Reports.ViewAll' },
+        {
+          type: 'group',
+          key: 'pay-financials',
+          labelKey: 'NAV.PAY_GROUP',
+          icon: 'coin',
+          permission: 'Reports.ViewAll',
+          children: [
+            { path: '/pay-runs', labelKey: 'NAV.PAY_RUNS', icon: 'coin', permission: 'Reports.ViewAll' },
+            { path: '/payouts', labelKey: 'NAV.PAYOUTS', icon: 'layers', permission: 'Reports.ViewAll' },
+          ],
+        },
       ],
     },
   ];

@@ -47,7 +47,9 @@ public sealed class PayoutExcelExportService : IPayoutExcelExportService
             ws.Cell(excelRow, 4).Value = row.PlanName;
             ws.Cell(excelRow, 5).Value = row.PeriodStart.ToString("yyyy-MM-dd");
             ws.Cell(excelRow, 6).Value = row.PeriodEnd.ToString("yyyy-MM-dd");
-            ws.Cell(excelRow, 7).Value = row.TotalCommissionAmount;
+            var payoutAmountCell = ws.Cell(excelRow, 7);
+            payoutAmountCell.Value = row.TotalCommissionAmount;
+            payoutAmountCell.Style.NumberFormat.Format = "#,##0.00";
             ws.Cell(excelRow, 8).Value = row.TotalCommissionCurrency;
             ws.Cell(excelRow, 9).Value = row.Status;
             ws.Cell(excelRow, 10).Value = row.CalculatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");

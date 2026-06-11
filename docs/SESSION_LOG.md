@@ -8,6 +8,129 @@
 
 ## Sessions (newest first)
 
+## 2026-06-11 — WI-EXCEL-MONEY-FORMAT
+
+### Problem
+Monetary columns in Excel exports (e.g. `TotalCommissionAmount`) displayed in scientific notation (`9.88407E+11`).
+
+### Root cause
+ClosedXML sets cell type to Number when a `decimal` is assigned but applies no display format. Excel's default for unformatted numbers that exceed column width is scientific notation.
+
+### Fix
+Applied `cell.Style.NumberFormat.Format = "#,##0.00"` to every monetary cell in all four services:
+- `PayoutExcelExportService` — col 7 `TotalCommissionAmount`
+- `TransactionExcelExportService` — col 5 `Amount`
+- `CreditExcelExportService` — col 7 `OriginalAmount`, col 9 `CreditedAmount`, col 11 `SplitPercentage`
+- `PayRunExcelExportService` — dynamic columns 14+ (`Amount_{CURRENCY}`)
+
+`Wasnie.Infrastructure` builds clean (0 errors, 0 warnings).
+
+---
+
+## 2026-06-11 — WI-TAB-SESSION-SYNC
+
+### Step 0 — Current state audit
+- **Token storage**: `localStorage` key `wasnie_session` (JSON) — shared across same-origin tabs. No sessionStorage concern; cross-tab approach applies directly.
+- **Inactivity timer**: `InactivityService` — 28 min idle + 2 min countdown warning. One independent timer per tab (root cause of problem 1).
+- **Logout**: `AuthService.logout()` clears signal + localStorage. `forceLogout(true)` additionally saves return URL to sessionStorage.
+- **401 detection**: HTTP error interceptor with auto-refresh + concurrent request queuing (`SessionRefreshService`).
+- **Cross-tab communication**: None — no BroadcastChannel, storage events, or SharedWorker in use.
+
+### Implemented
+
+**New: `TabSyncService`** (`src/app/core/services/tab-sync.service.ts`)
+- Thin BroadcastChannel wrapper. Channel name `wasnie-session` (same-origin scoped by BroadcastChannel spec).
+- Falls back to localStorage storage events (`wasnie:tab-sync`) for environments without BroadcastChannel.
+- `NgZone.run()` wraps incoming messages to re-enter Angular's zone (BroadcastChannel fires outside zone.js).
+- Emits and accepts only `TabSyncMessage = { type: 'activity' | 'logout' | 'session-expired' }` — auth tokens never transmitted.
+- `VALID_TYPES` set validates incoming messages; malformed JSON silently ignored.
+
+**Modified: `AuthService`**
+- Added `clearSessionSilent()` — clears `_currentUser` signal + `localStorage.removeItem`, no broadcast. Called when reacting to remote events to prevent re-broadcast loops.
+- `logout()` = `clearSessionSilent()` + `tabSync.broadcast({ type: 'logout' })` (guarded: only if `wasAuthenticated`).
+- `forceLogout()` = optional state save + `clearSessionSilent()` + `tabSync.broadcast({ type: 'session-expired' })` (guarded). No longer delegates to `logout()`.
+
+**Modified: `InactivityService`**
+- Injects `TabSyncService`.
+- `resetTimer()` now calls `_broadcastActivity()` — throttled to one broadcast per 5 s via `_lastActivityBroadcast` timestamp (prevents channel flooding from high-frequency mousemove events).
+- `start()` subscribes `_syncSub` to `tabSync.messages$`.
+- `stop()` unsubscribes and nullifies `_syncSub`.
+- `_handleTabSync(msg)`: `'activity'` → close any open warning + restart idle timer (so any tab's activity extends session for all); `'logout'` → `_applyRemoteLogout(false)`; `'session-expired'` → `_applyRemoteLogout(true)`.
+- `_applyRemoteLogout(showToast)`: calls `this.stop()` + `authService.clearSessionSilent()` (not `logout()`) + optional toast + redirect. Using `clearSessionSilent()` prevents the remote-logout handler from re-broadcasting.
+
+### Smoke checklist (manual)
+- Open 2 tabs → logout in Tab A → Tab B silently redirects to login (no toast).
+- Let both tabs idle for 28 min → warning appears in both → dismiss in one → warning dismissed in both.
+- Stay active in Tab A → Tab B never opens the warning (activity messages reset its timer).
+- Let all tabs idle 28 min + 2 min → all expire with toast simultaneously.
+- 401 in one tab → all tabs redirect to login with session-expired toast.
+
+### Tests
+- `tab-sync.service.spec.ts` — 11 tests: BroadcastChannel path (opens named channel, postMessage, incoming messages, close on destroy) + localStorage fallback (setItem on broadcast, storage event → messages$, rejects unknown types and malformed JSON).
+- `cross-tab-session.spec.ts` — 16 tests: sync reactions (logout/session-expired/no-rebroadcast/unsubscribe-on-stop), timer reactions (activity resets idle timer, activity dismisses warning — fakeAsync with start inside each it), throttle (first broadcast, rapid burst stays at 1, second broadcast after interval, no broadcast when warning open), AuthService broadcast (logout/forceLogout/clearSessionSilent/guard).
+
+### Build & test results
+- `ng build --configuration production`: clean (0 new errors or warnings)
+- `ng test --no-watch`: 359 total — 354 pass, 5 fail (all 5 pre-existing `ProcessPendingComponent` HTTP-mock teardown failures)
+
+## 2026-06-11 — WI-PAYOUTS-MENU-AND-STALE
+
+### Completed
+**Problem 1 — Stale data on /payouts re-navigation**
+
+Root cause: `PayoutsStore` is `@Injectable({ providedIn: 'root' })` (singleton) and loads exclusively through a constructor `effect()` that fires only when a signal changes. Re-navigating to `/payouts` without changing the filter (same `this-month` dates) leaves the signal unchanged → effect silent → stale data shown. A hard browser refresh re-instantiated the singleton, masking the bug.
+
+Fix: Added `void this.store.reload()` at the end of `ngOnInit()` in `payouts-list.component.ts` — one unconditional fresh load per route activation. Since `ngOnInit` only runs on component creation (not on signal changes), this cannot create a reload loop.
+
+Spec updates:
+- Added `storeMock.reload.calls.reset()` after `fixture.detectChanges()` in the poll-loop and onBulkMarkPaid `beforeEach` blocks (6 tests were measuring reload calls starting from 1 instead of 0).
+- Added new test: `calls store.reload() exactly once on route activation regardless of filter state`.
+
+Note: identical stale pattern exists in `pay-runs-list.component.ts` and `credits-list.component.ts` (both singleton stores + effect-only loading, no `reload()` in `ngOnInit`). Not fixed by this WI — reported for future WI.
+
+**Problem 2 — Payouts missing from sidebar**
+
+Converted the flat "Pay Runs" `NavItem` into a collapsible `NavGroupEntry` with two children: Pay Runs → `/pay-runs` (icon: `coin`) and Payouts → `/payouts` (icon: `layers`).
+
+Changed files:
+- `sidebar.component.ts`: Added `NavGroupEntry` interface and `NavEntry = NavItem | NavGroupEntry` union. Added `expandedGroups: Signal<Set<string>>`, `constructor()` with `effect()` that auto-expands any group containing the active route (prevents arriving at `/payouts` with the group closed). Added `toggleGroup`, `isGroupExpanded`, `isGroupActive`, `isNavGroup` methods.
+- `sidebar.component.html`: `@for` loop now branches on `isNavGroup(entry)`. Collapsed sidebar renders group children as flat icon-only links. Expanded sidebar renders a `<button>` group toggle with chevron + a nested `sidebar__nav--sub` `<ul>` for children.
+- `sidebar.component.scss`: Added `.sidebar__nav-group-toggle` (button with `background:none`, full width), `.sidebar__nav-chevron` (`margin-left:auto`), `.sidebar__nav--sub` (sub-list container), `.sidebar__nav-link--sub` (`padding-left:36px`, 13px font).
+
+i18n: `NAV.PAYOUTS` and `NAV.PAY_RUNS` already existed in EN, ES, PL — no changes required.
+
+### Test results
+- `ng build --configuration production`: clean (0 new errors or warnings)
+- `ng test --no-watch`: 332 total — 327 pass, 5 fail (all 5 pre-existing `ProcessPendingComponent` HTTP-mock teardown failures, unchanged since WI-A7)
+
+## 2026-06-11 — WI-AUDIT-CANCELLED-EXCLUSION: Cancelled transactions excluded from all calculations
+
+**Scope:** Read-only audit of all 14 surfaces that query or aggregate transactions; find any that include Cancelled in financial calculations; fix and test.
+
+**Audit results:**
+- 13 surfaces: correct (explicit Pending filter, or structural guarantee, or view/audit context)
+- 1 bug: `GetDashboardSummaryHandler.BuildPeriodBandAsync` — no status filter on `TransactionsCount` / `TransactionsVolumeByCurrency` KPIs
+
+**Key structural guarantee (no separate fix needed):**
+- `Cancel()` is domain-enforced to only work on `Pending` transactions
+- Credits are only created when `Pending → Calculated` (via CreditAllocationService and ProcessPending)
+- Therefore: no Cancelled transaction can ever have Credits → QuotaAttainmentService and CalculatePayoutsForPeriodHandler are safe by construction even without explicit status filters
+
+**Fix applied:**
+- `GetDashboardSummaryHandler.cs` line 175: added `.Where(t => t.Status != CompensationTransactionStatus.Cancelled)` to `txQuery` base
+
+**Test added:**
+- `DashboardEndpointsTests.GetDashboard_PeriodBand_ExcludesCancelledTransactionsFromCountAndVolume`
+- Seeds: 1 valid tx (€1,000) + 1 voided tx (€9,000), same period
+- Asserts: `TransactionsCount == 1` and `TransactionsVolumeByCurrency[0].Amount ≈ 1,000`
+- Result: PASS
+
+**Confirmed invariants:**
+- Cancelled NOT in calculations/aggregations: ✅ all 14 surfaces
+- Cancelled VISIBLE in views/export (ListTransactions, ExportTransactions): ✅ unchanged
+
+**Test counts:** 404/404 unit; 1/1 new integration test; build clean.
+
 ## 2026-06-10 — WI-2: Checkbox "Calcular al registrar" en Record Transaction + nota informativa
 
 **Scope:** Add `processImmediately` boolean flag (default=true) to the Record Transaction flow. When unchecked, transaction is saved as Pending with no credit allocation. When checked (default), existing calculation logic runs unchanged.

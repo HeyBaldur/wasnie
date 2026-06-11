@@ -48,7 +48,9 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
             ws.Cell(excelRow, 2).Value = row.ReferenceNumber;
             ws.Cell(excelRow, 3).Value = row.StaffId ?? string.Empty;
             ws.Cell(excelRow, 4).Value = row.PayeeName ?? string.Empty;
-            ws.Cell(excelRow, 5).Value = row.Amount;
+            var txAmountCell = ws.Cell(excelRow, 5);
+            txAmountCell.Value = row.Amount;
+            txAmountCell.Style.NumberFormat.Format = "#,##0.00";
             ws.Cell(excelRow, 6).Value = row.Currency;
             ws.Cell(excelRow, 7).Value = row.Quantity;
             ws.Cell(excelRow, 8).Value = row.TransactionDate.ToString("yyyy-MM-dd");
