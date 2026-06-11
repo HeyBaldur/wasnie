@@ -1,5 +1,5 @@
 import { Component, HostListener, inject, OnInit, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -53,6 +53,7 @@ import {
 export class PayeesListComponent implements OnInit {
   readonly store = inject(PayeesStore);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly PayeeStatus = PayeeStatus;
   readonly openMenuId = signal<string | null>(null);
@@ -83,6 +84,10 @@ export class PayeesListComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    const qp = this.route.snapshot.queryParams as Record<string, string>;
+    if (qp['status'] && ['Active', 'OnLeave', 'Terminated'].includes(qp['status'])) {
+      this.store.setStatus(qp['status'] as PayeeStatus);
+    }
     this.store.loadPayees();
   }
 

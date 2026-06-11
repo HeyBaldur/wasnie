@@ -7,6 +7,7 @@ using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Dashboard;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Plans;
@@ -36,6 +37,8 @@ public sealed class GetDashboardSummaryHandler(
         var priorLabel = PeriodHelper.GetPriorPeriodLabel(period, today);
 
         var actionBand = await BuildActionBandAsync(cancellationToken);
+        var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
+        actionBand = actionBand with { PendingByPlanItems = pendingByPlan };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
             ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, periodLabel, priorLabel, cancellationToken)
@@ -57,9 +60,12 @@ public sealed class GetDashboardSummaryHandler(
         var draftPayRuns = await db.PayRuns
             .CountAsync(r => r.Status == PayRunStatus.Draft, ct);
 
-        // Payouts pending approval = Status.Calculated; grouped by currency for Pattern B
+        // Payouts pending approval = Status.Calculated, non-zero amount only.
+        // Mirrors the payouts list default (hideZero=true / ExcludeZero=true) so that
+        // the card count matches what the user sees when they click through to the list.
         var pendingRaw = await db.CompensationPayouts
-            .Where(p => p.Status == CompensationPayoutStatus.Calculated)
+            .Where(p => p.Status == CompensationPayoutStatus.Calculated
+                     && p.TotalCommission.Amount > 0)
             .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })
             .ToListAsync(ct);
 
@@ -70,9 +76,10 @@ public sealed class GetDashboardSummaryHandler(
             .OrderBy(t => t.Currency)
             .ToList();
 
-        // Approved but not yet paid = Status.Approved
+        // Approved but not yet paid = Status.Approved, non-zero amount only.
         var approvedUnpaidRaw = await db.CompensationPayouts
-            .Where(p => p.Status == CompensationPayoutStatus.Approved)
+            .Where(p => p.Status == CompensationPayoutStatus.Approved
+                     && p.TotalCommission.Amount > 0)
             .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })
             .ToListAsync(ct);
 
@@ -86,7 +93,77 @@ public sealed class GetDashboardSummaryHandler(
             DraftPayRunsCount: draftPayRuns,
             PayoutsPendingApprovalCount: pendingCount,
             PayoutsPendingApprovalByCurrency: pendingByCurrency,
-            PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency);
+            PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency,
+            PendingByPlanItems: []);
+    }
+
+    // ── Pending transactions grouped by plan (action band supplement) ─────────
+    // Anti-Cartesian: three separate queries; matching done in-memory.
+    // Counts distinct Pending transaction IDs eligible for the ByPlan ProcessPending scope.
+
+    private async Task<IReadOnlyList<PlanPendingCountDto>> BuildPendingByPlanAsync(CancellationToken ct)
+    {
+        // Load active assignments that have an effective period (full entities — owned type)
+        var activeAssignments = await db.PlanAssignments
+            .Where(a => a.Status == AssignmentStatus.Active)
+            .ToListAsync(ct);
+
+        var withPeriod = activeAssignments.Where(a => a.EffectivePeriod is not null).ToList();
+        if (withPeriod.Count == 0) return [];
+
+        // Load plan name + currency for those plans
+        var planIds = withPeriod.Select(a => a.PlanId).Distinct().ToList();
+        var plans = await db.CompensationPlans
+            .Where(p => planIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, p.Currency })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        // Load all Pending transactions for the relevant payees (one query)
+        var payeeIds = withPeriod.Select(a => a.PayeeId).Distinct().ToList();
+        var pendingTx = await db.CompensationTransactions
+            .Where(t => t.Status == CompensationTransactionStatus.Pending
+                     && t.PayeeId.HasValue
+                     && payeeIds.Contains(t.PayeeId!.Value))
+            .Select(t => new
+            {
+                t.Id,
+                PayeeId = t.PayeeId!.Value,
+                t.TransactionDate,
+                Currency = t.Amount.Currency,
+            })
+            .ToListAsync(ct);
+
+        if (pendingTx.Count == 0) return [];
+
+        // Match in-memory: collect distinct Tx IDs per plan (HashSet prevents double-counting
+        // when a payee has multiple overlapping assignments to the same plan — rare but possible)
+        var txSetByPlan = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var a in withPeriod)
+        {
+            if (!plans.TryGetValue(a.PlanId, out var plan)) continue;
+            var start = a.EffectivePeriod!.Start;
+            var end = a.EffectivePeriod.End;
+            foreach (var t in pendingTx.Where(t =>
+                t.PayeeId == a.PayeeId
+                && t.TransactionDate >= start
+                && t.TransactionDate <= end
+                && t.Currency == plan.Currency))
+            {
+                if (!txSetByPlan.TryGetValue(a.PlanId, out var set))
+                    txSetByPlan[a.PlanId] = set = [];
+                set.Add(t.Id);
+            }
+        }
+
+        return txSetByPlan
+            .Where(kvp => kvp.Value.Count > 0)
+            .OrderByDescending(kvp => kvp.Value.Count)
+            .Select(kvp => new PlanPendingCountDto(
+                PlanId: kvp.Key,
+                PlanName: plans[kvp.Key].Name,
+                Currency: plans[kvp.Key].Currency,
+                PendingCount: kvp.Value.Count))
+            .ToList();
     }
 
     // ── Banda 2 — period-filtered state ──────────────────────────────────────

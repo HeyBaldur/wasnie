@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -44,6 +44,68 @@ import {
 })
 export class DashboardComponent {
   readonly store = inject(DashboardStore);
+
+  // ── Period-aware query params for period band links ───────────────────────
+  // Each computes the correct filter params for the destination list so the
+  // data shown on arrival matches exactly what the dashboard card displays.
+
+  readonly payoutsLinkParams = computed(() => {
+    const key = this.store.period();
+    const { from, to } = this._periodDates(key);
+    const p: Record<string, string> = { period: key };
+    if (from) p['pFrom'] = from;
+    if (to) p['pTo'] = to;
+    return p;
+  });
+
+  readonly transactionsLinkParams = computed(() => {
+    const { from, to } = this._periodDates(this.store.period());
+    const p: Record<string, string> = {};
+    if (from) p['txFrom'] = from;
+    if (to) p['txTo'] = to;
+    return p;
+  });
+
+  readonly creditsLinkParams = computed(() => {
+    const { from, to } = this._periodDates(this.store.period());
+    const p: Record<string, string> = {};
+    if (from) p['allocFrom'] = from;
+    if (to) p['allocTo'] = to;
+    return p;
+  });
+
+  /**
+   * Mirrors PeriodHelper.ComputeDateRange on the backend.
+   * this-month: first of month → today
+   * last-month: first of prev month → last day of prev month
+   * ytd: Jan 1 → today
+   * all-time: null, null
+   */
+  _periodDates(key: string): { from: string | null; to: string | null } {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    switch (key) {
+      case 'this-month':
+        return { from: `${yyyy}-${mm}-01`, to: todayStr };
+      case 'last-month': {
+        const first = new Date(yyyy, today.getMonth() - 1, 1);
+        const last = new Date(yyyy, today.getMonth(), 0);
+        const fy = first.getFullYear();
+        const fm = String(first.getMonth() + 1).padStart(2, '0');
+        const ly = last.getFullYear();
+        const lm = String(last.getMonth() + 1).padStart(2, '0');
+        const ld = String(last.getDate()).padStart(2, '0');
+        return { from: `${fy}-${fm}-01`, to: `${ly}-${lm}-${ld}` };
+      }
+      case 'ytd':
+        return { from: `${yyyy}-01-01`, to: todayStr };
+      default:
+        return { from: null, to: null };
+    }
+  }
 
   readonly periodOptions: SegOption[] = [
     { value: 'this-month', label: 'DASHBOARD.PERIOD_THIS_MONTH' },
@@ -105,6 +167,11 @@ export class DashboardComponent {
     return name.length > 28 ? `${name.slice(0, 26)}…` : name;
   }
 
+  /** Total pending transaction count across all plans (for the pending-by-plan card badge). */
+  pendingByPlanTotalCount(): number {
+    return this.store.actionBand()?.pendingByPlanItems?.reduce((s, x) => s + x.pendingCount, 0) ?? 0;
+  }
+
   /** Total count of action items needing attention (for band header badge). */
   pendingActionCount(): number {
     const b = this.store.actionBand();
@@ -112,12 +179,15 @@ export class DashboardComponent {
     return (
       b.draftPayRunsCount +
       b.payoutsPendingApprovalCount +
-      (b.payoutsApprovedUnpaidByCurrency.length > 0 ? 1 : 0)
+      (b.payoutsApprovedUnpaidByCurrency.length > 0 ? 1 : 0) +
+      b.pendingByPlanItems.reduce((s, x) => s + x.pendingCount, 0)
     );
   }
 
   relativeTime(isoUtc: string): string {
-    const diff = Date.now() - new Date(isoUtc).getTime();
+    // C# DateTime serialization can omit 'Z'; without it JS parses as local time instead of UTC
+    const utcStr = /Z$|[+-]\d{2}:\d{2}$/.test(isoUtc) ? isoUtc : isoUtc + 'Z';
+    const diff = Date.now() - new Date(utcStr).getTime();
     const mins = Math.floor(diff / 60_000);
     if (mins < 60) return `${Math.max(0, mins)}m`;
     const hours = Math.floor(mins / 60);

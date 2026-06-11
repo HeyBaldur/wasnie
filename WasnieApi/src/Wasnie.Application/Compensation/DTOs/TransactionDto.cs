@@ -16,4 +16,7 @@ public sealed record TransactionDto(
     string IngestedBy,
     DateTimeOffset UpdatedAt,
     string? PayeeName = null,
-    string? PayeeEmployeeCode = null);
+    string? PayeeEmployeeCode = null,
+    string? CancelledBy = null,
+    DateTimeOffset? CancelledAt = null,
+    string? CancelledReason = null);

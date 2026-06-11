@@ -201,5 +201,13 @@
     white-space: pre;
     max-height: 400px;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+
+    &::-webkit-scrollbar { width: 6px; height: 6px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 9999px; }
+    &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
+    &::-webkit-scrollbar-corner { background: transparent; }
   }
 }

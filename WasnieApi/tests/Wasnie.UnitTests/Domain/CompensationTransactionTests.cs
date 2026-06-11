@@ -175,7 +175,7 @@ public sealed class CompensationTransactionTests
     public void MarkEligible_WhenCancelled_ThrowsDomainException()
     {
         var tx = IngestValid();
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
         var act = () => tx.MarkEligible("validator", ValidNow, Guid.NewGuid());
@@ -191,7 +191,7 @@ public sealed class CompensationTransactionTests
         var tx = IngestValid();
         tx.ClearDomainEvents();
 
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
 
         tx.Status.Should().Be(CompensationTransactionStatus.Cancelled);
     }
@@ -202,45 +202,65 @@ public sealed class CompensationTransactionTests
         var tx = IngestValid();
         tx.ClearDomainEvents();
 
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
 
         tx.DomainEvents.Should().ContainSingle()
             .Which.Should().BeOfType<TransactionCancelledEvent>();
     }
 
     [Fact]
-    public void Cancel_WhenEligible_TransitionsToCancelled()
+    public void Cancel_WhenPending_SetsCancellationAuditFields()
     {
         var tx = IngestValid();
-        tx.MarkEligible("validator", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("duplicate entry", "mgr-01", ValidNow, Guid.NewGuid());
 
-        tx.Status.Should().Be(CompensationTransactionStatus.Cancelled);
+        tx.CancelledBy.Should().Be("mgr-01");
+        tx.CancelledAt.Should().Be(ValidNow);
+        tx.CancelledReason.Should().Be("duplicate entry");
     }
 
     [Fact]
-    public void Cancel_WhenEligible_RaisesTransactionCancelledEvent()
+    public void Cancel_WhenEligible_ThrowsDomainException()
     {
         var tx = IngestValid();
         tx.MarkEligible("validator", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        var act = () => tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
 
-        tx.DomainEvents.Should().ContainSingle()
-            .Which.Should().BeOfType<TransactionCancelledEvent>();
+        act.Should().Throw<DomainException>().WithMessage("*Only Pending*");
+    }
+
+    [Fact]
+    public void Cancel_WithEmptyReason_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+
+        var act = () => tx.Cancel("  ", "user", ValidNow, Guid.NewGuid());
+
+        act.Should().Throw<DomainException>().WithMessage("*reason*");
+    }
+
+    [Fact]
+    public void Cancel_WithShortReason_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+
+        var act = () => tx.Cancel("ab", "user", ValidNow, Guid.NewGuid());
+
+        act.Should().Throw<DomainException>().WithMessage("*3 characters*");
     }
 
     [Fact]
     public void Cancel_WhenAlreadyCancelled_ThrowsDomainException()
     {
         var tx = IngestValid();
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
-        var act = () => tx.Cancel("user", ValidNow, Guid.NewGuid());
+        var act = () => tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
 
         act.Should().Throw<DomainException>().WithMessage("*already cancelled*");
     }
@@ -302,7 +322,7 @@ public sealed class CompensationTransactionTests
     public void MarkCalculated_WhenCancelled_ThrowsDomainException()
     {
         var tx = IngestValid();
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
         var act = () => tx.MarkCalculated(1, ValidCommission, "engine", ValidNow, Guid.NewGuid());
@@ -353,7 +373,7 @@ public sealed class CompensationTransactionTests
         var tx = IngestValid();
         tx.ClearDomainEvents();
 
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
 
         tx.DomainEvents.Should().HaveCount(1);
     }
@@ -456,7 +476,7 @@ public sealed class CompensationTransactionTests
     public void Assign_WhenCancelled_Succeeds()
     {
         var tx = IngestUnassigned();
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
         var act = () => tx.Assign(Guid.NewGuid(), null, "user", ValidNow.AddHours(1), Guid.NewGuid());
@@ -531,7 +551,7 @@ public sealed class CompensationTransactionTests
     public void Reassign_WhenCancelled_Succeeds()
     {
         var tx = IngestValid();
-        tx.Cancel("user", ValidNow, Guid.NewGuid());
+        tx.Cancel("test void reason", "user", ValidNow, Guid.NewGuid());
         tx.ClearDomainEvents();
 
         var act = () => tx.Reassign(Guid.NewGuid(), "administrative closure correction", "user", ValidNow.AddHours(1), Guid.NewGuid());

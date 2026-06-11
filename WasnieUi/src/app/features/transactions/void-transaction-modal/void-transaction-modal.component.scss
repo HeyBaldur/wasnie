@@ -1,0 +1,105 @@
+@reference "../../../../styles.scss";
+
+.void-modal__context {
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.void-modal__context-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.void-modal__context-label {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.void-modal__context-value {
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+  font-weight: 500;
+
+  &--amount {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.void-modal__field {
+  margin-bottom: var(--space-4);
+
+  &:last-of-type {
+    margin-bottom: 0;
+  }
+}
+
+.void-modal__label {
+  display: block;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
+  line-height: 1;
+}
+
+.void-modal__textarea {
+  width: 100%;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-14);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  line-height: 1.55;
+  resize: vertical;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  box-sizing: border-box;
+  outline: none;
+
+  &::placeholder {
+    color: var(--color-text-placeholder);
+  }
+
+  &:hover {
+    border-color: var(--color-border-strong);
+  }
+
+  &:focus {
+    border-color: var(--color-border-focus);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.void-modal__field--error .void-modal__textarea {
+  border-color: var(--color-danger);
+
+  &:focus {
+    box-shadow: 0 0 0 3px var(--color-danger-border);
+  }
+}
+
+.void-modal__error-msg {
+  display: block;
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
+  margin-top: var(--space-1);
+}
+
+.void-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}

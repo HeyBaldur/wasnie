@@ -50,6 +50,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         body.ActionBand.PayoutsPendingApprovalCount.Should().Be(0);
         body.ActionBand.PayoutsPendingApprovalByCurrency.Should().BeEmpty();
         body.ActionBand.PayoutsApprovedUnpaidByCurrency.Should().BeEmpty();
+        body.ActionBand.PendingByPlanItems.Should().BeEmpty();
 
         body.PeriodBand.TransactionsCount.Should().Be(0);
         body.PeriodBand.TransactionsVolumeByCurrency.Should().BeEmpty();
@@ -172,6 +173,150 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         body!.TrendBand.Should().BeNull("all-time has no comparable prior period");
     }
 
+    // ── PendingByPlanItems ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetDashboard_PendingByPlanItems_IsEmptyWhenNoAssignmentsOrTransactions()
+    {
+        var response = await _clientA.GetAsync("/api/dashboard?period=this-month");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await response.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+        body!.ActionBand.PendingByPlanItems.Should().BeEmpty(
+            "empty tenant has no pending transactions");
+    }
+
+    [Fact]
+    public async Task GetDashboard_PendingByPlanItems_IsTenantScoped()
+    {
+        var payeeId = await CreatePayeeAsync(_clientA, "DASH-PEND-MT-001");
+        var planId = await CreateActivePlanAsync(_clientA, "EUR");
+        await CreateAssignmentAsync(_clientA, payeeId, planId);
+        await CreateTransactionAsync(_clientA, payeeId, planId, amount: 1_000m, currency: "EUR");
+
+        var bodyA = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
+            .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+        var bodyB = await (await _clientB.GetAsync("/api/dashboard?period=all-time"))
+            .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+
+        bodyA!.ActionBand.PendingByPlanItems.Should().HaveCount(1,
+            "Tenant A has 1 plan with a pending transaction");
+        bodyA.ActionBand.PendingByPlanItems[0].PendingCount.Should().Be(1);
+        bodyA.ActionBand.PendingByPlanItems[0].Currency.Should().Be("EUR");
+
+        bodyB!.ActionBand.PendingByPlanItems.Should().BeEmpty(
+            "Tenant B has no pending transactions");
+    }
+
+    [Fact]
+    public async Task GetDashboard_PendingByPlanItems_TwoPlans_CountsAreNotCartesianMultiplied()
+    {
+        // 2 plans, 1 payee assigned to each, 1 pending tx per plan — expect count=1 per plan.
+        var payeeId1 = await CreatePayeeAsync(_clientA, "DASH-PEND-AC-001");
+        var payeeId2 = await CreatePayeeAsync(_clientA, "DASH-PEND-AC-002");
+        var planId1 = await CreateActivePlanAsync(_clientA, "EUR");
+        var planId2 = await CreateActivePlanAsync(_clientA, "EUR");
+
+        await CreateAssignmentAsync(_clientA, payeeId1, planId1);
+        await CreateAssignmentAsync(_clientA, payeeId2, planId2);
+
+        await CreateTransactionAsync(_clientA, payeeId1, planId1, amount: 500m, currency: "EUR");
+        await CreateTransactionAsync(_clientA, payeeId2, planId2, amount: 700m, currency: "EUR");
+
+        var body = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
+            .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+
+        body!.ActionBand.PendingByPlanItems.Should().HaveCount(2,
+            "two plans each have 1 pending transaction");
+        body.ActionBand.PendingByPlanItems.Should().AllSatisfy(item =>
+            item.PendingCount.Should().Be(1,
+                "each plan has exactly 1 pending tx — Cartesian would inflate this"));
+    }
+
+    // ── Action band — Pending Approval count matches list default (hideZero=true) ──
+
+    [Fact]
+    public async Task GetDashboard_ActionBand_PendingApprovalCount_ExcludesZeroAmountPayouts()
+    {
+        // Two payees, same plan. Only one gets a transaction (→ non-zero payout).
+        // The other has an assignment but no credits → $0 payout is created by the engine.
+        // Dashboard must count only the non-zero one — matching the payouts list default (hideZero=true).
+        var payeeWithAmount = await CreatePayeeAsync(_clientA, "DASH-PPA-AMT-001");
+        var payeeZero       = await CreatePayeeAsync(_clientA, "DASH-PPA-ZERO-001");
+        var planId = await CreateActivePlanAsync(_clientA, "EUR"); // 5% flat rate
+
+        await CreateAssignmentAsync(_clientA, payeeWithAmount, planId);
+        await CreateAssignmentAsync(_clientA, payeeZero,       planId);
+
+        // Only payeeWithAmount gets a transaction → €10,000 × 5% = €500 credit
+        await CreateTransactionAsync(_clientA, payeeWithAmount, planId, amount: 10_000m, currency: "EUR");
+
+        // Process pending (async Hangfire job) — poll for credit to appear (up to 5 s)
+        var processReq = new { scope = 0, scopeId = planId };
+        (await _clientA.PostAsJsonAsync("/api/transactions/process-pending", processReq))
+            .EnsureSuccessStatusCode();
+
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(500);
+            var cr = await _clientA.GetAsync("/api/credits?pageSize=1");
+            var crBody = await cr.Content.ReadFromJsonAsync<JsonElement>();
+            if (crBody.GetProperty("totalCount").GetInt32() > 0) break;
+        }
+
+        // Calculate pay run: creates 2 payouts — payeeWithAmount at €500, payeeZero at €0
+        var calcReq = new { periodStart = "2026-01-01", periodEnd = "2026-12-31" };
+        (await _clientA.PostAsJsonAsync("/api/pay-runs/calculate", calcReq))
+            .EnsureSuccessStatusCode();
+
+        var resp = await _clientA.GetAsync("/api/dashboard?period=all-time");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+
+        body!.ActionBand.PayoutsPendingApprovalCount.Should().Be(1,
+            "only non-zero Calculated payouts count — the $0 payout must be excluded " +
+            "to match the payouts list default (hideZero=true)");
+        body.ActionBand.PayoutsPendingApprovalByCurrency.Should().HaveCount(1);
+        body.ActionBand.PayoutsPendingApprovalByCurrency[0].Currency.Should().Be("EUR");
+        body.ActionBand.PayoutsPendingApprovalByCurrency[0].Amount
+            .Should().BeApproximately(500m, 0.01m,
+                "€10,000 × 5% flat rate = €500; the $0 payout contributes nothing to the total");
+    }
+
+    [Fact]
+    public async Task GetDashboard_ActionBand_PayoutsPendingApprovalCount_IsTenantScoped()
+    {
+        // Seed 1 Calculated payout in Tenant A; Tenant B has none.
+        var payeeA = await CreatePayeeAsync(_clientA, "DASH-PPA-MT-A01");
+        var planA  = await CreateActivePlanAsync(_clientA, "EUR");
+        await CreateAssignmentAsync(_clientA, payeeA, planA);
+        await CreateTransactionAsync(_clientA, payeeA, planA, amount: 5_000m, currency: "EUR");
+
+        (await _clientA.PostAsJsonAsync("/api/transactions/process-pending",
+            new { scope = 0, scopeId = planA })).EnsureSuccessStatusCode();
+
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(500);
+            var cr = await _clientA.GetAsync("/api/credits?pageSize=1");
+            var crBody = await cr.Content.ReadFromJsonAsync<JsonElement>();
+            if (crBody.GetProperty("totalCount").GetInt32() > 0) break;
+        }
+
+        (await _clientA.PostAsJsonAsync("/api/pay-runs/calculate",
+            new { periodStart = "2026-01-01", periodEnd = "2026-06-30" })).EnsureSuccessStatusCode();
+
+        var dashA = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
+            .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+        var dashB = await (await _clientB.GetAsync("/api/dashboard?period=all-time"))
+            .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
+
+        dashA!.ActionBand.PayoutsPendingApprovalCount.Should().Be(1,
+            "Tenant A created 1 non-zero Calculated payout");
+        dashB!.ActionBand.PayoutsPendingApprovalCount.Should().Be(0,
+            "Tenant B has no payouts — action band must not leak across tenants");
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -281,7 +426,11 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         int DraftPayRunsCount,
         int PayoutsPendingApprovalCount,
         CurrencyTotalResponse[] PayoutsPendingApprovalByCurrency,
-        CurrencyTotalResponse[] PayoutsApprovedUnpaidByCurrency);
+        CurrencyTotalResponse[] PayoutsApprovedUnpaidByCurrency,
+        PlanPendingCountResponse[] PendingByPlanItems);
+
+    private sealed record PlanPendingCountResponse(
+        Guid PlanId, string PlanName, string Currency, int PendingCount);
 
     private sealed record PeriodBandResponse(
         int TransactionsCount,

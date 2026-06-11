@@ -1,4 +1,5 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -34,6 +35,13 @@ describe('DashboardComponent helpers', () => {
     it('returns days when 3 days ago', () => {
       const ts = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
       expect(component.relativeTime(ts)).toBe('3d');
+    });
+
+    it('treats ISO string without Z suffix as UTC (not local time)', () => {
+      // C# DateTime serialization omits Z; JS would otherwise add a local-timezone offset
+      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const noZ = tenMinAgo.toISOString().replace('Z', ''); // strip timezone marker
+      expect(component.relativeTime(noZ)).toBe('10m');
     });
   });
 
@@ -171,13 +179,38 @@ describe('DashboardComponent helpers', () => {
       expect(component.pendingActionCount()).toBe(0);
     });
 
-    it('counts draft pay runs + pending approval items', () => {
+    it('counts draft pay runs + pending approval items + pending-by-plan totals', () => {
       component.store.summary.set(buildMockSummary({
         draftPayRunsCount: 2,
         payoutsPendingApprovalCount: 5,
         payoutsApprovedUnpaidByCurrency: [{ amount: 1000, currency: 'EUR' }],
+        pendingByPlanItems: [
+          { planId: 'p1', planName: 'Plan A', currency: 'EUR', pendingCount: 3 },
+          { planId: 'p2', planName: 'Plan B', currency: 'USD', pendingCount: 4 },
+        ],
       }));
-      expect(component.pendingActionCount()).toBe(8);
+      expect(component.pendingActionCount()).toBe(15); // 2 + 5 + 1 + 3 + 4
+    });
+  });
+
+  describe('pendingByPlanTotalCount', () => {
+    it('returns 0 with no summary', () => {
+      expect(component.pendingByPlanTotalCount()).toBe(0);
+    });
+
+    it('returns 0 when pendingByPlanItems is empty', () => {
+      component.store.summary.set(buildMockSummary({ pendingByPlanItems: [] }));
+      expect(component.pendingByPlanTotalCount()).toBe(0);
+    });
+
+    it('sums pending counts across all plans', () => {
+      component.store.summary.set(buildMockSummary({
+        pendingByPlanItems: [
+          { planId: 'p1', planName: 'Plan A', currency: 'EUR', pendingCount: 7 },
+          { planId: 'p2', planName: 'Plan B', currency: 'USD', pendingCount: 3 },
+        ],
+      }));
+      expect(component.pendingByPlanTotalCount()).toBe(10);
     });
   });
 
@@ -192,6 +225,139 @@ describe('DashboardComponent helpers', () => {
       expect(bars[0]).toEqual({ label: 'Apr 2026', value: 900, currency: 'EUR' });
       expect(bars[1]).toEqual({ label: 'May 2026', value: 1200, currency: 'EUR', isCurrent: true });
     });
+  });
+
+  // ── Period link params ────────────────────────────────────────────────────
+
+  describe('_periodDates', () => {
+    it('returns null dates for all-time', () => {
+      const { from, to } = component._periodDates('all-time');
+      expect(from).toBeNull();
+      expect(to).toBeNull();
+    });
+
+    it('returns null dates for unknown period key', () => {
+      const { from, to } = component._periodDates('unknown-key');
+      expect(from).toBeNull();
+      expect(to).toBeNull();
+    });
+
+    it('this-month: from is first of current month', () => {
+      const { from } = component._periodDates('this-month');
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      expect(from).toBe(`${yyyy}-${mm}-01`);
+    });
+
+    it('this-month: to is today', () => {
+      const { to } = component._periodDates('this-month');
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      expect(to).toBe(`${yyyy}-${mm}-${dd}`);
+    });
+
+    it('ytd: from is Jan 1 of current year', () => {
+      const { from } = component._periodDates('ytd');
+      expect(from).toBe(`${new Date().getFullYear()}-01-01`);
+    });
+  });
+
+  describe('payoutsLinkParams', () => {
+    it('includes period key', () => {
+      component.store.setPeriod('last-month');
+      expect(component.payoutsLinkParams()['period']).toBe('last-month');
+    });
+
+    it('all-time: no pFrom or pTo', () => {
+      component.store.setPeriod('all-time');
+      const p = component.payoutsLinkParams();
+      expect(p['pFrom']).toBeUndefined();
+      expect(p['pTo']).toBeUndefined();
+    });
+
+    it('this-month: pFrom is first of month', () => {
+      component.store.setPeriod('this-month');
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      expect(component.payoutsLinkParams()['pFrom']).toBe(`${yyyy}-${mm}-01`);
+    });
+  });
+
+  describe('transactionsLinkParams', () => {
+    it('all-time: returns empty object (no dates)', () => {
+      component.store.setPeriod('all-time');
+      const p = component.transactionsLinkParams();
+      expect(Object.keys(p).length).toBe(0);
+    });
+
+    it('this-month: txFrom is first of month', () => {
+      component.store.setPeriod('this-month');
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      expect(component.transactionsLinkParams()['txFrom']).toBe(`${yyyy}-${mm}-01`);
+    });
+  });
+
+  describe('creditsLinkParams', () => {
+    it('all-time: returns empty object', () => {
+      component.store.setPeriod('all-time');
+      expect(Object.keys(component.creditsLinkParams()).length).toBe(0);
+    });
+
+    it('ytd: allocFrom is Jan 1', () => {
+      component.store.setPeriod('ytd');
+      expect(component.creditsLinkParams()['allocFrom']).toBe(`${new Date().getFullYear()}-01-01`);
+    });
+  });
+});
+
+// ── Action band payout card routing ──────────────────────────────────────────
+// Regression guard: dashboard payout cards must link to /payouts (the payout list)
+// with the correct status filter — NOT to /pay-runs (a different entity that can
+// never show the same global total as a payout-level aggregate).
+
+describe('Action band payout card routing', () => {
+  let fixture: ComponentFixture<DashboardComponent>;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent, TranslateModule.forRoot()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    fixture = TestBed.createComponent(DashboardComponent);
+    fixture.detectChanges();
+  });
+
+  it('"Pending Approval" card links to /payouts with status=Calculated (not /pay-runs)', () => {
+    const allAs = fixture.debugElement.queryAll(By.css('a.stat-card'));
+    const hrefs = allAs.map(a => (a.nativeElement as HTMLAnchorElement).href);
+
+    expect(hrefs.some(h => h.includes('/payouts') && h.includes('status=Calculated')))
+      .withContext(`Expected one of: ${hrefs.join(', ')}`)
+      .toBeTrue();
+  });
+
+  it('"Approved — Not Paid" card links to /payouts with status=Approved (not /pay-runs)', () => {
+    const allAs = fixture.debugElement.queryAll(By.css('a.stat-card'));
+    const hrefs = allAs.map(a => (a.nativeElement as HTMLAnchorElement).href);
+
+    expect(hrefs.some(h => h.includes('/payouts') && h.includes('status=Approved')))
+      .withContext(`Expected one of: ${hrefs.join(', ')}`)
+      .toBeTrue();
+  });
+
+  it('"Draft Pay Runs" card links to /pay-runs with status=Draft (not /payouts)', () => {
+    const allAs = fixture.debugElement.queryAll(By.css('a.stat-card'));
+    const hrefs = allAs.map(a => (a.nativeElement as HTMLAnchorElement).href);
+
+    expect(hrefs.some(h => h.includes('/pay-runs') && h.includes('status=Draft')))
+      .withContext(`Expected one of: ${hrefs.join(', ')}`)
+      .toBeTrue();
   });
 });
 
@@ -251,6 +417,7 @@ function buildMockSummary(
       payoutsPendingApprovalCount: 0,
       payoutsPendingApprovalByCurrency: [],
       payoutsApprovedUnpaidByCurrency: [],
+      pendingByPlanItems: [],
       ...actionOverride,
     },
     periodBand: {

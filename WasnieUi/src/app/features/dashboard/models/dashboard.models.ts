@@ -3,11 +3,19 @@ export interface CurrencyTotal {
   currency: string;
 }
 
+export interface PlanPendingItem {
+  planId: string;
+  planName: string;
+  currency: string;
+  pendingCount: number;
+}
+
 export interface DashboardActionBand {
   draftPayRunsCount: number;
   payoutsPendingApprovalCount: number;
   payoutsPendingApprovalByCurrency: CurrencyTotal[];
   payoutsApprovedUnpaidByCurrency: CurrencyTotal[];
+  pendingByPlanItems: PlanPendingItem[];
 }
 
 export interface DashboardPeriodBand {

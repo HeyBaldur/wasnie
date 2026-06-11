@@ -6,12 +6,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
-.band-hd--mt {
-  margin-top: var(--space-8);
-}
+.band-hd--mt { margin-top: var(--space-8); }
 
 .band-hd__lbl {
   font-size: var(--font-size-11);
@@ -25,23 +23,29 @@
   font-size: var(--font-size-11);
   font-weight: 500;
   color: var(--color-text-secondary);
-  padding: 1px var(--space-2);
+  padding: 2px var(--space-2);
   background: var(--color-bg-surface-sunken);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
 }
 
-// ── Banda 1: Action grid — 3 equal cols, min-height 150px ─────────────────────
+// ── Grids ──────────────────────────────────────────────────────────────────────
 
 .action-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: minmax(150px, auto);
+  grid-auto-rows: 160px;
   gap: var(--space-4);
   margin-bottom: var(--space-8);
 }
 
-// ── Banda 2: Main layout — period KPIs (1fr) + feed (360px fixed) ─────────────
+.period-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 170px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
 
 .dash-main {
   display: grid;
@@ -50,47 +54,176 @@
   align-items: start;
 }
 
-.dash-feed {
-  position: sticky;
-  top: var(--space-4);
-}
+.dash-feed {}
 
-// ── Banda 2 left: ONE unified 3-col grid for all 7 period KPI cards ───────────
-
-.period-grid {
+.trend-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: minmax(160px, auto);
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: minmax(220px, auto);
   gap: var(--space-4);
 }
 
-// ── KPI card — universal structure: icon-box + content + optional foot ─────────
+// ── Stat card — TailAdmin sales dashboard pattern ─────────────────────────────
+// Layout: title+trend TOP-LEFT, icon TOP-RIGHT | big value BOTTOM-LEFT, amounts BOTTOM-RIGHT
+// Ref: TailAdmin sales "mb-5 flex items-center justify-between" + "flex items-end justify-between"
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.stat-card__hd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+
+.stat-card__title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+
+.stat-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.stat-card__delta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+
+  &--ok   { color: var(--color-success); }
+  &--warn { color: var(--color-warning); }
+}
+
+.stat-card__period {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+.stat-card__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+
+  &--brand  { color: var(--color-brand); }
+  &--warn   { color: var(--color-warning); }
+  &--ok     { color: var(--color-success); }
+  &--info   { color: var(--color-info); }
+  &--danger { color: var(--color-danger); }
+}
+
+.stat-card__vrow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.stat-card__value {
+  font-size: var(--font-size-32);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card__cta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-11);
+  font-weight: 500;
+  color: var(--color-brand);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover { color: var(--color-brand-hover); }
+}
+
+.stat-card__amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.stat-card__amount-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.stat-card__ccy {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-tertiary);
+}
+
+.stat-card__amt {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pending-plan-card { display: block; margin-bottom: var(--space-8); }
+.pending-plan-card__sub { font-size: var(--font-size-12); color: var(--color-text-tertiary); margin: var(--space-1) 0 0; }
+.pending-plan-card__list { max-height: 180px; overflow-y: auto; }
+.pending-plan-card__row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--color-border-subtle);
+  text-decoration: none; color: inherit; transition: background-color 120ms ease;
+  &:last-child { border-bottom: none; }
+  &:hover { background-color: var(--color-bg-surface-sunken); border-radius: var(--radius-sm); }
+  &--skeleton { cursor: default; pointer-events: none; }
+}
+.pending-plan-card__name { flex: 1 1 0; font-size: var(--font-size-14); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pending-plan-card__empty { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) 0; font-size: var(--font-size-12); color: var(--color-text-tertiary); }
+
+// ── KPI card — TailAdmin pattern ───────────────────────────────────────────────
+// Pattern: icon box alone at top → mt-5 gap → body pushed to bottom
+// Ref: ecommerce-metrics: "flex h-12 w-12 rounded-xl bg-gray-100" +
+//      "flex items-end justify-between mt-5" + "text-sm text-gray-500" + "font-bold text-title-sm"
 
 .kpi-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  text-decoration: none;
   height: 100%;
+  text-decoration: none;
   color: inherit;
-
-  &--warn .kpi-card__value { color: var(--color-warning); }
 }
 
-.kpi-card__top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
+// Icon box — 48×48, radius-lg (10px, TailAdmin rounded-xl), sunken bg
 .kpi-card__icon-box {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
   background: var(--color-bg-surface-sunken);
   color: var(--color-brand);
 
@@ -100,16 +233,29 @@
   }
 }
 
+// Body: fills remaining space, content justified to bottom (TailAdmin items-end + mt-5)
+.kpi-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+  gap: var(--space-2);
+}
+
+// Label: text-sm muted (TailAdmin: "text-sm text-gray-500")
 .kpi-card__lbl {
   font-size: var(--font-size-13);
   font-weight: 500;
   color: var(--color-text-secondary);
   line-height: 1.3;
+  margin-bottom: var(--space-1);
 }
 
+// Big number: font-bold text-title-sm (TailAdmin ≈ 20–24px; using 24 for financial weight)
 .kpi-card__value {
-  font-size: var(--font-size-32);
-  font-weight: 800;
+  font-size: var(--font-size-24);
+  font-weight: 700;
   color: var(--color-text-primary);
   line-height: 1;
   letter-spacing: -0.02em;
@@ -117,40 +263,39 @@
 }
 
 .kpi-card__dash {
-  font-size: var(--font-size-24);
+  font-size: var(--font-size-20);
   font-weight: 300;
   color: var(--color-text-tertiary);
 }
 
+// Footer: badge left, link right (TailAdmin's justify-between on badge+value)
 .kpi-card__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin-top: auto;
+  margin-top: var(--space-1);
 }
 
 .kpi-card__link {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-11);
   font-weight: 500;
   color: var(--color-brand);
   text-decoration: none;
   margin-left: auto;
 
-  &--sm {
-    font-size: var(--font-size-11);
-    margin-top: auto;
-  }
-
   &:hover { color: var(--color-brand-hover); }
 }
 
-// Gauge variant — centers the ws-gauge within the kpi-card cell
+// Modifier: warning state
+.kpi-card--warn .kpi-card__value { color: var(--color-warning); }
+
+// Modifier: gauge card — center the gauge horizontally
 .kpi-card--gauge {
-  align-items: center;
+  .kpi-card__body { align-items: center; }
 }
 
 .kpi-card__gauge {
@@ -159,20 +304,154 @@
 }
 
 .kpi-card__pct {
-  font-size: var(--font-size-18);
+  font-size: var(--font-size-20);
   font-weight: 700;
   color: var(--color-text-primary);
   letter-spacing: -0.01em;
 }
 
-// ── Currency list — two-column mini-table (code left, amount right) ───────────
+// ── Metric card — TailAdmin churn-rate card pattern ────────────────────────────
+// Layout: title + desc TOP (mb-6) | value + sub-trend BOTTOM-LEFT | amounts/link BOTTOM-RIGHT
+// Ref: TailAdmin "mb-6 flex justify-between" (header) + "flex justify-between" (footer)
 
-.ccy-list {
+.metric-card {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+// Header: title + description, margin-bottom mb-6 = 24px
+.metric-card__hd { margin-bottom: var(--space-6); }
+
+.metric-card__title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+// Sub-description: "text-theme-sm text-gray-500"
+.metric-card__sub {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+  line-height: 1.3;
+}
+
+// Footer row: value group LEFT, aside RIGHT (TailAdmin "flex justify-between")
+.metric-card__ft {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+// Value: "text-title-xs font-semibold" ≈ 20px 600
+.metric-card__value {
+  font-size: var(--font-size-20);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+
+  &--amt { font-size: var(--font-size-18); font-weight: 700; }
+}
+
+// Trend line below value: "text-theme-xs text-gray-500" with colored delta
+.metric-card__trend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.metric-card__trend-val {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+
+  &--up   { color: var(--color-success); }
+  &--down { color: var(--color-danger); }
+  &--warn { color: var(--color-warning); }
+}
+
+// Aside (right side): stacked currency amounts or link
+.metric-card__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.metric-card__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-11);
+  font-weight: 500;
+  color: var(--color-brand);
+  white-space: nowrap;
+
+  &:hover { color: var(--color-brand-hover); }
+}
+
+.metric-card__ccy-row {
+  display: flex;
+  align-items: baseline;
   gap: var(--space-1);
 }
 
+.metric-card__ccy {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-tertiary);
+}
+
+.metric-card__amt {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card__ft--col {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.attainment-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.attainment-bar__fill {
+  height: 100%;
+  background: var(--color-brand);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+
+  &--warn { background: var(--color-warning); }
+  &--ok   { background: var(--color-success); }
+}
+
+// ── Currency list — mini-table: code left, amount right ───────────────────────
+
+.ccy-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .ccy-list--sm   { gap: 2px; }
 .ccy-list--hero { gap: var(--space-2); }
 
@@ -201,25 +480,24 @@
   font-variant-numeric: tabular-nums;
 
   &--xl {
-    font-size: var(--font-size-18);
+    font-size: var(--font-size-16);
     font-weight: 700;
     letter-spacing: -0.01em;
   }
 }
 
-// ── Activity feed — 360px sidebar, scrollable list ────────────────────────────
+// ── Activity feed ──────────────────────────────────────────────────────────────
 
 .feed__header {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--color-border-default);
-  flex-shrink: 0;
 }
 
 .feed__title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-13);
   font-weight: 600;
   color: var(--color-text-secondary);
 }
@@ -236,15 +514,12 @@
 }
 
 .feed__scroll {
-  max-height: 480px;
+  /* 2 rows × 170px + 1 gap (space-4) − feed__header ≈ 47px = matches period grid height */
+  max-height: calc(2 * 170px + var(--space-4) - 47px);
   overflow-y: auto;
 }
 
-.feed__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
+.feed__list { list-style: none; margin: 0; padding: 0; }
 
 .feed__item {
   display: flex;
@@ -252,10 +527,8 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--color-border-subtle);
-  transition: background var(--transition-fast);
 
   &:last-child { border-bottom: none; }
-  &:hover { background: var(--color-bg-surface-hover); }
 }
 
 .feed__avatar {
@@ -263,8 +536,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-full);
   background: var(--color-brand-subtle);
   color: var(--color-brand);
@@ -272,17 +545,14 @@
   font-weight: 700;
 }
 
-.feed__content {
-  flex: 1;
-  min-width: 0;
-}
+.feed__content { flex: 1; min-width: 0; }
 
 .feed__top-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: 1px;
+  margin-bottom: 2px;
 }
 
 .feed__actor {
@@ -312,87 +582,93 @@
   line-height: 1.4;
 }
 
-.feed__resource {
-  color: var(--color-brand);
-  font-weight: 500;
-  margin-left: 2px;
-}
+.feed__resource { color: var(--color-brand); font-weight: 500; margin-left: 2px; }
 
-// ── Banda 3: Trend — 2 fixed cols, min-height 200px ──────────────────────────
-
-.trend-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-auto-rows: minmax(200px, auto);
-  gap: var(--space-4);
-}
+// ── Trend cards — TailAdmin "Average Daily Sales" pattern ─────────────────────
+// Layout: [small label + big value LEFT | delta pill RIGHT] → bleed chart → prior row
 
 .trend-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
   height: 100%;
 }
 
 .trend-card__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
-.trend-card__delta {
-  display: flex;
+.trend-card__label {
+  display: block;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-1);
+}
+
+.trend-card__value {
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-card__delta-pill {
+  display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex-shrink: 0;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--radius-full);
   font-size: var(--font-size-12);
-  font-weight: 700;
+  font-weight: 600;
+  background: var(--color-bg-surface-sunken);
   color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 
-  &--up   { color: var(--color-success); }
-  &--down { color: var(--color-danger); }
+  &--up   { background: var(--color-success-bg); color: var(--color-success); }
+  &--down { background: var(--color-danger-bg);  color: var(--color-danger);  }
 }
 
 .trend-icon--down { transform: rotate(180deg); }
 
-.trend-card__amounts {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-2);
-  margin-top: auto;
+// Chart bleeds to card edges (card padding="md" = var(--space-5) horizontal)
+.trend-card__chart {
+  flex: 1;
+  margin-left: calc(-1 * var(--space-5));
+  margin-right: calc(-1 * var(--space-5));
+  overflow: hidden;
 }
 
-.trend-card__amount-row {
+.trend-card__prior {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2);
-
-  &--prior { opacity: 0.55; }
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: var(--space-2);
 }
 
-.trend-card__period-lbl {
+.trend-card__prior-lbl {
   font-size: var(--font-size-11);
   color: var(--color-text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 55%;
+  max-width: 60%;
 }
 
-.trend-card__amount {
+.trend-card__prior-amt {
   font-size: var(--font-size-13);
-  font-weight: 700;
-  color: var(--color-text-primary);
+  font-weight: 600;
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
-
-  &--prior {
-    font-size: var(--font-size-12);
-    font-weight: 600;
-    color: var(--color-text-secondary);
-  }
 }
 
 // ── Skeleton ───────────────────────────────────────────────────────────────────
@@ -403,7 +679,7 @@
   background: var(--color-bg-surface-sunken);
   animation: sk-pulse 1.6s ease-in-out infinite;
 
-  &--num  { width: 64px; height: 40px; border-radius: var(--radius-md); }
+  &--num  { width: 56px; height: 30px; border-radius: var(--radius-md); }
   &--text { width: 100px; height: 12px; }
 }
 
@@ -416,7 +692,6 @@
 
 @media (max-width: 1100px) {
   .dash-main    { grid-template-columns: 1fr; }
-  .dash-feed    { position: static; }
   .feed__scroll { max-height: none; }
   .period-grid  { grid-template-columns: repeat(2, 1fr); }
 }

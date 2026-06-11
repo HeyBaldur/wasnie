@@ -52,7 +52,7 @@
         </div>
       }
 
-      <div class="ws-select__list" role="listbox" [style.max-height.px]="listMaxHeight()">
+      <div class="ws-select__list ws-scroll-thin" role="listbox" [style.max-height.px]="listMaxHeight()">
         @for (opt of filteredOptions(); track opt.value; let i = $index) {
           <div
             class="ws-select__option"

@@ -15,7 +15,15 @@ public sealed record DashboardActionBandDto(
     int DraftPayRunsCount,
     int PayoutsPendingApprovalCount,
     IReadOnlyList<CurrencyTotalDto> PayoutsPendingApprovalByCurrency,
-    IReadOnlyList<CurrencyTotalDto> PayoutsApprovedUnpaidByCurrency);
+    IReadOnlyList<CurrencyTotalDto> PayoutsApprovedUnpaidByCurrency,
+    IReadOnlyList<PlanPendingCountDto> PendingByPlanItems);
+
+// Plans that have Pending transactions eligible for ProcessPending (ByPlan scope)
+public sealed record PlanPendingCountDto(
+    Guid PlanId,
+    string PlanName,
+    string Currency,
+    int PendingCount);
 
 // ── Banda 2 — "Period state" ────────────────────────────────────────────────
 

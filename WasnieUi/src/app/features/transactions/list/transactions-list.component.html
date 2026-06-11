@@ -84,7 +84,7 @@
               <th class="col-num">{{ 'TRANSACTIONS.COL_AMOUNT' | translate }}</th>
               <th class="col-num">{{ 'TRANSACTIONS.COL_QUANTITY' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_STATUS' | translate }}</th>
-              <th *hasPermission="'Transactions.Update'" class="col-actions"></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -110,7 +110,12 @@
             } @else {
               @for (tx of store.transactions(); track tx.id) {
                 <tr>
-                  <td class="col-ref">{{ tx.referenceNumber }}</td>
+                  <td class="col-ref" [class.col-ref--voided]="tx.status === TransactionStatus.Cancelled">
+                    <span class="col-ref__number">{{ tx.referenceNumber }}</span>
+                    @if (tx.status === TransactionStatus.Cancelled && tx.cancelledReason) {
+                      <span class="col-ref__reason">{{ tx.cancelledReason }}</span>
+                    }
+                  </td>
                   <td class="col-secondary">
                     @if (tx.payeeName) {
                       {{ tx.payeeName }}
@@ -130,20 +135,27 @@
                       {{ statusKey(tx.status) | translate }}
                     </ws-badge>
                   </td>
-                  <td *hasPermission="'Transactions.Update'" class="col-actions">
-                    @if (isUnassigned(tx)) {
-                      <ws-button size="sm" variant="secondary" (click)="openAssign(tx)">
-                        {{ 'TRANSACTIONS.ACTION_ASSIGN' | translate }}
-                      </ws-button>
-                    } @else if (canReassign(tx)) {
-                      <ws-button size="sm" variant="secondary" (click)="openReassign(tx)">
-                        {{ 'TRANSACTIONS.ACTION_REASSIGN' | translate }}
-                      </ws-button>
-                    } @else if (tx.status === TransactionStatus.Paid) {
-                      <ws-button size="sm" variant="secondary" [disabled]="true" [title]="'TRANSACTIONS.REASSIGN_PAID_TOOLTIP' | translate">
-                        {{ 'TRANSACTIONS.ACTION_REASSIGN' | translate }}
-                      </ws-button>
-                    }
+                  <td>
+                    <div class="col-actions">
+                      @if (isUnassigned(tx) && tx.status !== TransactionStatus.Cancelled && ('Transactions.Update' | hasPermission)) {
+                        <ws-button size="sm" variant="secondary" (click)="openAssign(tx)">
+                          {{ 'TRANSACTIONS.ACTION_ASSIGN' | translate }}
+                        </ws-button>
+                      } @else if (canReassign(tx) && ('Transactions.Update' | hasPermission)) {
+                        <ws-button size="sm" variant="secondary" (click)="openReassign(tx)">
+                          {{ 'TRANSACTIONS.ACTION_REASSIGN' | translate }}
+                        </ws-button>
+                      } @else if (tx.status === TransactionStatus.Paid && ('Transactions.Update' | hasPermission)) {
+                        <ws-button size="sm" variant="secondary" [disabled]="true" [title]="'TRANSACTIONS.REASSIGN_PAID_TOOLTIP' | translate">
+                          {{ 'TRANSACTIONS.ACTION_REASSIGN' | translate }}
+                        </ws-button>
+                      }
+                      @if (canVoid(tx) && ('Transactions.Void' | hasPermission)) {
+                        <ws-button size="sm" variant="danger" (click)="openVoid(tx)">
+                          {{ 'TRANSACTIONS.ACTION_VOID' | translate }}
+                        </ws-button>
+                      }
+                    </div>
                   </td>
                 </tr>
               }
@@ -177,6 +189,13 @@
   <app-reassign-payee-modal
     [transaction]="selectedTransaction()!"
     [isOpen]="reassignModalOpen()"
+    (closed)="onModalClosed()"
+    (saved)="onModalClosed()"
+  />
+
+  <app-void-transaction-modal
+    [transaction]="selectedTransaction()!"
+    [isOpen]="voidModalOpen()"
     (closed)="onModalClosed()"
     (saved)="onModalClosed()"
   />

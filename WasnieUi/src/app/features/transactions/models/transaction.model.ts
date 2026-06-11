@@ -24,6 +24,9 @@ export interface Transaction {
   status: TransactionStatus;
   payeeName?: string | null;
   payeeEmployeeCode?: string | null;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  cancelledReason?: string | null;
 }
 
 export interface CreateTransactionRequest {
@@ -33,6 +36,7 @@ export interface CreateTransactionRequest {
   currency: string;
   quantity: number;
   transactionDate: string;
+  processImmediately?: boolean;
 }
 
 export interface AssignPayeeRequest {
@@ -42,5 +46,9 @@ export interface AssignPayeeRequest {
 
 export interface ReassignPayeeRequest {
   newPayeeId: string;
+  reason: string;
+}
+
+export interface VoidTransactionRequest {
   reason: string;
 }

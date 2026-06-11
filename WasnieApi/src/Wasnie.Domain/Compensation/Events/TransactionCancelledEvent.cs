@@ -6,4 +6,5 @@ public sealed record TransactionCancelledEvent(
     Guid EventId,
     DateTimeOffset OccurredOn,
     Guid TransactionId,
-    Guid TenantId) : IDomainEvent;
+    Guid TenantId,
+    string Reason) : IDomainEvent;

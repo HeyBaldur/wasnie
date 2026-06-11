@@ -23,7 +23,8 @@ export class DashboardStore {
     return (
       b.draftPayRunsCount > 0 ||
       b.payoutsPendingApprovalCount > 0 ||
-      b.payoutsApprovedUnpaidByCurrency.length > 0
+      b.payoutsApprovedUnpaidByCurrency.length > 0 ||
+      b.pendingByPlanItems.length > 0
     );
   });
 

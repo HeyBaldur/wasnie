@@ -1,14 +1,13 @@
 <nav class="sidebar" [class.sidebar--collapsed]="!sidebarState.isExpanded()">
   <div class="sidebar__header">
-    <div class="sidebar__brand">
+    <a class="sidebar__brand" routerLink="/dashboard" [title]="'NAV.DASHBOARD' | translate">
       <span class="sidebar__brand-monogram">
         <img src="wasnie_logo.png" alt="Wasnie ICM & SPM" />
       </span>
       @if (sidebarState.isExpanded()) {
         <span class="sidebar__brand-name">{{ 'APP.NAME' | translate }}</span>
-        <span class="sidebar__status-dot" [title]="'TOPBAR.STATUS_OPERATIONAL' | translate"></span>
       }
-    </div>
+    </a>
     <button
       class="sidebar__toggle"
       (click)="sidebarState.toggle()"

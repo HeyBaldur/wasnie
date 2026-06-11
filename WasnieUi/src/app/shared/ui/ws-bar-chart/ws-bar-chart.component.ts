@@ -22,7 +22,7 @@ export class WsBarChartComponent {
   // SVG drawing constants — match ws-line-chart for consistent card appearance
   readonly VB_W = 560;
   readonly VB_H = 180;
-  readonly ML = 52;   // margin left (Y-axis labels)
+  readonly ML = 62;   // margin left (Y-axis labels) — wide enough for "1.5M" abbreviated labels
   readonly MR = 16;   // margin right
   readonly MT = 16;   // margin top
   readonly MB = 32;   // margin bottom (X-axis labels)
@@ -137,6 +137,18 @@ export class WsBarChartComponent {
   onSvgMouseLeave(): void {
     this.tooltipVisible.set(false);
     this.columnIndicatorX.set(null);
+  }
+
+  formatAxisLabel(value: number): string {
+    if (value >= 1_000_000) {
+      const v = value / 1_000_000;
+      return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + 'M';
+    }
+    if (value >= 1_000) {
+      const v = value / 1_000;
+      return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + 'K';
+    }
+    return value.toFixed(0);
   }
 
   formatValue(value: number, currency: string): string {

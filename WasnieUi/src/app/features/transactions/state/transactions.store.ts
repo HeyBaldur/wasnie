@@ -7,6 +7,7 @@ import {
   CreateTransactionRequest,
   AssignPayeeRequest,
   ReassignPayeeRequest,
+  VoidTransactionRequest,
 } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 
@@ -290,6 +291,12 @@ export class TransactionsStore {
 
   async reassignPayee(transactionId: string, request: ReassignPayeeRequest): Promise<Transaction> {
     const tx = await firstValueFrom(this.api.reassignPayee(transactionId, request));
+    await this.loadTransactions();
+    return tx;
+  }
+
+  async voidTransaction(transactionId: string, request: VoidTransactionRequest): Promise<Transaction> {
+    const tx = await firstValueFrom(this.api.void(transactionId, request));
     await this.loadTransactions();
     return tx;
   }

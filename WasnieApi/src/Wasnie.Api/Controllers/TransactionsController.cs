@@ -83,6 +83,22 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    [HttpPost("{id:guid}/void")]
+    public async Task<IActionResult> Void(Guid id, [FromBody] VoidTransactionRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new VoidTransactionCommand(id, body.Reason), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            var isDomainBlock = result.Error?.Contains("Only Pending", StringComparison.OrdinalIgnoreCase) == true
+                                || result.Error?.Contains("already cancelled", StringComparison.OrdinalIgnoreCase) == true
+                                || result.Error?.Contains("active credits", StringComparison.OrdinalIgnoreCase) == true;
+            return isDomainBlock
+                ? Conflict(new { message = result.Error })
+                : BadRequest(new { message = result.Error });
+        }
+        return Ok(result.Value);
+    }
+
     [HttpPost("process-pending")]
     public async Task<IActionResult> ProcessPending([FromBody] ProcessPendingTransactionsCommand command, CancellationToken cancellationToken)
     {
@@ -109,6 +125,7 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
 
     public record AssignPayeeRequest(Guid PayeeId, string? Comment);
     public record ReassignPayeeRequest(Guid NewPayeeId, string Reason);
+    public record VoidTransactionRequest(string Reason);
     public record PendingCountRequest(
         Wasnie.Application.Compensation.Calculation.ProcessPendingScope Scope,
         Guid? ScopeId,

@@ -22,6 +22,9 @@
 
 .sidebar__brand {
   @apply flex items-center gap-2 min-w-0;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .sidebar__brand-monogram {
@@ -31,7 +34,7 @@
 }
 
 .sidebar__brand-name {
-  @apply text-sm font-semibold truncate;
+  @apply text-2xl font-semibold truncate;
   color: var(--color-sidebar-active-text);
 }
 

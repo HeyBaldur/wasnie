@@ -109,16 +109,6 @@
   &--scrollable {
     overflow-y: auto;
     max-height: calc(90vh - 140px);
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-border-strong) transparent;
-
-    &::-webkit-scrollbar { width: 6px; }
-    &::-webkit-scrollbar-track { background: transparent; }
-    &::-webkit-scrollbar-thumb {
-      background: var(--color-border-strong);
-      border-radius: 3px;
-    }
-    &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
   }
 }
 

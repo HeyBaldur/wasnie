@@ -23,6 +23,9 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.IngestedAt).IsRequired();
         builder.Property(t => t.IngestedBy).IsRequired().HasMaxLength(450);
         builder.Property(t => t.UpdatedAt).IsRequired();
+        builder.Property(t => t.CancelledBy).HasMaxLength(450);
+        builder.Property(t => t.CancelledAt);
+        builder.Property(t => t.CancelledReason).HasMaxLength(1000);
 
         builder.OwnsOne(t => t.Amount, m =>
         {

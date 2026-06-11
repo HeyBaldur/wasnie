@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest } from '../models/transaction.model';
+import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest, VoidTransactionRequest } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 import { JobState } from '../../imports/transactions/models/transaction-import.models';
@@ -91,6 +91,10 @@ export class TransactionsApiService {
 
   reassignPayee(transactionId: string, request: ReassignPayeeRequest): Observable<Transaction> {
     return this.http.post<Transaction>(`${this.base}/${transactionId}/reassign-payee`, request);
+  }
+
+  void(transactionId: string, request: VoidTransactionRequest): Observable<Transaction> {
+    return this.http.post<Transaction>(`${this.base}/${transactionId}/void`, request);
   }
 
   getPendingCount(scope: ProcessPendingScope, scopeId?: string | null, periodStart?: string | null, periodEnd?: string | null): Observable<{ count: number }> {
