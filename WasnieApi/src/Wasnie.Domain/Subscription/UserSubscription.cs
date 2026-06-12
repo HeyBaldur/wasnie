@@ -22,6 +22,10 @@ public sealed class UserSubscription : AggregateRoot
     public DateTimeOffset? NextBillingDate { get; private set; }
     public DateTimeOffset? CanceledAt { get; private set; }
 
+    // cancel_at_period_end: subscription is Active but will not renew
+    public bool CancelAtPeriodEnd { get; private set; }
+    public DateTimeOffset? CancelAt { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -39,7 +43,10 @@ public sealed class UserSubscription : AggregateRoot
             UpdatedAt = now,
         };
 
-    // Called by Stripe webhooks in Fase 3 when a paid subscription is activated/updated
+    // Called by Stripe webhooks in Fase 3 when a paid subscription is activated/updated.
+    // Always resets cancellation fields: a freshly activated subscription has no pending
+    // cancellation and is not in a canceled state. Callers that need to re-apply a
+    // cancellation schedule (subscription.updated) do so explicitly after this call.
     public void UpdateFromStripe(
         Tier tier,
         SubscriptionStatus status,
@@ -61,6 +68,9 @@ public sealed class UserSubscription : AggregateRoot
         CurrentPeriodStart = periodStart;
         CurrentPeriodEnd = periodEnd;
         NextBillingDate = nextBillingDate;
+        CancelAtPeriodEnd = false;
+        CancelAt = null;
+        CanceledAt = null;
         UpdatedAt = now;
     }
 
@@ -68,6 +78,8 @@ public sealed class UserSubscription : AggregateRoot
     {
         Status = SubscriptionStatus.Canceled;
         CanceledAt = now;
+        CancelAtPeriodEnd = false;
+        CancelAt = null;
         UpdatedAt = now;
     }
 
@@ -80,6 +92,21 @@ public sealed class UserSubscription : AggregateRoot
     public void Recover(DateTimeOffset now)
     {
         Status = SubscriptionStatus.Active;
+        CanceledAt = null;
+        UpdatedAt = now;
+    }
+
+    public void ScheduleCancellation(DateTimeOffset cancelAt, DateTimeOffset now)
+    {
+        CancelAtPeriodEnd = true;
+        CancelAt = cancelAt;
+        UpdatedAt = now;
+    }
+
+    public void ClearCancellationSchedule(DateTimeOffset now)
+    {
+        CancelAtPeriodEnd = false;
+        CancelAt = null;
         UpdatedAt = now;
     }
 }

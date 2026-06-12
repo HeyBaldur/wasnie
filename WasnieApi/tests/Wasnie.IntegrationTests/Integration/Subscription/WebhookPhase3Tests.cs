@@ -161,6 +161,33 @@ public sealed class WebhookPhase3Tests : IAsyncLifetime
         r2.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Fact]
+    public async Task SubscriptionDeleted_WhenCancelScheduled_ClearsCancelScheduleFields()
+    {
+        // Arrange: mark the subscription as cancel-scheduled (simulates the scenario from the bug report)
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var sub = await db.UserSubscriptions
+                .IgnoreQueryFilters()
+                .FirstAsync(s => s.TenantId == TestConstants.TenantA);
+            sub.ScheduleCancellation(DateTimeOffset.UtcNow.AddMonths(1), DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        // Act: fire subscription.deleted
+        var json = BuildSubscriptionDeletedEvent("evt_webhook_p3_del_clear");
+        var response = await PostWebhook(json);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Assert: schedule cleared, status=Canceled, CanceledAt populated
+        var result = await ReadSubscription();
+        result!.Status.Should().Be(SubscriptionStatus.Canceled);
+        result.CancelAtPeriodEnd.Should().BeFalse();
+        result.CancelAt.Should().BeNull();
+        result.CanceledAt.Should().NotBeNull();
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private async Task<HttpResponseMessage> PostWebhook(string json)

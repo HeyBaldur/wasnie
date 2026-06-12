@@ -16,6 +16,7 @@ const ACTIVE_SUB = {
   stripePriceId: 'price_x', stripeProductId: 'prod_x',
   currentPeriodStart: null, currentPeriodEnd: null,
   nextBillingDate: null, canceledAt: null,
+  cancelAtPeriodEnd: false, cancelAt: null,
   createdAt: new Date().toISOString(),
 };
 

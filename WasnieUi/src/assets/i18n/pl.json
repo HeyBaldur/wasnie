@@ -149,7 +149,8 @@
     "CREATED_AT": "Utworzono",
     "UPDATED_AT": "Zaktualizowano",
     "CONTINUE": "Kontynuuj",
-    "DONE": "Gotowe"
+    "DONE": "Gotowe",
+    "RETRY": "Spróbuj ponownie"
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -1203,7 +1204,7 @@
   "SUBSCRIPTION": {
     "MANAGE_TITLE": "Subskrypcja",
     "MANAGE_SUBTITLE": "Zarządzaj bieżącym planem i przeglądaj opcje ulepszenia.",
-    "LOAD_ERROR": "Nie można załadować szczegółów subskrypcji. Spróbuj ponownie.",
+    "LOAD_ERROR": "Nie udało się załadować danych subskrypcji. To zazwyczaj tymczasowy problem z połączeniem — spróbuj ponownie za chwilę.",
     "BILLING_EMAIL": "E-mail rozliczeniowy",
     "CURRENT_PERIOD": "Bieżący okres",
     "NEXT_BILLING": "Następna data rozliczenia",
@@ -1235,8 +1236,26 @@
     "BILLING_PORTAL_ERROR": "Nie można otworzyć portalu rozliczeniowego. Spróbuj ponownie.",
     "PAST_DUE_BANNER_MSG": "Twoja płatność jest przeterminowana. Dostęp zostanie zablokowany po zakończeniu okresu karencji.",
     "PAST_DUE_BANNER_CTA": "Zaktualizuj metodę płatności",
-    "REACTIVATION_TITLE": "Wymagana subskrypcja",
-    "REACTIVATION_DESC": "Twoja subskrypcja została anulowana. Reaktywuj ją, aby kontynuować korzystanie z Wasnie.",
-    "REACTIVATION_CTA": "Reaktywuj subskrypcję"
+    "REACTIVATION_TITLE": "Twoja subskrypcja została anulowana",
+    "REACTIVATION_DESC": "Twoje konto jest nieaktywne. Nie masz dostępu do funkcji Wasnie.",
+    "REACTIVATION_CTA": "Reaktywuj",
+    "REACTIVATION_CANCELED_ON": "Anulowano",
+    "REACTIVATION_PREVIOUS_PLAN": "Poprzedni plan",
+    "REACTIVATION_DATA_PRESERVED": "Twoje dane są zachowane. Reaktywuj subskrypcję, aby odzyskać pełny dostęp.",
+    "REACTIVATION_PLANS_TITLE": "Wybierz plan",
+    "REACTIVATION_PAYEES_UP_TO": "Do {{count}} pracowników",
+    "REACTIVATION_PLANS_UP_TO": "Do {{count}} planów",
+    "REACTIVATION_PLAN_UNAVAILABLE": "Niedostępny",
+    "REACTIVATION_PLAN_OVER_PAYEE_LIMIT": "Twoje obecne użycie ({{current}} pracowników) przekracza limit tego planu wynoszący {{limit}}.",
+    "REACTIVATION_PLAN_OVER_PLAN_LIMIT": "Twoje obecne użycie ({{current}} planów) przekracza limit tego planu wynoszący {{limit}}.",
+    "REACTIVATION_CHECKOUT_ERROR": "Nie udało się uruchomić procesu płatności. Spróbuj ponownie.",
+    "REACTIVATION_GDPR_TITLE": "Żądanie usunięcia danych (RODO)",
+    "REACTIVATION_GDPR_BODY": "Masz prawo żądać całkowitego usunięcia swoich danych zgodnie z RODO. Proces ten jest obsługiwany ręcznie przez nasz zespół i może potrwać kilka dni roboczych. Dopóki nie złożysz wniosku o usunięcie, Twoje dane są zachowane i możesz reaktywować subskrypcję w dowolnym momencie.",
+    "REACTIVATION_GDPR_CONTACT": "Aby złożyć wniosek o usunięcie, skontaktuj się z nami:",
+    "REACTIVATION_GDPR_EMAIL": "privacy@wasnie.io",
+    "CANCEL_SCHEDULED_TITLE": "Twoja subskrypcja zostanie anulowana {{date}}.",
+    "CANCEL_SCHEDULED_DESC": "Będziesz mieć pełny dostęp do tej daty.",
+    "KEEP_SUBSCRIPTION_BTN": "Zachowaj subskrypcję",
+    "REVERT_CANCEL_ERROR": "Nie udało się cofnąć anulowania. Spróbuj ponownie."
   }
 }

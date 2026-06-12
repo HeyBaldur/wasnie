@@ -2,8 +2,9 @@ import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
-import { WsPageHeaderComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent } from '../../../shared/ui';
+import { WsPageLayoutComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent } from '../../../shared/ui';
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
 import { SubscriptionService, CurrentSubscription, SubscriptionPlan } from '../services/subscription.service';
 
@@ -20,13 +21,14 @@ const MAX_POLL_ATTEMPTS = 10;
 @Component({
   selector: 'app-manage-subscription',
   standalone: true,
-  imports: [DatePipe, TranslatePipe, AppShellComponent, WsPageHeaderComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent],
+  imports: [DatePipe, TranslatePipe, AppShellComponent, WsPageLayoutComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent],
   templateUrl: './manage-subscription.component.html',
   styleUrl: './manage-subscription.component.scss',
 })
 export class ManageSubscriptionComponent implements OnInit, OnDestroy {
   private readonly subscriptionService = inject(SubscriptionService);
   private readonly toast = inject(WsToastService);
+  private readonly router = inject(Router);
 
   readonly subscription = signal<CurrentSubscription | null>(null);
   readonly plans = signal<SubscriptionPlan[]>([]);
@@ -37,6 +39,7 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
   readonly openingPortal = signal(false);
   readonly pendingTier = signal<string | null>(null);
   readonly pollTimedOut = signal(false);
+  readonly revertingCancellation = signal(false);
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private pollAttempts = 0;
@@ -55,6 +58,10 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
 
     this.subscriptionService.getCurrent().subscribe({
       next: sub => {
+        if (sub.status === 'Canceled') {
+          void this.router.navigate(['/subscription/reactivate']);
+          return;
+        }
         this.subscription.set(sub);
         this.loadPlans();
       },
@@ -169,6 +176,25 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
         this.toast.show('SUBSCRIPTION.BILLING_PORTAL_ERROR', 'error');
       },
     });
+  }
+
+  revertCancellation(): void {
+    this.revertingCancellation.set(true);
+    this.subscriptionService.revertCancellation().subscribe({
+      next: () => {
+        this.revertingCancellation.set(false);
+        this.load();
+      },
+      error: () => {
+        this.revertingCancellation.set(false);
+        this.toast.show('SUBSCRIPTION.REVERT_CANCEL_ERROR', 'error');
+      },
+    });
+  }
+
+  get isCancelScheduled(): boolean {
+    const sub = this.subscription();
+    return sub?.status === 'Active' && sub?.cancelAtPeriodEnd === true;
   }
 
   get isFree(): boolean {

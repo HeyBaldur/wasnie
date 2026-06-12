@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 using Wasnie.Application.Features.Subscription.Commands;
+using Wasnie.Application.Features.Subscription.DTOs;
 using Wasnie.Application.Features.Subscription.Queries;
 
 namespace Wasnie.Api.Controllers;
@@ -48,13 +49,25 @@ public sealed class SubscriptionController(
         return Ok(new { publishableKey = stripeOptions.Value.PublishableKey });
     }
 
+    [HttpGet("usage")]
+    public async Task<IActionResult> GetUsage(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetSubscriptionUsageQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("checkout")]
     public async Task<IActionResult> CreateCheckout(
         [FromBody] CreateCheckoutSessionCommand command,
         CancellationToken cancellationToken)
     {
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+        var dto = result.Value!;
+        if (dto.Blocked)
+            return Conflict(dto);
+        return Ok(new CheckoutSessionDto(dto.CheckoutUrl!));
     }
 
     [HttpPost("change-plan")]
@@ -69,6 +82,13 @@ public sealed class SubscriptionController(
         if (dto.Blocked)
             return Conflict(dto);
         return Ok(dto);
+    }
+
+    [HttpPost("revert-cancellation")]
+    public async Task<IActionResult> RevertCancellation(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new RevertSubscriptionCancellationCommand(), cancellationToken);
+        return result.IsSuccess ? Ok() : BadRequest(new { message = result.Error });
     }
 
     [HttpPost("billing-portal")]

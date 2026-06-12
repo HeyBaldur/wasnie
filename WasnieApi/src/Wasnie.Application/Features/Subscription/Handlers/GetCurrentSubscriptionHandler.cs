@@ -33,6 +33,8 @@ public sealed class GetCurrentSubscriptionHandler(
             CurrentPeriodEnd: sub.CurrentPeriodEnd,
             NextBillingDate: sub.NextBillingDate,
             CanceledAt: sub.CanceledAt,
+            CancelAtPeriodEnd: sub.CancelAtPeriodEnd,
+            CancelAt: sub.CancelAt,
             CreatedAt: sub.CreatedAt));
     }
 }

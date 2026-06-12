@@ -1296,6 +1296,13 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
 
+                    b.Property<DateTimeOffset?>("CancelAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("CancelAtPeriodEnd")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTimeOffset?>("CanceledAt")
                         .HasColumnType("datetimeoffset");
 

@@ -149,7 +149,8 @@
     "CREATED_AT": "Created",
     "UPDATED_AT": "Updated",
     "CONTINUE": "Continue",
-    "DONE": "Done"
+    "DONE": "Done",
+    "RETRY": "Try again"
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
@@ -1203,7 +1204,7 @@
   "SUBSCRIPTION": {
     "MANAGE_TITLE": "Subscription",
     "MANAGE_SUBTITLE": "Manage your current plan and view upgrade options.",
-    "LOAD_ERROR": "Could not load subscription details. Please try again.",
+    "LOAD_ERROR": "We couldn't load your subscription details. This is usually a temporary connection issue — try again in a moment.",
     "BILLING_EMAIL": "Billing email",
     "CURRENT_PERIOD": "Current period",
     "NEXT_BILLING": "Next billing date",
@@ -1235,8 +1236,26 @@
     "BILLING_PORTAL_ERROR": "Could not open billing portal. Please try again.",
     "PAST_DUE_BANNER_MSG": "Your payment is overdue. Access will be blocked once the grace period ends.",
     "PAST_DUE_BANNER_CTA": "Update payment method",
-    "REACTIVATION_TITLE": "Subscription required",
-    "REACTIVATION_DESC": "Your subscription has been canceled. Reactivate to continue using Wasnie.",
-    "REACTIVATION_CTA": "Reactivate subscription"
+    "REACTIVATION_TITLE": "Your subscription has been canceled",
+    "REACTIVATION_DESC": "Your account is inactive. You don't have access to Wasnie features.",
+    "REACTIVATION_CTA": "Reactivate",
+    "REACTIVATION_CANCELED_ON": "Canceled on",
+    "REACTIVATION_PREVIOUS_PLAN": "Previous plan",
+    "REACTIVATION_DATA_PRESERVED": "Your data is preserved. Reactivate your subscription to regain full access.",
+    "REACTIVATION_PLANS_TITLE": "Choose your plan",
+    "REACTIVATION_PAYEES_UP_TO": "Up to {{count}} payees",
+    "REACTIVATION_PLANS_UP_TO": "Up to {{count}} comp plans",
+    "REACTIVATION_PLAN_UNAVAILABLE": "Unavailable",
+    "REACTIVATION_PLAN_OVER_PAYEE_LIMIT": "Your current usage ({{current}} payees) exceeds this plan's limit of {{limit}}.",
+    "REACTIVATION_PLAN_OVER_PLAN_LIMIT": "Your current usage ({{current}} comp plans) exceeds this plan's limit of {{limit}}.",
+    "REACTIVATION_CHECKOUT_ERROR": "Could not start checkout. Please try again.",
+    "REACTIVATION_GDPR_TITLE": "Request account deletion (GDPR)",
+    "REACTIVATION_GDPR_BODY": "You have the right to request complete deletion of your data under GDPR. This process is handled manually by our team and may take several business days. While you haven't requested deletion, your data is preserved and you can reactivate at any time.",
+    "REACTIVATION_GDPR_CONTACT": "To request deletion, contact us at:",
+    "REACTIVATION_GDPR_EMAIL": "privacy@wasnie.io",
+    "CANCEL_SCHEDULED_TITLE": "Your subscription will be canceled on {{date}}.",
+    "CANCEL_SCHEDULED_DESC": "You will continue to have full access until that date.",
+    "KEEP_SUBSCRIPTION_BTN": "Keep my subscription",
+    "REVERT_CANCEL_ERROR": "Could not revert cancellation. Please try again."
   }
 }

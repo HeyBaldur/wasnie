@@ -149,7 +149,8 @@
     "CREATED_AT": "Creado",
     "UPDATED_AT": "Actualizado",
     "CONTINUE": "Continuar",
-    "DONE": "Listo"
+    "DONE": "Listo",
+    "RETRY": "Intentar de nuevo"
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",
@@ -1203,7 +1204,7 @@
   "SUBSCRIPTION": {
     "MANAGE_TITLE": "Suscripción",
     "MANAGE_SUBTITLE": "Gestiona tu plan actual y consulta las opciones de mejora.",
-    "LOAD_ERROR": "No se pudieron cargar los detalles de la suscripción. Por favor, inténtalo de nuevo.",
+    "LOAD_ERROR": "No pudimos cargar los datos de tu suscripción. Suele ser un problema de conexión temporal — inténtalo de nuevo en un momento.",
     "BILLING_EMAIL": "Email de facturación",
     "CURRENT_PERIOD": "Período actual",
     "NEXT_BILLING": "Próxima facturación",
@@ -1235,8 +1236,26 @@
     "BILLING_PORTAL_ERROR": "No se pudo abrir el portal de facturación. Inténtalo de nuevo.",
     "PAST_DUE_BANNER_MSG": "Tu pago está vencido. El acceso se bloqueará cuando finalice el período de gracia.",
     "PAST_DUE_BANNER_CTA": "Actualizar método de pago",
-    "REACTIVATION_TITLE": "Suscripción requerida",
-    "REACTIVATION_DESC": "Tu suscripción ha sido cancelada. Reactívala para continuar usando Wasnie.",
-    "REACTIVATION_CTA": "Reactivar suscripción"
+    "REACTIVATION_TITLE": "Tu suscripción ha sido cancelada",
+    "REACTIVATION_DESC": "Tu cuenta está inactiva. No tienes acceso a las funciones de Wasnie.",
+    "REACTIVATION_CTA": "Reactivar",
+    "REACTIVATION_CANCELED_ON": "Cancelada el",
+    "REACTIVATION_PREVIOUS_PLAN": "Plan anterior",
+    "REACTIVATION_DATA_PRESERVED": "Tus datos están preservados. Reactiva tu suscripción para recuperar el acceso completo.",
+    "REACTIVATION_PLANS_TITLE": "Elige tu plan",
+    "REACTIVATION_PAYEES_UP_TO": "Hasta {{count}} empleados",
+    "REACTIVATION_PLANS_UP_TO": "Hasta {{count}} planes",
+    "REACTIVATION_PLAN_UNAVAILABLE": "No disponible",
+    "REACTIVATION_PLAN_OVER_PAYEE_LIMIT": "Tu uso actual ({{current}} empleados) supera el límite de este plan de {{limit}}.",
+    "REACTIVATION_PLAN_OVER_PLAN_LIMIT": "Tu uso actual ({{current}} planes) supera el límite de este plan de {{limit}}.",
+    "REACTIVATION_CHECKOUT_ERROR": "No se pudo iniciar el proceso de pago. Inténtalo de nuevo.",
+    "REACTIVATION_GDPR_TITLE": "Solicitar eliminación de datos (GDPR)",
+    "REACTIVATION_GDPR_BODY": "Tienes derecho a solicitar la eliminación completa de tus datos según el RGPD. Este proceso es gestionado manualmente por nuestro equipo y puede tardar varios días hábiles. Mientras no solicites la eliminación, tus datos están preservados y puedes reactivar la suscripción en cualquier momento.",
+    "REACTIVATION_GDPR_CONTACT": "Para solicitar la eliminación, contáctanos en:",
+    "REACTIVATION_GDPR_EMAIL": "privacy@wasnie.io",
+    "CANCEL_SCHEDULED_TITLE": "Tu suscripción se cancelará el {{date}}.",
+    "CANCEL_SCHEDULED_DESC": "Tendrás acceso completo hasta esa fecha.",
+    "KEEP_SUBSCRIPTION_BTN": "Mantener mi suscripción",
+    "REVERT_CANCEL_ERROR": "No se pudo revertir la cancelación. Inténtalo de nuevo."
   }
 }

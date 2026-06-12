@@ -21,6 +21,12 @@
   gap: var(--space-2);
 }
 
+.reactivation-header__right {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
 .reactivation-header__monogram {
   width: 32px;
   height: 32px;
@@ -49,30 +55,53 @@
 .reactivation-body {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: var(--space-12) var(--space-8);
 }
 
+.reactivation-loading {
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-16);
+}
+
 .reactivation-card {
-  max-width: 420px;
+  max-width: 560px;
   width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-5);
-  text-align: center;
 }
 
-.reactivation-icon {
+.reactivation-card__hero {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.reactivation-card__hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.reactivation-error {
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-4);
+}
+
+.reactivation-status-icon {
   width: 56px;
   height: 56px;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-size-24);
-  background: var(--color-danger-subtle, color-mix(in srgb, var(--color-danger) 12%, transparent));
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
   color: var(--color-danger);
   flex-shrink: 0;
 }
@@ -89,5 +118,188 @@
   font-size: var(--font-size-14);
   color: var(--color-text-secondary);
   margin: 0;
-  max-width: 320px;
+}
+
+.reactivation-meta {
+  width: 100%;
+  margin-top: var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reactivation-meta__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.reactivation-meta__label {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.reactivation-meta__value {
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.reactivation-data-note {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--color-info) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-info) 24%, transparent);
+  border-radius: var(--radius-md);
+  width: 100%;
+  text-align: center;
+}
+
+// Plan selection
+
+.reactivation-plans-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-5);
+}
+
+.reactivation-plans-title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  text-align: left;
+}
+
+.reactivation-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.reactivation-plan-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  text-align: left;
+
+  &--previous {
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 1px var(--color-brand);
+  }
+
+  &--blocked {
+    opacity: 0.65;
+    background: var(--color-bg-surface-sunken);
+    border-color: var(--color-border-subtle);
+  }
+}
+
+.reactivation-plan-card__blocked-note {
+  font-size: var(--font-size-12);
+  color: var(--color-warning);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.reactivation-plan-card__badge {
+  margin-bottom: calc(-1 * var(--space-1));
+}
+
+.reactivation-plan-card__name {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.reactivation-plan-card__price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.reactivation-plan-card__amount {
+  font-size: var(--font-size-20);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.reactivation-plan-card__currency {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.reactivation-plan-card__limits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+
+  li {
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+  }
+}
+
+// GDPR section
+
+.reactivation-gdpr {
+  width: 100%;
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  text-align: left;
+}
+
+.reactivation-gdpr__title {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.reactivation-gdpr__body {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.reactivation-gdpr__contact {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.reactivation-gdpr__email {
+  color: var(--color-text-link);
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
 }

@@ -6,16 +6,118 @@
       </div>
       <span class="reactivation-header__name">Wasnie</span>
     </div>
+    <div class="reactivation-header__right">
+      <ws-button variant="ghost" size="sm" (click)="signOut()">
+        {{ 'AUTH.LOGOUT' | translate }}
+      </ws-button>
+    </div>
   </header>
 
   <main class="reactivation-body">
-    <ws-card class="reactivation-card">
-      <div class="reactivation-icon" aria-hidden="true">⚠</div>
-      <h1 class="reactivation-title">{{ 'SUBSCRIPTION.REACTIVATION_TITLE' | translate }}</h1>
-      <p class="reactivation-desc">{{ 'SUBSCRIPTION.REACTIVATION_DESC' | translate }}</p>
-      <ws-button variant="primary" (click)="reactivate()">
-        {{ 'SUBSCRIPTION.REACTIVATION_CTA' | translate }}
-      </ws-button>
-    </ws-card>
+    @if (loading()) {
+      <div class="reactivation-loading" role="status" aria-live="polite">
+        {{ 'COMMON.LOADING' | translate }}
+      </div>
+    } @else if (loadError()) {
+      <ws-card class="reactivation-card">
+        <p class="reactivation-error">{{ 'SUBSCRIPTION.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </ws-card>
+    } @else {
+      <ws-card class="reactivation-card">
+        <!-- Status section -->
+        <div class="reactivation-card__hero">
+          <div class="reactivation-status-icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div class="reactivation-card__hero-text">
+            <h1 class="reactivation-title">{{ 'SUBSCRIPTION.REACTIVATION_TITLE' | translate }}</h1>
+            <p class="reactivation-desc">{{ 'SUBSCRIPTION.REACTIVATION_DESC' | translate }}</p>
+          </div>
+        </div>
+
+        <div class="reactivation-meta">
+          @if (subscription()?.canceledAt) {
+            <div class="reactivation-meta__row">
+              <span class="reactivation-meta__label">{{ 'SUBSCRIPTION.REACTIVATION_CANCELED_ON' | translate }}</span>
+              <span class="reactivation-meta__value">{{ subscription()?.canceledAt | date:'mediumDate' }}</span>
+            </div>
+          }
+          @if (subscription()?.tier && subscription()?.tier !== 'Free') {
+            <div class="reactivation-meta__row">
+              <span class="reactivation-meta__label">{{ 'SUBSCRIPTION.REACTIVATION_PREVIOUS_PLAN' | translate }}</span>
+              <ws-badge variant="neutral">{{ subscription()?.tier }}</ws-badge>
+            </div>
+          }
+        </div>
+
+        <p class="reactivation-data-note">{{ 'SUBSCRIPTION.REACTIVATION_DATA_PRESERVED' | translate }}</p>
+
+        <!-- Plan selection -->
+        <div class="reactivation-plans-section">
+          <h2 class="reactivation-plans-title">{{ 'SUBSCRIPTION.REACTIVATION_PLANS_TITLE' | translate }}</h2>
+          <div class="reactivation-plans-grid">
+            @for (plan of plans(); track plan.tier) {
+              <div class="reactivation-plan-card"
+                   [class.reactivation-plan-card--previous]="isPreviousPlan(plan)"
+                   [class.reactivation-plan-card--blocked]="isPlanBlocked(plan)">
+                @if (isPreviousPlan(plan) && !isPlanBlocked(plan)) {
+                  <div class="reactivation-plan-card__badge">
+                    <ws-badge variant="brand">{{ 'SUBSCRIPTION.REACTIVATION_PREVIOUS_PLAN' | translate }}</ws-badge>
+                  </div>
+                }
+                @if (isPlanBlocked(plan)) {
+                  <div class="reactivation-plan-card__badge">
+                    <ws-badge variant="warning">{{ 'SUBSCRIPTION.REACTIVATION_PLAN_UNAVAILABLE' | translate }}</ws-badge>
+                  </div>
+                }
+                <div class="reactivation-plan-card__name">{{ plan.name }}</div>
+                <div class="reactivation-plan-card__price">
+                  <span class="reactivation-plan-card__amount">{{ plan.price | number:'1.0-0' }}</span>
+                  <span class="reactivation-plan-card__currency">{{ plan.currency | uppercase }}/{{ plan.interval }}</span>
+                </div>
+                <ul class="reactivation-plan-card__limits">
+                  <li>{{ 'SUBSCRIPTION.REACTIVATION_PAYEES_UP_TO' | translate: { count: maxPayeesDisplay(plan) } }}</li>
+                  <li>{{ 'SUBSCRIPTION.REACTIVATION_PLANS_UP_TO' | translate: { count: maxPlansDisplay(plan) } }}</li>
+                </ul>
+                @if (isPlanBlockedByPayees(plan)) {
+                  <p class="reactivation-plan-card__blocked-note">
+                    {{ 'SUBSCRIPTION.REACTIVATION_PLAN_OVER_PAYEE_LIMIT' | translate: { current: usage()!.payeeCount, limit: plan.maxPayees } }}
+                  </p>
+                } @else if (isPlanBlockedByPlans(plan)) {
+                  <p class="reactivation-plan-card__blocked-note">
+                    {{ 'SUBSCRIPTION.REACTIVATION_PLAN_OVER_PLAN_LIMIT' | translate: { current: usage()!.planCount, limit: plan.maxPlans } }}
+                  </p>
+                }
+                <ws-button
+                  variant="primary"
+                  [fullWidth]="true"
+                  [loading]="isStartingCheckoutFor(plan.tier)"
+                  [disabled]="startingCheckout() !== null || isPlanBlocked(plan)"
+                  (click)="reactivate(plan.priceId!, plan.tier)">
+                  {{ 'SUBSCRIPTION.REACTIVATION_CTA' | translate }}
+                </ws-button>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- GDPR section -->
+        <div class="reactivation-gdpr">
+          <h3 class="reactivation-gdpr__title">{{ 'SUBSCRIPTION.REACTIVATION_GDPR_TITLE' | translate }}</h3>
+          <p class="reactivation-gdpr__body">{{ 'SUBSCRIPTION.REACTIVATION_GDPR_BODY' | translate }}</p>
+          <p class="reactivation-gdpr__contact">
+            {{ 'SUBSCRIPTION.REACTIVATION_GDPR_CONTACT' | translate }}
+            <a class="reactivation-gdpr__email" href="mailto:{{ 'SUBSCRIPTION.REACTIVATION_GDPR_EMAIL' | translate }}">
+              {{ 'SUBSCRIPTION.REACTIVATION_GDPR_EMAIL' | translate }}
+            </a>
+          </p>
+        </div>
+      </ws-card>
+    }
   </main>
 </div>

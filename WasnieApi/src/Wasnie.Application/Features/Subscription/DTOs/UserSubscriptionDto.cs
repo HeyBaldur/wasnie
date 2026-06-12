@@ -12,4 +12,6 @@ public sealed record UserSubscriptionDto(
     DateTimeOffset? CurrentPeriodEnd,
     DateTimeOffset? NextBillingDate,
     DateTimeOffset? CanceledAt,
+    bool CancelAtPeriodEnd,
+    DateTimeOffset? CancelAt,
     DateTimeOffset CreatedAt);

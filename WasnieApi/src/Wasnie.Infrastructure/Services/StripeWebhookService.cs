@@ -318,6 +318,7 @@ public sealed class StripeWebhookService(
         var periodStart = new DateTimeOffset(item.CurrentPeriodStart, TimeSpan.Zero);
         var periodEnd = new DateTimeOffset(item.CurrentPeriodEnd, TimeSpan.Zero);
         var previousTier = subscription.Tier;
+        var wasCancelScheduled = subscription.CancelAtPeriodEnd;
 
         subscription.UpdateFromStripe(
             tier: newTier,
@@ -332,6 +333,53 @@ public sealed class StripeWebhookService(
             now: now);
 
         tenant.SelectPlan(newTier);
+
+        // Log cancellation signal values for diagnosis (flexible billing uses cancel_at, not cancel_at_period_end).
+        logger.LogInformation(
+            "subscription.updated: CancelAtPeriodEnd={CancelAtPeriodEnd} CancelAt={CancelAt} for {SubscriptionId}",
+            stripeSubscription.CancelAtPeriodEnd, stripeSubscription.CancelAt, stripeSubscription.Id);
+
+        // Classic mode: cancel_at_period_end=true. Flexible (billing_mode=flexible / dahlia): cancel_at != null, cancel_at_period_end stays false.
+        var isCancelScheduled = stripeSubscription.CancelAtPeriodEnd || stripeSubscription.CancelAt.HasValue;
+        if (isCancelScheduled)
+        {
+            var cancelAt = stripeSubscription.CancelAt.HasValue
+                ? new DateTimeOffset(stripeSubscription.CancelAt.Value, TimeSpan.Zero)
+                : periodEnd;
+
+            subscription.ScheduleCancellation(cancelAt, now);
+
+            logger.LogInformation(
+                "Tenant {TenantId} subscription scheduled for cancellation at {CancelAt}",
+                subscription.TenantId, cancelAt);
+
+            return new AuditEntry(
+                TenantId: subscription.TenantId,
+                Action: AuditActions.SubscriptionCancelScheduled,
+                ResourceType: ResourceTypes.Subscription,
+                ResourceId: fullSubscription.Id,
+                ActorUserId: "stripe-webhook",
+                ActorEmail: "webhook@stripe.com",
+                DisplayName: $"Subscription cancel scheduled at {cancelAt:O}: {fullSubscription.Id}");
+        }
+
+        if (wasCancelScheduled)
+        {
+            subscription.ClearCancellationSchedule(now);
+
+            logger.LogInformation(
+                "Tenant {TenantId} subscription cancellation reverted",
+                subscription.TenantId);
+
+            return new AuditEntry(
+                TenantId: subscription.TenantId,
+                Action: AuditActions.SubscriptionCancelReverted,
+                ResourceType: ResourceTypes.Subscription,
+                ResourceId: fullSubscription.Id,
+                ActorUserId: "stripe-webhook",
+                ActorEmail: "webhook@stripe.com",
+                DisplayName: $"Subscription cancellation reverted: {fullSubscription.Id}");
+        }
 
         var action = newTier > previousTier
             ? AuditActions.SubscriptionUpgraded

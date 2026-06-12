@@ -40,6 +40,12 @@ public sealed class UserSubscriptionConfiguration : IEntityTypeConfiguration<Use
         builder.Property(s => s.StripeProductId)
             .HasMaxLength(100);
 
+        builder.Property(s => s.CancelAtPeriodEnd)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(s => s.CancelAt);
+
         builder.Property(s => s.CreatedAt)
             .IsRequired();
 

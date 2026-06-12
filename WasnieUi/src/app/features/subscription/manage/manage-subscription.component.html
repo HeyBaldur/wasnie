@@ -1,9 +1,10 @@
 <app-shell>
+  <ws-page-layout
+    icon="brand-stripe"
+    [title]="'SUBSCRIPTION.MANAGE_TITLE' | translate"
+    [subtitle]="'SUBSCRIPTION.MANAGE_SUBTITLE' | translate"
+  >
   <div class="subscription-page">
-    <ws-page-header
-      [title]="'SUBSCRIPTION.MANAGE_TITLE' | translate"
-      [subtitle]="'SUBSCRIPTION.MANAGE_SUBTITLE' | translate"
-    />
 
     @if (loading()) {
       <div class="subscription-skeleton">
@@ -60,6 +61,30 @@
           <p class="current-plan-card__free-note">{{ 'SUBSCRIPTION.FREE_NOTE' | translate }}</p>
         }
 
+        @if (isCancelScheduled) {
+          <div class="cancel-scheduled-banner" role="alert">
+            <svg class="cancel-scheduled-banner__icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            </svg>
+            <div class="cancel-scheduled-banner__body">
+              <span class="cancel-scheduled-banner__title">
+                {{ 'SUBSCRIPTION.CANCEL_SCHEDULED_TITLE' | translate : { date: (subscription()!.cancelAt | date:'mediumDate') } }}
+              </span>
+              <span class="cancel-scheduled-banner__desc">
+                {{ 'SUBSCRIPTION.CANCEL_SCHEDULED_DESC' | translate }}
+              </span>
+            </div>
+            <ws-button
+              variant="secondary"
+              size="sm"
+              [loading]="revertingCancellation()"
+              (click)="revertCancellation()"
+            >
+              {{ 'SUBSCRIPTION.KEEP_SUBSCRIPTION_BTN' | translate }}
+            </ws-button>
+          </div>
+        }
+
         @if (hasPaidSubscription) {
           <div class="current-plan-card__actions">
             <ws-button
@@ -99,19 +124,21 @@
       <!-- Plan selection section (upgrade / downgrade) -->
       @if (upgradePlans.length > 0) {
         <div class="upgrade-section">
-          <div class="upgrade-section__heading">
-            <h2 class="upgrade-section__title">{{ 'SUBSCRIPTION.UPGRADE_TITLE' | translate }}</h2>
-            @if (pendingTier()) {
-              <span class="upgrade-section__updating">
-                <span class="upgrade-section__updating-dot"></span>
-                {{ 'SUBSCRIPTION.PLAN_UPDATING' | translate }}
-              </span>
+          <div class="upgrade-section__header-group">
+            <div class="upgrade-section__heading">
+              <h2 class="upgrade-section__title">{{ 'SUBSCRIPTION.UPGRADE_TITLE' | translate }}</h2>
+              @if (pendingTier()) {
+                <span class="upgrade-section__updating">
+                  <span class="upgrade-section__updating-dot"></span>
+                  {{ 'SUBSCRIPTION.PLAN_UPDATING' | translate }}
+                </span>
+              }
+            </div>
+            <p class="upgrade-section__desc">{{ 'SUBSCRIPTION.UPGRADE_DESC' | translate }}</p>
+            @if (pollTimedOut()) {
+              <p class="upgrade-section__timeout">{{ 'SUBSCRIPTION.PLAN_UPDATE_TIMEOUT' | translate }}</p>
             }
           </div>
-          <p class="upgrade-section__desc">{{ 'SUBSCRIPTION.UPGRADE_DESC' | translate }}</p>
-          @if (pollTimedOut()) {
-            <p class="upgrade-section__timeout">{{ 'SUBSCRIPTION.PLAN_UPDATE_TIMEOUT' | translate }}</p>
-          }
 
           <div class="plan-comparison-wrap">
             <table class="plan-comparison">
@@ -188,4 +215,5 @@
       }
     }
   </div>
+  </ws-page-layout>
 </app-shell>

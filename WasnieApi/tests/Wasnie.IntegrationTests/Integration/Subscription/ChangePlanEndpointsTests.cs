@@ -214,5 +214,9 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
         public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl,
             CancellationToken cancellationToken = default)
             => Task.FromResult("https://billing.stripe.com/test-portal");
+
+        public Task RevertCancellationAsync(string subscriptionId,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }

@@ -28,7 +28,14 @@ export interface CurrentSubscription {
   currentPeriodEnd: string | null;
   nextBillingDate: string | null;
   canceledAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  cancelAt: string | null;
   createdAt: string;
+}
+
+export interface SubscriptionUsage {
+  payeeCount: number;
+  planCount: number;
 }
 
 export interface ChangePlanResult {
@@ -61,11 +68,19 @@ export class SubscriptionService {
     return this.http.get<CurrentSubscription>(`${this.base}/current`);
   }
 
+  getUsage(): Observable<SubscriptionUsage> {
+    return this.http.get<SubscriptionUsage>(`${this.base}/usage`);
+  }
+
   changePlan(targetTier: string): Observable<ChangePlanResult> {
     return this.http.post<ChangePlanResult>(`${this.base}/change-plan`, { targetTier });
   }
 
   getBillingPortalUrl(): Observable<{ url: string }> {
     return this.http.post<{ url: string }>(`${this.base}/billing-portal`, {});
+  }
+
+  revertCancellation(): Observable<void> {
+    return this.http.post<void>(`${this.base}/revert-cancellation`, {});
   }
 }

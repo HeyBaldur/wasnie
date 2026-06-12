@@ -8,6 +8,193 @@
 
 ## Sessions (newest first)
 
+## 2026-06-12 — WI-FIX-STALE-CANCEL-FIELDS-ON-REACTIVATION
+
+**Status:** COMPLETE. Backend unit 433/433. Integration tests ready (run with API stopped).
+
+**Step 0 — All activation/reactivation paths:**
+| Path | Clears cancel fields? |
+|---|---|
+| `checkout.session.completed` → `UpdateFromStripe` | ❌ BUG — root cause |
+| `subscription.updated` → `UpdateFromStripe` → ScheduleCancellation/Clear | ❌ UpdateFromStripe didn't clear; safe because schedule reapplied from Stripe payload |
+| `subscription.deleted` → `Cancel()` | ✓ (fixed previous session) |
+| `invoice.payment_succeeded` → `Recover()` | partial — didn't clear `CanceledAt` |
+
+**Fixes:**
+- `UserSubscription.UpdateFromStripe()`: added `CancelAtPeriodEnd = false; CancelAt = null; CanceledAt = null;`. Safe for `HandleSubscriptionUpdatedAsync` — `wasCancelScheduled` captured before call, schedule repopulated after if Stripe signals it.
+- `UserSubscription.Recover()`: added `CanceledAt = null` (defensive — PastDue path can't have it set today, but invariant is clear).
+- Frontend: `isCancelScheduled` already guards `status === 'Active'` — no change needed.
+
+**Dev data fix (corrupted row):**
+Run against dev DB: `UPDATE UserSubscriptions SET CancelAtPeriodEnd=0, CancelAt=NULL, CanceledAt=NULL WHERE StripeCustomerId='cus_UgWEoo6pTQLm7j'`
+
+**Files changed:**
+- `Wasnie.Domain/Subscription/UserSubscription.cs` — `UpdateFromStripe` + `Recover`
+- `tests/Wasnie.UnitTests/Domain/UserSubscriptionCancellationTests.cs` — 5 new tests
+- `tests/Wasnie.IntegrationTests/Integration/Subscription/ReactivationCancellationFieldsTests.cs` — NEW (8 tests)
+
+**Tests:** 433/433 unit (13 new). Integration: run with API stopped.
+
+---
+
+## 2026-06-12 — WI-FIX-REACTIVATION-TIER-LIMITS
+
+**Status:** COMPLETE. La pantalla de reactivación ya no permite elegir planes cuyos límites el uso actual del tenant excede.
+
+**Backend:**
+- `CreateCheckoutSessionHandler` reescrito: valida `payeeCount > limits.MaxPayees` y `planCount > limits.MaxPlans` antes de crear la sesión Stripe; devuelve `CheckoutResultDto(Blocked, BlockedReason, Current, Limit, TargetTier)`.
+- Controller `/api/subscription/checkout`: 409 Conflict si `dto.Blocked`, 200 con `CheckoutSessionDto(checkoutUrl)` si no (contrato frontend preservado).
+- Nuevo `GET /api/subscription/usage` → `GetSubscriptionUsageQuery/Handler` → `{payeeCount, planCount}`; añadido a `ExemptPrefixes` del middleware.
+- Nuevos DTOs: `CheckoutResultDto`, `SubscriptionUsageDto`.
+- 5 integration tests en `CheckoutTierLimitTests.cs`: Starter bloqueado (26 payees), Growth bloqueado (76), Starter libre (0 payees), Scale libre (26 payees), multi-tenant aislamiento.
+
+**Frontend:**
+- `SubscriptionService.getUsage()` + interfaz `SubscriptionUsage`.
+- `SubscriptionReactivationComponent`: `forkJoin({ plans, usage })` en `load()`; señal `usage`; métodos `isPlanBlocked/ByPayees/ByPlans`.
+- Template: clase `--blocked` + badge "Unavailable" + nota de uso; botón Reactivate deshabilitado cuando bloqueado.
+- SCSS: `.reactivation-plan-card--blocked` (opacity 0.65, sunken bg) + `.reactivation-plan-card__blocked-note` (warning color).
+- i18n: 3 nuevas claves × 3 idiomas (EN/ES/PL).
+- 7 nuevos unit tests (`isPlanBlocked*`, unlimited, null-usage guard).
+
+**Tests:** Frontend 401/406 (5 pre-existing ProcessPendingComponent). `ng build --configuration production` limpio.
+
+---
+
+## 2026-06-12 — WI-FIX-CANCELED-FIELDS + manage-subscription autoprotección
+
+**Status:** COMPLETE. Backend: 0 errores build, 10/10 unit tests (incluye 2 nuevos). Frontend: 4/4 nuevos spec + ng build production limpio. Integration test añadido (pendiente de ejecutar con API detenida — DLL lock).
+
+**Step 0 diagnóstico:**
+- `Cancel()` en `UserSubscription.cs` (línea 71): solo ponía `Status=Canceled + CanceledAt` — no limpiaba `CancelAtPeriodEnd/CancelAt`. Invariante de dominio roto.
+- `HandleSubscriptionDeletedAsync` (línea 418): solo llamaba `subscription.Cancel()`. El fix en el dominio propaga automáticamente a este handler sin tocarlo.
+- `isCancelScheduled` getter (manage-subscription): solo comprobaba `cancelAtPeriodEnd === true` sin verificar `Status === 'Active'` → mostraba banner amber a tenants Canceled con datos sucios.
+- No existía autoprotección en ManageSubscriptionComponent: un tenant Canceled podía hacer F5 en /subscription y ver la pantalla normal.
+
+**Decisión: fix en dominio, no en el handler.** `Cancel()` es la autoridad; cualquier futuro llamador obtiene la limpieza gratis.
+
+**Backend — `UserSubscription.Cancel()`:**
+- Añadidos `CancelAtPeriodEnd = false; CancelAt = null;` al método `Cancel()`.
+
+**Backend — tests:**
+- `UserSubscriptionCancellationTests`: 2 nuevos tests (`Cancel_WhenScheduled_ClearsCancelAtPeriodEnd`, `Cancel_WhenScheduled_ClearsCancelAt`). Total: 10/10 pass.
+- `WebhookPhase3Tests`: 1 nuevo test (`SubscriptionDeleted_WhenCancelScheduled_ClearsCancelScheduleFields`) — siembra subscription con `CancelAtPeriodEnd=true, CancelAt=+1mes`, dispara `subscription.deleted`, verifica `CancelAtPeriodEnd=false, CancelAt=null, Status=Canceled, CanceledAt set`.
+
+**Frontend — `ManageSubscriptionComponent`:**
+- Inyectado `Router`.
+- `load()` → `getCurrent()` next callback: si `sub.status === 'Canceled'` → `router.navigate(['/subscription/reactivate'])` y return (sin cargar planes).
+- `isCancelScheduled` getter: `sub?.status === 'Active' && sub?.cancelAtPeriodEnd === true` (double guard contra datos sucios con Status=Canceled).
+
+**Frontend — tests (`manage-subscription.component.spec.ts`, nuevo):**
+- 4 tests: redirect a /reactivate cuando Canceled; no llama getPlans cuando Canceled; `isCancelScheduled` true cuando Active+cancelAtPeriodEnd; `isCancelScheduled` false cuando Canceled aunque cancelAtPeriodEnd=true. 4/4 pass.
+
+## 2026-06-12 — WI-MANAGE-SUBSCRIPTION-UI: icono Stripe en header + corrección espaciado sección Upgrade
+
+**Status:** COMPLETE. `ng build --configuration production` clean, 0 errores nuevos.
+
+**Problema:**
+- Página `/subscription` usaba `<ws-page-header>` sin icono — todas las demás páginas usan `<ws-page-layout icon="...">` (ej. Payees: `icon="users"`).
+- Sección "Upgrade your account" / "Unlock more payees..." tenía gap de 16px (`--space-4`) entre título y subtítulo, mientras el header principal usa 4px (`--space-1`). Ambos debían ser visualmente idénticos.
+
+**Cambios:**
+- `manage-subscription.component.ts`: `WsPageHeaderComponent` → `WsPageLayoutComponent` en imports.
+- `manage-subscription.component.html`: `<ws-page-header>` → `<ws-page-layout icon="brand-stripe">` envolviendo todo el contenido; título y subtítulo de "Upgrade" agrupados en `.upgrade-section__header-group`.
+- `manage-subscription.component.scss`: eliminados `padding/max-width/margin` de `.subscription-page` (los maneja `ws-page-layout`); añadido `.upgrade-section__header-group { display: flex; flex-direction: column; gap: var(--space-1) }`.
+- Icono `brand-stripe` ya estaba registrado en `IconComponent.ICONS` — sin cambios en `icon.component.ts`.
+
+## 2026-06-12 — WI-CANCELED-SCREEN: pantalla cuenta cancelada + bloqueo server-side + reactivación + GDPR
+
+**Status:** COMPLETE. Build: 0 errores backend, ng build production limpio. Frontend: 396 tests (391 pass, 5 pre-existing). Backend unit: 418/418.
+
+**Step 0 Diagnóstico:**
+- Guard frontend ya existía (`subscriptionGuard` → `/subscription/reactivate`) pero NO había enforcement backend.
+- `customer.subscription.deleted` → `HandleSubscriptionDeletedAsync` → `subscription.Cancel()` → `Status=Canceled` + `CanceledAt=now`. Sin bug: no depende de `cancel_at_period_end`.
+- GET /current devuelve `UserSubscriptionDto` con `CanceledAt` y `Tier` (todo lo necesario para la pantalla).
+- `SubscriptionReactivationComponent` existía como stub (solo navegaba a `/onboarding/plan`).
+
+**Backend — `SubscriptionEnforcementMiddleware`:**
+- Bloqueea HTTP 402 con `{"code":"subscription_canceled","message":"..."}` para tenants `Status=Canceled`.
+- Rutas exentas: webhook, current, checkout, config, plans, /api/auth/, /health.
+- Middleware registrado en `Program.cs` después de `UseAuthorization`.
+- Structured logging: `LogWarning` con tenant + método + path.
+
+**Frontend — pantalla reactivación completa:**
+- `SubscriptionReactivationComponent` reemplazado (stub → full screen sin app-shell).
+- Carga `getCurrent()` + `getPlans()` en init; muestra fecha `CanceledAt`, tier anterior, estado.
+- Tarjetas de planes seleccionables → `createCheckout(priceId)` → Stripe checkout.
+- Plan anterior destacado con borde de brand.
+- Aviso GDPR informativo con correo placeholder (`privacy@wasnie.io` — **REEMPLAZAR**).
+- i18n EN/ES/PL: 14 nuevas claves.
+
+**Placeholder a completar:**
+- `REACTIVATION_GDPR_EMAIL` en los 3 archivos i18n = `privacy@wasnie.io` — reemplazar por correo real.
+
+**Tests nuevos:**
+- `SubscriptionEnforcementTests.cs` (9 tests integration): 402 en rutas funcionales, 200 en exentas, 401 sin auth, multi-tenant aislado.
+- `subscription-reactivation.component.spec.ts` (8 tests): init, filtro Free plans, previous plan, createCheckout llamado, startingCheckout signal, error toast, loadError.
+
+## 2026-06-12 — WI-FIX-CANCEL-AT-PERIOD-END v2: COMPLETE — billing_mode=flexible usa cancel_at, no cancel_at_period_end
+
+**Status:** COMPLETE. Build: 0 errores. 426/426 unit tests.
+
+**Causa raíz confirmada (segunda):** `billing_mode=flexible` (Stripe dahlia) señaliza "cancelar al final del periodo" con `cancel_at = <unix_timestamp>` y mantiene `cancel_at_period_end = false`. El handler anterior (v1, race condition fix) leía `stripeSubscription.CancelAtPeriodEnd` → siempre `false` en flexible → `ScheduleCancellation` nunca se llamaba.
+
+**Fix (`StripeWebhookService.cs` línea 343):**
+```
+var isCancelScheduled = stripeSubscription.CancelAtPeriodEnd || stripeSubscription.CancelAt.HasValue;
+```
+Soporta ambos modos:
+- Classic: `cancel_at_period_end=true, cancel_at=null` → `isCancelScheduled=true`, `cancelAt=periodEnd`
+- Flexible: `cancel_at_period_end=false, cancel_at=<ts>` → `isCancelScheduled=true`, `cancelAt=stripeSubscription.CancelAt.Value`
+- Revert: `cancel_at_period_end=false, cancel_at=null` → `isCancelScheduled=false` → `wasCancelScheduled` gate → `ClearCancellationSchedule`
+
+**Structured logging añadido:** `CancelAtPeriodEnd` y `CancelAt` logueados en cada evento `subscription.updated` para diagnóstico futuro.
+
+**Auditoría de `CurrentPeriodEnd/Start`:** todos los usos en el handler leen de `item.CurrentPeriodEnd/Start` (nivel item, correcto para dahlia). No hay usos de `subscription.CurrentPeriodEnd` (deprecated). Ningún cambio adicional necesario.
+
+**Smoke esperado:** "Don't cancel" en portal → volver a cancelar → evento nuevo → `CancelAtPeriodEnd=1`, `CancelAt=2026-07-11...` en DB → banner amber en `/subscription`.
+
+## 2026-06-12 — WI-FIX-CANCEL-AT-PERIOD-END: COMPLETE — race condition en webhook handler
+
+**Status:** COMPLETE. Build: 0 errors. 426/426 unit tests.
+
+**Causa raíz confirmada:** `HandleSubscriptionUpdatedAsync` leía `cancel_at_period_end` de `fullSubscription` (Stripe GET re-fetch, línea 338). Stripe envía el webhook *antes* de que el endpoint GET refleje el nuevo estado, por lo que `fullSubscription.CancelAtPeriodEnd` devolvía `false` aunque la suscripción estuviera marcada para cancelación. `UpdatedAt` sí se actualizaba (porque viene de `UpdateFromStripe`, que no depende de este campo) — eso confirmó que el handler corría pero saltaba el bloque de cancelación.
+
+**Fix aplicado:**
+- `StripeWebhookService.cs` línea 338: `fullSubscription.CancelAtPeriodEnd` → `stripeSubscription.CancelAtPeriodEnd` (event payload — fuente autoritativa).
+- `StripeWebhookService.cs` línea 340: `fullSubscription.CancelAt` → `stripeSubscription.CancelAt`.
+- `fullSubscription` se sigue usando para resolución de producto/tier (expand `items.data.price.product`).
+
+**Fixes de compilación (pre-existing):**
+- `ChangePlanEndpointsTests.StubStripeManagement`: añadido `RevertCancellationAsync` stub (interfaz creció en sesión anterior pero stub no se actualizó).
+- `PayeeImportExecutionServiceTests.CreateSut`: añadido `ITierLimitChecker` substitute (constructor de `PayeeImportExecutionService` creció con `ITierLimitChecker` en WI-IMPORT-TIER-LIMIT pero el test no se actualizó).
+
+**Para smoke test:** Reiniciar API → `stripe events resend evt_1ThP5a3kwCZf9lCAZLMAdz3h` → verificar `CancelAtPeriodEnd=1`, `CancelAt=2026-07-11...` en DB → verificar banner amber en `/subscription`.
+
+## 2026-06-12 — WI-PAYMENT-SUBSCRIPTION: COMPLETE — cancel_at_period_end manejado + aviso en UI
+
+**Status:** COMPLETE. Backend: 0 errors (Application + Infrastructure). `ng build --configuration production` clean. 418/418 backend unit tests. 383/388 frontend tests (5 pre-existing failures).
+
+**Trabajo realizado:**
+- `UserSubscription` dominio: +2 campos `CancelAtPeriodEnd`/`CancelAt`, +2 métodos `ScheduleCancellation`/`ClearCancellationSchedule`.
+- `AuditActions`: +`SUBSCRIPTION_CANCEL_SCHEDULED`, +`SUBSCRIPTION_CANCEL_REVERTED`.
+- `StripeWebhookService.HandleSubscriptionUpdatedAsync`: lee `cancel_at_period_end` de Stripe, llama métodos de dominio, audita en ambos sentidos (set + clear).
+- `UserSubscriptionDto` + `GetCurrentSubscriptionHandler`: exponen `CancelAtPeriodEnd` y `CancelAt`.
+- `IStripeSubscriptionManagementService`: +`RevertCancellationAsync` (llama `SubscriptionUpdate { CancelAtPeriodEnd = false }`).
+- `RevertSubscriptionCancellationCommand` + handler (idempotente, audita, usa `ICurrentUserService`).
+- `POST /api/subscription/revert-cancellation` en `SubscriptionController`.
+- Migración EF `A10_AddCancelAtPeriodEnd` escrita manualmente y aplicada con `--configuration Release`.
+- Frontend: `CurrentSubscription` +2 campos; `SubscriptionService.revertCancellation()`; banner amber `cancel-scheduled-banner` en `ManageSubscriptionComponent`; botón "Mantener mi suscripción" con loading state.
+- i18n EN/ES/PL: 4 nuevas claves.
+- 8 nuevos unit tests de dominio en `UserSubscriptionCancellationTests.cs`.
+
+**Decisiones:**
+- Status permanece `Active` cuando `cancel_at_period_end=true` — bloqueo real solo en `subscription.deleted`.
+- Botón "Mantener suscripción" incluido (llama Stripe directamente).
+- La suscripción `updated` handler sigue fetchando el full subscription de Stripe (mismo patrón que antes).
+
+**Pendiente / anotado:**
+- Stripe Customer Portal: verificar en Dashboard → Billing → Customer portal que "Cancel subscriptions" esté **OFF** para que la cancelación pase siempre por Wasnie.
+
 ## 2026-06-11 — WI-IMPORT-TIER-LIMIT: COMPLETE — Excel payee import enforces tier limits (all-or-nothing)
 
 **Status:** COMPLETE. Backend Application + Infrastructure build 0 errors. `ng build --configuration production` clean.

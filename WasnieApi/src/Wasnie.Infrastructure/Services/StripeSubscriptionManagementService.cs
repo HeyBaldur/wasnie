@@ -53,6 +53,18 @@ public sealed class StripeSubscriptionManagementService(IOptions<StripeOptions> 
             cancellationToken: cancellationToken);
     }
 
+    public async Task RevertCancellationAsync(
+        string subscriptionId,
+        CancellationToken cancellationToken = default)
+    {
+        var client = new StripeClient(options.Value.SecretKey);
+        var service = new SubscriptionService(client);
+        await service.UpdateAsync(
+            subscriptionId,
+            new SubscriptionUpdateOptions { CancelAtPeriodEnd = false },
+            cancellationToken: cancellationToken);
+    }
+
     public async Task<string> CreateBillingPortalSessionAsync(
         string customerId,
         string returnUrl,

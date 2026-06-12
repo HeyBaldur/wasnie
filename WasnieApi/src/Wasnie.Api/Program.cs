@@ -160,6 +160,7 @@ try
     app.UseCors("WasnieUi");
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseMiddleware<SubscriptionEnforcementMiddleware>();
     app.UseRateLimiter();
 
     // Hangfire dashboard — admin-only. See HangfireDashboardAuthorizationFilter:

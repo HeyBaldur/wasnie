@@ -4,4 +4,4 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Features.Subscription.Commands;
 
-public sealed record CreateCheckoutSessionCommand(string PriceId) : IRequest<Result<CheckoutSessionDto>>;
+public sealed record CreateCheckoutSessionCommand(string PriceId) : IRequest<Result<CheckoutResultDto>>;
