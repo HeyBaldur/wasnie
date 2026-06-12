@@ -212,6 +212,14 @@
   svg { flex-shrink: 0; display: block; }
 }
 
+.auth-page__trust-badge-img {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: block;
+  object-fit: contain;
+}
+
 /* ─── Mobile ─── */
 
 @media (max-width: 768px) {

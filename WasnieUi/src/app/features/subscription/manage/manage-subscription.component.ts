@@ -102,6 +102,7 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const upgrading = this.isUpgrade(targetTier);
     this.subscriptionService.changePlan(targetTier).subscribe({
       next: () => {
         this.changingPlan.set(null);
@@ -117,6 +118,8 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
             current: body.current ?? 0,
             limit: body.limit ?? 0,
           });
+        } else if (upgrading && err.status === 400 && err.error?.message === 'upgrade_payment_failed') {
+          this.toast.show('SUBSCRIPTION.UPGRADE_PAYMENT_FAILED', 'error');
         } else {
           this.toast.show('SUBSCRIPTION.CHANGE_ERROR', 'error');
         }

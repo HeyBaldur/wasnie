@@ -12,6 +12,7 @@ using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
+using Stripe;
 
 namespace Wasnie.IntegrationTests.Integration.Subscription;
 
@@ -177,6 +178,46 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
         body.Blocked.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ChangePlan_ValidDowngrade_Returns200Pending()
+    {
+        using var factory = _fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagement());
+            }));
+
+        var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
+        var response = await client.PostAsJsonAsync("/api/subscription/change-plan",
+            new { targetTier = "Starter" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<ChangePlanResultDto>(JsonOptions);
+        body.Should().NotBeNull();
+        body!.Pending.Should().BeTrue();
+        body.Blocked.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ChangePlan_UpgradePaymentFailed_Returns400WithUpgradePaymentFailedCode()
+    {
+        using var factory = _fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagementUpgradeFails());
+            }));
+
+        var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
+        var response = await client.PostAsJsonAsync("/api/subscription/change-plan",
+            new { targetTier = "Scale" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("upgrade_payment_failed");
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -207,6 +248,38 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
 
     private sealed class StubStripeManagement : IStripeSubscriptionManagementService
     {
+        // Returns Growth — matches the tier seeded in InitializeAsync.
+        public Task<Tier?> GetCurrentTierFromStripeAsync(string subscriptionId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<Tier?>(Tier.Growth);
+
+        public Task UpgradeSubscriptionAsync(string subscriptionId, string newPriceId,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task UpdateSubscriptionAsync(string subscriptionId, string newPriceId,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult("https://billing.stripe.com/test-portal");
+
+        public Task RevertCancellationAsync(string subscriptionId,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class StubStripeManagementUpgradeFails : IStripeSubscriptionManagementService
+    {
+        public Task<Tier?> GetCurrentTierFromStripeAsync(string subscriptionId,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<Tier?>(Tier.Growth);
+
+        public Task UpgradeSubscriptionAsync(string subscriptionId, string newPriceId,
+            CancellationToken cancellationToken = default)
+            => Task.FromException(new Stripe.StripeException("Your card was declined."));
+
         public Task UpdateSubscriptionAsync(string subscriptionId, string newPriceId,
             CancellationToken cancellationToken = default)
             => Task.CompletedTask;

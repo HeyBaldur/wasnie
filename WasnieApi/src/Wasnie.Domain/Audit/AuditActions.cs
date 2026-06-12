@@ -58,6 +58,7 @@ public static class AuditActions
     public const string SubscriptionRecovered = "SUBSCRIPTION_RECOVERED";
     public const string SubscriptionCancelScheduled = "SUBSCRIPTION_CANCEL_SCHEDULED";
     public const string SubscriptionCancelReverted = "SUBSCRIPTION_CANCEL_REVERTED";
+    public const string SubscriptionTierSyncedFromStripe = "SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE";
 
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";

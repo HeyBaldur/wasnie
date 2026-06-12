@@ -4,6 +4,8 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { WsModalComponent, WsButtonComponent } from '../../ui';
 import { TierLimitModalService, TierLimitInfo } from './tier-limit-modal.service';
 
+export const TIER_LIMIT_HERO_IMAGE = 'upgrade.jpg';
+
 @Component({
   selector: 'app-tier-limit-modal',
   standalone: true,
@@ -14,6 +16,8 @@ import { TierLimitModalService, TierLimitInfo } from './tier-limit-modal.service
 export class TierLimitModalComponent {
   readonly modal = inject(TierLimitModalService);
   private readonly router = inject(Router);
+
+  readonly heroImageUrl = TIER_LIMIT_HERO_IMAGE;
 
   upgrade(): void {
     this.modal.close();

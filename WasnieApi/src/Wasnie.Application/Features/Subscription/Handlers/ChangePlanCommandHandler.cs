@@ -1,9 +1,12 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Features.Subscription.Commands;
 using Wasnie.Application.Features.Subscription.DTOs;
+using Wasnie.Domain.Audit;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 
@@ -14,7 +17,9 @@ public sealed class ChangePlanCommandHandler(
     ITenantContext tenantContext,
     ISubscriptionPlanService planService,
     IStripeSubscriptionManagementService stripeManagement,
-    ILogger<ChangePlanCommandHandler> logger)
+    ILogger<ChangePlanCommandHandler> logger,
+    IClock clock,
+    IAuditService audit)
     : IRequestHandler<ChangePlanCommand, Result<ChangePlanResultDto>>
 {
     public async Task<Result<ChangePlanResultDto>> Handle(
@@ -40,13 +45,72 @@ public sealed class ChangePlanCommandHandler(
         if (string.IsNullOrEmpty(subscription.StripeSubscriptionId))
             return Result<ChangePlanResultDto>.Failure("No active paid Stripe subscription to change.");
 
-        var currentTier = subscription.Tier;
-        if (currentTier == targetTier)
+        // ── Read authoritative tier from Stripe ───────────────────────────────
+        // The DB tier can be stale: it only updates when customer.subscription.updated
+        // webhook arrives (seconds to minutes after a prior change). Trusting the DB here
+        // would route the wrong branch (upgrade treated as downgrade or vice versa) and
+        // either miss a charge or add an unwanted proration. Stripe is always authoritative.
+        Tier stripeCurrentTier;
+        try
+        {
+            var tierFromStripe = await stripeManagement.GetCurrentTierFromStripeAsync(
+                subscription.StripeSubscriptionId!, cancellationToken);
+
+            if (tierFromStripe is null)
+            {
+                logger.LogError(
+                    "Stripe subscription {SubId} for tenant {TenantId} has no mappable tier — aborting plan change",
+                    subscription.StripeSubscriptionId, tenantId);
+                return Result<ChangePlanResultDto>.Failure("plan_change_unavailable");
+            }
+
+            stripeCurrentTier = tierFromStripe.Value;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to read current tier from Stripe for subscription {SubId} (tenant {TenantId})",
+                subscription.StripeSubscriptionId, tenantId);
+            return Result<ChangePlanResultDto>.Failure("plan_change_unavailable");
+        }
+
+        // ── Sync DB if stale ──────────────────────────────────────────────────
+        // If the DB tier diverged from Stripe (e.g. a prior change whose webhook has not
+        // arrived yet), correct it now so future reads are accurate.
+        if (subscription.Tier != stripeCurrentTier)
+        {
+            var staleTier = subscription.Tier;
+            subscription.SyncTier(stripeCurrentTier, clock.UtcNowOffset);
+            await db.SaveChangesAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Synced stale DB tier for tenant {TenantId}: {OldTier} → {NewTier} (source: Stripe)",
+                tenantId, staleTier, stripeCurrentTier);
+
+            await audit.LogAsync(new AuditEntry(
+                TenantId:     tenantId,
+                Action:       AuditActions.SubscriptionTierSyncedFromStripe,
+                ResourceType: "UserSubscription",
+                ResourceId:   subscription.Id.ToString(),
+                ActorUserId:  "SYSTEM",
+                ActorEmail:   "system@wasnie.io",
+                DisplayName:  subscription.BillingEmail,
+                Before:       new { Tier = staleTier.ToString() },
+                After:        new { Tier = stripeCurrentTier.ToString() },
+                Metadata:     new Dictionary<string, string>
+                {
+                    ["stripeSubscriptionId"] = subscription.StripeSubscriptionId!,
+                    ["trigger"]             = "ChangePlanCommand",
+                }), cancellationToken);
+        }
+
+        // ── Same-tier guard ───────────────────────────────────────────────────
+        if (stripeCurrentTier == targetTier)
             return Result<ChangePlanResultDto>.Success(
                 new ChangePlanResultDto(Pending: false, Blocked: false, null, null, null, null));
 
-        // Downgrade: validate that current usage fits the target tier limits.
-        if (targetTier < currentTier)
+        // ── Downgrade: validate current usage fits the target tier limits ──────
+        if (targetTier < stripeCurrentTier)
         {
             var limits = TierLimits.Limits[targetTier];
 
@@ -88,7 +152,7 @@ public sealed class ChangePlanCommandHandler(
         }
 
         // Find the Stripe priceId for the target tier (monthly interval only).
-        var plans = await planService.GetPlansAsync(currentTier, cancellationToken);
+        var plans = await planService.GetPlansAsync(stripeCurrentTier, cancellationToken);
         var targetPlan = plans.FirstOrDefault(p =>
             string.Equals(p.Tier, targetTier.ToString(), StringComparison.OrdinalIgnoreCase)
             && p.PriceId is not null
@@ -102,25 +166,42 @@ public sealed class ChangePlanCommandHandler(
 
         // Call Stripe to update the subscription. The actual tier change in Wasnie
         // happens when the customer.subscription.updated webhook arrives (source of truth).
+        bool isUpgrade = targetTier > stripeCurrentTier;
         try
         {
-            await stripeManagement.UpdateSubscriptionAsync(
-                subscription.StripeSubscriptionId!,
-                targetPlan.PriceId,
-                cancellationToken);
+            if (isUpgrade)
+            {
+                // Upgrade: charges the full new-plan price immediately + resets billing cycle.
+                // StripeException is thrown synchronously if the card is declined.
+                await stripeManagement.UpgradeSubscriptionAsync(
+                    subscription.StripeSubscriptionId!,
+                    targetPlan.PriceId,
+                    cancellationToken);
+            }
+            else
+            {
+                // Downgrade: no immediate charge; proration credit applied to next invoice.
+                await stripeManagement.UpdateSubscriptionAsync(
+                    subscription.StripeSubscriptionId!,
+                    targetPlan.PriceId,
+                    cancellationToken);
+            }
         }
         catch (Exception ex)
         {
             logger.LogError(ex,
-                "Stripe subscription update failed for tenant {TenantId} (from {From} to {To})",
-                tenantId, currentTier, targetTier);
-            return Result<ChangePlanResultDto>.Failure(
-                "Failed to update subscription with Stripe. Please try again.");
+                "Stripe subscription {Direction} failed for tenant {TenantId} (from {From} to {To})",
+                isUpgrade ? "upgrade" : "downgrade", tenantId, stripeCurrentTier, targetTier);
+
+            var errorMessage = isUpgrade
+                ? "upgrade_payment_failed"
+                : "Failed to update subscription with Stripe. Please try again.";
+            return Result<ChangePlanResultDto>.Failure(errorMessage);
         }
 
         logger.LogInformation(
-            "Tenant {TenantId} plan change from {From} to {To} initiated — awaiting webhook confirmation",
-            tenantId, currentTier, targetTier);
+            "Tenant {TenantId} plan {Direction} from {From} to {To} initiated — awaiting webhook confirmation",
+            tenantId, isUpgrade ? "upgrade" : "downgrade", stripeCurrentTier, targetTier);
 
         return Result<ChangePlanResultDto>.Success(
             new ChangePlanResultDto(Pending: true, Blocked: false, null, null, null, null));

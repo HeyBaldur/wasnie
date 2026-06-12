@@ -67,7 +67,9 @@
     "PROFILE": "Perfil",
     "TENANT_SETTINGS": "Configuración del tenant",
     "SIGN_OUT": "Cerrar sesión",
-    "STATUS_OPERATIONAL": "Todos los sistemas operativos"
+    "STATUS_OPERATIONAL": "Todos los sistemas operativos",
+    "UPGRADE_BTN": "Mejorar plan",
+    "UPGRADE_TOOLTIP": "Estás en el plan Gratuito — mejora al Profesional"
   },
   "NAV": {
     "TOGGLE": "Contraer barra lateral",
@@ -162,6 +164,7 @@
   },
   "TIER_LIMIT": {
     "TITLE": "Límite del plan alcanzado",
+    "HERO_ALT": "Mejora tu plan",
     "MESSAGE": "Tu plan {{ tier }} permite hasta {{ limit }} registros. Actualiza para añadir más.",
     "MESSAGE_PLANS": "Tu plan {{ tier }} permite hasta {{ limit }} planes de compensación y ya tienes {{ current }}. Actualiza para crear más.",
     "MESSAGE_PAYEES": "Tu plan {{ tier }} permite hasta {{ limit }} beneficiarios y ya tienes {{ current }}. Actualiza para añadir más.",
@@ -1256,6 +1259,9 @@
     "CANCEL_SCHEDULED_TITLE": "Tu suscripción se cancelará el {{date}}.",
     "CANCEL_SCHEDULED_DESC": "Tendrás acceso completo hasta esa fecha.",
     "KEEP_SUBSCRIPTION_BTN": "Mantener mi suscripción",
-    "REVERT_CANCEL_ERROR": "No se pudo revertir la cancelación. Inténtalo de nuevo."
+    "REVERT_CANCEL_ERROR": "No se pudo revertir la cancelación. Inténtalo de nuevo.",
+    "UPGRADE_BILLING_NOTE": "Se cobra €{{price}}/mes de inmediato. El nuevo ciclo de facturación comienza hoy.",
+    "DOWNGRADE_BILLING_NOTE": "Efectivo ahora. La próxima factura se emitirá al nuevo precio.",
+    "UPGRADE_PAYMENT_FAILED": "Pago rechazado. Tu plan no ha cambiado. Revisa tu método de pago en el portal de facturación."
   }
 }

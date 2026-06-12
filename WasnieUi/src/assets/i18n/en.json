@@ -67,7 +67,9 @@
     "PROFILE": "Profile",
     "TENANT_SETTINGS": "Tenant Settings",
     "SIGN_OUT": "Sign out",
-    "STATUS_OPERATIONAL": "All systems operational"
+    "STATUS_OPERATIONAL": "All systems operational",
+    "UPGRADE_BTN": "Upgrade",
+    "UPGRADE_TOOLTIP": "You're on the Free plan — upgrade to Professional"
   },
   "NAV": {
     "TOGGLE": "Toggle sidebar",
@@ -162,6 +164,7 @@
   },
   "TIER_LIMIT": {
     "TITLE": "Plan Limit Reached",
+    "HERO_ALT": "Upgrade your plan",
     "MESSAGE": "Your {{ tier }} plan allows up to {{ limit }} records. Upgrade to add more.",
     "MESSAGE_PLANS": "Your {{ tier }} plan allows up to {{ limit }} compensation plans and you already have {{ current }}. Upgrade to create more.",
     "MESSAGE_PAYEES": "Your {{ tier }} plan allows up to {{ limit }} payees and you already have {{ current }}. Upgrade to add more.",
@@ -1256,6 +1259,9 @@
     "CANCEL_SCHEDULED_TITLE": "Your subscription will be canceled on {{date}}.",
     "CANCEL_SCHEDULED_DESC": "You will continue to have full access until that date.",
     "KEEP_SUBSCRIPTION_BTN": "Keep my subscription",
-    "REVERT_CANCEL_ERROR": "Could not revert cancellation. Please try again."
+    "REVERT_CANCEL_ERROR": "Could not revert cancellation. Please try again.",
+    "UPGRADE_BILLING_NOTE": "€{{price}}/mo charged immediately. New billing cycle starts today.",
+    "DOWNGRADE_BILLING_NOTE": "Effective now. Next invoice will be at the new rate.",
+    "UPGRADE_PAYMENT_FAILED": "Payment declined. Your plan was not changed. Please check your payment method in the billing portal."
   }
 }

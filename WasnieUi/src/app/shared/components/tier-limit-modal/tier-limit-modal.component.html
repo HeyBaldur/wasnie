@@ -3,16 +3,11 @@
   (closed)="modal.close()"
   size="sm"
   [title]="'TIER_LIMIT.TITLE' | translate"
+  [heroImageUrl]="heroImageUrl"
+  [heroImageAlt]="'TIER_LIMIT.HERO_ALT' | translate"
 >
   @if (modal.info(); as info) {
     <div class="tier-limit-modal__body">
-      <div class="tier-limit-modal__icon-wrap">
-        <svg class="tier-limit-modal__icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
-          <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 16V8m-4 4 4-4 4 4"/>
-        </svg>
-      </div>
-
       <p class="tier-limit-modal__message">
         @if (info.entityKey === 'plans') {
           {{ 'TIER_LIMIT.MESSAGE_PLANS' | translate: { tier: info.tier, limit: info.limit, current: info.currentCount } }}

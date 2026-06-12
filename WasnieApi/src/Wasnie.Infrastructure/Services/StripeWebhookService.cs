@@ -320,9 +320,20 @@ public sealed class StripeWebhookService(
         var previousTier = subscription.Tier;
         var wasCancelScheduled = subscription.CancelAtPeriodEnd;
 
+        var mappedStatus = fullSubscription.Status switch
+        {
+            "active"             => SubscriptionStatus.Active,
+            "past_due"           => SubscriptionStatus.PastDue,
+            "canceled"           => SubscriptionStatus.Canceled,
+            "incomplete"         => SubscriptionStatus.Incomplete,
+            "incomplete_expired" => SubscriptionStatus.Incomplete,
+            "trialing"           => SubscriptionStatus.Trialing,
+            _                    => SubscriptionStatus.Active,
+        };
+
         subscription.UpdateFromStripe(
             tier: newTier,
-            status: SubscriptionStatus.Active,
+            status: mappedStatus,
             stripeSubscriptionId: fullSubscription.Id,
             stripeCustomerId: fullSubscription.CustomerId,
             stripePriceId: item.Price.Id,

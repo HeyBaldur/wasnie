@@ -67,7 +67,9 @@
     "PROFILE": "Profil",
     "TENANT_SETTINGS": "Ustawienia tenanta",
     "SIGN_OUT": "Wyloguj się",
-    "STATUS_OPERATIONAL": "Wszystkie systemy działają poprawnie"
+    "STATUS_OPERATIONAL": "Wszystkie systemy działają poprawnie",
+    "UPGRADE_BTN": "Uaktualnij",
+    "UPGRADE_TOOLTIP": "Jesteś na planie Darmowym — przejdź na Profesjonalny"
   },
   "NAV": {
     "TOGGLE": "Zwiń pasek boczny",
@@ -162,6 +164,7 @@
   },
   "TIER_LIMIT": {
     "TITLE": "Osiągnięto limit planu",
+    "HERO_ALT": "Ulepsz swój plan",
     "MESSAGE": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} rekordów. Ulepsz, aby dodać więcej.",
     "MESSAGE_PLANS": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} planów wynagrodzeniowych, a już masz {{ current }}. Ulepsz, aby tworzyć więcej.",
     "MESSAGE_PAYEES": "Plan {{ tier }} pozwala na maksymalnie {{ limit }} pracowników i masz już {{ current }}. Ulepsz, aby dodać więcej.",
@@ -1256,6 +1259,9 @@
     "CANCEL_SCHEDULED_TITLE": "Twoja subskrypcja zostanie anulowana {{date}}.",
     "CANCEL_SCHEDULED_DESC": "Będziesz mieć pełny dostęp do tej daty.",
     "KEEP_SUBSCRIPTION_BTN": "Zachowaj subskrypcję",
-    "REVERT_CANCEL_ERROR": "Nie udało się cofnąć anulowania. Spróbuj ponownie."
+    "REVERT_CANCEL_ERROR": "Nie udało się cofnąć anulowania. Spróbuj ponownie.",
+    "UPGRADE_BILLING_NOTE": "Opłata €{{price}}/mies. pobierana natychmiast. Nowy cykl rozliczeniowy zaczyna się dzisiaj.",
+    "DOWNGRADE_BILLING_NOTE": "Zmiana obowiązuje natychmiast. Następna faktura będzie wystawiona po nowej stawce.",
+    "UPGRADE_PAYMENT_FAILED": "Płatność odrzucona. Plan nie został zmieniony. Sprawdź metodę płatności w portalu rozliczeniowym."
   }
 }

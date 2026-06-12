@@ -204,6 +204,15 @@
                             {{ 'SUBSCRIPTION.DOWNGRADE_BTN' | translate : { tier: plan.name } }}
                           }
                         </ws-button>
+                        @if (isUpgrade(plan.tier)) {
+                          <p class="plan-cta-note plan-cta-note--upgrade">
+                            {{ 'SUBSCRIPTION.UPGRADE_BILLING_NOTE' | translate : { price: plan.price } }}
+                          </p>
+                        } @else {
+                          <p class="plan-cta-note plan-cta-note--downgrade">
+                            {{ 'SUBSCRIPTION.DOWNGRADE_BILLING_NOTE' | translate }}
+                          </p>
+                        }
                       }
                     </td>
                   }

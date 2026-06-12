@@ -109,4 +109,13 @@ public sealed class UserSubscription : AggregateRoot
         CancelAt = null;
         UpdatedAt = now;
     }
+
+    // Corrects a stale DB tier to match Stripe's authoritative value.
+    // Called by ChangePlanCommandHandler before deciding upgrade vs downgrade,
+    // to close the window between a Stripe webhook arriving and the DB being updated.
+    public void SyncTier(Tier tier, DateTimeOffset now)
+    {
+        Tier = tier;
+        UpdatedAt = now;
+    }
 }

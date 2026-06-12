@@ -8,6 +8,70 @@
 
 ## Sessions (newest first)
 
+## 2026-06-12 — WI-FIX-STALE-TIER-UPGRADE-ROUTING
+
+**Status:** COMPLETE
+
+**Problem solved:** `ChangePlanCommandHandler` decidía upgrade vs downgrade con `currentTier` leído de la DB. La DB solo se actualiza cuando llega el webhook `customer.subscription.updated` (1-2s de lag). En tests rápidos o cambios consecutivos, la DB tenía un tier stale → `isUpgrade` evaluaba falso en upgrades legítimos → Stripe recibía `create_prorations` en vez de `BillingCycleAnchor.Now` → no cobraba. Root cause confirmado: evento `invoiceitem.created` sin `charge.succeeded` = rama de downgrade tomada.
+
+**Step 0:** Punto exacto de la bug: `ChangePlanCommandHandler.cs:43+105`. Mapeo `priceId→tier`: `subscription.Items.Data[0].Price.Product` (expand) → `productId` → `StripeOptions.ProductTierMap` (mismo `StripeSubscriptionPlanService.ResolveTier`).
+
+**Fix aplicado (Opción B — leer Stripe + sync DB):**
+1. `GetCurrentTierFromStripeAsync` añadido a `IStripeSubscriptionManagementService` → devuelve `Tier?` (sin Stripe.net types en Application layer, Clean Architecture ✓).
+2. Implementación en `StripeSubscriptionManagementService`: fetch con `expand=items.data.price.product`, extrae productId/metadata, llama `StripeSubscriptionPlanService.ResolveTier` (misma lógica, mismo assembly, `internal` accesible ✓).
+3. Handler: si Stripe falla o devuelve null → `Failure("plan_change_unavailable")`, no cobra, no cambia tier.
+4. Si DB tier ≠ Stripe tier → `subscription.SyncTier(stripeCurrentTier, clock.UtcNowOffset)` + `SaveChanges` + audit `SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE` (SYSTEM actor, before/after JSON).
+5. `isUpgrade = targetTier > stripeCurrentTier` (autoritativo).
+
+**Archivos modificados:**
+- `IStripeSubscriptionManagementService.cs` — `GetCurrentTierFromStripeAsync(string, CancellationToken) → Task<Tier?>`
+- `StripeSubscriptionManagementService.cs` — +ILogger constructor, implementación
+- `UserSubscription.cs` — `SyncTier(Tier, DateTimeOffset)` domain method
+- `AuditActions.cs` — `SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE` constant
+- `ChangePlanCommandHandler.cs` — +IClock +IAuditService, nueva lógica completa
+- `ChangePlanCommandHandlerTests.cs` — 6 nuevos tests + stubs actualizados para nuevo método
+- `ChangePlanEndpointsTests.cs` — stubs `StubStripeManagement` / `StubStripeManagementUpgradeFails` actualizados
+
+**Tests:** 454/454 unit tests pasan (448 → 454, +6 nuevos). Build 0 errores, 0 warnings.
+
+**Dev data fix (ejecutar después de confirmar en Stripe):**
+```sql
+-- Confirmar el tier real de la suscripción en el Stripe Dashboard ANTES de ejecutar.
+-- Reemplaza <TIER_INT> con: Starter=1, Growth=2, Scale=3.
+UPDATE UserSubscriptions
+SET Tier = <TIER_INT>
+WHERE StripeSubscriptionId = '<sub_id_del_tenant_de_prueba>';
+```
+
+**Smoke esperado post-fix:**
+1. Poner DB+Stripe en Starter (confirmados).
+2. Upgrade Starter→Growth → `charge.succeeded` + `invoice.paid` inmediato. DB=Growth (webhook).
+3. Sin esperar, upgrade Growth→Scale → `charge.succeeded` inmediato (no `invoiceitem.created`). DB=Scale.
+4. Repetir upgrades consecutivos → todos cobran, ninguno toma rama de downgrade.
+
+## 2026-06-12 — WI-PAYMENT-UPGRADE-DOWNGRADE
+
+**Status:** COMPLETE
+
+**Problem solved:** Upgrade usaba `create_prorations` igual que downgrade → el tier superior se activaba sin cobro inmediato. Un usuario podía hacer upgrade a Scale, usar el mes entero, y cancelar antes del próximo ciclo sin pagar.
+
+**Stripe mechanics confirmados (Step 0):**
+- **Upgrade:** `ProrationBehavior="none"` + `BillingCycleAnchor=SubscriptionBillingCycleAnchor.Now` + `PaymentBehavior="error_if_incomplete"` → Stripe genera factura completa del nuevo plan de inmediato, cobra, y si la tarjeta es rechazada la API lanza `StripeException` antes de actualizar la suscripción.
+- **Downgrade:** `ProrationBehavior="create_prorations"` sin cambio de anchor → Stripe genera crédito por días no usados en el plan actual, aplicado a la próxima factura. Sin cobro inmediato. Comportamiento ya existente, correcto.
+
+**Archivos modificados:**
+- `IStripeSubscriptionManagementService.cs` — añadido `UpgradeSubscriptionAsync`
+- `StripeSubscriptionManagementService.cs` — implementación con `BillingCycleAnchor.Now` / `error_if_incomplete`
+- `ChangePlanCommandHandler.cs` — ruteo `isUpgrade = targetTier > currentTier`; pago declinado → `Failure("upgrade_payment_failed")`
+- `StripeWebhookService.cs` — fix bug de auditoría: `HandleSubscriptionUpdatedAsync` ya no hardcodea `status=Active`; mapea `fullSubscription.Status` al enum local
+- `manage-subscription.component.ts` — toast específico para pago declinado en upgrade
+- `manage-subscription.component.html` — notas de facturación bajo los botones
+- `en.json / es.json / pl.json` — 3 nuevas claves i18n
+
+**Tests:** 15 nuevos unit tests (`ChangePlanCommandHandlerTests.cs`), 3 nuevos integration tests. 448/448 unit tests pasan. Angular build production limpio.
+
+**Deferred:** Manejo de fallos de pago asíncronos (3DS) para upgrades — `error_if_incomplete` cubre tarjetas rechazadas síncronamente (caso principal). Reconciliación periódica con Stripe (gap identificado en auditoría de resiliencia).
+
 ## 2026-06-12 — WI-FIX-STALE-CANCEL-FIELDS-ON-REACTIVATION
 
 **Status:** COMPLETE. Backend unit 433/433. Integration tests ready (run with API stopped).

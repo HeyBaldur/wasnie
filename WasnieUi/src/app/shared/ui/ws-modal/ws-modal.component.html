@@ -3,6 +3,17 @@
     <div class="ws-modal__overlay" (click)="onBackdropClick()"></div>
 
     <div #dialog [class]="dialogClass()">
+      @if (heroImageUrl()) {
+        <div class="ws-modal__hero">
+          <img
+            [src]="heroImageUrl()"
+            [alt]="heroImageAlt()"
+            class="ws-modal__hero-img"
+            loading="lazy"
+          />
+        </div>
+      }
+
       <div class="ws-modal__header">
         @if (title()) {
           <div class="ws-modal__titles">

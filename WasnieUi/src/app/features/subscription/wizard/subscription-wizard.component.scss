@@ -161,6 +161,14 @@
   .trust-pill--neutral & { background: var(--color-text-tertiary); }
 }
 
+.trust-pill__img {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: block;
+  object-fit: contain;
+}
+
 // ── Loading skeleton ─────────────────────────────────────────────────────────
 
 .pricing-skeleton {
