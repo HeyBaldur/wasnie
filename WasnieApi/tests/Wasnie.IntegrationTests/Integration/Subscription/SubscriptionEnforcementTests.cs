@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Features.Subscription.DTOs;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
@@ -96,7 +98,10 @@ public sealed class SubscriptionEnforcementTests : IAsyncLifetime
     [Fact]
     public async Task GetPlans_CanceledTenant_Returns200()
     {
-        var client = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA);
+        using var factory = _fixture.Factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+                services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService())));
+        var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
         var response = await client.GetAsync("/api/subscription/plans");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -139,4 +144,22 @@ public sealed class SubscriptionEnforcementTests : IAsyncLifetime
     }
 
     private sealed record ErrorBody(string Code, string Message);
+
+    private sealed class StubPlanService : ISubscriptionPlanService
+    {
+        public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(
+            Tier currentTier, CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<SubscriptionPlanDto> plans =
+            [
+                new(PriceId: "price_starter", ProductId: "prod_starter", Name: "Starter",
+                    Price: 29m, Currency: "EUR", Interval: "month", Tier: "Starter",
+                    MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: currentTier == Tier.Starter),
+                new(PriceId: "price_growth", ProductId: "prod_growth", Name: "Growth",
+                    Price: 79m, Currency: "EUR", Interval: "month", Tier: "Growth",
+                    MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: currentTier == Tier.Growth),
+            ];
+            return Task.FromResult(plans);
+        }
+    }
 }

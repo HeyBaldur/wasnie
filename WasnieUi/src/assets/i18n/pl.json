@@ -1262,6 +1262,15 @@
     "REVERT_CANCEL_ERROR": "Nie udało się cofnąć anulowania. Spróbuj ponownie.",
     "UPGRADE_BILLING_NOTE": "Opłata €{{price}}/mies. pobierana natychmiast. Nowy cykl rozliczeniowy zaczyna się dzisiaj.",
     "DOWNGRADE_BILLING_NOTE": "Zmiana obowiązuje natychmiast. Następna faktura będzie wystawiona po nowej stawce.",
-    "UPGRADE_PAYMENT_FAILED": "Płatność odrzucona. Plan nie został zmieniony. Sprawdź metodę płatności w portalu rozliczeniowym."
+    "UPGRADE_PAYMENT_FAILED": "Płatność odrzucona. Plan nie został zmieniony. Sprawdź metodę płatności w portalu rozliczeniowym.",
+    "CONFIRM_MODAL_TITLE": "Potwierdź zmianę na {{plan}}",
+    "CONFIRM_UPGRADE_CHARGE_LABEL": "Kwota do natychmiastowego obciążenia",
+    "CONFIRM_UPGRADE_DETAIL": "Twój plan zmienia się na {{plan}} natychmiast, z dostępem do {{maxPayees}} odbiorców i {{maxPlans}} planów prowizji. Nowy cykl rozliczeniowy zaczyna się dzisiaj.",
+    "CONFIRM_UPGRADE_BTN": "Potwierdź i zapłać €{{price}}",
+    "CONFIRM_DOWNGRADE_NO_CHARGE": "Dzisiaj nic nie zostanie naliczone.",
+    "CONFIRM_DOWNGRADE_IMMEDIATE": "Twój plan zmienia się na {{plan}} natychmiast. Limity zmieniają się na {{maxPayees}} odbiorców i {{maxPlans}} planów prowizji już teraz.",
+    "CONFIRM_DOWNGRADE_WARNING": "Stracisz funkcje i limity planu {{currentPlan}} natychmiast, nawet jeśli bieżący okres jest opłacony do {{periodEnd}}.",
+    "CONFIRM_DOWNGRADE_NEXT": "Twoja następna faktura w dniu {{nextDate}} zostanie wystawiona po stawce planu {{plan}} — €{{price}}/miesiąc.",
+    "CONFIRM_DOWNGRADE_BTN": "Potwierdź zmianę na {{plan}}"
   }
 }

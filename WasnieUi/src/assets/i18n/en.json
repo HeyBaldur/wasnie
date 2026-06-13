@@ -1262,6 +1262,15 @@
     "REVERT_CANCEL_ERROR": "Could not revert cancellation. Please try again.",
     "UPGRADE_BILLING_NOTE": "€{{price}}/mo charged immediately. New billing cycle starts today.",
     "DOWNGRADE_BILLING_NOTE": "Effective now. Next invoice will be at the new rate.",
-    "UPGRADE_PAYMENT_FAILED": "Payment declined. Your plan was not changed. Please check your payment method in the billing portal."
+    "UPGRADE_PAYMENT_FAILED": "Payment declined. Your plan was not changed. Please check your payment method in the billing portal.",
+    "CONFIRM_MODAL_TITLE": "Confirm switch to {{plan}}",
+    "CONFIRM_UPGRADE_CHARGE_LABEL": "Amount charged now",
+    "CONFIRM_UPGRADE_DETAIL": "Your plan switches to {{plan}} immediately, giving you access to {{maxPayees}} payees and {{maxPlans}} compensation plans. A new billing cycle starts today.",
+    "CONFIRM_UPGRADE_BTN": "Confirm and pay €{{price}}",
+    "CONFIRM_DOWNGRADE_NO_CHARGE": "Nothing will be charged today.",
+    "CONFIRM_DOWNGRADE_IMMEDIATE": "Your plan switches to {{plan}} immediately. Limits change to {{maxPayees}} payees and {{maxPlans}} compensation plans right now.",
+    "CONFIRM_DOWNGRADE_WARNING": "You will lose {{currentPlan}} features and limits immediately, even though your current period is paid until {{periodEnd}}.",
+    "CONFIRM_DOWNGRADE_NEXT": "Your next invoice on {{nextDate}} will be charged at the {{plan}} rate — €{{price}}/month.",
+    "CONFIRM_DOWNGRADE_BTN": "Confirm switch to {{plan}}"
   }
 }

@@ -1,8 +1,9 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, DestroyRef } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
@@ -29,9 +30,11 @@ export class RegisterTenantComponent {
   private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly isSubmitting = signal(false);
   readonly error = signal<string | null>(null);
+  private slugUserEdited = false;
 
   readonly form = this.fb.nonNullable.group({
     tenantName: ['', [Validators.required, Validators.maxLength(200)]],
@@ -41,6 +44,33 @@ export class RegisterTenantComponent {
     adminEmail: ['', [Validators.required, Validators.email]],
     adminPassword: ['', [Validators.required, Validators.minLength(8), passwordStrength]],
   });
+
+  constructor() {
+    this.form.controls.tenantName.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(name => {
+        if (!this.slugUserEdited) {
+          this.form.controls.tenantSlug.setValue(this.toSlug(name), { emitEvent: false });
+        }
+      });
+
+    this.form.controls.tenantSlug.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(slug => {
+        const derived = this.toSlug(this.form.controls.tenantName.value);
+        this.slugUserEdited = slug !== derived && slug !== '';
+      });
+  }
+
+  private toSlug(value: string): string {
+    return value
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
 
   fieldError(name: string): string {
     const ctrl = this.form.get(name);

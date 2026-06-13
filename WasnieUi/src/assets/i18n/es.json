@@ -1262,6 +1262,15 @@
     "REVERT_CANCEL_ERROR": "No se pudo revertir la cancelación. Inténtalo de nuevo.",
     "UPGRADE_BILLING_NOTE": "Se cobra €{{price}}/mes de inmediato. El nuevo ciclo de facturación comienza hoy.",
     "DOWNGRADE_BILLING_NOTE": "Efectivo ahora. La próxima factura se emitirá al nuevo precio.",
-    "UPGRADE_PAYMENT_FAILED": "Pago rechazado. Tu plan no ha cambiado. Revisa tu método de pago en el portal de facturación."
+    "UPGRADE_PAYMENT_FAILED": "Pago rechazado. Tu plan no ha cambiado. Revisa tu método de pago en el portal de facturación.",
+    "CONFIRM_MODAL_TITLE": "Confirmar cambio a {{plan}}",
+    "CONFIRM_UPGRADE_CHARGE_LABEL": "Importe a cobrar ahora",
+    "CONFIRM_UPGRADE_DETAIL": "Tu plan cambia a {{plan}} de inmediato, con acceso a {{maxPayees}} payees y {{maxPlans}} planes de compensación. El ciclo de facturación se reinicia hoy.",
+    "CONFIRM_UPGRADE_BTN": "Confirmar y pagar €{{price}}",
+    "CONFIRM_DOWNGRADE_NO_CHARGE": "No se te cobrará nada hoy.",
+    "CONFIRM_DOWNGRADE_IMMEDIATE": "Tu plan baja a {{plan}} de inmediato. Los límites cambian a {{maxPayees}} payees y {{maxPlans}} planes de compensación ahora mismo.",
+    "CONFIRM_DOWNGRADE_WARNING": "Perderás las funciones y límites de {{currentPlan}} de inmediato, aunque tu periodo actual esté pagado hasta {{periodEnd}}.",
+    "CONFIRM_DOWNGRADE_NEXT": "Tu próxima factura del {{nextDate}} será al precio de {{plan}} — €{{price}}/mes.",
+    "CONFIRM_DOWNGRADE_BTN": "Confirmar cambio a {{plan}}"
   }
 }

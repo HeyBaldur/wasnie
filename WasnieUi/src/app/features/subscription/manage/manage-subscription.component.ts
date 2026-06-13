@@ -5,6 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { WsPageLayoutComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent } from '../../../shared/ui';
+import { WsModalComponent } from '../../../shared/ui/ws-modal/ws-modal.component';
 import { WsToastService } from '../../../shared/ui/ws-toast/ws-toast.service';
 import { SubscriptionService, CurrentSubscription, SubscriptionPlan } from '../services/subscription.service';
 
@@ -21,7 +22,7 @@ const MAX_POLL_ATTEMPTS = 10;
 @Component({
   selector: 'app-manage-subscription',
   standalone: true,
-  imports: [DatePipe, TranslatePipe, AppShellComponent, WsPageLayoutComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent],
+  imports: [DatePipe, TranslatePipe, AppShellComponent, WsPageLayoutComponent, WsButtonComponent, WsBadgeComponent, WsCardComponent, WsModalComponent],
   templateUrl: './manage-subscription.component.html',
   styleUrl: './manage-subscription.component.scss',
 })
@@ -40,6 +41,11 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
   readonly pendingTier = signal<string | null>(null);
   readonly pollTimedOut = signal(false);
   readonly revertingCancellation = signal(false);
+
+  // ── Confirmation modal state ────────────────────────────────────────────────
+  readonly confirmModalOpen = signal(false);
+  readonly confirmPlan = signal<SubscriptionPlan | null>(null);
+  readonly confirmingPlan = signal(false);
 
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private pollAttempts = 0;
@@ -84,14 +90,14 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
     });
   }
 
-  changePlan(targetTier: string): void {
-    this.blockedInfo.set(null);
-    this.pollTimedOut.set(false);
-    this.changingPlan.set(targetTier);
+  // ── Plan change — two-step flow ─────────────────────────────────────────────
 
+  /** Step 1: click on table button → open confirmation modal (or checkout for Free). */
+  requestPlanChange(plan: SubscriptionPlan): void {
     if (this.isFree) {
-      const plan = this.plans().find(p => p.tier === targetTier);
-      if (!plan?.priceId) { this.changingPlan.set(null); return; }
+      // Free → paid goes straight to Stripe Checkout (its own confirmation page).
+      if (!plan.priceId) return;
+      this.changingPlan.set(plan.tier);
       this.subscriptionService.createCheckout(plan.priceId).subscribe({
         next: ({ checkoutUrl }) => window.location.assign(checkoutUrl),
         error: () => {
@@ -102,19 +108,39 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const upgrading = this.isUpgrade(targetTier);
-    this.subscriptionService.changePlan(targetTier).subscribe({
+    // Paid → paid: show confirmation modal.
+    this.confirmPlan.set(plan);
+    this.confirmModalOpen.set(true);
+  }
+
+  /** Step 2: user clicked the confirm button inside the modal. */
+  confirmPlanChange(): void {
+    const plan = this.confirmPlan();
+    if (!plan || this.confirmingPlan()) return;
+
+    this.confirmingPlan.set(true);
+    this.blockedInfo.set(null);
+    this.pollTimedOut.set(false);
+
+    const upgrading = this.isUpgrade(plan.tier);
+
+    this.subscriptionService.changePlan(plan.tier).subscribe({
       next: () => {
-        this.changingPlan.set(null);
-        this.startPolling(targetTier);
+        this.confirmingPlan.set(false);
+        this.confirmModalOpen.set(false);
+        this.confirmPlan.set(null);
+        this.startPolling(plan.tier);
       },
       error: (err: HttpErrorResponse) => {
-        this.changingPlan.set(null);
+        this.confirmingPlan.set(false);
+        this.confirmModalOpen.set(false);
+        this.confirmPlan.set(null);
+
         if (err.status === 409 && err.error?.blocked) {
           const body = err.error;
           this.blockedInfo.set({
             reason: body.blockedReason === 'payees' ? 'payees' : 'plans',
-            tier: body.targetTier ?? targetTier,
+            tier: body.targetTier ?? plan.tier,
             current: body.current ?? 0,
             limit: body.limit ?? 0,
           });
@@ -125,6 +151,12 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
         }
       },
     });
+  }
+
+  /** Cancel button inside the modal. */
+  cancelConfirm(): void {
+    this.confirmModalOpen.set(false);
+    this.confirmPlan.set(null);
   }
 
   private startPolling(targetTier: string): void {

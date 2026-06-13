@@ -8,6 +8,74 @@
 
 ## Sessions (newest first)
 
+## 2026-06-12 — WI-TEST-PAYMENT-CYCLE bug fixes
+
+**Status:** COMPLETE
+
+**3 integration test failures fixed:**
+
+1. **`PaymentFailedCycleTests.ReadAuditByResourceId`** — Missing `.IgnoreQueryFilters()` on `db.AuditLogs` query. `AuditLog` has a global EF query filter on `TenantId`; in test DI scope the `ITenantContext` is `BackgroundJobTenantContext` which throws `InvalidOperationException` if `SetTenant()` was not called. Fix: added `.IgnoreQueryFilters()` before `.AsNoTracking()` (same pattern already used in `ReadSubscription`).
+
+2. **`AssignmentsEndpointsTests.DisposeAsync`** — Was `Task.CompletedTask` (no cleanup). EMP-coded payees seeded in tests persisted across test class boundaries, causing `ChangePlanEndpointsTests` duplicate key on EMP001 and `CheckoutTierLimitTests` payee count off by +1. Fix: changed to `await _fixture.ResetCompensationDataAsync()` (mirrors `InitializeAsync`).
+
+3. **`SubscriptionEnforcementTests.GetPlans_CanceledTenant_Returns200`** — Used shared factory with no `ISubscriptionPlanService` mock. Real Stripe call failed with placeholder key → 503 instead of 200. Fix: `WithWebHostBuilder` + local `StubPlanService` (same pattern used throughout subscription tests). Added required usings: `Wasnie.Application.Common.Interfaces`, `Wasnie.Application.Features.Subscription.DTOs`.
+
+**Build:** `dotnet build tests\Wasnie.IntegrationTests` → 0 errors, 1 pre-existing warning (CS8604 in `SubscriptionEndpointsTests`, unchanged).
+
+**Pre-existing failures NOT caused by this WI (documented):**
+- `AssignmentsEndpointsTests.ListAssignmentsByPayee_ReturnsOnlyThatPayeesAssignments` — pre-existing test isolation issue within the class
+- `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_*` — pre-existing test data issue
+
+---
+
+## 2026-06-12 — WI-TEST-PAYMENT-CYCLE
+
+**Status:** COMPLETE
+
+**Approach:** A — webhooks sintéticos via HTTP stack completo. No Stripe real. Sigue el patrón de `WebhookPhase3Tests.cs`.
+
+**Rationale:** `WebhookPhase3Tests` ya cubría las transiciones de estado (PastDue/Active/Canceled) pero NO: tier invariante, audit trail, que PastDue no bloquea enforcement, 402 post-cancelación, idempotencia a nivel DB, ni multi-tenant isolation.
+
+**New file:** `tests/Wasnie.IntegrationTests/Integration/Subscription/PaymentFailedCycleTests.cs` (6 tests)
+
+| Test | Caso |
+|------|------|
+| `PaymentFailed_StatusIsPastDue_TierUnchanged_AuditPastDueLogged` | Case 1: tier intacto + audit PAST_DUE |
+| `PastDue_EnforcementDoesNotBlock_FunctionalEndpointReturnsNot402` | Case 1: PastDue no bloquea enforcement |
+| `PaymentSucceeded_FromPastDue_StatusActive_TierGrowth_AuditRecoveredLogged` | Case 2: recovery + audit RECOVERED |
+| `SubscriptionDeleted_FromPastDue_StatusCanceled_FieldsClean_AuditCanceledLogged_EnforcementBlocks` | Case 3: cancelación + campos + audit + 402 |
+| `Idempotency_SameEventId_ProcessedStripeEventInsertedOnce_StatusUnchanged` | Case 4: ProcessedStripeEvents.Count=1 |
+| `MultiTenant_PaymentFailed_ForTenantA_DoesNotAffectTenantB` | Case 5: isolation por StripeCustomerId |
+
+**Build note:** `dotnet build tests\Wasnie.UnitTests` 0 errores. IntegrationTests build bloqueado por PID 32608 (API corriendo) — no error de código, mismo patrón de sesiones previas. Requiere API detenida para compilar y ejecutar.
+
+**Manual Stripe test-clock verification (Approach B — si se quiere validar contra Stripe real):**
+Ver cabecera del archivo de test para el procedimiento completo. Resumen: crear customer con test clock, adjuntar tarjeta 4000000000000341, crear suscripción, avanzar reloj > 30 días → invoice.payment_failed real → PastDue. Avanzar pasado ventana de retry → subscription.deleted → Canceled.
+
+---
+
+## 2026-06-12 — WI-MODAL-CONFIRM-PLAN-CHANGE
+
+**Status:** COMPLETE
+
+**Scope:** Frontend only. No backend changes.
+
+**Rationale:** Usuarios hacían click en botones upgrade/downgrade y el cambio se ejecutaba inmediatamente sin confirmación ni información de costes. Riesgo de cargo accidental o cambio de límites involuntario.
+
+**Changes:**
+- `manage-subscription.component.ts`: `changePlan(tier)` renombrado a `requestPlanChange(plan)` (intercepta con modal); `confirmPlanChange()` ejecuta la llamada API real; `cancelConfirm()` cierra sin acción. Señales nuevas: `confirmModalOpen`, `confirmPlan`, `confirmingPlan`. Free→paid sigue a Stripe Checkout directamente.
+- `manage-subscription.component.html`: `(click)="requestPlanChange(plan)"` en botones de tabla. `<ws-modal>` añadido con contenido diferenciado upgrade/downgrade: upgrade muestra caja de €X en font grande + descripción; downgrade muestra banner verde "nothing charged" + warning amber con periodo + nota próxima factura.
+- `manage-subscription.component.scss`: Clases `.confirm-modal`, `.confirm-modal__charge`, `.confirm-modal__charge-amount`, `.confirm-modal__no-charge`, `.confirm-modal__warning`, `.confirm-modal__next`, `.confirm-modal-footer`.
+- `en.json` / `es.json` / `pl.json`: 10 claves nuevas por locale.
+
+**Error handling preservado:** 409 blocked → cierra modal, muestra `blockedInfo` alert. `upgrade_payment_failed` → toast. `plan_change_unavailable` → toast genérico.
+
+**Build:** `ng build --configuration production` limpio. 0 errores, warnings preexistentes sin cambio.
+
+**Deferred:** Tests unitarios del componente (actualizar spec para `requestPlanChange` y señales del modal). `lastFourDigits` no disponible en `CurrentSubscription` — se omite del modal (sin `GET /payment-method` endpoint en el backend).
+
+---
+
 ## 2026-06-12 — WI-FIX-STALE-TIER-UPGRADE-ROUTING
 
 **Status:** COMPLETE

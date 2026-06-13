@@ -25,7 +25,7 @@ public sealed class AssignmentsEndpointsTests : IAsyncLifetime
         _clientB = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantB);
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync() => await _fixture.ResetCompensationDataAsync();
 
     // ── Authentication ────────────────────────────────────────────────────────
 

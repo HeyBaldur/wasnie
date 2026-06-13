@@ -28,6 +28,8 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
     {
         _client = _fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA);
 
+        await _fixture.ResetPayeesAsync();
+
         // Seed an active Growth subscription so we can test upgrade/downgrade.
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

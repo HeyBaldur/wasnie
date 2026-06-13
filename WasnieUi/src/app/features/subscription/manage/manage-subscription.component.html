@@ -196,7 +196,7 @@
                           [loading]="isChangingTo(plan.tier)"
                           [disabled]="!!pendingTier()"
                           size="sm"
-                          (click)="changePlan(plan.tier)"
+                          (click)="requestPlanChange(plan)"
                         >
                           @if (isUpgrade(plan.tier)) {
                             {{ 'SUBSCRIPTION.UPGRADE_BTN' | translate : { tier: plan.name } }}
@@ -225,4 +225,83 @@
     }
   </div>
   </ws-page-layout>
+
+  <!-- ── Plan change confirmation modal ──────────────────────────────────── -->
+  <ws-modal
+    [(isOpen)]="confirmModalOpen"
+    [title]="'SUBSCRIPTION.CONFIRM_MODAL_TITLE' | translate : { plan: confirmPlan()?.name ?? '' }"
+    size="md"
+    [closable]="!confirmingPlan()"
+  >
+    @if (confirmPlan()) {
+      @if (isUpgrade(confirmPlan()!.tier)) {
+        <!-- Upgrade content -->
+        <div class="confirm-modal">
+          <div class="confirm-modal__charge">
+            <span class="confirm-modal__charge-label">{{ 'SUBSCRIPTION.CONFIRM_UPGRADE_CHARGE_LABEL' | translate }}</span>
+            <span class="confirm-modal__charge-amount">€{{ confirmPlan()!.price }}</span>
+          </div>
+          <p class="confirm-modal__detail">
+            {{ 'SUBSCRIPTION.CONFIRM_UPGRADE_DETAIL' | translate : {
+              plan: confirmPlan()!.name,
+              maxPayees: maxPayeesDisplay(confirmPlan()!),
+              maxPlans: maxPlansDisplay(confirmPlan()!)
+            } }}
+          </p>
+        </div>
+      } @else {
+        <!-- Downgrade content -->
+        <div class="confirm-modal">
+          <div class="confirm-modal__no-charge">
+            {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_NO_CHARGE' | translate }}
+          </div>
+          <p class="confirm-modal__detail">
+            {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_IMMEDIATE' | translate : {
+              plan: confirmPlan()!.name,
+              maxPayees: maxPayeesDisplay(confirmPlan()!),
+              maxPlans: maxPlansDisplay(confirmPlan()!)
+            } }}
+          </p>
+          @if (subscription()?.currentPeriodEnd) {
+            <p class="confirm-modal__warning">
+              {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_WARNING' | translate : {
+                currentPlan: subscription()!.tier,
+                periodEnd: (subscription()!.currentPeriodEnd | date:'mediumDate')
+              } }}
+            </p>
+          }
+          @if (subscription()?.nextBillingDate) {
+            <p class="confirm-modal__next">
+              {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_NEXT' | translate : {
+                nextDate: (subscription()!.nextBillingDate | date:'mediumDate'),
+                plan: confirmPlan()!.name,
+                price: confirmPlan()!.price
+              } }}
+            </p>
+          }
+        </div>
+      }
+    }
+
+    <div slot="footer" class="confirm-modal-footer">
+      <ws-button
+        variant="secondary"
+        [disabled]="confirmingPlan()"
+        (click)="cancelConfirm()"
+      >
+        {{ 'COMMON.CANCEL' | translate }}
+      </ws-button>
+      <ws-button
+        [variant]="isUpgrade(confirmPlan()?.tier ?? '') ? 'primary' : 'secondary'"
+        [loading]="confirmingPlan()"
+        (click)="confirmPlanChange()"
+      >
+        @if (isUpgrade(confirmPlan()?.tier ?? '')) {
+          {{ 'SUBSCRIPTION.CONFIRM_UPGRADE_BTN' | translate : { price: confirmPlan()?.price ?? 0 } }}
+        } @else {
+          {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_BTN' | translate : { plan: confirmPlan()?.name ?? '' } }}
+        }
+      </ws-button>
+    </div>
+  </ws-modal>
 </app-shell>

@@ -24,6 +24,8 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        await _fixture.ResetPayeesAsync();
+
         // Seed a Canceled Scale subscription for TenantA — simulates a reactivating tenant.
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -155,6 +157,8 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
 
     private async Task SeedPayeesAsync(int count)
     {
+        await _fixture.ResetPayeesAsync();
+
         using var scope = _fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var now = DateTimeOffset.UtcNow;
