@@ -213,8 +213,9 @@ export class PayRunDetailComponent implements OnInit {
     try {
       await firstValueFrom(this.api.approve(this.runId));
       await this.store.reload();
-    } catch {
-      this.actionError.set('PAY_RUNS.DETAIL.APPROVE_ERROR');
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.actionError.set(apiMsg ?? 'PAY_RUNS.DETAIL.APPROVE_ERROR');
     } finally {
       this.actioning.set(false);
     }
@@ -228,8 +229,9 @@ export class PayRunDetailComponent implements OnInit {
     try {
       await firstValueFrom(this.api.markPaid(this.runId));
       await this.store.reload();
-    } catch {
-      this.actionError.set('PAY_RUNS.DETAIL.MARK_PAID_ERROR');
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.actionError.set(apiMsg ?? 'PAY_RUNS.DETAIL.MARK_PAID_ERROR');
     } finally {
       this.actioning.set(false);
     }
@@ -243,8 +245,9 @@ export class PayRunDetailComponent implements OnInit {
     try {
       await firstValueFrom(this.api.reopen(this.runId));
       await this.store.reload();
-    } catch {
-      this.actionError.set('PAY_RUNS.DETAIL.REOPEN_ERROR');
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.actionError.set(apiMsg ?? 'PAY_RUNS.DETAIL.REOPEN_ERROR');
     } finally {
       this.actioning.set(false);
     }

@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Common.Abstractions;
@@ -7,7 +6,6 @@ using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
-using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
@@ -164,7 +162,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
         // Short-circuit: only call ComputeAsync when at least one active rule uses attainment.
         // This avoids a DB round-trip for Flat/Tiered plans (the common case).
         var attainmentPct = 1.0m; // default — only used when PlanUsesAttainment is true
-        if (PlanUsesAttainment(plan))
+        if (CommissionCalculator.PlanUsesAttainment(plan))
         {
             var attainment = await _quotaAttainmentService.ComputeAsync(
                 transaction.PayeeId!.Value, plan.Id, txDate, ct);
@@ -181,14 +179,14 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
         foreach (var rule in applicableRules)
         {
-            if (!EvaluateTrigger(rule.Trigger, transaction))
+            if (!CommissionCalculator.EvaluateTrigger(rule.Trigger, transaction, _logger))
                 continue;
 
             var baseAmount = transaction.Amount;
-            var commissionAmount = ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
-            commissionAmount = ApplyModifier(commissionAmount, baseAmount, rule.Modifier);
-            commissionAmount = ApplyCap(commissionAmount, rule.Cap);
-            commissionAmount = ApplyFloor(commissionAmount, rule.Floor);
+            var commissionAmount = CommissionCalculator.ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
+            commissionAmount = CommissionCalculator.ApplyModifier(commissionAmount, baseAmount, rule.Modifier);
+            commissionAmount = CommissionCalculator.ApplyCap(commissionAmount, rule.Cap);
+            commissionAmount = CommissionCalculator.ApplyFloor(commissionAmount, rule.Floor);
 
             var snapshot = RuleSnapshot.Freeze(
                 rule.Id, plan.Id, plan.Version, rule.Name,
@@ -216,198 +214,4 @@ public sealed class CreditAllocationService : ICreditAllocationService
         return credits;
     }
 
-    private static bool PlanUsesAttainment(CompensationPlan plan) =>
-        plan.Rules.Any(r => r.IsActive && r.RateTable.Type == RateTableType.AttainmentBased);
-
-    // ── Trigger evaluation ────────────────────────────────────────────────────
-
-    private bool EvaluateTrigger(Trigger trigger, CompensationTransaction tx)
-    {
-        if (trigger.Conditions.Count == 0) return true; // Trigger.Always
-
-        var results = trigger.Conditions.Select(c => EvaluateCondition(c, tx));
-
-        return trigger.LogicalOperator == LogicalOperator.And
-            ? results.All(r => r)
-            : results.Any(r => r);
-    }
-
-    private bool EvaluateCondition(Condition condition, CompensationTransaction tx)
-    {
-        string? fieldValue = condition.Field.ToLowerInvariant() switch
-        {
-            "transactionamount" => tx.Amount.Amount.ToString(CultureInfo.InvariantCulture),
-            "transactiondate" => tx.TransactionDate.ToString("yyyy-MM-dd"),
-            "source" => tx.Source.ToString(),
-            _ => null
-        };
-
-        if (fieldValue == null)
-        {
-            _logger.LogWarning(
-                "CreditEngine: unknown condition field '{Field}' on rule — treating as not-matched.",
-                condition.Field);
-            return false;
-        }
-
-        return condition.Value.Type switch
-        {
-            ConditionValueType.Number => EvaluateNumeric(fieldValue, condition.Operator, condition.Value.Raw),
-            ConditionValueType.Date => EvaluateDate(fieldValue, condition.Operator, condition.Value.Raw),
-            ConditionValueType.String => EvaluateString(fieldValue, condition.Operator, condition.Value.Raw, condition.Value.Set),
-            ConditionValueType.Boolean => EvaluateBoolean(fieldValue, condition.Operator, condition.Value.Raw),
-            _ => false
-        };
-    }
-
-    private static bool EvaluateNumeric(string fieldValue, ConditionOperator op, string raw)
-    {
-        if (!decimal.TryParse(fieldValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var field))
-            return false;
-        if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var threshold))
-            return false;
-
-        return op switch
-        {
-            ConditionOperator.Equal => field == threshold,
-            ConditionOperator.NotEqual => field != threshold,
-            ConditionOperator.GreaterThan => field > threshold,
-            ConditionOperator.GreaterThanOrEqual => field >= threshold,
-            ConditionOperator.LessThan => field < threshold,
-            ConditionOperator.LessThanOrEqual => field <= threshold,
-            _ => false
-        };
-    }
-
-    private static bool EvaluateDate(string fieldValue, ConditionOperator op, string raw)
-    {
-        if (!DateOnly.TryParseExact(fieldValue, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out var field))
-            return false;
-        if (!DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out var threshold))
-            return false;
-
-        return op switch
-        {
-            ConditionOperator.Equal => field == threshold,
-            ConditionOperator.NotEqual => field != threshold,
-            ConditionOperator.GreaterThan => field > threshold,
-            ConditionOperator.GreaterThanOrEqual => field >= threshold,
-            ConditionOperator.LessThan => field < threshold,
-            ConditionOperator.LessThanOrEqual => field <= threshold,
-            _ => false
-        };
-    }
-
-    private static bool EvaluateString(string fieldValue, ConditionOperator op, string raw, IReadOnlyList<string>? set)
-    {
-        return op switch
-        {
-            ConditionOperator.Equal => string.Equals(fieldValue, raw, StringComparison.OrdinalIgnoreCase),
-            ConditionOperator.NotEqual => !string.Equals(fieldValue, raw, StringComparison.OrdinalIgnoreCase),
-            ConditionOperator.In => set != null && set.Any(s => string.Equals(fieldValue, s, StringComparison.OrdinalIgnoreCase)),
-            ConditionOperator.NotIn => set == null || !set.Any(s => string.Equals(fieldValue, s, StringComparison.OrdinalIgnoreCase)),
-            _ => false
-        };
-    }
-
-    private static bool EvaluateBoolean(string fieldValue, ConditionOperator op, string raw)
-    {
-        if (!bool.TryParse(fieldValue, out var field)) return false;
-        if (!bool.TryParse(raw, out var threshold)) return false;
-
-        return op switch
-        {
-            ConditionOperator.Equal => field == threshold,
-            ConditionOperator.NotEqual => field != threshold,
-            _ => false
-        };
-    }
-
-    // ── Commission computation ────────────────────────────────────────────────
-
-    private static Money ComputeCommission(Money baseAmount, RateTable rateTable, decimal attainmentPct)
-    {
-        return rateTable.Type switch
-        {
-            RateTableType.Flat => baseAmount.Multiply(rateTable.FlatRate!.Value),
-            RateTableType.Tiered => ComputeTieredCommission(baseAmount, rateTable.Tiers!),
-            RateTableType.AttainmentBased =>
-                ComputeAttainmentCommission(baseAmount, rateTable.AttainmentTiers!, attainmentPct),
-            _ => throw new DomainException($"Unsupported RateTableType: {rateTable.Type}")
-        };
-    }
-
-    private static Money ComputeTieredCommission(Money baseAmount, IReadOnlyList<RateTier> tiers)
-    {
-        // Walk tiers: each tier applies its Rate to the portion of baseAmount within [From, To).
-        // If the last tier has To == null, it applies to everything above From.
-        var total = Money.Zero(baseAmount.Currency);
-        var remaining = baseAmount.Amount;
-
-        foreach (var tier in tiers)
-        {
-            if (remaining <= 0) break;
-
-            var tierMin = tier.From;
-            var tierMax = tier.To;
-
-            // How much of the base falls in this tier.
-            var inTier = tierMax.HasValue
-                ? Math.Min(remaining, tierMax.Value - tierMin)
-                : remaining;
-
-            if (inTier <= 0) continue;
-
-            total = total.Add(Money.Of(inTier * tier.Rate, baseAmount.Currency));
-            remaining -= inTier;
-        }
-
-        return total;
-    }
-
-    private static Money ComputeAttainmentCommission(Money baseAmount, IReadOnlyList<AttainmentTier> tiers, decimal attainmentPct)
-    {
-        // Find the bracket that contains attainmentPct.
-        var tier = tiers.LastOrDefault(t =>
-            t.AttainmentFrom <= attainmentPct &&
-            (t.AttainmentTo == null || attainmentPct <= t.AttainmentTo.Value));
-
-        if (tier == null) return Money.Zero(baseAmount.Currency);
-        return baseAmount.Multiply(tier.Rate);
-    }
-
-    // ── Modifiers, caps, floors ───────────────────────────────────────────────
-
-    private static Money ApplyModifier(Money commission, Money baseAmount, Modifier? modifier)
-    {
-        if (modifier == null) return commission;
-        // Multiplier and Accelerator: multiply commission by factor.
-        // Spiff: V1 stub — treat Factor as multiplier.
-        return commission.Multiply(modifier.Factor);
-    }
-
-    private static Money ApplyCap(Money commission, Cap? cap)
-    {
-        if (cap == null) return commission;
-        if (cap.Scope == CapScope.PerTransaction)
-        {
-            var capAmount = cap.Amount;
-            if (!string.Equals(commission.Currency, capAmount.Currency, StringComparison.OrdinalIgnoreCase))
-                return commission; // Currency mismatch on cap — skip cap.
-            return commission > capAmount ? capAmount : commission;
-        }
-        // PerPeriod and Total caps: deferred to WI-CALC-A.4 (Payout Engine has period context).
-        return commission;
-    }
-
-    private static Money ApplyFloor(Money commission, Floor? floor)
-    {
-        if (floor == null) return commission;
-        var floorAmount = floor.Amount;
-        if (!string.Equals(commission.Currency, floorAmount.Currency, StringComparison.OrdinalIgnoreCase))
-            return commission; // Currency mismatch on floor — skip floor.
-        return commission < floorAmount ? floorAmount : commission;
-    }
 }

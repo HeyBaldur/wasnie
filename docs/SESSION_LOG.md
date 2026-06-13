@@ -8,6 +8,65 @@
 
 ## Sessions (newest first)
 
+## 2026-06-13 — WI-WIZARD-CAPABILITIES
+
+**Scope:** Enriquecer el paso 2 del wizard de sign-up con las 9 capacidades validadas por el founder (no es landing de marketing — es información para elegir bien el plan).
+
+**Decisión de producto documentada:** Rep Portal descartado. Los vendedores no acceden a Wasnie. Marcado ⛔ FUERA DE ALCANCE en `PROJECT_STATUS.md` para evitar que se reintroduzca en futuras sesiones.
+
+**Implementación:**
+- `subscription-wizard.component.ts` — `readonly features` array con 9 pares de i18n keys (`nameKey`/`descKey`), `as const`
+- `subscription-wizard.component.html` — sección `<section class="capabilities">` insertada entre trust-bar y la zona de loading/error/tabla. Grid 3×3 con `@for (f of features)`, checkmark brand en círculo, nombre y descripción
+- `subscription-wizard.component.scss` — `.capabilities`, `.capabilities__heading`, `.capabilities__grid`, `.cap-item` (con surface card tokens), `.cap-item__check` (círculo brand-subtle + brand), `.cap-item__name`, `.cap-item__desc`. Responsive: 3→2→1 columnas a 680px/420px
+- `en.json` / `es.json` / `pl.json` — 20 claves nuevas en bloque `ONBOARDING`: `CAP_SECTION_HEADING` + `CAP_*_NAME` + `CAP_*_DESC` para las 9 capacidades
+
+**Decisión de diseño:** Sección "Incluido en todos los planes" (no columnas por tier — hoy todas las capacidades son iguales en todos los tiers). Fácil de mover una capacidad a fila con diferencias por tier en el futuro si un tier la limita.
+
+**Build:** `ng build --configuration production` — 0 errores. Warnings preexistentes sin cambio.
+
+**Archivos modificados:** `subscription-wizard.component.ts`, `.html`, `.scss`, `en.json`, `es.json`, `pl.json`, `PROJECT_STATUS.md`.
+
+---
+
+## 2026-06-13 — WI-MONEY-TESTS
+
+**Scope:** Close Critical Twelve #2 — money math in the commission engine had no unit tests.
+
+**Step 0 (previous session):** Diagnosis established that `CalculatePayoutsForPeriodHandler` contains no money math (DB orchestration only). All math lives in `CreditAllocationService`'s private static methods. `InternalsVisibleTo("Wasnie.UnitTests")` was already configured; `Wasnie.UnitTests.csproj` already references `Wasnie.Infrastructure` — infrastructure ready.
+
+**Step 1 — Extraction:** Created `WasnieApi/src/Wasnie.Infrastructure/Compensation/Calculation/CommissionCalculator.cs` as `internal static class`. Moved 13 methods verbatim (identical logic, `internal` visibility added): `PlanUsesAttainment`, `EvaluateTrigger`, `EvaluateCondition`, `EvaluateNumeric`, `EvaluateDate`, `EvaluateString`, `EvaluateBoolean`, `ComputeCommission`, `ComputeTieredCommission`, `ComputeAttainmentCommission`, `ApplyModifier`, `ApplyCap`, `ApplyFloor`. `EvaluateTrigger`/`EvaluateCondition` accept `ILogger?` (optional, null-safe — passed from service, omitted in tests).
+
+**Step 2 — Delegation:** `CreditAllocationService` updated to call `CommissionCalculator.*()` for all computation. Private methods removed. Unused `System.Globalization` using removed.
+
+**Step 3 — Tests:** `WasnieApi/tests/Wasnie.UnitTests/Calculation/CommissionCalculatorTests.cs` — 63 pure unit tests, zero DB, zero DI. Coverage: Flat rate (6), Tiered with boundary conditions (7), AttainmentBased with `LastOrDefault` boundary (7), Modifier (5), Cap inc. deferred scopes + currency mismatch (8), Floor inc. currency mismatch (5), Trigger evaluation inc. AND/OR/date/string/In/NotIn/unknown-field (13), banker's rounding Theory with string params (4), multi-currency isolation (3), determinism (2), pipeline integration (3).
+
+**Result:** 454 → 517 unit tests (+63), all pass. Build: 0 errors, 0 warnings.
+
+**Deferred:** Phase 2 of WI-WIZARD-FEATURES-SECTION (features block in subscription wizard) — awaiting founder approval of 🟢 feature list.
+
+---
+
+## 2026-06-13 — WI-FEATURE-INVENTORY + WI-WIZARD-FEATURES-SECTION
+
+**Status:** COMPLETE (ver detalle abajo — Fase 1 completa; Fase 2 completa post-aprobación de lista 🟢)
+
+**Fase 1 — Inventario real de módulos:**
+- Inventario completo desde el código (no desde la spec de mayo) añadido a `PROJECT_STATUS.md` como sección `## Feature Inventory (real state from code, 2026-06-13)`.
+- 🟢 plenos: Payees, Plans, Rules, Quotas, Assignments, Transactions, Credits, Pay Runs, Payouts, Process Pending, Admin Dashboard, Payee Dashboard, Multi-tenant, Auth/RBAC, Session Management, Audit Trail, Billing/Stripe, Tier Limits, i18n, Observability, Security Headers, todos los Import/Export.
+- 🟡 con deuda: Payout Engine (funcional pero sin unit tests de money math — Critical Twelve #2), Admin/Settings (básico).
+- 🔴 no empezado: Email Notifications, Clawbacks, Manager/Rep UI scoped data, E2E tests, Mobile.
+- Deuda latente documentada en 5 puntos con seguimiento.
+
+**Fase 2 — Sección de features en el wizard:**
+- Sección insertada en `subscription-wizard.component.html` entre el trust bar y la tabla de precios.
+- Solo features 🟢 confirmadas. Ver lista en sección de features del wizard.
+- i18n EN/ES/PL añadido: sección `ONBOARDING.FEATURES.*`.
+- `ng build --configuration development` limpio post-cambio.
+
+**Archivos tocados:** `docs/PROJECT_STATUS.md`, `docs/SESSION_LOG.md`, `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.html`, `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.scss`, `WasnieUi/src/assets/i18n/en.json`, `WasnieUi/src/assets/i18n/es.json`, `WasnieUi/src/assets/i18n/pl.json`.
+
+---
+
 ## 2026-06-12 — WI-TEST-PAYMENT-CYCLE bug fixes
 
 **Status:** COMPLETE

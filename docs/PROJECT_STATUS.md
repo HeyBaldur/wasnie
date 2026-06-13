@@ -1,5 +1,8 @@
 # Wasnie — Project Status
 
+**Last updated:** 2026-06-13 — WI-WIZARD-CAPABILITIES: 9 capacidades añadidas al wizard de sign-up (paso 2 — selección de plan). Sección "Incluido en todos los planes" entre trust-bar y tabla de precios: grid 3×3 con checkmark brand, nombre y descripción corta. i18n EN/ES/PL completo (20 claves nuevas en ONBOARDING). Build production limpio. Rep Portal marcado ⛔ FUERA DE ALCANCE en inventario.
+**Last updated:** 2026-06-13 — WI-MONEY-TESTS COMPLETE. Closed Critical Twelve #2 debt. Extracted 13 private static methods from `CreditAllocationService` into new `internal static CommissionCalculator` class (same logic, `internal` visibility enables unit testing without DB). `InternalsVisibleTo("Wasnie.UnitTests")` was already configured. Wrote 63 new unit tests in `Wasnie.UnitTests/Calculation/CommissionCalculatorTests.cs` covering: Flat rate (6), Tiered (7 + boundary conditions), AttainmentBased (7 + LastOrDefault boundary), Modifier (5), Cap (8 inc. currency mismatch + deferred scopes), Floor (5), Trigger evaluation (13 inc. AND/OR/date/string/In/NotIn/unknown-field), banker's rounding Theory (4 cases), multi-currency isolation (3), determinism (2), pipeline integration (3). Total unit tests: 454→517 (+63). Build: 0 errors, 0 warnings.
+**Last updated:** 2026-06-13 — WI-FEATURE-INVENTORY + WI-WIZARD-FEATURES-SECTION: Inventario real de módulos (desde el código) añadido como sección consolidada. Sección de features insertada en el wizard de onboarding (entre hero y tabla de precios). Ver "Feature Inventory" más abajo.
 **Last updated:** 2026-06-12 — WI-TEST-PAYMENT-CYCLE BUG FIXES APPLIED. 3 integration test failures fixed: (1) `PaymentFailedCycleTests.ReadAuditByResourceId` missing `.IgnoreQueryFilters()` → added (same pattern as `ReadSubscription`); (2) `AssignmentsEndpointsTests.DisposeAsync` was `Task.CompletedTask` → now calls `ResetCompensationDataAsync()` to prevent EMP-coded payee leakage into subsequent test classes; (3) `SubscriptionEnforcementTests.GetPlans_CanceledTenant_Returns200` used shared factory with no Stripe mock → now uses `WithWebHostBuilder` + local `StubPlanService`. Build: 0 errors, 1 pre-existing warning. Pre-existing failures (`ListAssignmentsByPayee`, `Dashboard.*PendingByPlanItems*`) unrelated to this WI.
 **Last updated:** 2026-06-12 — WI-TEST-PAYMENT-CYCLE COMPLETE. Nuevo test de integración `PaymentFailedCycleTests.cs` (6 tests) que cubre el ciclo completo de pago fallido via webhooks sintéticos (Approach A). Casos cubiertos: (1) payment_failed → PastDue: tier intacto + audit SUBSCRIPTION_PAST_DUE; (2) PastDue no bloquea enforcement (solo Canceled bloquea); (3) payment_succeeded → Active: audit SUBSCRIPTION_RECOVERED; (4) subscription.deleted → Canceled: CanceledAt set, CancelAtPeriodEnd=false, CancelAt=null, audit SUBSCRIPTION_CANCELED, enforcement 402; (5) idempotency: mismo event ID → ProcessedStripeEvents.Count=1; (6) multi-tenant: payment_failed para TenantA no afecta TenantB. Código compila limpio (unit tests 0 errores); build de IntegrationTests bloqueado por lock del API en ejecución — requiere API detenida para compilar y ejecutar. Comando: `dotnet test tests\Wasnie.IntegrationTests\... --filter "FullyQualifiedName~PaymentFailedCycleTests"`.
 **Last updated:** 2026-06-12 — WI-MODAL-CONFIRM-PLAN-CHANGE COMPLETE. Intercept de doble confirmación antes de cualquier cambio de plan (paid→paid). Frontend only. Flujo: botón en tabla de planes → `requestPlanChange(plan)` → modal `WsModal` → confirmar/cancelar → `confirmPlanChange()` → API → polling. Free→paid sigue yendo directo a Stripe Checkout (sin modal). Modal upgrade: caja de cargo destacada (€X en font grande, etiqueta uppercase) + párrafo de qué cambia + botón "Confirm and pay €X". Modal downgrade: banner verde "Nothing charged today" + párrafo de límites + bloque warning amber con periodo pagado hasta + nota de próxima factura + botón "Confirm switch to X". Loading state en botón confirm, `[closable]="!confirmingPlan()"` previene cierre durante llamada API. 409 blocked → cierra modal y muestra `blockedInfo` alert existente (sin cambios). upgrade_payment_failed → cierra modal y muestra toast. Señales: `confirmModalOpen`, `confirmPlan`, `confirmingPlan`. i18n EN/ES/PL: 10 nuevas claves por locale (`CONFIRM_MODAL_TITLE`, `CONFIRM_UPGRADE_CHARGE_LABEL`, `CONFIRM_UPGRADE_DETAIL`, `CONFIRM_UPGRADE_BTN`, `CONFIRM_DOWNGRADE_NO_CHARGE`, `CONFIRM_DOWNGRADE_IMMEDIATE`, `CONFIRM_DOWNGRADE_WARNING`, `CONFIRM_DOWNGRADE_NEXT`, `CONFIRM_DOWNGRADE_BTN`). `WsModalComponent` añadido a imports del componente. `ng build --configuration production` limpio (0 errores, warnings preexistentes sin cambio). No hay cambios backend.
@@ -111,6 +114,82 @@ PHASE 2+ — Transactions, Calculation Engine, Visibility, etc.
 ```
 
 For full plan details: `docs/Wasnie_Master_Plan_Phase_1_Closure.md`
+
+---
+
+## Feature Inventory (real state from code, 2026-06-13)
+
+Estado honesto de cada módulo funcional basado en inspección del código (no en la spec de mayo). Leyenda: 🟢 construido y funcional / 🟡 parcial o con deuda crítica / 🔴 no empezado.
+
+### Módulos de compensación (core)
+
+| Módulo | Estado | Notas |
+|---|---|---|
+| **Payees (Sales Reps)** | 🟢 | CRUD, deactivate/activate, Excel import con tier limits, jerarquía manager, payee dashboard completo |
+| **Compensation Plans** | 🟢 | Create/edit/activate/archive/clone; reglas Flat-rate y Tiered; multi-currency; endpoint list + detail + rules |
+| **Plan Rules** | 🟢 | Add/remove/update reglas por plan; MeasurementType Revenue+Units; cap/floor en tiered |
+| **Quotas** | 🟢 | Create/edit/activate/close; attainment Sales Revenue (Transaction.Amount); currency invariant enforced |
+| **Assignments** | 🟢 | Assign payee→plan con effective period; deactivate; notes; list by plan/payee |
+| **Transactions** | 🟢 | Ingest manual + import Excel (hasta 10k filas); reassign payee; void (Pending only); update-from-Excel; cancel + audit; multi-currency |
+| **Credits** | 🟢 | Trail completo de cómo se calculó cada comisión; list + counters + by-payee + detail; export Excel |
+| **Payout Engine** | 🟡 | Functionally complete + smoke-tested. **Deuda crítica: `CalculatePayoutsForPeriodHandler` sin unit tests de money math** — viola Critical Twelve #2. Prioridad alta antes de primer cliente real. |
+| **Pay Runs** | 🟢 | Package payouts en ciclos; Draft→Approved→Paid state machine; Reopen; roll-ups per-currency; export Excel |
+| **Payouts** | 🟢 | Calculate, approve (individual + bulk), mark paid (individual + bulk), export Excel; ExcludeZero toggle |
+| **Process Pending** | 🟢 | Hangfire job; 3 scopes (ByPlanAssignment/ByPlan/ByPayeeAndPeriod); skip log; cancel support |
+
+### Visibilidad y análisis
+
+| Módulo | Estado | Notas |
+|---|---|---|
+| **Admin Dashboard** | 🟢 | 3 bandas: acción (pay runs/payouts pendientes), período (transacciones/payouts/créditos/quotas/KPIs), tendencia (per-currency); activity feed; period selector |
+| **Payee Dashboard** | 🟢 | Vista individual: 5 bento cards (quota gauge SVG, sales trend bar chart, attainment, assignments, credits); period filter; click-through navigation |
+| **Credits Detail** | 🟢 | "Cómo se calculó" step-by-step (Flat + trace de snapshot); banner Superseded |
+
+### Infraestructura y plataforma
+
+| Módulo | Estado | Notas |
+|---|---|---|
+| **Multi-tenant** | 🟢 | Global EF query filters en 11 entidades; BackgroundJobTenantContext; cross-tenant tests en todos los endpoints |
+| **Auth + RBAC** | 🟢 | JWT + refresh + revocación; 4 roles (TenantAdmin/CompManager/Payee/Auditor); 29+ permisos; rate limiting; password policy; lockout |
+| **Session Management** | 🟢 | Inactivity timeout + warning modal; cross-tab sync (BroadcastChannel + localStorage fallback); session expiry toast |
+| **Audit Trail** | 🟢 | Inmutable (SQL trigger + EF), 7-year retention ready; audit en todas las operaciones destructivas y monetarias |
+| **Billing / Stripe** | 🟢 | Planes Free/Starter/Growth/Scale; Checkout hosted; webhooks (checkout/subscription/invoice); upgrade/downgrade (pago inmediato/proration); PastDue→grace; Canceled→reactivación con checkout; Billing Portal; idempotencia eventos |
+| **Tier Limits** | 🟢 | Enforced en create payee, create plan, import payees, checkout reactivación; UI modal con usage bar |
+| **i18n EN/ES/PL** | 🟢 | Completo en todos los módulos; sin fallbacks en ES/PL |
+| **Observability** | 🟢 | Structured JSON logging (Serilog); CorrelationId middleware; TenantId/UserId enrichers; frontend ErrorTrackingService + GlobalErrorHandler |
+| **Security headers** | 🟢 | SecurityHeadersMiddleware; HSTS; CSP; CORS no wildcard |
+
+### Import / Export
+
+| Módulo | Estado | Notas |
+|---|---|---|
+| **Payee Import (Excel)** | 🟢 | 5-step wizard; column mapping; validación + preview; tier limit pre-flight; hasta 300 filas |
+| **Transaction Import (Excel)** | 🟢 | 5-step wizard; hasta 10k filas (configurable); InvariantCulture date parsing |
+| **Transaction Update (Excel)** | 🟢 | Re-upload con ReferenceNumber como key; diff preview; audit por fila |
+| **Payouts Export (Excel)** | 🟢 | Filtros + 50k cap; ClosedXML; columnas de moneda dinámicas |
+| **Credits Export (Excel)** | 🟢 | Filtros + 50k cap; 17 columnas |
+| **Transactions Export (Excel)** | 🟢 | Filtros + 50k cap; 10 columnas; botón en lista |
+| **Pay Runs Export (Excel)** | 🟢 | Por pay run; per-currency dynamic columns |
+
+### Módulos parciales o no empezados
+
+| Módulo | Estado | Notas |
+|---|---|---|
+| **Admin/Settings** | 🟡 | Appearance (dark/light/soft) + field requirements por payee. No hay user management UI ni role assignment UI |
+| **Email Notifications** | 🔴 | `IEmailService` abstraction existe y está registrada como stub. Cero envíos reales. Deferred a primer cliente |
+| **Clawbacks/Adjustments** | 🔴 | Explícitamente diferido (Decision #66). No empezado |
+| **Rep Portal (acceso de vendedores)** | ⛔ FUERA DE ALCANCE | **Decisión de producto 2026-06-13:** los vendedores NO acceden a Wasnie. Wasnie es una herramienta para administradores de compensación. El Rep Portal descrito en la Product Master Spec (mayo) queda abandonado como dirección de producto. No reintroducir. |
+| **Manager/Rep scoped data access** | 🔴 | RBAC roles existen; sin UI separada para manager/rep. Diferido — requiere Rep Portal que está fuera de alcance |
+| **E2E tests** | 🔴 | Phase D, deferred |
+| **Mobile responsive** | 🔴 | Phase 8, deferred. Target mínimo: 1280px |
+
+### Deuda latente documentada (lleva seguimiento)
+
+1. **`CalculatePayoutsForPeriodHandler` sin unit tests de money math** — Viola Critical Twelve #2. El handler funciona (smoke + integración), pero sin cobertura unitaria de los cálculos monetarios. Antes del primer cliente real esto es bloqueante.
+2. **`_lastLoadedFilter` race latente** en `CreditsStore` + `TransactionsStore` — auditar antes del primer cliente.
+3. **Excel export usa 4 decimales** de BD en lugar de redondear a precisión de display — cosmético.
+4. **~11 pre-existing red tests** — 10 frontend (`ProcessPendingComponent×5`, `TransactionsListComponent×5`); 1 backend (`AssignmentsEndpointsTests.ListAssignmentsByPayee`).
+5. **F-001/F-002** — Clean Architecture violations documentadas, diferidas con pragma.
 
 ---
 

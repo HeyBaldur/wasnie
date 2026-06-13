@@ -210,8 +210,9 @@ export class PayRunsListComponent implements OnInit {
       this.calculateResult.set(result);
       this.calculatePhase.set('done');
       await this.store.reload();
-    } catch {
-      this.calculateError.set('PAY_RUNS.CALCULATE_ERROR');
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.calculateError.set(apiMsg ?? 'PAY_RUNS.CALCULATE_ERROR');
     } finally {
       this.calculating.set(false);
     }

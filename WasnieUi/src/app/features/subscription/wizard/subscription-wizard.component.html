@@ -42,6 +42,22 @@
       </div>
     </div>
 
+    <!-- Capabilities — same in every plan -->
+    <section class="capabilities" aria-label="{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}">
+      <p class="capabilities__heading">{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}</p>
+      <div class="capabilities__grid">
+        @for (f of features; track f.nameKey) {
+          <div class="cap-item">
+            <span class="cap-item__check" aria-hidden="true">✓</span>
+            <div class="cap-item__body">
+              <p class="cap-item__name">{{ f.nameKey | translate }}</p>
+              <p class="cap-item__desc">{{ f.descKey | translate }}</p>
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+
     <!-- Checkout error -->
     @if (checkoutError()) {
       <p class="wizard-checkout-error">{{ 'ONBOARDING.LOAD_ERROR' | translate }}</p>
