@@ -38,6 +38,17 @@ public sealed class ResendEmailService(
         return SendAsync(to, subject, html, cancellationToken);
     }
 
+    public Task SendEmailChangeConfirmationAsync(
+        string to,
+        string firstName,
+        string confirmationUrl,
+        string language,
+        CancellationToken cancellationToken = default)
+    {
+        var (subject, html) = EmailTemplates.EmailChangeConfirmation(firstName, confirmationUrl, language);
+        return SendAsync(to, subject, html, cancellationToken);
+    }
+
     private async Task SendAsync(string to, string subject, string html, CancellationToken cancellationToken)
     {
         var opts = options.Value;

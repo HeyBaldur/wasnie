@@ -66,6 +66,12 @@ public static class AuditActions
     public const string SubscriptionCancelReverted = "SUBSCRIPTION_CANCEL_REVERTED";
     public const string SubscriptionTierSyncedFromStripe = "SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE";
 
+    // Profile self-service
+    public const string ProfileNameUpdated = "PROFILE_NAME_UPDATED";
+    public const string ProfilePasswordChanged = "PROFILE_PASSWORD_CHANGED";
+    public const string ProfileEmailChangeRequested = "PROFILE_EMAIL_CHANGE_REQUESTED";
+    public const string ProfileEmailChangeConfirmed = "PROFILE_EMAIL_CHANGE_CONFIRMED";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

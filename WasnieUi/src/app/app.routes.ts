@@ -83,6 +83,19 @@ export const routes: Routes = [
       import('./features/subscription/subscription.routes').then((m) => m.manageSubscriptionRoutes),
   },
   {
+    path: 'profile',
+    canActivate: [planGuard, subscriptionGuard],
+    loadChildren: () =>
+      import('./features/profile/profile.routes').then(m => m.profileRoutes),
+  },
+  {
+    path: 'profile/confirm-email-change',
+    loadComponent: () =>
+      import('./features/profile/confirm-email-change/confirm-email-change.component').then(
+        m => m.ConfirmEmailChangeComponent,
+      ),
+  },
+  {
     path: 'admin',
     canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Subscription.Manage')],
     loadComponent: () =>

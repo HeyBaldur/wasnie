@@ -1,0 +1,209 @@
+<app-shell>
+  <div class="profile-page">
+    <ws-page-header
+      icon="settings"
+      [title]="'PROFILE.TITLE' | translate"
+      [subtitle]="'PROFILE.SUBTITLE' | translate"
+    />
+
+    @if (loading()) {
+      <div class="profile-skeleton">
+        <div class="profile-skeleton__card"></div>
+        <div class="profile-skeleton__card"></div>
+      </div>
+    }
+
+    @if (!loading() && loadError()) {
+      <ws-card>
+        <p class="profile-error">{{ 'PROFILE.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </ws-card>
+    }
+
+    @if (!loading() && !loadError() && profile()) {
+      <div class="profile-sections">
+
+        <!-- ── Section 1: Your Profile (editable) ────────────────────────────── -->
+        <section class="profile-section">
+          <h2 class="profile-section__title">{{ 'PROFILE.SECTION_YOUR_PROFILE' | translate }}</h2>
+
+          <!-- Name card -->
+          <ws-card class="profile-card">
+            <h3 class="profile-card__heading">{{ 'PROFILE.NAME_HEADING' | translate }}</h3>
+            <div class="ws-form-grid">
+              <div class="form-field">
+                <ws-input
+                  [label]="'AUTH.FIRST_NAME' | translate"
+                  type="text"
+                  inputId="firstName"
+                  autocomplete="given-name"
+                  [ngModel]="firstName()"
+                  (valueChange)="firstName.set($event)"
+                />
+              </div>
+              <div class="form-field">
+                <ws-input
+                  [label]="'AUTH.LAST_NAME' | translate"
+                  type="text"
+                  inputId="lastName"
+                  autocomplete="family-name"
+                  [ngModel]="lastName()"
+                  (valueChange)="lastName.set($event)"
+                />
+              </div>
+            </div>
+            <div class="profile-card__actions">
+              <ws-button
+                variant="primary"
+                [loading]="savingName()"
+                [disabled]="!firstName().trim() || !lastName().trim()"
+                (click)="saveName()"
+              >
+                {{ 'PROFILE.SAVE_NAME' | translate }}
+              </ws-button>
+            </div>
+          </ws-card>
+
+          <!-- Change password card -->
+          <ws-card class="profile-card">
+            <h3 class="profile-card__heading">{{ 'PROFILE.PASSWORD_HEADING' | translate }}</h3>
+            <div class="ws-form-grid">
+              <div class="form-field form-field--full">
+                <ws-input
+                  [label]="'PROFILE.CURRENT_PASSWORD' | translate"
+                  type="password"
+                  inputId="currentPassword"
+                  autocomplete="current-password"
+                  [error]="currentPasswordError() | translate"
+                  [ngModel]="currentPassword()"
+                  (valueChange)="currentPassword.set($event); currentPasswordError.set('')"
+                />
+              </div>
+              <div class="form-field">
+                <ws-input
+                  [label]="'PROFILE.NEW_PASSWORD' | translate"
+                  type="password"
+                  inputId="newPassword"
+                  autocomplete="new-password"
+                  [ngModel]="newPassword()"
+                  (valueChange)="newPassword.set($event)"
+                />
+              </div>
+              <div class="form-field">
+                <ws-input
+                  [label]="'PROFILE.CONFIRM_NEW_PASSWORD' | translate"
+                  type="password"
+                  inputId="confirmNewPassword"
+                  autocomplete="new-password"
+                  [ngModel]="confirmNewPassword()"
+                  (valueChange)="confirmNewPassword.set($event)"
+                />
+              </div>
+            </div>
+            @if (passwordError()) {
+              <p class="profile-field-error">{{ passwordError() | translate }}</p>
+            }
+            <p class="profile-card__hint">{{ 'PROFILE.PASSWORD_HINT' | translate }}</p>
+            <div class="profile-card__actions">
+              <ws-button
+                variant="primary"
+                [loading]="savingPassword()"
+                [disabled]="!currentPassword() || !newPassword() || !confirmNewPassword()"
+                (click)="changePassword()"
+              >
+                {{ 'PROFILE.CHANGE_PASSWORD' | translate }}
+              </ws-button>
+            </div>
+          </ws-card>
+
+          <!-- Change email card -->
+          <ws-card class="profile-card">
+            <h3 class="profile-card__heading">{{ 'PROFILE.EMAIL_HEADING' | translate }}</h3>
+            @if (profile()!.hasPendingEmailChange) {
+              <div class="profile-pending-badge">
+                {{ 'PROFILE.EMAIL_CHANGE_PENDING' | translate }}
+              </div>
+            }
+            <div class="ws-form-grid">
+              <div class="form-field form-field--full">
+                <ws-input
+                  [label]="'PROFILE.NEW_EMAIL' | translate"
+                  type="email"
+                  inputId="newEmail"
+                  autocomplete="email"
+                  [ngModel]="newEmail()"
+                  (valueChange)="newEmail.set($event)"
+                />
+              </div>
+            </div>
+            @if (emailChangeError()) {
+              <p class="profile-field-error">{{ emailChangeError() }}</p>
+            }
+            <p class="profile-card__hint">{{ 'PROFILE.EMAIL_CHANGE_HINT' | translate }}</p>
+            <div class="profile-card__actions">
+              <ws-button
+                variant="primary"
+                [loading]="requestingEmailChange()"
+                [disabled]="!newEmail().trim() || newEmail().trim() === profile()!.email"
+                (click)="requestEmailChange()"
+              >
+                {{ 'PROFILE.REQUEST_EMAIL_CHANGE' | translate }}
+              </ws-button>
+            </div>
+          </ws-card>
+        </section>
+
+        <!-- ── Section 2: Organization (read-only + contact) ─────────────────── -->
+        <section class="profile-section">
+          <h2 class="profile-section__title">{{ 'PROFILE.SECTION_ORGANIZATION' | translate }}</h2>
+
+          <ws-card class="profile-card">
+
+            <!-- Company name — read-only -->
+            <div class="profile-readonly-row">
+              <div class="profile-readonly-row__info">
+                <span class="profile-readonly-row__label">{{ 'PROFILE.COMPANY_NAME' | translate }}</span>
+                <span class="profile-readonly-row__value">{{ profile()!.companyName }}</span>
+              </div>
+              <div class="profile-readonly-row__action">
+                <ws-button variant="secondary" size="sm" (click)="contactSupport()">
+                  {{ 'PROFILE.CONTACT_TO_CHANGE' | translate }}
+                </ws-button>
+              </div>
+            </div>
+
+            <div class="profile-divider"></div>
+
+            <!-- Organization identifier — read-only -->
+            <div class="profile-readonly-row">
+              <div class="profile-readonly-row__info">
+                <span class="profile-readonly-row__label">{{ 'AUTH.TENANT_SLUG' | translate }}</span>
+                <span class="profile-readonly-row__value profile-readonly-row__value--mono">{{ profile()!.organizationSlug }}</span>
+              </div>
+              <div class="profile-readonly-row__action">
+                <ws-button variant="secondary" size="sm" (click)="contactSupport()">
+                  {{ 'PROFILE.CONTACT_TO_CHANGE' | translate }}
+                </ws-button>
+              </div>
+            </div>
+
+            <div class="profile-divider"></div>
+
+            <!-- Delete account — GDPR, handled by contact -->
+            <div class="profile-danger-zone">
+              <div class="profile-danger-zone__info">
+                <span class="profile-danger-zone__label">{{ 'PROFILE.DELETE_ACCOUNT_TITLE' | translate }}</span>
+                <span class="profile-danger-zone__desc">{{ 'PROFILE.DELETE_ACCOUNT_DESC' | translate }}</span>
+              </div>
+              <ws-button variant="danger" size="sm" (click)="contactPrivacy()">
+                {{ 'PROFILE.DELETE_ACCOUNT_CTA' | translate }}
+              </ws-button>
+            </div>
+
+          </ws-card>
+        </section>
+
+      </div>
+    }
+  </div>
+</app-shell>

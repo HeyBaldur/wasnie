@@ -3,6 +3,13 @@
     <a class="sidebar__brand" routerLink="/dashboard" [title]="'NAV.DASHBOARD' | translate">
       <span class="sidebar__brand-monogram">
         <img src="wasnie_logo.png" alt="Wasnie ICM & SPM" />
+        @if (tierName() === 'Starter') {
+          <span class="sidebar__logo-gradient bg-gradient-to-br from-purple-600 to-blue-500"></span>
+        } @else if (tierName() === 'Growth') {
+          <span class="sidebar__logo-gradient bg-gradient-to-br from-cyan-500 to-blue-500"></span>
+        } @else if (tierName() === 'Scale') {
+          <span class="sidebar__logo-gradient bg-gradient-to-br from-green-400 to-blue-600"></span>
+        }
       </span>
       @if (sidebarState.isExpanded()) {
         <span class="sidebar__brand-name">{{ 'APP.NAME' | translate }}</span>

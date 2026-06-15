@@ -7,11 +7,18 @@
   }
 
   <div class="ws-ph__row">
-    <div class="ws-ph__meta">
-      <h1 class="ws-ph__title">{{ title() | translate }}</h1>
+    <div class="ws-ph__title-group">
+      @if (icon()) {
+        <span class="ws-ph__icon">
+          <app-icon [name]="icon()" [size]="24" />
+        </span>
+      }
+      <div class="ws-ph__meta">
+        <h1 class="ws-ph__title">{{ title() | translate }}</h1>
       @if (subtitle()) {
         <p class="ws-ph__subtitle">{{ subtitle() | translate }}</p>
       }
+      </div>
     </div>
 
     <div class="ws-ph__actions">

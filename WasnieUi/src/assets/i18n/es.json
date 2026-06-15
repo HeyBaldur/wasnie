@@ -193,7 +193,8 @@
     "PAY_GROUP": "Finanzas",
     "ADMIN": "Configuración",
     "SUBSCRIPTION": "Suscripción",
-    "IMPORT_TRANSACTIONS": "Importar transacciones"
+    "IMPORT_TRANSACTIONS": "Importar transacciones",
+    "PROFILE": "Perfil"
   },
   "EMPTY_STATE": {
     "PLANS_TITLE": "Sin planes aún",
@@ -1396,5 +1397,43 @@
     "CONFIRM_DOWNGRADE_WARNING": "Perderás las funciones y límites de {{currentPlan}} de inmediato, aunque tu periodo actual esté pagado hasta {{periodEnd}}.",
     "CONFIRM_DOWNGRADE_NEXT": "Tu próxima factura del {{nextDate}} será al precio de {{plan}} — €{{price}}/mes.",
     "CONFIRM_DOWNGRADE_BTN": "Confirmar cambio a {{plan}}"
+  },
+  "PROFILE": {
+    "TITLE": "Tu Perfil",
+    "SUBTITLE": "Gestiona tus datos personales y la seguridad de tu cuenta.",
+    "LOAD_ERROR": "No pudimos cargar tu perfil. Por favor, inténtalo de nuevo.",
+    "SECTION_YOUR_PROFILE": "Datos personales",
+    "SECTION_ORGANIZATION": "Organización",
+    "NAME_HEADING": "Nombre completo",
+    "SAVE_NAME": "Guardar nombre",
+    "NAME_SAVED": "Nombre actualizado.",
+    "NAME_ERROR": "No se pudo actualizar el nombre. Inténtalo de nuevo.",
+    "PASSWORD_HEADING": "Cambiar contraseña",
+    "PASSWORD_DESC": "Para cambiar tu contraseña, introduce la contraseña actual y elige una nueva.",
+    "PASSWORD_HINT": "La contraseña debe tener al menos 10 caracteres, con una letra mayúscula, un dígito y un carácter especial.",
+    "CURRENT_PASSWORD": "Contraseña actual",
+    "NEW_PASSWORD": "Nueva contraseña",
+    "CONFIRM_NEW_PASSWORD": "Confirmar nueva contraseña",
+    "CHANGE_PASSWORD": "Cambiar contraseña",
+    "PASSWORDS_MISMATCH": "Las nuevas contraseñas no coinciden.",
+    "PASSWORD_CHANGED": "Contraseña cambiada. Por favor, inicia sesión de nuevo.",
+    "PASSWORD_ERROR": "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
+    "EMAIL_HEADING": "Cambiar dirección de correo electrónico",
+    "CURRENT_EMAIL": "Correo actual",
+    "NEW_EMAIL": "Nueva dirección de correo electrónico",
+    "EMAIL_CHANGE_HINT": "Se enviará un enlace de confirmación a tu nueva dirección. El correo no cambiará hasta que lo confirmes.",
+    "REQUEST_EMAIL_CHANGE": "Enviar confirmación",
+    "EMAIL_CHANGE_SENT": "Correo de confirmación enviado a tu nueva dirección.",
+    "EMAIL_CHANGE_ERROR": "No se pudo enviar el correo de confirmación. Inténtalo de nuevo.",
+    "EMAIL_CHANGE_PENDING": "Verificación pendiente — revisa tu nueva bandeja de entrada.",
+    "COMPANY_NAME": "Nombre de la empresa",
+    "CONTACT_TO_CHANGE": "Contáctanos para cambiar",
+    "DELETE_ACCOUNT_TITLE": "Eliminar cuenta (RGPD)",
+    "DELETE_ACCOUNT_DESC": "Tienes derecho a solicitar la eliminación completa de tus datos bajo el RGPD. Este proceso es gestionado manualmente por nuestro equipo.",
+    "DELETE_ACCOUNT_CTA": "Contáctanos para solicitar la eliminación",
+    "CONFIRM_EMAIL_LOADING": "Confirmando tu nueva dirección de correo electrónico…",
+    "CONFIRM_EMAIL_SUCCESS_TITLE": "¡Correo electrónico actualizado!",
+    "CONFIRM_EMAIL_SUCCESS_DESC": "Tu correo ha sido actualizado. Por favor, inicia sesión con tu nueva dirección. Redirigiendo…",
+    "CONFIRM_EMAIL_ERROR_TITLE": "Enlace expirado o inválido"
   }
 }

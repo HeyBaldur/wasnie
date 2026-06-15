@@ -30,6 +30,7 @@ public interface IApplicationDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<EmailConfirmationToken> EmailConfirmationTokens { get; }
     DbSet<PasswordResetToken> PasswordResetTokens { get; }
+    DbSet<EmailChangeToken> EmailChangeTokens { get; }
 
     DbSet<CompensationPlan> CompensationPlans { get; }
     DbSet<Quota> Quotas { get; }

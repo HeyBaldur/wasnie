@@ -70,7 +70,7 @@
             <span class="topbar__dropdown-email">{{ authService.currentUser()?.email }}</span>
           </div>
           <div class="topbar__dropdown-divider"></div>
-          <button class="topbar__dropdown-item">
+          <button class="topbar__dropdown-item" (click)="goToProfile()">
             <app-icon name="user" [size]="15" />
             {{ 'TOPBAR.PROFILE' | translate }}
           </button>

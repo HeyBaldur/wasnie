@@ -193,7 +193,8 @@
     "PAY_GROUP": "Financials",
     "ADMIN": "Settings",
     "SUBSCRIPTION": "Subscription",
-    "IMPORT_TRANSACTIONS": "Import transactions"
+    "IMPORT_TRANSACTIONS": "Import transactions",
+    "PROFILE": "Profile"
   },
   "EMPTY_STATE": {
     "PLANS_TITLE": "No plans yet",
@@ -1396,5 +1397,43 @@
     "CONFIRM_DOWNGRADE_WARNING": "You will lose {{currentPlan}} features and limits immediately, even though your current period is paid until {{periodEnd}}.",
     "CONFIRM_DOWNGRADE_NEXT": "Your next invoice on {{nextDate}} will be charged at the {{plan}} rate — €{{price}}/month.",
     "CONFIRM_DOWNGRADE_BTN": "Confirm switch to {{plan}}"
+  },
+  "PROFILE": {
+    "TITLE": "Your Profile",
+    "SUBTITLE": "Manage your personal details and account security.",
+    "LOAD_ERROR": "We couldn't load your profile. Please try again.",
+    "SECTION_YOUR_PROFILE": "Personal Details",
+    "SECTION_ORGANIZATION": "Organization",
+    "NAME_HEADING": "Full Name",
+    "SAVE_NAME": "Save Name",
+    "NAME_SAVED": "Name updated.",
+    "NAME_ERROR": "Failed to update name. Please try again.",
+    "PASSWORD_HEADING": "Change Password",
+    "PASSWORD_DESC": "To change your password, enter your current password and choose a new one.",
+    "PASSWORD_HINT": "Password must be at least 10 characters, with an uppercase letter, a digit, and a special character.",
+    "CURRENT_PASSWORD": "Current password",
+    "NEW_PASSWORD": "New password",
+    "CONFIRM_NEW_PASSWORD": "Confirm new password",
+    "CHANGE_PASSWORD": "Change Password",
+    "PASSWORDS_MISMATCH": "New passwords do not match.",
+    "PASSWORD_CHANGED": "Password changed. Please sign in again.",
+    "PASSWORD_ERROR": "Could not change password. Please try again.",
+    "EMAIL_HEADING": "Change Email Address",
+    "CURRENT_EMAIL": "Current email",
+    "NEW_EMAIL": "New email address",
+    "EMAIL_CHANGE_HINT": "A confirmation link will be sent to your new address. Your email will not change until you confirm it.",
+    "REQUEST_EMAIL_CHANGE": "Send Confirmation",
+    "EMAIL_CHANGE_SENT": "Confirmation email sent to your new address.",
+    "EMAIL_CHANGE_ERROR": "Could not send confirmation email. Please try again.",
+    "EMAIL_CHANGE_PENDING": "Verification pending — check your new email inbox.",
+    "COMPANY_NAME": "Company name",
+    "CONTACT_TO_CHANGE": "Contact us to change",
+    "DELETE_ACCOUNT_TITLE": "Delete Account (GDPR)",
+    "DELETE_ACCOUNT_DESC": "You have the right to request complete deletion of your data under GDPR. This process is handled manually by our team.",
+    "DELETE_ACCOUNT_CTA": "Contact us to request deletion",
+    "CONFIRM_EMAIL_LOADING": "Confirming your new email address…",
+    "CONFIRM_EMAIL_SUCCESS_TITLE": "Email address updated!",
+    "CONFIRM_EMAIL_SUCCESS_DESC": "Your email has been updated. Please sign in with your new address. Redirecting…",
+    "CONFIRM_EMAIL_ERROR_TITLE": "Link expired or invalid"
   }
 }

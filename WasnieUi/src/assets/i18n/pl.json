@@ -193,7 +193,8 @@
     "PAY_GROUP": "Finanse",
     "ADMIN": "Ustawienia",
     "SUBSCRIPTION": "Subskrypcja",
-    "IMPORT_TRANSACTIONS": "Importuj transakcje"
+    "IMPORT_TRANSACTIONS": "Importuj transakcje",
+    "PROFILE": "Profil"
   },
   "EMPTY_STATE": {
     "PLANS_TITLE": "Brak planów",
@@ -1396,5 +1397,43 @@
     "CONFIRM_DOWNGRADE_WARNING": "Stracisz funkcje i limity planu {{currentPlan}} natychmiast, nawet jeśli bieżący okres jest opłacony do {{periodEnd}}.",
     "CONFIRM_DOWNGRADE_NEXT": "Twoja następna faktura w dniu {{nextDate}} zostanie wystawiona po stawce planu {{plan}} — €{{price}}/miesiąc.",
     "CONFIRM_DOWNGRADE_BTN": "Potwierdź zmianę na {{plan}}"
+  },
+  "PROFILE": {
+    "TITLE": "Twój Profil",
+    "SUBTITLE": "Zarządzaj swoimi danymi osobowymi i bezpieczeństwem konta.",
+    "LOAD_ERROR": "Nie udało się załadować profilu. Spróbuj ponownie.",
+    "SECTION_YOUR_PROFILE": "Dane osobowe",
+    "SECTION_ORGANIZATION": "Organizacja",
+    "NAME_HEADING": "Imię i nazwisko",
+    "SAVE_NAME": "Zapisz imię",
+    "NAME_SAVED": "Imię zaktualizowane.",
+    "NAME_ERROR": "Nie udało się zaktualizować imienia. Spróbuj ponownie.",
+    "PASSWORD_HEADING": "Zmień hasło",
+    "PASSWORD_DESC": "Aby zmienić hasło, wprowadź aktualne hasło i wybierz nowe.",
+    "PASSWORD_HINT": "Hasło musi mieć co najmniej 10 znaków, zawierać wielką literę, cyfrę i znak specjalny.",
+    "CURRENT_PASSWORD": "Aktualne hasło",
+    "NEW_PASSWORD": "Nowe hasło",
+    "CONFIRM_NEW_PASSWORD": "Potwierdź nowe hasło",
+    "CHANGE_PASSWORD": "Zmień hasło",
+    "PASSWORDS_MISMATCH": "Nowe hasła nie są zgodne.",
+    "PASSWORD_CHANGED": "Hasło zmienione. Zaloguj się ponownie.",
+    "PASSWORD_ERROR": "Nie udało się zmienić hasła. Spróbuj ponownie.",
+    "EMAIL_HEADING": "Zmień adres e-mail",
+    "CURRENT_EMAIL": "Aktualny e-mail",
+    "NEW_EMAIL": "Nowy adres e-mail",
+    "EMAIL_CHANGE_HINT": "Link potwierdzający zostanie wysłany na nowy adres. E-mail nie zmieni się, dopóki nie potwierdzisz.",
+    "REQUEST_EMAIL_CHANGE": "Wyślij potwierdzenie",
+    "EMAIL_CHANGE_SENT": "E-mail potwierdzający wysłany na nowy adres.",
+    "EMAIL_CHANGE_ERROR": "Nie udało się wysłać e-maila potwierdzającego. Spróbuj ponownie.",
+    "EMAIL_CHANGE_PENDING": "Oczekuje na weryfikację — sprawdź nową skrzynkę odbiorczą.",
+    "COMPANY_NAME": "Nazwa firmy",
+    "CONTACT_TO_CHANGE": "Skontaktuj się, aby zmienić",
+    "DELETE_ACCOUNT_TITLE": "Usuń konto (RODO)",
+    "DELETE_ACCOUNT_DESC": "Masz prawo do żądania całkowitego usunięcia Twoich danych zgodnie z RODO. Proces jest obsługiwany ręcznie przez nasz zespół.",
+    "DELETE_ACCOUNT_CTA": "Skontaktuj się, aby złożyć wniosek o usunięcie",
+    "CONFIRM_EMAIL_LOADING": "Potwierdzanie nowego adresu e-mail…",
+    "CONFIRM_EMAIL_SUCCESS_TITLE": "Adres e-mail zaktualizowany!",
+    "CONFIRM_EMAIL_SUCCESS_DESC": "Twój e-mail został zaktualizowany. Zaloguj się przy użyciu nowego adresu. Przekierowywanie…",
+    "CONFIRM_EMAIL_ERROR_TITLE": "Link wygasł lub jest nieprawidłowy"
   }
 }

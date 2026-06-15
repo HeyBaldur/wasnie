@@ -47,6 +47,7 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public Microsoft.EntityFrameworkCore.DbSet<EmailConfirmationToken> EmailConfirmationTokens => Set<EmailConfirmationToken>();
     public Microsoft.EntityFrameworkCore.DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public Microsoft.EntityFrameworkCore.DbSet<EmailChangeToken> EmailChangeTokens => Set<EmailChangeToken>();
 
     public Microsoft.EntityFrameworkCore.DbSet<Plan> CompensationPlans => Set<Plan>();
     public Microsoft.EntityFrameworkCore.DbSet<Quota> Quotas => Set<Quota>();
@@ -71,6 +72,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new RefreshTokenConfiguration());
         builder.ApplyConfiguration(new EmailConfirmationTokenConfiguration());
         builder.ApplyConfiguration(new PasswordResetTokenConfiguration());
+        builder.ApplyConfiguration(new EmailChangeTokenConfiguration());
 
         builder.ApplyConfiguration(new CompensationPlanConfiguration());
         builder.ApplyConfiguration(new PlanRuleConfiguration());

@@ -106,6 +106,35 @@ internal static class EmailTemplates
         </html>
         """;
 
+    public static (string Subject, string Html) EmailChangeConfirmation(string firstName, string confirmUrl, string language) =>
+        language switch
+        {
+            "es" => EmailChangeConfirmationEs(firstName, confirmUrl),
+            "pl" => EmailChangeConfirmationPl(firstName, confirmUrl),
+            _ => EmailChangeConfirmationEn(firstName, confirmUrl),
+        };
+
+    private static (string, string) EmailChangeConfirmationEn(string firstName, string url) => (
+        "Confirm your new Wasnie email address",
+        Layout($"Hi {Escape(firstName)},",
+            "We received a request to change the email address associated with your Wasnie account. Click the button below to confirm your new email address.",
+            "Confirm new email address", url,
+            "This link is valid for 24 hours. If you didn't request this change, please ignore this email — your current email remains unchanged."));
+
+    private static (string, string) EmailChangeConfirmationEs(string firstName, string url) => (
+        "Confirma tu nueva dirección de correo electrónico en Wasnie",
+        Layout($"Hola {Escape(firstName)},",
+            "Recibimos una solicitud para cambiar el correo electrónico asociado a tu cuenta de Wasnie. Haz clic en el botón para confirmar tu nueva dirección de correo.",
+            "Confirmar nuevo correo electrónico", url,
+            "Este enlace es válido durante 24 horas. Si no solicitaste este cambio, ignora este mensaje — tu correo actual sigue sin cambios."));
+
+    private static (string, string) EmailChangeConfirmationPl(string firstName, string url) => (
+        "Potwierdź nowy adres e-mail Wasnie",
+        Layout($"Cześć {Escape(firstName)},",
+            "Otrzymaliśmy prośbę o zmianę adresu e-mail przypisanego do Twojego konta Wasnie. Kliknij przycisk, aby potwierdzić nowy adres e-mail.",
+            "Potwierdź nowy adres e-mail", url,
+            "Link jest ważny przez 24 godziny. Jeśli nie prosiłeś o tę zmianę, zignoruj tę wiadomość — Twój obecny adres e-mail pozostaje bez zmian."));
+
     private static string Escape(string s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 }

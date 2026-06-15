@@ -8,6 +8,100 @@
 
 ## Sessions (newest first)
 
+## 2026-06-15 — WI-MANAGE-PROFILE: Fix migración B3 (EmailChangeTokens table missing)
+
+**Scope:** La migración `20260615150000_B3_AddEmailChangeTokens` existía pero EF no la descubría — faltaba el archivo `.Designer.cs` con el atributo `[Migration("...")]` que EF Core usa para indexar y ordenar migraciones.
+
+**Root cause:** EF Core requiere que cada migración tenga un par `Migration.cs` + `Migration.Designer.cs`. El archivo `.cs` con `Up()`/`Down()` compila correctamente sin el Designer, pero EF tooling (y el runtime) no incluye la migración en el grafo sin el archivo Designer con `[DbContext(typeof(ApplicationDbContext))]` + `[Migration("ID")]`.
+
+**Fix:** Creado `20260615150000_B3_AddEmailChangeTokens.Designer.cs` con el modelo completo de B2 más la nueva entidad `Wasnie.Domain.Identity.EmailChangeToken` (Id, UserId, NewEmail, TokenHash, ExpiresAt, UsedAt, CreatedAt + índices `IX_EmailChangeTokens_TokenHash` + `IX_EmailChangeTokens_UserId_TokenHash`).
+
+**Verificación:** `dotnet ef migrations list` muestra B3 como aplicada (sin `(Pending)`). `dotnet ef database update` → "Done." La tabla `EmailChangeTokens` existe en la base de datos. Backend build: 0 errores.
+
+## 2026-06-15 — WI-MANAGE-PROFILE: Pantalla de gestión de perfil del usuario
+
+**Scope:** Pantalla `/profile` con datos editables del usuario (nombre, contraseña, email) y sección de organización de solo lectura (empresa, slug, borrado de cuenta GDPR por contacto).
+
+**Decisiones de seguridad:**
+- Cambio de contraseña → revoca TODOS los refresh tokens (re-login forzado). Consistente con `ResetPasswordCommandHandler`. Decisión deliberada.
+- Cambio de email → el email NO cambia hasta que el usuario confirma desde el nuevo inbox (token SHA256, 24h, un solo uso). Mientras tanto el email viejo sigue activo.
+- Unicidad de email verificada dos veces: al `RequestEmailChange` y al `ConfirmEmailChange` (guarda de condición de carrera).
+- Anti-abuse: cooldown 2min + cap 5/hora por userId para cambio de email (igual que password reset).
+
+**Reglas del sign-up reutilizadas:**
+- Validación de email: `FluentValidation.EmailAddress()` + `MaximumLength(256)` — idéntico a `RegisterTenantCommandValidator`.
+- Unicidad de email: `identityService.FindUserIdByEmailAsync(newEmail)` — mismo mecanismo que Identity.
+- Fortaleza de contraseña: `IsPasswordStrong()` — copiado de `ResetPasswordCommandHandler` (≥10 chars, uppercase, digit, special).
+- Token de email: `RandomNumberGenerator.GetBytes(32)` → URL-safe base64 → SHA256 hex hash — idéntico a `RegisterTenantCommandHandler`.
+- Rate limiting: mismo patrón IP/user-partitioned que `auth-password-reset`.
+
+**Infraestructura reutilizada:**
+- `IEmailService` / `ResendEmailService` — añadido `SendEmailChangeConfirmationAsync` + template HTML EN/ES/PL.
+- `ITokenService.RevokeUserRefreshTokensAsync` — mismo que reset de contraseña.
+- `IAuditService.LogAsync` — 4 nuevas audit actions (`PROFILE_*`).
+- `IOptions<ResendOptions>.FrontendBaseUrl` — para construir el link de confirmación.
+
+**Contacto GDPR:** `privacy@wasnie.io` (mismo que `REACTIVATION_GDPR_EMAIL` en el flujo de reactivación). Empresa/slug → `support@wasnie.com`.
+
+**Backend (archivos nuevos/modificados):**
+- `Wasnie.Domain`: `EmailChangeToken.cs` (nuevo), `AuditActions.cs` (+4 constantes)
+- `Wasnie.Application`: `IIdentityService.cs` (+4 métodos), `IEmailService.cs` (+1), `IApplicationDbContext.cs` (+1 DbSet); `Features/Profile/` — DTOs, Queries, Commands, Handlers (5), Validators (2)
+- `Wasnie.Infrastructure`: `IdentityService.cs` (+4 implementaciones), `ResendEmailService.cs` (+1), `EmailTemplates.cs` (+3 métodos EN/ES/PL), `EmailChangeTokenConfiguration.cs` (nuevo), migration `B3_AddEmailChangeTokens.cs` (nuevo), `ApplicationDbContext.cs` (+DbSet +configuration), `ApplicationDbContextModelSnapshot.cs` (+entidad)
+- `Wasnie.Api`: `ProfileController.cs` (nuevo), `Program.cs` (+2 rate limiters)
+
+**Frontend (archivos nuevos/modificados):**
+- `features/profile/services/profile.service.ts` (nuevo)
+- `features/profile/manage/manage-profile.component.*` (nuevo — .ts/.html/.scss)
+- `features/profile/confirm-email-change/confirm-email-change.component.ts` (nuevo — landing page del link)
+- `features/profile/profile.routes.ts` (nuevo)
+- `app.routes.ts` (+ruta `/profile` + `/profile/confirm-email-change`)
+- `sidebar.component.ts` (+profileItem)
+- `sidebar.component.html` (+nav link Profile en Settings)
+- `i18n/en.json`, `es.json`, `pl.json` (+`NAV.PROFILE`, +sección `PROFILE` completa, 38 claves cada uno)
+
+**Tests:** 527/527 backend (sin regresión). Frontend build: 0 errores TS. Bundle warning preexistente sin cambio.
+
+**Pendiente (smoke):**
+- Cambiar nombre → se guarda.
+- Cambiar password → exige la actual, valida fortaleza, funciona; refresh tokens revocados → re-login.
+- Cambiar email → link llega al nuevo inbox (o log en consola dev); email NO cambia hasta confirmar; email duplicado se rechaza.
+- Nombre de compañía / org identifier → solo lectura, con "contáctanos".
+- Borrar cuenta → muestra "contáctanos" (GDPR), no borra directo.
+- Todo en EN/ES/PL.
+
+---
+
+## 2026-06-15 — WI-LOGO-GRADIENT: Fondo del logo con gradiente por tier
+
+**Scope:** Aplicar al cuadrado del logo (PNG cyan con "W" blanca) el mismo gradiente que el badge de plan.
+
+**Diagnóstico previo al código:**
+La `wasnie_logo.png` tiene fondo opaco cyan sólido con "W" blanca. Poner un `background-image: gradient` en el contenedor padre no funciona porque la imagen tapa el fondo CSS. Se descartaron: CSS filter (no produce gradiente), mix-blend-mode en el img (no preserva la W blanca limpiamente).
+
+**Approach elegido: overlay con `mix-blend-mode: hue`**
+- Un `<span class="sidebar__logo-gradient">` con `position:absolute; inset:0` se coloca sobre la imagen
+- El span lleva las clases Tailwind del gradiente
+- `mix-blend-mode: hue`: aplica el hue del overlay al píxel de la imagen manteniendo la saturación y luminosidad de la imagen
+  - "W" blanca: acromática (sat=0) → el hue no tiene efecto → permanece blanca ✓
+  - Fondo cyan: sat=100%, lum~60% → adopta el hue del gradiente → toma los colores del gradiente ✓
+
+**Fuente del tier:** `SubscriptionStateService` (singleton `providedIn:'root'`, ya cargado por `AppShellComponent.ngOnInit()`). El sidebar solo lee `subscriptionState.subscription()?.tier` — sin llamada HTTP adicional.
+
+**Cambios — `sidebar.component.ts`:**
+- Import `SubscriptionStateService`
+- Inject + `readonly tierName = computed(() => this.subscriptionState.subscription()?.tier ?? null)`
+
+**Cambios — `sidebar.component.html`:**
+- Dentro de `.sidebar__brand-monogram`: 3 bloques `@if/else-if` que añaden `<span class="sidebar__logo-gradient bg-gradient-to-br from-X to-Y">` según tier
+
+**Cambios — `sidebar.component.scss`:**
+- `.sidebar__brand-monogram`: añadidos `position: relative; overflow: hidden` (también mejora el clipping de bordes redondeados)
+- Nueva clase `.sidebar__logo-gradient`: `position:absolute; inset:0; pointer-events:none; mix-blend-mode:hue; border-radius:inherit`
+
+**Cómo revertir (experimental):** eliminar los 3 bloques `@if` del overlay en `sidebar.component.html`. Un cambio de una línea por tier.
+
+**Build:** `ng build --configuration production` — 0 errores TypeScript/Angular. Warnings pre-existentes sin cambio.
+
 ## 2026-06-15 — WI-PLAN-BADGE v2: Gradientes por tier + ícono check
 
 **Scope:** Reemplazar badge plano por estilo "gradient border button" con gradiente específico por tier + SVG rosette-discount-check.

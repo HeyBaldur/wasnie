@@ -15,4 +15,11 @@ public interface IEmailService
         string resetUrl,
         string language,
         CancellationToken cancellationToken = default);
+
+    Task SendEmailChangeConfirmationAsync(
+        string to,
+        string firstName,
+        string confirmationUrl,
+        string language,
+        CancellationToken cancellationToken = default);
 }

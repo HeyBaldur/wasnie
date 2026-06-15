@@ -31,6 +31,20 @@
   @apply flex items-center justify-center shrink-0 text-sm font-bold rounded-lg;
   width: 32px;
   height: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+// Gradient overlay for paid plan tiers (Starter/Growth/Scale).
+// mix-blend-mode: hue → white "W" stays white (achromatic, unaffected by hue blending);
+// cyan logo background adopts the gradient's hue while keeping its saturation and luminosity.
+// To revert: remove the @if overlay blocks in sidebar.component.html.
+.sidebar__logo-gradient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: hue;
+  border-radius: inherit;
 }
 
 .sidebar__brand-name {

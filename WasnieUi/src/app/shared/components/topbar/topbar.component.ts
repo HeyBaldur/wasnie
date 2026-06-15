@@ -44,6 +44,11 @@ export class TopbarComponent implements OnInit {
     });
   }
 
+  goToProfile(): void {
+    this.dropdownOpen.set(false);
+    void this.router.navigateByUrl('/profile');
+  }
+
   goToSettings(): void {
     void this.router.navigateByUrl('/admin');
   }
