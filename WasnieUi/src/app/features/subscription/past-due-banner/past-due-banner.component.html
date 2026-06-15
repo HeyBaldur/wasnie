@@ -1,0 +1,8 @@
+@if (subState.isPastDue()) {
+  <div class="past-due-banner">
+    <span class="past-due-banner__msg">{{ 'SUBSCRIPTION.PAST_DUE_BANNER_MSG' | translate }}</span>
+    <ws-button variant="primary" size="sm" (click)="openBillingPortal()">
+      {{ 'SUBSCRIPTION.PAST_DUE_BANNER_CTA' | translate }}
+    </ws-button>
+  </div>
+}

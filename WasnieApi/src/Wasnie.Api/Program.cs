@@ -80,6 +80,25 @@ try
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+        options.OnRejected = async (ctx, token) =>
+        {
+            ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            ctx.HttpContext.Response.ContentType = "application/json";
+
+            if (ctx.HttpContext.RequestServices.GetService<ILoggerFactory>() is { } lf)
+            {
+                lf.CreateLogger("RateLimiter").LogWarning(
+                    "[DEV] Rate limit exceeded: {Method} {Path} from {IP}",
+                    ctx.HttpContext.Request.Method,
+                    ctx.HttpContext.Request.Path,
+                    ctx.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+            }
+
+            await ctx.HttpContext.Response.WriteAsync(
+                """{"code":"rate_limited","message":"Too many requests. Please try again later."}""",
+                token);
+        };
+
         options.AddFixedWindowLimiter("auth-login", o =>
         {
             o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:PermitLimit", 5);
@@ -104,21 +123,76 @@ try
             o.QueueLimit = 0;
         });
 
-        var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);
-        var globalWindowSeconds = builder.Configuration.GetValue<int>("RateLimiting:Global:WindowSeconds", 60);
+        // Resend-confirmation: partitioned by IP (3 requests / 5 minutes per IP).
+        // Separate from auth-login so an attacker cannot burn the shared login bucket.
+        options.AddPolicy("auth-resend", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthResend:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthResend:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
 
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        // Password-reset: partitioned by IP (3 requests / 5 minutes per IP).
+        // Separate bucket so an attacker cannot burn shared login quota.
+        options.AddPolicy("auth-password-reset", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // Profile password change: per-user (authenticated), 5 requests / 5 min.
+        options.AddPolicy("profile-password", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:ProfilePassword:PermitLimit", 5),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:ProfilePassword:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // Profile email change: per-user (authenticated), 3 requests / 5 min.
+        options.AddPolicy("profile-email-change", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:ProfileEmailChange:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:ProfileEmailChange:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        if (!builder.Environment.IsDevelopment())
         {
-            var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var key = userId ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
-            return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+            var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);
+            var globalWindowSeconds = builder.Configuration.GetValue<int>("RateLimiting:Global:WindowSeconds", 60);
+
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
             {
-                PermitLimit = globalPermitLimit,
-                Window = TimeSpan.FromSeconds(globalWindowSeconds),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0,
+                var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var key = userId ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = globalPermitLimit,
+                    Window = TimeSpan.FromSeconds(globalWindowSeconds),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                });
             });
-        });
+        }
     });
 
     builder.Services.AddCors(options =>
@@ -160,6 +234,8 @@ try
     app.UseCors("WasnieUi");
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseMiddleware<ActivationEnforcementMiddleware>();
+    app.UseMiddleware<SubscriptionEnforcementMiddleware>();
     app.UseRateLimiter();
 
     // Hangfire dashboard — admin-only. See HangfireDashboardAuthorizationFilter:

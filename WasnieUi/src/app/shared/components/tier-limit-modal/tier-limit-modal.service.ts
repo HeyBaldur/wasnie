@@ -4,6 +4,8 @@ export interface TierLimitInfo {
   tier: string;
   currentCount: number;
   limit: number;
+  entityKey?: 'plans' | 'payees';
+  incomingCount?: number;
 }
 
 @Injectable({ providedIn: 'root' })

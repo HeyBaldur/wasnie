@@ -3,24 +3,42 @@
   (closed)="modal.close()"
   size="sm"
   [title]="'TIER_LIMIT.TITLE' | translate"
+  [heroImageUrl]="heroImageUrl"
+  [heroImageAlt]="'TIER_LIMIT.HERO_ALT' | translate"
 >
   @if (modal.info(); as info) {
     <div class="tier-limit-modal__body">
       <p class="tier-limit-modal__message">
-        {{ 'TIER_LIMIT.MESSAGE' | translate: { tier: info.tier, limit: info.limit } }}
+        @if (info.entityKey === 'plans') {
+          {{ 'TIER_LIMIT.MESSAGE_PLANS' | translate: { tier: info.tier, limit: info.limit, current: info.currentCount } }}
+        } @else if (info.entityKey === 'payees' && info.incomingCount) {
+          {{ 'TIER_LIMIT.MESSAGE_PAYEES_IMPORT' | translate: { tier: info.tier, limit: info.limit, current: info.currentCount, incoming: info.incomingCount } }}
+        } @else if (info.entityKey === 'payees') {
+          {{ 'TIER_LIMIT.MESSAGE_PAYEES' | translate: { tier: info.tier, limit: info.limit, current: info.currentCount } }}
+        } @else {
+          {{ 'TIER_LIMIT.MESSAGE' | translate: { tier: info.tier, limit: info.limit } }}
+        }
       </p>
-      <div class="tier-limit-modal__stats">
-        <span class="tier-limit-modal__current">{{ info.currentCount }}</span>
-        <span class="tier-limit-modal__sep">/</span>
-        <span class="tier-limit-modal__limit">{{ info.limit }}</span>
+
+      <div class="tier-limit-modal__usage">
+        <div class="tier-limit-modal__usage-bar">
+          <div class="tier-limit-modal__usage-bar-fill" [style.width.%]="usagePercent(info)"></div>
+        </div>
+        <div class="tier-limit-modal__usage-numbers">
+          <span class="tier-limit-modal__usage-current">{{ info.currentCount }}</span>
+          <span class="tier-limit-modal__usage-sep">/</span>
+          <span class="tier-limit-modal__usage-limit">{{ info.limit }}</span>
+        </div>
       </div>
-      <p class="tier-limit-modal__upgrade-hint">{{ 'TIER_LIMIT.UPGRADE_HINT' | translate }}</p>
+
+      <p class="tier-limit-modal__hint">{{ 'TIER_LIMIT.UPGRADE_HINT' | translate }}</p>
     </div>
+
     <div class="tier-limit-modal__footer">
       <ws-button variant="ghost" (click)="modal.close()">
         {{ 'COMMON.CANCEL' | translate }}
       </ws-button>
-      <ws-button variant="primary" (click)="modal.close()">
+      <ws-button variant="primary" (click)="upgrade()">
         {{ 'TIER_LIMIT.UPGRADE' | translate }}
       </ws-button>
     </div>

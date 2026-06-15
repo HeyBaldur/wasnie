@@ -4,6 +4,7 @@
   }
 
   <div
+    #trigger
     class="ws-select__trigger"
     [class.ws-select__trigger--open]="isOpen()"
     tabindex="0"
@@ -78,7 +79,7 @@
         }
 
         @if (filteredOptions().length === 0 && !asyncLoading()) {
-          <div class="ws-select__empty">—</div>
+          <div class="ws-select__empty">{{ noResultsLabel() | translate }}</div>
         }
       </div>
     </div>

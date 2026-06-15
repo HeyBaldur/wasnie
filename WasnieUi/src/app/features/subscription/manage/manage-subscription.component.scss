@@ -1,0 +1,582 @@
+@reference "../../../../styles.scss";
+
+.subscription-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+// ── Loading skeleton ──────────────────────────────────────────────────────────
+
+.subscription-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.subscription-skeleton__card {
+  height: 160px;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface-sunken);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+  &--wide {
+    height: 240px;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+// ── Error state ───────────────────────────────────────────────────────────────
+
+.subscription-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.subscription-error__msg {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+// ── Current plan card ─────────────────────────────────────────────────────────
+
+.current-plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.current-plan-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.current-plan-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.current-plan-card__plan-name {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.current-plan-card__email {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.billing-table-wrap {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.billing-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.billing-table__label {
+  padding: 10px 16px;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface-raised);
+  white-space: nowrap;
+  width: 160px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.billing-table__value {
+  padding: 10px 16px;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.billing-table tbody tr:last-child th,
+.billing-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.current-plan-card__free-note {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+// ── Capabilities section ──────────────────────────────────────────────────────
+
+.sub-capabilities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sub-capabilities__heading {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--color-text-tertiary);
+  margin: 0;
+}
+
+.sub-capabilities__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+
+  @media (max-width: 860px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: 520px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sub-cap-item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.sub-cap-item__check {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sub-cap-item__body {
+  min-width: 0;
+}
+
+.sub-cap-item__name {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.sub-cap-item__desc {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  margin: var(--space-1) 0 0;
+  line-height: 1.45;
+}
+
+// ── Upgrade section ───────────────────────────────────────────────────────────
+
+.upgrade-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.upgrade-section__header-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.upgrade-section__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.upgrade-section__title {
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.upgrade-section__updating {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.upgrade-section__updating-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  flex-shrink: 0;
+  animation: poll-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes poll-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.75); }
+}
+
+.upgrade-section__desc {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.upgrade-section__timeout {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+// ── Plan comparison table ─────────────────────────────────────────────────────
+
+.plan-comparison-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-comparison {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 480px;
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+.plan-comparison__corner {
+  width: 130px;
+  background: var(--color-bg-surface-raised);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.plan-comparison__plan-th {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  text-align: center;
+  border-left: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface-raised);
+  vertical-align: top;
+
+  &--current {
+    border-top: 2px solid var(--color-success);
+    background: var(--color-success-bg);
+  }
+}
+
+.plan-th-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.plan-th-inner__badge {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-th-inner__name {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+}
+
+.plan-th-inner__price {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.plan-th-inner__amount {
+  font-size: var(--font-size-24);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.plan-th-inner__interval {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// ── Body rows ─────────────────────────────────────────────────────────────────
+
+.plan-comparison__label {
+  padding: 10px 16px;
+  font-size: var(--font-size-13);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  border-top: 1px solid var(--color-border-subtle);
+  white-space: nowrap;
+}
+
+.plan-comparison__cell {
+  padding: 10px 16px;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: center;
+  border-top: 1px solid var(--color-border-subtle);
+  border-left: 1px solid var(--color-border-subtle);
+
+  &--current {
+    background: var(--color-success-bg);
+  }
+}
+
+// ── CTA row ───────────────────────────────────────────────────────────────────
+
+.plan-comparison__cta-label {
+  border-top: 1px solid var(--color-border-default);
+}
+
+.plan-comparison__cta {
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+  border-top: 1px solid var(--color-border-default);
+  border-left: 1px solid var(--color-border-subtle);
+
+  &--current {
+    background: var(--color-success-bg);
+  }
+
+  ws-button {
+    width: 100%;
+  }
+}
+
+.plan-comparison__current-label {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-success);
+  margin: 0;
+}
+
+.plan-cta-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+// ── Current plan card actions ─────────────────────────────────────────────────
+
+.current-plan-card__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+// ── Cancellation scheduled banner ────────────────────────────────────────────
+
+.cancel-scheduled-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+}
+
+.cancel-scheduled-banner__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-warning);
+}
+
+.cancel-scheduled-banner__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  line-height: 1.5;
+}
+
+.cancel-scheduled-banner__title {
+  font-weight: 700;
+}
+
+.cancel-scheduled-banner__desc {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+// ── Blocked downgrade alert ───────────────────────────────────────────────────
+
+.blocked-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+}
+
+.blocked-alert__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-warning);
+}
+
+.blocked-alert__body {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.blocked-alert__title {
+  font-weight: 700;
+}
+
+// ── Plan change confirmation modal ────────────────────────────────────────────
+
+.confirm-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.confirm-modal__charge {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.confirm-modal__charge-label {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+}
+
+.confirm-modal__charge-amount {
+  font-size: var(--font-size-32);
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.confirm-modal__no-charge {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+.confirm-modal__detail {
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.confirm-modal__warning {
+  font-size: var(--font-size-13);
+  line-height: 1.6;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+}
+
+.confirm-modal__next {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.confirm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+.blocked-alert__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--color-text-tertiary);
+  line-height: 0;
+
+  &:hover {
+    color: var(--color-text-primary);
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}

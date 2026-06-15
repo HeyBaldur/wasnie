@@ -7,8 +7,14 @@ public static class AuditActions
     public const string LoginFailure = "LOGIN_FAILURE";
     public const string Logout = "LOGOUT";
     public const string PasswordChanged = "PASSWORD_CHANGED";
+    public const string PasswordResetRequested = "PASSWORD_RESET_REQUESTED";
+    public const string PasswordResetCompleted = "PASSWORD_RESET_COMPLETED";
     public const string TokenRefreshed = "TOKEN_REFRESHED";
     public const string AccountLocked = "ACCOUNT_LOCKED";
+    public const string TenantRegistered = "TENANT_REGISTERED";
+    public const string EmailConfirmationSent = "EMAIL_CONFIRMATION_SENT";
+    public const string EmailConfirmed = "EMAIL_CONFIRMED";
+    public const string TenantQualified = "TENANT_QUALIFIED";
 
     // Payees
     public const string PayeeCreated = "PAYEE_CREATED";
@@ -47,6 +53,24 @@ public static class AuditActions
 
     // Settings (Rule 5.1.5 — configuration changes)
     public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";
+
+    // Subscription
+    public const string PlanSelected = "PLAN_SELECTED";
+    public const string SubscriptionActivated = "SUBSCRIPTION_ACTIVATED";
+    public const string SubscriptionUpgraded = "SUBSCRIPTION_UPGRADED";
+    public const string SubscriptionDowngraded = "SUBSCRIPTION_DOWNGRADED";
+    public const string SubscriptionCanceled = "SUBSCRIPTION_CANCELED";
+    public const string SubscriptionPastDue = "SUBSCRIPTION_PAST_DUE";
+    public const string SubscriptionRecovered = "SUBSCRIPTION_RECOVERED";
+    public const string SubscriptionCancelScheduled = "SUBSCRIPTION_CANCEL_SCHEDULED";
+    public const string SubscriptionCancelReverted = "SUBSCRIPTION_CANCEL_REVERTED";
+    public const string SubscriptionTierSyncedFromStripe = "SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE";
+
+    // Profile self-service
+    public const string ProfileNameUpdated = "PROFILE_NAME_UPDATED";
+    public const string ProfilePasswordChanged = "PROFILE_PASSWORD_CHANGED";
+    public const string ProfileEmailChangeRequested = "PROFILE_EMAIL_CHANGE_REQUESTED";
+    public const string ProfileEmailChangeConfirmed = "PROFILE_EMAIL_CHANGE_CONFIRMED";
 
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";

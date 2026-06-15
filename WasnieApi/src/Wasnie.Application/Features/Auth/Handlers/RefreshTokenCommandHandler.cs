@@ -29,7 +29,7 @@ public sealed class RefreshTokenCommandHandler(
 
         await tokenService.RevokeRefreshTokenAsync(request.RefreshToken);
 
-        var email = await identityService.FindUserIdByEmailAsync(userId) ?? string.Empty;
+        var email = await identityService.FindEmailByUserIdAsync(userId) ?? string.Empty;
         var roles = await identityService.GetUserRolesAsync(userId);
         var tokens = await tokenService.GenerateTokenPairAsync(userId, email, tenantId, roles);
 

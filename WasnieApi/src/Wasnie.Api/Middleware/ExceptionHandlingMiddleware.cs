@@ -36,6 +36,12 @@ public sealed class ExceptionHandlingMiddleware(
                 message = ex.Message,
             }));
         }
+        catch (StripeUnavailableException ex)
+        {
+            logger.LogWarning(ex, "Stripe API unavailable");
+            await WriteErrorResponse(context, HttpStatusCode.ServiceUnavailable,
+                ex.Message, null);
+        }
         catch (TierLimitExceededException ex)
         {
             context.Response.StatusCode = (int)HttpStatusCode.Forbidden;

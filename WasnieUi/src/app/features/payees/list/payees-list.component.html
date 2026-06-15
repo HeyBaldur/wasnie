@@ -8,7 +8,13 @@
       <app-icon name="upload-cloud" [size]="14" />
       {{ 'PAYEES.ACTION_IMPORT' | translate }}
     </ws-button>
-    <ws-button slot="actions" variant="primary" routerLink="new" [hidden]="!('Payees.Create' | hasPermission)">
+    <ws-button
+      slot="actions"
+      variant="primary"
+      [hidden]="!('Payees.Create' | hasPermission)"
+      [class.at-limit]="atPayeesLimit()"
+      (click)="onCreatePayee()"
+    >
       <app-icon name="plus" [size]="16" />
       {{ 'PAYEES.NEW' | translate }}
     </ws-button>

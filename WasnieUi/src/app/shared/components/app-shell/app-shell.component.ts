@@ -6,6 +6,8 @@ import { SidebarStateService } from '../../../core/services/sidebar-state.servic
 import { InactivityService } from '../../../core/services/inactivity.service';
 import { WsToastContainerComponent } from '../../ui/ws-toast/ws-toast-container.component';
 import { WsConfirmationModalComponent } from '../../ui';
+import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
+import { PastDueBannerComponent } from '../../../features/subscription/past-due-banner/past-due-banner.component';
 
 @Component({
   selector: 'app-shell',
@@ -15,6 +17,7 @@ import { WsConfirmationModalComponent } from '../../ui';
     TopbarComponent,
     WsToastContainerComponent,
     WsConfirmationModalComponent,
+    PastDueBannerComponent,
     TranslateModule,
   ],
   templateUrl: './app-shell.component.html',
@@ -23,9 +26,11 @@ import { WsConfirmationModalComponent } from '../../ui';
 export class AppShellComponent implements OnInit, OnDestroy {
   readonly sidebarState = inject(SidebarStateService);
   readonly inactivity = inject(InactivityService);
+  readonly subState = inject(SubscriptionStateService);
 
   ngOnInit(): void {
     this.inactivity.start();
+    this.subState.load();
   }
 
   ngOnDestroy(): void {

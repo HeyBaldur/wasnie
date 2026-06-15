@@ -1,0 +1,16 @@
+.past-due-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
+  background: var(--color-warning-surface);
+  border-bottom: 1px solid var(--color-warning-border);
+  flex-wrap: wrap;
+}
+
+.past-due-banner__msg {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning-text);
+  flex: 1;
+}

@@ -115,6 +115,20 @@ public sealed class ImportsController(
             cancellationToken);
 
         cache.Remove(body.FileId);
+
+        if (result.Blocked)
+        {
+            return Conflict(new
+            {
+                blocked = true,
+                reason = "payee_limit",
+                current = result.BlockedCurrent,
+                incoming = result.BlockedIncoming,
+                limit = result.BlockedLimit,
+                tier = result.BlockedTier,
+            });
+        }
+
         return Ok(result);
     }
 

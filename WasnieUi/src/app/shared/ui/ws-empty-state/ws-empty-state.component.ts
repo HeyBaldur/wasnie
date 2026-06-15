@@ -7,35 +7,30 @@ import { WsButtonComponent } from '../ws-button/ws-button.component';
 
 const ILLUSTRATIONS: Record<string, string> = {
   'plans-empty': `
-    <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="22" y="20" width="72" height="88" rx="7" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.25"/>
-      <rect x="30" y="14" width="72" height="88" rx="7" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.5"/>
-      <rect x="38" y="8" width="72" height="88" rx="7" fill="var(--color-brand)" fill-opacity="0.06" stroke="currentColor" stroke-width="1.5"/>
-      <rect x="38" y="8" width="72" height="26" rx="7" fill="var(--color-brand)" fill-opacity="0.15"/>
-      <rect x="38" y="28" width="72" height="6" fill="var(--color-brand)" fill-opacity="0.08"/>
-      <line x1="52" y1="50" x2="80" y2="50" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <line x1="52" y1="62" x2="92" y2="62" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <line x1="52" y1="74" x2="84" y2="74" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <line x1="52" y1="86" x2="68" y2="86" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <circle cx="124" cy="88" r="18" fill="var(--color-brand)" fill-opacity="0.10" stroke="var(--color-brand)" stroke-width="1.5" stroke-dasharray="3 3"/>
-      <line x1="124" y1="80" x2="124" y2="96" stroke="var(--color-brand)" stroke-width="1.75" stroke-linecap="round"/>
-      <line x1="116" y1="88" x2="132" y2="88" stroke="var(--color-brand)" stroke-width="1.75" stroke-linecap="round"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 19h-6a1 1 0 0 1 -1 -1v-14a1 1 0 0 1 1 -1h6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2h6a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-6a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2" />
+      <path d="M12 5v16" />
+      <path d="M7 7h1" />
+      <path d="M7 11h1" />
+      <path d="M16 7h1" />
+      <path d="M16 11h1" />
+      <path d="M16 15h1" />
     </svg>`,
   'payees-empty': `
-    <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="60" cy="46" r="18" fill="var(--color-brand)" fill-opacity="0.10" stroke="currentColor" stroke-width="1.5"/>
-      <path d="M36 90a24 24 0 0 1 48 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <circle cx="100" cy="42" r="16" fill="var(--color-brand)" fill-opacity="0.06" stroke="currentColor" stroke-width="1.5"/>
-      <path d="M78 88a22 22 0 0 1 44 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <circle cx="134" cy="48" r="12" fill="var(--color-brand)" fill-opacity="0.06" stroke="currentColor" stroke-width="1.5"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+      <path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <path d="M21 21v-2a4 4 0 0 0 -3 -3.85" />
     </svg>`,
   'transactions-empty': `
-    <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M28 44 L92 44" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <path d="M80 32 L92 44 L80 56" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M132 76 L68 76" stroke="var(--color-brand)" stroke-width="1.75" stroke-linecap="round"/>
-      <path d="M80 64 L68 76 L80 88" stroke="var(--color-brand)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="132" cy="44" r="14" fill="var(--color-brand)" fill-opacity="0.10" stroke="var(--color-brand)" stroke-width="1.5"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16l-3 -2l-2 2l-2 -2l-2 2l-2 -2l-3 2" />
+      <path d="M15 7.8c-.523 -.502 -1.172 -.8 -1.875 -.8c-1.727 0 -3.125 1.791 -3.125 4s1.398 4 3.125 4c.703 0 1.352 -.298 1.874 -.8" />
+      <path d="M9 11h4" />
     </svg>`,
   'payouts-empty': `
     <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -44,19 +39,23 @@ const ILLUSTRATIONS: Record<string, string> = {
       <path d="M73 48 h5 a6 6 0 1 1 0 12 a6 6 0 1 0 0 12 h5" stroke="var(--color-brand)" stroke-width="1.75" stroke-linecap="round"/>
     </svg>`,
   'quotas-empty': `
-    <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="80" cy="60" r="46" stroke="currentColor" stroke-width="1.5" opacity="0.25"/>
-      <circle cx="80" cy="60" r="33" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>
-      <circle cx="80" cy="60" r="20" stroke="var(--color-brand)" stroke-width="1.5" fill="var(--color-brand)" fill-opacity="0.08"/>
-      <circle cx="80" cy="60" r="7" fill="var(--color-brand)" fill-opacity="0.80"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M11 6a5 3 0 1 0 10 0a5 3 0 1 0 -10 0" />
+      <path d="M11 6v4c0 1.657 2.239 3 5 3s5 -1.343 5 -3v-4" />
+      <path d="M11 10v4c0 1.657 2.239 3 5 3s5 -1.343 5 -3v-4" />
+      <path d="M11 14v4c0 1.657 2.239 3 5 3s5 -1.343 5 -3v-4" />
+      <path d="M7 9h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5" />
+      <path d="M5 15v1m0 -8v1" />
     </svg>`,
   'assignments-empty': `
-    <svg viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="20" y="44" width="44" height="32" rx="16" fill="var(--color-brand)" fill-opacity="0.10" stroke="currentColor" stroke-width="1.5"/>
-      <rect x="96" y="44" width="44" height="32" rx="16" fill="var(--color-brand)" fill-opacity="0.10" stroke="var(--color-brand)" stroke-width="1.5"/>
-      <line x1="64" y1="60" x2="96" y2="60" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="4 3"/>
-      <circle cx="42" cy="60" r="8" fill="var(--color-brand)" fill-opacity="0.20"/>
-      <circle cx="118" cy="60" r="8" fill="var(--color-brand)" fill-opacity="0.60"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M3 16a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
+      <path d="M10 16a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
+      <path d="M17 16a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
+      <path d="M5 11v-3a3 3 0 0 1 3 -3h8a3 3 0 0 1 3 3v3" />
+      <path d="M16.5 8.5l2.5 2.5l2.5 -2.5" />
     </svg>`,
 };
 

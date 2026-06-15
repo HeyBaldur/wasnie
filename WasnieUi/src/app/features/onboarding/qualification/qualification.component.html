@@ -1,0 +1,107 @@
+<div class="qualify-page">
+  <div class="qualify-page__card">
+    <header class="qualify-page__header">
+      <span class="qualify-page__brand">Wasnie</span>
+      <h1 class="qualify-page__title">{{ 'QUALIFY.TITLE' | translate }}</h1>
+      <p class="qualify-page__subtitle">{{ 'QUALIFY.SUBTITLE' | translate }}</p>
+    </header>
+
+    <!-- GDPR security notice -->
+    <div class="qualify-page__gdpr">
+      <div class="qualify-page__gdpr-icon" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+          <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3"/>
+          <path d="M9 12l2 2l4 -4"/>
+        </svg>
+      </div>
+      <div class="qualify-page__gdpr-content">
+        <p class="qualify-page__gdpr-title">{{ 'QUALIFY.GDPR_TITLE' | translate }}</p>
+        <p class="qualify-page__gdpr-body">{{ 'QUALIFY.GDPR_BODY' | translate }}</p>
+      </div>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="qualify-page__form">
+      <div class="ws-form-grid">
+
+        <ws-select
+          formControlName="country"
+          [label]="'QUALIFY.COUNTRY' | translate"
+          [placeholder]="'QUALIFY.SELECT_COUNTRY' | translate"
+          [error]="fieldError('country')"
+          [options]="countryOptions"
+          [searchable]="true" />
+
+        <div class="qualify-page__phone-group">
+          <ws-input
+            formControlName="phoneNumber"
+            [label]="'QUALIFY.PHONE' | translate"
+            [placeholder]="phoneExample() || ('QUALIFY.PHONE_PH' | translate)"
+            type="text"
+            [maxlength]="phoneMaxLength()"
+            [error]="fieldError('phoneNumber')" />
+          @if (selectedCountry()) {
+            <p class="qualify-page__phone-hint">
+              {{ 'QUALIFY.PHONE_HINT' | translate : { example: phoneExample() } }}
+            </p>
+          } @else {
+            <p class="qualify-page__phone-hint qualify-page__phone-hint--muted">
+              {{ 'QUALIFY.PHONE_SELECT_COUNTRY_FIRST' | translate }}
+            </p>
+          }
+        </div>
+
+        <ws-select
+          formControlName="howHeardAboutUs"
+          [label]="'QUALIFY.HOW_HEARD' | translate"
+          [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
+          [error]="fieldError('howHeardAboutUs')"
+          [options]="howHeardOptions"
+          class="qualify-page__full-row" />
+
+        <ws-select
+          formControlName="salesVolumeRange"
+          [label]="'QUALIFY.SALES_VOLUME' | translate"
+          [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
+          [error]="fieldError('salesVolumeRange')"
+          [options]="salesVolumeOptions" />
+
+        <ws-select
+          formControlName="currentSystem"
+          [label]="'QUALIFY.CURRENT_SYSTEM' | translate"
+          [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
+          [error]="fieldError('currentSystem')"
+          [options]="currentSystemOptions" />
+
+      </div>
+
+      <!-- Legal notice + acceptance -->
+      <div class="qualify-page__legal">
+        <div class="qualify-page__legal-notice">
+          <p>{{ 'QUALIFY.LEGAL_NOTICE' | translate }}</p>
+        </div>
+        <label class="qualify-page__checkbox-label" [class.qualify-page__checkbox-label--error]="fieldError('legalAccepted')">
+          <input
+            type="checkbox"
+            formControlName="legalAccepted"
+            class="qualify-page__checkbox"
+            [attr.aria-describedby]="fieldError('legalAccepted') ? 'legal-error' : null" />
+          <span>{{ 'QUALIFY.LEGAL_ACCEPT' | translate }}</span>
+        </label>
+        @if (fieldError('legalAccepted') && form.controls.legalAccepted.touched) {
+          <p id="legal-error" class="qualify-page__field-error">{{ 'QUALIFY.LEGAL_REQUIRED' | translate }}</p>
+        }
+      </div>
+
+      @if (error()) {
+        <p class="qualify-page__error">{{ error() }}</p>
+      }
+
+      <div class="qualify-page__actions">
+        <ws-button type="submit" variant="primary" [loading]="submitting()">
+          {{ 'QUALIFY.SUBMIT' | translate }}
+        </ws-button>
+      </div>
+    </form>
+  </div>
+</div>

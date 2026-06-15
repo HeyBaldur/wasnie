@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Infrastructure.Persistence;
@@ -33,7 +34,10 @@ public sealed class PayeeImportExecutionServiceTests
     private static PayeeImportExecutionService CreateSut(ApplicationDbContext db, Guid tenantId)
     {
         var logger = Substitute.For<ILogger<PayeeImportExecutionService>>();
-        return new PayeeImportExecutionService(db, new FixedTenantContext(tenantId), logger, new FakeClock(), new FakeGuidGenerator());
+        var tierLimitChecker = Substitute.For<ITierLimitChecker>();
+        tierLimitChecker.CheckPayeeImportLimitAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new PayeeImportLimitCheck(Blocked: false, Current: 0, Limit: int.MaxValue, Tier: "Scale"));
+        return new PayeeImportExecutionService(db, new FixedTenantContext(tenantId), logger, new FakeClock(), new FakeGuidGenerator(), tierLimitChecker);
     }
 
     private static PayeeImportColumnMapping DefaultMapping() => new()

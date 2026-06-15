@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, signal, computed, inject } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { Observable, map, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthResult, LoginRequest, RegisterTenantRequest, TokenPair } from '../models/auth.model';
 import { TabSyncService } from './tab-sync.service';
@@ -56,6 +56,7 @@ export class AuthService {
   clearSessionSilent(): void {
     this._currentUser.set(null);
     localStorage.removeItem('wasnie_session');
+    sessionStorage.removeItem('wasnie:confirm-email');
   }
 
   /**
@@ -87,6 +88,18 @@ export class AuthService {
     if (wasAuthenticated) {
       this.tabSync.broadcast({ type: 'session-expired' });
     }
+  }
+
+  requestPasswordReset(email: string): Observable<void> {
+    return this.http
+      .post<unknown>(`${environment.apiBaseUrl}/auth/request-password-reset`, { email })
+      .pipe(map(() => undefined));
+  }
+
+  resetPassword(userId: string, token: string, newPassword: string): Observable<void> {
+    return this.http
+      .post<unknown>(`${environment.apiBaseUrl}/auth/reset-password`, { userId, token, newPassword })
+      .pipe(map(() => undefined));
   }
 
   getAccessToken(): string | null {

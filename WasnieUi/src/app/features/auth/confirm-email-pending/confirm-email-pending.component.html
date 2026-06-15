@@ -1,0 +1,41 @@
+<div class="confirm-pending">
+  <div class="confirm-pending__card">
+    <div class="confirm-pending__icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+        <path d="m3 7 9 6 9-6"/>
+      </svg>
+    </div>
+
+    <h1 class="confirm-pending__title">{{ 'CONFIRM_EMAIL.TITLE' | translate }}</h1>
+    <p class="confirm-pending__desc">
+      {{ 'CONFIRM_EMAIL.DESC_PRE' | translate }} <strong>{{ email() }}</strong>. {{ 'CONFIRM_EMAIL.DESC_POST' | translate }}
+    </p>
+
+    @if (resent()) {
+      <p class="confirm-pending__success">{{ 'CONFIRM_EMAIL.RESENT' | translate }}</p>
+    } @else {
+      <p class="confirm-pending__hint">{{ 'CONFIRM_EMAIL.HINT' | translate }}</p>
+    }
+
+    @if (error()) {
+      <p class="confirm-pending__error">{{ error() }}</p>
+    }
+
+    <ws-button
+      variant="primary"
+      [loading]="resending()"
+      [disabled]="cooldownSeconds() > 0"
+      (click)="resend()">
+      @if (cooldownSeconds() > 0) {
+        {{ 'CONFIRM_EMAIL.RESEND_COOLDOWN' | translate: { time: formatCooldown(cooldownSeconds()) } }}
+      } @else {
+        {{ 'CONFIRM_EMAIL.RESEND' | translate }}
+      }
+    </ws-button>
+
+    <button class="confirm-pending__logout" type="button" (click)="logout()">
+      {{ 'AUTH.LOGOUT' | translate }}
+    </button>
+  </div>
+</div>

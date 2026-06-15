@@ -26,6 +26,8 @@ export class WsModalComponent {
   readonly description = input('');
   readonly closable = input(true);
   readonly closeOnBackdrop = input(true);
+  readonly heroImageUrl = input('');
+  readonly heroImageAlt = input('');
   readonly closed = output<void>();
 
   readonly dialogClass = computed(() => `ws-modal__dialog ws-modal__dialog--${this.size()}`);

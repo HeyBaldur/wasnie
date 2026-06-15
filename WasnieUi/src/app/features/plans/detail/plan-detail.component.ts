@@ -8,6 +8,9 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
 import { PlansApiService } from '../services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
+import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
+import { TierLimitModalService } from '../../../shared/components/tier-limit-modal/tier-limit-modal.service';
+import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import {
   Rule,
@@ -62,6 +65,18 @@ export class PlanDetailComponent implements OnInit {
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
   private readonly plansApi = inject(PlansApiService);
+  private readonly subState = inject(SubscriptionStateService);
+  private readonly tierLimitModal = inject(TierLimitModalService);
+
+  private get plansTierLimit(): number {
+    const tier = this.subState.subscription()?.tier ?? 'Free';
+    return TIER_LIMITS[tier]?.maxPlans ?? -1;
+  }
+
+  readonly atPlansLimit = computed(() => {
+    const max = this.plansTierLimit;
+    return max !== -1 && this.store.unfilteredTotal() >= max;
+  });
 
   readonly activeTab = signal<Tab>('rules');
   readonly planId = this.route.snapshot.paramMap.get('planId')!;
@@ -172,6 +187,16 @@ export class PlanDetailComponent implements OnInit {
   }
 
   async onClone(): Promise<void> {
+    if (this.atPlansLimit()) {
+      const tier = this.subState.subscription()?.tier ?? 'Free';
+      this.tierLimitModal.show({
+        tier,
+        currentCount: this.store.unfilteredTotal(),
+        limit: this.plansTierLimit,
+        entityKey: 'plans',
+      });
+      return;
+    }
     try {
       const newPlan = await this.store.clonePlan(this.planId);
       this.toast.show('PLANS.TOAST_CLONED', 'success');

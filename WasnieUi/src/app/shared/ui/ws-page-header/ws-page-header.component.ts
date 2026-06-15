@@ -13,6 +13,7 @@ import { IconComponent } from '../../components/icon/icon.component';
 export class WsPageHeaderComponent {
   readonly title = input.required<string>();
   readonly subtitle = input('');
+  readonly icon = input('');
   readonly backRoute = input('');
   readonly backLabel = input('COMMON.BACK');
 }

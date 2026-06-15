@@ -68,6 +68,63 @@
   @apply flex items-center gap-2;
 }
 
+// ── Upgrade pill ──────────────────────────────────────────────────────────────
+
+.topbar__upgrade-wrapper {
+  position: relative;
+
+  &::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-bd-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    color: var(--color-fg-secondary);
+    font-size: var(--font-size-12);
+    font-weight: 500;
+    padding: 6px 10px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    z-index: 100;
+  }
+
+  &:hover::after {
+    opacity: 1;
+  }
+}
+
+.topbar__upgrade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-4);
+  height: 32px;
+  border-radius: 9999px;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(to right, #7c3aed, #3b82f6);
+  color: #fff;
+  letter-spacing: 0.01em;
+  transition: opacity 150ms ease, box-shadow 150ms ease;
+
+  &:hover {
+    opacity: 0.88;
+    box-shadow: 0 0 0 3px color-mix(in sRGB, #7c3aed 25%, transparent);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in sRGB, #7c3aed 35%, transparent);
+  }
+}
+
 
 .topbar__icon-btn {
   @apply flex items-center justify-center relative cursor-pointer rounded-lg;

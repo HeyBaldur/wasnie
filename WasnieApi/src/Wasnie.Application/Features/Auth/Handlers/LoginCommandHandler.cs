@@ -29,6 +29,12 @@ public sealed class LoginCommandHandler(
             return Result<AuthResultDto>.Failure("Invalid credentials.");
         }
 
+        var emailConfirmed = await identityService.IsEmailConfirmedAsync(userId);
+        if (!emailConfirmed)
+        {
+            return Result<AuthResultDto>.Failure("EMAIL_NOT_CONFIRMED");
+        }
+
         var tenantIdString = await identityService.GetTenantIdClaimAsync(userId);
         if (tenantIdString is null || !Guid.TryParse(tenantIdString, out var tenantId))
         {

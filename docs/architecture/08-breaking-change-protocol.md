@@ -1,7 +1,8 @@
 # 08 — Breaking Change Protocol
 
-**Reading time:** ~4 min
-**Applies to:** API contracts, DTOs, Service interfaces
+**Reading time:** ~5 min
+**Version:** 1.1 (2026-06-15 — Added Rule 8.4.4: migrations must be applied and verified before WI complete)
+**Applies to:** API contracts, DTOs, Service interfaces, EF Core migrations
 
 ---
 
@@ -132,6 +133,26 @@ Migrations that DROP columns, tables, or data require owner approval. Code revie
 Any data migration (UPDATE/DELETE during deploy) MUST either:
 - Have a documented rollback SQL script
 - OR be exercised in a staging environment with production-like data first
+
+### Rule 8.4.4 — Migrations MUST be applied and verified before the work item is reported complete
+
+**This rule governs Claude Code's behaviour, not just deploy pipelines.**
+
+When a work item creates or modifies an EF Core migration, Claude Code MUST:
+
+1. **Apply it** — run `dotnet ef database update --project src/Wasnie.Infrastructure/Wasnie.Infrastructure.csproj --startup-project src/Wasnie.Api/Wasnie.Api.csproj` (or `--no-build` if the API process is running and holding the DLL lock, using freshly-built Infrastructure binaries).
+2. **Verify it** — confirm the table or columns exist in the database. "Done" from the EF tooling is NOT sufficient proof; EF reports "Done" both when a migration is successfully applied AND when nothing was pending. The distinction matters. A quick `sqlcmd` SELECT or schema check is the correct verification.
+3. **Report any failure explicitly** — if the apply fails for any reason (DLL lock from a running API, wrong connection string, missing Designer.cs, etc.), Claude Code MUST report this with the exact error and state precisely what the user must do to complete the apply. Leaving a migration created-but-unapplied silently is FORBIDDEN.
+
+**Why this rule exists:**  
+A migration that exists in code but was never applied to the database causes SQL errors ("Invalid column name 'X'", "Invalid object name 'Y'") that look exactly like code bugs. Two incidents occurred on 2026-06-15:
+- Migration for `IsQualified`, `Country`, `PhoneNumber` and other qualification columns was created but not applied → login failed with column errors, diagnosed as code bugs.
+- Migration `B2_PasswordResetTokens` was created without a `.Designer.cs`, so EF silently skipped it → "Invalid object name 'PasswordResetTokens'" at runtime.
+
+**Common failure modes to watch for:**
+- The running API process holds a lock on `Wasnie.Application.dll` / `Wasnie.Infrastructure.dll` in the API's output folder — `dotnet build` fails, but `dotnet ef database update --no-build` can still work if the Infrastructure project was rebuilt independently.
+- A manually-created migration file without the accompanying `.Designer.cs` is invisible to EF tooling — it will not appear in `dotnet ef migrations list` and will never be applied.
+- `dotnet ef database update` connecting to a different database than the running API (e.g., Release vs Debug connection string) — the schema change applies to one DB while the API queries another.
 
 ---
 

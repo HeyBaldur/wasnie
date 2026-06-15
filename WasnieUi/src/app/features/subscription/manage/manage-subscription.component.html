@@ -1,0 +1,323 @@
+<app-shell>
+  <ws-page-layout
+    icon="brand-stripe"
+    [title]="'SUBSCRIPTION.MANAGE_TITLE' | translate"
+    [subtitle]="'SUBSCRIPTION.MANAGE_SUBTITLE' | translate"
+  >
+  <div class="subscription-page">
+
+    @if (loading()) {
+      <div class="subscription-skeleton">
+        <div class="subscription-skeleton__card"></div>
+        <div class="subscription-skeleton__card subscription-skeleton__card--wide"></div>
+      </div>
+    }
+
+    @if (!loading() && loadError()) {
+      <ws-card class="subscription-error">
+        <p class="subscription-error__msg">{{ 'SUBSCRIPTION.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </ws-card>
+    }
+
+    @if (!loading() && !loadError() && subscription()) {
+      <!-- Current plan card -->
+      <ws-card class="current-plan-card">
+        <div class="current-plan-card__header">
+          <div class="current-plan-card__title-row">
+            <h2 class="current-plan-card__plan-name">{{ subscription()!.tier }}</h2>
+            <ws-badge [variant]="statusVariant" size="sm">
+              {{ ('SUBSCRIPTION.STATUS_' + subscription()!.status.toUpperCase()) | translate }}
+            </ws-badge>
+          </div>
+          <p class="current-plan-card__email">
+            {{ 'SUBSCRIPTION.BILLING_EMAIL' | translate }}: {{ subscription()!.billingEmail }}
+          </p>
+        </div>
+
+        @if (!isFree && subscription()!.currentPeriodEnd) {
+          <div class="billing-table-wrap">
+            <table class="billing-table">
+              <tbody>
+                <tr>
+                  <th class="billing-table__label">{{ 'SUBSCRIPTION.CURRENT_PERIOD' | translate }}</th>
+                  <td class="billing-table__value">
+                    {{ subscription()!.currentPeriodStart | date:'mediumDate' }} –
+                    {{ subscription()!.currentPeriodEnd | date:'mediumDate' }}
+                  </td>
+                </tr>
+                @if (subscription()!.nextBillingDate) {
+                  <tr>
+                    <th class="billing-table__label">{{ 'SUBSCRIPTION.NEXT_BILLING' | translate }}</th>
+                    <td class="billing-table__value">{{ subscription()!.nextBillingDate | date:'mediumDate' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (isFree) {
+          <p class="current-plan-card__free-note">{{ 'SUBSCRIPTION.FREE_NOTE' | translate }}</p>
+        }
+
+        @if (isCancelScheduled) {
+          <div class="cancel-scheduled-banner" role="alert">
+            <svg class="cancel-scheduled-banner__icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            </svg>
+            <div class="cancel-scheduled-banner__body">
+              <span class="cancel-scheduled-banner__title">
+                {{ 'SUBSCRIPTION.CANCEL_SCHEDULED_TITLE' | translate : { date: (subscription()!.cancelAt | date:'mediumDate') } }}
+              </span>
+              <span class="cancel-scheduled-banner__desc">
+                {{ 'SUBSCRIPTION.CANCEL_SCHEDULED_DESC' | translate }}
+              </span>
+            </div>
+            <ws-button
+              variant="secondary"
+              size="sm"
+              [loading]="revertingCancellation()"
+              (click)="revertCancellation()"
+            >
+              {{ 'SUBSCRIPTION.KEEP_SUBSCRIPTION_BTN' | translate }}
+            </ws-button>
+          </div>
+        }
+
+        @if (hasPaidSubscription) {
+          <div class="current-plan-card__actions">
+            <ws-button
+              variant="secondary"
+              size="sm"
+              [loading]="openingPortal()"
+              (click)="openBillingPortal()"
+            >
+              {{ 'SUBSCRIPTION.BILLING_PORTAL_BTN' | translate }}
+            </ws-button>
+          </div>
+        }
+      </ws-card>
+
+      <!-- Blocked downgrade message -->
+      @if (blockedInfo()) {
+        <div class="blocked-alert" role="alert">
+          <svg class="blocked-alert__icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11h2v5m-2 0h4m-2.592-8.5h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+          </svg>
+          <div class="blocked-alert__body">
+            <span class="blocked-alert__title">{{ 'SUBSCRIPTION.BLOCKED_TITLE' | translate : { tier: blockedInfo()!.tier } }}.</span>&nbsp;
+            @if (blockedInfo()!.reason === 'payees') {
+              <span>{{ 'SUBSCRIPTION.BLOCKED_PAYEES_BODY' | translate : { tier: blockedInfo()!.tier, current: blockedInfo()!.current, limit: blockedInfo()!.limit } }}</span>
+            } @else {
+              <span>{{ 'SUBSCRIPTION.BLOCKED_PLANS_BODY' | translate : { tier: blockedInfo()!.tier, current: blockedInfo()!.current, limit: blockedInfo()!.limit } }}</span>
+            }&#32;<span>{{ 'SUBSCRIPTION.BLOCKED_ACTION' | translate }}</span>
+          </div>
+          <button class="blocked-alert__close" type="button" (click)="blockedInfo.set(null)" aria-label="Dismiss">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      }
+
+      <!-- Capabilities — included in all plans -->
+      <section class="sub-capabilities" aria-label="{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}">
+        <p class="sub-capabilities__heading">{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}</p>
+        <div class="sub-capabilities__grid">
+          @for (f of features; track f.nameKey) {
+            <div class="sub-cap-item">
+              <span class="sub-cap-item__check" aria-hidden="true">✓</span>
+              <div class="sub-cap-item__body">
+                <p class="sub-cap-item__name">{{ f.nameKey | translate }}</p>
+                <p class="sub-cap-item__desc">{{ f.descKey | translate }}</p>
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+
+      <!-- Plan selection section (upgrade / downgrade) -->
+      @if (upgradePlans.length > 0) {
+        <div class="upgrade-section">
+          <div class="upgrade-section__header-group">
+            <div class="upgrade-section__heading">
+              <h2 class="upgrade-section__title">{{ 'SUBSCRIPTION.UPGRADE_TITLE' | translate }}</h2>
+              @if (pendingTier()) {
+                <span class="upgrade-section__updating">
+                  <span class="upgrade-section__updating-dot"></span>
+                  {{ 'SUBSCRIPTION.PLAN_UPDATING' | translate }}
+                </span>
+              }
+            </div>
+            <p class="upgrade-section__desc">{{ 'SUBSCRIPTION.UPGRADE_DESC' | translate }}</p>
+            @if (pollTimedOut()) {
+              <p class="upgrade-section__timeout">{{ 'SUBSCRIPTION.PLAN_UPDATE_TIMEOUT' | translate }}</p>
+            }
+          </div>
+
+          <div class="plan-comparison-wrap">
+            <table class="plan-comparison">
+              <thead>
+                <tr>
+                  <th class="plan-comparison__corner"></th>
+                  @for (plan of upgradePlans; track plan.tier) {
+                    <th class="plan-comparison__plan-th"
+                        [class.plan-comparison__plan-th--current]="plan.isCurrentPlan">
+                      <div class="plan-th-inner">
+                        <div class="plan-th-inner__badge">
+                          @if (plan.isCurrentPlan) {
+                            <ws-badge variant="success" size="sm">{{ 'SUBSCRIPTION.STATUS_ACTIVE' | translate }}</ws-badge>
+                          }
+                        </div>
+                        <span class="plan-th-inner__name">{{ plan.name }}</span>
+                        <div class="plan-th-inner__price">
+                          <span class="plan-th-inner__amount">€{{ plan.price }}</span>
+                          <span class="plan-th-inner__interval">/mo</span>
+                        </div>
+                      </div>
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="plan-comparison__label">{{ 'ONBOARDING.COL_PAYEES' | translate }}</td>
+                  @for (plan of upgradePlans; track plan.tier) {
+                    <td class="plan-comparison__cell"
+                        [class.plan-comparison__cell--current]="plan.isCurrentPlan">
+                      {{ maxPayeesDisplay(plan) }}
+                    </td>
+                  }
+                </tr>
+                <tr>
+                  <td class="plan-comparison__label">{{ 'ONBOARDING.COL_PLANS' | translate }}</td>
+                  @for (plan of upgradePlans; track plan.tier) {
+                    <td class="plan-comparison__cell"
+                        [class.plan-comparison__cell--current]="plan.isCurrentPlan">
+                      {{ maxPlansDisplay(plan) }}
+                    </td>
+                  }
+                </tr>
+                <tr>
+                  <td class="plan-comparison__cta-label"></td>
+                  @for (plan of upgradePlans; track plan.tier) {
+                    <td class="plan-comparison__cta"
+                        [class.plan-comparison__cta--current]="plan.isCurrentPlan">
+                      @if (plan.isCurrentPlan) {
+                        <p class="plan-comparison__current-label">{{ 'SUBSCRIPTION.CURRENT_PLAN' | translate }}</p>
+                      } @else {
+                        <ws-button
+                          [variant]="isUpgrade(plan.tier) ? 'primary' : 'secondary'"
+                          [loading]="isChangingTo(plan.tier)"
+                          [disabled]="!!pendingTier()"
+                          size="sm"
+                          (click)="requestPlanChange(plan)"
+                        >
+                          @if (isUpgrade(plan.tier)) {
+                            {{ 'SUBSCRIPTION.UPGRADE_BTN' | translate : { tier: plan.name } }}
+                          } @else {
+                            {{ 'SUBSCRIPTION.DOWNGRADE_BTN' | translate : { tier: plan.name } }}
+                          }
+                        </ws-button>
+                        @if (isUpgrade(plan.tier)) {
+                          <p class="plan-cta-note plan-cta-note--upgrade">
+                            {{ 'SUBSCRIPTION.UPGRADE_BILLING_NOTE' | translate : { price: plan.price } }}
+                          </p>
+                        } @else {
+                          <p class="plan-cta-note plan-cta-note--downgrade">
+                            {{ 'SUBSCRIPTION.DOWNGRADE_BILLING_NOTE' | translate }}
+                          </p>
+                        }
+                      }
+                    </td>
+                  }
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+    }
+  </div>
+  </ws-page-layout>
+
+  <!-- ── Plan change confirmation modal ──────────────────────────────────── -->
+  <ws-modal
+    [(isOpen)]="confirmModalOpen"
+    [title]="'SUBSCRIPTION.CONFIRM_MODAL_TITLE' | translate : { plan: confirmPlan()?.name ?? '' }"
+    size="md"
+    [closable]="!confirmingPlan()"
+  >
+    @if (confirmPlan()) {
+      @if (isUpgrade(confirmPlan()!.tier)) {
+        <!-- Upgrade content -->
+        <div class="confirm-modal">
+          <div class="confirm-modal__charge">
+            <span class="confirm-modal__charge-label">{{ 'SUBSCRIPTION.CONFIRM_UPGRADE_CHARGE_LABEL' | translate }}</span>
+            <span class="confirm-modal__charge-amount">€{{ confirmPlan()!.price }}</span>
+          </div>
+          <p class="confirm-modal__detail">
+            {{ 'SUBSCRIPTION.CONFIRM_UPGRADE_DETAIL' | translate : {
+              plan: confirmPlan()!.name,
+              maxPayees: maxPayeesDisplay(confirmPlan()!),
+              maxPlans: maxPlansDisplay(confirmPlan()!)
+            } }}
+          </p>
+        </div>
+      } @else {
+        <!-- Downgrade content -->
+        <div class="confirm-modal">
+          <div class="confirm-modal__no-charge">
+            {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_NO_CHARGE' | translate }}
+          </div>
+          <p class="confirm-modal__detail">
+            {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_IMMEDIATE' | translate : {
+              plan: confirmPlan()!.name,
+              maxPayees: maxPayeesDisplay(confirmPlan()!),
+              maxPlans: maxPlansDisplay(confirmPlan()!)
+            } }}
+          </p>
+          @if (subscription()?.currentPeriodEnd) {
+            <p class="confirm-modal__warning">
+              {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_WARNING' | translate : {
+                currentPlan: subscription()!.tier,
+                periodEnd: (subscription()!.currentPeriodEnd | date:'mediumDate')
+              } }}
+            </p>
+          }
+          @if (subscription()?.nextBillingDate) {
+            <p class="confirm-modal__next">
+              {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_NEXT' | translate : {
+                nextDate: (subscription()!.nextBillingDate | date:'mediumDate'),
+                plan: confirmPlan()!.name,
+                price: confirmPlan()!.price
+              } }}
+            </p>
+          }
+        </div>
+      }
+    }
+
+    <div slot="footer" class="confirm-modal-footer">
+      <ws-button
+        variant="secondary"
+        [disabled]="confirmingPlan()"
+        (click)="cancelConfirm()"
+      >
+        {{ 'COMMON.CANCEL' | translate }}
+      </ws-button>
+      <ws-button
+        [variant]="isUpgrade(confirmPlan()?.tier ?? '') ? 'primary' : 'secondary'"
+        [loading]="confirmingPlan()"
+        (click)="confirmPlanChange()"
+      >
+        @if (isUpgrade(confirmPlan()?.tier ?? '')) {
+          {{ 'SUBSCRIPTION.CONFIRM_UPGRADE_BTN' | translate : { price: confirmPlan()?.price ?? 0 } }}
+        } @else {
+          {{ 'SUBSCRIPTION.CONFIRM_DOWNGRADE_BTN' | translate : { plan: confirmPlan()?.name ?? '' } }}
+        }
+      </ws-button>
+    </div>
+  </ws-modal>
+</app-shell>

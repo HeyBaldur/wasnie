@@ -15,6 +15,7 @@ using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Identity;
 using Wasnie.Domain.Settings;
+using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence.Configurations;
 using Wasnie.Infrastructure.Persistence.Configurations.BackgroundJobs;
 using Wasnie.Infrastructure.Persistence.Configurations.Compensation;
@@ -44,6 +45,9 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<LegacyTransaction> Transactions => Set<LegacyTransaction>();
     public Microsoft.EntityFrameworkCore.DbSet<LegacyPayout> Payouts => Set<LegacyPayout>();
     public Microsoft.EntityFrameworkCore.DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public Microsoft.EntityFrameworkCore.DbSet<EmailConfirmationToken> EmailConfirmationTokens => Set<EmailConfirmationToken>();
+    public Microsoft.EntityFrameworkCore.DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public Microsoft.EntityFrameworkCore.DbSet<EmailChangeToken> EmailChangeTokens => Set<EmailChangeToken>();
 
     public Microsoft.EntityFrameworkCore.DbSet<Plan> CompensationPlans => Set<Plan>();
     public Microsoft.EntityFrameworkCore.DbSet<Quota> Quotas => Set<Quota>();
@@ -52,6 +56,8 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<Credit> Credits => Set<Credit>();
     public Microsoft.EntityFrameworkCore.DbSet<CompensationPayout> CompensationPayouts => Set<CompensationPayout>();
     public Microsoft.EntityFrameworkCore.DbSet<PayRun> PayRuns => Set<PayRun>();
+    public Microsoft.EntityFrameworkCore.DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
+    public Microsoft.EntityFrameworkCore.DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -64,6 +70,9 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new TransactionConfiguration());
         builder.ApplyConfiguration(new PayoutConfiguration());
         builder.ApplyConfiguration(new RefreshTokenConfiguration());
+        builder.ApplyConfiguration(new EmailConfirmationTokenConfiguration());
+        builder.ApplyConfiguration(new PasswordResetTokenConfiguration());
+        builder.ApplyConfiguration(new EmailChangeTokenConfiguration());
 
         builder.ApplyConfiguration(new CompensationPlanConfiguration());
         builder.ApplyConfiguration(new PlanRuleConfiguration());
@@ -77,6 +86,8 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new ImportAuditConfiguration());
         builder.ApplyConfiguration(new AuditLogConfiguration());
         builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
+        builder.ApplyConfiguration(new UserSubscriptionConfiguration());
+        builder.ApplyConfiguration(new ProcessedStripeEventConfiguration());
 
         builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<FieldRequirementSetting>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
@@ -93,6 +104,7 @@ public sealed class ApplicationDbContext(
         builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<UserSubscription>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

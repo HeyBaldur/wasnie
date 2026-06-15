@@ -1,7 +1,7 @@
 # ARCHITECTURE.md — Wasnie
 
 **Status:** ACTIVE — Binding
-**Version:** 1.0
+**Version:** 1.1
 **Created:** 2026-05-26
 **Owner:** Rodolfo A. Calvo Jaubert
 **Scope:** Wasnie (Sales Performance Management SaaS)
@@ -77,7 +77,7 @@ Each file is independently readable but cross-references others when relevant.
 
 These are the **absolutely non-negotiable rules** that apply to every change in Wasnie. They are the distilled essence of the 14 section files. Claude Code MUST respect these regardless of which sections it reads.
 
-**The Critical Twelve:**
+**The Critical Thirteen:**
 
 1. **Multi-tenant isolation:** Every query touching tenant data MUST filter by tenant ID. No exceptions. See file 09.
 
@@ -103,6 +103,8 @@ These are the **absolutely non-negotiable rules** that apply to every change in 
 
 12. **No new architectural layer without amendment:** The Clean Architecture layers are fixed. See file 01.
 
+13. **Migrations must be applied and verified, never left pending.** When a work item creates or modifies an EF Core migration, Claude Code MUST apply it to the database (`dotnet ef database update --project ... --startup-project ...`) AND verify the schema change is present BEFORE reporting the work item complete. "Done" from the EF tooling is NOT sufficient proof — confirm the table or columns actually exist. If the update fails (API process holding a DLL lock, wrong connection string, or any other cause), Claude Code MUST report this explicitly and state exactly what the user must do to complete the apply — never leave a migration created-but-unapplied silently. A migration file that exists but was never applied produces "Invalid column name" errors that masquerade as code bugs and waste diagnosis time. See file 08, Rule 8.4.4.
+
 ---
 
 ## 4. Routing table — which files to read for each task type
@@ -116,7 +118,7 @@ When working on Wasnie, read this file first (`ARCHITECTURE.md`) plus the specif
 | New API endpoint | 01, 03, 04, 06, 07, 08, 09 |
 | New domain entity | 01, 02, 05, 07, 09 |
 | New use case / command / query | 01, 02, 03, 07 |
-| Database migration | 01, 03, 09 |
+| Database migration | 01, 03, 08, 09 |
 | Calculation logic (commissions, payouts) | 02, 03, 05, 07 |
 | Authentication / authorization change | 04, 06, 13 |
 | Audit logging | 05, 09, 12 |
@@ -209,6 +211,7 @@ The only thing that overrides this document is an **amendment to this document**
 
 | Version | Date | Change |
 |---|---|---|
+| 1.1 | 2026-06-15 | Added Critical Rule 13: migrations must be applied and verified before reporting WI complete. Root cause: migrations created-but-unapplied caused "Invalid column name 'IsQualified'" and "Invalid object name 'PasswordResetTokens'" errors twice in the same session, wasting diagnosis time. Added Rule 8.4.4 in file 08. Updated routing table: "Database migration" now requires reading file 08. |
 | 1.0 | 2026-05-26 | Initial creation. Codifies lessons from Phase A. |
 
 ---

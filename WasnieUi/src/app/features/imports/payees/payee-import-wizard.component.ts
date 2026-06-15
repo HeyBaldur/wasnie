@@ -1,4 +1,4 @@
-import { Component, effect, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { WsPageLayoutComponent, WsWizardComponent, WsWizardStepComponent } from '../../../shared/ui';
@@ -13,6 +13,9 @@ import {
   ParseResponse,
   ValidateResponse,
 } from './models/payee-import.models';
+import { PayeesStore } from '../../payees/state/payees.store';
+import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
+import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 
 type WizardStep = 'upload' | 'map' | 'preview' | 'importing' | 'complete';
 
@@ -44,7 +47,21 @@ interface PersistedWizardState {
   styleUrl: './payee-import-wizard.component.scss',
 })
 export class PayeeImportWizardComponent implements OnInit {
+  private readonly payeesStore = inject(PayeesStore);
+  private readonly subState = inject(SubscriptionStateService);
+
   readonly currentStep = signal<WizardStep>('upload');
+
+  private get payeesTierLimit(): number {
+    const tier = this.subState.subscription()?.tier ?? 'Free';
+    return TIER_LIMITS[tier]?.maxPayees ?? -1;
+  }
+
+  readonly atPayeesLimit = computed(() => {
+    const limit = this.payeesTierLimit;
+    if (limit < 0) return false;
+    return this.payeesStore.unfilteredTotal() >= limit;
+  });
 
   parseResult = signal<(ParseResponse & { fileName: string; fileSize: number }) | null>(null);
   columnMapping = signal<PayeeImportColumnMapping | null>(null);

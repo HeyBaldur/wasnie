@@ -1,46 +1,78 @@
-.tier-limit-modal {
-  &__body {
-    padding: 0 1.5rem 1rem;
-  }
+.tier-limit-modal__body {
+  padding: var(--space-4) var(--space-6) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+}
 
-  &__message {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
-    margin-bottom: 1rem;
-  }
+.tier-limit-modal__message {
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
 
-  &__stats {
-    display: flex;
-    align-items: baseline;
-    gap: 0.25rem;
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
-    margin-bottom: 0.75rem;
-  }
+.tier-limit-modal__usage {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
 
-  &__sep {
-    font-size: 1.25rem;
-    font-weight: 400;
-    color: var(--color-text-tertiary);
-  }
+.tier-limit-modal__usage-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-raised);
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+}
 
-  &__limit {
-    font-size: 1.5rem;
-    font-weight: 400;
-    color: var(--color-text-secondary);
-  }
+.tier-limit-modal__usage-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  transition: width 0.3s ease;
+}
 
-  &__upgrade-hint {
-    font-size: 0.8125rem;
-    color: var(--color-text-tertiary);
-  }
+.tier-limit-modal__usage-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
 
-  &__footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--color-border);
-  }
+.tier-limit-modal__usage-current {
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+
+.tier-limit-modal__usage-sep {
+  font-size: var(--font-size-14);
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+}
+
+.tier-limit-modal__usage-limit {
+  font-size: var(--font-size-14);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.tier-limit-modal__hint {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  margin: 0;
+}
+
+.tier-limit-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border-default);
 }

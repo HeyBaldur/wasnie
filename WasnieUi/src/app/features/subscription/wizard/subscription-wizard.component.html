@@ -1,0 +1,172 @@
+<div class="wizard-shell">
+  <!-- Header -->
+  <header class="wizard-header">
+    <div class="wizard-header__brand">
+      <div class="wizard-header__monogram">
+        <img src="wasnie_logo.png" alt="Wasnie" />
+      </div>
+      <span class="wizard-header__name">{{ 'APP.NAME' | translate }}</span>
+    </div>
+
+    <div class="wizard-header__right">
+      <span class="wizard-header__step">{{ 'ONBOARDING.STEP_LABEL' | translate }}</span>
+      <span class="wizard-header__divider" aria-hidden="true"></span>
+      <ws-button variant="ghost" size="sm" (click)="signOut()">
+        {{ 'AUTH.LOGOUT' | translate }}
+      </ws-button>
+    </div>
+  </header>
+
+  <!-- Body -->
+  <main class="wizard-body">
+    <h1 class="wizard-title">{{ 'ONBOARDING.TITLE' | translate }}</h1>
+    <p class="wizard-subtitle">{{ 'ONBOARDING.SUBTITLE' | translate }}</p>
+
+    <!-- Trust bar -->
+    <div class="trust-bar">
+      <div class="trust-pill trust-pill--brand">
+        <img src="eu.png" alt="" class="trust-pill__img" aria-hidden="true" />
+        {{ 'ONBOARDING.TRUST_EU' | translate }}
+      </div>
+      <div class="trust-pill trust-pill--success">
+        <img src="gdpr.png" alt="" class="trust-pill__img" aria-hidden="true" />
+        {{ 'ONBOARDING.TRUST_GDPR' | translate }}
+      </div>
+      <div class="trust-pill trust-pill--info">
+        <span class="trust-pill__dot"></span>
+        {{ 'ONBOARDING.TRUST_NO_CARD' | translate }}
+      </div>
+      <div class="trust-pill trust-pill--neutral">
+        <span class="trust-pill__dot"></span>
+        {{ 'ONBOARDING.TRUST_CANCEL' | translate }}
+      </div>
+    </div>
+
+    <!-- Capabilities — same in every plan -->
+    <section class="capabilities" aria-label="{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}">
+      <p class="capabilities__heading">{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}</p>
+      <div class="capabilities__grid">
+        @for (f of features; track f.nameKey) {
+          <div class="cap-item">
+            <span class="cap-item__check" aria-hidden="true">✓</span>
+            <div class="cap-item__body">
+              <p class="cap-item__name">{{ f.nameKey | translate }}</p>
+              <p class="cap-item__desc">{{ f.descKey | translate }}</p>
+            </div>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- Checkout error -->
+    @if (checkoutError()) {
+      <p class="wizard-checkout-error">{{ 'ONBOARDING.LOAD_ERROR' | translate }}</p>
+    }
+
+    <!-- Loading skeleton -->
+    @if (loading()) {
+      <div class="pricing-skeleton">
+        <div class="pricing-skeleton__corner"></div>
+        @for (_ of [1,2,3,4]; track $index) {
+          <div class="pricing-skeleton__header"></div>
+        }
+        @for (_ of [1,2]; track $index) {
+          <div class="pricing-skeleton__label"></div>
+          @for (__ of [1,2,3,4]; track $index) {
+            <div class="pricing-skeleton__cell"></div>
+          }
+        }
+      </div>
+    }
+
+    <!-- Error state -->
+    @if (!loading() && loadError()) {
+      <div class="wizard-error">
+        <p class="wizard-error__msg">{{ 'ONBOARDING.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="loadPlans()">
+          {{ 'COMMON.RETRY' | translate }}
+        </ws-button>
+      </div>
+    }
+
+    <!-- Comparison table -->
+    @if (!loading() && !loadError()) {
+      <div class="pricing-scroll-wrapper">
+        <div class="pricing-table">
+
+          <!-- ── Header row ─────────────────────────────────────────────── -->
+          <div class="pt-corner"></div>
+          @for (plan of plans(); track plan.tier) {
+            <div class="pt-header"
+                 [class.pt-header--featured]="plan.tier === 'Growth'"
+                 [class.pt-header--disabled]="isPaid(plan)">
+              <div class="pt-header__badge">
+                @if (plan.tier === 'Growth') {
+                  <ws-badge variant="info" size="sm">
+                    {{ 'ONBOARDING.POPULAR' | translate }}
+                  </ws-badge>
+                } @else if (isPaid(plan)) {
+                  <ws-badge variant="neutral" size="sm">
+                    {{ 'ONBOARDING.COMING_SOON' | translate }}
+                  </ws-badge>
+                }
+              </div>
+              <p class="pt-header__name">{{ plan.name }}</p>
+              <div class="pt-header__price">
+                @if (plan.price === 0) {
+                  <span class="pt-header__amount">{{ 'ONBOARDING.FREE_LABEL' | translate }}</span>
+                } @else {
+                  <span class="pt-header__amount">€{{ plan.price }}</span>
+                  <span class="pt-header__interval">/mo</span>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- ── Feature row: Payees ─────────────────────────────────────── -->
+          <div class="pt-label pt-label--stripe">{{ 'ONBOARDING.COL_PAYEES' | translate }}</div>
+          @for (plan of plans(); track plan.tier) {
+            <div class="pt-cell pt-cell--stripe" [class.pt-cell--featured]="plan.tier === 'Growth'">
+              {{ maxPayeesDisplay(plan) }}
+            </div>
+          }
+
+          <!-- ── Feature row: Comp Plans ────────────────────────────────── -->
+          <div class="pt-label">{{ 'ONBOARDING.COL_PLANS' | translate }}</div>
+          @for (plan of plans(); track plan.tier) {
+            <div class="pt-cell" [class.pt-cell--featured]="plan.tier === 'Growth'">
+              {{ maxPlansDisplay(plan) }}
+            </div>
+          }
+
+          <!-- ── CTA row ────────────────────────────────────────────────── -->
+          <div class="pt-cta-corner"></div>
+          @for (plan of plans(); track plan.tier) {
+            <div class="pt-cta" [class.pt-cta--featured]="plan.tier === 'Growth'">
+              @if (!isPaid(plan)) {
+                <ws-button variant="primary" [loading]="submitting()" (click)="selectFree()">
+                  {{ 'ONBOARDING.CTA_FREE' | translate }}
+                </ws-button>
+                <p class="pt-cta__note pt-cta__note--free">
+                  ✓ {{ 'ONBOARDING.FREE_NOTE_SHORT' | translate }}
+                </p>
+              } @else {
+                <ws-button
+                  variant="primary"
+                  [class.pt-cta__btn--featured]="plan.tier === 'Growth'"
+                  [loading]="submitting()"
+                  (click)="selectPaid(plan)">
+                  {{ 'ONBOARDING.CTA_SUBSCRIBE' | translate }}
+                </ws-button>
+                <p class="pt-cta__note pt-cta__note--card">
+                  💳 {{ 'ONBOARDING.REQUIRES_CARD' | translate }}
+                </p>
+              }
+            </div>
+          }
+
+        </div>
+      </div>
+    }
+  </main>
+</div>

@@ -14,7 +14,8 @@ public sealed class PayeeImportExecutionService(
     ITenantContext tenantContext,
     ILogger<PayeeImportExecutionService> logger,
     IClock clock,
-    IGuidGenerator guid) : IPayeeImportExecutionService
+    IGuidGenerator guid,
+    ITierLimitChecker tierLimitChecker) : IPayeeImportExecutionService
 {
     public async Task<PayeeImportResult> ExecuteAsync(
         List<Dictionary<string, string>> rows,
@@ -38,6 +39,28 @@ public sealed class PayeeImportExecutionService(
                 skipped.Add(vr);
             else
                 toImport.Add((i, rows[i]));
+        }
+
+        // Tier limit pre-flight: reject the entire import if it would exceed the tenant's payee cap.
+        var limitCheck = await tierLimitChecker.CheckPayeeImportLimitAsync(toImport.Count, cancellationToken);
+        if (limitCheck.Blocked)
+        {
+            logger.LogWarning(
+                "Payee import blocked by tier limit: tenant has {Current}/{Limit} payees, file contains {Incoming} valid rows (tier: {Tier})",
+                limitCheck.Current, limitCheck.Limit, toImport.Count, limitCheck.Tier);
+
+            return new PayeeImportResult
+            {
+                TotalRows = rows.Count,
+                CreatedCount = 0,
+                SkippedCount = 0,
+                SkippedRows = [],
+                Blocked = true,
+                BlockedCurrent = limitCheck.Current,
+                BlockedIncoming = toImport.Count,
+                BlockedLimit = limitCheck.Limit,
+                BlockedTier = limitCheck.Tier,
+            };
         }
 
         // Pre-load existing employee codes to resolve manager references

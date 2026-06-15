@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
@@ -20,10 +20,18 @@ export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly translate = inject(TranslateService);
 
   readonly isSubmitting = signal(false);
   readonly error = signal<string | null>(null);
+  readonly emailNotConfirmed = signal(false);
+  readonly alreadyConfirmed = signal(
+    this.route.snapshot.queryParamMap.has('alreadyConfirmed')
+  );
+  readonly passwordResetSuccess = signal(
+    this.route.snapshot.queryParamMap.has('passwordReset')
+  );
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -44,6 +52,7 @@ export class LoginComponent {
 
     this.isSubmitting.set(true);
     this.error.set(null);
+    this.emailNotConfirmed.set(false);
 
     this.authService.login(this.form.getRawValue()).subscribe({
       next: () => {
@@ -54,9 +63,19 @@ export class LoginComponent {
         });
       },
       error: (err: HttpErrorResponse) => {
-        this.error.set(err?.error?.message ?? this.translate.instant('AUTH.INVALID_CREDENTIALS'));
+        if (err?.error?.message === 'EMAIL_NOT_CONFIRMED') {
+          this.emailNotConfirmed.set(true);
+        } else {
+          this.error.set(err?.error?.message ?? this.translate.instant('AUTH.INVALID_CREDENTIALS'));
+        }
         this.isSubmitting.set(false);
       },
     });
+  }
+
+  goToConfirmPending(): void {
+    const email = this.form.get('email')?.value ?? '';
+    if (email) sessionStorage.setItem('wasnie:confirm-email', email);
+    void this.router.navigateByUrl('/auth/confirm-email-pending');
   }
 }

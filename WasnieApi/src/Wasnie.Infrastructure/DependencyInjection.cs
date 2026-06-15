@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
-using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Models.Calculation;
 using Wasnie.Application.Models.Imports;
@@ -20,6 +20,7 @@ using Wasnie.Infrastructure.Observability;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
+using Wasnie.Infrastructure.Services.Email;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -72,6 +73,27 @@ public static class DependencyInjection
                 o => o.PayeeMaxRows is > 0 and <= 100_000,
                 "Imports:PayeeMaxRows must be between 1 and 100,000.")
             .ValidateOnStart();
+
+        services.AddOptions<StripeOptions>()
+            .Bind(configuration.GetSection(StripeOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.SecretKey),
+                "Stripe:SecretKey is required. Set it in appsettings.Development.json (dev) or as an environment variable (prod).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.PublishableKey),
+                "Stripe:PublishableKey is required. Set it in appsettings.Development.json (dev) or as an environment variable (prod).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.WebhookSecret),
+                "Stripe:WebhookSecret is required. Run 'stripe listen' to get your whsec_ and add it to appsettings.Development.json.")
+            .ValidateOnStart();
+
+        services.AddOptions<ResendOptions>()
+            .Bind(configuration.GetSection(ResendOptions.SectionName));
+
+        services.AddHttpClient("Resend");
+        services.AddScoped<IEmailService, ResendEmailService>();
+
+        services.AddScoped<ISubscriptionPlanService, StripeSubscriptionPlanService>();
+        services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
+        services.AddScoped<IStripeWebhookService, StripeWebhookService>();
+        services.AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

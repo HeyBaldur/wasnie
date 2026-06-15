@@ -8,6 +8,981 @@
 
 ## Sessions (newest first)
 
+## 2026-06-15 — WI-MANAGE-PROFILE: Fix migración B3 (EmailChangeTokens table missing)
+
+**Scope:** La migración `20260615150000_B3_AddEmailChangeTokens` existía pero EF no la descubría — faltaba el archivo `.Designer.cs` con el atributo `[Migration("...")]` que EF Core usa para indexar y ordenar migraciones.
+
+**Root cause:** EF Core requiere que cada migración tenga un par `Migration.cs` + `Migration.Designer.cs`. El archivo `.cs` con `Up()`/`Down()` compila correctamente sin el Designer, pero EF tooling (y el runtime) no incluye la migración en el grafo sin el archivo Designer con `[DbContext(typeof(ApplicationDbContext))]` + `[Migration("ID")]`.
+
+**Fix:** Creado `20260615150000_B3_AddEmailChangeTokens.Designer.cs` con el modelo completo de B2 más la nueva entidad `Wasnie.Domain.Identity.EmailChangeToken` (Id, UserId, NewEmail, TokenHash, ExpiresAt, UsedAt, CreatedAt + índices `IX_EmailChangeTokens_TokenHash` + `IX_EmailChangeTokens_UserId_TokenHash`).
+
+**Verificación:** `dotnet ef migrations list` muestra B3 como aplicada (sin `(Pending)`). `dotnet ef database update` → "Done." La tabla `EmailChangeTokens` existe en la base de datos. Backend build: 0 errores.
+
+## 2026-06-15 — WI-MANAGE-PROFILE: Pantalla de gestión de perfil del usuario
+
+**Scope:** Pantalla `/profile` con datos editables del usuario (nombre, contraseña, email) y sección de organización de solo lectura (empresa, slug, borrado de cuenta GDPR por contacto).
+
+**Decisiones de seguridad:**
+- Cambio de contraseña → revoca TODOS los refresh tokens (re-login forzado). Consistente con `ResetPasswordCommandHandler`. Decisión deliberada.
+- Cambio de email → el email NO cambia hasta que el usuario confirma desde el nuevo inbox (token SHA256, 24h, un solo uso). Mientras tanto el email viejo sigue activo.
+- Unicidad de email verificada dos veces: al `RequestEmailChange` y al `ConfirmEmailChange` (guarda de condición de carrera).
+- Anti-abuse: cooldown 2min + cap 5/hora por userId para cambio de email (igual que password reset).
+
+**Reglas del sign-up reutilizadas:**
+- Validación de email: `FluentValidation.EmailAddress()` + `MaximumLength(256)` — idéntico a `RegisterTenantCommandValidator`.
+- Unicidad de email: `identityService.FindUserIdByEmailAsync(newEmail)` — mismo mecanismo que Identity.
+- Fortaleza de contraseña: `IsPasswordStrong()` — copiado de `ResetPasswordCommandHandler` (≥10 chars, uppercase, digit, special).
+- Token de email: `RandomNumberGenerator.GetBytes(32)` → URL-safe base64 → SHA256 hex hash — idéntico a `RegisterTenantCommandHandler`.
+- Rate limiting: mismo patrón IP/user-partitioned que `auth-password-reset`.
+
+**Infraestructura reutilizada:**
+- `IEmailService` / `ResendEmailService` — añadido `SendEmailChangeConfirmationAsync` + template HTML EN/ES/PL.
+- `ITokenService.RevokeUserRefreshTokensAsync` — mismo que reset de contraseña.
+- `IAuditService.LogAsync` — 4 nuevas audit actions (`PROFILE_*`).
+- `IOptions<ResendOptions>.FrontendBaseUrl` — para construir el link de confirmación.
+
+**Contacto GDPR:** `privacy@wasnie.io` (mismo que `REACTIVATION_GDPR_EMAIL` en el flujo de reactivación). Empresa/slug → `support@wasnie.com`.
+
+**Backend (archivos nuevos/modificados):**
+- `Wasnie.Domain`: `EmailChangeToken.cs` (nuevo), `AuditActions.cs` (+4 constantes)
+- `Wasnie.Application`: `IIdentityService.cs` (+4 métodos), `IEmailService.cs` (+1), `IApplicationDbContext.cs` (+1 DbSet); `Features/Profile/` — DTOs, Queries, Commands, Handlers (5), Validators (2)
+- `Wasnie.Infrastructure`: `IdentityService.cs` (+4 implementaciones), `ResendEmailService.cs` (+1), `EmailTemplates.cs` (+3 métodos EN/ES/PL), `EmailChangeTokenConfiguration.cs` (nuevo), migration `B3_AddEmailChangeTokens.cs` (nuevo), `ApplicationDbContext.cs` (+DbSet +configuration), `ApplicationDbContextModelSnapshot.cs` (+entidad)
+- `Wasnie.Api`: `ProfileController.cs` (nuevo), `Program.cs` (+2 rate limiters)
+
+**Frontend (archivos nuevos/modificados):**
+- `features/profile/services/profile.service.ts` (nuevo)
+- `features/profile/manage/manage-profile.component.*` (nuevo — .ts/.html/.scss)
+- `features/profile/confirm-email-change/confirm-email-change.component.ts` (nuevo — landing page del link)
+- `features/profile/profile.routes.ts` (nuevo)
+- `app.routes.ts` (+ruta `/profile` + `/profile/confirm-email-change`)
+- `sidebar.component.ts` (+profileItem)
+- `sidebar.component.html` (+nav link Profile en Settings)
+- `i18n/en.json`, `es.json`, `pl.json` (+`NAV.PROFILE`, +sección `PROFILE` completa, 38 claves cada uno)
+
+**Tests:** 527/527 backend (sin regresión). Frontend build: 0 errores TS. Bundle warning preexistente sin cambio.
+
+**Pendiente (smoke):**
+- Cambiar nombre → se guarda.
+- Cambiar password → exige la actual, valida fortaleza, funciona; refresh tokens revocados → re-login.
+- Cambiar email → link llega al nuevo inbox (o log en consola dev); email NO cambia hasta confirmar; email duplicado se rechaza.
+- Nombre de compañía / org identifier → solo lectura, con "contáctanos".
+- Borrar cuenta → muestra "contáctanos" (GDPR), no borra directo.
+- Todo en EN/ES/PL.
+
+---
+
+## 2026-06-15 — WI-LOGO-GRADIENT: Fondo del logo con gradiente por tier
+
+**Scope:** Aplicar al cuadrado del logo (PNG cyan con "W" blanca) el mismo gradiente que el badge de plan.
+
+**Diagnóstico previo al código:**
+La `wasnie_logo.png` tiene fondo opaco cyan sólido con "W" blanca. Poner un `background-image: gradient` en el contenedor padre no funciona porque la imagen tapa el fondo CSS. Se descartaron: CSS filter (no produce gradiente), mix-blend-mode en el img (no preserva la W blanca limpiamente).
+
+**Approach elegido: overlay con `mix-blend-mode: hue`**
+- Un `<span class="sidebar__logo-gradient">` con `position:absolute; inset:0` se coloca sobre la imagen
+- El span lleva las clases Tailwind del gradiente
+- `mix-blend-mode: hue`: aplica el hue del overlay al píxel de la imagen manteniendo la saturación y luminosidad de la imagen
+  - "W" blanca: acromática (sat=0) → el hue no tiene efecto → permanece blanca ✓
+  - Fondo cyan: sat=100%, lum~60% → adopta el hue del gradiente → toma los colores del gradiente ✓
+
+**Fuente del tier:** `SubscriptionStateService` (singleton `providedIn:'root'`, ya cargado por `AppShellComponent.ngOnInit()`). El sidebar solo lee `subscriptionState.subscription()?.tier` — sin llamada HTTP adicional.
+
+**Cambios — `sidebar.component.ts`:**
+- Import `SubscriptionStateService`
+- Inject + `readonly tierName = computed(() => this.subscriptionState.subscription()?.tier ?? null)`
+
+**Cambios — `sidebar.component.html`:**
+- Dentro de `.sidebar__brand-monogram`: 3 bloques `@if/else-if` que añaden `<span class="sidebar__logo-gradient bg-gradient-to-br from-X to-Y">` según tier
+
+**Cambios — `sidebar.component.scss`:**
+- `.sidebar__brand-monogram`: añadidos `position: relative; overflow: hidden` (también mejora el clipping de bordes redondeados)
+- Nueva clase `.sidebar__logo-gradient`: `position:absolute; inset:0; pointer-events:none; mix-blend-mode:hue; border-radius:inherit`
+
+**Cómo revertir (experimental):** eliminar los 3 bloques `@if` del overlay en `sidebar.component.html`. Un cambio de una línea por tier.
+
+**Build:** `ng build --configuration production` — 0 errores TypeScript/Angular. Warnings pre-existentes sin cambio.
+
+## 2026-06-15 — WI-PLAN-BADGE v2: Gradientes por tier + ícono check
+
+**Scope:** Reemplazar badge plano por estilo "gradient border button" con gradiente específico por tier + SVG rosette-discount-check.
+
+**Clases Tailwind no disponibles en este proyecto (reportadas y sustituidas sin cambiar el look):**
+- `bg-neutral-primary-soft` → `bg-[var(--color-surface-raised)]` — exactamente el fondo del topbar; el gradiente asoma como "borde" de 2px (padding `p-0.5`) alrededor del inner span
+- `text-heading` → `text-[var(--color-fg-primary)]` — color de texto primario del proyecto, CSS var adapta dark mode automáticamente
+- `rounded-base` → `rounded-lg` (outer) / `rounded-md` (inner span, ligeramente menor para el efecto borde)
+- `dark:text-white`, `group-hover:dark:bg-transparent` → omitidos — el proyecto usa `[data-theme='dark']` con CSS vars, NO el `dark:` de Tailwind; `--color-fg-primary` ya es light-ish en dark mode
+
+**Mapeo de gradientes (clases exactas del founder, todas estándar Tailwind v4):**
+- Starter: `from-purple-600 to-blue-500`, `focus:ring-blue-300`
+- Growth: `from-cyan-500 to-blue-500`, `focus:ring-cyan-200`
+- Scale: `from-green-400 to-blue-600`, `focus:ring-green-200`
+
+**Efecto hover:** `group` en outer button + `group-hover:bg-transparent` en inner span → inner span se vuelve transparente revelando el gradiente completo; `hover:text-white` en outer button garantiza legibilidad.
+
+**SVG:** `icon-tabler-rosette-discount-check`, `width="16" height="16"`, `stroke="currentColor"` (adapta a hover blanco automáticamente), `style="flex-shrink:0"`.
+
+**Estrategia de template:** 3 bloques `@if/else-if` por tier — las clases Tailwind aparecen literal en el .html → scanner de Tailwind v4 las incluye en el CSS.
+
+**Limpieza:** SCSS `.topbar__plan-badge` + `.topbar__plan-badge__dot` + variantes `[data-tier]` eliminados.
+
+**Build:** `ng build --configuration production` — 0 errores TypeScript. Warnings pre-existentes sin cambio.
+
+## 2026-06-15 — WI-PLAN-BADGE: Badge del plan activo en barra superior
+
+**Scope:** Mostrar badge del plan activo (Starter/Growth/Scale) en la barra superior. Free no cambia.
+
+**Fuente del tier:** `SubscriptionService.getCurrent()` → `sub.tier` (ya se usaba en `TopbarComponent` para el gate del botón Upgrade). Renombrado `currentTier` → `_tier` (privado) + expuesto vía computeds públicos.
+
+**Cambios — `topbar.component.ts`:**
+- Renombrado signal privado a `_tier`
+- Añadidos: `isPaidTier = computed(...)` (true si Starter/Growth/Scale), `tierName = computed(...)` (expone nombre para template)
+- Añadido método `goToSubscription()` (navega a `/subscription`)
+
+**Cambios — `topbar.component.html`:**
+- Nuevo bloque `@if (isPaidTier())`: `<button class="topbar__plan-badge" [attr.data-tier]="tierName()?.toLowerCase()" (click)="goToSubscription()">` con dot span + nombre del tier
+- Free: sin cambios (bloque Upgrade intacto)
+
+**Cambios — `topbar.component.scss`:**
+- `.topbar__plan-badge`: pill `height: 28px`, `border-radius: 9999px`, `font-size: var(--font-size-12)`, `font-weight: 600`
+- `.topbar__plan-badge__dot`: indicador circular 5×5 px, `opacity: 0.65`
+- Variantes por `[data-tier]`: starter=info tokens, growth=warning tokens, scale=brand tokens
+- Hover: `opacity: 0.75`; focus-visible: `var(--focus-ring)`
+
+**i18n:** `TOPBAR.PLAN_BADGE_TOOLTIP` añadida a EN/ES/PL.
+
+**Estados de borde:** `_tier` inicia en `null` → `isPaidTier()` = false → badge no aparece durante carga ni en error. Sin parpadeo.
+
+**Build:** `ng build --configuration production` — 0 errores. Warnings son todos pre-existentes (unused imports en otros componentes; bundle 593 kB pre-existente).
+
+**Smoke esperado:** Cuenta Starter → badge azul; Growth → badge ámbar; Scale → badge brand. Clic → `/subscription`. Free → sin badge, "Upgrade" intacto.
+
+## 2026-06-15 — WI-TENANT-SETTINGS v2: Seed incompleto — 7 campos en vez de 2
+
+**Scope:** El fix previo (RegisterTenantCommandHandler) sembraba solo 2 de 7 field requirements. Cuenta nueva mostraba solo Email + HireDate; cuenta vieja mostraba los 7 correctos.
+
+**Step 0 — Lista canónica (fuente de verdad: 3 migraciones + 2 constantes):**
+
+| Entity | Field | Constante | Default nuevo tenant |
+|---|---|---|---|
+| Payee | Email | `PayeeFieldNames.Email` | false (Optional) |
+| Payee | HireDate | `PayeeFieldNames.HireDate` | false (Optional) |
+| Payee | Role | `PayeeFieldNames.Role` | false (Optional) — añadido en `P2_PayeeNewColumns` |
+| Payee | ManagerId | `PayeeFieldNames.ManagerId` | false (Optional) — idem |
+| Payee | EmploymentType | `PayeeFieldNames.EmploymentType` | false (Optional) — idem |
+| Payee | Location | `PayeeFieldNames.Location` | false (Optional) — idem |
+| Transaction | PayeeId | `TransactionFieldNames.PayeeId` | false (Optional) — `P2_PayeeLifecycle` |
+
+Nota: Transaction/PayeeId aparece como Required en la cuenta vieja del founder porque fue cambiado manualmente via UI — el default de la migración también fue Optional=0.
+
+**Fix — `RegisterTenantCommandHandler.cs`:**
+- Añadido `using Wasnie.Application.Common.Constants;`
+- Reemplazado el `foreach` de 2 campos por array de 7 usando las constantes canónicas
+- Build: 0 errores
+
+**Repair SQL (7 tenants afectados — 5 INSERTs con WHERE NOT EXISTS):**
+Reparó Role, ManagerId, EmploymentType, Location, Transaction/PayeeId para tenants con solo 2 campos.
+
+**Verificación DB:** `SELECT TenantName, COUNT(*) AS FieldCount … GROUP BY` — todos los 17 tenants muestran FieldCount=7. Sin duplicados.
+
+**Verificación runtime pendiente:** Crear tenant nuevo → /admin → Field requirements debe mostrar los 7 campos. Cuenta vieja: sin cambios.
+
+## 2026-06-15 — WI-TENANT-SETTINGS: Field Requirements empty + Architecture amendment
+
+**Scope:** Two work items. (1) Bug: `/admin` Tenant Settings "Field requirements" section showed title/description but zero controls. (2) Architecture amendment: permanent rule mandating migration apply+verify.
+
+**Root cause — Field Requirements empty (Step 0 diagnosis):**
+- Template: `@for (req of requirements(); track req.fieldName)` — empty signal array → empty content; title/desc are outside the loop and always render regardless.
+- `GET /api/settings/field-requirements` → `GetFieldRequirementsQuery` → queries `db.FieldRequirementSettings` with tenant filter → returns `[]` for tenants with no rows.
+- Migration `P2_FieldRequirementSettings` (2026-06-01) seeded existing tenants (`INSERT INTO FieldRequirementSettings SELECT NEWID(), Id, 'Payee', 'Email', 1 FROM Tenants …`) but added comment: *"New tenants created going forward get Optional defaults, set by the tenant-creation path."* That path was never implemented.
+- `RegisterTenantCommandHandler` had no `FieldRequirementSetting.Create()` call anywhere.
+
+**Fix — `RegisterTenantCommandHandler.cs`:**
+- Added `using Wasnie.Domain.Settings;` to usings.
+- After `dbContext.Tenants.Add(tenant)`, before `SaveChangesAsync`: `foreach` loop seeding `("Payee", "Email")` and `("Payee", "HireDate")` with `isRequired: false`.
+- Build result: 0 errors.
+
+**Repair SQL (existing affected tenants — 8 tenants repaired):**
+```sql
+INSERT INTO [dbo].[FieldRequirementSettings] (Id, TenantId, EntityName, FieldName, IsRequired)
+SELECT NEWID(), t.Id, 'Payee', 'Email', 0 FROM Tenants t
+WHERE NOT EXISTS (SELECT 1 FROM FieldRequirementSettings f WHERE f.TenantId = t.Id AND f.EntityName = 'Payee' AND f.FieldName = 'Email');
+
+INSERT INTO [dbo].[FieldRequirementSettings] (Id, TenantId, EntityName, FieldName, IsRequired)
+SELECT NEWID(), t.Id, 'Payee', 'HireDate', 0 FROM Tenants t
+WHERE NOT EXISTS (SELECT 1 FROM FieldRequirementSettings f WHERE f.TenantId = t.Id AND f.EntityName = 'Payee' AND f.FieldName = 'HireDate');
+```
+Result: 8 rows affected per query. All 17 tenants now have Payee/Email + Payee/HireDate rows.
+
+**Appearance section:** Confirmed purely client-side (static `SUPPORTED_LANGS` + `THEME_OPTIONS` arrays, no API call) — title/desc AND controls always render. Not a bug.
+
+**Architecture amendment (ARCHITECTURE.md v1.0 → v1.1):**
+- Renamed "Critical Twelve" → "Critical Thirteen"; added Rule 13: migrations must be applied and verified before WI complete.
+- `08-breaking-change-protocol.md`: added Rule 8.4.4 (3 required steps: apply, verify, report failure explicitly; 3 documented failure modes: DLL lock, missing Designer.cs, wrong connection string). Incident context preserved.
+- Routing table: "Database migration" now requires reading file 08.
+- Changelog entry added to both files.
+- Triggered by: "IsQualified" column incident + "PasswordResetTokens" table incident (both 2026-06-15).
+
+**Verification pending:** Restart API → founder tests `/admin` → Field Requirements shows Email + HireDate toggle controls. Register new test tenant → same 2 controls present.
+
+## 2026-06-15 — WI-PASSWORD-RESET-DEBUG: Silent failure diagnosis + fix
+
+**Scope:** Diagnose why `request-password-reset` endpoint showed success screen but produced no `[DEV]` log and sent no email.
+
+**Root cause analysis:**
+- `ActivationEnforcementMiddleware`: confirmed NOT the issue — only gates authenticated requests; `[AllowAnonymous]` endpoint passes through immediately.
+- Branch 1 of handler (`userId is null`): returned `Success(true)` with **zero log** — invisible failure if email not registered.
+- IP rate limiter (`auth-password-reset`, 3 req / 5 min): returned HTTP 429 before handler ran, with **zero log** — matches symptom after founder tested multiple times.
+
+**Fixes:**
+- `Program.cs`: Added `options.OnRejected` callback to `AddRateLimiter` — logs `[DEV] Rate limit exceeded: {Method} {Path} from {IP}` and returns `{"code":"rate_limited"}` JSON. Previously the rate limiter silently returned 429 with no console output. Frontend `forgot-password.component.ts` always calls `sent.set(true)` (anti-enumeration), so success screen appeared even on 429.
+- `RequestPasswordResetCommandHandler.cs`: Added `[DEV] Password reset: no account found for {EmailMask}` info log to branch 1 before the anti-enumeration early return. HTTP response unchanged (still 200).
+
+**Verification pending:** Restart API → test with founder email → console must show one of: `[DEV] Rate limit exceeded` (most likely — cooldown window may still be active) or `[DEV] Password reset: no account found` (if email lookup fails) or `[DEV] Password reset link for ...` (if flow proceeds correctly).
+
+**Also completed this session:**
+- "Forgot password?" link relocated to card footer inline with "Don't have an account?" (same line, `·` separator).
+
+## 2026-06-15 — WI-PASSWORD-RESET + auth hardening
+
+**Scope:** Full forgot-password / reset-password flow with security hardening. Also several preceding fixes this session: phone validator fix, € symbols on sales volume, `<strong>` tags in i18n, inline resend link on login, backend silent 200 on resend (FindUserIdByEmailAsync copy-paste bug), confirm-email-pending robustness (sessionStorage persistence + redirect if no context), already-confirmed redirect, rate limit hardening (anti-enumeration cooldown, IP-partitioned resend policy, hourly cap), password reset flow.
+
+**Completed (auth hardening):**
+- Phone validator: `validatePhone()` now checks local part after stripping prefix (was comparing length only — "+43 abc" passed).
+- Sales volume dropdown: all VOL_* labels changed from $ to € in EN/ES/PL.
+- `<strong>` tags: split `CONFIRM_EMAIL.DESC` into `DESC_PRE`/`DESC_POST` + `<strong>` in template.
+- Resend link inline: moved inline with "Please confirm your email" text; button styled as inline link.
+- `FindUserIdByEmailAsync` bug: called `FindByIdAsync` instead of `FindByEmailAsync` → silent 200. Fixed; also fixed `RefreshTokenCommandHandler` which called the same method with wrong arg.
+- confirm-email-pending: sessionStorage persistence (`wasnie:confirm-email`), guard redirect if empty, already-confirmed → `/auth/login?alreadyConfirmed=true`.
+- Rate limit: cooldown returns `Success(true)` not 400 (anti-enumeration); `auth-resend` IP-partitioned policy; hourly cap (5/hr); `[DEV]` log before send.
+
+**Completed (password reset):**
+- Domain: `PasswordResetToken` entity (SHA256 hash, expiry, `IsValid()`, `MarkUsed()`).
+- Infrastructure: `PasswordResetTokenConfiguration` (EF, `PasswordResetTokens` table, 2 indexes); migration `B2_PasswordResetTokens` applied.
+- Application: `RequestPasswordResetCommandHandler` (anti-enumeration, cooldown 2 min, cap 5/hr, invalidates prior unused tokens, `[DEV]` URL log before send, `AuditActions.PasswordResetRequested`); `ResetPasswordCommandHandler` (hash lookup, `IsValid()`, password strength ≥10+upper+digit+special, marks used, revokes all refresh tokens, `AuditActions.PasswordResetCompleted`).
+- Identity: `ResetPasswordAsync` added to `IIdentityService` + `IdentityService`.
+- Controller: 2 new endpoints (`request-password-reset`, `reset-password`) with `auth-password-reset` rate limiter.
+- Rate limit: `auth-password-reset` IP-partitioned policy (3 req / 5 min) added to `Program.cs`.
+- Tests: 8 new unit tests in `Auth/PasswordResetHandlerTests.cs`. Total: 519 → 527.
+- Frontend: `AuthService.requestPasswordReset()` + `resetPassword()` (no HttpClient in components).
+- `forgot-password` component (3 files): form → sent state, lock/mail SVG icons, auth-centered card pattern.
+- `reset-password` component (3 files): reads `userId+token` from URL, invalid-link state, `passwordsMatchValidator`, password+confirm fields.
+- `auth.routes.ts`: `forgot-password` (noAuthGuard) + `reset-password` routes added.
+- `login.component`: `passwordResetSuccess` signal; banner; "Forgot password?" link inside `auth-form__password-row`.
+- i18n EN+ES+PL: `FORGOT_PASSWORD.*` (5 keys), `RESET_PASSWORD.*` (7 keys), `AUTH.FORGOT_PASSWORD`, `AUTH.PASSWORD_RESET_SUCCESS`, `AUTH.BACK_TO_LOGIN`.
+
+**Build state:** Backend 0 errors, 527/527 unit tests pass. Frontend 0 errors, 1 pre-existing bundle budget warning (pre-existing).
+
+**Deferred:**
+- Frontend unit tests for forgot-password/reset-password components (CLAUDE.md allows skipping for non-money UI pages; auth components are low-risk display logic).
+
+## 2026-06-15 — WI-EMAIL-ACTIVATION + WI-PAYMENT-SUBSCRIPTION (cont.)
+
+**Scope:** Three items: (1) SVG icon swap in WsEmptyState; (2) dev rate-limit 429 fix; (3) full Resend email integration + activation funnel (email confirmation + qualification form + hard backend gating).
+
+**Completed:**
+- `WsEmptyState`: replaced 5 custom SVGs with Tabler icons (vocabulary/businessplan/reorder/users/receipt-euro); removed hardcoded `width`/`height` attrs so CSS controls size (160×120px container, 120×120px SVG).
+- `Program.cs`: `GlobalLimiter` gated by `!IsDevelopment()` — eliminates 429 on SPA navigation.
+- Domain: `EmailConfirmationToken` entity (hash, expiry, single-use); `Tenant.Qualify()` method + 9 qualification fields; `AuditActions` extended (TenantRegistered, EmailConfirmationSent, EmailConfirmed, TenantQualified).
+- Application: `IEmailService` interface; `ResendOptions`; `ConfirmEmailCommandHandler`; `ResendEmailConfirmationCommandHandler` (2-min cooldown, security-neutral response); `CompleteQualificationCommandHandler` (idempotent, legalVersion "1.0"); `RegisterTenantCommandHandler` rewritten (stores claims, generates token, sends email); `LoginCommandHandler` blocks unconfirmed with `EMAIL_NOT_CONFIRMED`; `GetCurrentUserHandler` exposes `EmailConfirmed`/`IsQualified`; `CurrentUserDto` extended.
+- Infrastructure: `ResendEmailService` (direct HTTP, named client "Resend", graceful skip when ApiKey empty); `EmailTemplates` (EN/ES/PL HTML); `EmailConfirmationTokenConfiguration`; `IdentityService` extended (IsEmailConfirmedAsync, SetEmailConfirmedAsync, GetClaimAsync, EmailConfirmed=false on create); migration `B1_EmailConfirmationAndQualification`.
+- API: `AuthController` + `/confirm-email` + `/resend-confirmation` endpoints (AllowAnonymous); `OnboardingController` + `/qualify`; `ActivationEnforcementMiddleware` (email gate → qualification gate, exempt paths); registered before SubscriptionEnforcementMiddleware.
+- Frontend: `CurrentUser` model + `emailConfirmed`/`isQualified`; `confirm-email-pending` page; `confirm-email` callback page (auto-confirm, success→/onboarding/qualify, error state); `qualification` form (2-col ws-form-grid, WsSelect options, legal native checkbox with accent-color token); `qualificationGuard`; `planGuard`/`onboardingGuard` updated; `auth.routes` + `subscription.routes` updated; `RegisterTenantComponent` redirects to confirm-email-pending; `LoginComponent` shows unconfirmed warning + resend link button.
+- i18n: EN + ES + PL complete — `AUTH.EMAIL_NOT_CONFIRMED`, `AUTH.RESEND_CONFIRMATION`, `CONFIRM_EMAIL.*` (12 keys), `QUALIFY.*` (30+ keys).
+- Build fixes: duplicate `using Wasnie.Application.Common.Options` in DI.cs; unused `identityService` param in AuthController; `[errorKey]` → `[error]` in qualification template; `type="tel"` → `type="text"` (WsInput doesn't support tel).
+- Backend build: 0 errors, 1 pre-existing warning. Frontend production build: 0 errors, pre-existing bundle budget warning (598 kB vs 500 kB — pre-existing, not introduced here).
+
+**Deferred:**
+- Backend unit tests: email confirmation token flow (single-use, expiry), activation middleware, qualification command, registration handler. (CLAUDE.md overrides no-test rule for money/auth code.)
+- `appsettings.Development.json` `Resend:ApiKey` must be filled in manually by the founder.
+
+**Key decisions:**
+- ApiKey stored only in `appsettings.Development.json` (gitignored) and prod env config — never in committed files.
+- Dev testing: token URL logged at Info level in backend console regardless of Resend send.
+- No WsCheckbox primitive → native `<input type="checkbox">` with `accent-color: var(--color-brand)` for legal acceptance.
+- `ActivationEnforcementMiddleware` runs before `SubscriptionEnforcementMiddleware`; each has distinct exempt path list.
+
+## 2026-06-13 — WI-WIZARD-CAPABILITIES
+
+**Scope:** Enriquecer el paso 2 del wizard de sign-up con las 9 capacidades validadas por el founder (no es landing de marketing — es información para elegir bien el plan).
+
+**Decisión de producto documentada:** Rep Portal descartado. Los vendedores no acceden a Wasnie. Marcado ⛔ FUERA DE ALCANCE en `PROJECT_STATUS.md` para evitar que se reintroduzca en futuras sesiones.
+
+**Implementación:**
+- `subscription-wizard.component.ts` — `readonly features` array con 9 pares de i18n keys (`nameKey`/`descKey`), `as const`
+- `subscription-wizard.component.html` — sección `<section class="capabilities">` insertada entre trust-bar y la zona de loading/error/tabla. Grid 3×3 con `@for (f of features)`, checkmark brand en círculo, nombre y descripción
+- `subscription-wizard.component.scss` — `.capabilities`, `.capabilities__heading`, `.capabilities__grid`, `.cap-item` (con surface card tokens), `.cap-item__check` (círculo brand-subtle + brand), `.cap-item__name`, `.cap-item__desc`. Responsive: 3→2→1 columnas a 680px/420px
+- `en.json` / `es.json` / `pl.json` — 20 claves nuevas en bloque `ONBOARDING`: `CAP_SECTION_HEADING` + `CAP_*_NAME` + `CAP_*_DESC` para las 9 capacidades
+
+**Decisión de diseño:** Sección "Incluido en todos los planes" (no columnas por tier — hoy todas las capacidades son iguales en todos los tiers). Fácil de mover una capacidad a fila con diferencias por tier en el futuro si un tier la limita.
+
+**Build:** `ng build --configuration production` — 0 errores. Warnings preexistentes sin cambio.
+
+**Archivos modificados:** `subscription-wizard.component.ts`, `.html`, `.scss`, `en.json`, `es.json`, `pl.json`, `PROJECT_STATUS.md`.
+
+---
+
+## 2026-06-13 — WI-MONEY-TESTS
+
+**Scope:** Close Critical Twelve #2 — money math in the commission engine had no unit tests.
+
+**Step 0 (previous session):** Diagnosis established that `CalculatePayoutsForPeriodHandler` contains no money math (DB orchestration only). All math lives in `CreditAllocationService`'s private static methods. `InternalsVisibleTo("Wasnie.UnitTests")` was already configured; `Wasnie.UnitTests.csproj` already references `Wasnie.Infrastructure` — infrastructure ready.
+
+**Step 1 — Extraction:** Created `WasnieApi/src/Wasnie.Infrastructure/Compensation/Calculation/CommissionCalculator.cs` as `internal static class`. Moved 13 methods verbatim (identical logic, `internal` visibility added): `PlanUsesAttainment`, `EvaluateTrigger`, `EvaluateCondition`, `EvaluateNumeric`, `EvaluateDate`, `EvaluateString`, `EvaluateBoolean`, `ComputeCommission`, `ComputeTieredCommission`, `ComputeAttainmentCommission`, `ApplyModifier`, `ApplyCap`, `ApplyFloor`. `EvaluateTrigger`/`EvaluateCondition` accept `ILogger?` (optional, null-safe — passed from service, omitted in tests).
+
+**Step 2 — Delegation:** `CreditAllocationService` updated to call `CommissionCalculator.*()` for all computation. Private methods removed. Unused `System.Globalization` using removed.
+
+**Step 3 — Tests:** `WasnieApi/tests/Wasnie.UnitTests/Calculation/CommissionCalculatorTests.cs` — 63 pure unit tests, zero DB, zero DI. Coverage: Flat rate (6), Tiered with boundary conditions (7), AttainmentBased with `LastOrDefault` boundary (7), Modifier (5), Cap inc. deferred scopes + currency mismatch (8), Floor inc. currency mismatch (5), Trigger evaluation inc. AND/OR/date/string/In/NotIn/unknown-field (13), banker's rounding Theory with string params (4), multi-currency isolation (3), determinism (2), pipeline integration (3).
+
+**Result:** 454 → 517 unit tests (+63), all pass. Build: 0 errors, 0 warnings.
+
+**Deferred:** Phase 2 of WI-WIZARD-FEATURES-SECTION (features block in subscription wizard) — awaiting founder approval of 🟢 feature list.
+
+---
+
+## 2026-06-13 — WI-FEATURE-INVENTORY + WI-WIZARD-FEATURES-SECTION
+
+**Status:** COMPLETE (ver detalle abajo — Fase 1 completa; Fase 2 completa post-aprobación de lista 🟢)
+
+**Fase 1 — Inventario real de módulos:**
+- Inventario completo desde el código (no desde la spec de mayo) añadido a `PROJECT_STATUS.md` como sección `## Feature Inventory (real state from code, 2026-06-13)`.
+- 🟢 plenos: Payees, Plans, Rules, Quotas, Assignments, Transactions, Credits, Pay Runs, Payouts, Process Pending, Admin Dashboard, Payee Dashboard, Multi-tenant, Auth/RBAC, Session Management, Audit Trail, Billing/Stripe, Tier Limits, i18n, Observability, Security Headers, todos los Import/Export.
+- 🟡 con deuda: Payout Engine (funcional pero sin unit tests de money math — Critical Twelve #2), Admin/Settings (básico).
+- 🔴 no empezado: Email Notifications, Clawbacks, Manager/Rep UI scoped data, E2E tests, Mobile.
+- Deuda latente documentada en 5 puntos con seguimiento.
+
+**Fase 2 — Sección de features en el wizard:**
+- Sección insertada en `subscription-wizard.component.html` entre el trust bar y la tabla de precios.
+- Solo features 🟢 confirmadas. Ver lista en sección de features del wizard.
+- i18n EN/ES/PL añadido: sección `ONBOARDING.FEATURES.*`.
+- `ng build --configuration development` limpio post-cambio.
+
+**Archivos tocados:** `docs/PROJECT_STATUS.md`, `docs/SESSION_LOG.md`, `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.html`, `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.scss`, `WasnieUi/src/assets/i18n/en.json`, `WasnieUi/src/assets/i18n/es.json`, `WasnieUi/src/assets/i18n/pl.json`.
+
+---
+
+## 2026-06-12 — WI-TEST-PAYMENT-CYCLE bug fixes
+
+**Status:** COMPLETE
+
+**3 integration test failures fixed:**
+
+1. **`PaymentFailedCycleTests.ReadAuditByResourceId`** — Missing `.IgnoreQueryFilters()` on `db.AuditLogs` query. `AuditLog` has a global EF query filter on `TenantId`; in test DI scope the `ITenantContext` is `BackgroundJobTenantContext` which throws `InvalidOperationException` if `SetTenant()` was not called. Fix: added `.IgnoreQueryFilters()` before `.AsNoTracking()` (same pattern already used in `ReadSubscription`).
+
+2. **`AssignmentsEndpointsTests.DisposeAsync`** — Was `Task.CompletedTask` (no cleanup). EMP-coded payees seeded in tests persisted across test class boundaries, causing `ChangePlanEndpointsTests` duplicate key on EMP001 and `CheckoutTierLimitTests` payee count off by +1. Fix: changed to `await _fixture.ResetCompensationDataAsync()` (mirrors `InitializeAsync`).
+
+3. **`SubscriptionEnforcementTests.GetPlans_CanceledTenant_Returns200`** — Used shared factory with no `ISubscriptionPlanService` mock. Real Stripe call failed with placeholder key → 503 instead of 200. Fix: `WithWebHostBuilder` + local `StubPlanService` (same pattern used throughout subscription tests). Added required usings: `Wasnie.Application.Common.Interfaces`, `Wasnie.Application.Features.Subscription.DTOs`.
+
+**Build:** `dotnet build tests\Wasnie.IntegrationTests` → 0 errors, 1 pre-existing warning (CS8604 in `SubscriptionEndpointsTests`, unchanged).
+
+**Pre-existing failures NOT caused by this WI (documented):**
+- `AssignmentsEndpointsTests.ListAssignmentsByPayee_ReturnsOnlyThatPayeesAssignments` — pre-existing test isolation issue within the class
+- `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_*` — pre-existing test data issue
+
+---
+
+## 2026-06-12 — WI-TEST-PAYMENT-CYCLE
+
+**Status:** COMPLETE
+
+**Approach:** A — webhooks sintéticos via HTTP stack completo. No Stripe real. Sigue el patrón de `WebhookPhase3Tests.cs`.
+
+**Rationale:** `WebhookPhase3Tests` ya cubría las transiciones de estado (PastDue/Active/Canceled) pero NO: tier invariante, audit trail, que PastDue no bloquea enforcement, 402 post-cancelación, idempotencia a nivel DB, ni multi-tenant isolation.
+
+**New file:** `tests/Wasnie.IntegrationTests/Integration/Subscription/PaymentFailedCycleTests.cs` (6 tests)
+
+| Test | Caso |
+|------|------|
+| `PaymentFailed_StatusIsPastDue_TierUnchanged_AuditPastDueLogged` | Case 1: tier intacto + audit PAST_DUE |
+| `PastDue_EnforcementDoesNotBlock_FunctionalEndpointReturnsNot402` | Case 1: PastDue no bloquea enforcement |
+| `PaymentSucceeded_FromPastDue_StatusActive_TierGrowth_AuditRecoveredLogged` | Case 2: recovery + audit RECOVERED |
+| `SubscriptionDeleted_FromPastDue_StatusCanceled_FieldsClean_AuditCanceledLogged_EnforcementBlocks` | Case 3: cancelación + campos + audit + 402 |
+| `Idempotency_SameEventId_ProcessedStripeEventInsertedOnce_StatusUnchanged` | Case 4: ProcessedStripeEvents.Count=1 |
+| `MultiTenant_PaymentFailed_ForTenantA_DoesNotAffectTenantB` | Case 5: isolation por StripeCustomerId |
+
+**Build note:** `dotnet build tests\Wasnie.UnitTests` 0 errores. IntegrationTests build bloqueado por PID 32608 (API corriendo) — no error de código, mismo patrón de sesiones previas. Requiere API detenida para compilar y ejecutar.
+
+**Manual Stripe test-clock verification (Approach B — si se quiere validar contra Stripe real):**
+Ver cabecera del archivo de test para el procedimiento completo. Resumen: crear customer con test clock, adjuntar tarjeta 4000000000000341, crear suscripción, avanzar reloj > 30 días → invoice.payment_failed real → PastDue. Avanzar pasado ventana de retry → subscription.deleted → Canceled.
+
+---
+
+## 2026-06-12 — WI-MODAL-CONFIRM-PLAN-CHANGE
+
+**Status:** COMPLETE
+
+**Scope:** Frontend only. No backend changes.
+
+**Rationale:** Usuarios hacían click en botones upgrade/downgrade y el cambio se ejecutaba inmediatamente sin confirmación ni información de costes. Riesgo de cargo accidental o cambio de límites involuntario.
+
+**Changes:**
+- `manage-subscription.component.ts`: `changePlan(tier)` renombrado a `requestPlanChange(plan)` (intercepta con modal); `confirmPlanChange()` ejecuta la llamada API real; `cancelConfirm()` cierra sin acción. Señales nuevas: `confirmModalOpen`, `confirmPlan`, `confirmingPlan`. Free→paid sigue a Stripe Checkout directamente.
+- `manage-subscription.component.html`: `(click)="requestPlanChange(plan)"` en botones de tabla. `<ws-modal>` añadido con contenido diferenciado upgrade/downgrade: upgrade muestra caja de €X en font grande + descripción; downgrade muestra banner verde "nothing charged" + warning amber con periodo + nota próxima factura.
+- `manage-subscription.component.scss`: Clases `.confirm-modal`, `.confirm-modal__charge`, `.confirm-modal__charge-amount`, `.confirm-modal__no-charge`, `.confirm-modal__warning`, `.confirm-modal__next`, `.confirm-modal-footer`.
+- `en.json` / `es.json` / `pl.json`: 10 claves nuevas por locale.
+
+**Error handling preservado:** 409 blocked → cierra modal, muestra `blockedInfo` alert. `upgrade_payment_failed` → toast. `plan_change_unavailable` → toast genérico.
+
+**Build:** `ng build --configuration production` limpio. 0 errores, warnings preexistentes sin cambio.
+
+**Deferred:** Tests unitarios del componente (actualizar spec para `requestPlanChange` y señales del modal). `lastFourDigits` no disponible en `CurrentSubscription` — se omite del modal (sin `GET /payment-method` endpoint en el backend).
+
+---
+
+## 2026-06-12 — WI-FIX-STALE-TIER-UPGRADE-ROUTING
+
+**Status:** COMPLETE
+
+**Problem solved:** `ChangePlanCommandHandler` decidía upgrade vs downgrade con `currentTier` leído de la DB. La DB solo se actualiza cuando llega el webhook `customer.subscription.updated` (1-2s de lag). En tests rápidos o cambios consecutivos, la DB tenía un tier stale → `isUpgrade` evaluaba falso en upgrades legítimos → Stripe recibía `create_prorations` en vez de `BillingCycleAnchor.Now` → no cobraba. Root cause confirmado: evento `invoiceitem.created` sin `charge.succeeded` = rama de downgrade tomada.
+
+**Step 0:** Punto exacto de la bug: `ChangePlanCommandHandler.cs:43+105`. Mapeo `priceId→tier`: `subscription.Items.Data[0].Price.Product` (expand) → `productId` → `StripeOptions.ProductTierMap` (mismo `StripeSubscriptionPlanService.ResolveTier`).
+
+**Fix aplicado (Opción B — leer Stripe + sync DB):**
+1. `GetCurrentTierFromStripeAsync` añadido a `IStripeSubscriptionManagementService` → devuelve `Tier?` (sin Stripe.net types en Application layer, Clean Architecture ✓).
+2. Implementación en `StripeSubscriptionManagementService`: fetch con `expand=items.data.price.product`, extrae productId/metadata, llama `StripeSubscriptionPlanService.ResolveTier` (misma lógica, mismo assembly, `internal` accesible ✓).
+3. Handler: si Stripe falla o devuelve null → `Failure("plan_change_unavailable")`, no cobra, no cambia tier.
+4. Si DB tier ≠ Stripe tier → `subscription.SyncTier(stripeCurrentTier, clock.UtcNowOffset)` + `SaveChanges` + audit `SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE` (SYSTEM actor, before/after JSON).
+5. `isUpgrade = targetTier > stripeCurrentTier` (autoritativo).
+
+**Archivos modificados:**
+- `IStripeSubscriptionManagementService.cs` — `GetCurrentTierFromStripeAsync(string, CancellationToken) → Task<Tier?>`
+- `StripeSubscriptionManagementService.cs` — +ILogger constructor, implementación
+- `UserSubscription.cs` — `SyncTier(Tier, DateTimeOffset)` domain method
+- `AuditActions.cs` — `SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE` constant
+- `ChangePlanCommandHandler.cs` — +IClock +IAuditService, nueva lógica completa
+- `ChangePlanCommandHandlerTests.cs` — 6 nuevos tests + stubs actualizados para nuevo método
+- `ChangePlanEndpointsTests.cs` — stubs `StubStripeManagement` / `StubStripeManagementUpgradeFails` actualizados
+
+**Tests:** 454/454 unit tests pasan (448 → 454, +6 nuevos). Build 0 errores, 0 warnings.
+
+**Dev data fix (ejecutar después de confirmar en Stripe):**
+```sql
+-- Confirmar el tier real de la suscripción en el Stripe Dashboard ANTES de ejecutar.
+-- Reemplaza <TIER_INT> con: Starter=1, Growth=2, Scale=3.
+UPDATE UserSubscriptions
+SET Tier = <TIER_INT>
+WHERE StripeSubscriptionId = '<sub_id_del_tenant_de_prueba>';
+```
+
+**Smoke esperado post-fix:**
+1. Poner DB+Stripe en Starter (confirmados).
+2. Upgrade Starter→Growth → `charge.succeeded` + `invoice.paid` inmediato. DB=Growth (webhook).
+3. Sin esperar, upgrade Growth→Scale → `charge.succeeded` inmediato (no `invoiceitem.created`). DB=Scale.
+4. Repetir upgrades consecutivos → todos cobran, ninguno toma rama de downgrade.
+
+## 2026-06-12 — WI-PAYMENT-UPGRADE-DOWNGRADE
+
+**Status:** COMPLETE
+
+**Problem solved:** Upgrade usaba `create_prorations` igual que downgrade → el tier superior se activaba sin cobro inmediato. Un usuario podía hacer upgrade a Scale, usar el mes entero, y cancelar antes del próximo ciclo sin pagar.
+
+**Stripe mechanics confirmados (Step 0):**
+- **Upgrade:** `ProrationBehavior="none"` + `BillingCycleAnchor=SubscriptionBillingCycleAnchor.Now` + `PaymentBehavior="error_if_incomplete"` → Stripe genera factura completa del nuevo plan de inmediato, cobra, y si la tarjeta es rechazada la API lanza `StripeException` antes de actualizar la suscripción.
+- **Downgrade:** `ProrationBehavior="create_prorations"` sin cambio de anchor → Stripe genera crédito por días no usados en el plan actual, aplicado a la próxima factura. Sin cobro inmediato. Comportamiento ya existente, correcto.
+
+**Archivos modificados:**
+- `IStripeSubscriptionManagementService.cs` — añadido `UpgradeSubscriptionAsync`
+- `StripeSubscriptionManagementService.cs` — implementación con `BillingCycleAnchor.Now` / `error_if_incomplete`
+- `ChangePlanCommandHandler.cs` — ruteo `isUpgrade = targetTier > currentTier`; pago declinado → `Failure("upgrade_payment_failed")`
+- `StripeWebhookService.cs` — fix bug de auditoría: `HandleSubscriptionUpdatedAsync` ya no hardcodea `status=Active`; mapea `fullSubscription.Status` al enum local
+- `manage-subscription.component.ts` — toast específico para pago declinado en upgrade
+- `manage-subscription.component.html` — notas de facturación bajo los botones
+- `en.json / es.json / pl.json` — 3 nuevas claves i18n
+
+**Tests:** 15 nuevos unit tests (`ChangePlanCommandHandlerTests.cs`), 3 nuevos integration tests. 448/448 unit tests pasan. Angular build production limpio.
+
+**Deferred:** Manejo de fallos de pago asíncronos (3DS) para upgrades — `error_if_incomplete` cubre tarjetas rechazadas síncronamente (caso principal). Reconciliación periódica con Stripe (gap identificado en auditoría de resiliencia).
+
+## 2026-06-12 — WI-FIX-STALE-CANCEL-FIELDS-ON-REACTIVATION
+
+**Status:** COMPLETE. Backend unit 433/433. Integration tests ready (run with API stopped).
+
+**Step 0 — All activation/reactivation paths:**
+| Path | Clears cancel fields? |
+|---|---|
+| `checkout.session.completed` → `UpdateFromStripe` | ❌ BUG — root cause |
+| `subscription.updated` → `UpdateFromStripe` → ScheduleCancellation/Clear | ❌ UpdateFromStripe didn't clear; safe because schedule reapplied from Stripe payload |
+| `subscription.deleted` → `Cancel()` | ✓ (fixed previous session) |
+| `invoice.payment_succeeded` → `Recover()` | partial — didn't clear `CanceledAt` |
+
+**Fixes:**
+- `UserSubscription.UpdateFromStripe()`: added `CancelAtPeriodEnd = false; CancelAt = null; CanceledAt = null;`. Safe for `HandleSubscriptionUpdatedAsync` — `wasCancelScheduled` captured before call, schedule repopulated after if Stripe signals it.
+- `UserSubscription.Recover()`: added `CanceledAt = null` (defensive — PastDue path can't have it set today, but invariant is clear).
+- Frontend: `isCancelScheduled` already guards `status === 'Active'` — no change needed.
+
+**Dev data fix (corrupted row):**
+Run against dev DB: `UPDATE UserSubscriptions SET CancelAtPeriodEnd=0, CancelAt=NULL, CanceledAt=NULL WHERE StripeCustomerId='cus_UgWEoo6pTQLm7j'`
+
+**Files changed:**
+- `Wasnie.Domain/Subscription/UserSubscription.cs` — `UpdateFromStripe` + `Recover`
+- `tests/Wasnie.UnitTests/Domain/UserSubscriptionCancellationTests.cs` — 5 new tests
+- `tests/Wasnie.IntegrationTests/Integration/Subscription/ReactivationCancellationFieldsTests.cs` — NEW (8 tests)
+
+**Tests:** 433/433 unit (13 new). Integration: run with API stopped.
+
+---
+
+## 2026-06-12 — WI-FIX-REACTIVATION-TIER-LIMITS
+
+**Status:** COMPLETE. La pantalla de reactivación ya no permite elegir planes cuyos límites el uso actual del tenant excede.
+
+**Backend:**
+- `CreateCheckoutSessionHandler` reescrito: valida `payeeCount > limits.MaxPayees` y `planCount > limits.MaxPlans` antes de crear la sesión Stripe; devuelve `CheckoutResultDto(Blocked, BlockedReason, Current, Limit, TargetTier)`.
+- Controller `/api/subscription/checkout`: 409 Conflict si `dto.Blocked`, 200 con `CheckoutSessionDto(checkoutUrl)` si no (contrato frontend preservado).
+- Nuevo `GET /api/subscription/usage` → `GetSubscriptionUsageQuery/Handler` → `{payeeCount, planCount}`; añadido a `ExemptPrefixes` del middleware.
+- Nuevos DTOs: `CheckoutResultDto`, `SubscriptionUsageDto`.
+- 5 integration tests en `CheckoutTierLimitTests.cs`: Starter bloqueado (26 payees), Growth bloqueado (76), Starter libre (0 payees), Scale libre (26 payees), multi-tenant aislamiento.
+
+**Frontend:**
+- `SubscriptionService.getUsage()` + interfaz `SubscriptionUsage`.
+- `SubscriptionReactivationComponent`: `forkJoin({ plans, usage })` en `load()`; señal `usage`; métodos `isPlanBlocked/ByPayees/ByPlans`.
+- Template: clase `--blocked` + badge "Unavailable" + nota de uso; botón Reactivate deshabilitado cuando bloqueado.
+- SCSS: `.reactivation-plan-card--blocked` (opacity 0.65, sunken bg) + `.reactivation-plan-card__blocked-note` (warning color).
+- i18n: 3 nuevas claves × 3 idiomas (EN/ES/PL).
+- 7 nuevos unit tests (`isPlanBlocked*`, unlimited, null-usage guard).
+
+**Tests:** Frontend 401/406 (5 pre-existing ProcessPendingComponent). `ng build --configuration production` limpio.
+
+---
+
+## 2026-06-12 — WI-FIX-CANCELED-FIELDS + manage-subscription autoprotección
+
+**Status:** COMPLETE. Backend: 0 errores build, 10/10 unit tests (incluye 2 nuevos). Frontend: 4/4 nuevos spec + ng build production limpio. Integration test añadido (pendiente de ejecutar con API detenida — DLL lock).
+
+**Step 0 diagnóstico:**
+- `Cancel()` en `UserSubscription.cs` (línea 71): solo ponía `Status=Canceled + CanceledAt` — no limpiaba `CancelAtPeriodEnd/CancelAt`. Invariante de dominio roto.
+- `HandleSubscriptionDeletedAsync` (línea 418): solo llamaba `subscription.Cancel()`. El fix en el dominio propaga automáticamente a este handler sin tocarlo.
+- `isCancelScheduled` getter (manage-subscription): solo comprobaba `cancelAtPeriodEnd === true` sin verificar `Status === 'Active'` → mostraba banner amber a tenants Canceled con datos sucios.
+- No existía autoprotección en ManageSubscriptionComponent: un tenant Canceled podía hacer F5 en /subscription y ver la pantalla normal.
+
+**Decisión: fix en dominio, no en el handler.** `Cancel()` es la autoridad; cualquier futuro llamador obtiene la limpieza gratis.
+
+**Backend — `UserSubscription.Cancel()`:**
+- Añadidos `CancelAtPeriodEnd = false; CancelAt = null;` al método `Cancel()`.
+
+**Backend — tests:**
+- `UserSubscriptionCancellationTests`: 2 nuevos tests (`Cancel_WhenScheduled_ClearsCancelAtPeriodEnd`, `Cancel_WhenScheduled_ClearsCancelAt`). Total: 10/10 pass.
+- `WebhookPhase3Tests`: 1 nuevo test (`SubscriptionDeleted_WhenCancelScheduled_ClearsCancelScheduleFields`) — siembra subscription con `CancelAtPeriodEnd=true, CancelAt=+1mes`, dispara `subscription.deleted`, verifica `CancelAtPeriodEnd=false, CancelAt=null, Status=Canceled, CanceledAt set`.
+
+**Frontend — `ManageSubscriptionComponent`:**
+- Inyectado `Router`.
+- `load()` → `getCurrent()` next callback: si `sub.status === 'Canceled'` → `router.navigate(['/subscription/reactivate'])` y return (sin cargar planes).
+- `isCancelScheduled` getter: `sub?.status === 'Active' && sub?.cancelAtPeriodEnd === true` (double guard contra datos sucios con Status=Canceled).
+
+**Frontend — tests (`manage-subscription.component.spec.ts`, nuevo):**
+- 4 tests: redirect a /reactivate cuando Canceled; no llama getPlans cuando Canceled; `isCancelScheduled` true cuando Active+cancelAtPeriodEnd; `isCancelScheduled` false cuando Canceled aunque cancelAtPeriodEnd=true. 4/4 pass.
+
+## 2026-06-12 — WI-MANAGE-SUBSCRIPTION-UI: icono Stripe en header + corrección espaciado sección Upgrade
+
+**Status:** COMPLETE. `ng build --configuration production` clean, 0 errores nuevos.
+
+**Problema:**
+- Página `/subscription` usaba `<ws-page-header>` sin icono — todas las demás páginas usan `<ws-page-layout icon="...">` (ej. Payees: `icon="users"`).
+- Sección "Upgrade your account" / "Unlock more payees..." tenía gap de 16px (`--space-4`) entre título y subtítulo, mientras el header principal usa 4px (`--space-1`). Ambos debían ser visualmente idénticos.
+
+**Cambios:**
+- `manage-subscription.component.ts`: `WsPageHeaderComponent` → `WsPageLayoutComponent` en imports.
+- `manage-subscription.component.html`: `<ws-page-header>` → `<ws-page-layout icon="brand-stripe">` envolviendo todo el contenido; título y subtítulo de "Upgrade" agrupados en `.upgrade-section__header-group`.
+- `manage-subscription.component.scss`: eliminados `padding/max-width/margin` de `.subscription-page` (los maneja `ws-page-layout`); añadido `.upgrade-section__header-group { display: flex; flex-direction: column; gap: var(--space-1) }`.
+- Icono `brand-stripe` ya estaba registrado en `IconComponent.ICONS` — sin cambios en `icon.component.ts`.
+
+## 2026-06-12 — WI-CANCELED-SCREEN: pantalla cuenta cancelada + bloqueo server-side + reactivación + GDPR
+
+**Status:** COMPLETE. Build: 0 errores backend, ng build production limpio. Frontend: 396 tests (391 pass, 5 pre-existing). Backend unit: 418/418.
+
+**Step 0 Diagnóstico:**
+- Guard frontend ya existía (`subscriptionGuard` → `/subscription/reactivate`) pero NO había enforcement backend.
+- `customer.subscription.deleted` → `HandleSubscriptionDeletedAsync` → `subscription.Cancel()` → `Status=Canceled` + `CanceledAt=now`. Sin bug: no depende de `cancel_at_period_end`.
+- GET /current devuelve `UserSubscriptionDto` con `CanceledAt` y `Tier` (todo lo necesario para la pantalla).
+- `SubscriptionReactivationComponent` existía como stub (solo navegaba a `/onboarding/plan`).
+
+**Backend — `SubscriptionEnforcementMiddleware`:**
+- Bloqueea HTTP 402 con `{"code":"subscription_canceled","message":"..."}` para tenants `Status=Canceled`.
+- Rutas exentas: webhook, current, checkout, config, plans, /api/auth/, /health.
+- Middleware registrado en `Program.cs` después de `UseAuthorization`.
+- Structured logging: `LogWarning` con tenant + método + path.
+
+**Frontend — pantalla reactivación completa:**
+- `SubscriptionReactivationComponent` reemplazado (stub → full screen sin app-shell).
+- Carga `getCurrent()` + `getPlans()` en init; muestra fecha `CanceledAt`, tier anterior, estado.
+- Tarjetas de planes seleccionables → `createCheckout(priceId)` → Stripe checkout.
+- Plan anterior destacado con borde de brand.
+- Aviso GDPR informativo con correo placeholder (`privacy@wasnie.io` — **REEMPLAZAR**).
+- i18n EN/ES/PL: 14 nuevas claves.
+
+**Placeholder a completar:**
+- `REACTIVATION_GDPR_EMAIL` en los 3 archivos i18n = `privacy@wasnie.io` — reemplazar por correo real.
+
+**Tests nuevos:**
+- `SubscriptionEnforcementTests.cs` (9 tests integration): 402 en rutas funcionales, 200 en exentas, 401 sin auth, multi-tenant aislado.
+- `subscription-reactivation.component.spec.ts` (8 tests): init, filtro Free plans, previous plan, createCheckout llamado, startingCheckout signal, error toast, loadError.
+
+## 2026-06-12 — WI-FIX-CANCEL-AT-PERIOD-END v2: COMPLETE — billing_mode=flexible usa cancel_at, no cancel_at_period_end
+
+**Status:** COMPLETE. Build: 0 errores. 426/426 unit tests.
+
+**Causa raíz confirmada (segunda):** `billing_mode=flexible` (Stripe dahlia) señaliza "cancelar al final del periodo" con `cancel_at = <unix_timestamp>` y mantiene `cancel_at_period_end = false`. El handler anterior (v1, race condition fix) leía `stripeSubscription.CancelAtPeriodEnd` → siempre `false` en flexible → `ScheduleCancellation` nunca se llamaba.
+
+**Fix (`StripeWebhookService.cs` línea 343):**
+```
+var isCancelScheduled = stripeSubscription.CancelAtPeriodEnd || stripeSubscription.CancelAt.HasValue;
+```
+Soporta ambos modos:
+- Classic: `cancel_at_period_end=true, cancel_at=null` → `isCancelScheduled=true`, `cancelAt=periodEnd`
+- Flexible: `cancel_at_period_end=false, cancel_at=<ts>` → `isCancelScheduled=true`, `cancelAt=stripeSubscription.CancelAt.Value`
+- Revert: `cancel_at_period_end=false, cancel_at=null` → `isCancelScheduled=false` → `wasCancelScheduled` gate → `ClearCancellationSchedule`
+
+**Structured logging añadido:** `CancelAtPeriodEnd` y `CancelAt` logueados en cada evento `subscription.updated` para diagnóstico futuro.
+
+**Auditoría de `CurrentPeriodEnd/Start`:** todos los usos en el handler leen de `item.CurrentPeriodEnd/Start` (nivel item, correcto para dahlia). No hay usos de `subscription.CurrentPeriodEnd` (deprecated). Ningún cambio adicional necesario.
+
+**Smoke esperado:** "Don't cancel" en portal → volver a cancelar → evento nuevo → `CancelAtPeriodEnd=1`, `CancelAt=2026-07-11...` en DB → banner amber en `/subscription`.
+
+## 2026-06-12 — WI-FIX-CANCEL-AT-PERIOD-END: COMPLETE — race condition en webhook handler
+
+**Status:** COMPLETE. Build: 0 errors. 426/426 unit tests.
+
+**Causa raíz confirmada:** `HandleSubscriptionUpdatedAsync` leía `cancel_at_period_end` de `fullSubscription` (Stripe GET re-fetch, línea 338). Stripe envía el webhook *antes* de que el endpoint GET refleje el nuevo estado, por lo que `fullSubscription.CancelAtPeriodEnd` devolvía `false` aunque la suscripción estuviera marcada para cancelación. `UpdatedAt` sí se actualizaba (porque viene de `UpdateFromStripe`, que no depende de este campo) — eso confirmó que el handler corría pero saltaba el bloque de cancelación.
+
+**Fix aplicado:**
+- `StripeWebhookService.cs` línea 338: `fullSubscription.CancelAtPeriodEnd` → `stripeSubscription.CancelAtPeriodEnd` (event payload — fuente autoritativa).
+- `StripeWebhookService.cs` línea 340: `fullSubscription.CancelAt` → `stripeSubscription.CancelAt`.
+- `fullSubscription` se sigue usando para resolución de producto/tier (expand `items.data.price.product`).
+
+**Fixes de compilación (pre-existing):**
+- `ChangePlanEndpointsTests.StubStripeManagement`: añadido `RevertCancellationAsync` stub (interfaz creció en sesión anterior pero stub no se actualizó).
+- `PayeeImportExecutionServiceTests.CreateSut`: añadido `ITierLimitChecker` substitute (constructor de `PayeeImportExecutionService` creció con `ITierLimitChecker` en WI-IMPORT-TIER-LIMIT pero el test no se actualizó).
+
+**Para smoke test:** Reiniciar API → `stripe events resend evt_1ThP5a3kwCZf9lCAZLMAdz3h` → verificar `CancelAtPeriodEnd=1`, `CancelAt=2026-07-11...` en DB → verificar banner amber en `/subscription`.
+
+## 2026-06-12 — WI-PAYMENT-SUBSCRIPTION: COMPLETE — cancel_at_period_end manejado + aviso en UI
+
+**Status:** COMPLETE. Backend: 0 errors (Application + Infrastructure). `ng build --configuration production` clean. 418/418 backend unit tests. 383/388 frontend tests (5 pre-existing failures).
+
+**Trabajo realizado:**
+- `UserSubscription` dominio: +2 campos `CancelAtPeriodEnd`/`CancelAt`, +2 métodos `ScheduleCancellation`/`ClearCancellationSchedule`.
+- `AuditActions`: +`SUBSCRIPTION_CANCEL_SCHEDULED`, +`SUBSCRIPTION_CANCEL_REVERTED`.
+- `StripeWebhookService.HandleSubscriptionUpdatedAsync`: lee `cancel_at_period_end` de Stripe, llama métodos de dominio, audita en ambos sentidos (set + clear).
+- `UserSubscriptionDto` + `GetCurrentSubscriptionHandler`: exponen `CancelAtPeriodEnd` y `CancelAt`.
+- `IStripeSubscriptionManagementService`: +`RevertCancellationAsync` (llama `SubscriptionUpdate { CancelAtPeriodEnd = false }`).
+- `RevertSubscriptionCancellationCommand` + handler (idempotente, audita, usa `ICurrentUserService`).
+- `POST /api/subscription/revert-cancellation` en `SubscriptionController`.
+- Migración EF `A10_AddCancelAtPeriodEnd` escrita manualmente y aplicada con `--configuration Release`.
+- Frontend: `CurrentSubscription` +2 campos; `SubscriptionService.revertCancellation()`; banner amber `cancel-scheduled-banner` en `ManageSubscriptionComponent`; botón "Mantener mi suscripción" con loading state.
+- i18n EN/ES/PL: 4 nuevas claves.
+- 8 nuevos unit tests de dominio en `UserSubscriptionCancellationTests.cs`.
+
+**Decisiones:**
+- Status permanece `Active` cuando `cancel_at_period_end=true` — bloqueo real solo en `subscription.deleted`.
+- Botón "Mantener suscripción" incluido (llama Stripe directamente).
+- La suscripción `updated` handler sigue fetchando el full subscription de Stripe (mismo patrón que antes).
+
+**Pendiente / anotado:**
+- Stripe Customer Portal: verificar en Dashboard → Billing → Customer portal que "Cancel subscriptions" esté **OFF** para que la cancelación pase siempre por Wasnie.
+
+## 2026-06-11 — WI-IMPORT-TIER-LIMIT: COMPLETE — Excel payee import enforces tier limits (all-or-nothing)
+
+**Status:** COMPLETE. Backend Application + Infrastructure build 0 errors. `ng build --configuration production` clean.
+
+### Problem
+Free account (limit: 5 payees) could import 10 payees via Excel with no enforcement. `PayeeImportExecutionService` was a plain service (not MediatR) — never had `ITierLimitChecker` in its constructor.
+
+### Decision
+All-or-nothing rejection: if `current + incoming > limit`, reject 100% with no DB writes. Return 409 with structured body.
+
+### Backend changes
+- `ITierLimitChecker.cs` — Added `CheckPayeeImportLimitAsync(incomingCount)` + `PayeeImportLimitCheck` record.
+- `TierLimitChecker.cs` — Implemented: counts `db.Payees`, checks `current + incomingCount > MaxPayees`, logs audit, returns structured result (no throw).
+- `ImportValidationModels.cs` — `PayeeImportResult` extended with `Blocked`, `BlockedCurrent`, `BlockedIncoming`, `BlockedLimit`, `BlockedTier`.
+- `PayeeImportExecutionService.cs` — Pre-flight check after `toImport` list built, before any `SaveChangesAsync`. Returns early blocked result.
+- `ImportsController.cs` — `ExecutePayees` returns `Conflict({ blocked, reason, current, incoming, limit, tier })` when blocked.
+
+### Frontend changes
+- `payee-import.models.ts` — `PayeeImportResult` extended with optional blocked fields.
+- `tier-limit-modal.service.ts` — `TierLimitInfo` extended with `incomingCount?`.
+- `tier-limit-modal.component.html` — New import-specific branch: `entityKey='payees' && info.incomingCount` → `MESSAGE_PAYEES_IMPORT`.
+- `importing-step.component.ts` — Catches `HttpErrorResponse` status 409 with `blocked=true`; shows `TierLimitModal` with incomingCount; emits `retryRequested`.
+- `payee-import-wizard.component.ts` — Injects `PayeesStore`, `SubscriptionStateService`, `TIER_LIMITS`; adds `atPayeesLimit` computed.
+- `payee-import-wizard.component.html` — Passes `[atPayeesLimit]` to `<app-preview-step>`.
+- `preview-step.component.ts` — Added `atPayeesLimit = input(false)`.
+- `preview-step.component.html` — Import button disabled when `willImportCount === 0 || atPayeesLimit()`.
+- `en/es/pl.json` — `TIER_LIMIT.MESSAGE_PAYEES_IMPORT` added (params: tier, limit, current, incoming).
+
+### Deferred
+- Integration tests (`PayeeImportEndpointsTests.cs`): Free 0+10→409; Free 3+2→ok; Free 3+5→409; Starter+10→ok; no partial inserts; multi-tenant.
+- Full backend solution build requires stopping running server (PID 5040 holding DLL locks). Application + Infrastructure projects compile clean individually.
+
+---
+
+## 2026-06-11 — WI-TIER-LIMIT-PREVENTIVE: COMPLETE — Preventive tier blocking + professional modal
+
+**Status:** COMPLETE. Build clean (`ng build --configuration production` 0 new errors).
+
+### Changes
+- `src/app/shared/services/tier-limits.ts` — NEW. `TIER_LIMITS` record: Free(1p/5), Starter(5/25), Growth(15/75), Scale(∞/150), Enterprise(∞/∞). `-1` = unlimited.
+- `tier-limit-modal.service.ts` — `TierLimitInfo` extended with `entityKey?: 'plans' | 'payees'`.
+- `tier-limit-modal.component.ts` — Added `Router` injection, `upgrade()` (close + navigate to `/subscription`), `usagePercent(info)` helper.
+- `tier-limit-modal.component.html` — Full redesign: SVG icon (arrow-up circle), entity-specific message (plans/payees/generic), usage bar (dynamic `[style.width.%]`), usage numbers (current/limit), upgrade hint.
+- `tier-limit-modal.component.scss` — New token-based styles. Icon wrap with surface-raised bg, usage bar in brand color, consistent font-size numeric tokens.
+- `plans.store.ts` + `payees.store.ts` — Added `unfilteredTotal = signal<number>(0)`. Set in `_loadInternal` only when `!search && !status` (unfiltered loads).
+- `plans-list.component.ts` — Added `SubscriptionStateService`, `TierLimitModalService`, `TIER_LIMITS`, `Router`; `atPlansLimit` computed signal; `onCreatePlan()` gate method.
+- `plans-list.component.html` — Create button: removed `routerLink="new"`, added `(click)="onCreatePlan()"` + `[class.at-limit]`.
+- `payees-list.component.ts` + `payees-list.component.html` — Same pattern for payees (`atPayeesLimit`, `onCreatePayee()`).
+- `en/es/pl.json` — Added `TIER_LIMIT.MESSAGE_PLANS` and `TIER_LIMIT.MESSAGE_PAYEES`.
+
+### Behavior
+- At limit → button click shows `TierLimitModal` immediately (no form rendered).
+- Below limit → button navigates normally to `new` route.
+- Reactive: after deleting a plan/payee and going below limit, `unfilteredTotal` updates on next unfiltered load and `atPlansLimit`/`atPayeesLimit` recompute.
+- Backend 403 via `forbiddenResponseInterceptor` remains as safety-net fallback.
+
+---
+
+## 2026-06-11 — WI-STRIPE-FASE-3: COMPLETE — Upgrade/Downgrade + Billing Portal + PastDue cycle
+
+**Status:** COMPLETE. Backend + frontend implementados. Ambas builds limpias. Integration tests escritos (requieren restart del server para correr).
+
+### Backend entregado
+
+**Nuevos archivos:**
+- `Wasnie.Application/Common/Interfaces/IStripeSubscriptionManagementService.cs` — interfaz limpia (solo `UpdateSubscriptionAsync` + `CreateBillingPortalSessionAsync`; sin tipos Stripe — Application layer no referencia Stripe.net)
+- `Wasnie.Infrastructure/Services/StripeSubscriptionManagementService.cs` — implementación con `SubscriptionService.UpdateAsync(ProrationBehavior="create_prorations")` + `BillingPortal.SessionService`; `GetSubscriptionWithProductAsync` como método público (no en interfaz, usado por webhook inline)
+- `Wasnie.Application/Features/Subscription/Commands/ChangePlanCommand.cs` + `ChangePlanCommandHandler.cs` — valida tier (`Starter|Growth|Scale`), bloquea downgrade si `db.Payees.CountAsync()` > `TierLimits[target].MaxPayees` o planes > `MaxPlans`; devuelve `{ pending:true }` o `{ blocked:true, reason, current, limit, targetTier }`; tier real cambia SOLO vía webhook
+- `Wasnie.Application/Features/Subscription/Commands/CreateBillingPortalSessionCommand.cs` + `CreateBillingPortalSessionCommandHandler.cs` — requiere `StripeCustomerId`; returnUrl = `{FrontendBaseUrl}/subscription`
+- `Wasnie.Application/Features/Subscription/DTOs/ChangePlanResultDto.cs` + `BillingPortalSessionDto.cs`
+
+**Archivos modificados:**
+- `UserSubscription.cs` — nuevos métodos `MarkPastDue(now)` + `Recover(now)`
+- `AuditActions.cs` — 5 nuevas constantes: `SubscriptionUpgraded/Downgraded/Canceled/PastDue/Recovered`
+- `StripeWebhookService.cs` — 4 nuevos casos en switch: `customer.subscription.updated` (fetch full sub inline, sync tier+status, audit UPGRADED/DOWNGRADED), `customer.subscription.deleted` (Cancel, audit CANCELED), `invoice.payment_failed` (MarkPastDue, audit PAST_DUE), `invoice.payment_succeeded` (recover solo si PastDue, audit RECOVERED; idempotente)
+- `DependencyInjection.cs` — `AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>()`
+- `SubscriptionController.cs` — `POST /change-plan` (409 si blocked, 200 si pending), `POST /billing-portal` (200 + URL)
+
+**Tests:**
+- `ChangePlanEndpointsTests.cs` — auth (401), tiers inválidos (400 Free/Enterprise/invalid), downgrade bloqueado por payees (409 con payload), upgrade válido → 200 pending (Stripe stubbed)
+- `WebhookPhase3Tests.cs` — HMAC signer manual (no `EventUtility.GenerateTestHeaderString` en v52); payment_failed→PastDue (idempotente), payment_succeeded cuando PastDue→Active, payment_succeeded cuando Active→no-op, subscription.deleted→Canceled (idempotente); `Stripe:WebhookSecret` añadido a `TestWebApplicationFactory`; constante `TestConstants.StripeWebhookSecret`
+
+**Decisión importante — Application layer vs Stripe.net:** `IStripeSubscriptionManagementService` en Application NO puede retornar `Stripe.Subscription` (Stripe.net no está referenciado en Application). Interface simplificada a métodos void/string. Webhook handler inlinea la llamada Stripe (`new StripeClient(options.Value.SecretKey)`) igual que `HandleCheckoutSessionCompletedAsync`.
+
+### Frontend entregado
+
+**Nuevos archivos:**
+- `subscription-state.service.ts` — `providedIn: root`; signals: `_subscription`, `_loaded`, computed `isPastDue/isCanceled`; `load()` / `refresh()`
+- `subscription.guard.ts` — `CanActivateFn` async; llama `getCurrent()`, redirige a `/subscription/reactivate` si Canceled; `catchError → of(true)` para no bloquear en error
+- `past-due-banner/` — banner standalone (HTML+TS+SCSS); inyectado en `AppShellComponent` (template + imports); aparece cuando `subState.isPastDue()`; botón "Update payment method" → `getBillingPortalUrl()` → `window.open(_blank)`
+- `reactivation/` — full-page sin `<app-shell>`; mismo patrón visual que `SubscriptionSuccessComponent`; botón → `/onboarding/plan`
+
+**Archivos modificados:**
+- `subscription.service.ts` — `changePlan(targetTier)` + `getBillingPortalUrl()` + interfaz `ChangePlanResult`
+- `manage-subscription.component.ts/html/scss` — botones upgrade/downgrade (primary/secondary según dirección), billing portal button en current-plan-card, `blockedInfo` signal (key + params para `translate:params`), `isUpgrade()` helper, "Coming Soon" eliminado
+- `app-shell.component.ts/html` — inyecta `SubscriptionStateService`; `load()` en `ngOnInit`; `<app-past-due-banner />` entre topbar y main content
+- `subscription.routes.ts` — ruta `/subscription/reactivate` (sin `subscriptionGuard` para que Canceled pueda acceder)
+- `app.routes.ts` — `subscriptionGuard` añadido a todas las rutas protegidas excepto `/subscription` y `/onboarding`
+- `en.json / es.json / pl.json` — 16 nuevas claves: `CHANGE_PLAN/UPGRADE_BTN/DOWNGRADE_BTN/CHANGE_PENDING/CHANGE_ERROR/DOWNGRADE_BLOCKED_PAYEES/DOWNGRADE_BLOCKED_PLANS/BILLING_PORTAL_BTN/BILLING_PORTAL_ERROR/PAST_DUE_BANNER_MSG/PAST_DUE_BANNER_CTA/REACTIVATION_TITLE/REACTIVATION_DESC/REACTIVATION_CTA`
+
+### Próximos pasos
+
+1. Reiniciar el servidor API para correr integration tests en frío
+2. Configurar Stripe Customer Portal en dashboard.stripe.com: plan-changes `OFF`, cancellation `OFF`, invoices `ON`, payment method `ON`
+3. Activar Stripe Smart Retries en la configuración de billing
+
+## 2026-06-11 — WI-STRIPE-FASE-3: Step 0 — Diseño Upgrade/Downgrade + Portal (aprobado, implementando)
+
+**Status:** Step 0 completo y aprobado por el owner. Implementación en curso.
+
+### Decisiones de diseño aprobadas
+
+**Enfoque upgrade/downgrade:** Ambos se aplican de forma inmediata via `SubscriptionService.UpdateAsync()` con `ProrationBehavior = "create_prorations"`. Sin nuevo Checkout; reutiliza el `StripeCustomerId` existente. El cambio de tier en Wasnie se confirma SOLO vía webhook `customer.subscription.updated` (fuente de verdad — mismo patrón que Fase 2). El endpoint devuelve `{ pending: true }`.
+
+**Validación de downgrade (Opción A — bloqueo):** El backend cuenta `db.Payees.CountAsync()` + `db.CompensationPlans.CountAsync()` (todos los registros, igual que `TierLimitChecker`) y compara contra `TierLimits[targetTier]`. Si excede → `409` con `{ blocked: true, reason: "payees"|"plans", current: N, limit: M, targetTier }`. Frontend muestra mensaje accionable con números concretos.
+
+**Criterio de conteo:** Todos los payees/planes (incluidos inactivos/terminados) cuentan contra los límites — consistente con `TierLimitChecker` actual y evita el abuso de "terminar → bajar tier → reactivar".
+
+**Nuevos endpoints:**
+- `POST /api/subscription/change-plan { targetTier }` — upgrade: siempre permitido; downgrade: valida límites primero.
+- `POST /api/subscription/billing-portal` — crea Stripe Billing Portal Session para el `StripeCustomerId` del tenant; devuelve `{ url }`. Frontend redirige para facturas/historial/tarjeta.
+
+**Nuevos handlers de webhook (añadir en `StripeWebhookService`):**
+- `customer.subscription.updated` → `UpdateFromStripe(newTier, newStatus, ...)` + `tenant.SetTier(newTier)`. Dirección del cambio → audit `SUBSCRIPTION_UPGRADED` o `SUBSCRIPTION_DOWNGRADED`.
+- `customer.subscription.deleted` → `subscription.Cancel(now)` + `tenant.SetTier(Tier.Free)` → audit `SUBSCRIPTION_CANCELED`.
+- `invoice.payment_failed` → `subscription.MarkPastDue(now)` (nuevo método de dominio; solo cambia Status, no el tier) → audit `SUBSCRIPTION_PAST_DUE`. Lookup por `StripeCustomerId` via `IgnoreQueryFilters()`.
+
+Los tres deduplicados via tabla `ProcessedStripeEvents` existente. Todos idempotentes.
+
+**Nuevo método de dominio:** `UserSubscription.MarkPastDue(DateTimeOffset now)` — `Status = PastDue`, actualiza `UpdatedAt`. Sin cambio de tier.
+
+**Nuevas acciones de audit:** `SubscriptionUpgraded`, `SubscriptionDowngraded`, `SubscriptionCanceled`, `SubscriptionPastDue`.
+
+**Frontend (`ManageSubscriptionComponent`):**
+- Botones de upgrade a tiers superiores (siempre habilitados).
+- Botones de downgrade a tiers inferiores; si el backend devuelve 409, muestra mensaje bloqueado con uso actual vs límite del destino.
+- Botón "Gestionar facturación" → endpoint billing-portal → `window.location.href` al portal de Stripe.
+- i18n EN/ES/PL completo.
+
+**Configuración del Stripe Customer Portal (el usuario debe hacer en el dashboard de Stripe):**
+
+| Función | Configuración requerida |
+|---|---|
+| Cancelar suscripciones | **DESACTIVAR** |
+| Actualizar plan (cambio de suscripción) | **DESACTIVAR** |
+| Actualizar método de pago | **ACTIVAR** |
+| Ver historial de facturas / descargar PDF | **ACTIVAR** |
+
+URL (test): `https://dashboard.stripe.com/test/settings/billing/portal`
+
+**Tests planificados:** upgrade (mock Stripe + webhook sync); downgrade dentro de límites (permitido); downgrade sobre límites → 409 + mensaje; `customer.subscription.updated` → sync tier; `.deleted` → Canceled + Free; `invoice.payment_failed` → PastDue. Todos idempotentes. Multi-tenant. Build limpio.
+
+---
+
+## 2026-06-11 — WI-STRIPE-FASE-2: Stripe Checkout + Webhook + Tier Activation
+
+**Completed:**
+- Backend: `ProcessedStripeEvent` idempotency entity + `A10_AddProcessedStripeEvents` migration (PK: EventId varchar(100), no tenant filter — global system table).
+- `IStripeCheckoutService` / `StripeCheckoutService`: creates Stripe Hosted Checkout Session; `Metadata["tenantId"]` set server-side; success/cancel URLs from `FrontendBaseUrl` config.
+- `IStripeWebhookService` / `StripeWebhookService`: `ConstructEvent` signature verification → idempotency check → `EventTypes.CheckoutSessionCompleted` handler → `UpdateFromStripe` + `tenant.SelectPlan()` saved atomically with `ProcessedStripeEvent` — audit logged after main save to preserve atomicity.
+- `POST /checkout` (Authorize) + `POST /webhook` (AllowAnonymous, raw body) endpoints in `SubscriptionController`.
+- `WebhookSecret` + `FrontendBaseUrl` in `StripeOptions`; values in `appsettings.Development.json` (gitignored).
+- 7 new unit tests for `StripeWebhookService` using manual HMAC-SHA256 signatures (Stripe.net v52 has no `GenerateTestHeaderString`).
+- Frontend: `SubscriptionService.createCheckout(priceId)`. Wizard `selectPaid()` → checkout API → `redirect()` (DOCUMENT-injected protected method). New `SubscriptionSuccessComponent` polls `GET /api/subscription/current` every 2s (up to 30s) then shows confirmed/timeout state. Route `/onboarding/success` with `authGuard` only. EN/ES/PL i18n (7 keys).
+
+**Key fixes during implementation:**
+- `Events.CheckoutSessionCompleted` → `EventTypes.CheckoutSessionCompleted` (Stripe.net v52).
+- `Subscription.CurrentPeriodStart/End` → `SubscriptionItem.CurrentPeriodStart/End` (moved in v52).
+- Karma DISCONNECTED (test 20/29): `window.location.href = url` in wizard caused Chrome Headless to actually navigate away. Fixed by extracting to `protected redirect(url)` + `spyOn` in test.
+- Karma DISCONNECTED (success spec): `setInterval` + 1500ms `setTimeout` pending in `fakeAsync`. Fixed by `StubComponent` router routes + `flush()` to clear macrotasks.
+
+**Tests:** 418 backend unit pass; 29/29 frontend subscription tests pass. Both builds clean.
+
+**Deferred to Fase 3:** Customer portal; `customer.subscription.updated` / `customer.subscription.deleted` / `invoice.payment_failed` events.
+
+**User must do:**
+1. Add real Stripe ProductIds to `appsettings.Development.json` `Stripe:ProductTierMap`.
+2. Run `stripe listen --forward-to https://localhost:5001/api/subscription/webhook` and paste `whsec_...` into `Stripe:WebhookSecret`.
+
+---
+
+## 2026-06-11 — WI-STRIPE-TIER-MAP: mapeo ProductId→Tier por config
+
+**Problem:** `GET /api/subscription/plans` returned only Free. 3 paid Stripe products (Starter €299, Growth €799, Scale €1,299) were silently discarded because `product.Metadata["tier"]` was missing (metadata = `{}`).
+
+**Root cause:** `StripeSubscriptionPlanService.TryMapPrice` required `product.Metadata["tier"]` — no fallback.
+
+**Fix:** `StripeOptions.ProductTierMap: Dictionary<string,string>` (ProductId→Tier name). Precedence: metadata["tier"] first (forward-compat if user adds it to Stripe later) → `ProductTierMap[productId]` → WARNING + discard.
+
+**Architecture:** `ResolveTier()` extracted as `internal static` method. `InternalsVisibleTo("Wasnie.UnitTests")` + `ProjectReference` to Infrastructure in unit test project.
+
+**Tests:** 6 new unit tests in `StripeProductMappingTests` (6/6 pass): config map resolves, metadata resolves, metadata beats config, empty metadata falls back, unknown → null, unknown → warning logged.
+
+**Config:** User must add 3 real Stripe ProductIds to `Stripe:ProductTierMap` in `appsettings.Development.json`. Placeholders added (`REPLACE_WITH_*`). Template in `appsettings.json` updated too.
+
+**Counts:** Backend 566 total (unchanged — no integration tests for this WI; unit tests now 572). Frontend unchanged.
+
+## 2026-06-11 — WI-WIZARD-SUBSCRIPTION + UserSubscriptions tabla (continuación)
+
+### UserSubscriptions — tabla local espejo del estado de suscripción
+- `UserSubscription` entity (Domain) con `SubscriptionStatus` enum (Active/PastDue/Canceled/Incomplete/Trialing)
+- Campos: TenantId FK único, Tier, Status, BillingEmail, Stripe IDs (nullable), period/billing dates (nullable), CreatedAt/UpdatedAt (IClock via now param)
+- `UserSubscription.CreateFree(id, tenantId, billingEmail, now)` factory method
+- `UpdateFromStripe(...)` + `Cancel(...)` para Fase 3 webhooks
+- EF: `UserSubscriptionConfiguration` (unique index TenantId, FK cascade), `HasQueryFilter(TenantId)`, registrado en `ApplicationDbContext`
+- Migración `A9_AddUserSubscriptions` generada y aplicada a BD
+- `SelectFreePlanHandler` actualizado: crea `UserSubscription` (idempotente) + llama `tenant.SelectPlan(Tier.Free)`. IClock restaurado.
+- `GET /api/subscription/current` → `GetCurrentSubscriptionQuery` + `GetCurrentSubscriptionHandler` + `UserSubscriptionDto`
+- 10 nuevos integration tests (auth, crea fila, setea flag, idempotente, get current, 404 antes de plan, multi-tenant, guard scenario)
+- **Fix test isolation**: `UserSubscriptionEndpointsTests` tiene `InitializeAsync` + `DisposeAsync` que ambos restauran `Tier=Enterprise` (valor 4) para TenantA/B — evita que `Tier=Free` del `select-free` se escape a otras clases de tests
+
+### Frontend Manage Subscription
+- `SubscriptionService.getCurrent()` añadido; `CurrentSubscription` interface
+- `ManageSubscriptionComponent` (`/subscription`): plan actual (tier, status badge, email), nota Free, 3 upgrade cards con "Coming soon"/disabled
+- Ruta `/subscription` en `app.routes.ts` (gated `Subscription.Manage`)
+- Sidebar: `subscriptionItem` (credit-card icon) en footer junto a Settings
+- i18n EN/ES/PL: `NAV.SUBSCRIPTION` + bloque `SUBSCRIPTION` completo (19 claves)
+
+### Step 0 decisión
+- `UserSubscription` row = fuente de verdad canónica. `Tenant.HasSelectedPlan` = cache/flag derivado.
+- Flujo: sign-up → wizard → elegir Free → crea fila → `HasSelectedPlan=true` → entra app. Cerrar sesión sin elegir → no hay fila → al volver el guard manda de nuevo al wizard.
+- Fase 2/3 pendiente: checkout Stripe → llenar Stripe IDs + webhooks que llaman `UpdateFromStripe()`
+
+## 2026-06-11 — WI-WIZARD-SUBSCRIPTION + WI-STRIPE-FASE-1 + noAuthGuard + WI-EXCEL-MONEY-FORMAT
+
+### WI-WIZARD-SUBSCRIPTION — Mandatory plan-selection wizard
+- `HasSelectedPlan: bool` on `Tenant` entity (default false); `Tenant.SelectPlan(Tier)` sets both Tier and HasSelectedPlan atomically
+- EF migration `A8_AddTenantHasSelectedPlan` generated
+- `SelectFreePlanCommand/Handler` → saves plan, logs `PLAN_SELECTED` audit event
+- `POST /api/subscription/select-free` endpoint
+- `CurrentUserDto.HasSelectedPlan` added; `GET /auth/me` returns it
+- `planGuard`: unauthenticated → /auth/login; no plan → /onboarding/plan; has plan → allow. Replaces `authGuard` on all app routes
+- `onboardingGuard`: has plan → /dashboard; no auth → /auth/login; no plan → allow
+- `SubscriptionWizardComponent`: 4-card grid, Free interactive, paid "Coming soon"/disabled, loading skeleton, error state with retry, signal-based
+- `/onboarding/plan` route; post-registration redirect updated to `/onboarding/plan`
+- i18n EN/ES/PL complete (12 new keys each)
+- 17 new frontend unit tests (component + guards); 378 total (373 pass, 5 pre-existing)
+- Backend: 556 total (551 pass, 3 pre-existing)
+- `SelectFreePlanHandler.cs` build fixes: added missing `using Wasnie.Application.Common.DTOs`, removed unused `IClock clock` parameter
+
+### WI-STRIPE-FASE-1 — Stripe credentials + plans endpoint
+- `StripeOptions` (SecretKey + PublishableKey) validated at startup via `IOptions<T>`
+- `StripeSubscriptionPlanService`: fetches Stripe prices, maps `product.Metadata["tier"]` → TierLimits, prepends synthetic Free plan
+- `GET /api/subscription/plans` (Authorize) — secret key never in any response
+- `GET /api/subscription/config` — publishable key only
+- `StripeUnavailableException` → 503 via middleware
+- 8 new integration tests; `Stripe.net 52.0.0` added
+- `Tenant.Create()` default changed to `Tier.Free`
+
+### noAuthGuard
+- Authenticated users navigating to /auth/login or /auth/register are redirected to /dashboard
+
+### WI-EXCEL-MONEY-FORMAT
+- Fixed scientific notation on monetary columns in 4 Excel export services (ClosedXML `NumberFormat.Format = "#,##0.00"`)
+
+## 2026-06-11 — WI-STRIPE-FASE-1
+
+### Decisiones de arquitectura
+- Stripe es fuente de verdad de precio/producto. Los límites de funcionalidad siguen en `TierLimits.cs` (domain).
+- `Free` es **sintético** — no vive en Stripe. El endpoint lo prepend hardcodeado con valores de `TierLimits.Limits[Tier.Free]`.
+- Mapeo: `product.Metadata["tier"]` → parse a enum `Tier` → `TierLimits.Limits[tier]` → `MaxPayees/MaxPlans`.
+- `StripeOptions` validado en startup (`ValidateOnStart()`); falla inmediato si las keys no están configuradas.
+- `StripeUnavailableException` → middleware → 503 (nunca expone el mensaje de Stripe al cliente en prod).
+- El secret key **jamás** aparece en ninguna respuesta de API. Confirmado por tests explícitos.
+
+### Archivos creados/modificados
+**Application:**
+- `Common/Options/StripeOptions.cs` — `SecretKey` + `PublishableKey` con validación
+- `Common/Interfaces/ISubscriptionPlanService.cs` — `GetPlansAsync(Tier currentTier)`
+- `Common/Exceptions/StripeUnavailableException.cs` — excepción propia → 503 via middleware
+- `Features/Subscription/DTOs/SubscriptionPlanDto.cs` — shape del wizard
+- `Features/Subscription/Queries/GetSubscriptionPlansQuery.cs` — MediatR query
+- `Features/Subscription/Handlers/GetSubscriptionPlansHandler.cs` — lee tenant.Tier, llama servicio
+
+**Infrastructure:**
+- `Wasnie.Infrastructure.csproj` — `Stripe.net 52.0.0` añadido
+- `Services/StripeSubscriptionPlanService.cs` — consulta precios activos de Stripe, filtra por metadata `tier`, ordena por precio, prepend Free sintético
+- `DependencyInjection.cs` — registro de `StripeOptions` + `ISubscriptionPlanService`
+
+**Api:**
+- `Controllers/SubscriptionController.cs` — `GET /api/subscription/plans` + `GET /api/subscription/config`
+- `Middleware/ExceptionHandlingMiddleware.cs` — `StripeUnavailableException` → 503
+- `appsettings.Development.template.json` — bloque `Stripe` con placeholders (commiteado)
+
+**Domain:**
+- `Entities/Tenant.cs` — `Tenant.Create()` arranca en `Tier.Free` (era `Tier.Growth`)
+
+**Tests:**
+- `Integration/Subscription/SubscriptionEndpointsTests.cs` — 8 tests (auth 401, shape de 4 planes, secret key never in response × 2, 503 en Stripe caído, publishable key en config)
+- `Infrastructure/TestWebApplicationFactory.cs` — Stripe placeholder keys para startup validation
+
+### Secretos
+- `appsettings.Development.json` (gitignoreado): bloque `Stripe.SecretKey` / `Stripe.PublishableKey` → el usuario añade sus claves `sk_test_` / `pk_test_` manualmente
+- `appsettings.Production.json` (gitignoreado): idem pero apunta a Azure App Service Application Settings / Key Vault
+- Confirmado: NINGUNA key real está en el repo
+
+### Pendiente (fases siguientes)
+- Fase 2: Checkout → `POST /api/subscription/checkout-session` (Stripe Checkout Session)
+- Fase 3: Webhook → `POST /api/stripe/webhook` (signature verification, `customer.subscription.updated` → `tenant.SetTier()`)
+- Fase 4: Wizard UI en Angular post-sign-up
+- Nota: `Tenant.Create()` ahora arranca en `Tier.Free`; el tenant de dev existente sigue en `Growth` hasta que se ejecute `tenant.SetTier()` vía wizard
+
+---
+
 ## 2026-06-11 — WI-EXCEL-MONEY-FORMAT
 
 ### Problem

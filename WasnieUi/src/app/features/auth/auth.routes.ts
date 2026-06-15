@@ -21,4 +21,33 @@ export const authRoutes: Routes = [
         (m) => m.RegisterTenantComponent
       ),
   },
+  {
+    path: 'forgot-password',
+    canActivate: [noAuthGuard],
+    loadComponent: () =>
+      import('./forgot-password/forgot-password.component').then(
+        (m) => m.ForgotPasswordComponent
+      ),
+  },
+  {
+    path: 'reset-password',
+    loadComponent: () =>
+      import('./reset-password/reset-password.component').then(
+        (m) => m.ResetPasswordComponent
+      ),
+  },
+  {
+    path: 'confirm-email-pending',
+    loadComponent: () =>
+      import('./confirm-email-pending/confirm-email-pending.component').then(
+        (m) => m.ConfirmEmailPendingComponent
+      ),
+  },
+  {
+    path: 'confirm-email',
+    loadComponent: () =>
+      import('./confirm-email/confirm-email.component').then(
+        (m) => m.ConfirmEmailComponent
+      ),
+  },
 ];

@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs/operators';
@@ -8,6 +8,7 @@ import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { SidebarStateService } from '../../../core/services/sidebar-state.service';
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
+import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
 
 interface NavItem {
   path: string;
@@ -44,6 +45,11 @@ export class SidebarComponent {
   private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   readonly sidebarState = inject(SidebarStateService);
+  private readonly subscriptionState = inject(SubscriptionStateService);
+
+  // Reads from the same root-singleton already loaded by AppShellComponent.
+  // To revert logo gradient: remove the @if overlay blocks in the template.
+  readonly tierName = computed(() => this.subscriptionState.subscription()?.tier ?? null);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -142,6 +148,7 @@ export class SidebarComponent {
     },
   ];
 
+  readonly subscriptionItem: NavItem = { path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
 
   logout(): void {
