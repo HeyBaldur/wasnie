@@ -11,7 +11,9 @@ export interface AuthResult {
   tenantId: string;
   tenantSlug: string;
   roles: string[];
-  tokens: TokenPair;
+  tokens: TokenPair | null;
+  requiresTwoFactor?: boolean;
+  twoFactorChallengeToken?: string;
 }
 
 export interface LoginRequest {

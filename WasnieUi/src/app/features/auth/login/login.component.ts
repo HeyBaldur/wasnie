@@ -55,7 +55,11 @@ export class LoginComponent {
     this.emailNotConfirmed.set(false);
 
     this.authService.login(this.form.getRawValue()).subscribe({
-      next: () => {
+      next: (result) => {
+        if (result.requiresTwoFactor) {
+          void this.router.navigateByUrl('/auth/verify-2fa');
+          return;
+        }
         this.currentUser.refresh().subscribe(() => {
           const returnUrl = sessionStorage.getItem('wasnie:return-url') ?? '/dashboard';
           sessionStorage.removeItem('wasnie:return-url');

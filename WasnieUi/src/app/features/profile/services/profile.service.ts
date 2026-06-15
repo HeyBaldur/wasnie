@@ -12,6 +12,20 @@ export interface ProfileDto {
   organizationSlug: string;
 }
 
+export interface TwoFactorStatusDto {
+  isEnabled: boolean;
+  recoveryCodeCount: number;
+}
+
+export interface TwoFactorSetupDto {
+  secret: string;
+  otpauthUri: string;
+}
+
+export interface EnableTwoFactorResultDto {
+  recoveryCodes: string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProfileService {
   private readonly http = inject(HttpClient);
@@ -35,5 +49,25 @@ export class ProfileService {
 
   requestEmailChange(newEmail: string): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(`${this.base}/request-email-change`, { newEmail });
+  }
+
+  getTwoFactorStatus(): Observable<TwoFactorStatusDto> {
+    return this.http.get<TwoFactorStatusDto>(`${this.base}/2fa/status`);
+  }
+
+  getTwoFactorSetup(): Observable<TwoFactorSetupDto> {
+    return this.http.get<TwoFactorSetupDto>(`${this.base}/2fa/setup`);
+  }
+
+  enableTwoFactor(verificationCode: string): Observable<EnableTwoFactorResultDto> {
+    return this.http.post<EnableTwoFactorResultDto>(`${this.base}/2fa/enable`, { verificationCode });
+  }
+
+  disableTwoFactor(password: string, code: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.base}/2fa/disable`, { password, code });
+  }
+
+  regenerateRecoveryCodes(password: string, code: string): Observable<{ recoveryCodes: string[] }> {
+    return this.http.post<{ recoveryCodes: string[] }>(`${this.base}/2fa/recovery-codes`, { password, code });
   }
 }

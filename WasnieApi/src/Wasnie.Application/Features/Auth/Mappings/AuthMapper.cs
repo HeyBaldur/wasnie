@@ -12,4 +12,16 @@ public static class AuthMapper
         IList<string> roles,
         TokenPairDto tokens) =>
         new(userId, email, tenantId, tenantSlug, roles, tokens);
+
+    public static AuthResultDto ToTwoFactorChallengeDto(
+        string userId,
+        string email,
+        Guid tenantId,
+        string tenantSlug,
+        IList<string> roles,
+        string challengeToken) =>
+        new(userId, email, tenantId, tenantSlug, roles,
+            Tokens: null,
+            RequiresTwoFactor: true,
+            TwoFactorChallengeToken: challengeToken);
 }

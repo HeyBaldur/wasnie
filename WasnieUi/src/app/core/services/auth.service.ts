@@ -21,7 +21,33 @@ export class AuthService {
   login(request: LoginRequest): Observable<AuthResult> {
     return this.http
       .post<AuthResult>(`${environment.apiBaseUrl}/auth/login`, request)
-      .pipe(tap((result) => this.persistSession(result)));
+      .pipe(tap((result) => {
+        if (result.requiresTwoFactor) {
+          sessionStorage.setItem('wasnie:2fa-challenge', result.twoFactorChallengeToken ?? '');
+          sessionStorage.setItem('wasnie:2fa-email', result.email ?? '');
+        } else {
+          this.persistSession(result);
+        }
+      }));
+  }
+
+  verifyTwoFactor(code: string, isRecoveryCode = false): Observable<AuthResult> {
+    const challengeToken = sessionStorage.getItem('wasnie:2fa-challenge') ?? '';
+    return this.http
+      .post<AuthResult>(`${environment.apiBaseUrl}/auth/verify-2fa`, {
+        challengeToken,
+        code,
+        isRecoveryCode,
+      })
+      .pipe(tap((result) => {
+        sessionStorage.removeItem('wasnie:2fa-challenge');
+        sessionStorage.removeItem('wasnie:2fa-email');
+        this.persistSession(result);
+      }));
+  }
+
+  getTwoFactorEmail(): string {
+    return sessionStorage.getItem('wasnie:2fa-email') ?? '';
   }
 
   registerTenant(request: RegisterTenantRequest): Observable<AuthResult> {
@@ -103,11 +129,11 @@ export class AuthService {
   }
 
   getAccessToken(): string | null {
-    return this._currentUser()?.tokens.accessToken ?? null;
+    return this._currentUser()?.tokens?.accessToken ?? null;
   }
 
   getRefreshToken(): string | null {
-    return this._currentUser()?.tokens.refreshToken ?? null;
+    return this._currentUser()?.tokens?.refreshToken ?? null;
   }
 
   private persistSession(result: AuthResult): void {

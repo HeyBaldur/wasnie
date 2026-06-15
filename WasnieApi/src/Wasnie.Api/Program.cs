@@ -175,6 +175,31 @@ try
                     QueueLimit = 0,
                 }));
 
+        // 2FA verify: per-IP, 5 requests / 15 min — anti brute-force on 6-digit code.
+        options.AddPolicy("auth-verify-2fa", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthVerify2Fa:PermitLimit", 5),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthVerify2Fa:WindowSeconds", 900)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // 2FA profile actions: per-user, 10 requests / 5 min.
+        options.AddPolicy("profile-2fa", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Profile2Fa:PermitLimit", 10),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:Profile2Fa:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
         if (!builder.Environment.IsDevelopment())
         {
             var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);

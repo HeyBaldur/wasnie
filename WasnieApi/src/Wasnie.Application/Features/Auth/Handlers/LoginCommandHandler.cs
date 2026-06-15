@@ -48,6 +48,16 @@ public sealed class LoginCommandHandler(
         }
 
         var roles = await identityService.GetUserRolesAsync(userId);
+
+        // 2FA check: if enabled, issue challenge token instead of full session.
+        var twoFactorEnabled = await identityService.IsTwoFactorEnabledAsync(userId);
+        if (twoFactorEnabled)
+        {
+            var challengeToken = tokenService.GenerateTwoFactorChallengeToken(userId);
+            return Result<AuthResultDto>.Success(
+                AuthMapper.ToTwoFactorChallengeDto(userId, email, tenantId, tenant.Slug, roles, challengeToken));
+        }
+
         var tokens = await tokenService.GenerateTokenPairAsync(userId, email, tenantId, roles);
 
         try

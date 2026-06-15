@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Wasnie.Application.Features.Auth.Commands;
+using Wasnie.Application.Features.Auth.Queries;
 using Wasnie.Application.Features.Profile.Commands;
 using Wasnie.Application.Features.Profile.Queries;
 
@@ -72,5 +74,67 @@ public sealed class ProfileController(IMediator mediator) : ControllerBase
             return BadRequest(new { message = result.Error });
 
         return Ok(new { message = "Email address updated successfully. Please sign in with your new email." });
+    }
+
+    // ── Two-Factor Authentication ───────────────────────────────────────────
+
+    [HttpGet("2fa/status")]
+    public async Task<IActionResult> GetTwoFactorStatus(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetTwoFactorStatusQuery(), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(result.Value);
+    }
+
+    [HttpGet("2fa/setup")]
+    [EnableRateLimiting("profile-2fa")]
+    public async Task<IActionResult> GetTwoFactorSetup(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetTwoFactorSetupQuery(), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("2fa/enable")]
+    [EnableRateLimiting("profile-2fa")]
+    public async Task<IActionResult> EnableTwoFactor(
+        [FromBody] EnableTwoFactorCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("2fa/disable")]
+    [EnableRateLimiting("profile-2fa")]
+    public async Task<IActionResult> DisableTwoFactor(
+        [FromBody] DisableTwoFactorCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { message = "Two-factor authentication has been disabled." });
+    }
+
+    [HttpPost("2fa/recovery-codes")]
+    [EnableRateLimiting("profile-2fa")]
+    public async Task<IActionResult> RegenerateRecoveryCodes(
+        [FromBody] RegenerateRecoveryCodesCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { recoveryCodes = result.Value });
     }
 }
