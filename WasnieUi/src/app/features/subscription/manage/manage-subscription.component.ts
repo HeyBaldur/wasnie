@@ -31,6 +31,18 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
   private readonly toast = inject(WsToastService);
   private readonly router = inject(Router);
 
+  readonly features = [
+    { nameKey: 'ONBOARDING.CAP_PLAN_BUILDER_NAME',  descKey: 'ONBOARDING.CAP_PLAN_BUILDER_DESC'  },
+    { nameKey: 'ONBOARDING.CAP_REP_DIRECTORY_NAME', descKey: 'ONBOARDING.CAP_REP_DIRECTORY_DESC' },
+    { nameKey: 'ONBOARDING.CAP_QUOTA_NAME',         descKey: 'ONBOARDING.CAP_QUOTA_DESC'         },
+    { nameKey: 'ONBOARDING.CAP_AUTO_CALC_NAME',     descKey: 'ONBOARDING.CAP_AUTO_CALC_DESC'     },
+    { nameKey: 'ONBOARDING.CAP_PAY_RUN_NAME',       descKey: 'ONBOARDING.CAP_PAY_RUN_DESC'       },
+    { nameKey: 'ONBOARDING.CAP_DASHBOARD_NAME',     descKey: 'ONBOARDING.CAP_DASHBOARD_DESC'     },
+    { nameKey: 'ONBOARDING.CAP_EXCEL_NAME',         descKey: 'ONBOARDING.CAP_EXCEL_DESC'         },
+    { nameKey: 'ONBOARDING.CAP_MULTICURRENCY_NAME', descKey: 'ONBOARDING.CAP_MULTICURRENCY_DESC' },
+    { nameKey: 'ONBOARDING.CAP_AUDIT_NAME',         descKey: 'ONBOARDING.CAP_AUDIT_DESC'         },
+  ] as const;
+
   readonly subscription = signal<CurrentSubscription | null>(null);
   readonly plans = signal<SubscriptionPlan[]>([]);
   readonly loading = signal(true);

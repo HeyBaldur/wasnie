@@ -104,21 +104,24 @@ try
             o.QueueLimit = 0;
         });
 
-        var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);
-        var globalWindowSeconds = builder.Configuration.GetValue<int>("RateLimiting:Global:WindowSeconds", 60);
-
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        if (!builder.Environment.IsDevelopment())
         {
-            var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var key = userId ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
-            return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+            var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);
+            var globalWindowSeconds = builder.Configuration.GetValue<int>("RateLimiting:Global:WindowSeconds", 60);
+
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
             {
-                PermitLimit = globalPermitLimit,
-                Window = TimeSpan.FromSeconds(globalWindowSeconds),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0,
+                var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var key = userId ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = globalPermitLimit,
+                    Window = TimeSpan.FromSeconds(globalWindowSeconds),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                });
             });
-        });
+        }
     });
 
     builder.Services.AddCors(options =>

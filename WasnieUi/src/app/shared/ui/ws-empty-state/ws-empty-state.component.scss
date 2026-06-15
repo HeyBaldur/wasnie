@@ -13,11 +13,19 @@
 }
 
 .ws-es__illustration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 160px;
   height: 120px;
   margin-bottom: var(--space-2);
   opacity: 0.85;
   color: var(--color-text-tertiary);
+
+  svg {
+    width: 120px;
+    height: 120px;
+  }
 }
 
 .ws-es__icon-wrap {

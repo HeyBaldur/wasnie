@@ -121,6 +121,22 @@
         </div>
       }
 
+      <!-- Capabilities — included in all plans -->
+      <section class="sub-capabilities" aria-label="{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}">
+        <p class="sub-capabilities__heading">{{ 'ONBOARDING.CAP_SECTION_HEADING' | translate }}</p>
+        <div class="sub-capabilities__grid">
+          @for (f of features; track f.nameKey) {
+            <div class="sub-cap-item">
+              <span class="sub-cap-item__check" aria-hidden="true">✓</span>
+              <div class="sub-cap-item__body">
+                <p class="sub-cap-item__name">{{ f.nameKey | translate }}</p>
+                <p class="sub-cap-item__desc">{{ f.descKey | translate }}</p>
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+
       <!-- Plan selection section (upgrade / downgrade) -->
       @if (upgradePlans.length > 0) {
         <div class="upgrade-section">
