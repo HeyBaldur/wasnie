@@ -18,9 +18,14 @@ export class TopbarComponent implements OnInit {
   private readonly subscriptionService = inject(SubscriptionService);
 
   readonly dropdownOpen = signal(false);
-  private readonly currentTier = signal<string | null>(null);
+  private readonly _tier = signal<string | null>(null);
 
-  readonly isFreeTier = computed(() => this.currentTier() === 'Free');
+  readonly isFreeTier = computed(() => this._tier() === 'Free');
+  readonly isPaidTier = computed(() => {
+    const t = this._tier();
+    return t === 'Starter' || t === 'Growth' || t === 'Scale';
+  });
+  readonly tierName = computed(() => this._tier());
 
   readonly userInitial = computed(() => {
     const email = this.authService.currentUser()?.email ?? '';
@@ -34,7 +39,7 @@ export class TopbarComponent implements OnInit {
 
   ngOnInit(): void {
     this.subscriptionService.getCurrent().subscribe({
-      next: (sub) => this.currentTier.set(sub.tier),
+      next: (sub) => this._tier.set(sub.tier),
       error: () => {},
     });
   }
@@ -44,6 +49,10 @@ export class TopbarComponent implements OnInit {
   }
 
   goToUpgrade(): void {
+    void this.router.navigateByUrl('/subscription');
+  }
+
+  goToSubscription(): void {
     void this.router.navigateByUrl('/subscription');
   }
 

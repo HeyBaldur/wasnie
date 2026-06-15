@@ -8,6 +8,128 @@
 
 ## Sessions (newest first)
 
+## 2026-06-15 — WI-PLAN-BADGE v2: Gradientes por tier + ícono check
+
+**Scope:** Reemplazar badge plano por estilo "gradient border button" con gradiente específico por tier + SVG rosette-discount-check.
+
+**Clases Tailwind no disponibles en este proyecto (reportadas y sustituidas sin cambiar el look):**
+- `bg-neutral-primary-soft` → `bg-[var(--color-surface-raised)]` — exactamente el fondo del topbar; el gradiente asoma como "borde" de 2px (padding `p-0.5`) alrededor del inner span
+- `text-heading` → `text-[var(--color-fg-primary)]` — color de texto primario del proyecto, CSS var adapta dark mode automáticamente
+- `rounded-base` → `rounded-lg` (outer) / `rounded-md` (inner span, ligeramente menor para el efecto borde)
+- `dark:text-white`, `group-hover:dark:bg-transparent` → omitidos — el proyecto usa `[data-theme='dark']` con CSS vars, NO el `dark:` de Tailwind; `--color-fg-primary` ya es light-ish en dark mode
+
+**Mapeo de gradientes (clases exactas del founder, todas estándar Tailwind v4):**
+- Starter: `from-purple-600 to-blue-500`, `focus:ring-blue-300`
+- Growth: `from-cyan-500 to-blue-500`, `focus:ring-cyan-200`
+- Scale: `from-green-400 to-blue-600`, `focus:ring-green-200`
+
+**Efecto hover:** `group` en outer button + `group-hover:bg-transparent` en inner span → inner span se vuelve transparente revelando el gradiente completo; `hover:text-white` en outer button garantiza legibilidad.
+
+**SVG:** `icon-tabler-rosette-discount-check`, `width="16" height="16"`, `stroke="currentColor"` (adapta a hover blanco automáticamente), `style="flex-shrink:0"`.
+
+**Estrategia de template:** 3 bloques `@if/else-if` por tier — las clases Tailwind aparecen literal en el .html → scanner de Tailwind v4 las incluye en el CSS.
+
+**Limpieza:** SCSS `.topbar__plan-badge` + `.topbar__plan-badge__dot` + variantes `[data-tier]` eliminados.
+
+**Build:** `ng build --configuration production` — 0 errores TypeScript. Warnings pre-existentes sin cambio.
+
+## 2026-06-15 — WI-PLAN-BADGE: Badge del plan activo en barra superior
+
+**Scope:** Mostrar badge del plan activo (Starter/Growth/Scale) en la barra superior. Free no cambia.
+
+**Fuente del tier:** `SubscriptionService.getCurrent()` → `sub.tier` (ya se usaba en `TopbarComponent` para el gate del botón Upgrade). Renombrado `currentTier` → `_tier` (privado) + expuesto vía computeds públicos.
+
+**Cambios — `topbar.component.ts`:**
+- Renombrado signal privado a `_tier`
+- Añadidos: `isPaidTier = computed(...)` (true si Starter/Growth/Scale), `tierName = computed(...)` (expone nombre para template)
+- Añadido método `goToSubscription()` (navega a `/subscription`)
+
+**Cambios — `topbar.component.html`:**
+- Nuevo bloque `@if (isPaidTier())`: `<button class="topbar__plan-badge" [attr.data-tier]="tierName()?.toLowerCase()" (click)="goToSubscription()">` con dot span + nombre del tier
+- Free: sin cambios (bloque Upgrade intacto)
+
+**Cambios — `topbar.component.scss`:**
+- `.topbar__plan-badge`: pill `height: 28px`, `border-radius: 9999px`, `font-size: var(--font-size-12)`, `font-weight: 600`
+- `.topbar__plan-badge__dot`: indicador circular 5×5 px, `opacity: 0.65`
+- Variantes por `[data-tier]`: starter=info tokens, growth=warning tokens, scale=brand tokens
+- Hover: `opacity: 0.75`; focus-visible: `var(--focus-ring)`
+
+**i18n:** `TOPBAR.PLAN_BADGE_TOOLTIP` añadida a EN/ES/PL.
+
+**Estados de borde:** `_tier` inicia en `null` → `isPaidTier()` = false → badge no aparece durante carga ni en error. Sin parpadeo.
+
+**Build:** `ng build --configuration production` — 0 errores. Warnings son todos pre-existentes (unused imports en otros componentes; bundle 593 kB pre-existente).
+
+**Smoke esperado:** Cuenta Starter → badge azul; Growth → badge ámbar; Scale → badge brand. Clic → `/subscription`. Free → sin badge, "Upgrade" intacto.
+
+## 2026-06-15 — WI-TENANT-SETTINGS v2: Seed incompleto — 7 campos en vez de 2
+
+**Scope:** El fix previo (RegisterTenantCommandHandler) sembraba solo 2 de 7 field requirements. Cuenta nueva mostraba solo Email + HireDate; cuenta vieja mostraba los 7 correctos.
+
+**Step 0 — Lista canónica (fuente de verdad: 3 migraciones + 2 constantes):**
+
+| Entity | Field | Constante | Default nuevo tenant |
+|---|---|---|---|
+| Payee | Email | `PayeeFieldNames.Email` | false (Optional) |
+| Payee | HireDate | `PayeeFieldNames.HireDate` | false (Optional) |
+| Payee | Role | `PayeeFieldNames.Role` | false (Optional) — añadido en `P2_PayeeNewColumns` |
+| Payee | ManagerId | `PayeeFieldNames.ManagerId` | false (Optional) — idem |
+| Payee | EmploymentType | `PayeeFieldNames.EmploymentType` | false (Optional) — idem |
+| Payee | Location | `PayeeFieldNames.Location` | false (Optional) — idem |
+| Transaction | PayeeId | `TransactionFieldNames.PayeeId` | false (Optional) — `P2_PayeeLifecycle` |
+
+Nota: Transaction/PayeeId aparece como Required en la cuenta vieja del founder porque fue cambiado manualmente via UI — el default de la migración también fue Optional=0.
+
+**Fix — `RegisterTenantCommandHandler.cs`:**
+- Añadido `using Wasnie.Application.Common.Constants;`
+- Reemplazado el `foreach` de 2 campos por array de 7 usando las constantes canónicas
+- Build: 0 errores
+
+**Repair SQL (7 tenants afectados — 5 INSERTs con WHERE NOT EXISTS):**
+Reparó Role, ManagerId, EmploymentType, Location, Transaction/PayeeId para tenants con solo 2 campos.
+
+**Verificación DB:** `SELECT TenantName, COUNT(*) AS FieldCount … GROUP BY` — todos los 17 tenants muestran FieldCount=7. Sin duplicados.
+
+**Verificación runtime pendiente:** Crear tenant nuevo → /admin → Field requirements debe mostrar los 7 campos. Cuenta vieja: sin cambios.
+
+## 2026-06-15 — WI-TENANT-SETTINGS: Field Requirements empty + Architecture amendment
+
+**Scope:** Two work items. (1) Bug: `/admin` Tenant Settings "Field requirements" section showed title/description but zero controls. (2) Architecture amendment: permanent rule mandating migration apply+verify.
+
+**Root cause — Field Requirements empty (Step 0 diagnosis):**
+- Template: `@for (req of requirements(); track req.fieldName)` — empty signal array → empty content; title/desc are outside the loop and always render regardless.
+- `GET /api/settings/field-requirements` → `GetFieldRequirementsQuery` → queries `db.FieldRequirementSettings` with tenant filter → returns `[]` for tenants with no rows.
+- Migration `P2_FieldRequirementSettings` (2026-06-01) seeded existing tenants (`INSERT INTO FieldRequirementSettings SELECT NEWID(), Id, 'Payee', 'Email', 1 FROM Tenants …`) but added comment: *"New tenants created going forward get Optional defaults, set by the tenant-creation path."* That path was never implemented.
+- `RegisterTenantCommandHandler` had no `FieldRequirementSetting.Create()` call anywhere.
+
+**Fix — `RegisterTenantCommandHandler.cs`:**
+- Added `using Wasnie.Domain.Settings;` to usings.
+- After `dbContext.Tenants.Add(tenant)`, before `SaveChangesAsync`: `foreach` loop seeding `("Payee", "Email")` and `("Payee", "HireDate")` with `isRequired: false`.
+- Build result: 0 errors.
+
+**Repair SQL (existing affected tenants — 8 tenants repaired):**
+```sql
+INSERT INTO [dbo].[FieldRequirementSettings] (Id, TenantId, EntityName, FieldName, IsRequired)
+SELECT NEWID(), t.Id, 'Payee', 'Email', 0 FROM Tenants t
+WHERE NOT EXISTS (SELECT 1 FROM FieldRequirementSettings f WHERE f.TenantId = t.Id AND f.EntityName = 'Payee' AND f.FieldName = 'Email');
+
+INSERT INTO [dbo].[FieldRequirementSettings] (Id, TenantId, EntityName, FieldName, IsRequired)
+SELECT NEWID(), t.Id, 'Payee', 'HireDate', 0 FROM Tenants t
+WHERE NOT EXISTS (SELECT 1 FROM FieldRequirementSettings f WHERE f.TenantId = t.Id AND f.EntityName = 'Payee' AND f.FieldName = 'HireDate');
+```
+Result: 8 rows affected per query. All 17 tenants now have Payee/Email + Payee/HireDate rows.
+
+**Appearance section:** Confirmed purely client-side (static `SUPPORTED_LANGS` + `THEME_OPTIONS` arrays, no API call) — title/desc AND controls always render. Not a bug.
+
+**Architecture amendment (ARCHITECTURE.md v1.0 → v1.1):**
+- Renamed "Critical Twelve" → "Critical Thirteen"; added Rule 13: migrations must be applied and verified before WI complete.
+- `08-breaking-change-protocol.md`: added Rule 8.4.4 (3 required steps: apply, verify, report failure explicitly; 3 documented failure modes: DLL lock, missing Designer.cs, wrong connection string). Incident context preserved.
+- Routing table: "Database migration" now requires reading file 08.
+- Changelog entry added to both files.
+- Triggered by: "IsQualified" column incident + "PasswordResetTokens" table incident (both 2026-06-15).
+
+**Verification pending:** Restart API → founder tests `/admin` → Field Requirements shows Email + HireDate toggle controls. Register new test tenant → same 2 controls present.
+
 ## 2026-06-15 — WI-PASSWORD-RESET-DEBUG: Silent failure diagnosis + fix
 
 **Scope:** Diagnose why `request-password-reset` endpoint showed success screen but produced no `[DEV]` log and sent no email.

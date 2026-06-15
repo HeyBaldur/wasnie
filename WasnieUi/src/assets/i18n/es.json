@@ -131,9 +131,6 @@
     "COUNTRY_ES": "España",
     "COUNTRY_SE": "Suecia"
   },
-  "COMMON": {
-    "NO_RESULTS": "Sin resultados"
-  },
   "SESSION": {
     "WARNING_TITLE": "La sesión expirará pronto",
     "WARNING_BODY": "Has estado inactivo. Por tu seguridad, la sesión se cerrará automáticamente.",
@@ -175,7 +172,8 @@
     "SIGN_OUT": "Cerrar sesión",
     "STATUS_OPERATIONAL": "Todos los sistemas operativos",
     "UPGRADE_BTN": "Mejorar plan",
-    "UPGRADE_TOOLTIP": "Estás en el plan Gratuito — mejora al Profesional"
+    "UPGRADE_TOOLTIP": "Estás en el plan Gratuito — mejora al Profesional",
+    "PLAN_BADGE_TOOLTIP": "Gestionar suscripción"
   },
   "NAV": {
     "TOGGLE": "Contraer barra lateral",
@@ -258,7 +256,8 @@
     "UPDATED_AT": "Actualizado",
     "CONTINUE": "Continuar",
     "DONE": "Listo",
-    "RETRY": "Intentar de nuevo"
+    "RETRY": "Intentar de nuevo",
+    "NO_RESULTS": "Sin resultados"
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",

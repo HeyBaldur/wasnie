@@ -131,9 +131,6 @@
     "COUNTRY_ES": "Hiszpania",
     "COUNTRY_SE": "Szwecja"
   },
-  "COMMON": {
-    "NO_RESULTS": "Brak wyników"
-  },
   "SESSION": {
     "WARNING_TITLE": "Sesja wkrótce wygaśnie",
     "WARNING_BODY": "Byłeś nieaktywny. Dla Twojego bezpieczeństwa zostaniesz automatycznie wylogowany.",
@@ -175,7 +172,8 @@
     "SIGN_OUT": "Wyloguj się",
     "STATUS_OPERATIONAL": "Wszystkie systemy działają poprawnie",
     "UPGRADE_BTN": "Uaktualnij",
-    "UPGRADE_TOOLTIP": "Jesteś na planie Darmowym — przejdź na Profesjonalny"
+    "UPGRADE_TOOLTIP": "Jesteś na planie Darmowym — przejdź na Profesjonalny",
+    "PLAN_BADGE_TOOLTIP": "Zarządzaj subskrypcją"
   },
   "NAV": {
     "TOGGLE": "Zwiń pasek boczny",
@@ -258,7 +256,8 @@
     "UPDATED_AT": "Zaktualizowano",
     "CONTINUE": "Kontynuuj",
     "DONE": "Gotowe",
-    "RETRY": "Spróbuj ponownie"
+    "RETRY": "Spróbuj ponownie",
+    "NO_RESULTS": "Brak wyników"
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",

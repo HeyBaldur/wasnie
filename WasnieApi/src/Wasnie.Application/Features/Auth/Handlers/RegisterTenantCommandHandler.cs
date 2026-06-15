@@ -14,6 +14,8 @@ using Wasnie.Domain.Audit;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Entities;
 using Wasnie.Domain.Identity;
+using Wasnie.Application.Common.Constants;
+using Wasnie.Domain.Settings;
 
 namespace Wasnie.Application.Features.Auth.Handlers;
 
@@ -39,6 +41,26 @@ public sealed class RegisterTenantCommandHandler(
 
         var tenant = Tenant.Create(request.TenantName, request.TenantSlug, guid.NewGuid(), clock.UtcNowOffset);
         dbContext.Tenants.Add(tenant);
+
+        // Seed all 7 field requirement settings (Optional) for every new tenant.
+        // Canonical list mirrors the three seeding migrations: P2_FieldRequirementSettings,
+        // P2_PayeeNewColumns, and P2_PayeeLifecycle. All default to Optional so admins
+        // can configure to their preference.
+        foreach (var (entityName, fieldName) in new (string, string)[]
+        {
+            (PayeeFieldNames.Entity,       PayeeFieldNames.Email),
+            (PayeeFieldNames.Entity,       PayeeFieldNames.HireDate),
+            (PayeeFieldNames.Entity,       PayeeFieldNames.Role),
+            (PayeeFieldNames.Entity,       PayeeFieldNames.ManagerId),
+            (PayeeFieldNames.Entity,       PayeeFieldNames.EmploymentType),
+            (PayeeFieldNames.Entity,       PayeeFieldNames.Location),
+            (TransactionFieldNames.Entity, TransactionFieldNames.PayeeId),
+        })
+        {
+            dbContext.FieldRequirementSettings.Add(
+                FieldRequirementSetting.Create(guid.NewGuid(), tenant.Id, entityName, fieldName, isRequired: false));
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var (succeeded, userId, errors) = await identityService.CreateUserAsync(

@@ -131,9 +131,6 @@
     "COUNTRY_ES": "Spain",
     "COUNTRY_SE": "Sweden"
   },
-  "COMMON": {
-    "NO_RESULTS": "No results found"
-  },
   "SESSION": {
     "WARNING_TITLE": "Session expiring soon",
     "WARNING_BODY": "You have been inactive. For your security, you will be signed out automatically.",
@@ -175,7 +172,8 @@
     "SIGN_OUT": "Sign out",
     "STATUS_OPERATIONAL": "All systems operational",
     "UPGRADE_BTN": "Upgrade",
-    "UPGRADE_TOOLTIP": "You're on the Free plan — upgrade to Professional"
+    "UPGRADE_TOOLTIP": "You're on the Free plan — upgrade to Professional",
+    "PLAN_BADGE_TOOLTIP": "Manage your subscription"
   },
   "NAV": {
     "TOGGLE": "Toggle sidebar",
@@ -258,7 +256,8 @@
     "UPDATED_AT": "Updated",
     "CONTINUE": "Continue",
     "DONE": "Done",
-    "RETRY": "Try again"
+    "RETRY": "Try again",
+    "NO_RESULTS": "No results found"
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
