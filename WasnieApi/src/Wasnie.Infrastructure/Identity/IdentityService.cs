@@ -18,7 +18,7 @@ public sealed class IdentityService(
         {
             UserName = email,
             Email = email,
-            EmailConfirmed = true
+            EmailConfirmed = false,
         };
 
         var createResult = await userManager.CreateAsync(user, password);
@@ -59,10 +59,10 @@ public sealed class IdentityService(
         return (true, user.Id, user.Email);
     }
 
-    public async Task<string?> FindUserIdByEmailAsync(string userId)
+    public async Task<string?> FindUserIdByEmailAsync(string email)
     {
-        var user = await userManager.FindByIdAsync(userId);
-        return user?.Email;
+        var user = await userManager.FindByEmailAsync(email);
+        return user?.Id;
     }
 
     public async Task<string?> FindEmailByUserIdAsync(string userId)
@@ -85,12 +85,31 @@ public sealed class IdentityService(
     public async Task<string?> GetTenantIdClaimAsync(string userId)
     {
         var user = await userManager.FindByIdAsync(userId);
-        if (user is null)
-        {
-            return null;
-        }
-
+        if (user is null) return null;
         var claims = await userManager.GetClaimsAsync(user);
         return claims.FirstOrDefault(c => c.Type == "tenant_id")?.Value;
+    }
+
+    public async Task<bool> IsEmailConfirmedAsync(string userId)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        return user?.EmailConfirmed ?? false;
+    }
+
+    public async Task<string?> GetClaimAsync(string userId, string claimType)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null) return null;
+        var claims = await userManager.GetClaimsAsync(user);
+        return claims.FirstOrDefault(c => c.Type == claimType)?.Value;
+    }
+
+    public async Task<bool> SetEmailConfirmedAsync(string userId)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null) return false;
+        user.EmailConfirmed = true;
+        var result = await userManager.UpdateAsync(user);
+        return result.Succeeded;
     }
 }

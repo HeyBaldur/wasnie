@@ -36,5 +36,18 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.HasSelectedPlan)
             .IsRequired()
             .HasDefaultValue(false);
+
+        builder.Property(t => t.IsQualified)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(t => t.QualifiedAt);
+        builder.Property(t => t.Country).HasMaxLength(100);
+        builder.Property(t => t.PhoneNumber).HasMaxLength(50);
+        builder.Property(t => t.HowHeardAboutUs).HasMaxLength(100);
+        builder.Property(t => t.SalesVolumeRange).HasMaxLength(50);
+        builder.Property(t => t.CurrentSystem).HasMaxLength(100);
+        builder.Property(t => t.LegalAcceptedAt);
+        builder.Property(t => t.LegalAcceptedVersion).HasMaxLength(20);
     }
 }

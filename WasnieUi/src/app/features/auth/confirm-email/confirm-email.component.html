@@ -1,0 +1,38 @@
+<div class="confirm-email">
+  <div class="confirm-email__card">
+
+    @if (state() === 'confirming') {
+      <div class="confirm-email__spinner" aria-label="Confirming..." role="status">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+      </div>
+      <p class="confirm-email__message">{{ 'CONFIRM_EMAIL.CONFIRMING' | translate }}</p>
+    }
+
+    @if (state() === 'success') {
+      <div class="confirm-email__icon confirm-email__icon--success" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5"/>
+        </svg>
+      </div>
+      <h1 class="confirm-email__title">{{ 'CONFIRM_EMAIL.SUCCESS_TITLE' | translate }}</h1>
+      <p class="confirm-email__message">{{ 'CONFIRM_EMAIL.SUCCESS_DESC' | translate }}</p>
+    }
+
+    @if (state() === 'error') {
+      <div class="confirm-email__icon confirm-email__icon--error" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        </svg>
+      </div>
+      <h1 class="confirm-email__title">{{ 'CONFIRM_EMAIL.ERROR_TITLE' | translate }}</h1>
+      <p class="confirm-email__message">{{ errorMsg() }}</p>
+      <div class="confirm-email__actions">
+        <ws-button variant="primary" (click)="requestNew()">{{ 'CONFIRM_EMAIL.REQUEST_NEW' | translate }}</ws-button>
+        <ws-button variant="ghost" (click)="goToLogin()">{{ 'AUTH.LOGIN' | translate }}</ws-button>
+      </div>
+    }
+
+  </div>
+</div>

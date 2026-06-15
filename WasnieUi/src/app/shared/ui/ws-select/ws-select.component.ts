@@ -13,7 +13,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { Observable, Subject, catchError, debounceTime, of, switchMap, tap } from 'rxjs';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { IconComponent } from '../../components/icon/icon.component';
 
 export interface SelectOption {
@@ -38,6 +38,7 @@ export interface SelectOption {
 })
 export class WsSelectComponent implements ControlValueAccessor {
   @ViewChild('searchInput') searchInputRef!: ElementRef<HTMLInputElement>;
+  @ViewChild('trigger') triggerRef!: ElementRef<HTMLElement>;
 
   // options is now optional — existing callers pass it unchanged; async callers omit it
   readonly options = input<SelectOption[]>([]);
@@ -45,6 +46,7 @@ export class WsSelectComponent implements ControlValueAccessor {
   readonly searchable = input(false);
   readonly label = input('');
   readonly error = input('');
+  readonly noResultsLabel = input('COMMON.NO_RESULTS');
 
   // Async mode: consumer provides a function that turns a query string into an Observable<SelectOption[]>.
   // When non-null the component is in async mode; the [options] input is ignored.
@@ -85,6 +87,7 @@ export class WsSelectComponent implements ControlValueAccessor {
 
   private readonly host = inject(ElementRef);
   private readonly _destroyRef = inject(DestroyRef);
+  private readonly _translate = inject(TranslateService);
   private readonly _searchSubject$ = new Subject<string>();
 
   // In async mode, selectedOption checks asyncOptions first, then falls back to initialOption (edit
@@ -98,13 +101,20 @@ export class WsSelectComponent implements ControlValueAccessor {
   });
 
   // In async mode, the server already filtered — return asyncOptions as-is (no client-side filter).
-  // In client-side mode, behavior is byte-for-byte identical to the original.
+  // In client-side mode, filter against the TRANSLATED label, normalizing diacritics so "espana"
+  // matches "España" and "pol" matches "Poland/Polonia/Polska" regardless of case or accent.
   readonly filteredOptions = computed(() => {
     if (this.searchFn()) return this.asyncOptions();
-    const q = this.searchQuery().toLowerCase();
+    const q = this._norm(this.searchQuery());
     if (!q) return this.options();
-    return this.options().filter(o => o.label.toLowerCase().includes(q));
+    return this.options().filter(o =>
+      this._norm(this._translate.instant(String(o.label))).includes(q)
+    );
   });
+
+  private _norm(s: string): string {
+    return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  }
 
   readonly hostClasses = computed(() =>
     [
@@ -139,7 +149,8 @@ export class WsSelectComponent implements ControlValueAccessor {
 
   openDropdown(): void {
     if (this.isDisabled()) return;
-    const triggerEl = this.host.nativeElement as HTMLElement;
+    // Measure the trigger button specifically, not the host (which includes the label above).
+    const triggerEl = (this.triggerRef?.nativeElement ?? this.host.nativeElement) as HTMLElement;
     const triggerRect = triggerEl.getBoundingClientRect();
 
     const containerBottom = window.innerHeight - 8;
@@ -255,6 +266,16 @@ export class WsSelectComponent implements ControlValueAccessor {
     if (!this.host.nativeElement.contains(event.target)) {
       this.closeDropdown();
     }
+  }
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    if (this.isOpen()) this.closeDropdown();
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (this.isOpen()) this.closeDropdown();
   }
 
   writeValue(val: string | number): void {

@@ -27,6 +27,7 @@ export class WsInputComponent implements ControlValueAccessor {
   readonly label = input('');
   readonly inputId = input('');
   readonly autocomplete = input('');
+  readonly maxlength = input<number | null>(null);
 
   readonly valueChange = output<string>();
 

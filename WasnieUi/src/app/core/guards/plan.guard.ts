@@ -13,6 +13,15 @@ export const planGuard: CanActivateFn = () => {
   }
 
   const user = currentUser.currentUser();
+
+  if (user && !user.emailConfirmed) {
+    return router.createUrlTree(['/auth/confirm-email-pending']);
+  }
+
+  if (user && !user.isQualified) {
+    return router.createUrlTree(['/onboarding/qualify']);
+  }
+
   if (user && !user.hasSelectedPlan) {
     return router.createUrlTree(['/onboarding/plan']);
   }

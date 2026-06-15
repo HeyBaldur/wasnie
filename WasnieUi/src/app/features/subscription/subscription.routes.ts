@@ -1,8 +1,17 @@
 import { Routes } from '@angular/router';
 import { onboardingGuard } from '../../core/guards/onboarding.guard';
+import { qualificationGuard } from '../../core/guards/qualification.guard';
 import { authGuard } from '../../core/guards/auth.guard';
 
 export const subscriptionRoutes: Routes = [
+  {
+    path: 'qualify',
+    canActivate: [qualificationGuard],
+    loadComponent: () =>
+      import('../onboarding/qualification/qualification.component').then(
+        (m) => m.QualificationComponent
+      ),
+  },
   {
     path: 'plan',
     canActivate: [onboardingGuard],

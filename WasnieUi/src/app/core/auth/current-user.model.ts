@@ -8,5 +8,7 @@ export interface CurrentUser {
   tenantSlug: string;
   tier: Tier;
   hasSelectedPlan: boolean;
+  emailConfirmed: boolean;
+  isQualified: boolean;
   permissions: string[];
 }

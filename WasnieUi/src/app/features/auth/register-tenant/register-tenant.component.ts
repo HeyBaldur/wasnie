@@ -93,7 +93,9 @@ export class RegisterTenantComponent {
 
     this.authService.registerTenant(this.form.getRawValue()).subscribe({
       next: () => {
-        this.currentUser.refresh().subscribe(() => this.router.navigateByUrl('/onboarding/plan'));
+        sessionStorage.setItem('wasnie:confirm-email', this.form.controls.adminEmail.value);
+        this.currentUser.refresh().subscribe(() =>
+          this.router.navigateByUrl('/auth/confirm-email-pending'));
       },
       error: (err: HttpErrorResponse) => {
         this.error.set(err?.error?.message ?? this.translate.instant('ERRORS.GENERIC'));

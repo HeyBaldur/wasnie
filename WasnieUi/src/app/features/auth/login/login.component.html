@@ -15,7 +15,17 @@
         <p class="auth-page__card-subtitle">{{ 'APP.TAGLINE' | translate }}</p>
 
         <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
-          @if (error()) {
+          @if (alreadyConfirmed()) {
+            <div class="auth-form__confirmed">
+              <p>{{ 'AUTH.ALREADY_CONFIRMED' | translate }}</p>
+            </div>
+          } @else if (emailNotConfirmed()) {
+            <div class="auth-form__unconfirmed">
+              <p>{{ 'AUTH.EMAIL_NOT_CONFIRMED' | translate }}
+                <button type="button" class="auth-form__resend-link" (click)="goToConfirmPending()">{{ 'AUTH.RESEND_CONFIRMATION' | translate }}</button>
+              </p>
+            </div>
+          } @else if (error()) {
             <div class="auth-form__error">{{ error() }}</div>
           }
 

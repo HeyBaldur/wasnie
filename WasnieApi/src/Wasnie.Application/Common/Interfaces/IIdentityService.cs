@@ -19,4 +19,10 @@ public interface IIdentityService
     Task<IList<string>> GetUserRolesAsync(string userId);
 
     Task<string?> GetTenantIdClaimAsync(string userId);
+
+    Task<bool> IsEmailConfirmedAsync(string userId);
+
+    Task<string?> GetClaimAsync(string userId, string claimType);
+
+    Task<bool> SetEmailConfirmedAsync(string userId);
 }

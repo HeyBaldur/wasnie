@@ -104,6 +104,19 @@ try
             o.QueueLimit = 0;
         });
 
+        // Resend-confirmation: partitioned by IP (3 requests / 5 minutes per IP).
+        // Separate from auth-login so an attacker cannot burn the shared login bucket.
+        options.AddPolicy("auth-resend", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthResend:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthResend:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
         if (!builder.Environment.IsDevelopment())
         {
             var globalPermitLimit = builder.Configuration.GetValue<int>("RateLimiting:Global:PermitLimit", 100);
@@ -163,6 +176,7 @@ try
     app.UseCors("WasnieUi");
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseMiddleware<ActivationEnforcementMiddleware>();
     app.UseMiddleware<SubscriptionEnforcementMiddleware>();
     app.UseRateLimiter();
 

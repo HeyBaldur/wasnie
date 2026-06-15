@@ -21,4 +21,18 @@ export const authRoutes: Routes = [
         (m) => m.RegisterTenantComponent
       ),
   },
+  {
+    path: 'confirm-email-pending',
+    loadComponent: () =>
+      import('./confirm-email-pending/confirm-email-pending.component').then(
+        (m) => m.ConfirmEmailPendingComponent
+      ),
+  },
+  {
+    path: 'confirm-email',
+    loadComponent: () =>
+      import('./confirm-email/confirm-email.component').then(
+        (m) => m.ConfirmEmailComponent
+      ),
+  },
 ];

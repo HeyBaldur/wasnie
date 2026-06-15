@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.Queries;
+using Wasnie.Application.Common.Interfaces;
 
 namespace Wasnie.Api.Controllers;
 
@@ -79,5 +80,39 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         await mediator.Send(new LogoutCommand(userId), cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("confirm-email")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> ConfirmEmail(
+        [FromQuery] string userId,
+        [FromQuery] string token,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(token))
+            return BadRequest(new { message = "Invalid confirmation link." });
+
+        var result = await mediator.Send(new ConfirmEmailCommand(userId, token), cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { message = "Email confirmed." });
+    }
+
+    [HttpPost("resend-confirmation")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-resend")]
+    public async Task<IActionResult> ResendConfirmation(
+        [FromBody] ResendEmailConfirmationCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { message = "If that email exists, a confirmation link has been sent." });
     }
 }

@@ -56,6 +56,7 @@ export class AuthService {
   clearSessionSilent(): void {
     this._currentUser.set(null);
     localStorage.removeItem('wasnie_session');
+    sessionStorage.removeItem('wasnie:confirm-email');
   }
 
   /**

@@ -8,6 +8,32 @@
 
 ## Sessions (newest first)
 
+## 2026-06-15 — WI-EMAIL-ACTIVATION + WI-PAYMENT-SUBSCRIPTION (cont.)
+
+**Scope:** Three items: (1) SVG icon swap in WsEmptyState; (2) dev rate-limit 429 fix; (3) full Resend email integration + activation funnel (email confirmation + qualification form + hard backend gating).
+
+**Completed:**
+- `WsEmptyState`: replaced 5 custom SVGs with Tabler icons (vocabulary/businessplan/reorder/users/receipt-euro); removed hardcoded `width`/`height` attrs so CSS controls size (160×120px container, 120×120px SVG).
+- `Program.cs`: `GlobalLimiter` gated by `!IsDevelopment()` — eliminates 429 on SPA navigation.
+- Domain: `EmailConfirmationToken` entity (hash, expiry, single-use); `Tenant.Qualify()` method + 9 qualification fields; `AuditActions` extended (TenantRegistered, EmailConfirmationSent, EmailConfirmed, TenantQualified).
+- Application: `IEmailService` interface; `ResendOptions`; `ConfirmEmailCommandHandler`; `ResendEmailConfirmationCommandHandler` (2-min cooldown, security-neutral response); `CompleteQualificationCommandHandler` (idempotent, legalVersion "1.0"); `RegisterTenantCommandHandler` rewritten (stores claims, generates token, sends email); `LoginCommandHandler` blocks unconfirmed with `EMAIL_NOT_CONFIRMED`; `GetCurrentUserHandler` exposes `EmailConfirmed`/`IsQualified`; `CurrentUserDto` extended.
+- Infrastructure: `ResendEmailService` (direct HTTP, named client "Resend", graceful skip when ApiKey empty); `EmailTemplates` (EN/ES/PL HTML); `EmailConfirmationTokenConfiguration`; `IdentityService` extended (IsEmailConfirmedAsync, SetEmailConfirmedAsync, GetClaimAsync, EmailConfirmed=false on create); migration `B1_EmailConfirmationAndQualification`.
+- API: `AuthController` + `/confirm-email` + `/resend-confirmation` endpoints (AllowAnonymous); `OnboardingController` + `/qualify`; `ActivationEnforcementMiddleware` (email gate → qualification gate, exempt paths); registered before SubscriptionEnforcementMiddleware.
+- Frontend: `CurrentUser` model + `emailConfirmed`/`isQualified`; `confirm-email-pending` page; `confirm-email` callback page (auto-confirm, success→/onboarding/qualify, error state); `qualification` form (2-col ws-form-grid, WsSelect options, legal native checkbox with accent-color token); `qualificationGuard`; `planGuard`/`onboardingGuard` updated; `auth.routes` + `subscription.routes` updated; `RegisterTenantComponent` redirects to confirm-email-pending; `LoginComponent` shows unconfirmed warning + resend link button.
+- i18n: EN + ES + PL complete — `AUTH.EMAIL_NOT_CONFIRMED`, `AUTH.RESEND_CONFIRMATION`, `CONFIRM_EMAIL.*` (12 keys), `QUALIFY.*` (30+ keys).
+- Build fixes: duplicate `using Wasnie.Application.Common.Options` in DI.cs; unused `identityService` param in AuthController; `[errorKey]` → `[error]` in qualification template; `type="tel"` → `type="text"` (WsInput doesn't support tel).
+- Backend build: 0 errors, 1 pre-existing warning. Frontend production build: 0 errors, pre-existing bundle budget warning (598 kB vs 500 kB — pre-existing, not introduced here).
+
+**Deferred:**
+- Backend unit tests: email confirmation token flow (single-use, expiry), activation middleware, qualification command, registration handler. (CLAUDE.md overrides no-test rule for money/auth code.)
+- `appsettings.Development.json` `Resend:ApiKey` must be filled in manually by the founder.
+
+**Key decisions:**
+- ApiKey stored only in `appsettings.Development.json` (gitignored) and prod env config — never in committed files.
+- Dev testing: token URL logged at Info level in backend console regardless of Resend send.
+- No WsCheckbox primitive → native `<input type="checkbox">` with `accent-color: var(--color-brand)` for legal acceptance.
+- `ActivationEnforcementMiddleware` runs before `SubscriptionEnforcementMiddleware`; each has distinct exempt path list.
+
 ## 2026-06-13 — WI-WIZARD-CAPABILITIES
 
 **Scope:** Enriquecer el paso 2 del wizard de sign-up con las 9 capacidades validadas por el founder (no es landing de marketing — es información para elegir bien el plan).

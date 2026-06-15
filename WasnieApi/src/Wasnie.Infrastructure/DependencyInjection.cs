@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Abstractions;
-using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Models.Calculation;
 using Wasnie.Application.Models.Imports;
@@ -20,6 +20,7 @@ using Wasnie.Infrastructure.Observability;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
+using Wasnie.Infrastructure.Services.Email;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -82,6 +83,12 @@ public static class DependencyInjection
             .Validate(o => !string.IsNullOrWhiteSpace(o.WebhookSecret),
                 "Stripe:WebhookSecret is required. Run 'stripe listen' to get your whsec_ and add it to appsettings.Development.json.")
             .ValidateOnStart();
+
+        services.AddOptions<ResendOptions>()
+            .Bind(configuration.GetSection(ResendOptions.SectionName));
+
+        services.AddHttpClient("Resend");
+        services.AddScoped<IEmailService, ResendEmailService>();
 
         services.AddScoped<ISubscriptionPlanService, StripeSubscriptionPlanService>();
         services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();

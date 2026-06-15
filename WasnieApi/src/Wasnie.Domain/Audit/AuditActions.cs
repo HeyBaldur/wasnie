@@ -9,6 +9,10 @@ public static class AuditActions
     public const string PasswordChanged = "PASSWORD_CHANGED";
     public const string TokenRefreshed = "TOKEN_REFRESHED";
     public const string AccountLocked = "ACCOUNT_LOCKED";
+    public const string TenantRegistered = "TENANT_REGISTERED";
+    public const string EmailConfirmationSent = "EMAIL_CONFIRMATION_SENT";
+    public const string EmailConfirmed = "EMAIL_CONFIRMED";
+    public const string TenantQualified = "TENANT_QUALIFIED";
 
     // Payees
     public const string PayeeCreated = "PAYEE_CREATED";
