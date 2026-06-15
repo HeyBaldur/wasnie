@@ -15,7 +15,9 @@
         <p class="auth-page__card-subtitle">{{ 'APP.TAGLINE' | translate }}</p>
 
         <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
-          @if (alreadyConfirmed()) {
+          @if (passwordResetSuccess()) {
+            <div class="auth-form__success">{{ 'AUTH.PASSWORD_RESET_SUCCESS' | translate }}</div>
+          } @else if (alreadyConfirmed()) {
             <div class="auth-form__confirmed">
               <p>{{ 'AUTH.ALREADY_CONFIRMED' | translate }}</p>
             </div>
@@ -59,6 +61,8 @@
         <div class="auth-page__card-footer">
           {{ 'AUTH.NO_ACCOUNT' | translate }}
           <a routerLink="/auth/register">{{ 'AUTH.REGISTER' | translate }}</a>
+          <span class="auth-page__card-footer-sep">·</span>
+          <a routerLink="/auth/forgot-password">{{ 'AUTH.FORGOT_PASSWORD' | translate }}</a>
         </div>
       </div>
     </div>

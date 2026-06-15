@@ -29,7 +29,26 @@
     "FOOTER_RIGHTS": "© 2025 Wasnie. Todos los derechos reservados.",
     "EMAIL_NOT_CONFIRMED": "Por favor confirma tu correo electrónico antes de iniciar sesión.",
     "RESEND_CONFIRMATION": "Reenviar correo de confirmación",
-    "ALREADY_CONFIRMED": "Tu cuenta ya está confirmada. Inicia sesión a continuación."
+    "ALREADY_CONFIRMED": "Tu cuenta ya está confirmada. Inicia sesión a continuación.",
+    "FORGOT_PASSWORD": "¿Olvidaste tu contraseña?",
+    "PASSWORD_RESET_SUCCESS": "Contraseña actualizada. Inicia sesión con tu nueva contraseña.",
+    "BACK_TO_LOGIN": "Volver a iniciar sesión"
+  },
+  "FORGOT_PASSWORD": {
+    "TITLE": "¿Olvidaste tu contraseña?",
+    "DESC": "Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.",
+    "SUBMIT": "Enviar enlace de restablecimiento",
+    "SENT_TITLE": "Revisa tu bandeja de entrada",
+    "SENT_DESC": "Si existe una cuenta con ese correo, se ha enviado un enlace de restablecimiento."
+  },
+  "RESET_PASSWORD": {
+    "TITLE": "Establece una nueva contraseña",
+    "NEW_PASSWORD": "Nueva contraseña",
+    "CONFIRM_PASSWORD": "Confirmar nueva contraseña",
+    "SUBMIT": "Restablecer contraseña",
+    "INVALID_LINK": "Este enlace de restablecimiento no es válido o ha expirado.",
+    "REQUEST_NEW": "Solicitar un nuevo enlace",
+    "PASSWORDS_MISMATCH": "Las contraseñas no coinciden."
   },
   "CONFIRM_EMAIL": {
     "TITLE": "Revisa tu bandeja de entrada",

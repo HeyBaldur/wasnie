@@ -7,6 +7,8 @@ public static class AuditActions
     public const string LoginFailure = "LOGIN_FAILURE";
     public const string Logout = "LOGOUT";
     public const string PasswordChanged = "PASSWORD_CHANGED";
+    public const string PasswordResetRequested = "PASSWORD_RESET_REQUESTED";
+    public const string PasswordResetCompleted = "PASSWORD_RESET_COMPLETED";
     public const string TokenRefreshed = "TOKEN_REFRESHED";
     public const string AccountLocked = "ACCOUNT_LOCKED";
     public const string TenantRegistered = "TENANT_REGISTERED";

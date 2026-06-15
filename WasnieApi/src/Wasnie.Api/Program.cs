@@ -80,6 +80,25 @@ try
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+        options.OnRejected = async (ctx, token) =>
+        {
+            ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            ctx.HttpContext.Response.ContentType = "application/json";
+
+            if (ctx.HttpContext.RequestServices.GetService<ILoggerFactory>() is { } lf)
+            {
+                lf.CreateLogger("RateLimiter").LogWarning(
+                    "[DEV] Rate limit exceeded: {Method} {Path} from {IP}",
+                    ctx.HttpContext.Request.Method,
+                    ctx.HttpContext.Request.Path,
+                    ctx.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+            }
+
+            await ctx.HttpContext.Response.WriteAsync(
+                """{"code":"rate_limited","message":"Too many requests. Please try again later."}""",
+                token);
+        };
+
         options.AddFixedWindowLimiter("auth-login", o =>
         {
             o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:PermitLimit", 5);
@@ -113,6 +132,19 @@ try
                 {
                     PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthResend:PermitLimit", 3),
                     Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthResend:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // Password-reset: partitioned by IP (3 requests / 5 minutes per IP).
+        // Separate bucket so an attacker cannot burn shared login quota.
+        options.AddPolicy("auth-password-reset", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthPasswordReset:WindowSeconds", 300)),
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                     QueueLimit = 0,
                 }));

@@ -8,6 +8,57 @@
 
 ## Sessions (newest first)
 
+## 2026-06-15 — WI-PASSWORD-RESET-DEBUG: Silent failure diagnosis + fix
+
+**Scope:** Diagnose why `request-password-reset` endpoint showed success screen but produced no `[DEV]` log and sent no email.
+
+**Root cause analysis:**
+- `ActivationEnforcementMiddleware`: confirmed NOT the issue — only gates authenticated requests; `[AllowAnonymous]` endpoint passes through immediately.
+- Branch 1 of handler (`userId is null`): returned `Success(true)` with **zero log** — invisible failure if email not registered.
+- IP rate limiter (`auth-password-reset`, 3 req / 5 min): returned HTTP 429 before handler ran, with **zero log** — matches symptom after founder tested multiple times.
+
+**Fixes:**
+- `Program.cs`: Added `options.OnRejected` callback to `AddRateLimiter` — logs `[DEV] Rate limit exceeded: {Method} {Path} from {IP}` and returns `{"code":"rate_limited"}` JSON. Previously the rate limiter silently returned 429 with no console output. Frontend `forgot-password.component.ts` always calls `sent.set(true)` (anti-enumeration), so success screen appeared even on 429.
+- `RequestPasswordResetCommandHandler.cs`: Added `[DEV] Password reset: no account found for {EmailMask}` info log to branch 1 before the anti-enumeration early return. HTTP response unchanged (still 200).
+
+**Verification pending:** Restart API → test with founder email → console must show one of: `[DEV] Rate limit exceeded` (most likely — cooldown window may still be active) or `[DEV] Password reset: no account found` (if email lookup fails) or `[DEV] Password reset link for ...` (if flow proceeds correctly).
+
+**Also completed this session:**
+- "Forgot password?" link relocated to card footer inline with "Don't have an account?" (same line, `·` separator).
+
+## 2026-06-15 — WI-PASSWORD-RESET + auth hardening
+
+**Scope:** Full forgot-password / reset-password flow with security hardening. Also several preceding fixes this session: phone validator fix, € symbols on sales volume, `<strong>` tags in i18n, inline resend link on login, backend silent 200 on resend (FindUserIdByEmailAsync copy-paste bug), confirm-email-pending robustness (sessionStorage persistence + redirect if no context), already-confirmed redirect, rate limit hardening (anti-enumeration cooldown, IP-partitioned resend policy, hourly cap), password reset flow.
+
+**Completed (auth hardening):**
+- Phone validator: `validatePhone()` now checks local part after stripping prefix (was comparing length only — "+43 abc" passed).
+- Sales volume dropdown: all VOL_* labels changed from $ to € in EN/ES/PL.
+- `<strong>` tags: split `CONFIRM_EMAIL.DESC` into `DESC_PRE`/`DESC_POST` + `<strong>` in template.
+- Resend link inline: moved inline with "Please confirm your email" text; button styled as inline link.
+- `FindUserIdByEmailAsync` bug: called `FindByIdAsync` instead of `FindByEmailAsync` → silent 200. Fixed; also fixed `RefreshTokenCommandHandler` which called the same method with wrong arg.
+- confirm-email-pending: sessionStorage persistence (`wasnie:confirm-email`), guard redirect if empty, already-confirmed → `/auth/login?alreadyConfirmed=true`.
+- Rate limit: cooldown returns `Success(true)` not 400 (anti-enumeration); `auth-resend` IP-partitioned policy; hourly cap (5/hr); `[DEV]` log before send.
+
+**Completed (password reset):**
+- Domain: `PasswordResetToken` entity (SHA256 hash, expiry, `IsValid()`, `MarkUsed()`).
+- Infrastructure: `PasswordResetTokenConfiguration` (EF, `PasswordResetTokens` table, 2 indexes); migration `B2_PasswordResetTokens` applied.
+- Application: `RequestPasswordResetCommandHandler` (anti-enumeration, cooldown 2 min, cap 5/hr, invalidates prior unused tokens, `[DEV]` URL log before send, `AuditActions.PasswordResetRequested`); `ResetPasswordCommandHandler` (hash lookup, `IsValid()`, password strength ≥10+upper+digit+special, marks used, revokes all refresh tokens, `AuditActions.PasswordResetCompleted`).
+- Identity: `ResetPasswordAsync` added to `IIdentityService` + `IdentityService`.
+- Controller: 2 new endpoints (`request-password-reset`, `reset-password`) with `auth-password-reset` rate limiter.
+- Rate limit: `auth-password-reset` IP-partitioned policy (3 req / 5 min) added to `Program.cs`.
+- Tests: 8 new unit tests in `Auth/PasswordResetHandlerTests.cs`. Total: 519 → 527.
+- Frontend: `AuthService.requestPasswordReset()` + `resetPassword()` (no HttpClient in components).
+- `forgot-password` component (3 files): form → sent state, lock/mail SVG icons, auth-centered card pattern.
+- `reset-password` component (3 files): reads `userId+token` from URL, invalid-link state, `passwordsMatchValidator`, password+confirm fields.
+- `auth.routes.ts`: `forgot-password` (noAuthGuard) + `reset-password` routes added.
+- `login.component`: `passwordResetSuccess` signal; banner; "Forgot password?" link inside `auth-form__password-row`.
+- i18n EN+ES+PL: `FORGOT_PASSWORD.*` (5 keys), `RESET_PASSWORD.*` (7 keys), `AUTH.FORGOT_PASSWORD`, `AUTH.PASSWORD_RESET_SUCCESS`, `AUTH.BACK_TO_LOGIN`.
+
+**Build state:** Backend 0 errors, 527/527 unit tests pass. Frontend 0 errors, 1 pre-existing bundle budget warning (pre-existing).
+
+**Deferred:**
+- Frontend unit tests for forgot-password/reset-password components (CLAUDE.md allows skipping for non-money UI pages; auth components are low-risk display logic).
+
 ## 2026-06-15 — WI-EMAIL-ACTIVATION + WI-PAYMENT-SUBSCRIPTION (cont.)
 
 **Scope:** Three items: (1) SVG icon swap in WsEmptyState; (2) dev rate-limit 429 fix; (3) full Resend email integration + activation funnel (email confirmation + qualification form + hard backend gating).

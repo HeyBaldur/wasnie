@@ -29,6 +29,9 @@ export class LoginComponent {
   readonly alreadyConfirmed = signal(
     this.route.snapshot.queryParamMap.has('alreadyConfirmed')
   );
+  readonly passwordResetSuccess = signal(
+    this.route.snapshot.queryParamMap.has('passwordReset')
+  );
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],

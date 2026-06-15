@@ -115,4 +115,37 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
 
         return Ok(new { message = "If that email exists, a confirmation link has been sent." });
     }
+
+    [HttpPost("request-password-reset")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-password-reset")]
+    public async Task<IActionResult> RequestPasswordReset(
+        [FromBody] RequestPasswordResetCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { message = "If that email exists, a password reset link has been sent." });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-password-reset")]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(command.UserId) || string.IsNullOrWhiteSpace(command.Token))
+            return BadRequest(new { message = "Invalid password reset link." });
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return Ok(new { message = "Password has been reset successfully." });
+    }
 }

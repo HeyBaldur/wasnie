@@ -39,6 +39,10 @@ export class TopbarComponent implements OnInit {
     });
   }
 
+  goToSettings(): void {
+    void this.router.navigateByUrl('/admin');
+  }
+
   goToUpgrade(): void {
     void this.router.navigateByUrl('/subscription');
   }

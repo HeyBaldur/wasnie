@@ -25,4 +25,6 @@ public interface IIdentityService
     Task<string?> GetClaimAsync(string userId, string claimType);
 
     Task<bool> SetEmailConfirmedAsync(string userId);
+
+    Task<bool> ResetPasswordAsync(string userId, string newPassword);
 }

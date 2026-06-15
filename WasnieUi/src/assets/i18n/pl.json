@@ -29,7 +29,26 @@
     "FOOTER_RIGHTS": "© 2025 Wasnie. Wszelkie prawa zastrzeżone.",
     "EMAIL_NOT_CONFIRMED": "Potwierdź swój adres e-mail przed zalogowaniem.",
     "RESEND_CONFIRMATION": "Wyślij ponownie e-mail potwierdzający",
-    "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej."
+    "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej.",
+    "FORGOT_PASSWORD": "Nie pamiętasz hasła?",
+    "PASSWORD_RESET_SUCCESS": "Hasło zostało zaktualizowane. Zaloguj się nowym hasłem.",
+    "BACK_TO_LOGIN": "Powrót do logowania"
+  },
+  "FORGOT_PASSWORD": {
+    "TITLE": "Nie pamiętasz hasła?",
+    "DESC": "Podaj swój adres e-mail, a wyślemy Ci link do resetowania hasła.",
+    "SUBMIT": "Wyślij link do resetowania",
+    "SENT_TITLE": "Sprawdź swoją skrzynkę",
+    "SENT_DESC": "Jeśli konto z tym adresem istnieje, wysłaliśmy link do resetowania hasła."
+  },
+  "RESET_PASSWORD": {
+    "TITLE": "Ustaw nowe hasło",
+    "NEW_PASSWORD": "Nowe hasło",
+    "CONFIRM_PASSWORD": "Potwierdź nowe hasło",
+    "SUBMIT": "Zresetuj hasło",
+    "INVALID_LINK": "Ten link do resetowania jest nieprawidłowy lub wygasł.",
+    "REQUEST_NEW": "Poproś o nowy link",
+    "PASSWORDS_MISMATCH": "Hasła nie są zgodne."
   },
   "CONFIRM_EMAIL": {
     "TITLE": "Sprawdź swoją skrzynkę",

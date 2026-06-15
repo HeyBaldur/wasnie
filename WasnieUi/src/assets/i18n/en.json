@@ -29,7 +29,26 @@
     "FOOTER_RIGHTS": "© 2025 Wasnie. All rights reserved.",
     "EMAIL_NOT_CONFIRMED": "Please confirm your email address before signing in.",
     "RESEND_CONFIRMATION": "Resend confirmation email",
-    "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below."
+    "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below.",
+    "FORGOT_PASSWORD": "Forgot password?",
+    "PASSWORD_RESET_SUCCESS": "Password updated. Sign in with your new password.",
+    "BACK_TO_LOGIN": "Back to sign in"
+  },
+  "FORGOT_PASSWORD": {
+    "TITLE": "Forgot your password?",
+    "DESC": "Enter your email and we'll send you a reset link.",
+    "SUBMIT": "Send reset link",
+    "SENT_TITLE": "Check your inbox",
+    "SENT_DESC": "If an account exists for that email, a reset link has been sent."
+  },
+  "RESET_PASSWORD": {
+    "TITLE": "Set a new password",
+    "NEW_PASSWORD": "New password",
+    "CONFIRM_PASSWORD": "Confirm new password",
+    "SUBMIT": "Reset password",
+    "INVALID_LINK": "This reset link is invalid or has expired.",
+    "REQUEST_NEW": "Request a new reset link",
+    "PASSWORDS_MISMATCH": "Passwords do not match."
   },
   "CONFIRM_EMAIL": {
     "TITLE": "Check your inbox",

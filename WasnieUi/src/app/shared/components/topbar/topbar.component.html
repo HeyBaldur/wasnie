@@ -1,5 +1,4 @@
 <header class="topbar">
-
   <div class="topbar__search">
     <app-icon name="search" [size]="15" class="topbar__search-icon" />
     <input
@@ -13,7 +12,6 @@
   </div>
 
   <div class="topbar__actions">
-
     @if (isFreeTier()) {
       <div
         class="topbar__upgrade-wrapper"
@@ -41,7 +39,7 @@
             <app-icon name="user" [size]="15" />
             {{ 'TOPBAR.PROFILE' | translate }}
           </button>
-          <button class="topbar__dropdown-item">
+          <button class="topbar__dropdown-item" (click)="goToSettings()">
             <app-icon name="tenant" [size]="15" />
             {{ 'TOPBAR.TENANT_SETTINGS' | translate }}
           </button>
@@ -53,6 +51,5 @@
         </div>
       }
     </div>
-
   </div>
 </header>

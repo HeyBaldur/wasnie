@@ -112,4 +112,14 @@ public sealed class IdentityService(
         var result = await userManager.UpdateAsync(user);
         return result.Succeeded;
     }
+
+    public async Task<bool> ResetPasswordAsync(string userId, string newPassword)
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null) return false;
+
+        var token = await userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await userManager.ResetPasswordAsync(user, token, newPassword);
+        return result.Succeeded;
+    }
 }
