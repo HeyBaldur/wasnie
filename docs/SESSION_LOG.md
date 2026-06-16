@@ -4,6 +4,146 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-16 — WI-PAYMENT-BLOCK-UI: Rediseño del mensaje de bloqueo anti-doble-pago
+
+**Objetivo:** Reemplazar el muro de texto rojo concatenado del bloqueo anti-doble-pago por un resumen claro + tabla scrolleable reutilizando `OverlapWarningComponent`.
+
+**Approach elegido (vs alternativas):**
+- `Result<PaymentBlockResult?>` en vez de `Result`: null = pagado, non-null = bloqueado con datos estructurados, `Failure` = error real (not found, wrong status). Consistente con el patrón `ChangePlanCommandHandler { blocked: true, ... }`.
+- HTTP 409 Conflict para bloqueo (semántica correcta) vs 400 BadRequest (que era para errores reales).
+- Reusar `OverlapWarningComponent` exactamente con mapping `PaymentConflictItem → OverlapRow`: Period=período del payout consumidor, Status=Paid badge, Col3=referencia transacción.
+
+**Backend (Wasnie.Application + Wasnie.Api):**
+- `PaymentBlockResult.cs` + `PaymentConflictItem.cs` en `Common/DTOs/`
+- `MarkPayRunPaidCommand : IRequest<Result<PaymentBlockResult?>>` (antes `IRequest<Result>`)
+- `MarkPayoutPaidCommand : IRequest<Result<PaymentBlockResult?>>` (antes `IRequest<Result>`)
+- `MarkPayRunPaidHandler` + `MarkPayoutPaidHandler`: guard section ahora retorna `Result<PaymentBlockResult?>.Success(new PaymentBlockResult(...))` en vez de `Result.Failure(errorMsg)`; el log/audit string mantiene el mismo nivel de detalle
+- `PayRunsController.MarkPaid` + `PayoutsController.MarkPaid`: 204 si null, 409 si blocked, 400 si failure
+- Tests actualizados: `IsSuccess.Should().BeTrue()` + `Value.Should().NotBeNull()` + conflict assertions
+
+**Frontend (WasnieUi):**
+- `PaymentConflictItem` + `PaymentBlockResponse` interfaces en `payout.model.ts`
+- `pay-run-detail.component.ts`: signal `doublePayConflicts = signal<OverlapRow[]>([])`, catch 409 → set conflicts, catch other → set `actionError`; método `viewConflictPayout()` + `_toConflictRows()`
+- `pay-run-detail.component.html`: `@if (doublePayConflicts().length > 0)` → `<app-overlap-warning>` con `warningKey="PAY_RUNS.DETAIL.DOUBLE_PAY_BLOCKED"` + `col3HeaderKey="PAY_RUNS.DETAIL.DOUBLE_PAY_COL_TX_REF"` + `(rowClick)="viewConflictPayout($event)"`
+- `payout-detail.component.ts` + HTML: mismo patrón
+- i18n EN+ES+PL: `PAYOUTS.DETAIL.DOUBLE_PAY_BLOCKED`, `PAYOUTS.DETAIL.DOUBLE_PAY_COL_TX_REF`, `PAY_RUNS.DETAIL.DOUBLE_PAY_BLOCKED`, `PAY_RUNS.DETAIL.DOUBLE_PAY_COL_TX_REF`
+
+**Pruebas:** 10/10 integration tests pasan (9 AntiDoublePay + 1 PayRunEngine anti-double-pay). Build backend Application: 0 errores. Build frontend: 0 errores TS.
+
+**Deuda pendiente:** Frontend para `POST /api/payouts/{id}/revert-paid` — sin UI todavía.
+
+## 2026-06-16 — WI-ANTI-DOUBLE-PAY-GUARD: Guarda bloqueante en el punto de pago (SMOCK-326546143213)
+
+**Síntoma:** Transacción SMOCK-326546143213 (£75,000, £3,750 comisión) pagada 7 veces en 7 payouts distintos. Todos Paid. Solo 1 crédito consumido.
+
+**Root cause (3 capas):**
+1. **Relación 1:1 (Transaction → Credit)** — un solo crédito por transacción. El mismo crédito puede aparecer en PayoutLines de MÚLTIPLES payouts.
+2. **Ventana de vulnerabilidad** — los 7 payouts se calcularon antes de pagar ninguno. Al calcular, `ConsumedAt == null` para todos, así que el calculador incluyó el crédito en los 7. Los PayoutLines existen antes de cualquier pago.
+3. **"Graceful skip" no bloqueaba** — el código anterior: `if (credit.ConsumedAt is not null) { logger.LogWarning; continue; }` — saltaba el consumo pero SEGUÍA marcando el payout como Paid. El segundo (y tercer, cuarto...) payout continuaba pagándose aunque el crédito ya estuviese consumido.
+
+**Fix — guarda bloqueante en las 3 rutas de pago:**
+- **Upfront check**: antes de `payout.MarkPaid()`, se cargan TODOS los créditos del payout. Si `alreadyConsumed.Count > 0` → se consultan referencias de transacciones y períodos del payout consumidor → se devuelve `Result.Failure(...)` con mensaje claro identificando qué transacción está ya pagada y en qué período. El payout NO cambia de estado.
+- **Audit**: `PAYMENT_BLOCKED_DOUBLE_PAYMENT` con IDs de créditos bloqueados y descripción del conflicto.
+- **Concurrencia optimista**: `Credit.RowVersion` (rowversion SQL Server). EF incluye `WHERE RowVersion = <original>` en el UPDATE de consumo. Dos pagos simultáneos → el segundo lanza `DbUpdateConcurrencyException` → capturada con error claro.
+
+**Migración B5_CreditRowVersion:**
+- `Credits.RowVersion rowversion NOT NULL` — aplicada vía SQL directa (API corriendo, DLLs bloqueados). Registrada en `__EFMigrationsHistory`.
+- Archivos de migración: `20260616200000_B5_CreditRowVersion.cs` + `.Designer.cs`
+
+**AuditActions nuevas:** `PaymentBlockedDoublePayment = "PAYMENT_BLOCKED_DOUBLE_PAYMENT"`
+
+**Archivos tocados:**
+- `src/Wasnie.Domain/Compensation/Credits/Credit.cs` — `RowVersion` property
+- `src/Wasnie.Infrastructure/Persistence/Configurations/Compensation/CreditConfiguration.cs` — `.IsRowVersion()`
+- `src/Wasnie.Infrastructure/Persistence/Migrations/20260616200000_B5_CreditRowVersion.cs` + `.Designer.cs`
+- `src/Wasnie.Domain/Audit/AuditActions.cs` — `PaymentBlockedDoublePayment`
+- `src/Wasnie.Application/Compensation/Handlers/PayRuns/MarkPayRunPaidHandler.cs` — upfront check + DbUpdateConcurrencyException
+- `src/Wasnie.Application/Compensation/Handlers/Payouts/MarkPayoutPaidHandler.cs` — ídem
+- `src/Wasnie.Application/Compensation/Handlers/Payouts/BulkMarkPaidHandler.cs` — ídem (por payout)
+- `tests/Wasnie.IntegrationTests/Compensation/AntiDoublePayTests.cs` — 3 nuevos tests
+- `tests/Wasnie.IntegrationTests/Compensation/PayRunEngineTests.cs` — 1 nuevo test
+
+**Tests:** 589 unit (0 regresiones). 30 integration (9 AntiDoublePay + 21 PayRunEngine) — todos pasan.
+
+**Verificación RUNTIME pendiente:** Reiniciar la API y reproducir el caso: pagar pay run A con la transacción → intentar pagar pay run B con la misma → debe bloquearse con mensaje claro.
+
+---
+
+## 2026-06-16 — WI-TX-PAID-PROPAGATION-FIX: Bug crítico — transacciones no se marcaban Paid al pagar un pay run
+
+**Síntoma:** `/transactions?statuses=Paid` devolvía cero resultados tras pagar payouts. Transacciones de payouts Paid seguían en estado Calculated.
+
+**Root cause:** `MarkPayRunPaidHandler` — la ruta que usa la UI (pay-runs flow) — cargaba los payouts **sin `.Include(p => p.Lines)`** y llamaba directamente `payout.MarkPaid(actor, now)` en un loop simple. Nunca cargaba créditos, nunca llamaba `credit.Consume()`, nunca llamaba `tx.MarkPaid()`. Solo el estado del `CompensationPayout` cambiaba a Paid. Los otros dos handlers (`MarkPayoutPaidHandler` individual + `BulkMarkPaidHandler`) SÍ estaban correctos pero los usaba nadie en el flujo principal.
+
+**Fix (`MarkPayRunPaidHandler.cs`):**
+- Añadido `ILogger<MarkPayRunPaidHandler>` al constructor
+- `.Include(p => p.Lines)` al cargar payouts aprobados del run
+- Batch-load: todos los `CreditId` de todas las líneas → query bulk `db.Credits` (con `IgnoreQueryFilters`, `SupersededAt == null`) → query bulk `db.CompensationTransactions` (con `IgnoreQueryFilters`, `Status == Calculated`)
+- Loop por payout: `payout.MarkPaid()` + por cada crédito `credit.Consume()` + por cada `TransactionId` único `tx.MarkPaid()`
+- Graceful skip si crédito ya consumido (warning log)
+- Audit log `PAYOUT_CREDITS_CONSUMED` con counts
+- `PayRunEngineTests.MarkPaidHandler()` factory actualizado: `NullLogger<MarkPayRunPaidHandler>.Instance` como 7º arg
+
+**Archivos tocados:**
+- `src/Wasnie.Application/Compensation/Handlers/PayRuns/MarkPayRunPaidHandler.cs` — reescrito
+- `tests/Wasnie.IntegrationTests/Compensation/PayRunEngineTests.cs` — factory helper actualizado
+
+**Tests:** 589 unit (sin cambio). 26 integration (6 AntiDoublePay + 20 PayRunEngine) — todos pasan.
+
+**Deuda pendiente:** Frontend para `POST /api/payouts/{id}/revert-paid` — sin UI todavía.
+
+---
+
+## 2026-06-16 — WI-ANTI-DOUBLE-PAY Phase 3 (B+C): Consumo de créditos + exclusión en motor
+
+**Objetivo:** Implementar anti-doble-pago completo: propagar estado Paid a transacciones (Parte B), marcar créditos como consumidos al pagar y excluirlos del motor de cálculo en periodos solapados (Parte C), con reversibilidad completa.
+
+**Decisión clave:** Consumo al PAGAR (no al Aprobar). Rationale: Approved es reversible (ReopenPayRun revierte Approved→Calculated), Paid = dinero movido. Para el riesgo de dos payouts Approved con créditos solapados: el motor ya bloquea recalcular el mismo período exacto si hay uno Approved; los períodos parcialmente solapados son un error de workflow, no sistémico.
+
+**Completado:**
+
+**Dominio:**
+- `Credit.cs`: `ConsumedAt` + `ConsumedByPayoutId` (nullable), `Consume()`, `Unconsume()`
+- `CompensationTransaction.cs`: `MarkPaid()` implementado (elimina stub NotSupportedException) — Calculated→Paid; `RevertPaidToCalculated()` nuevo método
+- `CompensationPayout.cs`: `RevertPaidToApproved()` — Paid→Approved
+- Eventos nuevos: `CreditConsumedEvent`, `CreditUnconsumedEvent`, `TransactionMarkedPaidEvent`
+- `AuditActions.cs`: `TransactionMarkedPaid`, `PayoutCreditsConsumed`, `PayoutRevertedToApproved`
+
+**Infraestructura:**
+- `CreditConfiguration.cs`: columnas `ConsumedAt` + `ConsumedByPayoutId` + 2 índices filtrados
+- Migración `B4_CreditConsumptionFields` creada y verificada (Up/Down correctos)
+
+**Motor de cálculo (el fix central):**
+- `CalculatePayoutsForPeriodHandler.cs`: añadido `&& c.ConsumedAt == null` al filtro de créditos — éste es el fix que previene el doble pago en períodos solapados
+
+**Handlers actualizados:**
+- `MarkPayoutPaidHandler.cs`: Include(Lines), carga créditos no-Superseded, llama `credit.Consume()`, marca transacciones Paid, audit `PAYOUT_CREDITS_CONSUMED`; añade `ILogger`
+- `BulkMarkPaidHandler.cs`: misma lógica en bulk (batch load de créditos + transacciones), `ILogger`
+- `RevertPayoutToApprovedHandler.cs` (nuevo): carga créditos por `ConsumedByPayoutId`, llama `credit.Unconsume()`, revertir transacciones Paid→Calculated, `payout.RevertPaidToApproved()`, audit
+
+**API:**
+- `PayoutsController.cs`: `POST /api/payouts/{id}/revert-paid`
+- Comando: `RevertPayoutToApprovedCommand`
+
+**Tests:**
+- `AntiDoublePayTests.cs` (6 tests): MarkPaid propaga (créditos consumidos + txs Paid), solape excluye créditos consumidos (el bug fix), no-solape funciona normal, revert libera créditos + revierte txs, recalculación post-revert, multi-tenant isolation
+- `CompensationTransactionTests.cs` (4 tests nuevos): MarkPaid desde Calculated OK, MarkPaid desde Pending throws, RevertPaidToCalculated OK, RevertFromPending throws; stub test eliminado
+- `PayRunEngineTests.cs`: fix pre-existente (NoOpAuditService faltaba para ApprovePayRunHandler + MarkPayRunPaidHandler)
+- **589 unit tests pasan** (4 nuevos + stub test eliminado + 63 CommissionCalculator intactos)
+- **34 integration tests pasan** (8 PayoutEngineTests + 20 PayRunEngineTests + 6 AntiDoublePayTests)
+- Fallos existentes: todos 403 Forbidden en HTTP endpoint tests (JWT auth infra, pre-existentes)
+
+**Archivos tocados (backend):**
+- `Wasnie.Domain`: Credit.cs, CompensationTransaction.cs, CompensationPayout.cs, AuditActions.cs, Events/CreditConsumedEvent.cs (nuevo), Events/CreditUnconsumedEvent.cs (nuevo), Events/TransactionMarkedPaidEvent.cs (nuevo)
+- `Wasnie.Infrastructure`: CreditConfiguration.cs, Migrations/20260616135428_B4_CreditConsumptionFields.cs (nuevo), ModelSnapshot actualizado
+- `Wasnie.Application`: CalculatePayoutsForPeriodHandler.cs, MarkPayoutPaidHandler.cs, BulkMarkPaidHandler.cs, Commands/Payouts/RevertPayoutToApprovedCommand.cs (nuevo), Handlers/Payouts/RevertPayoutToApprovedHandler.cs (nuevo)
+- `Wasnie.Api`: PayoutsController.cs
+- Tests: AntiDoublePayTests.cs (nuevo), CompensationTransactionTests.cs, PayRunEngineTests.cs
+
+**Deuda/Notas:**
+- Frontend no actualizado — filtro "Paid" en Transactions ya funcionará (txs ahora se marcan Paid), pero no hay UI para el nuevo endpoint `revert-paid`
+- El filtro `c.ConsumedAt == null` evita doble-pago en cualquier solape futuro; datos históricos (pre-fix) pueden tener créditos sin `ConsumedAt` en payouts ya pagados — no se retroactively corrigen (sin impacto en nuevos periodos)
+
 ## 2026-06-16 — WI-PAYOUT-OVERLAP-GUARD: Aviso de solapamiento al aprobar/pagar payouts
 
 **Objetivo:** Mostrar aviso de solapamiento al aprobar o marcar como pagado payouts individuales y en operaciones bulk, reutilizando el componente de tabla que ya existía en pay-run-detail.

@@ -16,7 +16,7 @@ import { HasPermissionDirective } from '../../../shared/directives/has-permissio
 import { PayRunDetailStore } from '../state/pay-run-detail.store';
 import { PayRunsApiService } from '../services/pay-runs.api.service';
 import { OverlappingPayRun, PayRunStatus } from '../models/pay-run.model';
-import { PayoutStatus } from '../../payouts/models/payout.model';
+import { PaymentConflictItem, PayoutStatus } from '../../payouts/models/payout.model';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
 import {
@@ -58,6 +58,7 @@ export class PayRunDetailComponent implements OnInit {
   readonly deleteConfirmOpen = signal(false);
   readonly actioning = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly doublePayConflicts = signal<OverlapRow[]>([]);
   readonly deleting = signal(false);
   readonly deleteError = signal<string | null>(null);
 
@@ -250,6 +251,22 @@ export class PayRunDetailComponent implements OnInit {
     window.open(`/pay-runs/${id}`, '_blank');
   }
 
+  viewConflictPayout(payoutId: string): void {
+    window.open(`/payouts/${payoutId}`, '_blank');
+  }
+
+  private _toConflictRows(conflicts: PaymentConflictItem[]): OverlapRow[] {
+    return conflicts.map(c => ({
+      id: c.paidInPayoutId,
+      periodStart: c.paidInPayoutPeriodStart,
+      periodEnd: c.paidInPayoutPeriodEnd,
+      statusLabel: 'PAYOUTS.STATUS_PAID',
+      statusVariant: 'success' as BadgeVariant,
+      col3: c.transactionReference,
+      amounts: [],
+    }));
+  }
+
   runStatusBadge(status: PayRunStatus): BadgeVariant {
     switch (status) {
       case 'Draft':    return 'neutral';
@@ -288,12 +305,17 @@ export class PayRunDetailComponent implements OnInit {
     this.markPaidConfirmOpen.set(false);
     this.actioning.set(true);
     this.actionError.set(null);
+    this.doublePayConflicts.set([]);
     try {
       await firstValueFrom(this.api.markPaid(this.runId));
       await this.store.reload();
     } catch (err) {
-      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
-      this.actionError.set(apiMsg ?? 'PAY_RUNS.DETAIL.MARK_PAID_ERROR');
+      const httpErr = err as { status?: number; error?: { blocked?: boolean; conflicts?: PaymentConflictItem[]; message?: string } };
+      if (httpErr.status === 409 && httpErr.error?.blocked && httpErr.error.conflicts?.length) {
+        this.doublePayConflicts.set(this._toConflictRows(httpErr.error.conflicts));
+      } else {
+        this.actionError.set(httpErr.error?.message ?? 'PAY_RUNS.DETAIL.MARK_PAID_ERROR');
+      }
     } finally {
       this.actioning.set(false);
     }

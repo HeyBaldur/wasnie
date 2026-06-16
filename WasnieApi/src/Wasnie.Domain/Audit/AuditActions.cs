@@ -51,6 +51,14 @@ public static class AuditActions
     public const string PendingTransactionsProcessed = "PENDING_TRANSACTIONS_PROCESSED";
     public const string TransactionUpdatedViaExcel = "TRANSACTION_UPDATED_VIA_EXCEL";
 
+    // Transactions (Phase 3 — payout propagation)
+    public const string TransactionMarkedPaid = "TRANSACTION_MARKED_PAID";
+
+    // Payouts — credit consumption (anti-double-pay Phase 3)
+    public const string PayoutCreditsConsumed = "PAYOUT_CREDITS_CONSUMED";
+    public const string PayoutRevertedToApproved = "PAYOUT_REVERTED_TO_APPROVED";
+    public const string PaymentBlockedDoublePayment = "PAYMENT_BLOCKED_DOUBLE_PAYMENT";
+
     // Settings (Rule 5.1.5 — configuration changes)
     public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";
 

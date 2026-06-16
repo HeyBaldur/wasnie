@@ -22,6 +22,11 @@ public sealed class Credit : AggregateRoot
     public string AllocatedBy { get; private set; } = string.Empty;
     public DateTimeOffset? SupersededAt { get; private set; }
     public string? SupersededBy { get; private set; }
+    // Anti-double-pay: set when a Paid payout consumes this credit; cleared on payout revert.
+    public DateTimeOffset? ConsumedAt { get; private set; }
+    public Guid? ConsumedByPayoutId { get; private set; }
+    // Optimistic concurrency token — EF uses this to detect concurrent consumption of the same credit.
+    public byte[] RowVersion { get; private set; } = [];
 
     private Credit() { }
 
@@ -80,5 +85,31 @@ public sealed class Credit : AggregateRoot
         SupersededBy = reason;
 
         RaiseDomainEvent(new CreditSupersededEvent(eventId, now, Id, TransactionId, PayeeId, TenantId, reason));
+    }
+
+    // Anti-double-pay Phase 3: mark this credit consumed when its payout is Paid.
+    // ConsumedAt != null causes the calculation engine to exclude this credit from any future payout.
+    public void Consume(Guid payoutId, DateTimeOffset now, Guid eventId)
+    {
+        if (ConsumedAt is not null)
+            throw new DomainException($"Credit {Id} is already consumed by payout {ConsumedByPayoutId}.");
+
+        ConsumedAt = now;
+        ConsumedByPayoutId = payoutId;
+
+        RaiseDomainEvent(new CreditConsumedEvent(eventId, now, Id, TransactionId, PayeeId, TenantId, payoutId));
+    }
+
+    // Undo consumption when a Paid payout is reverted. Returns this credit to the available pool.
+    public void Unconsume(Guid eventId, DateTimeOffset now)
+    {
+        if (ConsumedAt is null)
+            throw new DomainException($"Credit {Id} is not consumed and cannot be unconsumed.");
+
+        var formerPayoutId = ConsumedByPayoutId!.Value;
+        ConsumedAt = null;
+        ConsumedByPayoutId = null;
+
+        RaiseDomainEvent(new CreditUnconsumedEvent(eventId, now, Id, TransactionId, PayeeId, TenantId, formerPayoutId));
     }
 }

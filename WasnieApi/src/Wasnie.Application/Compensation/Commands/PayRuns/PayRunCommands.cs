@@ -1,4 +1,5 @@
 using MediatR;
+using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Compensation.Commands.Payouts;
 using Wasnie.Domain.Common.Results;
 
@@ -16,7 +17,7 @@ public sealed record CalculatePayRunResult(
 
 public sealed record ApprovePayRunCommand(Guid PayRunId) : IRequest<Result>;
 
-public sealed record MarkPayRunPaidCommand(Guid PayRunId) : IRequest<Result>;
+public sealed record MarkPayRunPaidCommand(Guid PayRunId) : IRequest<Result<PaymentBlockResult?>>;
 
 public sealed record ReopenPayRunCommand(Guid PayRunId) : IRequest<Result>;
 

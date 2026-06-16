@@ -113,6 +113,19 @@ export interface BulkMarkPaidResult {
   errors: string[];
 }
 
+export interface PaymentConflictItem {
+  transactionReference: string;
+  paidInPayoutId: string;
+  paidInPayoutPeriodStart: string;
+  paidInPayoutPeriodEnd: string;
+}
+
+export interface PaymentBlockResponse {
+  blocked: boolean;
+  totalConflicts: number;
+  conflicts: PaymentConflictItem[];
+}
+
 export interface OverlappingPayout {
   id: string;
   periodStart: string;

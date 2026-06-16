@@ -18,5 +18,6 @@ export class OverlapWarningComponent {
   @Input() loading = false;
   @Input() warningKey = '';
   @Input() col3HeaderKey = '';
+  @Input() showTotals = true;
   @Output() rowClick = new EventEmitter<string>();
 }

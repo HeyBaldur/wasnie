@@ -15,7 +15,9 @@
             <th>{{ 'OVERLAP_WARNING.COL_PERIOD' | translate }}</th>
             <th>{{ 'OVERLAP_WARNING.COL_STATUS' | translate }}</th>
             <th>{{ col3HeaderKey | translate }}</th>
-            <th>{{ 'OVERLAP_WARNING.COL_TOTAL' | translate }}</th>
+            @if (showTotals) {
+              <th>{{ 'OVERLAP_WARNING.COL_TOTAL' | translate }}</th>
+            }
           </tr>
         </thead>
         <tbody>
@@ -29,11 +31,13 @@
                 <ws-badge [variant]="row.statusVariant">{{ row.statusLabel | translate }}</ws-badge>
               </td>
               <td>{{ row.col3 }}</td>
-              <td>
-                @for (entry of row.amounts; track entry.currency) {
-                  <div>{{ entry.amount | currencyFormat: entry.currency }}</div>
-                }
-              </td>
+              @if (showTotals) {
+                <td>
+                  @for (entry of row.amounts; track entry.currency) {
+                    <div>{{ entry.amount | currencyFormat: entry.currency }}</div>
+                  }
+                </td>
+              }
             </tr>
           }
         </tbody>

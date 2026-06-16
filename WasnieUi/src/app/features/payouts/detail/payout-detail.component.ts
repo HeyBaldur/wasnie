@@ -9,7 +9,7 @@ import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { OverlapWarningComponent } from '../../../shared/components/overlap-warning/overlap-warning.component';
 import { PayoutsApiService } from '../services/payouts.api.service';
-import { OverlappingPayout, PayoutDetail, LineCalculationDto, RateTableDto } from '../models/payout.model';
+import { OverlappingPayout, PaymentConflictItem, PayoutDetail, LineCalculationDto, RateTableDto } from '../models/payout.model';
 import { OverlapRow } from '../../../shared/models/overlap-row.model';
 import {
   WsButtonComponent,
@@ -50,6 +50,7 @@ export class PayoutDetailComponent implements OnInit {
   readonly markingPaid = signal(false);
   readonly exporting = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly doublePayConflicts = signal<OverlapRow[]>([]);
 
   readonly approveOverlaps = signal<OverlappingPayout[]>([]);
   readonly markPaidOverlaps = signal<OverlappingPayout[]>([]);
@@ -161,14 +162,32 @@ export class PayoutDetailComponent implements OnInit {
     this.markPaidConfirmOpen.set(false);
     this.markingPaid.set(true);
     this.actionError.set(null);
+    this.doublePayConflicts.set([]);
     try {
       await firstValueFrom(this.api.markPaid(this.payoutId));
       await this._load();
-    } catch {
-      this.actionError.set('PAYOUTS.DETAIL.MARK_PAID_ERROR');
+    } catch (err) {
+      const httpErr = err as { status?: number; error?: { blocked?: boolean; conflicts?: PaymentConflictItem[]; message?: string } };
+      if (httpErr.status === 409 && httpErr.error?.blocked && httpErr.error.conflicts?.length) {
+        this.doublePayConflicts.set(this._toConflictRows(httpErr.error.conflicts));
+      } else {
+        this.actionError.set(httpErr.error?.message ?? 'PAYOUTS.DETAIL.MARK_PAID_ERROR');
+      }
     } finally {
       this.markingPaid.set(false);
     }
+  }
+
+  private _toConflictRows(conflicts: PaymentConflictItem[]): OverlapRow[] {
+    return conflicts.map(c => ({
+      id: c.paidInPayoutId,
+      periodStart: c.paidInPayoutPeriodStart,
+      periodEnd: c.paidInPayoutPeriodEnd,
+      statusLabel: 'PAYOUTS.STATUS_PAID',
+      statusVariant: 'success' as BadgeVariant,
+      col3: c.transactionReference,
+      amounts: [],
+    }));
   }
 
   openPlan(planId: string): void {

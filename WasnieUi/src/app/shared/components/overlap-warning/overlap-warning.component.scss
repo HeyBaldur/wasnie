@@ -7,6 +7,7 @@
     border: 1px solid var(--color-warning-border);
     border-radius: var(--radius-md);
     overflow: hidden;
+    margin-bottom: var(--space-4);
   }
 
   &__msg {
@@ -25,6 +26,13 @@
   &__table-wrapper {
     max-height: 220px;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+
+    &::-webkit-scrollbar        { width: 6px; }
+    &::-webkit-scrollbar-track  { background: transparent; }
+    &::-webkit-scrollbar-thumb  { background: var(--color-border-strong); border-radius: 9999px; }
+    &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
   }
 
   &__table {

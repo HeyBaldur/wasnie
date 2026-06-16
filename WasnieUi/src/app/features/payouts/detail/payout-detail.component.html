@@ -37,6 +37,18 @@
         </ws-card>
       }
 
+      <!-- Double-pay block: structured conflict table -->
+      @if (doublePayConflicts().length > 0) {
+        <app-overlap-warning
+          [rows]="doublePayConflicts()"
+          [loading]="false"
+          [showTotals]="false"
+          warningKey="PAYOUTS.DETAIL.DOUBLE_PAY_BLOCKED"
+          col3HeaderKey="PAYOUTS.DETAIL.DOUBLE_PAY_COL_TX_REF"
+          (rowClick)="viewOverlapPayout($event)"
+        />
+      }
+
       <!-- Approval banner -->
       @if (isCalculated()) {
         <ws-card variant="raised" accent="brand" class="payout-detail__banner">

@@ -72,6 +72,17 @@
       </ws-card>
     }
 
+    @if (doublePayConflicts().length > 0) {
+      <app-overlap-warning
+        [rows]="doublePayConflicts()"
+        [loading]="false"
+        [showTotals]="false"
+        warningKey="PAY_RUNS.DETAIL.DOUBLE_PAY_BLOCKED"
+        col3HeaderKey="PAY_RUNS.DETAIL.DOUBLE_PAY_COL_TX_REF"
+        (rowClick)="viewConflictPayout($event)"
+      />
+    }
+
     @if (exportError()) {
       <ws-card variant="raised" class="pay-run-detail__error-banner">
         <app-icon name="alert-circle" [size]="16" />

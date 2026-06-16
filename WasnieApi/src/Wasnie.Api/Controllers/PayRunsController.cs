@@ -54,7 +54,9 @@ public sealed class PayRunsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> MarkPaid(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new MarkPayRunPaidCommand(id), cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
+        if (!result.IsSuccess) return BadRequest(new { message = result.Error });
+        if (result.Value is not null) return Conflict(new { blocked = true, result.Value.TotalConflicts, conflicts = result.Value.Conflicts });
+        return NoContent();
     }
 
     // POST /api/pay-runs/{id}/reopen

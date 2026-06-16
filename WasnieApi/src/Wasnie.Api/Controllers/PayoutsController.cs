@@ -70,6 +70,16 @@ public sealed class PayoutsController(
     public async Task<IActionResult> MarkPaid(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new MarkPayoutPaidCommand(id), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.Error });
+        if (result.Value is not null) return Conflict(new { blocked = true, result.Value.TotalConflicts, conflicts = result.Value.Conflicts });
+        return NoContent();
+    }
+
+    // POST /api/payouts/{id}/revert-paid  — reverts Paid → Approved and unconsuemes credits
+    [HttpPost("{id:guid}/revert-paid")]
+    public async Task<IActionResult> RevertPaid(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new RevertPayoutToApprovedCommand(id), cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
     }
 

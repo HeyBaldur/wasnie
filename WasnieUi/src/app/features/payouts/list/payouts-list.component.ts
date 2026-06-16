@@ -72,6 +72,8 @@ export class PayoutsListComponent implements OnInit {
   readonly bulkApproving = signal(false);
   readonly bulkMarkPaidConfirmOpen = signal(false);
   readonly bulkMarkPaiding = signal(false);
+  readonly bulkMarkPaidErrors = signal<string[]>([]);
+  readonly bulkMarkPaidCount = signal(0);
   readonly bulkOverlapCount = signal(0);
   readonly bulkOverlapsLoading = signal(false);
   readonly calculating = signal(false);
@@ -414,10 +416,20 @@ export class PayoutsListComponent implements OnInit {
     if (ids.length === 0 || this.bulkMarkPaiding()) return;
     this.bulkMarkPaidConfirmOpen.set(false);
     this.bulkMarkPaiding.set(true);
+    this.bulkMarkPaidErrors.set([]);
+    this.bulkMarkPaidCount.set(0);
     try {
-      await firstValueFrom(this.api.bulkMarkPaid({ payoutIds: ids }));
-      this.store.clearSelection();
-      await this.store.reload();
+      const result = await firstValueFrom(this.api.bulkMarkPaid({ payoutIds: ids }));
+      if (result.errors.length > 0) {
+        this.bulkMarkPaidErrors.set(result.errors);
+        this.bulkMarkPaidCount.set(result.paid);
+      }
+      if (result.paid > 0) {
+        this.store.clearSelection();
+        await this.store.reload();
+      }
+    } catch {
+      this.bulkMarkPaidErrors.set(['PAYOUTS.BULK_MARK_PAID_ERROR']);
     } finally {
       this.bulkMarkPaiding.set(false);
     }

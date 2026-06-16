@@ -4,6 +4,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.PayRuns;
@@ -41,6 +42,12 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
     {
         public static readonly AlwaysAllowAuth Instance = new();
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpAuditService : IAuditService
+    {
+        public static readonly NoOpAuditService Instance = new();
+        public Task LogAsync(AuditEntry entry, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class AlwaysForbidAuth : IAuthorizationService
@@ -110,12 +117,15 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
     private static ApprovePayRunHandler ApproveHandler(
         ApplicationDbContext db, IAuthorizationService? auth = null) =>
         new(db, auth ?? AlwaysAllowAuth.Instance,
-            new FixedUser(), new FakeClock(Now.UtcDateTime), new FakeGuidGenerator());
+            new FixedUser(), new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
+            NoOpAuditService.Instance);
 
     private static MarkPayRunPaidHandler MarkPaidHandler(
         ApplicationDbContext db, IAuthorizationService? auth = null) =>
         new(db, auth ?? AlwaysAllowAuth.Instance,
-            new FixedUser(), new FakeClock(Now.UtcDateTime), new FakeGuidGenerator());
+            new FixedUser(), new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
+            NoOpAuditService.Instance,
+            NullLogger<MarkPayRunPaidHandler>.Instance);
 
     private static ReopenPayRunHandler ReopenHandler(
         ApplicationDbContext db, IAuthorizationService? auth = null) =>
@@ -786,5 +796,102 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
 
         await act.Should().ThrowAsync<ForbiddenException>()
             .WithMessage($"*{Permission.PayoutsRead}*");
+    }
+
+    // ── Anti-double-pay guard via pay-run path ────────────────────────────────
+    // Reproduces the SMOCK-326546143213 scenario via the UI path (mark pay run paid).
+    // Two pay runs calculated before any payment → same credit in both → paying run 1
+    // consumes the credit → trying to pay run 2 must BLOCK with a clear error.
+
+    [Fact]
+    public async Task MarkPayRunPaid_WhenCreditAlreadyConsumedByAnotherPayout_ReturnsFailure()
+    {
+        var tenantId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var periodA = (Start: new DateOnly(2026, 1, 1), End: new DateOnly(2026, 1, 31));
+        var periodB = (Start: new DateOnly(2026, 1, 1), End: new DateOnly(2026, 3, 31));
+
+        // Seed: payee + plan covering Jan-Mar + assignment + one tx on Jan 15.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var payee = MakePayee(tenantId, "EMP-PAYRUN-DBL");
+            db.Payees.Add(payee);
+            db.CompensationPlans.Add(MakePlan(tenantId, planId, Eur, periodB.Start, periodB.End));
+            db.PlanAssignments.Add(MakeAssignment(
+                tenantId, planId, payee.Id, payee.FullName, "EMP-PAYRUN-DBL",
+                periodB.Start, periodB.End));
+            await db.SaveChangesAsync();
+
+            await using var db2 = fixture.CreateDbForTenant(tenantId);
+            var plan = await db2.CompensationPlans.Include(p => p.Rules).FirstAsync(p => p.Id == planId);
+            var ruleId = plan.Rules.First().Id;
+            var snapshot = RuleSnapshot.Freeze(ruleId, planId, 1, "Commission",
+                RateTable.Flat(0.10m), Trigger.Always(), Now);
+            var tx = MakeTx(tenantId, payee.Id, "SMOCK-PAYRUN-DBL-001",
+                new DateOnly(2026, 1, 15), 5000m, Eur);
+            db2.CompensationTransactions.Add(tx);
+            var credit = Domain.Compensation.Credits.Credit.Allocate(
+                tenantId, tx.Id, payee.Id, planId, ruleId, snapshot,
+                Money.Of(5000m, Eur), Money.Of(500m, Eur),
+                Percentage.FromPercent(100), CreditRole.Primary,
+                "test", Guid.NewGuid(), Now, Guid.NewGuid());
+            db2.Credits.Add(credit);
+            tx.MarkCalculated(1, Money.Of(500m, Eur), "test", Now, Guid.NewGuid());
+            await db2.SaveChangesAsync();
+        }
+
+        // Calculate pay run A (Jan 1-31) — captures the credit for Jan 15 tx.
+        Guid runAId;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(periodA.Start, periodA.End), default);
+            r.IsSuccess.Should().BeTrue();
+            runAId = r.Value!.PayRunId;
+        }
+
+        // Calculate pay run B (Jan 1-Mar 31) before paying A — same credit captured again.
+        Guid runBId;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(periodB.Start, periodB.End), default);
+            r.IsSuccess.Should().BeTrue();
+            runBId = r.Value!.PayRunId;
+        }
+
+        // Approve both runs.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(runAId), default);
+        }
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(runBId), default);
+        }
+
+        // Pay run A — must succeed and consume the credit.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = await MarkPaidHandler(db).Handle(new MarkPayRunPaidCommand(runAId), default);
+            r.IsSuccess.Should().BeTrue("pay run A should pay successfully");
+        }
+
+        // Try to pay run B — must BLOCK because the credit is consumed by run A's payout.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = await MarkPaidHandler(db).Handle(new MarkPayRunPaidCommand(runBId), default);
+            r.IsSuccess.Should().BeTrue("block is a structured domain outcome, not a handler failure");
+            r.Value.Should().NotBeNull("blocked result carries structured conflict data");
+            r.Value!.TotalConflicts.Should().BeGreaterThan(0, "at least one conflict must be reported");
+        }
+
+        // Verify pay run B is still Approved (not Paid).
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var runB = await db.PayRuns.FirstAsync(r => r.Id == runBId);
+            runB.Status.Should().Be(PayRunStatus.Approved,
+                "pay run B must remain Approved — no double payment occurred");
+        }
     }
 }
