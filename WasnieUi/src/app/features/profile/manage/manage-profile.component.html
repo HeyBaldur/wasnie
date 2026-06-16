@@ -30,6 +30,9 @@
           <!-- Name card -->
           <ws-card class="profile-card">
             <h3 class="profile-card__heading">{{ 'PROFILE.NAME_HEADING' | translate }}</h3>
+            @if (nameIsMissing()) {
+              <p class="profile-name-notice">{{ 'PROFILE.NAME_MISSING_NOTICE' | translate }}</p>
+            }
             <div class="ws-form-grid">
               <div class="form-field">
                 <ws-input

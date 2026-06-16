@@ -30,12 +30,16 @@ public sealed class IdentityService(
 
         foreach (var role in roles)
         {
-            await userManager.AddToRoleAsync(user, role);
+            var roleResult = await userManager.AddToRoleAsync(user, role);
+            if (!roleResult.Succeeded)
+                return (false, null, roleResult.Errors.Select(e => e.Description).ToList());
         }
 
         foreach (var (type, value) in claims)
         {
-            await userManager.AddClaimAsync(user, new System.Security.Claims.Claim(type, value));
+            var claimResult = await userManager.AddClaimAsync(user, new System.Security.Claims.Claim(type, value));
+            if (!claimResult.Succeeded)
+                return (false, null, claimResult.Errors.Select(e => e.Description).ToList());
         }
 
         return (true, user.Id, []);

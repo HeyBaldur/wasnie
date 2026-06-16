@@ -1405,6 +1405,7 @@
     "SECTION_YOUR_PROFILE": "Datos personales",
     "SECTION_ORGANIZATION": "Organización",
     "NAME_HEADING": "Nombre completo",
+    "NAME_MISSING_NOTICE": "Aún no tienes nombre configurado. Por favor, introduce tu nombre y apellido y guarda los cambios.",
     "SAVE_NAME": "Guardar nombre",
     "NAME_SAVED": "Nombre actualizado.",
     "NAME_ERROR": "No se pudo actualizar el nombre. Inténtalo de nuevo.",

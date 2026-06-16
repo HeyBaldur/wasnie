@@ -1405,6 +1405,7 @@
     "SECTION_YOUR_PROFILE": "Personal Details",
     "SECTION_ORGANIZATION": "Organization",
     "NAME_HEADING": "Full Name",
+    "NAME_MISSING_NOTICE": "Your name isn't set yet. Please fill in your first and last name and save.",
     "SAVE_NAME": "Save Name",
     "NAME_SAVED": "Name updated.",
     "NAME_ERROR": "Failed to update name. Please try again.",

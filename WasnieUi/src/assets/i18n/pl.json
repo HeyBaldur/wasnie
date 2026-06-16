@@ -1405,6 +1405,7 @@
     "SECTION_YOUR_PROFILE": "Dane osobowe",
     "SECTION_ORGANIZATION": "Organizacja",
     "NAME_HEADING": "Imię i nazwisko",
+    "NAME_MISSING_NOTICE": "Twoje imię i nazwisko nie zostało jeszcze ustawione. Uzupełnij je i zapisz zmiany.",
     "SAVE_NAME": "Zapisz imię",
     "NAME_SAVED": "Imię zaktualizowane.",
     "NAME_ERROR": "Nie udało się zaktualizować imienia. Spróbuj ponownie.",

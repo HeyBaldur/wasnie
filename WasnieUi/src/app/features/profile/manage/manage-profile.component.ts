@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
@@ -40,6 +40,10 @@ export class ManageProfileComponent implements OnInit {
   readonly firstName = signal('');
   readonly lastName = signal('');
   readonly savingName = signal(false);
+  readonly nameIsMissing = computed(() => {
+    const p = this.profile();
+    return p !== null && !p.firstName && !p.lastName;
+  });
 
   // Password section
   readonly currentPassword = signal('');
