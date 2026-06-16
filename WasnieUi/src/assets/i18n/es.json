@@ -234,6 +234,11 @@
     "PASSWORD_DIGIT": "La contraseña debe contener al menos un dígito (0–9).",
     "INVALID": "Valor no válido."
   },
+  "OVERLAP_WARNING": {
+    "COL_PERIOD": "Período",
+    "COL_STATUS": "Estado",
+    "COL_TOTAL": "Total"
+  },
   "COMMON": {
     "LOADING": "Cargando...",
     "SAVE": "Guardar",
@@ -1102,6 +1107,7 @@
     "BULK_MARK_PAID_SKIP_WARNING": "{{skipped}} pago(s) seleccionado(s) no están en estado Aprobado y serán omitidos.",
     "BULK_MARK_PAID_SUCCESS": "{{count}} pago(s) marcado(s) como pagados.",
     "BULK_MARK_PAID_PARTIAL": "{{paid}} marcados como pagados. {{errors}} no pudieron procesarse.",
+    "BULK_OVERLAP_WARNING": "{{count}} de {{total}} pagos seleccionados se superponen con pagos ya aprobados/realizados para los mismos beneficiarios. Revise antes de continuar.",
     "BULK_MARK_PAID_ERROR": "No se pudieron marcar los pagos como pagados.",
     "CALCULATE_TITLE": "Calcular Pagos",
     "CALCULATE_SUBTITLE": "Ejecuta el motor de pagos para un período.",
@@ -1161,7 +1167,9 @@
       "MARK_PAID_SUCCESS": "Pago marcado como realizado.",
       "MARK_PAID_ERROR": "No se pudo marcar el pago como realizado.",
       "EXPORT_SUCCESS": "PDF exportado.",
-      "EXPORT_ERROR": "Error al exportar el PDF."
+      "EXPORT_ERROR": "Error al exportar el PDF.",
+      "OVERLAP_WARNING": "Advertencia: el período de este pago se superpone con {{count}} pago(s) ya aprobado(s)/realizado(s) para el mismo beneficiario. Las comisiones podrían pagarse más de una vez. Revise antes de continuar.",
+      "OVERLAP_COL_PLAN": "Plan"
     },
     "EXPORT": {
       "BUTTON": "Exportar a Excel",

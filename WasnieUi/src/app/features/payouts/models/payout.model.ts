@@ -113,6 +113,16 @@ export interface BulkMarkPaidResult {
   errors: string[];
 }
 
+export interface OverlappingPayout {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  planName: string;
+  totalCommissionAmount: number;
+  totalCommissionCurrency: string;
+}
+
 export interface CalculateJobConflict {
   payeeId: string;
   payeeName: string;

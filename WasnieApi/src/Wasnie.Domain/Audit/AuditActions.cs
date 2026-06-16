@@ -87,6 +87,12 @@ public static class AuditActions
     public const string PayRunApprovedWithOverlap = "PAY_RUN_APPROVED_WITH_OVERLAP";
     public const string PayRunPaidWithOverlap = "PAY_RUN_PAID_WITH_OVERLAP";
 
+    // Payouts — overlap override audit (anti-double-pay)
+    public const string PayoutApprovedWithOverlap = "PAYOUT_APPROVED_WITH_OVERLAP";
+    public const string PayoutPaidWithOverlap = "PAYOUT_PAID_WITH_OVERLAP";
+    public const string PayoutBulkApprovedWithOverlap = "PAYOUT_BULK_APPROVED_WITH_OVERLAP";
+    public const string PayoutBulkPaidWithOverlap = "PAYOUT_BULK_PAID_WITH_OVERLAP";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

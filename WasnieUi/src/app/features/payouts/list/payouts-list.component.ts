@@ -72,6 +72,8 @@ export class PayoutsListComponent implements OnInit {
   readonly bulkApproving = signal(false);
   readonly bulkMarkPaidConfirmOpen = signal(false);
   readonly bulkMarkPaiding = signal(false);
+  readonly bulkOverlapCount = signal(0);
+  readonly bulkOverlapsLoading = signal(false);
   readonly calculating = signal(false);
   readonly calculatePhase = signal<'form' | 'running' | 'done'>('form');
   readonly calculateResult = signal<CalculateJobResult | null>(null);
@@ -376,6 +378,36 @@ export class PayoutsListComponent implements OnInit {
     const { totalsByCurrency } = this.store.bulkMarkPaidSummary();
     return [...totalsByCurrency.entries()].map(([currency, amount]) => ({ currency, amount }));
   });
+
+  async openBulkApproveConfirm(): Promise<void> {
+    this.bulkOverlapCount.set(0);
+    this.bulkOverlapsLoading.set(true);
+    this.bulkApproveConfirmOpen.set(true);
+    try {
+      const ids = this.store.selectedCalculatedIds();
+      const res = await firstValueFrom(this.api.checkBulkOverlaps(ids));
+      this.bulkOverlapCount.set(res.count);
+    } catch {
+      // non-critical
+    } finally {
+      this.bulkOverlapsLoading.set(false);
+    }
+  }
+
+  async openBulkMarkPaidConfirm(): Promise<void> {
+    this.bulkOverlapCount.set(0);
+    this.bulkOverlapsLoading.set(true);
+    this.bulkMarkPaidConfirmOpen.set(true);
+    try {
+      const ids = this.store.selectedApprovedIds();
+      const res = await firstValueFrom(this.api.checkBulkOverlaps(ids));
+      this.bulkOverlapCount.set(res.count);
+    } catch {
+      // non-critical
+    } finally {
+      this.bulkOverlapsLoading.set(false);
+    }
+  }
 
   async onBulkMarkPaid(): Promise<void> {
     const ids = this.store.selectedApprovedIds();

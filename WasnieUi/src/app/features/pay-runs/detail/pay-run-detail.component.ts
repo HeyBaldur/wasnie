@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { distinctUntilChanged } from 'rxjs/operators';
@@ -7,6 +7,8 @@ import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { OverlapWarningComponent } from '../../../shared/components/overlap-warning/overlap-warning.component';
+import { OverlapRow } from '../../../shared/models/overlap-row.model';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
@@ -31,6 +33,7 @@ import {
   imports: [
     AppShellComponent, RouterLink, ReactiveFormsModule, TranslateModule,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
+    OverlapWarningComponent,
     WsButtonComponent, WsBadgeComponent, WsCardComponent, WsPageLayoutComponent,
     WsTableComponent, WsTableEmptyComponent, WsPaginationComponent, WsModalComponent,
     WsSelectComponent, WsInputComponent, WsDatePickerComponent,
@@ -61,6 +64,14 @@ export class PayRunDetailComponent implements OnInit {
   readonly approveOverlaps = signal<OverlappingPayRun[]>([]);
   readonly markPaidOverlaps = signal<OverlappingPayRun[]>([]);
   readonly overlapsLoading = signal(false);
+
+  readonly approveOverlapRows = computed<OverlapRow[]>(() =>
+    this.approveOverlaps().map(r => this._runToRow(r))
+  );
+
+  readonly markPaidOverlapRows = computed<OverlapRow[]>(() =>
+    this.markPaidOverlaps().map(r => this._runToRow(r))
+  );
 
   // Filter panel
   readonly filterOpen = signal(false);
@@ -223,8 +234,16 @@ export class PayRunDetailComponent implements OnInit {
     }
   }
 
-  overlapTotalEntries(run: OverlappingPayRun): { currency: string; amount: number }[] {
-    return Object.entries(run.totalAmounts).map(([currency, amount]) => ({ currency, amount }));
+  private _runToRow(run: OverlappingPayRun): OverlapRow {
+    return {
+      id: run.id,
+      periodStart: run.periodStart,
+      periodEnd: run.periodEnd,
+      statusLabel: `PAY_RUNS.STATUS_${run.status.toUpperCase()}`,
+      statusVariant: run.status === 'Paid' ? 'success' : 'brand',
+      col3: String(run.payeeCount),
+      amounts: Object.entries(run.totalAmounts).map(([currency, amount]) => ({ currency, amount })),
+    };
   }
 
   viewOverlapRun(id: string): void {

@@ -10,7 +10,7 @@
         <ws-button
           variant="secondary"
           [disabled]="bulkApproving()"
-          (click)="bulkApproveConfirmOpen.set(true)"
+          (click)="openBulkApproveConfirm()"
         >
           {{ 'PAYOUTS.BULK_APPROVE' | translate }}
           <ws-badge variant="brand" size="sm">{{ store.selectedCalculatedIds().length }}</ws-badge>
@@ -21,7 +21,7 @@
           *hasPermission="'Payouts.MarkPaid'"
           variant="secondary"
           [disabled]="bulkMarkPaiding()"
-          (click)="bulkMarkPaidConfirmOpen.set(true)"
+          (click)="openBulkMarkPaidConfirm()"
         >
           {{ 'PAYOUTS.BULK_MARK_PAID' | translate }}
           <ws-badge variant="success" size="sm">{{ store.selectedApprovedIds().length }}</ws-badge>
@@ -455,6 +455,18 @@
       </p>
     }
 
+    <!-- 4. Overlap warning -->
+    @if (bulkOverlapsLoading()) {
+      <div class="payouts-list__bulk-overlap-loading">
+        <div class="ws-skeleton ws-skeleton--line" style="width: 70%"></div>
+      </div>
+    } @else if (bulkOverlapCount() > 0) {
+      <p class="payouts-list__bulk-overlap-warning">
+        <app-icon name="alert-triangle" [size]="14" />
+        {{ 'PAYOUTS.BULK_OVERLAP_WARNING' | translate: { count: bulkOverlapCount(), total: store.bulkApproveSummary().count } }}
+      </p>
+    }
+
   </div>
 
   <ng-container slot="footer">
@@ -530,6 +542,18 @@
       <p class="payouts-list__bulk-skip">
         <app-icon name="info" [size]="14" />
         {{ 'PAYOUTS.BULK_MARK_PAID_SKIP_WARNING' | translate: { skipped: store.bulkMarkPaidSummary().skippedCount } }}
+      </p>
+    }
+
+    <!-- 6. Overlap warning -->
+    @if (bulkOverlapsLoading()) {
+      <div class="payouts-list__bulk-overlap-loading">
+        <div class="ws-skeleton ws-skeleton--line" style="width: 70%"></div>
+      </div>
+    } @else if (bulkOverlapCount() > 0) {
+      <p class="payouts-list__bulk-overlap-warning">
+        <app-icon name="alert-triangle" [size]="14" />
+        {{ 'PAYOUTS.BULK_OVERLAP_WARNING' | translate: { count: bulkOverlapCount(), total: store.bulkMarkPaidSummary().count } }}
       </p>
     }
 

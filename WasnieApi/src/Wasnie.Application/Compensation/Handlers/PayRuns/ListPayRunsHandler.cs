@@ -25,8 +25,8 @@ public sealed class ListPayRunsHandler(
         var query = BuildQuery(db, f);
 
         query = string.Equals(f.SortOrder, "asc", StringComparison.OrdinalIgnoreCase)
-            ? query.OrderBy(r => r.PeriodStart)
-            : query.OrderByDescending(r => r.PeriodStart);
+            ? query.OrderBy(r => r.CreatedAt)
+            : query.OrderByDescending(r => r.CreatedAt);
 
         var paged = await query.ToPagedResultAsync(f.Page, f.PageSize, cancellationToken);
 

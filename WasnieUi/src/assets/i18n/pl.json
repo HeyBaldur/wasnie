@@ -234,6 +234,11 @@
     "PASSWORD_DIGIT": "Hasło musi zawierać co najmniej jedną cyfrę (0–9).",
     "INVALID": "Nieprawidłowa wartość."
   },
+  "OVERLAP_WARNING": {
+    "COL_PERIOD": "Okres",
+    "COL_STATUS": "Status",
+    "COL_TOTAL": "Suma"
+  },
   "COMMON": {
     "LOADING": "Ładowanie...",
     "SAVE": "Zapisz",
@@ -1102,6 +1107,7 @@
     "BULK_MARK_PAID_SKIP_WARNING": "{{skipped}} zaznaczonych wypłat(-y) nie ma statusu Zatwierdzone i zostanie pominiętych.",
     "BULK_MARK_PAID_SUCCESS": "{{count}} wypłat(-y) oznaczonych jako zrealizowane.",
     "BULK_MARK_PAID_PARTIAL": "{{paid}} oznaczonych jako zrealizowane. {{errors}} nie mogło zostać przetworzone.",
+    "BULK_OVERLAP_WARNING": "{{count}} z {{total}} zaznaczonych wypłat nakłada się z już zatwierdzonymi/zrealizowanymi wypłatami dla tych samych beneficjentów. Sprawdź przed kontynuowaniem.",
     "BULK_MARK_PAID_ERROR": "Nie udało się oznaczyć wypłat jako zrealizowanych.",
     "CALCULATE_TITLE": "Oblicz wypłaty",
     "CALCULATE_SUBTITLE": "Uruchom silnik wypłat dla danego okresu.",
@@ -1161,7 +1167,9 @@
       "MARK_PAID_SUCCESS": "Wypłata oznaczona jako zrealizowana.",
       "MARK_PAID_ERROR": "Nie udało się oznaczyć wypłaty jako zrealizowanej.",
       "EXPORT_SUCCESS": "PDF wyeksportowany.",
-      "EXPORT_ERROR": "Eksport PDF nie powiódł się."
+      "EXPORT_ERROR": "Eksport PDF nie powiódł się.",
+      "OVERLAP_WARNING": "Ostrzeżenie: okres tej wypłaty nakłada się z {{count}} już zatwierdzon(-ą/-ymi)/zrealizowaną(-ymi) wypłatą(-ami) dla tego samego beneficjenta. Prowizje mogą zostać wypłacone więcej niż raz. Sprawdź przed kontynuowaniem.",
+      "OVERLAP_COL_PLAN": "Plan"
     },
     "EXPORT": {
       "BUTTON": "Eksportuj do Excel",

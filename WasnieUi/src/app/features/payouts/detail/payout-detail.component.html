@@ -49,7 +49,7 @@
               *hasPermission="'Payouts.Approve'"
               variant="primary"
               [disabled]="approving()"
-              (click)="approveConfirmOpen.set(true)"
+              (click)="openApproveConfirm()"
             >
               {{ 'PAYOUTS.ACTION_APPROVE' | translate }}
             </ws-button>
@@ -68,7 +68,7 @@
               *hasPermission="'Payouts.MarkPaid'"
               variant="primary"
               [disabled]="markingPaid()"
-              (click)="markPaidConfirmOpen.set(true)"
+              (click)="openMarkPaidConfirm()"
             >
               {{ 'PAYOUTS.ACTION_MARK_PAID' | translate }}
             </ws-button>
@@ -276,24 +276,56 @@
   </ws-page-layout>
 </app-shell>
 
-<ws-confirmation-modal
-  [(isOpen)]="approveConfirmOpen"
+<!-- Approve payout modal -->
+<ws-modal
+  [isOpen]="approveConfirmOpen()"
+  (isOpenChange)="approveConfirmOpen.set($event)"
   [title]="'PAYOUTS.DETAIL.APPROVE_CONFIRM_TITLE' | translate"
-  [message]="'PAYOUTS.DETAIL.APPROVE_CONFIRM_MSG' | translate"
-  [confirmLabel]="'PAYOUTS.ACTION_APPROVE' | translate"
-  [cancelLabel]="'COMMON.CANCEL' | translate"
-  [loading]="approving()"
-  (confirmed)="onApprove()"
-  (cancelled)="approveConfirmOpen.set(false)"
-/>
+  [closable]="!approving()"
+>
+  <div class="payout-detail__modal-body">
+    <p class="payout-detail__modal-intro">{{ 'PAYOUTS.DETAIL.APPROVE_CONFIRM_MSG' | translate }}</p>
+    <app-overlap-warning
+      [rows]="approveOverlapRows()"
+      [loading]="overlapsLoading()"
+      warningKey="PAYOUTS.DETAIL.OVERLAP_WARNING"
+      col3HeaderKey="PAYOUTS.DETAIL.OVERLAP_COL_PLAN"
+      (rowClick)="viewOverlapPayout($event)"
+    />
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="approving()" (click)="approveConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="approving()" [loading]="approving()" (click)="onApprove()">
+      {{ 'PAYOUTS.ACTION_APPROVE' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
 
-<ws-confirmation-modal
-  [(isOpen)]="markPaidConfirmOpen"
+<!-- Mark payout paid modal -->
+<ws-modal
+  [isOpen]="markPaidConfirmOpen()"
+  (isOpenChange)="markPaidConfirmOpen.set($event)"
   [title]="'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_TITLE' | translate"
-  [message]="'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_MSG' | translate"
-  [confirmLabel]="'PAYOUTS.ACTION_MARK_PAID' | translate"
-  [cancelLabel]="'COMMON.CANCEL' | translate"
-  [loading]="markingPaid()"
-  (confirmed)="onMarkPaid()"
-  (cancelled)="markPaidConfirmOpen.set(false)"
-/>
+  [closable]="!markingPaid()"
+>
+  <div class="payout-detail__modal-body">
+    <p class="payout-detail__modal-intro">{{ 'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_MSG' | translate }}</p>
+    <app-overlap-warning
+      [rows]="markPaidOverlapRows()"
+      [loading]="overlapsLoading()"
+      warningKey="PAYOUTS.DETAIL.OVERLAP_WARNING"
+      col3HeaderKey="PAYOUTS.DETAIL.OVERLAP_COL_PLAN"
+      (rowClick)="viewOverlapPayout($event)"
+    />
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="markingPaid()" (click)="markPaidConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="markingPaid()" [loading]="markingPaid()" (click)="onMarkPaid()">
+      {{ 'PAYOUTS.ACTION_MARK_PAID' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>

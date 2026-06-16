@@ -1,0 +1,43 @@
+@if (loading) {
+  <div class="overlap-warning__loading">
+    <div class="ws-skeleton ws-skeleton--line" style="width: 60%"></div>
+  </div>
+} @else if (rows.length > 0) {
+  <div class="overlap-warning__wrapper">
+    <p class="overlap-warning__msg">
+      <app-icon name="alert-triangle" [size]="14" />
+      {{ warningKey | translate: { count: rows.length } }}
+    </p>
+    <div class="overlap-warning__table-wrapper">
+      <table class="overlap-warning__table">
+        <thead>
+          <tr>
+            <th>{{ 'OVERLAP_WARNING.COL_PERIOD' | translate }}</th>
+            <th>{{ 'OVERLAP_WARNING.COL_STATUS' | translate }}</th>
+            <th>{{ col3HeaderKey | translate }}</th>
+            <th>{{ 'OVERLAP_WARNING.COL_TOTAL' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows; track row.id) {
+            <tr class="overlap-warning__row"
+                tabindex="0"
+                (click)="rowClick.emit(row.id)"
+                (keydown.enter)="rowClick.emit(row.id)">
+              <td>{{ row.periodStart | dateFormat }} → {{ row.periodEnd | dateFormat }}</td>
+              <td>
+                <ws-badge [variant]="row.statusVariant">{{ row.statusLabel | translate }}</ws-badge>
+              </td>
+              <td>{{ row.col3 }}</td>
+              <td>
+                @for (entry of row.amounts; track entry.currency) {
+                  <div>{{ entry.amount | currencyFormat: entry.currency }}</div>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+}

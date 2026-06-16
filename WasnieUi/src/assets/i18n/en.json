@@ -234,6 +234,11 @@
     "PASSWORD_DIGIT": "Password must contain at least one digit (0–9).",
     "INVALID": "Invalid value."
   },
+  "OVERLAP_WARNING": {
+    "COL_PERIOD": "Period",
+    "COL_STATUS": "Status",
+    "COL_TOTAL": "Total"
+  },
   "COMMON": {
     "LOADING": "Loading...",
     "SAVE": "Save",
@@ -1102,6 +1107,7 @@
     "BULK_MARK_PAID_SKIP_WARNING": "{{skipped}} selected payout(s) are not Approved and will be skipped.",
     "BULK_MARK_PAID_SUCCESS": "{{count}} payout(s) marked as paid.",
     "BULK_MARK_PAID_PARTIAL": "{{paid}} marked as paid. {{errors}} could not be processed.",
+    "BULK_OVERLAP_WARNING": "{{count}} of {{total}} selected payouts overlap with already approved/paid payouts for the same payees. Review before continuing.",
     "BULK_MARK_PAID_ERROR": "Could not mark payouts as paid.",
     "CALCULATE_TITLE": "Calculate Payouts",
     "CALCULATE_SUBTITLE": "Run the payout engine for a period. Existing Calculated payouts will be replaced. Approved and Paid payouts are protected.",
@@ -1161,7 +1167,9 @@
       "MARK_PAID_SUCCESS": "Payout marked as paid.",
       "MARK_PAID_ERROR": "Could not mark payout as paid.",
       "EXPORT_SUCCESS": "PDF exported.",
-      "EXPORT_ERROR": "PDF export failed."
+      "EXPORT_ERROR": "PDF export failed.",
+      "OVERLAP_WARNING": "Warning: this payout's period overlaps with {{count}} already approved/paid payout(s) for the same payee. Commissions may be paid more than once. Review before continuing.",
+      "OVERLAP_COL_PLAN": "Plan"
     },
     "EXPORT": {
       "BUTTON": "Export to Excel",

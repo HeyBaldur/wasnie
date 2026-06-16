@@ -4,6 +4,32 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-16 — WI-PAYOUT-OVERLAP-GUARD: Aviso de solapamiento al aprobar/pagar payouts
+
+**Objetivo:** Mostrar aviso de solapamiento al aprobar o marcar como pagado payouts individuales y en operaciones bulk, reutilizando el componente de tabla que ya existía en pay-run-detail.
+
+**Completado:**
+- **Backend handlers**: `GetPayoutOverlapsHandler` (overlaps por payee+período, resolución de plan name) + `CheckPayoutsOverlapsHandler` (bulk count)
+- **Queries**: `GetPayoutOverlapsQuery` + `CheckPayoutsOverlapsQuery` en `ListPayoutsQuery.cs`
+- **DTO**: `OverlappingPayoutDto` en `PayoutDto.cs`
+- **Audit constants**: `PayoutApprovedWithOverlap`, `PayoutPaidWithOverlap`, `PayoutBulkApprovedWithOverlap`, `PayoutBulkPaidWithOverlap` en `AuditActions.cs`
+- **Handlers actualizados**: `ApprovePayoutHandler` + `MarkPayoutPaidHandler` ahora tienen auth guard + overlap audit; `BulkApprovePayoutsHandler` + `BulkMarkPaidHandler` con IAuditService + overlap count
+- **Endpoints nuevos**: `GET /api/payouts/{id}/overlaps` + `POST /api/payouts/overlaps-check` en `PayoutsController`
+- **Shared component**: `OverlapWarningComponent` en `shared/components/overlap-warning/` — extrae el markup de tabla scrolleable que existía inline en pay-run-detail
+- **pay-run-detail refactorizado**: inline overlap tables reemplazadas con `<app-overlap-warning>`, `_runToRow()` helper, computed signals `approveOverlapRows`/`markPaidOverlapRows`
+- **payout-detail actualizado**: `ws-confirmation-modal` → `ws-modal` + `<app-overlap-warning>`, métodos `openApproveConfirm()`/`openMarkPaidConfirm()` que fetchan overlaps al abrir
+- **payouts-list actualizado**: `openBulkApproveConfirm()`/`openBulkMarkPaidConfirm()` con `checkBulkOverlaps`, overlap count en ambos bulk modals
+- **Modelos**: `OverlapRow` interface en `shared/models/`, `OverlappingPayout` en `payout.model.ts`, `getOverlaps`/`checkBulkOverlaps` en `payouts.api.service.ts`
+- **i18n EN/ES/PL**: `OVERLAP_WARNING.COL_*` (shared), `PAYOUTS.DETAIL.OVERLAP_WARNING`, `PAYOUTS.DETAIL.OVERLAP_COL_PLAN`, `PAYOUTS.BULK_OVERLAP_WARNING`
+- **Tests**: 10 nuevos `GetPayoutOverlapsHandlerTests` (576→586 total, todos pasan)
+- **Build**: `ng build --configuration production` limpio; Application + Domain compilados sin errores (API DLL bloqueada por servidor en ejecución)
+
+**Decisiones:**
+- Solapamiento de payout = mismo payee + período solapado + status Approved/Paid (no tenant-wide como pay-run)
+- Bulk muestra solo el count (no tabla per-row — N overlaps queries sería costoso)
+- `OverlapWarningComponent` usa inputs `warningKey` + `col3HeaderKey` para ser agnóstico al dominio padre
+- Columnas fijas (Period, Status, Total) en namespace `OVERLAP_WARNING.*`; col3 variable via input
+
 ## 2026-06-16 — WI-DELETE-DRAFT: Borrado permanente de pay runs en Draft
 
 **Objetivo:** Permitir borrar definitivamente pay runs en estado Draft (y SOLO Draft). Approved y Paid son registros financieros — nunca borrables.

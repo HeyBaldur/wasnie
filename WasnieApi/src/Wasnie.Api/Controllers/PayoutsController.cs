@@ -93,6 +93,23 @@ public sealed class PayoutsController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    // GET /api/payouts/{id}/overlaps
+    [HttpGet("{id:guid}/overlaps")]
+    public async Task<IActionResult> GetOverlaps(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetPayoutOverlapsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
+    // POST /api/payouts/overlaps-check
+    [HttpPost("overlaps-check")]
+    public async Task<IActionResult> CheckOverlaps(
+        [FromBody] OverlapsCheckRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new CheckPayoutsOverlapsQuery(body.PayoutIds), cancellationToken);
+        return result.IsSuccess ? Ok(new { count = result.Value }) : BadRequest(new { message = result.Error });
+    }
+
     // GET /api/payouts/export
     [HttpGet("export")]
     public async Task<IActionResult> Export(
@@ -129,3 +146,4 @@ public sealed record CalculatePayoutsRequest(
 
 public sealed record BulkApproveRequest(IReadOnlyList<Guid> PayoutIds);
 public sealed record BulkMarkPaidRequest(IReadOnlyList<Guid> PayoutIds);
+public sealed record OverlapsCheckRequest(IReadOnlyList<Guid> PayoutIds);

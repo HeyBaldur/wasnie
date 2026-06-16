@@ -311,4 +311,16 @@
     color: var(--color-text-tertiary);
     font-style: italic;
   }
+
+  &__modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  &__modal-intro {
+    margin: 0;
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+  }
 }

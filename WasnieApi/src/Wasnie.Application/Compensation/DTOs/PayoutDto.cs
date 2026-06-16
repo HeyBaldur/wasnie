@@ -1,5 +1,14 @@
 namespace Wasnie.Application.Compensation.DTOs;
 
+public sealed record OverlappingPayoutDto(
+    Guid Id,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
+    string Status,
+    string PlanName,
+    decimal TotalCommissionAmount,
+    string TotalCommissionCurrency);
+
 public sealed record PayoutListItemDto(
     Guid Id,
     Guid PayeeId,

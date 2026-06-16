@@ -23,7 +23,7 @@ export class PayRunsStore {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly page = signal(1);
-  readonly pageSize = signal(25);
+  readonly pageSize = signal(10);
   readonly filter = signal<PayRunFilter>({ ...EMPTY_PAY_RUN_FILTER });
 
   readonly pagedResult = signal<PagedResult<PayRunListItem> | null>(null);

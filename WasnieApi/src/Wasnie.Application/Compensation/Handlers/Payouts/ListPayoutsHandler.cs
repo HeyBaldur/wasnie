@@ -40,8 +40,8 @@ public sealed class ListPayoutsHandler(
                 ? query.OrderByDescending(p => p.Status)
                 : query.OrderBy(p => p.Status),
             _ => desc
-                ? query.OrderByDescending(p => p.UpdatedAt)
-                : query.OrderBy(p => p.UpdatedAt),
+                ? query.OrderByDescending(p => p.CalculatedAt)
+                : query.OrderBy(p => p.CalculatedAt),
         };
 
         var paged = await query.ToPagedResultAsync(f.Page, f.PageSize, cancellationToken);

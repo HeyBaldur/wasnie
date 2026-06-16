@@ -10,6 +10,7 @@ import {
   BulkMarkPaidRequest,
   BulkMarkPaidResult,
   CalculatePayoutsRequest,
+  OverlappingPayout,
   PayoutDetail,
   PayoutListItem,
 } from '../models/payout.model';
@@ -54,6 +55,14 @@ export class PayoutsApiService {
 
   bulkMarkPaid(body: BulkMarkPaidRequest): Observable<BulkMarkPaidResult> {
     return this.http.post<BulkMarkPaidResult>(`${this.base}/bulk-mark-paid`, body);
+  }
+
+  getOverlaps(id: string): Observable<OverlappingPayout[]> {
+    return this.http.get<OverlappingPayout[]>(`${this.base}/${id}/overlaps`);
+  }
+
+  checkBulkOverlaps(ids: string[]): Observable<{ count: number }> {
+    return this.http.post<{ count: number }>(`${this.base}/overlaps-check`, { payoutIds: ids });
   }
 
   getJobStatus(jobId: string): Observable<PayoutJobStatus> {
