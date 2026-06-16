@@ -44,4 +44,11 @@ public sealed record PayoutLineDto(
     decimal BaseAmount,
     string BaseCurrency,
     decimal CommissionAmount,
-    string CommissionCurrency);
+    string CommissionCurrency,
+    // Source transaction — null only if data is missing (should not occur in normal operation)
+    Guid? TransactionId,
+    string? TransactionReference,
+    string? TransactionExternalId,
+    DateOnly? TransactionDate,
+    decimal? TransactionAmount,
+    string? TransactionCurrency);

@@ -27,6 +27,12 @@ export interface PayoutLine {
   baseCurrency: string;
   commissionAmount: number;
   commissionCurrency: string;
+  transactionId: string | null;
+  transactionReference: string | null;
+  transactionExternalId: string | null;
+  transactionDate: string | null;
+  transactionAmount: number | null;
+  transactionCurrency: string | null;
 }
 
 export interface PayoutDetail extends PayoutListItem {

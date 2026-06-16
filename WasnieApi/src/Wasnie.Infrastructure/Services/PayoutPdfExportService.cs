@@ -104,6 +104,7 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
                     table.ColumnsDefinition(cols =>
                     {
                         cols.RelativeColumn(3); // Rule
+                        cols.RelativeColumn(3); // Source transaction
                         cols.RelativeColumn(2); // Base
                         cols.RelativeColumn(2); // Commission
                     });
@@ -113,6 +114,8 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
                     {
                         header.Cell().Background(Colors.Grey.Lighten3).Padding(6)
                             .Text("Rule").SemiBold().FontSize(9);
+                        header.Cell().Background(Colors.Grey.Lighten3).Padding(6)
+                            .Text("Source Transaction").SemiBold().FontSize(9);
                         header.Cell().Background(Colors.Grey.Lighten3).Padding(6).AlignRight()
                             .Text("Base Amount").SemiBold().FontSize(9);
                         header.Cell().Background(Colors.Grey.Lighten3).Padding(6).AlignRight()
@@ -122,8 +125,15 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
                     // Data rows
                     foreach (var line in payout.Lines)
                     {
+                        var sourceText = line.TransactionReference is not null
+                            ? $"{line.TransactionReference}  {line.TransactionDate:yyyy-MM-dd}"
+                            : "—";
+
                         table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3).Padding(5)
                             .Text(line.RuleName).FontSize(9);
+                        table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3).Padding(5)
+                            .Text(sourceText).FontSize(9).FontColor(
+                                line.TransactionReference is not null ? Colors.Black : Colors.Grey.Darken1);
                         table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3).Padding(5).AlignRight()
                             .Text($"{line.BaseAmount:N2} {line.BaseCurrency}").FontSize(9);
                         table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3).Padding(5).AlignRight()
@@ -132,6 +142,7 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
 
                     // Total row
                     table.Cell().Padding(5).Text("Total").SemiBold().FontSize(9);
+                    table.Cell().Padding(5);
                     table.Cell().Padding(5);
                     table.Cell().Padding(5).AlignRight()
                         .Text($"{payout.TotalCommissionAmount:N2} {payout.TotalCommissionCurrency}")

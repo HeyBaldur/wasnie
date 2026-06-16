@@ -130,6 +130,7 @@
               <thead>
                 <tr>
                   <th>{{ 'PAYOUTS.DETAIL.COL_RULE' | translate }}</th>
+                  <th>{{ 'PAYOUTS.DETAIL.COL_SOURCE' | translate }}</th>
                   <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_BASE' | translate }}</th>
                   <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_COMMISSION' | translate }}</th>
                 </tr>
@@ -138,6 +139,21 @@
                 @for (line of p.lines; track line.id) {
                   <tr>
                     <td>{{ line.ruleName }}</td>
+                    <td>
+                      @if (line.transactionReference) {
+                        <div class="payout-detail__source-cell">
+                          <a class="payout-detail__source-ref"
+                             (click)="openTransaction(line.transactionReference)"
+                             role="button"
+                             tabindex="0">{{ line.transactionReference }}</a>
+                          @if (line.transactionDate) {
+                            <span class="payout-detail__source-date">{{ line.transactionDate | dateFormat }}</span>
+                          }
+                        </div>
+                      } @else {
+                        <span class="payout-detail__source-none">—</span>
+                      }
+                    </td>
                     <td class="payout-detail__col-right payout-detail__num">
                       {{ line.baseAmount | currencyFormat: line.baseCurrency }}
                     </td>
@@ -150,6 +166,7 @@
               <tfoot>
                 <tr class="payout-detail__total-row">
                   <td><strong>Total</strong></td>
+                  <td></td>
                   <td></td>
                   <td class="payout-detail__col-right payout-detail__num">
                     <strong>{{ p.totalCommissionAmount | currencyFormat: p.totalCommissionCurrency }}</strong>

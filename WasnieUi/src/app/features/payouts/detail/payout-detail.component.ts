@@ -115,6 +115,10 @@ export class PayoutDetailComponent implements OnInit {
     window.open(`/plans/${planId}`, '_blank');
   }
 
+  openTransaction(referenceNumber: string): void {
+    window.open(`/transactions?ref=${encodeURIComponent(referenceNumber)}`, '_blank');
+  }
+
   async onExportPdf(): Promise<void> {
     if (this.exporting()) return;
     this.exporting.set(true);

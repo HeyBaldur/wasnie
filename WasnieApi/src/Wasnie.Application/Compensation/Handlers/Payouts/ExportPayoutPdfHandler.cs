@@ -36,15 +36,7 @@ public sealed class ExportPayoutPdfHandler(
             .Select(p => p.Name)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
-        var lines = payout.Lines.Select(l => new PayoutLineDto(
-            Id: l.Id,
-            CreditId: l.CreditId,
-            RuleId: l.RuleId,
-            RuleName: l.RuleName,
-            BaseAmount: l.BaseAmount.Amount,
-            BaseCurrency: l.BaseAmount.Currency,
-            CommissionAmount: l.CommissionAmount.Amount,
-            CommissionCurrency: l.CommissionAmount.Currency)).ToList();
+        var lines = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, db, cancellationToken);
 
         var dto = new PayoutDto(
             Id: payout.Id,

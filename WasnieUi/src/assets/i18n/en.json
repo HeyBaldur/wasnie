@@ -1136,6 +1136,7 @@
       "UPDATED_AT": "Last updated at",
       "UPDATED_BY": "Last updated by",
       "COL_RULE": "Rule",
+      "COL_SOURCE": "Source Transaction",
       "COL_BASE": "Base Amount",
       "COL_COMMISSION": "Commission",
       "NO_LINES": "No commission lines recorded.",

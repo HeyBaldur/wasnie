@@ -1136,6 +1136,7 @@
       "UPDATED_AT": "Última actualización",
       "UPDATED_BY": "Actualizado por",
       "COL_RULE": "Regla",
+      "COL_SOURCE": "Transacción de origen",
       "COL_BASE": "Importe base",
       "COL_COMMISSION": "Comisión",
       "NO_LINES": "No hay líneas de comisión registradas.",

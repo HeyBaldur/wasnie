@@ -4,6 +4,38 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-16 — WI-PAYMENT-TRACEABILITY: Exponer trazabilidad pago → transacción (Fase 1)
+
+**Objetivo:** Que cada línea de comisión en el statement muestre la transacción de venta de origen.
+
+**Diagnóstico previo (read-only, misma sesión):** Confirmó que la cadena `PayoutLine.CreditId → Credit.TransactionId → CompensationTransaction` existe completa en la DB pero se corta en la API.
+
+**Step 0 confirmado:**
+- `Credit.TransactionId` no nullable → toda línea tiene crédito y todo crédito tiene transacción
+- `Credit.OriginalAmount == CompensationTransaction.Amount` (confirmado por warning EF en logs)
+- No hay cambios de esquema ni de dominio
+
+**Cambios backend:**
+- `PayoutDto.cs` — `PayoutLineDto` extendido con 6 campos nullable (`TransactionId`, `TransactionReference`, `TransactionExternalId`, `TransactionDate`, `TransactionAmount`, `TransactionCurrency`)
+- `GetPayoutByIdHandler.cs` — refactorizado a `BuildLinesAsync` (`public static`); resuelve en 2 queries bulk: `Credits WHERE id IN (...)` + `Transactions WHERE id IN (...)`; null-safe con `TryGetValue`
+- `ExportPayoutPdfHandler.cs` — reutiliza `GetPayoutByIdHandler.BuildLinesAsync` (sin duplicar lógica)
+- `PayoutPdfExportService.cs` — tabla de líneas ahora con 4 columnas; nueva columna "Source Transaction" muestra `ReferenceNumber · YYYY-MM-DD`; líneas sin referencia muestran "—" en gris
+
+**Cambios frontend:**
+- `payout.model.ts` — `PayoutLine` extendido con los 6 campos nuevos nullable
+- `payout-detail.component.html` — nueva columna "Source Transaction" en tabla; muestra referencia en span bold + fecha debajo en span muted; `@if` graceful para null
+- `payout-detail.component.scss` — estilos para `.payout-detail__source-cell/ref/date/none`
+- `en/es/pl.json` — clave `PAYOUTS.DETAIL.COL_SOURCE` (EN: "Source Transaction", ES: "Transacción de origen", PL: "Transakcja źródłowa")
+
+**Tests:** 4 nuevos unit tests en `GetPayoutByIdHandlerBuildLinesTests.cs` — reference populated, fields preserved, missing credit → null graceful, 3 lines all resolved. Total: 545→549. Sin regresiones.
+
+**Decisiones:**
+- `BuildLinesAsync` hecho `public static` para ser reutilizable por `ExportPayoutPdfHandler` y testeable sin `InternalsVisibleTo`
+- `Credit.OriginalAmount` no incluido en DTO por separado (= `tx.Amount`, redundante)
+- PDF incluido en este WI (era opcional — el handler ya tenía la misma estructura, bajo esfuerzo)
+
+**Próximo:** Audit log de Approve/MarkPaid (WI-AUDIT-PAYOUT-TRANSITIONS) — riesgo regulatorio, 10 líneas de código.
+
 ---
 
 ## Sessions (newest first)
