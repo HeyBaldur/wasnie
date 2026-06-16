@@ -19,3 +19,5 @@ public sealed record ApprovePayRunCommand(Guid PayRunId) : IRequest<Result>;
 public sealed record MarkPayRunPaidCommand(Guid PayRunId) : IRequest<Result>;
 
 public sealed record ReopenPayRunCommand(Guid PayRunId) : IRequest<Result>;
+
+public sealed record DeletePayRunDraftCommand(Guid PayRunId) : IRequest<Result>;

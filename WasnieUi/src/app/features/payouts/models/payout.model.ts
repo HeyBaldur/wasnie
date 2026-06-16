@@ -18,6 +18,54 @@ export interface PayoutListItem {
   updatedBy: string;
 }
 
+export interface RateTierDto {
+  from: number;
+  to: number | null;
+  rate: number;
+}
+
+export interface AttainmentTierDto {
+  attainmentFrom: number;
+  attainmentTo: number | null;
+  rate: number;
+}
+
+export interface RateTableDto {
+  type: 'Flat' | 'Tiered' | 'AttainmentBased';
+  flatRate: number | null;
+  tiers: RateTierDto[] | null;
+  attainmentTiers: AttainmentTierDto[] | null;
+}
+
+export interface ConditionDto {
+  field: string;
+  operator: string;
+  value: string;
+}
+
+export interface TriggerDto {
+  isAlways: boolean;
+  logicalOperator: string;
+  conditions: ConditionDto[];
+}
+
+export interface ModifierApplicationDto {
+  modifierName: string;
+  factorApplied: number;
+  amountBefore: number;
+  amountBeforeCurrency: string;
+  amountAfter: number;
+  amountAfterCurrency: string;
+}
+
+export interface LineCalculationDto {
+  planVersion: number;
+  frozenAt: string;
+  rateTable: RateTableDto;
+  trigger: TriggerDto;
+  modifiers: ModifierApplicationDto[];
+}
+
 export interface PayoutLine {
   id: string;
   creditId: string;
@@ -33,6 +81,7 @@ export interface PayoutLine {
   transactionDate: string | null;
   transactionAmount: number | null;
   transactionCurrency: string | null;
+  calculation: LineCalculationDto | null;
 }
 
 export interface PayoutDetail extends PayoutListItem {

@@ -80,6 +80,13 @@ public static class AuditActions
     public const string RecoveryCodeUsed = "RECOVERY_CODE_USED";
     public const string RecoveryCodesRegenerated = "RECOVERY_CODES_REGENERATED";
 
+    // Pay runs — lifecycle
+    public const string PayRunDraftDeleted = "PAY_RUN_DRAFT_DELETED";
+
+    // Pay runs — overlap override audit (anti-double-pay)
+    public const string PayRunApprovedWithOverlap = "PAY_RUN_APPROVED_WITH_OVERLAP";
+    public const string PayRunPaidWithOverlap = "PAY_RUN_PAID_WITH_OVERLAP";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

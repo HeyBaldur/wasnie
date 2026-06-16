@@ -9,6 +9,15 @@
       <!-- Draft actions -->
       @if (store.isDraft() && !store.loading()) {
         <ws-button
+          *hasPermission="'Payouts.DeleteDraft'"
+          variant="secondary"
+          size="sm"
+          [disabled]="actioning() || deleting()"
+          (click)="deleteConfirmOpen.set(true)"
+        >
+          {{ 'PAY_RUNS.DELETE_DRAFT' | translate }}
+        </ws-button>
+        <ws-button
           *hasPermission="'Payouts.Calculate'"
           variant="secondary"
           [disabled]="actioning()"
@@ -22,7 +31,7 @@
           variant="primary"
           [disabled]="actioning()"
           [loading]="actioning()"
-          (click)="approveConfirmOpen.set(true)"
+          (click)="openApproveConfirm()"
         >
           {{ 'PAY_RUNS.ACTION_APPROVE' | translate }}
         </ws-button>
@@ -42,7 +51,7 @@
           variant="primary"
           [disabled]="actioning()"
           [loading]="actioning()"
-          (click)="markPaidConfirmOpen.set(true)"
+          (click)="openMarkPaidConfirm()"
         >
           {{ 'PAY_RUNS.ACTION_MARK_PAID' | translate }}
         </ws-button>
@@ -68,6 +77,13 @@
       <ws-card variant="raised" class="pay-run-detail__error-banner">
         <app-icon name="alert-circle" [size]="16" />
         {{ exportError()! | translate }}
+      </ws-card>
+    }
+
+    @if (deleteError()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ deleteError()! | translate }}
       </ws-card>
     }
 
@@ -372,6 +388,48 @@
     <p class="pay-run-detail__modal-intro">
       {{ 'PAY_RUNS.DETAIL.APPROVE_CONFIRM_BODY' | translate: { payeeCount: store.run()?.payeeCount ?? 0 } }}
     </p>
+
+    @if (overlapsLoading()) {
+      <div class="pay-run-detail__overlap-loading">
+        <div class="ws-skeleton ws-skeleton--line" style="width: 60%"></div>
+      </div>
+    } @else if (approveOverlaps().length > 0) {
+      <div class="pay-run-detail__overlap-warning">
+        <p class="pay-run-detail__overlap-msg">
+          <app-icon name="alert-triangle" [size]="14" />
+          {{ 'PAY_RUNS.DETAIL.OVERLAP_WARNING' | translate: { count: approveOverlaps().length } }}
+        </p>
+        <div class="pay-run-detail__overlap-table-wrapper">
+          <table class="pay-run-detail__overlap-table">
+            <thead>
+              <tr>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_PERIOD' | translate }}</th>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_STATUS' | translate }}</th>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_PAYEES' | translate }}</th>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_TOTAL' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (run of approveOverlaps(); track run.id) {
+                <tr class="pay-run-detail__overlap-row"
+                    tabindex="0"
+                    (click)="viewOverlapRun(run.id)"
+                    (keydown.enter)="viewOverlapRun(run.id)">
+                  <td>{{ run.periodStart | dateFormat }} → {{ run.periodEnd | dateFormat }}</td>
+                  <td><ws-badge [variant]="runStatusBadge(run.status)">{{ 'PAY_RUNS.STATUS_' + run.status.toUpperCase() | translate }}</ws-badge></td>
+                  <td>{{ run.payeeCount }}</td>
+                  <td>
+                    @for (entry of overlapTotalEntries(run); track entry.currency) {
+                      <div>{{ entry.amount | currencyFormat: entry.currency }}</div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
   </div>
   <ng-container slot="footer">
     <ws-button variant="ghost" [disabled]="actioning()" (click)="approveConfirmOpen.set(false)">
@@ -423,6 +481,48 @@
       {{ 'PAY_RUNS.DETAIL.MARK_PAID_IRREVERSIBLE' | translate }}
     </p>
 
+    @if (overlapsLoading()) {
+      <div class="pay-run-detail__overlap-loading">
+        <div class="ws-skeleton ws-skeleton--line" style="width: 60%"></div>
+      </div>
+    } @else if (markPaidOverlaps().length > 0) {
+      <div class="pay-run-detail__overlap-warning">
+        <p class="pay-run-detail__overlap-msg">
+          <app-icon name="alert-triangle" [size]="14" />
+          {{ 'PAY_RUNS.DETAIL.OVERLAP_WARNING' | translate: { count: markPaidOverlaps().length } }}
+        </p>
+        <div class="pay-run-detail__overlap-table-wrapper">
+          <table class="pay-run-detail__overlap-table">
+            <thead>
+              <tr>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_PERIOD' | translate }}</th>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_STATUS' | translate }}</th>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_PAYEES' | translate }}</th>
+                <th>{{ 'PAY_RUNS.DETAIL.OVERLAP_COL_TOTAL' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (run of markPaidOverlaps(); track run.id) {
+                <tr class="pay-run-detail__overlap-row"
+                    tabindex="0"
+                    (click)="viewOverlapRun(run.id)"
+                    (keydown.enter)="viewOverlapRun(run.id)">
+                  <td>{{ run.periodStart | dateFormat }} → {{ run.periodEnd | dateFormat }}</td>
+                  <td><ws-badge [variant]="runStatusBadge(run.status)">{{ 'PAY_RUNS.STATUS_' + run.status.toUpperCase() | translate }}</ws-badge></td>
+                  <td>{{ run.payeeCount }}</td>
+                  <td>
+                    @for (entry of overlapTotalEntries(run); track entry.currency) {
+                      <div>{{ entry.amount | currencyFormat: entry.currency }}</div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+
   </div>
   <ng-container slot="footer">
     <ws-button variant="ghost" [disabled]="actioning()" (click)="markPaidConfirmOpen.set(false)">
@@ -452,6 +552,32 @@
     </ws-button>
     <ws-button variant="secondary" [disabled]="actioning()" [loading]="actioning()" (click)="onReopen()">
       {{ 'PAY_RUNS.DETAIL.REOPEN_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Delete draft modal — IRREVERSIBLE -->
+<ws-modal
+  [isOpen]="deleteConfirmOpen()"
+  (isOpenChange)="deleteConfirmOpen.set($event)"
+  [title]="'PAY_RUNS.DELETE_CONFIRM_TITLE' | translate"
+  [closable]="!deleting()"
+>
+  <div class="pay-run-detail__modal-body">
+    <p class="pay-run-detail__modal-intro">
+      {{ 'PAY_RUNS.DELETE_CONFIRM_BODY' | translate: {
+        periodStart: (store.run()?.periodStart ?? '') | dateFormat,
+        periodEnd: (store.run()?.periodEnd ?? '') | dateFormat
+      } }}
+      <span class="pay-run-detail__modal-irreversible">{{ 'PAY_RUNS.DELETE_CONFIRM_IRREVERSIBLE' | translate }}</span>
+    </p>
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="deleting()" (click)="deleteConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="danger" [disabled]="deleting()" [loading]="deleting()" (click)="onDelete()">
+      {{ 'PAY_RUNS.DELETE_CONFIRM_BTN' | translate }}
     </ws-button>
   </ng-container>
 </ws-modal>

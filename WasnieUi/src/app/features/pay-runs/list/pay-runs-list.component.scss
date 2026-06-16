@@ -116,6 +116,60 @@
     color: var(--color-text-secondary);
   }
 
+  &__col-actions {
+    width: 40px;
+    text-align: center;
+    padding-left: 0;
+    padding-right: var(--space-2);
+  }
+
+  &__delete-btn {
+    opacity: 0;
+    transition: opacity 150ms ease;
+    color: var(--color-text-secondary);
+
+    &:hover {
+      color: var(--color-danger);
+    }
+  }
+
+  &__row:hover &__delete-btn,
+  &__row:focus-within &__delete-btn {
+    opacity: 1;
+  }
+
+  // ── Delete / shared modal body ─────────────────────────────────────────────
+
+  &__modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  &__modal-intro {
+    font-size: var(--font-size-14);
+    color: var(--color-text-primary);
+    margin: 0;
+  }
+
+  &__modal-warning {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-warning);
+    margin: 0;
+  }
+
+  &__modal-irreversible {
+    font-weight: 600;
+    color: var(--color-warning);
+  }
+
+  &__modal-error {
+    font-size: var(--font-size-13);
+    color: var(--color-danger);
+    margin: 0;
+  }
+
   // ── Calculate modal ────────────────────────────────────────────────────────
 
   &__modal-form {

@@ -34,3 +34,13 @@ public sealed record PayRunDetailDto(
     DateTimeOffset? PaidAt,
     string? PaidBy,
     PagedResult<PayoutListItemDto> Payouts);
+
+public sealed record OverlappingPayRunDto(
+    Guid Id,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd,
+    string Status,
+    int PayeeCount,
+    IReadOnlyDictionary<string, decimal> TotalAmounts,
+    DateTimeOffset? ApprovedAt,
+    DateTimeOffset? PaidAt);

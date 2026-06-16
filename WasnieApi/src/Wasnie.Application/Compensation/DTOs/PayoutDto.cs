@@ -51,4 +51,40 @@ public sealed record PayoutLineDto(
     string? TransactionExternalId,
     DateOnly? TransactionDate,
     decimal? TransactionAmount,
-    string? TransactionCurrency);
+    string? TransactionCurrency,
+    // Calculation explanation — null if credit data unavailable
+    LineCalculationDto? Calculation);
+
+// ── Calculation explanation DTOs ──────────────────────────────────────────────
+
+public sealed record LineCalculationDto(
+    int PlanVersion,
+    DateTimeOffset FrozenAt,
+    RateTableDto RateTable,
+    TriggerDto Trigger,
+    IReadOnlyList<ModifierApplicationDto> Modifiers);
+
+public sealed record RateTableDto(
+    string Type,
+    decimal? FlatRate,
+    IReadOnlyList<RateTierDto>? Tiers,
+    IReadOnlyList<AttainmentTierDto>? AttainmentTiers);
+
+public sealed record RateTierDto(decimal From, decimal? To, decimal Rate);
+
+public sealed record AttainmentTierDto(decimal AttainmentFrom, decimal? AttainmentTo, decimal Rate);
+
+public sealed record TriggerDto(
+    bool IsAlways,
+    string LogicalOperator,
+    IReadOnlyList<ConditionDto> Conditions);
+
+public sealed record ConditionDto(string Field, string Operator, string Value);
+
+public sealed record ModifierApplicationDto(
+    string ModifierName,
+    decimal FactorApplied,
+    decimal AmountBefore,
+    string AmountBeforeCurrency,
+    decimal AmountAfter,
+    string AmountAfterCurrency);

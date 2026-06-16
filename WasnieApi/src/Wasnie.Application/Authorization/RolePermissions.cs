@@ -19,6 +19,7 @@ public static class RolePermissions
             Permission.CreditsRead, Permission.CreditsExport,
             Permission.PayoutsRead, Permission.PayoutsCalculate, Permission.PayoutsApprove,
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
+            Permission.PayoutsDeleteDraft,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
             Permission.SettingsUpdate,
         };
@@ -38,6 +39,7 @@ public static class RolePermissions
             Permission.CreditsRead, Permission.CreditsExport,
             Permission.PayoutsRead, Permission.PayoutsCalculate, Permission.PayoutsApprove,
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
+            Permission.PayoutsDeleteDraft,
             Permission.ImportsExecute, Permission.ReportsViewAll,
         };
 

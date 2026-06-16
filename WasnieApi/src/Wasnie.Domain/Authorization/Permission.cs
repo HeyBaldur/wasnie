@@ -40,6 +40,7 @@ public static class Permission
     public const string PayoutsMarkPaid = "Payouts.MarkPaid";
     public const string PayoutsReopen = "Payouts.Reopen";
     public const string PayoutsExport = "Payouts.Export";
+    public const string PayoutsDeleteDraft = "Payouts.DeleteDraft";
 
     public const string ImportsExecute = "Imports.Execute";
     public const string ReportsViewAll = "Reports.ViewAll";

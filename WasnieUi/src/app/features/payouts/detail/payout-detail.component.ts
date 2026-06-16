@@ -8,7 +8,7 @@ import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { PayoutsApiService } from '../services/payouts.api.service';
-import { PayoutDetail } from '../models/payout.model';
+import { PayoutDetail, LineCalculationDto, RateTableDto } from '../models/payout.model';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -117,6 +117,39 @@ export class PayoutDetailComponent implements OnInit {
 
   openTransaction(referenceNumber: string): void {
     window.open(`/transactions?ref=${encodeURIComponent(referenceNumber)}`, '_blank');
+  }
+
+  // ── Calculation expand/collapse ──────────────────────────────────────────
+
+  readonly expandedLines = signal(new Set<string>());
+
+  toggleLine(lineId: string): void {
+    this.expandedLines.update(s => {
+      const next = new Set(s);
+      if (next.has(lineId)) next.delete(lineId); else next.add(lineId);
+      return next;
+    });
+  }
+
+  isExpanded(lineId: string): boolean {
+    return this.expandedLines().has(lineId);
+  }
+
+  rateLabel(rt: RateTableDto): string {
+    if (rt.type === 'Flat' && rt.flatRate != null) {
+      return `${(rt.flatRate * 100).toFixed(2).replace(/\.?0+$/, '')}% flat`;
+    }
+    if (rt.type === 'Tiered' && rt.tiers?.length) {
+      return rt.tiers.map(t =>
+        `${t.to != null ? t.from + '–' + t.to : t.from + '+'}@${(t.rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`
+      ).join(' / ');
+    }
+    if (rt.type === 'AttainmentBased' && rt.attainmentTiers?.length) {
+      return rt.attainmentTiers.map(t =>
+        `${t.attainmentTo != null ? (t.attainmentFrom * 100).toFixed(0) + '–' + (t.attainmentTo * 100).toFixed(0) + '%' : (t.attainmentFrom * 100).toFixed(0) + '%+'} @ ${(t.rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`
+      ).join(' / ');
+    }
+    return rt.type;
   }
 
   async onExportPdf(): Promise<void> {

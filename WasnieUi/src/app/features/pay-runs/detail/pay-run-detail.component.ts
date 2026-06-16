@@ -13,7 +13,7 @@ import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { PayRunDetailStore } from '../state/pay-run-detail.store';
 import { PayRunsApiService } from '../services/pay-runs.api.service';
-import { PayRunStatus } from '../models/pay-run.model';
+import { OverlappingPayRun, PayRunStatus } from '../models/pay-run.model';
 import { PayoutStatus } from '../../payouts/models/payout.model';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
@@ -52,8 +52,15 @@ export class PayRunDetailComponent implements OnInit {
   readonly approveConfirmOpen = signal(false);
   readonly markPaidConfirmOpen = signal(false);
   readonly reopenConfirmOpen = signal(false);
+  readonly deleteConfirmOpen = signal(false);
   readonly actioning = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly deleting = signal(false);
+  readonly deleteError = signal<string | null>(null);
+
+  readonly approveOverlaps = signal<OverlappingPayRun[]>([]);
+  readonly markPaidOverlaps = signal<OverlappingPayRun[]>([]);
+  readonly overlapsLoading = signal(false);
 
   // Filter panel
   readonly filterOpen = signal(false);
@@ -188,6 +195,42 @@ export class PayRunDetailComponent implements OnInit {
     }
   }
 
+  async openApproveConfirm(): Promise<void> {
+    this.approveOverlaps.set([]);
+    this.approveConfirmOpen.set(true);
+    this.overlapsLoading.set(true);
+    try {
+      const overlaps = await firstValueFrom(this.api.getOverlaps(this.runId));
+      this.approveOverlaps.set(overlaps);
+    } catch {
+      // non-critical — modal is already open, overlap info unavailable
+    } finally {
+      this.overlapsLoading.set(false);
+    }
+  }
+
+  async openMarkPaidConfirm(): Promise<void> {
+    this.markPaidOverlaps.set([]);
+    this.markPaidConfirmOpen.set(true);
+    this.overlapsLoading.set(true);
+    try {
+      const overlaps = await firstValueFrom(this.api.getOverlaps(this.runId));
+      this.markPaidOverlaps.set(overlaps);
+    } catch {
+      // non-critical — modal is already open, overlap info unavailable
+    } finally {
+      this.overlapsLoading.set(false);
+    }
+  }
+
+  overlapTotalEntries(run: OverlappingPayRun): { currency: string; amount: number }[] {
+    return Object.entries(run.totalAmounts).map(([currency, amount]) => ({ currency, amount }));
+  }
+
+  viewOverlapRun(id: string): void {
+    window.open(`/pay-runs/${id}`, '_blank');
+  }
+
   runStatusBadge(status: PayRunStatus): BadgeVariant {
     switch (status) {
       case 'Draft':    return 'neutral';
@@ -250,6 +293,21 @@ export class PayRunDetailComponent implements OnInit {
       this.actionError.set(apiMsg ?? 'PAY_RUNS.DETAIL.REOPEN_ERROR');
     } finally {
       this.actioning.set(false);
+    }
+  }
+
+  async onDelete(): Promise<void> {
+    if (this.deleting()) return;
+    this.deleteConfirmOpen.set(false);
+    this.deleting.set(true);
+    this.deleteError.set(null);
+    try {
+      await firstValueFrom(this.api.deleteDraft(this.runId));
+      await this.router.navigate(['/pay-runs']);
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.deleteError.set(apiMsg ?? 'PAY_RUNS.DELETE_ERROR');
+      this.deleting.set(false);
     }
   }
 

@@ -6,6 +6,7 @@ import { buildHttpParams } from '../../../shared/utils/build-http-params';
 import {
   CalculatePayRunRequest,
   CalculatePayRunResult,
+  OverlappingPayRun,
   PayRunDetail,
   PayRunListItem,
   PayRunPayoutsDetailFilter,
@@ -64,5 +65,13 @@ export class PayRunsApiService {
 
   reopen(id: string): Observable<void> {
     return this.http.post<void>(`${this.base}/${id}/reopen`, {});
+  }
+
+  getOverlaps(id: string): Observable<OverlappingPayRun[]> {
+    return this.http.get<OverlappingPayRun[]>(`${this.base}/${id}/overlaps`);
+  }
+
+  deleteDraft(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/${id}`);
   }
 }

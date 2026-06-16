@@ -4,6 +4,65 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-16 — WI-DELETE-DRAFT: Borrado permanente de pay runs en Draft
+
+**Objetivo:** Permitir borrar definitivamente pay runs en estado Draft (y SOLO Draft). Approved y Paid son registros financieros — nunca borrables.
+
+**Backend:**
+- `Permission.PayoutsDeleteDraft = "Payouts.DeleteDraft"` añadido + asignado a TenantAdmin + CompManager
+- `DeletePayRunDraftCommand` + `DeletePayRunDraftHandler`: RequireAsync → status guard (retorna Failure con "locked" para Approved/Paid) → RemoveRange payouts (FK Restrict obliga borrado explícito) → Remove payRun → SaveChanges → audit `PAY_RUN_DRAFT_DELETED`
+- `DELETE /api/pay-runs/{id}`: 204 OK, 404 not found, 409 Conflict (locked — Approved/Paid)
+- 7 unit tests nuevos: borrado exitoso, audit logueado, Approved rechazado con "locked", Paid rechazado, not found, no audit en rejected, otros runs intactos
+- Tests totales: 569→576
+
+**Frontend:**
+- Lista: columna de acciones (width 40px), botón trash opacity:0→1 on hover (Draft + hasPermission)
+- Detalle: botón "Delete draft" en header (ghost, Draft + hasPermission)
+- Modal de confirmación en ambos: período interpolado, advertencia irreversible, botón `variant="danger"`
+- Lista recarga store tras borrado; detalle navega a `/pay-runs` tras borrado
+- SCSS: `__col-actions`, `__delete-btn`, `__modal-body`, `__modal-intro`, `__modal-warning`, `__modal-error`
+- i18n EN/ES/PL: `DELETE_DRAFT`, `DELETE_CONFIRM_TITLE`, `DELETE_CONFIRM_BODY` (con `{{periodStart}}` + `{{periodEnd}}`), `DELETE_CONFIRM_IRREVERSIBLE`, `DELETE_CONFIRM_BTN`, `DELETE_ERROR`
+
+**Decisiones:**
+- Backend retorna 409 (no 400) para intentos de borrar Approved/Paid — distinguible del error de input, ayuda a depuración
+- `DELETE_CONFIRM_BODY` incluye el período para que el admin confirme visualmente qué run va a borrar
+- Delete button en el detail aparece como primer botón en el header (antes de Back + Approve) para no interferir con el flujo normal
+
+**Build:** `ng build --configuration production` limpio. 576/576 unit tests pasan.
+
+## 2026-06-16 — WI-OVERLAP-GUARD: Anti doble-pago — pay runs solapados en modales Aprobar/Pagar
+
+**Objetivo:** Mostrar al admin los pay runs cuyo periodo se solapa (Approved/Paid) antes de confirmar Aprobar o Marcar Pagado, sin bloquear la acción.
+
+**Step 0:**
+- Handlers: `ApprovePayRunHandler` + `MarkPayRunPaidHandler` — sin `IAuditService`; modales ya existentes con slots de body/footer
+- Solapamiento: `PeriodStart ≤ thisPeriodEnd AND PeriodEnd ≥ thisPeriodStart` — endpoints compartidos = solape
+- Multi-tenant: global query filter `PayRun` (ApplicationDbContext línea 103) — automático, sin filtro manual
+- `AuditActions.cs` sin constantes de pay run
+
+**Cambios backend:**
+- `PayRunDto.cs` — añadido `OverlappingPayRunDto`
+- `PayRunQueries.cs` — añadido `GetPayRunOverlapsQuery`
+- NEW `GetPayRunOverlapsHandler.cs` — carga el pay run, query de solapamiento bulk, devuelve lista
+- `PayRunsController.cs` — `GET /api/pay-runs/{id}/overlaps`
+- `AuditActions.cs` — `PayRunApprovedWithOverlap`, `PayRunPaidWithOverlap`
+- `ApprovePayRunHandler.cs` — inyecta `IAuditService`; captura IDs solapados antes de SaveChanges; loga si count > 0
+- `MarkPayRunPaidHandler.cs` — mismo patrón
+
+**Cambios frontend:**
+- `pay-run.model.ts` — `OverlappingPayRun` interface
+- `pay-runs.api.service.ts` — `getOverlaps(id): Observable<OverlappingPayRun[]>`
+- `pay-run-detail.component.ts` — signals `approveOverlaps`/`markPaidOverlaps`/`overlapsLoading`; métodos `openApproveConfirm()`/`openMarkPaidConfirm()` (fetch → open modal); `overlapTotalEntries()`, `viewOverlapRun()`
+- `pay-run-detail.component.html` — tabla scrolleable en ambos modales (Approve + MarkPaid); skeleton durante carga; filas clickables
+- `pay-run-detail.component.scss` — `__overlap-warning`, `__overlap-msg`, `__overlap-table-wrapper` (max-height 220px), `__overlap-table`, `__overlap-row`
+- i18n EN/ES/PL — 5 claves nuevas: `OVERLAP_WARNING`, `OVERLAP_COL_PERIOD`, `OVERLAP_COL_STATUS`, `OVERLAP_COL_PAYEES`, `OVERLAP_COL_TOTAL`
+
+**Tests:** 11 nuevos unit tests en `GetPayRunOverlapsHandlerTests.cs` — sin solapamiento, mismo periodo Approved/Paid, Draft no incluido, solapamiento parcial, endpoint compartido cuenta como solape, no-solape adyacente, periodo anterior, múltiples solapamientos, not found, self no incluido. Total: 558→569.
+
+**Build:** test project 0 errores; `ng build --configuration production` 601.21 kB, limpio.
+
+**Próximo recomendado:** WI-AUDIT-PAYOUT-TRANSITIONS — `ApprovePayoutHandler`/`MarkPayoutPaidHandler` (individuales, no pay run) sin audit; `AuditActions.cs` sin constantes PAYOUT_*. ~10 líneas por handler.
+
 ## 2026-06-16 — WI-PAYMENT-TRACEABILITY: Exponer trazabilidad pago → transacción (Fase 1)
 
 **Objetivo:** Que cada línea de comisión en el statement muestre la transacción de venta de origen.
