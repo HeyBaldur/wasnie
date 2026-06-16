@@ -6,4 +6,6 @@ public sealed record AuthResultDto(
     Guid TenantId,
     string TenantSlug,
     IList<string> Roles,
-    TokenPairDto Tokens);
+    TokenPairDto? Tokens,
+    bool RequiresTwoFactor = false,
+    string? TwoFactorChallengeToken = null);

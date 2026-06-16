@@ -72,6 +72,14 @@ public static class AuditActions
     public const string ProfileEmailChangeRequested = "PROFILE_EMAIL_CHANGE_REQUESTED";
     public const string ProfileEmailChangeConfirmed = "PROFILE_EMAIL_CHANGE_CONFIRMED";
 
+    // Two-factor authentication
+    public const string TwoFactorEnabled = "TWO_FACTOR_ENABLED";
+    public const string TwoFactorDisabled = "TWO_FACTOR_DISABLED";
+    public const string TwoFactorLoginSuccess = "TWO_FACTOR_LOGIN_SUCCESS";
+    public const string TwoFactorLoginFailure = "TWO_FACTOR_LOGIN_FAILURE";
+    public const string RecoveryCodeUsed = "RECOVERY_CODE_USED";
+    public const string RecoveryCodesRegenerated = "RECOVERY_CODES_REGENERATED";
+
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";

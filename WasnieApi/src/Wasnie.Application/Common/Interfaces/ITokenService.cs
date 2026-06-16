@@ -8,4 +8,7 @@ public interface ITokenService
     Task<string?> ValidateRefreshTokenAsync(string refreshToken);
     Task RevokeRefreshTokenAsync(string refreshToken);
     Task<int> RevokeUserRefreshTokensAsync(string userId);
+
+    string GenerateTwoFactorChallengeToken(string userId);
+    string? ValidateTwoFactorChallengeToken(string challengeToken);
 }

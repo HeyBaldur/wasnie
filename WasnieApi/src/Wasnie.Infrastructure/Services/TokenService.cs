@@ -119,4 +119,69 @@ public sealed class TokenService(
 
         return tokens.Count;
     }
+
+    public string GenerateTwoFactorChallengeToken(string userId)
+    {
+        var jwtSettings = configuration.GetSection("JwtSettings");
+        var secret = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret not configured.");
+        var issuer = jwtSettings["Issuer"] ?? "WasnieApi";
+        var audience = jwtSettings["Audience"] ?? "WasnieUi";
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var now = clock.UtcNowOffset;
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, userId),
+            new(JwtRegisteredClaimNames.Jti, guid.NewGuid().ToString()),
+            new("purpose", "2fa_challenge"),
+        };
+
+        var token = new JwtSecurityToken(
+            issuer: issuer,
+            audience: audience,
+            claims: claims,
+            notBefore: now.UtcDateTime,
+            expires: now.AddMinutes(5).UtcDateTime,
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string? ValidateTwoFactorChallengeToken(string challengeToken)
+    {
+        var jwtSettings = configuration.GetSection("JwtSettings");
+        var secret = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret not configured.");
+        var issuer = jwtSettings["Issuer"] ?? "WasnieApi";
+        var audience = jwtSettings["Audience"] ?? "WasnieUi";
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        var handler = new JwtSecurityTokenHandler();
+        handler.InboundClaimTypeMap.Clear(); // prevent "sub" → ClaimTypes.NameIdentifier remapping
+
+        try
+        {
+            var principal = handler.ValidateToken(challengeToken, new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = issuer,
+                ValidAudience = audience,
+                IssuerSigningKey = key,
+                ClockSkew = TimeSpan.Zero,
+            }, out _);
+
+            var purpose = principal.FindFirst("purpose")?.Value;
+            if (purpose != "2fa_challenge") return null;
+
+            return principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

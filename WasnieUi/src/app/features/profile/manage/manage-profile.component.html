@@ -30,6 +30,9 @@
           <!-- Name card -->
           <ws-card class="profile-card">
             <h3 class="profile-card__heading">{{ 'PROFILE.NAME_HEADING' | translate }}</h3>
+            @if (nameIsMissing()) {
+              <p class="profile-name-notice">{{ 'PROFILE.NAME_MISSING_NOTICE' | translate }}</p>
+            }
             <div class="ws-form-grid">
               <div class="form-field">
                 <ws-input
@@ -150,6 +153,275 @@
                 {{ 'PROFILE.REQUEST_EMAIL_CHANGE' | translate }}
               </ws-button>
             </div>
+          </ws-card>
+        </section>
+
+        <!-- ── Section 1b: Two-Factor Authentication ─────────────────────────── -->
+        <section class="profile-section" id="security">
+          <h2 class="profile-section__title">{{ 'TWO_FACTOR.SECTION_TITLE' | translate }}</h2>
+
+          <ws-card class="profile-card">
+
+            @switch (twoFactorStep()) {
+
+              <!-- Status view -->
+              @case ('status') {
+                <h3 class="profile-card__heading">{{ 'TWO_FACTOR.HEADING' | translate }}</h3>
+
+                @if (twoFactorStatus() === null) {
+                  <p class="profile-card__hint">{{ 'COMMON.LOADING' | translate }}</p>
+                } @else if (twoFactorStatus()!.isEnabled) {
+                  <p class="tfa-info-text">{{ 'TWO_FACTOR.INFO_PRIMARY' | translate }}</p>
+                  <p class="tfa-info-text">
+                    {{ 'TWO_FACTOR.INFO_SECONDARY' | translate }}
+                    <a class="tfa-app-link" href="https://www.microsoft.com/en-us/security/mobile-authenticator-app" target="_blank" rel="noopener noreferrer">
+                      {{ 'TWO_FACTOR.APP_LINK_LABEL' | translate }}
+                    </a>
+                  </p>
+                  <div class="tfa-enabled-alert" role="alert">
+                    <svg class="tfa-enabled-alert__icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24">
+                      <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11h2v5m-2 0h4m-2.592-8.5h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                    </svg>
+                    <p>
+                      <span class="tfa-enabled-alert__label">{{ 'TWO_FACTOR.STATUS_ENABLED' | translate }}</span>
+                      {{ 'TWO_FACTOR.ENABLED_DESC' | translate }}
+                    </p>
+                  </div>
+                  <p class="profile-card__hint">
+                    {{ 'TWO_FACTOR.RECOVERY_CODES_REMAINING' | translate: { count: twoFactorStatus()!.recoveryCodeCount } }}
+                  </p>
+                  <div class="profile-card__actions tfa-actions">
+                    <ws-button variant="secondary" size="sm" (click)="startRegenCodes()">
+                      {{ 'TWO_FACTOR.REGEN_CODES_BTN' | translate }}
+                    </ws-button>
+                    <ws-button variant="danger" size="sm" (click)="startDisable()">
+                      {{ 'TWO_FACTOR.DISABLE_BTN' | translate }}
+                    </ws-button>
+                  </div>
+                } @else {
+                  <div class="tfa-status">
+                    <span class="tfa-status__badge tfa-status__badge--disabled">{{ 'TWO_FACTOR.STATUS_DISABLED' | translate }}</span>
+                  </div>
+                  <p class="tfa-info-text">{{ 'TWO_FACTOR.INFO_PRIMARY' | translate }}</p>
+                  <p class="tfa-info-text">
+                    {{ 'TWO_FACTOR.INFO_SECONDARY' | translate }}
+                    <a class="tfa-app-link" href="https://www.microsoft.com/en-us/security/mobile-authenticator-app" target="_blank" rel="noopener noreferrer">
+                      {{ 'TWO_FACTOR.APP_LINK_LABEL' | translate }}
+                    </a>
+                  </p>
+                  @if (twoFactorError()) {
+                    <p class="profile-field-error">{{ twoFactorError() | translate }}</p>
+                  }
+                  <div class="profile-card__actions">
+                    <ws-button variant="primary" [loading]="twoFactorLoading()" (click)="startSetup()">
+                      {{ 'TWO_FACTOR.ENABLE_BTN' | translate }}
+                    </ws-button>
+                  </div>
+                }
+              }
+
+              <!-- Setup: educational intro + QR + confirmation -->
+              @case ('setup') {
+                <h3 class="profile-card__heading">{{ 'TWO_FACTOR.SETUP_HEADING' | translate }}</h3>
+
+                <!-- What is 2FA? -->
+                <div class="tfa-edu">
+                  <p class="tfa-edu__desc">{{ 'TWO_FACTOR.SETUP_WHAT_DESC' | translate }}</p>
+                </div>
+
+                <!-- How it works — 3 steps -->
+                <div class="tfa-steps">
+                  <p class="tfa-steps__title">{{ 'TWO_FACTOR.SETUP_HOW_TITLE' | translate }}</p>
+                  <ol class="tfa-steps__list">
+                    <li class="tfa-step">
+                      <span class="tfa-step__number">1</span>
+                      <div class="tfa-step__content">
+                        <span class="tfa-step__title">{{ 'TWO_FACTOR.SETUP_STEP1_TITLE' | translate }}</span>
+                        <span class="tfa-step__desc">
+                          {{ 'TWO_FACTOR.SETUP_STEP1_DESC' | translate }}
+                          <a class="tfa-app-link" href="https://www.microsoft.com/en-us/security/mobile-authenticator-app" target="_blank" rel="noopener noreferrer">
+                            {{ 'TWO_FACTOR.APP_LINK_LABEL' | translate }}
+                          </a>
+                        </span>
+                      </div>
+                    </li>
+                    <li class="tfa-step">
+                      <span class="tfa-step__number">2</span>
+                      <div class="tfa-step__content">
+                        <span class="tfa-step__title">{{ 'TWO_FACTOR.SETUP_STEP2_TITLE' | translate }}</span>
+                        <span class="tfa-step__desc">{{ 'TWO_FACTOR.SETUP_STEP2_DESC' | translate }}</span>
+                      </div>
+                    </li>
+                    <li class="tfa-step">
+                      <span class="tfa-step__number">3</span>
+                      <div class="tfa-step__content">
+                        <span class="tfa-step__title">{{ 'TWO_FACTOR.SETUP_STEP3_TITLE' | translate }}</span>
+                        <span class="tfa-step__desc">{{ 'TWO_FACTOR.SETUP_STEP3_DESC' | translate }}</span>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+
+                <!-- Visual break before action area -->
+                <div class="tfa-scan-divider"></div>
+                <p class="tfa-scan-label">{{ 'TWO_FACTOR.SETUP_SCAN_LABEL' | translate }}</p>
+
+                <!-- QR code -->
+                @if (twoFactorQrDataUrl()) {
+                  <div class="tfa-qr-container">
+                    <img [src]="twoFactorQrDataUrl()" alt="QR Code" class="tfa-qr" width="200" height="200" />
+                  </div>
+                }
+
+                <!-- Manual key -->
+                <div class="tfa-secret-block">
+                  <span class="tfa-secret-label">{{ 'TWO_FACTOR.SECRET_LABEL' | translate }}</span>
+                  <code class="tfa-secret-code">{{ twoFactorSecret() }}</code>
+                </div>
+
+                <!-- Code input -->
+                <p class="tfa-setup-confirm-hint">{{ 'TWO_FACTOR.CONFIRM_HINT' | translate }}</p>
+                <div class="ws-form-grid">
+                  <div class="form-field form-field--full">
+                    <ws-input
+                      [label]="'TWO_FACTOR.CODE_LABEL' | translate"
+                      type="text"
+                      inputId="tfa-setup-code"
+                      [maxlength]="6"
+                      autocomplete="one-time-code"
+                      [ngModel]="twoFactorCode()"
+                      (valueChange)="twoFactorCode.set($event)"
+                    />
+                  </div>
+                </div>
+
+                @if (twoFactorError()) {
+                  <p class="profile-field-error">{{ twoFactorError() | translate }}</p>
+                }
+
+                <div class="profile-card__actions tfa-actions">
+                  <ws-button variant="secondary" (click)="cancelTwoFactorAction()">{{ 'COMMON.CANCEL' | translate }}</ws-button>
+                  <ws-button
+                    variant="primary"
+                    [loading]="twoFactorLoading()"
+                    [disabled]="twoFactorCode().length !== 6"
+                    (click)="confirmEnable()"
+                  >
+                    {{ 'TWO_FACTOR.CONFIRM_ENABLE_BTN' | translate }}
+                  </ws-button>
+                </div>
+              }
+
+              <!-- Recovery codes (shown once after enable or regen) -->
+              @case ('recoveryCodes') {
+                <h3 class="profile-card__heading">{{ 'TWO_FACTOR.RECOVERY_CODES_TITLE' | translate }}</h3>
+                <p class="tfa-recovery-warning">{{ 'TWO_FACTOR.RECOVERY_CODES_WARNING' | translate }}</p>
+
+                <div class="tfa-codes-grid">
+                  @for (code of recoveryCodesToShow(); track code) {
+                    <code class="tfa-code-item">{{ code }}</code>
+                  }
+                </div>
+
+                <div class="profile-card__actions">
+                  <ws-button variant="primary" (click)="finishSetup()">
+                    {{ 'TWO_FACTOR.SAVED_CODES_BTN' | translate }}
+                  </ws-button>
+                </div>
+              }
+
+              <!-- Disable 2FA -->
+              @case ('disable') {
+                <h3 class="profile-card__heading">{{ 'TWO_FACTOR.DISABLE_HEADING' | translate }}</h3>
+                <p class="tfa-setup-instruction">{{ 'TWO_FACTOR.DISABLE_INSTRUCTION' | translate }}</p>
+
+                <div class="ws-form-grid">
+                  <div class="form-field form-field--full">
+                    <ws-input
+                      [label]="'PROFILE.CURRENT_PASSWORD' | translate"
+                      type="password"
+                      inputId="tfa-disable-pw"
+                      autocomplete="current-password"
+                      [ngModel]="tfaPassword()"
+                      (valueChange)="tfaPassword.set($event)"
+                    />
+                  </div>
+                  <div class="form-field form-field--full">
+                    <ws-input
+                      [label]="'TWO_FACTOR.CODE_LABEL' | translate"
+                      type="text"
+                      inputId="tfa-disable-code"
+                      [maxlength]="6"
+                      [ngModel]="tfaCode()"
+                      (valueChange)="tfaCode.set($event)"
+                    />
+                  </div>
+                </div>
+
+                @if (tfaActionError()) {
+                  <p class="profile-field-error">{{ tfaActionError() | translate }}</p>
+                }
+
+                <div class="profile-card__actions tfa-actions">
+                  <ws-button variant="secondary" (click)="cancelTwoFactorAction()">{{ 'COMMON.CANCEL' | translate }}</ws-button>
+                  <ws-button
+                    variant="danger"
+                    [loading]="twoFactorLoading()"
+                    [disabled]="!tfaPassword() || tfaCode().length !== 6"
+                    (click)="confirmDisable()"
+                  >
+                    {{ 'TWO_FACTOR.CONFIRM_DISABLE_BTN' | translate }}
+                  </ws-button>
+                </div>
+              }
+
+              <!-- Regenerate recovery codes -->
+              @case ('regenCodes') {
+                <h3 class="profile-card__heading">{{ 'TWO_FACTOR.REGEN_HEADING' | translate }}</h3>
+                <p class="tfa-setup-instruction">{{ 'TWO_FACTOR.REGEN_INSTRUCTION' | translate }}</p>
+
+                <div class="ws-form-grid">
+                  <div class="form-field form-field--full">
+                    <ws-input
+                      [label]="'PROFILE.CURRENT_PASSWORD' | translate"
+                      type="password"
+                      inputId="tfa-regen-pw"
+                      autocomplete="current-password"
+                      [ngModel]="tfaPassword()"
+                      (valueChange)="tfaPassword.set($event)"
+                    />
+                  </div>
+                  <div class="form-field form-field--full">
+                    <ws-input
+                      [label]="'TWO_FACTOR.CODE_LABEL' | translate"
+                      type="text"
+                      inputId="tfa-regen-code"
+                      [maxlength]="6"
+                      [ngModel]="tfaCode()"
+                      (valueChange)="tfaCode.set($event)"
+                    />
+                  </div>
+                </div>
+
+                @if (tfaActionError()) {
+                  <p class="profile-field-error">{{ tfaActionError() | translate }}</p>
+                }
+
+                <div class="profile-card__actions tfa-actions">
+                  <ws-button variant="secondary" (click)="cancelTwoFactorAction()">{{ 'COMMON.CANCEL' | translate }}</ws-button>
+                  <ws-button
+                    variant="primary"
+                    [loading]="twoFactorLoading()"
+                    [disabled]="!tfaPassword() || tfaCode().length !== 6"
+                    (click)="confirmRegenCodes()"
+                  >
+                    {{ 'TWO_FACTOR.CONFIRM_REGEN_BTN' | translate }}
+                  </ws-button>
+                </div>
+              }
+
+            }
+
           </ws-card>
         </section>
 

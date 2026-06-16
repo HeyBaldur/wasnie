@@ -70,8 +70,8 @@ public sealed class RegisterTenantCommandHandler(
             new Dictionary<string, string>
             {
                 ["tenant_id"] = tenant.Id.ToString(),
-                ["given_name"] = request.AdminFirstName,
-                ["family_name"] = request.AdminLastName,
+                ["given_name"] = request.AdminFirstName.Trim(),
+                ["family_name"] = request.AdminLastName.Trim(),
             });
 
         if (!succeeded || userId is null)

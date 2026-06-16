@@ -50,4 +50,11 @@ export const authRoutes: Routes = [
         (m) => m.ConfirmEmailComponent
       ),
   },
+  {
+    path: 'verify-2fa',
+    loadComponent: () =>
+      import('./verify-two-factor/verify-two-factor.component').then(
+        (m) => m.VerifyTwoFactorComponent
+      ),
+  },
 ];

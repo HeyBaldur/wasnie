@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Wasnie.Application.Features.Auth.Commands;
 using Wasnie.Application.Features.Auth.Queries;
-using Wasnie.Application.Common.Interfaces;
 
 namespace Wasnie.Api.Controllers;
 
@@ -147,5 +146,20 @@ public sealed class AuthController(IMediator mediator) : ControllerBase
             return BadRequest(new { message = result.Error });
 
         return Ok(new { message = "Password has been reset successfully." });
+    }
+
+    [HttpPost("verify-2fa")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth-verify-2fa")]
+    public async Task<IActionResult> VerifyTwoFactor(
+        [FromBody] VerifyTwoFactorLoginCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return Unauthorized(new { message = result.Error });
+
+        return Ok(result.Value);
     }
 }

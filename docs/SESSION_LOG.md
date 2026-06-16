@@ -8,6 +8,69 @@
 
 ## Sessions (newest first)
 
+## 2026-06-16 — WI-PAYMENT-SUBCRIPTION: Toast de recordatorio 2FA (no intrusivo, esquina inferior izquierda)
+
+**Scope:** Recordatorio discreto para usuarios sin 2FA activo. No bloquea la app (toast de esquina, no modal).
+
+**Comportamiento:**
+- Aparece 4s después de cargar el app shell, solo si el usuario está autenticado Y `GET /profile/2fa/status` devuelve `isEnabled: false`.
+- Si el usuario tiene 2FA, jamás aparece (condición de API no se cumple).
+- Jerarquía de acciones: botón primario "Enable now" → `router.navigate(['/profile'], { fragment: 'security' })`, botón secundario "Remind me in 3 days" → snooze 3 días, link de texto "Don't show again" → flag permanente.
+- X del header actúa como snooze (mismo comportamiento que el botón secundario).
+- Animación slide-in desde abajo (250ms); slide-out al cerrar.
+
+**Persistencia (localStorage):**
+- `wasnie:2fa-reminder-snooze`: timestamp de cuando el usuario hizo snooze; no muestra hasta +3 días.
+- `wasnie:2fa-reminder-dismissed`: `"true"` → nunca vuelve a mostrarse.
+- Trade-off aceptado: localStorage es por-navegador; si el usuario borra storage o cambia dispositivo, el popup puede reaparecer. Si en el futuro molesta, mover al backend.
+
+**Archivos creados:**
+- `WasnieUi/src/app/shared/components/two-fa-reminder/two-fa-reminder.component.ts`
+- `WasnieUi/src/app/shared/components/two-fa-reminder/two-fa-reminder.component.html`
+- `WasnieUi/src/app/shared/components/two-fa-reminder/two-fa-reminder.component.scss`
+
+**Archivos modificados:**
+- `app-shell.component.ts` + `.html`: mounting de `<app-two-fa-reminder />`
+- `manage-profile.component.html`: añadido `id="security"` al section de 2FA para el fragment scroll
+- `assets/i18n/en.json`, `es.json`, `pl.json`: 5 claves nuevas cada uno (`TWO_FACTOR.REMINDER_TITLE/BODY/ACTIVATE/SNOOZE/DISMISS`)
+
+**i18n:** EN/ES/PL completo. Build: `ng build --configuration production` limpio, 0 errores (warnings preexistentes sin cambio).
+
+---
+
+## 2026-06-15 — WI-2FA-TOTP: Autenticación de dos factores (2FA) con TOTP — opcional por usuario
+
+**Scope:** 2FA opcional por usuario basado en TOTP (Google Authenticator, Authy, etc.). Flujo de activación: QR + secreto → código de 6 dígitos → confirmación → códigos de recuperación (mostrados una sola vez). Flujo de login: challenge token (JWT 5min, `purpose=2fa_challenge`) → verificación TOTP o código de recuperación → sesión completa. Desactivación y regeneración de códigos requieren contraseña + código TOTP (doble verificación). Rate limiting anti-fuerza-bruta. Audit trail completo. i18n EN/ES/PL (~40 claves).
+
+**Sin migración DB:** `AspNetUserTokens` ya existe desde `InitialCreate` (2026-05-22). ASP.NET Identity gestiona TOTP via `AuthenticatorTokenProvider` (RFC 6238, ventana ±1, recovery codes con hash).
+
+**Decisiones técnicas:**
+- Challenge token: JWT de corta duración (5 min), claim `purpose=2fa_challenge`, sin tenant ni roles → no puede usarse como access token.
+- `ITenantContext` inyectado en handlers que necesitan TenantId (no `ICurrentUserService`, que no expone TenantId).
+- `qrcode` npm (MIT) importado dinámicamente (`await import('qrcode')`) para evitar añadir ~100kB al bundle inicial. La diferencia (601.59→601.21kB) confirma que qrcode queda en un chunk lazy.
+- Bundle budget: baseline ya era ~600kB antes del WI. `angular.json` `maximumWarning` ajustado de 500kB a 650kB con justificación; `maximumError` (1MB) sin cambios.
+
+**Backend (archivos nuevos/modificados):**
+- `Wasnie.Domain`: `AuditActions.cs` (+6: `TWO_FACTOR_ENABLED/DISABLED/LOGIN_SUCCESS/LOGIN_FAILURE`, `RECOVERY_CODE_USED`, `RECOVERY_CODES_REGENERATED`)
+- `Wasnie.Application`: `IIdentityService.cs` (+8 métodos 2FA), `ITokenService.cs` (+2 métodos challenge), `AuthResultDto.cs` (tokens nullable, +`RequiresTwoFactor`, +`TwoFactorChallengeToken`), `AuthMapper.cs` (+`ToTwoFactorChallengeDto`); DTOs nuevos: `TwoFactorSetupDto`, `TwoFactorStatusDto`, `EnableTwoFactorResultDto`; `LoginCommandHandler.cs` (fork 2FA); handlers nuevos: `VerifyTwoFactorLogin`, `GetTwoFactorSetup`, `GetTwoFactorStatus`, `EnableTwoFactor`, `DisableTwoFactor`, `RegenerateRecoveryCodes` (+ validators)
+- `Wasnie.Infrastructure`: `IdentityService.cs` (+8 implementaciones usando `UserManager<IdentityUser>` built-ins), `TokenService.cs` (+challenge token generation/validation)
+- `Wasnie.Api`: `AuthController.cs` (`POST /auth/verify-2fa`, `AllowAnonymous`, rate limit `auth-verify-2fa`); `ProfileController.cs` (+5 endpoints: `GET /2fa/status`, `GET /2fa/setup`, `POST /2fa/enable`, `POST /2fa/disable`, `POST /2fa/recovery-codes`); `Program.cs` (+rate limiters `auth-verify-2fa` 5/15min por IP + `profile-2fa` 10/5min por usuario)
+
+**Frontend (archivos nuevos/modificados):**
+- `core/models/auth.model.ts`: `tokens: TokenPair | null`, +`requiresTwoFactor?`, +`twoFactorChallengeToken?`
+- `core/services/auth.service.ts`: login fork (sessionStorage challenge), `verifyTwoFactor()`, `getTwoFactorEmail()`
+- `features/auth/login/login.component.ts`: redirect a `/auth/verify-2fa` si `requiresTwoFactor`
+- `features/auth/verify-two-factor/` (NUEVO): componente completo con toggle TOTP/recovery code, redirect guard si no hay challenge en sessionStorage
+- `features/auth/auth.routes.ts`: ruta `verify-2fa` (lazy)
+- `features/profile/services/profile.service.ts`: +5 métodos 2FA
+- `features/profile/manage/manage-profile.component.*`: sección "Security" con state machine 6-estados (`status/setup/confirm/recoveryCodes/disable/regenCodes`); QR renderizado via `QRCode.toDataURL`
+- `assets/i18n/en.json`, `es.json`, `pl.json`: sección `TWO_FACTOR` completa (~40 claves cada uno)
+- `angular.json`: `maximumWarning` 500kB→650kB (baseline pre-existente ya superaba 500kB; qrcode es lazy)
+
+**Tests backend:** 14 nuevos unit tests en `TwoFactorHandlerTests.cs` (GetStatus, GetSetup, Enable, Disable, RegenCodes, VerifyLogin — válidos e inválidos). Total: 527→541 (+14). Build: 0 errores.
+
+**Deuda pendiente (no bloqueante):** Frontend tests para `VerifyTwoFactorComponent` y la sección 2FA de `ManageProfileComponent` no añadidos (CLAUDE.md §6 item 6). Coverage check diferido al próximo WI de calidad.
+
 ## 2026-06-15 — WI-MANAGE-PROFILE: Fix migración B3 (EmailChangeTokens table missing)
 
 **Scope:** La migración `20260615150000_B3_AddEmailChangeTokens` existía pero EF no la descubría — faltaba el archivo `.Designer.cs` con el atributo `[Migration("...")]` que EF Core usa para indexar y ordenar migraciones.

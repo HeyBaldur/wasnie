@@ -1,0 +1,140 @@
+@reference "../../../../styles.scss";
+
+.tfa-reminder {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-10);
+  z-index: 1900;
+  width: 300px;
+  max-width: calc(100vw - var(--space-8));
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-4);
+  animation: tfa-slide-in 250ms ease;
+
+  &--hiding {
+    animation: tfa-slide-out 250ms ease forwards;
+  }
+
+  @media (max-width: 480px) {
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: var(--space-3);
+    bottom: var(--space-3);
+    width: auto;
+    max-width: none;
+  }
+}
+
+.tfa-reminder__header {
+  @apply flex items-center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.tfa-reminder__icon {
+  @apply flex items-center justify-center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: var(--color-brand-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-brand);
+}
+
+.tfa-reminder__title {
+  flex: 1;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.tfa-reminder__close {
+  @apply flex items-center justify-center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+
+  &:hover {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+}
+
+.tfa-reminder__body {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-4);
+}
+
+.tfa-reminder__actions {
+  @apply flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+
+  ws-button {
+    flex: 1;
+  }
+}
+
+.tfa-reminder__dismiss {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  text-align: center;
+  padding: var(--space-1) 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--transition-base);
+
+  &:hover {
+    color: var(--color-text-secondary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+}
+
+@keyframes tfa-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tfa-slide-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}

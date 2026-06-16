@@ -1,0 +1,100 @@
+<div class="auth-page">
+  <div class="auth-page__form">
+    <div class="auth-page__form-top">
+      <app-theme-toggle />
+    </div>
+
+    <div class="auth-page__form-body">
+      <div class="auth-page__brand">
+        <img src="wasnie_logo.png" alt="Wasnie" class="auth-page__brand-logo" />
+      </div>
+
+      <div class="auth-page__card">
+        <h1 class="auth-page__card-title">{{ 'TWO_FACTOR.VERIFY_TITLE' | translate }}</h1>
+        <p class="auth-page__card-subtitle">
+          @if (!useRecoveryCode()) {
+            {{ 'TWO_FACTOR.VERIFY_SUBTITLE' | translate }}&nbsp;<strong class="tfa-subtitle-email">{{ email() }}</strong>.
+          } @else {
+            {{ 'TWO_FACTOR.RECOVERY_SUBTITLE' | translate }}&nbsp;<strong class="tfa-subtitle-email">{{ email() }}</strong>.
+          }
+        </p>
+
+        <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+          @if (error()) {
+            <div class="auth-form__error">{{ error() | translate }}</div>
+          }
+
+          @if (!useRecoveryCode()) {
+            <ws-input
+              formControlName="code"
+              [label]="'TWO_FACTOR.CODE_LABEL' | translate"
+              type="text"
+              [maxlength]="6"
+              autocomplete="one-time-code"
+              [placeholder]="'TWO_FACTOR.CODE_PLACEHOLDER' | translate"
+            />
+          } @else {
+            <ws-input
+              formControlName="code"
+              [label]="'TWO_FACTOR.RECOVERY_CODE_LABEL' | translate"
+              type="text"
+              autocomplete="off"
+              [placeholder]="'TWO_FACTOR.RECOVERY_CODE_PLACEHOLDER' | translate"
+            />
+          }
+
+          <ws-button
+            type="submit"
+            variant="primary"
+            [fullWidth]="true"
+            [loading]="isSubmitting()"
+            class="auth-form__submit"
+          >
+            {{ 'TWO_FACTOR.VERIFY_BTN' | translate }}
+          </ws-button>
+        </form>
+
+        <div class="tfa-links">
+          <button type="button" class="tfa-link" (click)="toggleMode()">
+            @if (!useRecoveryCode()) {
+              {{ 'TWO_FACTOR.USE_RECOVERY_CODE' | translate }}
+            } @else {
+              {{ 'TWO_FACTOR.USE_TOTP_CODE' | translate }}
+            }
+          </button>
+          <button type="button" class="tfa-link tfa-link--muted" (click)="backToLogin()">
+            {{ 'TWO_FACTOR.BACK_TO_LOGIN' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-page__form-bottom">
+      <span class="auth-page__copyright">{{ 'AUTH.FOOTER_RIGHTS' | translate }}</span>
+    </div>
+  </div>
+
+  <div class="auth-page__hero">
+    <img class="auth-page__hero-bg" src="/auth/sign-in.jpg" alt="" aria-hidden="true" />
+    <div class="auth-page__hero-overlay"></div>
+    <div class="auth-page__hero-inner">
+      <div class="auth-page__hero-brand">
+        <img src="wasnie_logo.png" alt="Wasnie" class="auth-page__hero-logo-img" />
+      </div>
+      <div class="auth-page__hero-bottom">
+        <h2 class="auth-page__headline">{{ 'AUTH.HERO_TITLE' | translate }}</h2>
+        <p class="auth-page__subline">{{ 'AUTH.HERO_SUBTITLE' | translate }}</p>
+        <div class="auth-page__trust-badges">
+          <div class="auth-page__trust-badge">
+            <img src="eu.png" alt="" class="auth-page__trust-badge-img" aria-hidden="true" />
+            <span>EU Compliant</span>
+          </div>
+          <div class="auth-page__trust-badge">
+            <img src="gdpr.png" alt="" class="auth-page__trust-badge-img" aria-hidden="true" />
+            <span>GDPR Ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

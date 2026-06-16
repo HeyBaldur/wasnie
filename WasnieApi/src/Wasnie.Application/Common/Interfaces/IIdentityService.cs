@@ -38,4 +38,14 @@ public interface IIdentityService
     Task<bool> UpdateClaimAsync(string userId, string claimType, string newValue);
 
     Task<bool> ChangeEmailAsync(string userId, string newEmail);
+
+    // Two-factor authentication (TOTP via ASP.NET Identity built-in)
+    Task<bool> IsTwoFactorEnabledAsync(string userId);
+    Task<string?> GetOrCreateTotpSecretAsync(string userId);
+    Task<bool> VerifyTotpCodeAsync(string userId, string code);
+    Task<(bool Succeeded, IEnumerable<string> RecoveryCodes)> EnableTwoFactorAsync(string userId, string verificationCode);
+    Task<bool> DisableTwoFactorAsync(string userId);
+    Task<IEnumerable<string>?> GenerateRecoveryCodesAsync(string userId, int count);
+    Task<bool> RedeemRecoveryCodeAsync(string userId, string code);
+    Task<int> CountRecoveryCodesAsync(string userId);
 }
