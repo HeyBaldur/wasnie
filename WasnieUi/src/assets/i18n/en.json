@@ -1490,6 +1490,11 @@
     "SETUP_STEP2_DESC": "Open the app, tap 'Add account' and point your camera at the code. No camera? Use the manual key instead.",
     "SETUP_STEP3_TITLE": "Enter the 6-digit code",
     "SETUP_STEP3_DESC": "Your app generates a new code every 30 seconds — that's normal. Enter the current one to finish.",
-    "SETUP_SCAN_LABEL": "Scan with your authenticator app"
+    "SETUP_SCAN_LABEL": "Scan with your authenticator app",
+    "REMINDER_TITLE": "Protect your account",
+    "REMINDER_BODY": "Two-factor authentication adds a second step at sign-in — your account stays safe even if your password is ever compromised. It only takes a minute to set up.",
+    "REMINDER_ACTIVATE": "Enable now",
+    "REMINDER_SNOOZE": "Remind me in 3 days",
+    "REMINDER_DISMISS": "Don't show again"
   }
 }

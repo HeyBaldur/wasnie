@@ -1490,6 +1490,11 @@
     "SETUP_STEP2_DESC": "Abre la app, toca 'Añadir cuenta' y apunta la cámara al código. ¿Sin cámara? Usa la clave manual.",
     "SETUP_STEP3_TITLE": "Introduce el código de 6 dígitos",
     "SETUP_STEP3_DESC": "La app genera un código nuevo cada 30 segundos — es lo normal. Introduce el actual para terminar.",
-    "SETUP_SCAN_LABEL": "Escanea con tu app de autenticación"
+    "SETUP_SCAN_LABEL": "Escanea con tu app de autenticación",
+    "REMINDER_TITLE": "Protege tu cuenta",
+    "REMINDER_BODY": "La autenticación de dos factores añade un segundo paso al iniciar sesión — tu cuenta permanece segura aunque tu contraseña sea comprometida. Solo tarda un minuto en configurarse.",
+    "REMINDER_ACTIVATE": "Activar ahora",
+    "REMINDER_SNOOZE": "Recordarme en 3 días",
+    "REMINDER_DISMISS": "No volver a mostrar"
   }
 }

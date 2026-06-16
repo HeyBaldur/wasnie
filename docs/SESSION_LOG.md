@@ -8,6 +8,36 @@
 
 ## Sessions (newest first)
 
+## 2026-06-16 — WI-PAYMENT-SUBCRIPTION: Toast de recordatorio 2FA (no intrusivo, esquina inferior izquierda)
+
+**Scope:** Recordatorio discreto para usuarios sin 2FA activo. No bloquea la app (toast de esquina, no modal).
+
+**Comportamiento:**
+- Aparece 4s después de cargar el app shell, solo si el usuario está autenticado Y `GET /profile/2fa/status` devuelve `isEnabled: false`.
+- Si el usuario tiene 2FA, jamás aparece (condición de API no se cumple).
+- Jerarquía de acciones: botón primario "Enable now" → `router.navigate(['/profile'], { fragment: 'security' })`, botón secundario "Remind me in 3 days" → snooze 3 días, link de texto "Don't show again" → flag permanente.
+- X del header actúa como snooze (mismo comportamiento que el botón secundario).
+- Animación slide-in desde abajo (250ms); slide-out al cerrar.
+
+**Persistencia (localStorage):**
+- `wasnie:2fa-reminder-snooze`: timestamp de cuando el usuario hizo snooze; no muestra hasta +3 días.
+- `wasnie:2fa-reminder-dismissed`: `"true"` → nunca vuelve a mostrarse.
+- Trade-off aceptado: localStorage es por-navegador; si el usuario borra storage o cambia dispositivo, el popup puede reaparecer. Si en el futuro molesta, mover al backend.
+
+**Archivos creados:**
+- `WasnieUi/src/app/shared/components/two-fa-reminder/two-fa-reminder.component.ts`
+- `WasnieUi/src/app/shared/components/two-fa-reminder/two-fa-reminder.component.html`
+- `WasnieUi/src/app/shared/components/two-fa-reminder/two-fa-reminder.component.scss`
+
+**Archivos modificados:**
+- `app-shell.component.ts` + `.html`: mounting de `<app-two-fa-reminder />`
+- `manage-profile.component.html`: añadido `id="security"` al section de 2FA para el fragment scroll
+- `assets/i18n/en.json`, `es.json`, `pl.json`: 5 claves nuevas cada uno (`TWO_FACTOR.REMINDER_TITLE/BODY/ACTIVATE/SNOOZE/DISMISS`)
+
+**i18n:** EN/ES/PL completo. Build: `ng build --configuration production` limpio, 0 errores (warnings preexistentes sin cambio).
+
+---
+
 ## 2026-06-15 — WI-2FA-TOTP: Autenticación de dos factores (2FA) con TOTP — opcional por usuario
 
 **Scope:** 2FA opcional por usuario basado en TOTP (Google Authenticator, Authy, etc.). Flujo de activación: QR + secreto → código de 6 dígitos → confirmación → códigos de recuperación (mostrados una sola vez). Flujo de login: challenge token (JWT 5min, `purpose=2fa_challenge`) → verificación TOTP o código de recuperación → sesión completa. Desactivación y regeneración de códigos requieren contraseña + código TOTP (doble verificación). Rate limiting anti-fuerza-bruta. Audit trail completo. i18n EN/ES/PL (~40 claves).

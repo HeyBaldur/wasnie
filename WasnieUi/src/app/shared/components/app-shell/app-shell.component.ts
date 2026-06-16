@@ -8,6 +8,7 @@ import { WsToastContainerComponent } from '../../ui/ws-toast/ws-toast-container.
 import { WsConfirmationModalComponent } from '../../ui';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
 import { PastDueBannerComponent } from '../../../features/subscription/past-due-banner/past-due-banner.component';
+import { TwoFaReminderComponent } from '../two-fa-reminder/two-fa-reminder.component';
 
 @Component({
   selector: 'app-shell',
@@ -18,6 +19,7 @@ import { PastDueBannerComponent } from '../../../features/subscription/past-due-
     WsToastContainerComponent,
     WsConfirmationModalComponent,
     PastDueBannerComponent,
+    TwoFaReminderComponent,
     TranslateModule,
   ],
   templateUrl: './app-shell.component.html',

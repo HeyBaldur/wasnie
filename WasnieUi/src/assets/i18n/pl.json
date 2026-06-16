@@ -1490,6 +1490,11 @@
     "SETUP_STEP2_DESC": "Otwórz aplikację, dotknij 'Dodaj konto' i skieruj kamerę na kod. Brak kamery? Skorzystaj z klucza ręcznego.",
     "SETUP_STEP3_TITLE": "Wprowadź 6-cyfrowy kod",
     "SETUP_STEP3_DESC": "Aplikacja generuje nowy kod co 30 sekund — to normalne. Wprowadź aktualny, aby zakończyć.",
-    "SETUP_SCAN_LABEL": "Zeskanuj za pomocą aplikacji uwierzytelniającej"
+    "SETUP_SCAN_LABEL": "Zeskanuj za pomocą aplikacji uwierzytelniającej",
+    "REMINDER_TITLE": "Chroń swoje konto",
+    "REMINDER_BODY": "Uwierzytelnianie dwuskładnikowe dodaje drugi etap logowania — Twoje konto pozostaje bezpieczne nawet jeśli hasło zostanie przejęte. Konfiguracja zajmuje tylko minutę.",
+    "REMINDER_ACTIVATE": "Włącz teraz",
+    "REMINDER_SNOOZE": "Przypomnij za 3 dni",
+    "REMINDER_DISMISS": "Nie pokazuj więcej"
   }
 }
