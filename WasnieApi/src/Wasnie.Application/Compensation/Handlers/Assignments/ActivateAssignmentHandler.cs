@@ -1,0 +1,41 @@
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
+using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Commands.Assignments;
+using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Exceptions;
+
+namespace Wasnie.Application.Compensation.Handlers.Assignments;
+
+public sealed class ActivateAssignmentHandler(
+    IApplicationDbContext db,
+    ICurrentUserService currentUser,
+    IClock clock,
+    IGuidGenerator guid,
+    IAuthorizationService authorizationService)
+    : IRequestHandler<ActivateAssignmentCommand, Result>
+{
+    public async Task<Result> Handle(ActivateAssignmentCommand request, CancellationToken cancellationToken)
+    {
+        await authorizationService.RequireAsync(Permission.AssignmentsUpdate, cancellationToken);
+
+        var assignment = await db.PlanAssignments
+            .FirstOrDefaultAsync(a => a.Id == request.AssignmentId, cancellationToken);
+
+        if (assignment is null)
+            return Result.Failure("Assignment not found.");
+
+        try
+        {
+            assignment.Activate(currentUser.UserId ?? "system", clock.UtcNowOffset, guid.NewGuid());
+            await db.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+        catch (DomainException ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+}

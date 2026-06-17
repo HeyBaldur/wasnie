@@ -3,13 +3,15 @@ import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
+import { OverlapWarningComponent } from '../../../shared/components/overlap-warning/overlap-warning.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { AssignmentsStore } from '../state/assignments.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
-import { AssignmentStatus } from '../models/assignment.model';
+import { AssignmentStatus, BlockedAssignmentDto } from '../models/assignment.model';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { OverlapRow } from '../../../shared/models/overlap-row.model';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -36,6 +38,7 @@ import {
     DateFormatPipe,
     HasPermissionDirective,
     HasPermissionPipe,
+    OverlapWarningComponent,
     WsButtonComponent,
     WsInputComponent,
     WsBadgeComponent,
@@ -57,9 +60,25 @@ export class AssignmentsListComponent implements OnInit {
   readonly openMenuId = signal<string | null>(null);
   readonly menuPosition = signal<{ top: number; right: number } | null>(null);
 
+  // ── Single activate ────────────────────────────────────────────────────────
+  readonly activateOpen = signal(false);
+  readonly activateSaving = signal(false);
+  readonly pendingActivateId = signal<string | null>(null);
+
+  // ── Single deactivate ──────────────────────────────────────────────────────
   readonly deactivateOpen = signal(false);
   readonly deactivateSaving = signal(false);
   readonly pendingDeactivateId = signal<string | null>(null);
+
+  // ── Bulk actions ───────────────────────────────────────────────────────────
+  readonly bulkActivateOpen = signal(false);
+  readonly bulkDeactivateOpen = signal(false);
+  readonly bulkDeleteOpen = signal(false);
+  readonly bulkSaving = signal(false);
+
+  // ── Blocked-delete modal ───────────────────────────────────────────────────
+  readonly blockedOpen = signal(false);
+  readonly blockedRows = signal<OverlapRow[]>([]);
 
   readonly statusOptions: SegOption[] = [
     { value: '', label: 'ASSIGNMENTS.FILTER_ALL' },
@@ -118,6 +137,32 @@ export class AssignmentsListComponent implements OnInit {
     this.closeMenu();
   }
 
+  // ── Single activate ────────────────────────────────────────────────────────
+
+  onActivate(assignmentId: string): void {
+    this.closeMenu();
+    this.pendingActivateId.set(assignmentId);
+    this.activateOpen.set(true);
+  }
+
+  async onConfirmActivate(): Promise<void> {
+    const id = this.pendingActivateId();
+    if (!id) return;
+    this.activateSaving.set(true);
+    try {
+      await this.store.activateAssignment(id);
+      this.toast.show('ASSIGNMENTS.TOAST_ACTIVATED', 'success');
+      this.activateOpen.set(false);
+      this.pendingActivateId.set(null);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.activateSaving.set(false);
+    }
+  }
+
+  // ── Single deactivate ──────────────────────────────────────────────────────
+
   onDeactivate(assignmentId: string): void {
     this.closeMenu();
     this.pendingDeactivateId.set(assignmentId);
@@ -139,6 +184,78 @@ export class AssignmentsListComponent implements OnInit {
       this.deactivateSaving.set(false);
     }
   }
+
+  // ── Bulk activate ──────────────────────────────────────────────────────────
+
+  async onConfirmBulkActivate(): Promise<void> {
+    const ids = [...this.store.selectedIds()];
+    if (!ids.length) return;
+    this.bulkSaving.set(true);
+    try {
+      await this.store.bulkActivate(ids);
+      this.toast.show('ASSIGNMENTS.TOAST_BULK_ACTIVATED', 'success');
+      this.bulkActivateOpen.set(false);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.bulkSaving.set(false);
+    }
+  }
+
+  // ── Bulk deactivate ────────────────────────────────────────────────────────
+
+  async onConfirmBulkDeactivate(): Promise<void> {
+    const ids = [...this.store.selectedIds()];
+    if (!ids.length) return;
+    this.bulkSaving.set(true);
+    try {
+      await this.store.bulkDeactivate(ids);
+      this.toast.show('ASSIGNMENTS.TOAST_BULK_DEACTIVATED', 'success');
+      this.bulkDeactivateOpen.set(false);
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.bulkSaving.set(false);
+    }
+  }
+
+  // ── Bulk delete ────────────────────────────────────────────────────────────
+
+  async onConfirmBulkDelete(): Promise<void> {
+    const ids = [...this.store.selectedIds()];
+    if (!ids.length) return;
+    this.bulkSaving.set(true);
+    try {
+      const result = await this.store.bulkDelete(ids);
+      if (result.allDeleted) {
+        this.toast.show('ASSIGNMENTS.TOAST_BULK_DELETED', 'success');
+        this.bulkDeleteOpen.set(false);
+      } else {
+        // All-or-nothing blocked: show the table of blocked items
+        this.bulkDeleteOpen.set(false);
+        this.blockedRows.set(this.toBlockedRows(result.blocked));
+        this.blockedOpen.set(true);
+      }
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.bulkSaving.set(false);
+    }
+  }
+
+  private toBlockedRows(blocked: BlockedAssignmentDto[]): OverlapRow[] {
+    return blocked.map(b => ({
+      id: b.assignmentId,
+      periodStart: b.effectiveStart,
+      periodEnd: b.effectiveEnd,
+      statusLabel: b.reason,
+      statusVariant: 'danger' as BadgeVariant,
+      col3: `${b.payeeName} → ${b.planName}`,
+      amounts: [],
+    }));
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   statusVariant(status: AssignmentStatus): BadgeVariant {
     switch (status) {

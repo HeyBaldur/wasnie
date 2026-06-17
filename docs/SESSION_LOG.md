@@ -4,6 +4,60 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-17 — WI-DASHBOARD-PENDING-LABEL: Fix "ProcessPending" + global-scope note
+
+**Root cause:** `PENDING_BY_PLAN_DESC` in all three i18n locales contained the literal string `"ProcessPending"` — the i18n key name for the Process Pending feature accidentally leaked into the translation value. Also, the section shows all-time global totals regardless of the date filter, but nothing in the UI communicated this, causing user confusion when the number didn't change on filter switch.
+
+**Changes:**
+- `en.json` / `es.json` / `pl.json`: fixed `PENDING_BY_PLAN_DESC` ("Plans that have transactions ready to calculate." / "Planes con transacciones listas para calcular." / "Plany z transakcjami gotowymi do obliczenia."); added new `PENDING_BY_PLAN_SCOPE` key ("All periods · not affected by the date filter" / "Todos los periodos · no afectado por el filtro de fecha" / "Wszystkie okresy · niezależne od filtra dat")
+- `dashboard.component.html`: added `<p class="pending-plan-card__scope">` with globe icon + `PENDING_BY_PLAN_SCOPE` text, rendered below the existing subtitle
+- `dashboard.component.scss`: added `.pending-plan-card__scope` rule (font-size-11, color-text-placeholder, flex + gap, 2px top margin)
+- No logic changes, no backend changes
+
+**Build:** clean (production)
+
+## 2026-06-17 — WI-ASSIGNMENTS-BULK-ACTIONS: Bulk checkbox + all-or-nothing delete
+
+**Step 0 hallazgos:**
+- Entidad: `PlanAssignment` (`WasnieApi/src/Wasnie.Domain/Compensation/Assignments/PlanAssignment.cs`) — estados Active/Deactivated, sin FK de AssignmentId en payouts
+- Criterio "usada": `CompensationPayout` con TenantId+PayeeId+PlanId donde periodo de payout solapa con `EffectivePeriod` de la asignación — es la única forma de detectar uso ya que no hay FK directa
+- Patrón de selección existente: `payouts.store.ts` — señales `selectedIds`, `allSelected`, `toggleSelect`, `toggleSelectAll`
+- Componente reutilizado: `app-overlap-warning` (inputs: `rows: OverlapRow[]`, `warningKey`, `col3HeaderKey`, `showTotals`) — col3 lleva "Payee → Plan", amounts vacío, showTotals=false
+- Permisos existentes: `Assignments.Update` para activar/desactivar; nuevo `Assignments.Delete` para borrar (TenantAdmin + CompManager)
+- No existía `Activate()` en el dominio — añadido
+
+**Cambios aplicados:**
+
+Backend:
+- `PlanAssignment.cs` — added `Activate()` method (Deactivated → Active, raises PlanAssignmentActivatedEvent)
+- `Permission.cs` — added `AssignmentsDelete = "Assignments.Delete"`
+- `RolePermissions.cs` — added `AssignmentsDelete` to TenantAdmin + CompManager
+- `AuditActions.cs` — added `AssignmentBulkActivated`, `AssignmentBulkDeactivated`, `AssignmentBulkDeleted`
+- New commands: `ActivateAssignmentCommand`, `BulkActivateAssignmentsCommand`, `BulkDeactivateAssignmentsCommand`, `BulkDeleteAssignmentsCommand` (+ `BulkDeleteAssignmentsResult`, `BlockedAssignmentDto`, `BulkAssignmentOperationResult`)
+- New handlers: `ActivateAssignmentHandler`, `BulkActivateAssignmentsHandler`, `BulkDeactivateAssignmentsHandler`, `BulkDeleteAssignmentsHandler`
+- `AssignmentsController.cs` — 4 new endpoints: POST `/{id}/activate`, POST `/bulk-activate`, POST `/bulk-deactivate`, POST `/bulk-delete`
+
+Frontend:
+- `assignment.model.ts` — added `BulkAssignmentIdsRequest`, `BulkAssignmentOperationResult`, `BlockedAssignmentDto`, `BulkDeleteAssignmentsResult`
+- `assignments.api.service.ts` — added `activateAssignment`, `bulkActivate`, `bulkDeactivate`, `bulkDelete`
+- `assignments.store.ts` — added `selectedIds`, `selectedCount`, `allSelected`, `someSelected`, `toggleSelect`, `toggleSelectAll`, `clearSelection`, `activateAssignment`, `bulkActivate`, `bulkDeactivate`, `bulkDelete`
+- `assignments-list.component.ts/html/scss` — checkbox column, bulk action bar, 3 confirmation modals, blocked-items modal (OverlapWarningComponent inside WsConfirmationModal via ng-content)
+- i18n EN/ES/PL: 14 new keys each
+
+**Tests:**
+- Backend: 602/602 pass (13 new unit tests: Activate domain, BulkDelete all-or-nothing, period boundary edge cases, BulkActivate/BulkDeactivate)
+- Frontend: 406 total, 384 pass, 22 pre-existing failures (unchanged)
+
+**Smoke esperado:**
+- Seleccionar varias → barra de acciones aparece con count
+- Desactivar N → todas Deactivated (sin guarda)
+- Activar N → todas Active
+- Borrar (nunca usadas) → se borran todas
+- Borrar (≥1 usada en payouts) → ninguna borrada, modal muestra tabla con bloqueadas y razón
+- Intentar borrar vía API directa sin permiso → 403
+- Multi-tenant implícito (TenantId en assignments + payouts)
+- EN/ES/PL funcionando
+
 ## 2026-06-17 — WI-EXPLANATION-GAPS: Currency dropdown fix + EUR default
 
 **Objetivo:** Arreglar el dropdown de moneda en creación de plan que "no abre al hacer clic."

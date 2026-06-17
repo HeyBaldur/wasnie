@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.Commands.Assignments;
 using Wasnie.Application.Compensation.Queries.Assignments;
+using System.Collections.Generic;
 
 namespace Wasnie.Api.Controllers;
 
@@ -61,5 +62,37 @@ public sealed class AssignmentsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? NoContent() : UnprocessableEntity(new { message = result.Error });
     }
 
+    [HttpPost("{assignmentId:guid}/activate")]
+    public async Task<IActionResult> Activate(Guid assignmentId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ActivateAssignmentCommand(assignmentId), cancellationToken);
+        return result.IsSuccess ? NoContent() : UnprocessableEntity(new { message = result.Error });
+    }
+
+    [HttpPost("bulk-activate")]
+    public async Task<IActionResult> BulkActivate([FromBody] BulkAssignmentIdsRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new BulkActivateAssignmentsCommand(body.AssignmentIds), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    [HttpPost("bulk-deactivate")]
+    public async Task<IActionResult> BulkDeactivate([FromBody] BulkAssignmentIdsRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new BulkDeactivateAssignmentsCommand(body.AssignmentIds), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    [HttpPost("bulk-delete")]
+    public async Task<IActionResult> BulkDelete([FromBody] BulkAssignmentIdsRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new BulkDeleteAssignmentsCommand(body.AssignmentIds), cancellationToken);
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+        // 200 always; frontend checks result.allDeleted
+        return Ok(result.Value);
+    }
+
     public record UpdateNotesRequest(string? Notes);
+    public record BulkAssignmentIdsRequest(IReadOnlyList<Guid> AssignmentIds);
 }

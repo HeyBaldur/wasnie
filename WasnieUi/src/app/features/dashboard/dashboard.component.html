@@ -184,6 +184,10 @@
         <div>
           <h3 class="stat-card__title">{{ 'DASHBOARD.PENDING_BY_PLAN' | translate }}</h3>
           <p class="pending-plan-card__sub">{{ 'DASHBOARD.PENDING_BY_PLAN_DESC' | translate }}</p>
+          <p class="pending-plan-card__scope">
+            <app-icon name="globe" [size]="11" />
+            {{ 'DASHBOARD.PENDING_BY_PLAN_SCOPE' | translate }}
+          </p>
         </div>
         @if (!store.loading() && (store.actionBand()?.pendingByPlanItems?.length ?? 0) > 0) {
           <ws-badge variant="warning" size="sm">

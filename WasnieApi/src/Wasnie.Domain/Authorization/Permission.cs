@@ -22,6 +22,7 @@ public static class Permission
     public const string AssignmentsRead = "Assignments.Read";
     public const string AssignmentsCreate = "Assignments.Create";
     public const string AssignmentsUpdate = "Assignments.Update";
+    public const string AssignmentsDelete = "Assignments.Delete";
 
     public const string CreditsRead = "Credits.Read";
     public const string CreditsExport = "Credits.Export";

@@ -1,7 +1,13 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Assignment, CreateAssignmentRequest } from '../models/assignment.model';
+import {
+  Assignment,
+  BulkAssignmentIdsRequest,
+  BulkAssignmentOperationResult,
+  BulkDeleteAssignmentsResult,
+  CreateAssignmentRequest,
+} from '../models/assignment.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
@@ -38,5 +44,21 @@ export class AssignmentsApiService {
 
   deactivateAssignment(assignmentId: string): Observable<void> {
     return this.http.post<void>(`${this.base}/${assignmentId}/deactivate`, {});
+  }
+
+  activateAssignment(assignmentId: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/${assignmentId}/activate`, {});
+  }
+
+  bulkActivate(body: BulkAssignmentIdsRequest): Observable<BulkAssignmentOperationResult> {
+    return this.http.post<BulkAssignmentOperationResult>(`${this.base}/bulk-activate`, body);
+  }
+
+  bulkDeactivate(body: BulkAssignmentIdsRequest): Observable<BulkAssignmentOperationResult> {
+    return this.http.post<BulkAssignmentOperationResult>(`${this.base}/bulk-deactivate`, body);
+  }
+
+  bulkDelete(body: BulkAssignmentIdsRequest): Observable<BulkDeleteAssignmentsResult> {
+    return this.http.post<BulkDeleteAssignmentsResult>(`${this.base}/bulk-delete`, body);
   }
 }

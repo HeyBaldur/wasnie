@@ -43,6 +43,9 @@ public static class AuditActions
     public const string AssignmentCreated = "ASSIGNMENT_CREATED";
     public const string AssignmentUpdated = "ASSIGNMENT_UPDATED";
     public const string AssignmentRemoved = "ASSIGNMENT_REMOVED";
+    public const string AssignmentBulkActivated = "ASSIGNMENT_BULK_ACTIVATED";
+    public const string AssignmentBulkDeactivated = "ASSIGNMENT_BULK_DEACTIVATED";
+    public const string AssignmentBulkDeleted = "ASSIGNMENT_BULK_DELETED";
 
     // Transactions (Phase 2)
     public const string TransactionIngested = "TRANSACTION_INGESTED";

@@ -3,7 +3,13 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AssignmentsApiService } from '../services/assignments.api.service';
-import { Assignment, AssignmentStatus, AssignmentListParams, CreateAssignmentRequest } from '../models/assignment.model';
+import {
+  Assignment,
+  AssignmentStatus,
+  AssignmentListParams,
+  BulkDeleteAssignmentsResult,
+  CreateAssignmentRequest,
+} from '../models/assignment.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 
 @Injectable({ providedIn: 'root' })
@@ -12,6 +18,36 @@ export class AssignmentsStore {
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+
+  // ── Bulk selection ──────────────────────────────────────────────────────────
+  readonly selectedIds = signal<Set<string>>(new Set());
+  readonly selectedCount = computed(() => this.selectedIds().size);
+  readonly allSelected = computed(() => {
+    const items = this.assignments();
+    return items.length > 0 && items.every(a => this.selectedIds().has(a.id));
+  });
+  readonly someSelected = computed(() => this.selectedIds().size > 0 && !this.allSelected());
+
+  toggleSelect(id: string): void {
+    this.selectedIds.update(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  toggleSelectAll(): void {
+    const items = this.assignments();
+    if (this.allSelected()) {
+      this.selectedIds.set(new Set());
+    } else {
+      this.selectedIds.set(new Set(items.map(a => a.id)));
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
 
   readonly page = signal(1);
   readonly pageSize = signal(10);
@@ -102,6 +138,38 @@ export class AssignmentsStore {
     this.pagedResult.update((r) => r
       ? { ...r, items: r.items.map((a) => a.id === assignmentId ? { ...a, status: 'Deactivated' as AssignmentStatus } : a) }
       : r);
+  }
+
+  async activateAssignment(assignmentId: string): Promise<void> {
+    await firstValueFrom(this.api.activateAssignment(assignmentId));
+    this.pagedResult.update((r) => r
+      ? { ...r, items: r.items.map((a) => a.id === assignmentId ? { ...a, status: 'Active' as AssignmentStatus } : a) }
+      : r);
+  }
+
+  async bulkActivate(ids: string[]): Promise<void> {
+    await firstValueFrom(this.api.bulkActivate({ assignmentIds: ids }));
+    this.pagedResult.update((r) => r
+      ? { ...r, items: r.items.map((a) => ids.includes(a.id) ? { ...a, status: 'Active' as AssignmentStatus } : a) }
+      : r);
+    this.clearSelection();
+  }
+
+  async bulkDeactivate(ids: string[]): Promise<void> {
+    await firstValueFrom(this.api.bulkDeactivate({ assignmentIds: ids }));
+    this.pagedResult.update((r) => r
+      ? { ...r, items: r.items.map((a) => ids.includes(a.id) ? { ...a, status: 'Deactivated' as AssignmentStatus } : a) }
+      : r);
+    this.clearSelection();
+  }
+
+  async bulkDelete(ids: string[]): Promise<BulkDeleteAssignmentsResult> {
+    const result = await firstValueFrom(this.api.bulkDelete({ assignmentIds: ids }));
+    if (result.allDeleted) {
+      await this.loadAssignments();
+      this.clearSelection();
+    }
+    return result;
   }
 
   setSearch(value: string): void {

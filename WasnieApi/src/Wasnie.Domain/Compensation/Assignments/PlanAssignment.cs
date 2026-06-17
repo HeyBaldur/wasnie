@@ -64,6 +64,21 @@ public sealed class PlanAssignment : AggregateRoot
         UpdatedBy = updatedBy;
     }
 
+    public void Activate(string updatedBy, DateTimeOffset now, Guid eventId)
+    {
+        if (Status == AssignmentStatus.Active)
+        {
+            throw new DomainException("Assignment is already active.");
+        }
+
+        Status = AssignmentStatus.Active;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+
+        RaiseDomainEvent(new PlanAssignmentActivatedEvent(
+            eventId, now, Id, PlanId, PayeeId, TenantId));
+    }
+
     public void Deactivate(string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status == AssignmentStatus.Deactivated)
