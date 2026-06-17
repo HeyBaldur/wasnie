@@ -4,6 +4,366 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-17 — WI-DASHBOARD-PENDING-LABEL: Fix "ProcessPending" + global-scope note
+
+**Root cause:** `PENDING_BY_PLAN_DESC` in all three i18n locales contained the literal string `"ProcessPending"` — the i18n key name for the Process Pending feature accidentally leaked into the translation value. Also, the section shows all-time global totals regardless of the date filter, but nothing in the UI communicated this, causing user confusion when the number didn't change on filter switch.
+
+**Changes:**
+- `en.json` / `es.json` / `pl.json`: fixed `PENDING_BY_PLAN_DESC` ("Plans that have transactions ready to calculate." / "Planes con transacciones listas para calcular." / "Plany z transakcjami gotowymi do obliczenia."); added new `PENDING_BY_PLAN_SCOPE` key ("All periods · not affected by the date filter" / "Todos los periodos · no afectado por el filtro de fecha" / "Wszystkie okresy · niezależne od filtra dat")
+- `dashboard.component.html`: added `<p class="pending-plan-card__scope">` with globe icon + `PENDING_BY_PLAN_SCOPE` text, rendered below the existing subtitle
+- `dashboard.component.scss`: added `.pending-plan-card__scope` rule (font-size-11, color-text-placeholder, flex + gap, 2px top margin)
+- No logic changes, no backend changes
+
+**Build:** clean (production)
+
+## 2026-06-17 — WI-ASSIGNMENTS-BULK-ACTIONS: Bulk checkbox + all-or-nothing delete
+
+**Step 0 hallazgos:**
+- Entidad: `PlanAssignment` (`WasnieApi/src/Wasnie.Domain/Compensation/Assignments/PlanAssignment.cs`) — estados Active/Deactivated, sin FK de AssignmentId en payouts
+- Criterio "usada": `CompensationPayout` con TenantId+PayeeId+PlanId donde periodo de payout solapa con `EffectivePeriod` de la asignación — es la única forma de detectar uso ya que no hay FK directa
+- Patrón de selección existente: `payouts.store.ts` — señales `selectedIds`, `allSelected`, `toggleSelect`, `toggleSelectAll`
+- Componente reutilizado: `app-overlap-warning` (inputs: `rows: OverlapRow[]`, `warningKey`, `col3HeaderKey`, `showTotals`) — col3 lleva "Payee → Plan", amounts vacío, showTotals=false
+- Permisos existentes: `Assignments.Update` para activar/desactivar; nuevo `Assignments.Delete` para borrar (TenantAdmin + CompManager)
+- No existía `Activate()` en el dominio — añadido
+
+**Cambios aplicados:**
+
+Backend:
+- `PlanAssignment.cs` — added `Activate()` method (Deactivated → Active, raises PlanAssignmentActivatedEvent)
+- `Permission.cs` — added `AssignmentsDelete = "Assignments.Delete"`
+- `RolePermissions.cs` — added `AssignmentsDelete` to TenantAdmin + CompManager
+- `AuditActions.cs` — added `AssignmentBulkActivated`, `AssignmentBulkDeactivated`, `AssignmentBulkDeleted`
+- New commands: `ActivateAssignmentCommand`, `BulkActivateAssignmentsCommand`, `BulkDeactivateAssignmentsCommand`, `BulkDeleteAssignmentsCommand` (+ `BulkDeleteAssignmentsResult`, `BlockedAssignmentDto`, `BulkAssignmentOperationResult`)
+- New handlers: `ActivateAssignmentHandler`, `BulkActivateAssignmentsHandler`, `BulkDeactivateAssignmentsHandler`, `BulkDeleteAssignmentsHandler`
+- `AssignmentsController.cs` — 4 new endpoints: POST `/{id}/activate`, POST `/bulk-activate`, POST `/bulk-deactivate`, POST `/bulk-delete`
+
+Frontend:
+- `assignment.model.ts` — added `BulkAssignmentIdsRequest`, `BulkAssignmentOperationResult`, `BlockedAssignmentDto`, `BulkDeleteAssignmentsResult`
+- `assignments.api.service.ts` — added `activateAssignment`, `bulkActivate`, `bulkDeactivate`, `bulkDelete`
+- `assignments.store.ts` — added `selectedIds`, `selectedCount`, `allSelected`, `someSelected`, `toggleSelect`, `toggleSelectAll`, `clearSelection`, `activateAssignment`, `bulkActivate`, `bulkDeactivate`, `bulkDelete`
+- `assignments-list.component.ts/html/scss` — checkbox column, bulk action bar, 3 confirmation modals, blocked-items modal (OverlapWarningComponent inside WsConfirmationModal via ng-content)
+- i18n EN/ES/PL: 14 new keys each
+
+**Tests:**
+- Backend: 602/602 pass (13 new unit tests: Activate domain, BulkDelete all-or-nothing, period boundary edge cases, BulkActivate/BulkDeactivate)
+- Frontend: 406 total, 384 pass, 22 pre-existing failures (unchanged)
+
+**Smoke esperado:**
+- Seleccionar varias → barra de acciones aparece con count
+- Desactivar N → todas Deactivated (sin guarda)
+- Activar N → todas Active
+- Borrar (nunca usadas) → se borran todas
+- Borrar (≥1 usada en payouts) → ninguna borrada, modal muestra tabla con bloqueadas y razón
+- Intentar borrar vía API directa sin permiso → 403
+- Multi-tenant implícito (TenantId en assignments + payouts)
+- EN/ES/PL funcionando
+
+## 2026-06-17 — WI-EXPLANATION-GAPS: Currency dropdown fix + EUR default
+
+**Objetivo:** Arreglar el dropdown de moneda en creación de plan que "no abre al hacer clic."
+
+**Root cause (Step 0 diagnóstico):**
+- La lista de monedas es ESTÁTICA (no viene del backend) → la causa NO es el tenant sin datos
+- El `ws-select` siempre usa `position: fixed` para el dropdown (para escapar `overflow: hidden` de contenedores ancestrales)
+- En modo **upward** (dropdown va hacia arriba), la lógica setea `dropdownFixedTop = null` y `dropdownFixedBottom = Xpx`
+- Cuando `dropdownFixedTop` es null, la binding `[style.top.px]` se limpia → la CSS `top: calc(100% + …)` del `position: absolute` toma efecto
+- Con `position: fixed`, `100%` en `top` se resuelve contra el viewport (no el elemento padre) → `top ≈ 100vh + 4px` = debajo del viewport
+- Con `top ≈ 768px` + `bottom: Xpx`, la altura calculada del elemento es NEGATIVA → el dropdown colapsa a **cero altura** (invisible)
+- En una pantalla 1366×768: currency trigger ≈ 580px desde viewport top → `spaceBelow ≈ 180px < 280px` → upward mode se activa SIEMPRE → dropdown invisible en toda pantalla de laptop estándar
+
+**Cambios aplicados:**
+1. `WasnieUi/src/app/shared/ui/ws-select/ws-select.component.html` — binding `[style.top.px]` → `[style.top]` (string); cuando fixed+upward explícitamente pasa `'auto'` para neutralizar la CSS `top: calc(...)`. Downward: `dropdownFixedTop + 'px'`. No-fixed: `null`.
+2. `WasnieUi/src/app/features/plans/create/plan-create.component.ts` — default de currency de `'USD'` → `'EUR'` (el producto es europeo).
+3. `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.spec.ts` — fixture `makeUser()` le faltaban `emailConfirmed: true, isQualified: true` (TypeScript error pre-existente que impedía ejecutar todos los tests).
+
+**Verificación:**
+- Build: `ng build --configuration production` limpio (warnings pre-existentes sin cambio)
+- Tests: 406 run → 384 pass, 22 pre-existing failures (unrelated: ProcessPending HTTP mocks, SubscriptionReactivation HttpClient, PayRuns/Payouts pagination)
+- Para verificar en runtime: abrir `/plans/create` en cualquier pantalla → campo Currency muestra "EUR" por defecto → clic → dropdown abre con 8 opciones (EUR, USD, GBP, PLN, CAD, AUD, JPY, CHF) → seleccionar cualquiera → crear plan funciona
+
+**Archivos tocados:**
+- `WasnieUi/src/app/shared/ui/ws-select/ws-select.component.html`
+- `WasnieUi/src/app/features/plans/create/plan-create.component.ts`
+- `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.spec.ts`
+
+## 2026-06-16 — UI-DASHBOARD-LAYOUT + UI fixes (scroll, Total column, bulk errors)
+
+**Objetivo:** 4 UI fixes post-WI-PAYMENT-BLOCK-UI.
+
+**Fix 1 — Scrollbar delgado + margin-bottom en OverlapWarningComponent:**
+- `overlap-warning.component.scss`: `__wrapper` → `margin-bottom: var(--space-4)`; `__table-wrapper` → scrollbar thin styles inlineados (no `@extend` — SASS scope issue en componentes).
+
+**Fix 2 — Columna "Total" oculta cuando no hay datos:**
+- `overlap-warning.component.ts`: nuevo `@Input() showTotals = true`
+- `overlap-warning.component.html`: `@if (showTotals)` envuelve `<th>` y `<td>` de Total
+- Usado con `[showTotals]="false"` en pay-run-detail + payout-detail para los conflictos de doble-pago.
+
+**Fix 3 — Bulk mark-paid muestra errores cuando `paid=0`:**
+- `payouts-list.component.ts`: señales `bulkMarkPaidErrors` + `bulkMarkPaidCount`; `onBulkMarkPaid()` ahora captura el resultado y popula las señales
+- `payouts-list.component.html`: banner de error con lista scrolleable antes del `<ws-table>`
+- `payouts-list.component.scss`: `.payouts-list__bulk-error*` con scrollbar thin + max-height 180px
+
+**Fix 4 — Dashboard layout iguala layout de planes:**
+- `dashboard.component.html`: eliminado `maxWidth="wide"` → usa 1200px estándar
+- `dashboard.component.scss`: `action-grid` → 2 cols en ≤1100px; breakpoint inferior unificado a 640px (antes 820px → solo 1 col en 820px sin step intermedio)
+
+## 2026-06-16 — WI-PAYMENT-BLOCK-UI: Rediseño del mensaje de bloqueo anti-doble-pago
+
+**Objetivo:** Reemplazar el muro de texto rojo concatenado del bloqueo anti-doble-pago por un resumen claro + tabla scrolleable reutilizando `OverlapWarningComponent`.
+
+**Approach elegido (vs alternativas):**
+- `Result<PaymentBlockResult?>` en vez de `Result`: null = pagado, non-null = bloqueado con datos estructurados, `Failure` = error real (not found, wrong status). Consistente con el patrón `ChangePlanCommandHandler { blocked: true, ... }`.
+- HTTP 409 Conflict para bloqueo (semántica correcta) vs 400 BadRequest (que era para errores reales).
+- Reusar `OverlapWarningComponent` exactamente con mapping `PaymentConflictItem → OverlapRow`: Period=período del payout consumidor, Status=Paid badge, Col3=referencia transacción.
+
+**Backend (Wasnie.Application + Wasnie.Api):**
+- `PaymentBlockResult.cs` + `PaymentConflictItem.cs` en `Common/DTOs/`
+- `MarkPayRunPaidCommand : IRequest<Result<PaymentBlockResult?>>` (antes `IRequest<Result>`)
+- `MarkPayoutPaidCommand : IRequest<Result<PaymentBlockResult?>>` (antes `IRequest<Result>`)
+- `MarkPayRunPaidHandler` + `MarkPayoutPaidHandler`: guard section ahora retorna `Result<PaymentBlockResult?>.Success(new PaymentBlockResult(...))` en vez de `Result.Failure(errorMsg)`; el log/audit string mantiene el mismo nivel de detalle
+- `PayRunsController.MarkPaid` + `PayoutsController.MarkPaid`: 204 si null, 409 si blocked, 400 si failure
+- Tests actualizados: `IsSuccess.Should().BeTrue()` + `Value.Should().NotBeNull()` + conflict assertions
+
+**Frontend (WasnieUi):**
+- `PaymentConflictItem` + `PaymentBlockResponse` interfaces en `payout.model.ts`
+- `pay-run-detail.component.ts`: signal `doublePayConflicts = signal<OverlapRow[]>([])`, catch 409 → set conflicts, catch other → set `actionError`; método `viewConflictPayout()` + `_toConflictRows()`
+- `pay-run-detail.component.html`: `@if (doublePayConflicts().length > 0)` → `<app-overlap-warning>` con `warningKey="PAY_RUNS.DETAIL.DOUBLE_PAY_BLOCKED"` + `col3HeaderKey="PAY_RUNS.DETAIL.DOUBLE_PAY_COL_TX_REF"` + `(rowClick)="viewConflictPayout($event)"`
+- `payout-detail.component.ts` + HTML: mismo patrón
+- i18n EN+ES+PL: `PAYOUTS.DETAIL.DOUBLE_PAY_BLOCKED`, `PAYOUTS.DETAIL.DOUBLE_PAY_COL_TX_REF`, `PAY_RUNS.DETAIL.DOUBLE_PAY_BLOCKED`, `PAY_RUNS.DETAIL.DOUBLE_PAY_COL_TX_REF`
+
+**Pruebas:** 10/10 integration tests pasan (9 AntiDoublePay + 1 PayRunEngine anti-double-pay). Build backend Application: 0 errores. Build frontend: 0 errores TS.
+
+**Deuda pendiente:** Frontend para `POST /api/payouts/{id}/revert-paid` — sin UI todavía.
+
+## 2026-06-16 — WI-ANTI-DOUBLE-PAY-GUARD: Guarda bloqueante en el punto de pago (SMOCK-326546143213)
+
+**Síntoma:** Transacción SMOCK-326546143213 (£75,000, £3,750 comisión) pagada 7 veces en 7 payouts distintos. Todos Paid. Solo 1 crédito consumido.
+
+**Root cause (3 capas):**
+1. **Relación 1:1 (Transaction → Credit)** — un solo crédito por transacción. El mismo crédito puede aparecer en PayoutLines de MÚLTIPLES payouts.
+2. **Ventana de vulnerabilidad** — los 7 payouts se calcularon antes de pagar ninguno. Al calcular, `ConsumedAt == null` para todos, así que el calculador incluyó el crédito en los 7. Los PayoutLines existen antes de cualquier pago.
+3. **"Graceful skip" no bloqueaba** — el código anterior: `if (credit.ConsumedAt is not null) { logger.LogWarning; continue; }` — saltaba el consumo pero SEGUÍA marcando el payout como Paid. El segundo (y tercer, cuarto...) payout continuaba pagándose aunque el crédito ya estuviese consumido.
+
+**Fix — guarda bloqueante en las 3 rutas de pago:**
+- **Upfront check**: antes de `payout.MarkPaid()`, se cargan TODOS los créditos del payout. Si `alreadyConsumed.Count > 0` → se consultan referencias de transacciones y períodos del payout consumidor → se devuelve `Result.Failure(...)` con mensaje claro identificando qué transacción está ya pagada y en qué período. El payout NO cambia de estado.
+- **Audit**: `PAYMENT_BLOCKED_DOUBLE_PAYMENT` con IDs de créditos bloqueados y descripción del conflicto.
+- **Concurrencia optimista**: `Credit.RowVersion` (rowversion SQL Server). EF incluye `WHERE RowVersion = <original>` en el UPDATE de consumo. Dos pagos simultáneos → el segundo lanza `DbUpdateConcurrencyException` → capturada con error claro.
+
+**Migración B5_CreditRowVersion:**
+- `Credits.RowVersion rowversion NOT NULL` — aplicada vía SQL directa (API corriendo, DLLs bloqueados). Registrada en `__EFMigrationsHistory`.
+- Archivos de migración: `20260616200000_B5_CreditRowVersion.cs` + `.Designer.cs`
+
+**AuditActions nuevas:** `PaymentBlockedDoublePayment = "PAYMENT_BLOCKED_DOUBLE_PAYMENT"`
+
+**Archivos tocados:**
+- `src/Wasnie.Domain/Compensation/Credits/Credit.cs` — `RowVersion` property
+- `src/Wasnie.Infrastructure/Persistence/Configurations/Compensation/CreditConfiguration.cs` — `.IsRowVersion()`
+- `src/Wasnie.Infrastructure/Persistence/Migrations/20260616200000_B5_CreditRowVersion.cs` + `.Designer.cs`
+- `src/Wasnie.Domain/Audit/AuditActions.cs` — `PaymentBlockedDoublePayment`
+- `src/Wasnie.Application/Compensation/Handlers/PayRuns/MarkPayRunPaidHandler.cs` — upfront check + DbUpdateConcurrencyException
+- `src/Wasnie.Application/Compensation/Handlers/Payouts/MarkPayoutPaidHandler.cs` — ídem
+- `src/Wasnie.Application/Compensation/Handlers/Payouts/BulkMarkPaidHandler.cs` — ídem (por payout)
+- `tests/Wasnie.IntegrationTests/Compensation/AntiDoublePayTests.cs` — 3 nuevos tests
+- `tests/Wasnie.IntegrationTests/Compensation/PayRunEngineTests.cs` — 1 nuevo test
+
+**Tests:** 589 unit (0 regresiones). 30 integration (9 AntiDoublePay + 21 PayRunEngine) — todos pasan.
+
+**Verificación RUNTIME pendiente:** Reiniciar la API y reproducir el caso: pagar pay run A con la transacción → intentar pagar pay run B con la misma → debe bloquearse con mensaje claro.
+
+---
+
+## 2026-06-16 — WI-TX-PAID-PROPAGATION-FIX: Bug crítico — transacciones no se marcaban Paid al pagar un pay run
+
+**Síntoma:** `/transactions?statuses=Paid` devolvía cero resultados tras pagar payouts. Transacciones de payouts Paid seguían en estado Calculated.
+
+**Root cause:** `MarkPayRunPaidHandler` — la ruta que usa la UI (pay-runs flow) — cargaba los payouts **sin `.Include(p => p.Lines)`** y llamaba directamente `payout.MarkPaid(actor, now)` en un loop simple. Nunca cargaba créditos, nunca llamaba `credit.Consume()`, nunca llamaba `tx.MarkPaid()`. Solo el estado del `CompensationPayout` cambiaba a Paid. Los otros dos handlers (`MarkPayoutPaidHandler` individual + `BulkMarkPaidHandler`) SÍ estaban correctos pero los usaba nadie en el flujo principal.
+
+**Fix (`MarkPayRunPaidHandler.cs`):**
+- Añadido `ILogger<MarkPayRunPaidHandler>` al constructor
+- `.Include(p => p.Lines)` al cargar payouts aprobados del run
+- Batch-load: todos los `CreditId` de todas las líneas → query bulk `db.Credits` (con `IgnoreQueryFilters`, `SupersededAt == null`) → query bulk `db.CompensationTransactions` (con `IgnoreQueryFilters`, `Status == Calculated`)
+- Loop por payout: `payout.MarkPaid()` + por cada crédito `credit.Consume()` + por cada `TransactionId` único `tx.MarkPaid()`
+- Graceful skip si crédito ya consumido (warning log)
+- Audit log `PAYOUT_CREDITS_CONSUMED` con counts
+- `PayRunEngineTests.MarkPaidHandler()` factory actualizado: `NullLogger<MarkPayRunPaidHandler>.Instance` como 7º arg
+
+**Archivos tocados:**
+- `src/Wasnie.Application/Compensation/Handlers/PayRuns/MarkPayRunPaidHandler.cs` — reescrito
+- `tests/Wasnie.IntegrationTests/Compensation/PayRunEngineTests.cs` — factory helper actualizado
+
+**Tests:** 589 unit (sin cambio). 26 integration (6 AntiDoublePay + 20 PayRunEngine) — todos pasan.
+
+**Deuda pendiente:** Frontend para `POST /api/payouts/{id}/revert-paid` — sin UI todavía.
+
+---
+
+## 2026-06-16 — WI-ANTI-DOUBLE-PAY Phase 3 (B+C): Consumo de créditos + exclusión en motor
+
+**Objetivo:** Implementar anti-doble-pago completo: propagar estado Paid a transacciones (Parte B), marcar créditos como consumidos al pagar y excluirlos del motor de cálculo en periodos solapados (Parte C), con reversibilidad completa.
+
+**Decisión clave:** Consumo al PAGAR (no al Aprobar). Rationale: Approved es reversible (ReopenPayRun revierte Approved→Calculated), Paid = dinero movido. Para el riesgo de dos payouts Approved con créditos solapados: el motor ya bloquea recalcular el mismo período exacto si hay uno Approved; los períodos parcialmente solapados son un error de workflow, no sistémico.
+
+**Completado:**
+
+**Dominio:**
+- `Credit.cs`: `ConsumedAt` + `ConsumedByPayoutId` (nullable), `Consume()`, `Unconsume()`
+- `CompensationTransaction.cs`: `MarkPaid()` implementado (elimina stub NotSupportedException) — Calculated→Paid; `RevertPaidToCalculated()` nuevo método
+- `CompensationPayout.cs`: `RevertPaidToApproved()` — Paid→Approved
+- Eventos nuevos: `CreditConsumedEvent`, `CreditUnconsumedEvent`, `TransactionMarkedPaidEvent`
+- `AuditActions.cs`: `TransactionMarkedPaid`, `PayoutCreditsConsumed`, `PayoutRevertedToApproved`
+
+**Infraestructura:**
+- `CreditConfiguration.cs`: columnas `ConsumedAt` + `ConsumedByPayoutId` + 2 índices filtrados
+- Migración `B4_CreditConsumptionFields` creada y verificada (Up/Down correctos)
+
+**Motor de cálculo (el fix central):**
+- `CalculatePayoutsForPeriodHandler.cs`: añadido `&& c.ConsumedAt == null` al filtro de créditos — éste es el fix que previene el doble pago en períodos solapados
+
+**Handlers actualizados:**
+- `MarkPayoutPaidHandler.cs`: Include(Lines), carga créditos no-Superseded, llama `credit.Consume()`, marca transacciones Paid, audit `PAYOUT_CREDITS_CONSUMED`; añade `ILogger`
+- `BulkMarkPaidHandler.cs`: misma lógica en bulk (batch load de créditos + transacciones), `ILogger`
+- `RevertPayoutToApprovedHandler.cs` (nuevo): carga créditos por `ConsumedByPayoutId`, llama `credit.Unconsume()`, revertir transacciones Paid→Calculated, `payout.RevertPaidToApproved()`, audit
+
+**API:**
+- `PayoutsController.cs`: `POST /api/payouts/{id}/revert-paid`
+- Comando: `RevertPayoutToApprovedCommand`
+
+**Tests:**
+- `AntiDoublePayTests.cs` (6 tests): MarkPaid propaga (créditos consumidos + txs Paid), solape excluye créditos consumidos (el bug fix), no-solape funciona normal, revert libera créditos + revierte txs, recalculación post-revert, multi-tenant isolation
+- `CompensationTransactionTests.cs` (4 tests nuevos): MarkPaid desde Calculated OK, MarkPaid desde Pending throws, RevertPaidToCalculated OK, RevertFromPending throws; stub test eliminado
+- `PayRunEngineTests.cs`: fix pre-existente (NoOpAuditService faltaba para ApprovePayRunHandler + MarkPayRunPaidHandler)
+- **589 unit tests pasan** (4 nuevos + stub test eliminado + 63 CommissionCalculator intactos)
+- **34 integration tests pasan** (8 PayoutEngineTests + 20 PayRunEngineTests + 6 AntiDoublePayTests)
+- Fallos existentes: todos 403 Forbidden en HTTP endpoint tests (JWT auth infra, pre-existentes)
+
+**Archivos tocados (backend):**
+- `Wasnie.Domain`: Credit.cs, CompensationTransaction.cs, CompensationPayout.cs, AuditActions.cs, Events/CreditConsumedEvent.cs (nuevo), Events/CreditUnconsumedEvent.cs (nuevo), Events/TransactionMarkedPaidEvent.cs (nuevo)
+- `Wasnie.Infrastructure`: CreditConfiguration.cs, Migrations/20260616135428_B4_CreditConsumptionFields.cs (nuevo), ModelSnapshot actualizado
+- `Wasnie.Application`: CalculatePayoutsForPeriodHandler.cs, MarkPayoutPaidHandler.cs, BulkMarkPaidHandler.cs, Commands/Payouts/RevertPayoutToApprovedCommand.cs (nuevo), Handlers/Payouts/RevertPayoutToApprovedHandler.cs (nuevo)
+- `Wasnie.Api`: PayoutsController.cs
+- Tests: AntiDoublePayTests.cs (nuevo), CompensationTransactionTests.cs, PayRunEngineTests.cs
+
+**Deuda/Notas:**
+- Frontend no actualizado — filtro "Paid" en Transactions ya funcionará (txs ahora se marcan Paid), pero no hay UI para el nuevo endpoint `revert-paid`
+- El filtro `c.ConsumedAt == null` evita doble-pago en cualquier solape futuro; datos históricos (pre-fix) pueden tener créditos sin `ConsumedAt` en payouts ya pagados — no se retroactively corrigen (sin impacto en nuevos periodos)
+
+## 2026-06-16 — WI-PAYOUT-OVERLAP-GUARD: Aviso de solapamiento al aprobar/pagar payouts
+
+**Objetivo:** Mostrar aviso de solapamiento al aprobar o marcar como pagado payouts individuales y en operaciones bulk, reutilizando el componente de tabla que ya existía en pay-run-detail.
+
+**Completado:**
+- **Backend handlers**: `GetPayoutOverlapsHandler` (overlaps por payee+período, resolución de plan name) + `CheckPayoutsOverlapsHandler` (bulk count)
+- **Queries**: `GetPayoutOverlapsQuery` + `CheckPayoutsOverlapsQuery` en `ListPayoutsQuery.cs`
+- **DTO**: `OverlappingPayoutDto` en `PayoutDto.cs`
+- **Audit constants**: `PayoutApprovedWithOverlap`, `PayoutPaidWithOverlap`, `PayoutBulkApprovedWithOverlap`, `PayoutBulkPaidWithOverlap` en `AuditActions.cs`
+- **Handlers actualizados**: `ApprovePayoutHandler` + `MarkPayoutPaidHandler` ahora tienen auth guard + overlap audit; `BulkApprovePayoutsHandler` + `BulkMarkPaidHandler` con IAuditService + overlap count
+- **Endpoints nuevos**: `GET /api/payouts/{id}/overlaps` + `POST /api/payouts/overlaps-check` en `PayoutsController`
+- **Shared component**: `OverlapWarningComponent` en `shared/components/overlap-warning/` — extrae el markup de tabla scrolleable que existía inline en pay-run-detail
+- **pay-run-detail refactorizado**: inline overlap tables reemplazadas con `<app-overlap-warning>`, `_runToRow()` helper, computed signals `approveOverlapRows`/`markPaidOverlapRows`
+- **payout-detail actualizado**: `ws-confirmation-modal` → `ws-modal` + `<app-overlap-warning>`, métodos `openApproveConfirm()`/`openMarkPaidConfirm()` que fetchan overlaps al abrir
+- **payouts-list actualizado**: `openBulkApproveConfirm()`/`openBulkMarkPaidConfirm()` con `checkBulkOverlaps`, overlap count en ambos bulk modals
+- **Modelos**: `OverlapRow` interface en `shared/models/`, `OverlappingPayout` en `payout.model.ts`, `getOverlaps`/`checkBulkOverlaps` en `payouts.api.service.ts`
+- **i18n EN/ES/PL**: `OVERLAP_WARNING.COL_*` (shared), `PAYOUTS.DETAIL.OVERLAP_WARNING`, `PAYOUTS.DETAIL.OVERLAP_COL_PLAN`, `PAYOUTS.BULK_OVERLAP_WARNING`
+- **Tests**: 10 nuevos `GetPayoutOverlapsHandlerTests` (576→586 total, todos pasan)
+- **Build**: `ng build --configuration production` limpio; Application + Domain compilados sin errores (API DLL bloqueada por servidor en ejecución)
+
+**Decisiones:**
+- Solapamiento de payout = mismo payee + período solapado + status Approved/Paid (no tenant-wide como pay-run)
+- Bulk muestra solo el count (no tabla per-row — N overlaps queries sería costoso)
+- `OverlapWarningComponent` usa inputs `warningKey` + `col3HeaderKey` para ser agnóstico al dominio padre
+- Columnas fijas (Period, Status, Total) en namespace `OVERLAP_WARNING.*`; col3 variable via input
+
+## 2026-06-16 — WI-DELETE-DRAFT: Borrado permanente de pay runs en Draft
+
+**Objetivo:** Permitir borrar definitivamente pay runs en estado Draft (y SOLO Draft). Approved y Paid son registros financieros — nunca borrables.
+
+**Backend:**
+- `Permission.PayoutsDeleteDraft = "Payouts.DeleteDraft"` añadido + asignado a TenantAdmin + CompManager
+- `DeletePayRunDraftCommand` + `DeletePayRunDraftHandler`: RequireAsync → status guard (retorna Failure con "locked" para Approved/Paid) → RemoveRange payouts (FK Restrict obliga borrado explícito) → Remove payRun → SaveChanges → audit `PAY_RUN_DRAFT_DELETED`
+- `DELETE /api/pay-runs/{id}`: 204 OK, 404 not found, 409 Conflict (locked — Approved/Paid)
+- 7 unit tests nuevos: borrado exitoso, audit logueado, Approved rechazado con "locked", Paid rechazado, not found, no audit en rejected, otros runs intactos
+- Tests totales: 569→576
+
+**Frontend:**
+- Lista: columna de acciones (width 40px), botón trash opacity:0→1 on hover (Draft + hasPermission)
+- Detalle: botón "Delete draft" en header (ghost, Draft + hasPermission)
+- Modal de confirmación en ambos: período interpolado, advertencia irreversible, botón `variant="danger"`
+- Lista recarga store tras borrado; detalle navega a `/pay-runs` tras borrado
+- SCSS: `__col-actions`, `__delete-btn`, `__modal-body`, `__modal-intro`, `__modal-warning`, `__modal-error`
+- i18n EN/ES/PL: `DELETE_DRAFT`, `DELETE_CONFIRM_TITLE`, `DELETE_CONFIRM_BODY` (con `{{periodStart}}` + `{{periodEnd}}`), `DELETE_CONFIRM_IRREVERSIBLE`, `DELETE_CONFIRM_BTN`, `DELETE_ERROR`
+
+**Decisiones:**
+- Backend retorna 409 (no 400) para intentos de borrar Approved/Paid — distinguible del error de input, ayuda a depuración
+- `DELETE_CONFIRM_BODY` incluye el período para que el admin confirme visualmente qué run va a borrar
+- Delete button en el detail aparece como primer botón en el header (antes de Back + Approve) para no interferir con el flujo normal
+
+**Build:** `ng build --configuration production` limpio. 576/576 unit tests pasan.
+
+## 2026-06-16 — WI-OVERLAP-GUARD: Anti doble-pago — pay runs solapados en modales Aprobar/Pagar
+
+**Objetivo:** Mostrar al admin los pay runs cuyo periodo se solapa (Approved/Paid) antes de confirmar Aprobar o Marcar Pagado, sin bloquear la acción.
+
+**Step 0:**
+- Handlers: `ApprovePayRunHandler` + `MarkPayRunPaidHandler` — sin `IAuditService`; modales ya existentes con slots de body/footer
+- Solapamiento: `PeriodStart ≤ thisPeriodEnd AND PeriodEnd ≥ thisPeriodStart` — endpoints compartidos = solape
+- Multi-tenant: global query filter `PayRun` (ApplicationDbContext línea 103) — automático, sin filtro manual
+- `AuditActions.cs` sin constantes de pay run
+
+**Cambios backend:**
+- `PayRunDto.cs` — añadido `OverlappingPayRunDto`
+- `PayRunQueries.cs` — añadido `GetPayRunOverlapsQuery`
+- NEW `GetPayRunOverlapsHandler.cs` — carga el pay run, query de solapamiento bulk, devuelve lista
+- `PayRunsController.cs` — `GET /api/pay-runs/{id}/overlaps`
+- `AuditActions.cs` — `PayRunApprovedWithOverlap`, `PayRunPaidWithOverlap`
+- `ApprovePayRunHandler.cs` — inyecta `IAuditService`; captura IDs solapados antes de SaveChanges; loga si count > 0
+- `MarkPayRunPaidHandler.cs` — mismo patrón
+
+**Cambios frontend:**
+- `pay-run.model.ts` — `OverlappingPayRun` interface
+- `pay-runs.api.service.ts` — `getOverlaps(id): Observable<OverlappingPayRun[]>`
+- `pay-run-detail.component.ts` — signals `approveOverlaps`/`markPaidOverlaps`/`overlapsLoading`; métodos `openApproveConfirm()`/`openMarkPaidConfirm()` (fetch → open modal); `overlapTotalEntries()`, `viewOverlapRun()`
+- `pay-run-detail.component.html` — tabla scrolleable en ambos modales (Approve + MarkPaid); skeleton durante carga; filas clickables
+- `pay-run-detail.component.scss` — `__overlap-warning`, `__overlap-msg`, `__overlap-table-wrapper` (max-height 220px), `__overlap-table`, `__overlap-row`
+- i18n EN/ES/PL — 5 claves nuevas: `OVERLAP_WARNING`, `OVERLAP_COL_PERIOD`, `OVERLAP_COL_STATUS`, `OVERLAP_COL_PAYEES`, `OVERLAP_COL_TOTAL`
+
+**Tests:** 11 nuevos unit tests en `GetPayRunOverlapsHandlerTests.cs` — sin solapamiento, mismo periodo Approved/Paid, Draft no incluido, solapamiento parcial, endpoint compartido cuenta como solape, no-solape adyacente, periodo anterior, múltiples solapamientos, not found, self no incluido. Total: 558→569.
+
+**Build:** test project 0 errores; `ng build --configuration production` 601.21 kB, limpio.
+
+**Próximo recomendado:** WI-AUDIT-PAYOUT-TRANSITIONS — `ApprovePayoutHandler`/`MarkPayoutPaidHandler` (individuales, no pay run) sin audit; `AuditActions.cs` sin constantes PAYOUT_*. ~10 líneas por handler.
+
+## 2026-06-16 — WI-PAYMENT-TRACEABILITY: Exponer trazabilidad pago → transacción (Fase 1)
+
+**Objetivo:** Que cada línea de comisión en el statement muestre la transacción de venta de origen.
+
+**Diagnóstico previo (read-only, misma sesión):** Confirmó que la cadena `PayoutLine.CreditId → Credit.TransactionId → CompensationTransaction` existe completa en la DB pero se corta en la API.
+
+**Step 0 confirmado:**
+- `Credit.TransactionId` no nullable → toda línea tiene crédito y todo crédito tiene transacción
+- `Credit.OriginalAmount == CompensationTransaction.Amount` (confirmado por warning EF en logs)
+- No hay cambios de esquema ni de dominio
+
+**Cambios backend:**
+- `PayoutDto.cs` — `PayoutLineDto` extendido con 6 campos nullable (`TransactionId`, `TransactionReference`, `TransactionExternalId`, `TransactionDate`, `TransactionAmount`, `TransactionCurrency`)
+- `GetPayoutByIdHandler.cs` — refactorizado a `BuildLinesAsync` (`public static`); resuelve en 2 queries bulk: `Credits WHERE id IN (...)` + `Transactions WHERE id IN (...)`; null-safe con `TryGetValue`
+- `ExportPayoutPdfHandler.cs` — reutiliza `GetPayoutByIdHandler.BuildLinesAsync` (sin duplicar lógica)
+- `PayoutPdfExportService.cs` — tabla de líneas ahora con 4 columnas; nueva columna "Source Transaction" muestra `ReferenceNumber · YYYY-MM-DD`; líneas sin referencia muestran "—" en gris
+
+**Cambios frontend:**
+- `payout.model.ts` — `PayoutLine` extendido con los 6 campos nuevos nullable
+- `payout-detail.component.html` — nueva columna "Source Transaction" en tabla; muestra referencia en span bold + fecha debajo en span muted; `@if` graceful para null
+- `payout-detail.component.scss` — estilos para `.payout-detail__source-cell/ref/date/none`
+- `en/es/pl.json` — clave `PAYOUTS.DETAIL.COL_SOURCE` (EN: "Source Transaction", ES: "Transacción de origen", PL: "Transakcja źródłowa")
+
+**Tests:** 4 nuevos unit tests en `GetPayoutByIdHandlerBuildLinesTests.cs` — reference populated, fields preserved, missing credit → null graceful, 3 lines all resolved. Total: 545→549. Sin regresiones.
+
+**Decisiones:**
+- `BuildLinesAsync` hecho `public static` para ser reutilizable por `ExportPayoutPdfHandler` y testeable sin `InternalsVisibleTo`
+- `Credit.OriginalAmount` no incluido en DTO por separado (= `tx.Amount`, redundante)
+- PDF incluido en este WI (era opcional — el handler ya tenía la misma estructura, bajo esfuerzo)
+
+**Próximo:** Audit log de Approve/MarkPaid (WI-AUDIT-PAYOUT-TRANSITIONS) — riesgo regulatorio, 10 líneas de código.
+
 ---
 
 ## Sessions (newest first)

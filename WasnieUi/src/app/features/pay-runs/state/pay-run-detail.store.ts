@@ -12,7 +12,7 @@ export class PayRunDetailStore {
   readonly run = signal<PayRunDetail | null>(null);
 
   readonly page = signal(1);
-  readonly pageSize = signal(25);
+  readonly pageSize = signal(10);
 
   readonly filter = signal<PayRunPayoutsDetailFilter>({ ...EMPTY_PAYOUTS_DETAIL_FILTER });
   // Race-condition guard: export reads the filter used by the last completed load.
@@ -97,6 +97,12 @@ export class PayRunDetailStore {
 
   setPage(n: number): void {
     this.page.set(n);
+    void this._fetch();
+  }
+
+  setPageSize(n: number): void {
+    this.pageSize.set(n);
+    this.page.set(1);
     void this._fetch();
   }
 

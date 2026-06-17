@@ -53,3 +53,17 @@ public sealed record BulkMarkPaidResult(int Paid, IReadOnlyList<string> Errors);
 /// </summary>
 public sealed record ExportPayoutsQuery(PayoutFilterQuery Filter)
     : IRequest<Result<ExportResult>>;
+
+/// <summary>
+/// Given a payout ID, returns all OTHER payouts of the same payee with an overlapping period
+/// that are in Approved or Paid status.
+/// </summary>
+public sealed record GetPayoutOverlapsQuery(Guid PayoutId)
+    : IRequest<Result<IReadOnlyList<OverlappingPayoutDto>>>;
+
+/// <summary>
+/// Given a list of payout IDs, returns how many of them have at least one overlapping
+/// Approved/Paid payout for the same payee.
+/// </summary>
+public sealed record CheckPayoutsOverlapsQuery(IReadOnlyList<Guid> PayoutIds)
+    : IRequest<Result<int>>;

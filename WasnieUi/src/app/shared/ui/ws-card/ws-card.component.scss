@@ -11,7 +11,9 @@
   position: relative;
   height: 100%;
   box-sizing: border-box;
-  transition: box-shadow var(--transition-base), transform var(--transition-base);
+  transition:
+    box-shadow var(--transition-base),
+    transform var(--transition-base);
 }
 
 .ws-card--flat {
@@ -40,10 +42,18 @@
   }
 }
 
-.ws-card--pad-none { padding: 0; }
-.ws-card--pad-sm   { padding: var(--space-3); }
-.ws-card--pad-md   { padding: var(--space-4) var(--space-5); }
-.ws-card--pad-lg   { padding: var(--space-6) var(--space-8); }
+.ws-card--pad-none {
+  padding: 0;
+}
+.ws-card--pad-sm {
+  padding: var(--space-3);
+}
+.ws-card--pad-md {
+  padding: var(--space-4) var(--space-5);
+}
+.ws-card--pad-lg {
+  padding: var(--space-6) var(--space-8);
+}
 
 .ws-card--accent-brand::before,
 .ws-card--accent-success::before,
@@ -59,8 +69,18 @@
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 }
 
-.ws-card--accent-brand::before   { background: var(--color-brand); }
-.ws-card--accent-success::before { background: var(--color-success); }
-.ws-card--accent-warning::before { background: var(--color-warning); }
-.ws-card--accent-danger::before  { background: var(--color-danger); }
-.ws-card--accent-info::before    { background: var(--color-info); }
+.ws-card--accent-brand::before {
+  background: var(--color-brand);
+}
+.ws-card--accent-success::before {
+  background: var(--color-success);
+}
+.ws-card--accent-warning::before {
+  background: var(--color-warning);
+}
+.ws-card--accent-danger::before {
+  background: var(--color-danger);
+}
+.ws-card--accent-info::before {
+  background: var(--color-info);
+}

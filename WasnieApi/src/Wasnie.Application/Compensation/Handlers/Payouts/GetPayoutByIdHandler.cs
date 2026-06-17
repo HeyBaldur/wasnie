@@ -5,6 +5,9 @@ using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payouts;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Payouts;
+using Wasnie.Domain.Compensation.Rules;
+using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.Application.Compensation.Handlers.Payouts;
 
@@ -30,15 +33,7 @@ public sealed class GetPayoutByIdHandler(
             .Select(p => p.Name)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
-        var lines = payout.Lines.Select(l => new PayoutLineDto(
-            Id: l.Id,
-            CreditId: l.CreditId,
-            RuleId: l.RuleId,
-            RuleName: l.RuleName,
-            BaseAmount: l.BaseAmount.Amount,
-            BaseCurrency: l.BaseAmount.Currency,
-            CommissionAmount: l.CommissionAmount.Amount,
-            CommissionCurrency: l.CommissionAmount.Currency)).ToList();
+        var lines = await BuildLinesAsync(payout.Lines, db, cancellationToken);
 
         var dto = new PayoutDto(
             Id: payout.Id,
@@ -61,4 +56,101 @@ public sealed class GetPayoutByIdHandler(
 
         return Result<PayoutDto>.Success(dto);
     }
+
+    // Resolves source transactions + calculation snapshots for all lines.
+    // Uses two bulk queries (no N+1). Credits loaded fully (AsNoTracking) to access
+    // RuleSnapshot value-converted JSON without projection ambiguity.
+    public static async Task<List<PayoutLineDto>> BuildLinesAsync(
+        IReadOnlyList<PayoutLine> lines,
+        IApplicationDbContext db,
+        CancellationToken ct)
+    {
+        var creditIds = lines.Select(l => l.CreditId).Distinct().ToList();
+
+        var creditById = await db.Credits
+            .Where(c => creditIds.Contains(c.Id))
+            .AsNoTracking()
+            .ToDictionaryAsync(c => c.Id, ct);
+
+        var transactionIds = creditById.Values
+            .Select(c => c.TransactionId)
+            .Distinct()
+            .ToList();
+
+        var txById = await db.CompensationTransactions
+            .Where(t => transactionIds.Contains(t.Id))
+            .Select(t => new
+            {
+                t.Id,
+                t.ReferenceNumber,
+                t.ExternalId,
+                t.TransactionDate,
+                AmountValue = t.Amount.Amount,
+                AmountCurrency = t.Amount.Currency,
+            })
+            .ToDictionaryAsync(t => t.Id, ct);
+
+        return lines.Select(l =>
+        {
+            creditById.TryGetValue(l.CreditId, out var credit);
+            var tx = credit is not null ? txById.GetValueOrDefault(credit.TransactionId) : null;
+
+            var calculation = credit is not null
+                ? MapCalculation(credit.RuleSnapshot, l.AppliedModifiers)
+                : null;
+
+            return new PayoutLineDto(
+                Id: l.Id,
+                CreditId: l.CreditId,
+                RuleId: l.RuleId,
+                RuleName: l.RuleName,
+                BaseAmount: l.BaseAmount.Amount,
+                BaseCurrency: l.BaseAmount.Currency,
+                CommissionAmount: l.CommissionAmount.Amount,
+                CommissionCurrency: l.CommissionAmount.Currency,
+                TransactionId: tx?.Id,
+                TransactionReference: tx?.ReferenceNumber,
+                TransactionExternalId: tx?.ExternalId,
+                TransactionDate: tx?.TransactionDate,
+                TransactionAmount: tx?.AmountValue,
+                TransactionCurrency: tx?.AmountCurrency,
+                Calculation: calculation);
+        }).ToList();
+    }
+
+    public static LineCalculationDto MapCalculation(
+        RuleSnapshot snapshot,
+        IReadOnlyList<ModifierApplication> modifiers)
+    {
+        return new LineCalculationDto(
+            PlanVersion: snapshot.PlanVersion,
+            FrozenAt: snapshot.FrozenAt,
+            RateTable: MapRateTable(snapshot.RateTable),
+            Trigger: MapTrigger(snapshot.Trigger),
+            Modifiers: modifiers.Select(m => new ModifierApplicationDto(
+                ModifierName: m.ModifierName,
+                FactorApplied: m.FactorApplied,
+                AmountBefore: m.AmountBefore.Amount,
+                AmountBeforeCurrency: m.AmountBefore.Currency,
+                AmountAfter: m.AmountAfter.Amount,
+                AmountAfterCurrency: m.AmountAfter.Currency)).ToList());
+    }
+
+    private static RateTableDto MapRateTable(RateTable rt) => new(
+        Type: rt.Type.ToString(),
+        FlatRate: rt.FlatRate,
+        Tiers: rt.Tiers?.Select(t => new RateTierDto(t.From, t.To, t.Rate)).ToList(),
+        AttainmentTiers: rt.AttainmentTiers?
+            .Select(t => new AttainmentTierDto(t.AttainmentFrom, t.AttainmentTo, t.Rate))
+            .ToList());
+
+    private static TriggerDto MapTrigger(Trigger trigger) => new(
+        IsAlways: trigger.Conditions.Count == 0,
+        LogicalOperator: trigger.LogicalOperator.ToString(),
+        Conditions: trigger.Conditions.Select(c => new ConditionDto(
+            Field: c.Field,
+            Operator: c.Operator.ToString(),
+            Value: c.Value.Set is { Count: > 0 }
+                ? string.Join(", ", c.Value.Set)
+                : c.Value.Raw)).ToList());
 }

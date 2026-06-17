@@ -54,7 +54,9 @@ public sealed class PayRunsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> MarkPaid(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new MarkPayRunPaidCommand(id), cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
+        if (!result.IsSuccess) return BadRequest(new { message = result.Error });
+        if (result.Value is not null) return Conflict(new { blocked = true, result.Value.TotalConflicts, conflicts = result.Value.Conflicts });
+        return NoContent();
     }
 
     // POST /api/pay-runs/{id}/reopen
@@ -63,6 +65,29 @@ public sealed class PayRunsController(IMediator mediator) : ControllerBase
     {
         var result = await mediator.Send(new ReopenPayRunCommand(id), cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
+    }
+
+    // DELETE /api/pay-runs/{id}
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new DeletePayRunDraftCommand(id), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            // 404 for not found, 409 for wrong-status (Approved/Paid — permanently locked)
+            return result.Error!.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                ? NotFound(new { message = result.Error })
+                : Conflict(new { message = result.Error });
+        }
+        return NoContent();
+    }
+
+    // GET /api/pay-runs/{id}/overlaps
+    [HttpGet("{id:guid}/overlaps")]
+    public async Task<IActionResult> GetOverlaps(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetPayRunOverlapsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
     // GET /api/pay-runs/export

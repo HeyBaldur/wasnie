@@ -18,11 +18,19 @@
           {{ 'COMMON.BACK' | translate }}
         </ws-button>
         <ws-button
+          *hasPermission="'Payouts.DeleteDraft'"
+          variant="secondary"
+          [disabled]="actioning() || deleting()"
+          (click)="deleteConfirmOpen.set(true)"
+        >
+          {{ 'PAY_RUNS.DELETE_DRAFT' | translate }}
+        </ws-button>
+        <ws-button
           *hasPermission="'Payouts.Approve'"
           variant="primary"
           [disabled]="actioning()"
           [loading]="actioning()"
-          (click)="approveConfirmOpen.set(true)"
+          (click)="openApproveConfirm()"
         >
           {{ 'PAY_RUNS.ACTION_APPROVE' | translate }}
         </ws-button>
@@ -42,7 +50,7 @@
           variant="primary"
           [disabled]="actioning()"
           [loading]="actioning()"
-          (click)="markPaidConfirmOpen.set(true)"
+          (click)="openMarkPaidConfirm()"
         >
           {{ 'PAY_RUNS.ACTION_MARK_PAID' | translate }}
         </ws-button>
@@ -64,10 +72,28 @@
       </ws-card>
     }
 
+    @if (doublePayConflicts().length > 0) {
+      <app-overlap-warning
+        [rows]="doublePayConflicts()"
+        [loading]="false"
+        [showTotals]="false"
+        warningKey="PAY_RUNS.DETAIL.DOUBLE_PAY_BLOCKED"
+        col3HeaderKey="PAY_RUNS.DETAIL.DOUBLE_PAY_COL_TX_REF"
+        (rowClick)="viewConflictPayout($event)"
+      />
+    }
+
     @if (exportError()) {
       <ws-card variant="raised" class="pay-run-detail__error-banner">
         <app-icon name="alert-circle" [size]="16" />
         {{ exportError()! | translate }}
+      </ws-card>
+    }
+
+    @if (deleteError()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ deleteError()! | translate }}
       </ws-card>
     }
 
@@ -347,6 +373,7 @@
         [totalCount]="store.payoutTotalCount()"
         [pageSize]="store.pageSize()"
         (pageChange)="store.setPage($event)"
+        (pageSizeChange)="store.setPageSize($event)"
       />
     }
 
@@ -372,6 +399,14 @@
     <p class="pay-run-detail__modal-intro">
       {{ 'PAY_RUNS.DETAIL.APPROVE_CONFIRM_BODY' | translate: { payeeCount: store.run()?.payeeCount ?? 0 } }}
     </p>
+
+    <app-overlap-warning
+      [rows]="approveOverlapRows()"
+      [loading]="overlapsLoading()"
+      warningKey="PAY_RUNS.DETAIL.OVERLAP_WARNING"
+      col3HeaderKey="PAY_RUNS.DETAIL.OVERLAP_COL_PAYEES"
+      (rowClick)="viewOverlapRun($event)"
+    />
   </div>
   <ng-container slot="footer">
     <ws-button variant="ghost" [disabled]="actioning()" (click)="approveConfirmOpen.set(false)">
@@ -423,6 +458,14 @@
       {{ 'PAY_RUNS.DETAIL.MARK_PAID_IRREVERSIBLE' | translate }}
     </p>
 
+    <app-overlap-warning
+      [rows]="markPaidOverlapRows()"
+      [loading]="overlapsLoading()"
+      warningKey="PAY_RUNS.DETAIL.OVERLAP_WARNING"
+      col3HeaderKey="PAY_RUNS.DETAIL.OVERLAP_COL_PAYEES"
+      (rowClick)="viewOverlapRun($event)"
+    />
+
   </div>
   <ng-container slot="footer">
     <ws-button variant="ghost" [disabled]="actioning()" (click)="markPaidConfirmOpen.set(false)">
@@ -452,6 +495,32 @@
     </ws-button>
     <ws-button variant="secondary" [disabled]="actioning()" [loading]="actioning()" (click)="onReopen()">
       {{ 'PAY_RUNS.DETAIL.REOPEN_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Delete draft modal — IRREVERSIBLE -->
+<ws-modal
+  [isOpen]="deleteConfirmOpen()"
+  (isOpenChange)="deleteConfirmOpen.set($event)"
+  [title]="'PAY_RUNS.DELETE_CONFIRM_TITLE' | translate"
+  [closable]="!deleting()"
+>
+  <div class="pay-run-detail__modal-body">
+    <p class="pay-run-detail__modal-intro">
+      {{ 'PAY_RUNS.DELETE_CONFIRM_BODY' | translate: {
+        periodStart: (store.run()?.periodStart ?? '') | dateFormat,
+        periodEnd: (store.run()?.periodEnd ?? '') | dateFormat
+      } }}
+      <span class="pay-run-detail__modal-irreversible">{{ 'PAY_RUNS.DELETE_CONFIRM_IRREVERSIBLE' | translate }}</span>
+    </p>
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="deleting()" (click)="deleteConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="danger" [disabled]="deleting()" [loading]="deleting()" (click)="onDelete()">
+      {{ 'PAY_RUNS.DELETE_CONFIRM_BTN' | translate }}
     </ws-button>
   </ng-container>
 </ws-modal>

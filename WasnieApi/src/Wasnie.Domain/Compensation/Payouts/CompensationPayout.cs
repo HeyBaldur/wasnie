@@ -140,6 +140,18 @@ public sealed class CompensationPayout : AggregateRoot
         UpdatedBy = updatedBy;
     }
 
+    // Revert a Paid payout to Approved so its credits can be unconsumed and the period
+    // recalculated. Caller is responsible for unconsuming credits and reverting transactions.
+    public void RevertPaidToApproved(string updatedBy, DateTimeOffset now)
+    {
+        if (Status != CompensationPayoutStatus.Paid)
+            throw new DomainException("Only Paid payouts can be reverted to Approved.");
+
+        Status = CompensationPayoutStatus.Approved;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
     public void Dispute(string updatedBy, DateTimeOffset now)
     {
         if (Status == CompensationPayoutStatus.Paid)

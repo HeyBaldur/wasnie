@@ -151,8 +151,8 @@ public sealed class CalculatePayoutsForPeriodHandler(
                 .Select(t => t.Id)
                 .ToListAsync(cancellationToken);
 
-            // Step 2: Credits for those transactions filtered by plan and not superseded.
-            // One Credit per (transaction, rule) — no Cartesian product risk.
+            // Step 2: Credits for those transactions filtered by plan, not superseded, and not
+            // consumed by a prior Paid payout (anti-double-pay: ConsumedAt == null guard).
             List<Credit> credits = [];
             if (txIdsInPeriod.Count > 0)
             {
@@ -162,6 +162,7 @@ public sealed class CalculatePayoutsForPeriodHandler(
                              && c.PayeeId == payeeId
                              && c.PlanId == planId
                              && c.SupersededAt == null
+                             && c.ConsumedAt == null
                              && txIdsInPeriod.Contains(c.TransactionId))
                     .ToListAsync(cancellationToken);
             }

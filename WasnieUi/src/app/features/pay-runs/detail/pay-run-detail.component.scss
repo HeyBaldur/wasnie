@@ -293,6 +293,18 @@
     margin: 0;
   }
 
+  &__modal-warning-plain {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-warning);
+    margin: 0;
+  }
+
+  &__modal-irreversible {
+    font-weight: 600;
+    color: var(--color-warning);
+  }
+
   &__modal-skip {
     display: flex;
     align-items: center;
@@ -304,5 +316,82 @@
     font-size: var(--font-size-13);
     color: var(--color-text-secondary);
     margin: 0;
+  }
+
+  // ── Overlap warning table ──────────────────────────────────────────────────
+
+  &__overlap-loading {
+    padding: var(--space-2) 0;
+  }
+
+  &__overlap-warning {
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  &__overlap-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    font-size: var(--font-size-13);
+    font-weight: 500;
+    margin: 0;
+    border-bottom: 1px solid var(--color-warning-border);
+  }
+
+  &__overlap-table-wrapper {
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  &__overlap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-13);
+
+    th {
+      position: sticky;
+      top: 0;
+      padding: var(--space-2) var(--space-3);
+      background: var(--color-bg-surface-sunken);
+      font-size: var(--font-size-11);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-text-secondary);
+      text-align: left;
+      border-bottom: 1px solid var(--color-border-subtle);
+      white-space: nowrap;
+    }
+  }
+
+  &__overlap-row {
+    cursor: pointer;
+
+    td {
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--color-border-subtle);
+      color: var(--color-text-primary);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    &:last-child td {
+      border-bottom: none;
+    }
+
+    &:hover td {
+      background: var(--color-bg-surface-raised);
+    }
+
+    &:focus {
+      outline: none;
+
+      td:first-child { box-shadow: inset 2px 0 0 var(--color-brand); }
+    }
   }
 }

@@ -1,0 +1,84 @@
+.overlap-warning {
+  &__loading {
+    padding: var(--space-2) 0;
+  }
+
+  &__wrapper {
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: var(--space-4);
+  }
+
+  &__msg {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    font-size: var(--font-size-13);
+    font-weight: 500;
+    margin: 0;
+    border-bottom: 1px solid var(--color-warning-border);
+  }
+
+  &__table-wrapper {
+    max-height: 220px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+
+    &::-webkit-scrollbar        { width: 6px; }
+    &::-webkit-scrollbar-track  { background: transparent; }
+    &::-webkit-scrollbar-thumb  { background: var(--color-border-strong); border-radius: 9999px; }
+    &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-13);
+
+    th {
+      position: sticky;
+      top: 0;
+      padding: var(--space-2) var(--space-3);
+      background: var(--color-bg-surface-sunken);
+      font-size: var(--font-size-11);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-text-secondary);
+      text-align: left;
+      border-bottom: 1px solid var(--color-border-subtle);
+      white-space: nowrap;
+    }
+  }
+
+  &__row {
+    cursor: pointer;
+
+    td {
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--color-border-subtle);
+      color: var(--color-text-primary);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    &:last-child td {
+      border-bottom: none;
+    }
+
+    &:hover td {
+      background: var(--color-bg-surface-raised);
+    }
+
+    &:focus {
+      outline: none;
+
+      td:first-child { box-shadow: inset 2px 0 0 var(--color-brand); }
+    }
+  }
+}

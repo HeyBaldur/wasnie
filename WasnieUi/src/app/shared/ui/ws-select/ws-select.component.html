@@ -36,7 +36,7 @@
       [style.position]="dropdownFixed() ? 'fixed' : null"
       [style.left.px]="dropdownFixed() ? dropdownLeft() : null"
       [style.width.px]="dropdownFixed() ? dropdownWidth() : null"
-      [style.top.px]="dropdownFixed() && dropdownFixedTop() !== null ? dropdownFixedTop()! : null"
+      [style.top]="dropdownFixed() ? (dropdownFixedTop() !== null ? dropdownFixedTop() + 'px' : 'auto') : null"
       [style.bottom.px]="dropdownFixed() && dropdownFixedBottom() !== null ? dropdownFixedBottom()! : null"
       [style.right]="dropdownFixed() ? 'auto' : null"
     >

@@ -130,8 +130,8 @@ public sealed class ListTransactionsHandler(
         }
         else
         {
-            var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "transactiondate";
-            var desc = string.Equals(p.SortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+            var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "ingestedat";
+            var desc = !string.Equals(p.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
 
             query = sortBy switch
             {

@@ -42,3 +42,6 @@ public sealed record GetPayRunByIdQuery(Guid Id, PayRunPayoutsFilter PayoutsFilt
 
 public sealed record ExportPayRunsQuery(PayRunFilterQuery Filter)
     : IRequest<Result<ExportResult>>;
+
+public sealed record GetPayRunOverlapsQuery(Guid PayRunId)
+    : IRequest<Result<IReadOnlyList<OverlappingPayRunDto>>>;

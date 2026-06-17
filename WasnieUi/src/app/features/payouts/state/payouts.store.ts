@@ -31,7 +31,7 @@ export class PayoutsStore {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly page = signal(1);
-  readonly pageSize = signal(25);
+  readonly pageSize = signal(10);
   readonly sortBy = signal('updatedAt');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly filter = signal<PayoutFilter>({ ...EMPTY_PAYOUT_FILTER });

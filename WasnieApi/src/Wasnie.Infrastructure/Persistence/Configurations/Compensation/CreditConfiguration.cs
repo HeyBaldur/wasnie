@@ -35,6 +35,9 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
         builder.Property(c => c.AllocatedBy).IsRequired().HasMaxLength(450);
         builder.Property(c => c.SupersededAt).IsRequired(false);
         builder.Property(c => c.SupersededBy).HasColumnType("nvarchar(max)").IsRequired(false);
+        builder.Property(c => c.ConsumedAt).IsRequired(false);
+        builder.Property(c => c.ConsumedByPayoutId).IsRequired(false);
+        builder.Property(c => c.RowVersion).IsRowVersion();
 
         builder.OwnsOne(c => c.OriginalAmount, m =>
         {
@@ -62,5 +65,9 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
         builder.HasIndex(c => new { c.TenantId, c.TransactionId, c.PayeeId });
         builder.HasIndex(c => new { c.TenantId, c.SupersededAt })
             .HasFilter("[SupersededAt] IS NULL");
+        builder.HasIndex(c => new { c.TenantId, c.ConsumedAt })
+            .HasFilter("[ConsumedAt] IS NULL");
+        builder.HasIndex(c => c.ConsumedByPayoutId)
+            .HasFilter("[ConsumedByPayoutId] IS NOT NULL");
     }
 }

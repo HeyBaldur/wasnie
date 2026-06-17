@@ -70,6 +70,16 @@ public sealed class PayoutsController(
     public async Task<IActionResult> MarkPaid(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new MarkPayoutPaidCommand(id), cancellationToken);
+        if (!result.IsSuccess) return BadRequest(new { message = result.Error });
+        if (result.Value is not null) return Conflict(new { blocked = true, result.Value.TotalConflicts, conflicts = result.Value.Conflicts });
+        return NoContent();
+    }
+
+    // POST /api/payouts/{id}/revert-paid  — reverts Paid → Approved and unconsuemes credits
+    [HttpPost("{id:guid}/revert-paid")]
+    public async Task<IActionResult> RevertPaid(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new RevertPayoutToApprovedCommand(id), cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
     }
 
@@ -91,6 +101,23 @@ public sealed class PayoutsController(
         var result = await mediator.Send(
             new BulkMarkPaidCommand(body.PayoutIds), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    // GET /api/payouts/{id}/overlaps
+    [HttpGet("{id:guid}/overlaps")]
+    public async Task<IActionResult> GetOverlaps(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetPayoutOverlapsQuery(id), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
+    // POST /api/payouts/overlaps-check
+    [HttpPost("overlaps-check")]
+    public async Task<IActionResult> CheckOverlaps(
+        [FromBody] OverlapsCheckRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new CheckPayoutsOverlapsQuery(body.PayoutIds), cancellationToken);
+        return result.IsSuccess ? Ok(new { count = result.Value }) : BadRequest(new { message = result.Error });
     }
 
     // GET /api/payouts/export
@@ -129,3 +156,4 @@ public sealed record CalculatePayoutsRequest(
 
 public sealed record BulkApproveRequest(IReadOnlyList<Guid> PayoutIds);
 public sealed record BulkMarkPaidRequest(IReadOnlyList<Guid> PayoutIds);
+public sealed record OverlapsCheckRequest(IReadOnlyList<Guid> PayoutIds);

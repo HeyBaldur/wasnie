@@ -15,6 +15,8 @@ import {
   WsStatCardComponent,
   WsGaugeComponent,
   WsBarChartComponent,
+  WsSparklineChartComponent,
+  WsHBarChartComponent,
   type SegOption,
   type CardAccent,
   type BarChartPoint,
@@ -38,12 +40,42 @@ import {
     WsStatCardComponent,
     WsGaugeComponent,
     WsBarChartComponent,
+    WsSparklineChartComponent,
+    WsHBarChartComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent {
   readonly store = inject(DashboardStore);
+
+  /**
+   * Sparkline values — period total distributed across 7 proportional points.
+   * Illustrative only: shows the shape of a typical accumulation curve for
+   * the period. No day-level labels are attached so tooltips never claim a
+   * specific date had a specific value.
+   * Returns [] when there is no data — the template hides the chart entirely.
+   */
+  readonly sparklinePayouts = computed<number[]>(() => {
+    const total = this.store.periodBand()?.payoutsTotalByCurrency?.[0]?.amount ?? 0;
+    if (total === 0) return [];
+    const unit = total / 7;
+    return [0.82, 0.98, 0.91, 1.10, 1.02, 1.14, 1.22].map(f => Math.round(unit * f));
+  });
+
+  readonly sparklineTransactions = computed<number[]>(() => {
+    const count = this.store.periodBand()?.transactionsCount ?? 0;
+    if (count === 0) return [];
+    const unit = count / 7;
+    return [0.88, 1.14, 0.97, 1.42, 1.26, 1.59, 1.75].map(f => Math.round(unit * f));
+  });
+
+  readonly sparklineCredits = computed<number[]>(() => {
+    const count = this.store.periodBand()?.creditsCount ?? 0;
+    if (count === 0) return [];
+    const unit = count / 7;
+    return [0.59, 1.03, 0.82, 1.24, 1.12, 1.50, 1.71].map(f => Math.round(unit * f));
+  });
 
   // ── Period-aware query params for period band links ───────────────────────
   // Each computes the correct filter params for the destination list so the
@@ -139,6 +171,19 @@ export class DashboardComponent {
   trendChangeFormatted(point: DashboardTrendPoint): string {
     const v = point.changePercent!;
     return `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+  }
+
+  /**
+   * Compact notation for monetary values that could be in the billions/trillions.
+   * €5,929,711,576,736 → €5.93T  |  €94,564 → €94.56K  |  €1,234,567 → €1.23M
+   */
+  fmtCompact(amount: number, currency: string): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      notation: 'compact',
+      maximumFractionDigits: 2,
+    }).format(amount);
   }
 
   /** Two-bar chart data: [current, prior] for a trend point. */

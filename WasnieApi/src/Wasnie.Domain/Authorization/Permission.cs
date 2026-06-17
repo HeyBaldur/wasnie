@@ -22,6 +22,7 @@ public static class Permission
     public const string AssignmentsRead = "Assignments.Read";
     public const string AssignmentsCreate = "Assignments.Create";
     public const string AssignmentsUpdate = "Assignments.Update";
+    public const string AssignmentsDelete = "Assignments.Delete";
 
     public const string CreditsRead = "Credits.Read";
     public const string CreditsExport = "Credits.Export";
@@ -40,6 +41,7 @@ public static class Permission
     public const string PayoutsMarkPaid = "Payouts.MarkPaid";
     public const string PayoutsReopen = "Payouts.Reopen";
     public const string PayoutsExport = "Payouts.Export";
+    public const string PayoutsDeleteDraft = "Payouts.DeleteDraft";
 
     public const string ImportsExecute = "Imports.Execute";
     public const string ReportsViewAll = "Reports.ViewAll";

@@ -1,5 +1,23 @@
-import { Component, computed, ElementRef, input, signal, ViewChild } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  input,
+  OnDestroy,
+  ViewChild,
+} from '@angular/core';
+import {
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart,
+  LinearScale,
+  Tooltip,
+} from 'chart.js';
+
+Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
 export interface BarChartPoint {
   label: string;
@@ -8,158 +26,162 @@ export interface BarChartPoint {
   isCurrent?: boolean;
 }
 
+const BLUE_CURRENT = '#3b82f6';              // current month — solid accent
+const BLUE_PAST    = 'rgba(59,130,246,0.50)'; // past months — same hue, half opacity
+const BLUE_HOVER   = 'rgba(59,130,246,0.80)'; // past hover — slightly more opaque
+const TICK_AXIS    = '#9ca3af';               // gray-400 — ticks recede behind titles
+const GRID         = 'rgba(0,0,0,0.06)';
+
+/**
+ * Vertical bar chart for monthly earnings trends.
+ *
+ * Replaces the hand-drawn SVG implementation with Chart.js so axis
+ * labels, tooltips, and rendering stay consistent with ws-hbar-chart.
+ * Current period bar is highlighted in blue; past periods are gray.
+ * Y-axis ticks use compact notation (1.2M, 94K, etc.).
+ */
 @Component({
   selector: 'ws-bar-chart',
   standalone: true,
-  imports: [DecimalPipe],
   templateUrl: './ws-bar-chart.component.html',
   styleUrl: './ws-bar-chart.component.scss',
 })
-export class WsBarChartComponent {
-  readonly points = input<BarChartPoint[]>([]);
+export class WsBarChartComponent implements OnDestroy {
+  @ViewChild('canvas', { static: true }) private canvasRef!: ElementRef<HTMLCanvasElement>;
+
+  readonly points    = input<BarChartPoint[]>([]);
   readonly emptyLabel = input('');
 
-  // SVG drawing constants — match ws-line-chart for consistent card appearance
-  readonly VB_W = 560;
-  readonly VB_H = 180;
-  readonly ML = 62;   // margin left (Y-axis labels) — wide enough for "1.5M" abbreviated labels
-  readonly MR = 16;   // margin right
-  readonly MT = 16;   // margin top
-  readonly MB = 32;   // margin bottom (X-axis labels)
-
-  readonly chartW = computed(() => this.VB_W - this.ML - this.MR);
-  readonly chartH = computed(() => this.VB_H - this.MT - this.MB);
-  readonly bucketW = computed(() => this.chartW() / Math.max(1, this.points().length));
-  readonly barW = computed(() => this.bucketW() * 0.7);
-
-  // Show bars only if at least one month has a non-zero value
   readonly hasData = computed(() => this.points().some(p => p.value > 0));
 
-  readonly maxValue = computed(() => {
-    const vals = this.points().map(p => p.value);
-    if (!vals.length || Math.max(...vals) === 0) return 1;
-    const m = Math.max(...vals);
-    const magnitude = Math.pow(10, Math.floor(Math.log10(m || 1)));
-    return Math.ceil(m / magnitude) * magnitude || 1;
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private chart: Chart<'bar', number[], string> | null = null;
 
-  readonly yTicks = computed(() => {
-    const max = this.maxValue();
-    return [0, 0.25, 0.5, 0.75, 1.0].map(f => ({
-      value: max * f,
-      y: this.yToSvg(max * f),
-    }));
-  });
+  constructor() {
+    afterNextRender(() => { if (!this.chart) this.initChart(); });
 
-  readonly bars = computed(() => {
-    const pts = this.points();
-    const bW = this.bucketW();
-    const barW = this.barW();
-    const chartH = this.chartH();
-    const max = this.maxValue();
-    const MIN_H = 2; // 2 px stub for zero-value months so the slot is visible
+    effect(() => {
+      const pts = this.points();
+      const hasValues = pts.some(p => p.value > 0);
 
-    return pts.map((p, i) => {
-      const barH = p.value > 0
-        ? Math.max(MIN_H, (p.value / max) * chartH)
-        : MIN_H;
-      const x = this.ML + i * bW + (bW - barW) / 2;
-      const y = this.MT + chartH - barH;
-      return { x, y, width: barW, height: barH, point: p, index: i };
+      if (!hasValues) return;
+
+      if (!this.chart) {
+        // Data arrived after initial render — canvas exists, chart not yet created
+        this.initChart();
+        return;
+      }
+
+      this.chart.data.labels = pts.map(p => p.label);
+      this.chart.data.datasets[0].data = pts.map(p => p.value);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.chart.data.datasets[0] as any).backgroundColor =
+        pts.map(p => p.isCurrent ? BLUE_CURRENT : BLUE_PAST);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.chart.data.datasets[0] as any).hoverBackgroundColor =
+        pts.map(p => p.isCurrent ? BLUE_CURRENT : BLUE_HOVER);
+      this.chart.update('none');
     });
-  });
-
-  barLabelX(i: number): number {
-    return this.ML + i * this.bucketW() + this.bucketW() / 2;
   }
 
-  yToSvg(value: number): number {
-    return this.MT + this.chartH() - (value / this.maxValue()) * this.chartH();
-  }
-
-  // ── Tooltip ──────────────────────────────────────────────────────────────────
-
-  readonly tooltipVisible = signal(false);
-  readonly tooltipLeft = signal<number | null>(null);   // % from left edge (null = use right)
-  readonly tooltipRight = signal<number | null>(null);  // % from right edge (null = use left)
-  readonly tooltipTop = signal(10);                     // % from top of card
-  readonly tooltipLabel = signal('');
-  readonly tooltipValue = signal(0);
-  readonly tooltipCurrency = signal('');
-  readonly tooltipIsEmpty = signal(false);
-  /** SVG X coordinate of hovered bucket center — used for the column indicator. */
-  readonly columnIndicatorX = signal<number | null>(null);
-
-  @ViewChild('svgEl') svgEl?: ElementRef<SVGSVGElement>;
-
-  onSvgMouseMove(event: MouseEvent): void {
-    const svg = this.svgEl?.nativeElement;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const svgX = ((event.clientX - rect.left) / rect.width) * this.VB_W;
+  private initChart(): void {
+    const canvas = this.canvasRef.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const pts = this.points();
-    if (!pts.length) return;
+    if (!pts.some(p => p.value > 0)) return;
 
-    // Which bucket is the cursor in?
-    const bW = this.bucketW();
-    const idx = Math.max(0, Math.min(pts.length - 1, Math.floor((svgX - this.ML) / bW)));
-    const p = pts[idx];
-    const bar = this.bars()[idx];
+    const currency = pts.find(p => p.currency)?.currency ?? '';
 
-    // Column indicator — vertical reference line at bucket center
-    const bucketCenterX = this.ML + idx * bW + bW / 2;
-    this.columnIndicatorX.set(bucketCenterX);
-
-    // Tooltip horizontal: center on bucket when space allows; right-anchor near right edge
-    const bucketPct = (bucketCenterX / this.VB_W) * 100;
-    if (bucketPct > 65) {
-      // Right-side anchor: tooltip grows to the left from the bar center
-      this.tooltipLeft.set(null);
-      this.tooltipRight.set(Math.max(2, 100 - bucketPct));
-    } else {
-      // Center anchor: tooltip centered on bar
-      this.tooltipLeft.set(Math.max(5, bucketPct));
-      this.tooltipRight.set(null);
-    }
-
-    // Tooltip vertical: position above the bar's top, clamped so it doesn't escape card
-    const barTopPct = (bar.y / this.VB_H) * 100;
-    this.tooltipTop.set(Math.max(2, barTopPct - 20));
-
-    this.tooltipLabel.set(p.label);
-    this.tooltipValue.set(p.value);
-    this.tooltipCurrency.set(p.currency ?? '');
-    this.tooltipIsEmpty.set(p.value === 0);
-    this.tooltipVisible.set(true);
+    this.chart = new Chart<'bar', number[], string>(canvas, {
+      type: 'bar',
+      data: {
+        labels: pts.map(p => p.label),
+        datasets: [{
+          data: pts.map(p => p.value),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          backgroundColor:      pts.map(p => p.isCurrent ? BLUE_CURRENT : BLUE_PAST) as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          hoverBackgroundColor: pts.map(p => p.isCurrent ? BLUE_CURRENT : BLUE_HOVER) as any,
+          borderWidth: 0,
+          borderRadius: 6,
+          minBarLength: 8,
+          barPercentage: 0.72,
+          categoryPercentage: 0.88,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            backgroundColor: 'rgba(17, 24, 39, 0.92)',
+            titleColor: '#9ca3af',
+            bodyColor: '#f9fafb',
+            padding: 8,
+            cornerRadius: 6,
+            displayColors: false,
+            callbacks: {
+              label: (tooltipCtx) => {
+                const val = tooltipCtx.parsed.y ?? 0;
+                return ` ${this.fmt(val, currency)}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid:   { display: false },
+            border: { display: false },
+            ticks: {
+              color: TICK_AXIS,
+              font:  { size: 11 },
+              maxRotation: 0,
+            },
+          },
+          y: {
+            grid:   { color: GRID },
+            border: { display: false },
+            ticks: {
+              color: TICK_AXIS,
+              font:  { size: 11 },
+              maxTicksLimit: 5,
+              callback: (val) => this.fmtAxis(Number(val)),
+            },
+          },
+        },
+      },
+    });
   }
 
-  onSvgMouseLeave(): void {
-    this.tooltipVisible.set(false);
-    this.columnIndicatorX.set(null);
+  ngOnDestroy(): void {
+    this.chart?.destroy();
   }
 
-  formatAxisLabel(value: number): string {
-    if (value >= 1_000_000) {
-      const v = value / 1_000_000;
-      return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + 'M';
-    }
-    if (value >= 1_000) {
-      const v = value / 1_000;
-      return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + 'K';
-    }
+  private fmtAxis(value: number): string {
+    const abs = Math.abs(value);
+    if (abs >= 1e12) return `${(value / 1e12).toFixed(1)}T`;
+    if (abs >= 1e9)  return `${(value / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6)  return `${(value / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3)  return `${(value / 1e3).toFixed(1)}K`;
     return value.toFixed(0);
   }
 
+  private fmt(value: number, currency: string): string {
+    return currency
+      ? new Intl.NumberFormat('en-US', {
+          style: 'currency', currency,
+          notation: 'compact', maximumFractionDigits: 2,
+        }).format(value)
+      : value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+
+  /** Public for tests and backward compatibility. */
   formatValue(value: number, currency: string): string {
-    if (currency) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(value);
-    }
-    return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return this.fmt(value, currency);
   }
 }

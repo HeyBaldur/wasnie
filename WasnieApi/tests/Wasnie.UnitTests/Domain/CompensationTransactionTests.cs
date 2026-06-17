@@ -342,16 +342,52 @@ public sealed class CompensationTransactionTests
         act.Should().Throw<DomainException>().WithMessage("*Pending*");
     }
 
-    // ── Phase 3 stubs ─────────────────────────────────────────────────────────
+    // ── MarkPaid (Phase 3 — implemented) ─────────────────────────────────────
 
     [Fact]
-    public void MarkPaid_AlwaysThrowsNotSupportedException()
+    public void MarkPaid_FromCalculated_SetsStatusAndRaisesEvent()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, Money.Of(100m, "EUR"), "calc", ValidNow, Guid.NewGuid());
+        tx.ClearDomainEvents();
+
+        tx.MarkPaid("payroll", ValidNow, Guid.NewGuid());
+
+        tx.Status.Should().Be(CompensationTransactionStatus.Paid);
+        tx.DomainEvents.Should().HaveCount(1);
+        tx.DomainEvents[0].Should().BeOfType<TransactionMarkedPaidEvent>();
+    }
+
+    [Fact]
+    public void MarkPaid_FromPending_ThrowsDomainException()
     {
         var tx = IngestValid();
 
         var act = () => tx.MarkPaid("payroll", ValidNow, Guid.NewGuid());
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*Phase 3*");
+        act.Should().Throw<DomainException>().WithMessage("*Calculated*");
+    }
+
+    [Fact]
+    public void RevertPaidToCalculated_FromPaid_SetsStatusToCalculated()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, Money.Of(100m, "EUR"), "calc", ValidNow, Guid.NewGuid());
+        tx.MarkPaid("payroll", ValidNow, Guid.NewGuid());
+
+        tx.RevertPaidToCalculated("reverter", ValidNow);
+
+        tx.Status.Should().Be(CompensationTransactionStatus.Calculated);
+    }
+
+    [Fact]
+    public void RevertPaidToCalculated_FromPending_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+
+        var act = () => tx.RevertPaidToCalculated("reverter", ValidNow);
+
+        act.Should().Throw<DomainException>().WithMessage("*Paid*");
     }
 
     // ── §5b.7 regression guard: every state-change raises an event ─────────────

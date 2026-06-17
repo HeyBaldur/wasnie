@@ -43,6 +43,9 @@ public static class AuditActions
     public const string AssignmentCreated = "ASSIGNMENT_CREATED";
     public const string AssignmentUpdated = "ASSIGNMENT_UPDATED";
     public const string AssignmentRemoved = "ASSIGNMENT_REMOVED";
+    public const string AssignmentBulkActivated = "ASSIGNMENT_BULK_ACTIVATED";
+    public const string AssignmentBulkDeactivated = "ASSIGNMENT_BULK_DEACTIVATED";
+    public const string AssignmentBulkDeleted = "ASSIGNMENT_BULK_DELETED";
 
     // Transactions (Phase 2)
     public const string TransactionIngested = "TRANSACTION_INGESTED";
@@ -50,6 +53,14 @@ public static class AuditActions
     public const string TransactionPayeeReassigned = "TRANSACTION_PAYEE_REASSIGNED";
     public const string PendingTransactionsProcessed = "PENDING_TRANSACTIONS_PROCESSED";
     public const string TransactionUpdatedViaExcel = "TRANSACTION_UPDATED_VIA_EXCEL";
+
+    // Transactions (Phase 3 — payout propagation)
+    public const string TransactionMarkedPaid = "TRANSACTION_MARKED_PAID";
+
+    // Payouts — credit consumption (anti-double-pay Phase 3)
+    public const string PayoutCreditsConsumed = "PAYOUT_CREDITS_CONSUMED";
+    public const string PayoutRevertedToApproved = "PAYOUT_REVERTED_TO_APPROVED";
+    public const string PaymentBlockedDoublePayment = "PAYMENT_BLOCKED_DOUBLE_PAYMENT";
 
     // Settings (Rule 5.1.5 — configuration changes)
     public const string FieldRequirementChanged = "FIELD_REQUIREMENT_CHANGED";
@@ -79,6 +90,19 @@ public static class AuditActions
     public const string TwoFactorLoginFailure = "TWO_FACTOR_LOGIN_FAILURE";
     public const string RecoveryCodeUsed = "RECOVERY_CODE_USED";
     public const string RecoveryCodesRegenerated = "RECOVERY_CODES_REGENERATED";
+
+    // Pay runs — lifecycle
+    public const string PayRunDraftDeleted = "PAY_RUN_DRAFT_DELETED";
+
+    // Pay runs — overlap override audit (anti-double-pay)
+    public const string PayRunApprovedWithOverlap = "PAY_RUN_APPROVED_WITH_OVERLAP";
+    public const string PayRunPaidWithOverlap = "PAY_RUN_PAID_WITH_OVERLAP";
+
+    // Payouts — overlap override audit (anti-double-pay)
+    public const string PayoutApprovedWithOverlap = "PAYOUT_APPROVED_WITH_OVERLAP";
+    public const string PayoutPaidWithOverlap = "PAYOUT_PAID_WITH_OVERLAP";
+    public const string PayoutBulkApprovedWithOverlap = "PAYOUT_BULK_APPROVED_WITH_OVERLAP";
+    public const string PayoutBulkPaidWithOverlap = "PAYOUT_BULK_PAID_WITH_OVERLAP";
 
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";

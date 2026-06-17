@@ -66,18 +66,19 @@
             <th>{{ 'PAY_RUNS.COL_PAYEES' | translate }}</th>
             <th class="pay-runs-list__col-right">{{ 'PAY_RUNS.COL_TOTALS' | translate }}</th>
             <th>{{ 'PAY_RUNS.COL_CREATED' | translate }}</th>
+            <th class="pay-runs-list__col-actions"></th>
           </tr>
         </thead>
         <tbody>
           @if (store.loading()) {
             @for (row of skeletonRows; track row) {
               <tr class="pay-runs-list__skeleton-row">
-                <td colspan="5"><div class="ws-skeleton ws-skeleton--line"></div></td>
+                <td colspan="6"><div class="ws-skeleton ws-skeleton--line"></div></td>
               </tr>
             }
           } @else if (store.items().length === 0) {
             <tr>
-              <td colspan="5">
+              <td colspan="6">
                 <ws-table-empty
                   [messageKey]="store.filter().status !== 'All' || store.filter().periodFrom ? 'PAY_RUNS.EMPTY_FILTER_TITLE' : 'PAY_RUNS.EMPTY_TITLE'"
                 />
@@ -124,6 +125,20 @@
                   <span class="pay-runs-list__created-by">{{ run.createdBy }}</span>
                   <span class="pay-runs-list__created-at">{{ run.createdAt | dateFormat }}</span>
                 </td>
+                <!-- Actions — delete button visible only for Drafts -->
+                <td class="pay-runs-list__col-actions">
+                  @if (run.status === 'Draft') {
+                    <ws-button
+                      *hasPermission="'Payouts.DeleteDraft'"
+                      variant="secondary"
+                      size="sm"
+                      class="pay-runs-list__delete-btn"
+                      (click)="openDeleteConfirm(run, $event)"
+                    >
+                      {{ 'PAY_RUNS.DELETE_DRAFT' | translate }}
+                    </ws-button>
+                  }
+                </td>
               </tr>
             }
           }
@@ -144,6 +159,35 @@
 
   </ws-page-layout>
 </app-shell>
+
+<!-- Delete Draft confirmation modal -->
+<ws-modal
+  [isOpen]="!!deleteTarget()"
+  (isOpenChange)="!$event && deleteTarget.set(null)"
+  [title]="'PAY_RUNS.DELETE_CONFIRM_TITLE' | translate"
+  [closable]="!deleting()"
+>
+  <div class="pay-runs-list__modal-body">
+    <p class="pay-runs-list__modal-intro">
+      {{ 'PAY_RUNS.DELETE_CONFIRM_BODY' | translate: {
+        periodStart: (deleteTarget()?.periodStart ?? '') | dateFormat,
+        periodEnd: (deleteTarget()?.periodEnd ?? '') | dateFormat
+      } }}
+      <span class="pay-runs-list__modal-irreversible">{{ 'PAY_RUNS.DELETE_CONFIRM_IRREVERSIBLE' | translate }}</span>
+    </p>
+    @if (deleteError()) {
+      <p class="pay-runs-list__modal-error">{{ deleteError()! | translate }}</p>
+    }
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="deleting()" (click)="deleteTarget.set(null)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="danger" [disabled]="deleting()" [loading]="deleting()" (click)="onDeleteConfirmed()">
+      {{ 'PAY_RUNS.DELETE_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
 
 <!-- Calculate Pay Run Modal (form → done, no polling loop) -->
 <ws-modal

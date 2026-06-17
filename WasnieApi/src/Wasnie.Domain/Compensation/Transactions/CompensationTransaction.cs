@@ -109,9 +109,28 @@ public sealed class CompensationTransaction : AggregateRoot
             creditCount, totalCommission.Amount, totalCommission.Currency));
     }
 
-    // Phase 3 stub — implemented when the payout module is built.
+    // Phase 3: propagate Paid status from the payout that consumed this transaction's credits.
     public void MarkPaid(string updatedBy, DateTimeOffset now, Guid eventId)
-        => throw new NotSupportedException("MarkPaid is implemented in Phase 3.");
+    {
+        if (Status != CompensationTransactionStatus.Calculated)
+            throw new DomainException($"Only Calculated transactions can be marked Paid. Current status: {Status}.");
+
+        Status = CompensationTransactionStatus.Paid;
+        UpdatedAt = now;
+
+        RaiseDomainEvent(new TransactionMarkedPaidEvent(eventId, now, Id, TenantId, PayeeId ?? Guid.Empty));
+    }
+
+    // Undo Paid status when a payout is reverted. Returns the transaction to Calculated so it
+    // can be included in a future payout recalculation.
+    public void RevertPaidToCalculated(string updatedBy, DateTimeOffset now)
+    {
+        if (Status != CompensationTransactionStatus.Paid)
+            throw new DomainException($"Only Paid transactions can be reverted to Calculated. Current status: {Status}.");
+
+        Status = CompensationTransactionStatus.Calculated;
+        UpdatedAt = now;
+    }
 
     // Assign a payee to a previously unassigned transaction (PayeeId IS NULL).
     // State rules per Decision 11: Paid is blocked; Eligible/Calculated → revert to Pending.

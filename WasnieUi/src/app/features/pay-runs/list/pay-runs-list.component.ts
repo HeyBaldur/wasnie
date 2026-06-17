@@ -63,6 +63,10 @@ export class PayRunsListComponent implements OnInit {
   readonly exporting = signal(false);
   readonly exportError = signal<string | null>(null);
 
+  readonly deleteTarget = signal<PayRunListItem | null>(null);
+  readonly deleting = signal(false);
+  readonly deleteError = signal<string | null>(null);
+
   readonly periodOptions: SegOption[] = [
     { value: 'this-month', label: 'PAY_RUNS.FILTER.PERIOD_THIS_MONTH' },
     { value: 'last-month', label: 'PAY_RUNS.FILTER.PERIOD_LAST_MONTH' },
@@ -242,6 +246,29 @@ export class PayRunsListComponent implements OnInit {
       this.exportError.set('PAY_RUNS.EXPORT.ERROR');
     } finally {
       this.exporting.set(false);
+    }
+  }
+
+  openDeleteConfirm(run: PayRunListItem, event: MouseEvent): void {
+    event.stopPropagation();
+    this.deleteTarget.set(run);
+    this.deleteError.set(null);
+  }
+
+  async onDeleteConfirmed(): Promise<void> {
+    const target = this.deleteTarget();
+    if (!target || this.deleting()) return;
+    this.deleting.set(true);
+    this.deleteError.set(null);
+    try {
+      await firstValueFrom(this.api.deleteDraft(target.id));
+      this.deleteTarget.set(null);
+      await this.store.reload();
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.deleteError.set(apiMsg ?? 'PAY_RUNS.DELETE_ERROR');
+    } finally {
+      this.deleting.set(false);
     }
   }
 

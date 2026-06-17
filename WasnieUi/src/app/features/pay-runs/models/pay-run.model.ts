@@ -77,3 +77,14 @@ export interface PayRunWarning {
   periodEnd: string;
   pendingTransactionCount: number;
 }
+
+export interface OverlappingPayRun {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: PayRunStatus;
+  payeeCount: number;
+  totalAmounts: Record<string, number>;
+  approvedAt: string | null;
+  paidAt: string | null;
+}

@@ -49,7 +49,7 @@ export class PlanCreateComponent {
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
     description: ['', Validators.maxLength(500)],
-    currency: ['USD', Validators.required],
+    currency: ['EUR', Validators.required],
     dateRange: [null as DateRange | null, Validators.required],
   });
 

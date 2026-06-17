@@ -59,7 +59,7 @@ export class QuotasListComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
 
   readonly openMenuId = signal<string | null>(null);
-  readonly menuPosition = signal<{ top: number; right: number } | null>(null);
+  readonly menuPosition = signal<{ top?: number; bottom?: number; right: number } | null>(null);
 
   readonly closeOpen = signal(false);
   readonly closeSaving = signal(false);
@@ -111,7 +111,12 @@ export class QuotasListComponent implements OnInit {
     if (isOpening) {
       const btn = event.currentTarget as HTMLElement;
       const rect = btn.getBoundingClientRect();
-      this.menuPosition.set({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      const right = window.innerWidth - rect.right;
+      if (window.innerHeight - rect.bottom < 108) {
+        this.menuPosition.set({ bottom: window.innerHeight - rect.top + 4, right });
+      } else {
+        this.menuPosition.set({ top: rect.bottom + 4, right });
+      }
     } else {
       this.menuPosition.set(null);
     }

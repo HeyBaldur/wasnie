@@ -277,6 +277,38 @@
     font-size: var(--font-size-12);
   }
 
+  &__bulk-error {
+    margin-bottom: var(--space-4);
+    color: var(--color-danger);
+  }
+
+  &__bulk-error-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+  }
+
+  &__bulk-error-list {
+    margin: 0;
+    padding-left: var(--space-5);
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 180px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+
+    &::-webkit-scrollbar        { width: 6px; }
+    &::-webkit-scrollbar-track  { background: transparent; }
+    &::-webkit-scrollbar-thumb  { background: var(--color-border-strong); border-radius: 9999px; }
+  }
+
   // ── Shared: bulk confirmation modal body ─────────────────────────────────────
 
   &__bulk-body {
@@ -433,6 +465,24 @@
     border-radius: var(--radius-md);
     font-size: var(--font-size-13);
     color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  &__bulk-overlap-loading {
+    padding: var(--space-2) 0;
+  }
+
+  &__bulk-overlap-warning {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-13);
+    font-weight: 500;
+    color: var(--color-warning);
     margin: 0;
   }
 

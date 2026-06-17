@@ -420,6 +420,12 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ConsumedByPayoutId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("PayeeId")
                         .HasColumnType("uniqueidentifier");
 
@@ -451,6 +457,12 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConsumedByPayoutId")
+                        .HasFilter("[ConsumedByPayoutId] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ConsumedAt")
+                        .HasFilter("[ConsumedAt] IS NULL");
 
                     b.HasIndex("TenantId", "SupersededAt")
                         .HasFilter("[SupersededAt] IS NULL");
@@ -1235,40 +1247,6 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("Transactions", (string)null);
                 });
 
-            modelBuilder.Entity("Wasnie.Domain.Identity.EmailConfirmationToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<DateTimeOffset?>("UsedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash");
-
-                    b.HasIndex("UserId", "TokenHash");
-
-                    b.ToTable("EmailConfirmationTokens", (string)null);
-                });
-
             modelBuilder.Entity("Wasnie.Domain.Identity.EmailChangeToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1306,6 +1284,40 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "TokenHash");
 
                     b.ToTable("EmailChangeTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Identity.EmailConfirmationToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash");
+
+                    b.HasIndex("UserId", "TokenHash");
+
+                    b.ToTable("EmailConfirmationTokens", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Identity.PasswordResetToken", b =>

@@ -30,3 +30,27 @@ export interface AssignmentListParams {
   search: string;
   status: AssignmentStatus | null;
 }
+
+export interface BulkAssignmentIdsRequest {
+  assignmentIds: string[];
+}
+
+export interface BulkAssignmentOperationResult {
+  affected: number;
+  errors: string[];
+}
+
+export interface BlockedAssignmentDto {
+  assignmentId: string;
+  payeeName: string;
+  planName: string;
+  effectiveStart: string;
+  effectiveEnd: string;
+  reason: string;
+}
+
+export interface BulkDeleteAssignmentsResult {
+  allDeleted: boolean;
+  deletedCount: number;
+  blocked: BlockedAssignmentDto[];
+}

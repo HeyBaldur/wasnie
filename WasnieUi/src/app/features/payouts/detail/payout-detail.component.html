@@ -37,6 +37,18 @@
         </ws-card>
       }
 
+      <!-- Double-pay block: structured conflict table -->
+      @if (doublePayConflicts().length > 0) {
+        <app-overlap-warning
+          [rows]="doublePayConflicts()"
+          [loading]="false"
+          [showTotals]="false"
+          warningKey="PAYOUTS.DETAIL.DOUBLE_PAY_BLOCKED"
+          col3HeaderKey="PAYOUTS.DETAIL.DOUBLE_PAY_COL_TX_REF"
+          (rowClick)="viewOverlapPayout($event)"
+        />
+      }
+
       <!-- Approval banner -->
       @if (isCalculated()) {
         <ws-card variant="raised" accent="brand" class="payout-detail__banner">
@@ -49,7 +61,7 @@
               *hasPermission="'Payouts.Approve'"
               variant="primary"
               [disabled]="approving()"
-              (click)="approveConfirmOpen.set(true)"
+              (click)="openApproveConfirm()"
             >
               {{ 'PAYOUTS.ACTION_APPROVE' | translate }}
             </ws-button>
@@ -68,7 +80,7 @@
               *hasPermission="'Payouts.MarkPaid'"
               variant="primary"
               [disabled]="markingPaid()"
-              (click)="markPaidConfirmOpen.set(true)"
+              (click)="openMarkPaidConfirm()"
             >
               {{ 'PAYOUTS.ACTION_MARK_PAID' | translate }}
             </ws-button>
@@ -129,15 +141,43 @@
             <table>
               <thead>
                 <tr>
+                  <th class="payout-detail__col-expand"></th>
                   <th>{{ 'PAYOUTS.DETAIL.COL_RULE' | translate }}</th>
+                  <th>{{ 'PAYOUTS.DETAIL.COL_SOURCE' | translate }}</th>
                   <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_BASE' | translate }}</th>
                   <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_COMMISSION' | translate }}</th>
                 </tr>
               </thead>
               <tbody>
                 @for (line of p.lines; track line.id) {
-                  <tr>
+                  <!-- Main line row -->
+                  <tr [class.payout-detail__row--expanded]="isExpanded(line.id)">
+                    <td class="payout-detail__col-expand">
+                      @if (line.calculation) {
+                        <button class="payout-detail__expand-btn"
+                                [attr.aria-expanded]="isExpanded(line.id)"
+                                [title]="(isExpanded(line.id) ? 'PAYOUTS.DETAIL.CALC_HIDE' : 'PAYOUTS.DETAIL.CALC_SHOW') | translate"
+                                (click)="toggleLine(line.id)">
+                          <app-icon [name]="isExpanded(line.id) ? 'chevron-up' : 'chevron-down'" [size]="14" />
+                        </button>
+                      }
+                    </td>
                     <td>{{ line.ruleName }}</td>
+                    <td>
+                      @if (line.transactionReference) {
+                        <div class="payout-detail__source-cell">
+                          <a class="payout-detail__source-ref"
+                             (click)="openTransaction(line.transactionReference)"
+                             role="button"
+                             tabindex="0">{{ line.transactionReference }}</a>
+                          @if (line.transactionDate) {
+                            <span class="payout-detail__source-date">{{ line.transactionDate | dateFormat }}</span>
+                          }
+                        </div>
+                      } @else {
+                        <span class="payout-detail__source-none">—</span>
+                      }
+                    </td>
                     <td class="payout-detail__col-right payout-detail__num">
                       {{ line.baseAmount | currencyFormat: line.baseCurrency }}
                     </td>
@@ -145,11 +185,69 @@
                       {{ line.commissionAmount | currencyFormat: line.commissionCurrency }}
                     </td>
                   </tr>
+
+                  <!-- Calculation detail row (expandable) -->
+                  @if (line.calculation && isExpanded(line.id)) {
+                    <tr class="payout-detail__detail-row">
+                      <td></td>
+                      <td colspan="4">
+                        <div class="payout-detail__calc">
+
+                          <!-- Rule metadata -->
+                          <div class="payout-detail__calc-meta">
+                            <span class="payout-detail__calc-badge">v{{ line.calculation.planVersion }}</span>
+                            <span class="payout-detail__calc-rate">{{ rateLabel(line.calculation.rateTable) }}</span>
+                            @if (!line.calculation.trigger.isAlways) {
+                              <span class="payout-detail__calc-trigger">
+                                {{ 'PAYOUTS.DETAIL.CALC_WHEN' | translate }}
+                                {{ line.calculation.trigger.logicalOperator }}:
+                                @for (cond of line.calculation.trigger.conditions; track $index) {
+                                  <span class="payout-detail__calc-cond">{{ cond.field }} {{ cond.operator }} {{ cond.value }}</span>
+                                }
+                              </span>
+                            } @else {
+                              <span class="payout-detail__calc-trigger payout-detail__calc-trigger--always">
+                                {{ 'PAYOUTS.DETAIL.CALC_ALWAYS' | translate }}
+                              </span>
+                            }
+                          </div>
+
+                          <!-- Modifier chain -->
+                          @if (line.calculation.modifiers.length > 0) {
+                            <div class="payout-detail__calc-modifiers">
+                              <span class="payout-detail__calc-modifiers-label">{{ 'PAYOUTS.DETAIL.CALC_ADJUSTMENTS' | translate }}</span>
+                              <div class="payout-detail__calc-chain">
+                                <span class="payout-detail__calc-amount payout-detail__calc-amount--start">
+                                  {{ line.calculation.modifiers[0].amountBefore | currencyFormat: line.calculation.modifiers[0].amountBeforeCurrency }}
+                                </span>
+                                @for (mod of line.calculation.modifiers; track $index) {
+                                  <span class="payout-detail__calc-arrow">→</span>
+                                  <span class="payout-detail__calc-mod">
+                                    <span class="payout-detail__calc-mod-name">{{ mod.modifierName }}</span>
+                                    <span class="payout-detail__calc-mod-factor">×{{ mod.factorApplied }}</span>
+                                  </span>
+                                  <span class="payout-detail__calc-arrow">→</span>
+                                  <span class="payout-detail__calc-amount">
+                                    {{ mod.amountAfter | currencyFormat: mod.amountAfterCurrency }}
+                                  </span>
+                                }
+                              </div>
+                            </div>
+                          } @else {
+                            <span class="payout-detail__calc-no-mod">{{ 'PAYOUTS.DETAIL.CALC_NO_ADJUSTMENTS' | translate }}</span>
+                          }
+
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
               <tfoot>
                 <tr class="payout-detail__total-row">
+                  <td></td>
                   <td><strong>Total</strong></td>
+                  <td></td>
                   <td></td>
                   <td class="payout-detail__col-right payout-detail__num">
                     <strong>{{ p.totalCommissionAmount | currencyFormat: p.totalCommissionCurrency }}</strong>
@@ -190,24 +288,56 @@
   </ws-page-layout>
 </app-shell>
 
-<ws-confirmation-modal
-  [(isOpen)]="approveConfirmOpen"
+<!-- Approve payout modal -->
+<ws-modal
+  [isOpen]="approveConfirmOpen()"
+  (isOpenChange)="approveConfirmOpen.set($event)"
   [title]="'PAYOUTS.DETAIL.APPROVE_CONFIRM_TITLE' | translate"
-  [message]="'PAYOUTS.DETAIL.APPROVE_CONFIRM_MSG' | translate"
-  [confirmLabel]="'PAYOUTS.ACTION_APPROVE' | translate"
-  [cancelLabel]="'COMMON.CANCEL' | translate"
-  [loading]="approving()"
-  (confirmed)="onApprove()"
-  (cancelled)="approveConfirmOpen.set(false)"
-/>
+  [closable]="!approving()"
+>
+  <div class="payout-detail__modal-body">
+    <p class="payout-detail__modal-intro">{{ 'PAYOUTS.DETAIL.APPROVE_CONFIRM_MSG' | translate }}</p>
+    <app-overlap-warning
+      [rows]="approveOverlapRows()"
+      [loading]="overlapsLoading()"
+      warningKey="PAYOUTS.DETAIL.OVERLAP_WARNING"
+      col3HeaderKey="PAYOUTS.DETAIL.OVERLAP_COL_PLAN"
+      (rowClick)="viewOverlapPayout($event)"
+    />
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="approving()" (click)="approveConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="approving()" [loading]="approving()" (click)="onApprove()">
+      {{ 'PAYOUTS.ACTION_APPROVE' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
 
-<ws-confirmation-modal
-  [(isOpen)]="markPaidConfirmOpen"
+<!-- Mark payout paid modal -->
+<ws-modal
+  [isOpen]="markPaidConfirmOpen()"
+  (isOpenChange)="markPaidConfirmOpen.set($event)"
   [title]="'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_TITLE' | translate"
-  [message]="'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_MSG' | translate"
-  [confirmLabel]="'PAYOUTS.ACTION_MARK_PAID' | translate"
-  [cancelLabel]="'COMMON.CANCEL' | translate"
-  [loading]="markingPaid()"
-  (confirmed)="onMarkPaid()"
-  (cancelled)="markPaidConfirmOpen.set(false)"
-/>
+  [closable]="!markingPaid()"
+>
+  <div class="payout-detail__modal-body">
+    <p class="payout-detail__modal-intro">{{ 'PAYOUTS.DETAIL.MARK_PAID_CONFIRM_MSG' | translate }}</p>
+    <app-overlap-warning
+      [rows]="markPaidOverlapRows()"
+      [loading]="overlapsLoading()"
+      warningKey="PAYOUTS.DETAIL.OVERLAP_WARNING"
+      col3HeaderKey="PAYOUTS.DETAIL.OVERLAP_COL_PLAN"
+      (rowClick)="viewOverlapPayout($event)"
+    />
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="markingPaid()" (click)="markPaidConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [disabled]="markingPaid()" [loading]="markingPaid()" (click)="onMarkPaid()">
+      {{ 'PAYOUTS.ACTION_MARK_PAID' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>

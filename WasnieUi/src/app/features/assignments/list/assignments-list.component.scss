@@ -11,9 +11,35 @@
 
 .assignments-list__search { flex: 0 0 280px; }
 
+.col-check { width: 40px; padding-left: var(--space-3) !important; }
 .col-name { min-width: 200px; }
 .col-secondary { font-size: var(--font-size-13); color: var(--color-text-secondary); }
 .col-actions { width: 48px; }
+
+tr.is-selected { background: var(--color-brand-subtle); }
+
+.assignments-list__bulk-bar {
+  @apply flex items-center flex-wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.bulk-bar__count {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex: 1 1 auto;
+}
+
+.bulk-bar__actions {
+  @apply flex items-center flex-wrap;
+  gap: var(--space-2);
+}
 
 .payee-identity {
   @apply flex items-center;

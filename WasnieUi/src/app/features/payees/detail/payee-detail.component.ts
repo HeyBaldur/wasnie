@@ -297,9 +297,10 @@ export class PayeeDetailComponent implements OnInit {
   }
 
   gaugeColorClass(value: number): string {
-    if (value >= 1.0) return 'bento-bar--blue';
-    if (value >= 0.80) return 'bento-bar--green';
-    if (value >= 0.50) return 'bento-bar--amber';
+    const pct = value * 100;
+    if (pct >= 100) return 'bento-bar--blue';
+    if (pct >= 80)  return 'bento-bar--green';
+    if (pct >= 50)  return 'bento-bar--amber';
     return 'bento-bar--red';
   }
 
