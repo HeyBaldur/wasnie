@@ -24,7 +24,7 @@ const SAMPLE_PLANS: SubscriptionPlan[] = [
 
 function makeUser(hasSelectedPlan: boolean): CurrentUser {
   return { userId: 'u1', email: 'test@test.com', role: 'TenantAdmin', tenantId: 't1',
-           tenantSlug: 'slug', tier: 'Free', hasSelectedPlan, permissions: [] };
+           tenantSlug: 'slug', tier: 'Free', hasSelectedPlan, emailConfirmed: true, isQualified: true, permissions: [] };
 }
 
 @Component({ template: '', standalone: true })

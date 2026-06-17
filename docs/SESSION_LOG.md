@@ -4,6 +4,34 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-17 — WI-EXPLANATION-GAPS: Currency dropdown fix + EUR default
+
+**Objetivo:** Arreglar el dropdown de moneda en creación de plan que "no abre al hacer clic."
+
+**Root cause (Step 0 diagnóstico):**
+- La lista de monedas es ESTÁTICA (no viene del backend) → la causa NO es el tenant sin datos
+- El `ws-select` siempre usa `position: fixed` para el dropdown (para escapar `overflow: hidden` de contenedores ancestrales)
+- En modo **upward** (dropdown va hacia arriba), la lógica setea `dropdownFixedTop = null` y `dropdownFixedBottom = Xpx`
+- Cuando `dropdownFixedTop` es null, la binding `[style.top.px]` se limpia → la CSS `top: calc(100% + …)` del `position: absolute` toma efecto
+- Con `position: fixed`, `100%` en `top` se resuelve contra el viewport (no el elemento padre) → `top ≈ 100vh + 4px` = debajo del viewport
+- Con `top ≈ 768px` + `bottom: Xpx`, la altura calculada del elemento es NEGATIVA → el dropdown colapsa a **cero altura** (invisible)
+- En una pantalla 1366×768: currency trigger ≈ 580px desde viewport top → `spaceBelow ≈ 180px < 280px` → upward mode se activa SIEMPRE → dropdown invisible en toda pantalla de laptop estándar
+
+**Cambios aplicados:**
+1. `WasnieUi/src/app/shared/ui/ws-select/ws-select.component.html` — binding `[style.top.px]` → `[style.top]` (string); cuando fixed+upward explícitamente pasa `'auto'` para neutralizar la CSS `top: calc(...)`. Downward: `dropdownFixedTop + 'px'`. No-fixed: `null`.
+2. `WasnieUi/src/app/features/plans/create/plan-create.component.ts` — default de currency de `'USD'` → `'EUR'` (el producto es europeo).
+3. `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.spec.ts` — fixture `makeUser()` le faltaban `emailConfirmed: true, isQualified: true` (TypeScript error pre-existente que impedía ejecutar todos los tests).
+
+**Verificación:**
+- Build: `ng build --configuration production` limpio (warnings pre-existentes sin cambio)
+- Tests: 406 run → 384 pass, 22 pre-existing failures (unrelated: ProcessPending HTTP mocks, SubscriptionReactivation HttpClient, PayRuns/Payouts pagination)
+- Para verificar en runtime: abrir `/plans/create` en cualquier pantalla → campo Currency muestra "EUR" por defecto → clic → dropdown abre con 8 opciones (EUR, USD, GBP, PLN, CAD, AUD, JPY, CHF) → seleccionar cualquiera → crear plan funciona
+
+**Archivos tocados:**
+- `WasnieUi/src/app/shared/ui/ws-select/ws-select.component.html`
+- `WasnieUi/src/app/features/plans/create/plan-create.component.ts`
+- `WasnieUi/src/app/features/subscription/wizard/subscription-wizard.component.spec.ts`
+
 ## 2026-06-16 — UI-DASHBOARD-LAYOUT + UI fixes (scroll, Total column, bulk errors)
 
 **Objetivo:** 4 UI fixes post-WI-PAYMENT-BLOCK-UI.
