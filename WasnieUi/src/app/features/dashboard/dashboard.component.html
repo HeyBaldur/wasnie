@@ -3,7 +3,6 @@
     icon="dashboard"
     [title]="'DASHBOARD.TITLE' | translate"
     [subtitle]="'DASHBOARD.SUBTITLE' | translate"
-    maxWidth="wide"
   >
     <ws-segmented-control
       slot="actions"
@@ -149,13 +148,13 @@
               <span></span>
             } @else if ((store.actionBand()?.payoutsApprovedUnpaidByCurrency?.length ?? 0) > 0) {
               <div class="stat-card__value">
-                {{ store.actionBand()!.payoutsApprovedUnpaidByCurrency[0].amount | currencyFormat: store.actionBand()!.payoutsApprovedUnpaidByCurrency[0].currency }}
+                {{ fmtCompact(store.actionBand()!.payoutsApprovedUnpaidByCurrency[0].amount, store.actionBand()!.payoutsApprovedUnpaidByCurrency[0].currency) }}
               </div>
               <div class="stat-card__amounts">
                 @for (t of store.actionBand()!.payoutsApprovedUnpaidByCurrency.slice(1); track t.currency) {
                   <div class="stat-card__amount-row">
                     <span class="stat-card__ccy">{{ t.currency }}</span>
-                    <span class="stat-card__amt">{{ t.amount | currencyFormat: t.currency }}</span>
+                    <span class="stat-card__amt">{{ fmtCompact(t.amount, t.currency) }}</span>
                   </div>
                 } @empty {
                   <span class="stat-card__cta">
@@ -232,10 +231,10 @@
       }
     </div>
 
-    <div class="dash-main">
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-4 w-full max-w-full mb-8">
 
-      <!-- ONE 3-col grid: all period KPI cards — TailAdmin churn-rate card pattern -->
-      <div class="period-grid">
+      <!-- Inner 3-col sub-grid: metric cards — takes cols 1-3 on desktop -->
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3 lg:col-span-3">
 
           <!-- Payouts total by currency -->
           <ws-card variant="interactive" padding="md">
@@ -244,33 +243,41 @@
                 <h3 class="metric-card__title">{{ 'DASHBOARD.PAYOUTS_PERIOD' | translate }}</h3>
                 <p class="metric-card__sub">{{ 'DASHBOARD.PAYOUTS_PERIOD_DESC' | translate }}</p>
               </div>
-              <div class="metric-card__ft">
-                <div>
+              <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+                <div class="flex flex-col gap-1 min-w-0 flex-1">
                   @if (store.loading()) {
                     <span class="skeleton skeleton--num"></span>
                   } @else if ((store.periodBand()?.payoutsTotalByCurrency?.length ?? 0) > 0) {
+                    <!-- Compact primary value never wraps or breaks across lines -->
                     <div class="metric-card__value metric-card__value--amt">
-                      {{ store.periodBand()!.payoutsTotalByCurrency[0].amount | currencyFormat: store.periodBand()!.payoutsTotalByCurrency[0].currency }}
+                      {{ fmtCompact(store.periodBand()!.payoutsTotalByCurrency[0].amount, store.periodBand()!.payoutsTotalByCurrency[0].currency) }}
                     </div>
-                    <p class="metric-card__trend">
-                      <span class="metric-card__trend-val">{{ store.periodBand()!.payoutsTotalByCurrency[0].currency }}</span>
-                    </p>
+                    <!-- Exact full amount for users who need precision -->
+                    <span class="metric-card__value--full">
+                      {{ store.periodBand()!.payoutsTotalByCurrency[0].amount | currencyFormat: store.periodBand()!.payoutsTotalByCurrency[0].currency }}
+                    </span>
+                    <span class="metric-card__ccy">{{ store.periodBand()!.payoutsTotalByCurrency[0].currency }}</span>
+                    @if ((store.periodBand()?.payoutsTotalByCurrency?.length ?? 0) > 1) {
+                      <div class="metric-card__secondary-ccys flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                        @for (t of store.periodBand()!.payoutsTotalByCurrency.slice(1); track t.currency) {
+                          <div class="flex items-center gap-1">
+                            <span class="metric-card__ccy">{{ t.currency }}</span>
+                            <span class="metric-card__amt">{{ fmtCompact(t.amount, t.currency) }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
                   } @else {
                     <div class="metric-card__value">—</div>
                   }
                 </div>
-                @if (!store.loading()) {
-                  <div class="metric-card__aside">
-                    @if ((store.periodBand()?.payoutsTotalByCurrency?.length ?? 0) > 1) {
-                      @for (t of store.periodBand()!.payoutsTotalByCurrency.slice(1); track t.currency) {
-                        <div class="metric-card__ccy-row">
-                          <span class="metric-card__ccy">{{ t.currency }}</span>
-                          <span class="metric-card__amt">{{ t.amount | currencyFormat: t.currency }}</span>
-                        </div>
-                      }
-                    } @else {
-                      <span class="metric-card__link">{{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" /></span>
-                    }
+                @if (sparklinePayouts().length > 0) {
+                  <div class="h-14 w-28 flex-shrink-0">
+                    <ws-sparkline-chart
+                      [values]="sparklinePayouts()"
+                      [labels]="sparklineLabels"
+                      [currency]="store.periodBand()?.payoutsTotalByCurrency?.[0]?.currency ?? ''"
+                    />
                   </div>
                 }
               </div>
@@ -284,30 +291,35 @@
                 <h3 class="metric-card__title">{{ 'DASHBOARD.TRANSACTIONS_PERIOD' | translate }}</h3>
                 <p class="metric-card__sub">{{ 'DASHBOARD.TRANSACTIONS_PERIOD_DESC' | translate }}</p>
               </div>
-              <div class="metric-card__ft">
-                <div>
+              <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+                <div class="flex flex-col gap-1 min-w-0 flex-1">
                   <div class="metric-card__value">
                     @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
                     @else { {{ store.periodBand()?.transactionsCount ?? 0 }} }
                   </div>
                   @if (!store.loading() && (store.periodBand()?.transactionsVolumeByCurrency?.length ?? 0) > 0) {
                     <p class="metric-card__trend">
-                      <span class="metric-card__trend-val">{{ store.periodBand()!.transactionsVolumeByCurrency[0].amount | currencyFormat: store.periodBand()!.transactionsVolumeByCurrency[0].currency }}</span>
+                      <span class="metric-card__trend-val">{{ fmtCompact(store.periodBand()!.transactionsVolumeByCurrency[0].amount, store.periodBand()!.transactionsVolumeByCurrency[0].currency) }}</span>
                     </p>
+                    @if ((store.periodBand()?.transactionsVolumeByCurrency?.length ?? 0) > 1) {
+                      <div class="metric-card__secondary-ccys flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                        @for (t of store.periodBand()!.transactionsVolumeByCurrency.slice(1); track t.currency) {
+                          <div class="flex items-center gap-1">
+                            <span class="metric-card__ccy">{{ t.currency }}</span>
+                            <span class="metric-card__amt">{{ fmtCompact(t.amount, t.currency) }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
                   }
                 </div>
-                @if (!store.loading()) {
-                  <div class="metric-card__aside">
-                    @if ((store.periodBand()?.transactionsVolumeByCurrency?.length ?? 0) > 1) {
-                      @for (t of store.periodBand()!.transactionsVolumeByCurrency.slice(1); track t.currency) {
-                        <div class="metric-card__ccy-row">
-                          <span class="metric-card__ccy">{{ t.currency }}</span>
-                          <span class="metric-card__amt">{{ t.amount | currencyFormat: t.currency }}</span>
-                        </div>
-                      }
-                    } @else {
-                      <span class="metric-card__link">{{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" /></span>
-                    }
+                @if (sparklineTransactions().length > 0) {
+                  <div class="h-14 w-28 flex-shrink-0">
+                    <ws-sparkline-chart
+                      [values]="sparklineTransactions()"
+                      [labels]="sparklineLabels"
+                      [currency]="''"
+                    />
                   </div>
                 }
               </div>
@@ -321,30 +333,35 @@
                 <h3 class="metric-card__title">{{ 'DASHBOARD.CREDITS_PERIOD' | translate }}</h3>
                 <p class="metric-card__sub">{{ 'DASHBOARD.CREDITS_PERIOD_DESC' | translate }}</p>
               </div>
-              <div class="metric-card__ft">
-                <div>
+              <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+                <div class="flex flex-col gap-1 min-w-0 flex-1">
                   <div class="metric-card__value">
                     @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
                     @else { {{ store.periodBand()?.creditsCount ?? 0 }} }
                   </div>
                   @if (!store.loading() && (store.periodBand()?.creditsTotalByCurrency?.length ?? 0) > 0) {
                     <p class="metric-card__trend">
-                      <span class="metric-card__trend-val">{{ store.periodBand()!.creditsTotalByCurrency[0].amount | currencyFormat: store.periodBand()!.creditsTotalByCurrency[0].currency }}</span>
+                      <span class="metric-card__trend-val">{{ fmtCompact(store.periodBand()!.creditsTotalByCurrency[0].amount, store.periodBand()!.creditsTotalByCurrency[0].currency) }}</span>
                     </p>
+                    @if ((store.periodBand()?.creditsTotalByCurrency?.length ?? 0) > 1) {
+                      <div class="metric-card__secondary-ccys flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                        @for (t of store.periodBand()!.creditsTotalByCurrency.slice(1); track t.currency) {
+                          <div class="flex items-center gap-1">
+                            <span class="metric-card__ccy">{{ t.currency }}</span>
+                            <span class="metric-card__amt">{{ fmtCompact(t.amount, t.currency) }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
                   }
                 </div>
-                @if (!store.loading()) {
-                  <div class="metric-card__aside">
-                    @if ((store.periodBand()?.creditsTotalByCurrency?.length ?? 0) > 1) {
-                      @for (t of store.periodBand()!.creditsTotalByCurrency.slice(1); track t.currency) {
-                        <div class="metric-card__ccy-row">
-                          <span class="metric-card__ccy">{{ t.currency }}</span>
-                          <span class="metric-card__amt">{{ t.amount | currencyFormat: t.currency }}</span>
-                        </div>
-                      }
-                    } @else {
-                      <span class="metric-card__link">{{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" /></span>
-                    }
+                @if (sparklineCredits().length > 0) {
+                  <div class="h-14 w-28 flex-shrink-0">
+                    <ws-sparkline-chart
+                      [values]="sparklineCredits()"
+                      [labels]="sparklineLabels"
+                      [currency]="''"
+                    />
                   </div>
                 }
               </div>
@@ -358,7 +375,7 @@
                 <h3 class="metric-card__title">{{ 'DASHBOARD.ACTIVE_PLANS' | translate }}</h3>
                 <p class="metric-card__sub">{{ 'DASHBOARD.ACTIVE_PLANS_DESC' | translate }}</p>
               </div>
-              <div class="metric-card__ft">
+              <div class="mt-4 flex items-end justify-between w-full flex-1">
                 <div class="metric-card__value">
                   @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
                   @else { {{ store.periodBand()?.activePlansCount ?? 0 }} }
@@ -375,8 +392,8 @@
                 <h3 class="metric-card__title">{{ 'DASHBOARD.PAYEES_ACTIVE' | translate }}</h3>
                 <p class="metric-card__sub">{{ 'DASHBOARD.PAYEES_ACTIVE_DESC' | translate }}</p>
               </div>
-              <div class="metric-card__ft">
-                <div>
+              <div class="mt-4 flex items-end justify-between w-full flex-1">
+                <div class="min-w-0">
                   <div class="metric-card__value">
                     @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
                     @else { {{ store.periodBand()?.payeesActiveCount ?? 0 }} }
@@ -389,7 +406,7 @@
                     </p>
                   }
                 </div>
-                <span class="metric-card__link">{{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" /></span>
+                <span class="metric-card__link flex-shrink-0">{{ 'DASHBOARD.VIEW_ALL' | translate }} <app-icon name="external-link" [size]="10" /></span>
               </div>
             </a>
           </ws-card>
@@ -428,8 +445,8 @@
 
       </div>
 
-      <!-- Activity feed — 360px, scrollable, max-height 480px -->
-      <aside class="dash-feed">
+      <!-- Activity feed — col 4 on desktop, full height via grid stretch -->
+      <aside class="dash-feed lg:col-span-1 min-w-0">
         <ws-card variant="flat" padding="none">
           <div class="feed__header">
             <span class="feed__title">
@@ -486,17 +503,17 @@
           <ws-card variant="default" padding="md">
             <div class="trend-card">
 
-              <!-- TailAdmin: label + big value LEFT, delta pill RIGHT -->
+              <!-- Header: period label + current value + delta pill (separate block, never overlaps chart) -->
               <div class="trend-card__head">
-                <div>
+                <div class="min-w-0 flex-1">
                   <span class="trend-card__label">
                     {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
                   </span>
                   <div class="trend-card__value">
-                    {{ point.currentAmount | currencyFormat: point.currency }}
+                    {{ fmtCompact(point.currentAmount, point.currency) }}
                   </div>
                 </div>
-                <span class="trend-card__delta-pill"
+                <span class="trend-card__delta-pill flex-shrink-0"
                       [class.trend-card__delta-pill--up]="point.direction === 'up' && !trendIsNoBase(point)"
                       [class.trend-card__delta-pill--down]="point.direction === 'down' && !trendIsNoBase(point)">
                   @if (!trendIsNoBase(point)) {
@@ -509,9 +526,9 @@
                 </span>
               </div>
 
-              <!-- Bar chart — bleeds to card edges -->
+              <!-- Horizontal bar chart — fills its own dedicated height, never overlaps header -->
               <div class="trend-card__chart">
-                <ws-bar-chart
+                <ws-hbar-chart
                   [points]="trendBarPoints(point, store.trendBand()!.currentPeriodLabel, store.trendBand()!.priorPeriodLabel)"
                 />
               </div>
@@ -522,7 +539,7 @@
                   {{ 'DASHBOARD.TREND_PRIOR' | translate }}: {{ store.trendBand()!.priorPeriodLabel }}
                 </span>
                 <span class="trend-card__prior-amt">
-                  {{ point.priorAmount | currencyFormat: point.currency }}
+                  {{ fmtCompact(point.priorAmount, point.currency) }}
                 </span>
               </div>
 

@@ -27,3 +27,5 @@ export { WsPaginationComponent } from './ws-pagination/ws-pagination.component';
 export { WsGaugeComponent } from './ws-gauge/ws-gauge.component';
 export { WsLineChartComponent, type LineChartPoint } from './ws-line-chart/ws-line-chart.component';
 export { WsBarChartComponent, type BarChartPoint } from './ws-bar-chart/ws-bar-chart.component';
+export { WsSparklineChartComponent } from './ws-sparkline-chart/ws-sparkline-chart.component';
+export { WsHBarChartComponent } from './ws-hbar-chart/ws-hbar-chart.component';

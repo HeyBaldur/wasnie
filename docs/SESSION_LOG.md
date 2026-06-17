@@ -4,6 +4,27 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-16 — UI-DASHBOARD-LAYOUT + UI fixes (scroll, Total column, bulk errors)
+
+**Objetivo:** 4 UI fixes post-WI-PAYMENT-BLOCK-UI.
+
+**Fix 1 — Scrollbar delgado + margin-bottom en OverlapWarningComponent:**
+- `overlap-warning.component.scss`: `__wrapper` → `margin-bottom: var(--space-4)`; `__table-wrapper` → scrollbar thin styles inlineados (no `@extend` — SASS scope issue en componentes).
+
+**Fix 2 — Columna "Total" oculta cuando no hay datos:**
+- `overlap-warning.component.ts`: nuevo `@Input() showTotals = true`
+- `overlap-warning.component.html`: `@if (showTotals)` envuelve `<th>` y `<td>` de Total
+- Usado con `[showTotals]="false"` en pay-run-detail + payout-detail para los conflictos de doble-pago.
+
+**Fix 3 — Bulk mark-paid muestra errores cuando `paid=0`:**
+- `payouts-list.component.ts`: señales `bulkMarkPaidErrors` + `bulkMarkPaidCount`; `onBulkMarkPaid()` ahora captura el resultado y popula las señales
+- `payouts-list.component.html`: banner de error con lista scrolleable antes del `<ws-table>`
+- `payouts-list.component.scss`: `.payouts-list__bulk-error*` con scrollbar thin + max-height 180px
+
+**Fix 4 — Dashboard layout iguala layout de planes:**
+- `dashboard.component.html`: eliminado `maxWidth="wide"` → usa 1200px estándar
+- `dashboard.component.scss`: `action-grid` → 2 cols en ≤1100px; breakpoint inferior unificado a 640px (antes 820px → solo 1 col en 820px sin step intermedio)
+
 ## 2026-06-16 — WI-PAYMENT-BLOCK-UI: Rediseño del mensaje de bloqueo anti-doble-pago
 
 **Objetivo:** Reemplazar el muro de texto rojo concatenado del bloqueo anti-doble-pago por un resumen claro + tabla scrolleable reutilizando `OverlapWarningComponent`.
