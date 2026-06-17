@@ -100,6 +100,12 @@ export class PayRunDetailStore {
     void this._fetch();
   }
 
+  setPageSize(n: number): void {
+    this.pageSize.set(n);
+    this.page.set(1);
+    void this._fetch();
+  }
+
   async reload(): Promise<void> {
     await this._fetch();
   }

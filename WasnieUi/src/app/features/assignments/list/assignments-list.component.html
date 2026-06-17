@@ -137,7 +137,8 @@
                       </button>
                       @if (openMenuId() === assignment.id) {
                         <div class="row-menu__dropdown"
-                          [style.top.px]="menuPosition()!.top"
+                          [style.top.px]="menuPosition()!.top ?? null"
+                          [style.bottom.px]="menuPosition()!.bottom ?? null"
                           [style.right.px]="menuPosition()!.right"
                         >
                           @if (assignment.status === 'Active') {

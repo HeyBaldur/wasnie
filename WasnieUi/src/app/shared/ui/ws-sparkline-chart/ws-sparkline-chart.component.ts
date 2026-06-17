@@ -46,7 +46,7 @@ export class WsSparklineChartComponent implements OnDestroy {
   private chart: Chart<'line', number[], string> | null = null;
 
   constructor() {
-    afterNextRender(() => this.initChart());
+    afterNextRender(() => { if (!this.chart) this.initChart(); });
 
     effect(() => {
       const vals = this.values();

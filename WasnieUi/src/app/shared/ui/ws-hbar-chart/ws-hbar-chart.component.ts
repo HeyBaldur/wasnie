@@ -52,7 +52,7 @@ export class WsHBarChartComponent implements OnDestroy {
   private chart: Chart<'bar', number[], string> | null = null;
 
   constructor() {
-    afterNextRender(() => this.initChart());
+    afterNextRender(() => { if (!this.chart) this.initChart(); });
 
     effect(() => {
       const [prior, current] = this.splitPoints();

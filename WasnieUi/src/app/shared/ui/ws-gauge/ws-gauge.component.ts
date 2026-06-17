@@ -1,4 +1,16 @@
-import { Component, computed, input } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  input,
+  OnDestroy,
+  ViewChild,
+} from '@angular/core';
+import { ArcElement, Chart, DoughnutController, Tooltip } from 'chart.js';
+
+Chart.register(DoughnutController, ArcElement, Tooltip);
 
 @Component({
   selector: 'ws-gauge',
@@ -6,47 +18,86 @@ import { Component, computed, input } from '@angular/core';
   templateUrl: './ws-gauge.component.html',
   styleUrl: './ws-gauge.component.scss',
 })
-export class WsGaugeComponent {
-  // 0.0 = 0%, 1.0 = 100%, 1.5 = 150% (overachievement)
+export class WsGaugeComponent implements OnDestroy {
+  @ViewChild('canvas', { static: true }) private canvasRef!: ElementRef<HTMLCanvasElement>;
+
+  /** Fraction: 0.0 = 0 %, 1.0 = 100 %, 1.5 = 150 %. */
   readonly value = input<number>(0);
-  readonly label = input('');
-  // Fraction of the quota period elapsed (0-1). When provided, shows a pacing target line.
-  // null = no pacing line (closed quota or future quota).
+  /** API compat: pacing marker not rendered in the Chart.js version. */
   readonly pacingValue = input<number | null>(null);
 
-  private readonly RADIUS = 80;
-  private readonly ARC_LENGTH = Math.PI * this.RADIUS; // ≈ 251.33
+  private chart: Chart<'doughnut', number[], string> | null = null;
 
-  // SVG arc path: half-circle from left to right, top half
-  readonly trackPath = `M ${100 - this.RADIUS},100 A ${this.RADIUS},${this.RADIUS} 0 0,1 ${100 + this.RADIUS},100`;
-
-  readonly fillDashArray = computed(() => {
-    const fill = Math.min(this.value(), 1.0) * this.ARC_LENGTH;
-    return `${fill.toFixed(2)} ${this.ARC_LENGTH.toFixed(2)}`;
-  });
-
+  /** Color follows business rules: <50 red, 50–79 amber, 80–99 green, ≥100 brand blue. */
   readonly fillColor = computed(() => {
-    const v = this.value();
-    if (v >= 1.0) return 'var(--color-brand)';
-    if (v >= 0.80) return 'var(--color-success)';
-    if (v >= 0.50) return 'var(--color-warning)';
-    return 'var(--color-danger)';
+    const pct = this.value() * 100;
+    if (pct >= 100) return '#3b82f6'; // brand blue — achieved / exceeded
+    if (pct >= 80)  return '#10b981'; // emerald — on track
+    if (pct >= 50)  return '#f59e0b'; // amber — in progress
+    return '#ef4444';                  // red — critical / behind
   });
 
   readonly percentText = computed(() => `${Math.round(this.value() * 100)}%`);
 
-  readonly ariaLabel = computed(() =>
-    `Gauge: ${this.percentText()} attainment${this.label() ? ` — ${this.label()}` : ''}`);
+  constructor() {
+    afterNextRender(() => { if (!this.chart) this.initChart(); });
 
-  // Pacing marker position on the arc.
-  // Arc: starts at (20,100), goes counter-clockwise through top to (180,100).
-  // At fraction P: x = 100 - 80*cos(P*π), y = 100 - 80*sin(P*π)
-  readonly pacingPoint = computed(() => {
-    const p = this.pacingValue();
-    if (p === null || p < 0 || p > 1) return null;
-    const angle = p * Math.PI;
-    const x = 100 - this.RADIUS * Math.cos(angle);
-    const y = 100 - this.RADIUS * Math.sin(angle);
-    return { x: +x.toFixed(1), y: +y.toFixed(1) };
-  });
+    effect(() => {
+      const pct   = Math.min(this.value() * 100, 100);
+      const rest  = Math.max(0, 100 - pct);
+      const color = this.fillColor();
+      if (!this.chart) return;
+      this.chart.data.datasets[0].data = [pct, rest];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.chart.data.datasets[0] as any).backgroundColor = [color, this.trackColor()];
+      this.chart.update();
+    });
+  }
+
+  private initChart(): void {
+    const canvas = this.canvasRef.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const pct  = Math.min(this.value() * 100, 100);
+    const rest = Math.max(0, 100 - pct);
+
+    this.chart = new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [pct, rest],
+          backgroundColor: [this.fillColor(), this.trackColor()],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        rotation: -90,       // arc starts at 9 o'clock (left)
+        circumference: 180,  // half-circle: left → top → right
+        cutout: '80%',
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2,      // 2:1 canvas → arc fills the full width cleanly
+        plugins: {
+          legend:  { display: false },
+          tooltip: { enabled: false },
+        },
+        animation: {
+          duration: 800,
+          easing:   'easeOutQuart',
+        },
+      },
+    });
+  }
+
+  /** Reads the design-system token so the track respects dark / light mode. */
+  private trackColor(): string {
+    const raw = getComputedStyle(this.canvasRef.nativeElement)
+      .getPropertyValue('--color-border-default').trim();
+    return raw || '#e5e7eb';
+  }
+
+  ngOnDestroy(): void {
+    this.chart?.destroy();
+  }
 }

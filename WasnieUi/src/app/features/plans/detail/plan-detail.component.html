@@ -276,6 +276,7 @@
                 [totalPages]="planAssignmentsResult()!.totalPages"
                 [totalCount]="planAssignmentsResult()!.totalCount"
                 [pageSize]="10"
+                [pageSizeOptions]="[]"
                 (pageChange)="loadPlanAssignments($event)"
               />
             }

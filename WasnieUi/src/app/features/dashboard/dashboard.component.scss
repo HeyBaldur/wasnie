@@ -363,8 +363,11 @@
   &--amt { font-size: var(--font-size-18); font-weight: 700; }
 }
 
-// Exact full value shown below the compact notation in small muted text
+// Exact full value shown below the compact notation in small muted text.
+// display: block is required — text-overflow: ellipsis only works on block-level
+// elements, not inline spans. Without it the span wraps instead of clipping.
 .metric-card__value--full {
+  display: block;
   font-size: var(--font-size-11);
   color: var(--color-text-tertiary);
   font-variant-numeric: tabular-nums;

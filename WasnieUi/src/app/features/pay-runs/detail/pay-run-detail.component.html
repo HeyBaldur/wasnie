@@ -373,6 +373,7 @@
         [totalCount]="store.payoutTotalCount()"
         [pageSize]="store.pageSize()"
         (pageChange)="store.setPage($event)"
+        (pageSizeChange)="store.setPageSize($event)"
       />
     }
 

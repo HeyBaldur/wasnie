@@ -279,7 +279,6 @@
                   <div class="h-14 w-28 flex-shrink-0">
                     <ws-sparkline-chart
                       [values]="sparklinePayouts()"
-                      [labels]="sparklineLabels"
                       [currency]="store.periodBand()?.payoutsTotalByCurrency?.[0]?.currency ?? ''"
                     />
                   </div>
@@ -321,7 +320,6 @@
                   <div class="h-14 w-28 flex-shrink-0">
                     <ws-sparkline-chart
                       [values]="sparklineTransactions()"
-                      [labels]="sparklineLabels"
                       [currency]="''"
                     />
                   </div>
@@ -363,7 +361,6 @@
                   <div class="h-14 w-28 flex-shrink-0">
                     <ws-sparkline-chart
                       [values]="sparklineCredits()"
-                      [labels]="sparklineLabels"
                       [currency]="''"
                     />
                   </div>

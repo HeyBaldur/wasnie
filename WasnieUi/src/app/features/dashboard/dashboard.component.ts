@@ -50,9 +50,11 @@ export class DashboardComponent {
   readonly store = inject(DashboardStore);
 
   /**
-   * Sparkline values derived strictly from real store totals.
-   * Returns [] when there is no real data — the template hides the chart entirely
-   * so a blank account never displays invented trend lines.
+   * Sparkline values — period total distributed across 7 proportional points.
+   * Illustrative only: shows the shape of a typical accumulation curve for
+   * the period. No day-level labels are attached so tooltips never claim a
+   * specific date had a specific value.
+   * Returns [] when there is no data — the template hides the chart entirely.
    */
   readonly sparklinePayouts = computed<number[]>(() => {
     const total = this.store.periodBand()?.payoutsTotalByCurrency?.[0]?.amount ?? 0;
@@ -74,16 +76,6 @@ export class DashboardComponent {
     const unit = count / 7;
     return [0.59, 1.03, 0.82, 1.24, 1.12, 1.50, 1.71].map(f => Math.round(unit * f));
   });
-
-  /** Labels for the last 7 days — shown in sparkline hover tooltips. */
-  readonly sparklineLabels: string[] = (() => {
-    const today = new Date();
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() - (6 - i));
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    });
-  })();
 
   // ── Period-aware query params for period band links ───────────────────────
   // Each computes the correct filter params for the destination list so the
