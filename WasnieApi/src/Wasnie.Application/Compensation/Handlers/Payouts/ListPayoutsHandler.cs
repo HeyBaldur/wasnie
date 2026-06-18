@@ -120,10 +120,16 @@ public sealed class ListPayoutsHandler(
         }
 
         if (f.PeriodFrom.HasValue)
-            query = query.Where(p => p.Period.Start >= f.PeriodFrom.Value);
+        {
+            var from = new DateTimeOffset(f.PeriodFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query = query.Where(p => p.CalculatedAt >= from);
+        }
 
         if (f.PeriodTo.HasValue)
-            query = query.Where(p => p.Period.End <= f.PeriodTo.Value);
+        {
+            var to = new DateTimeOffset(f.PeriodTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query = query.Where(p => p.CalculatedAt < to);
+        }
 
         if (f.AmountMin.HasValue)
             query = query.Where(p => p.TotalCommission.Amount >= f.AmountMin.Value);

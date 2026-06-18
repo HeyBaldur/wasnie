@@ -4,6 +4,39 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-18 — WI-OVERLAP-WARNING-UX (pay run overlap warning — inform, not alarm)
+
+**Root cause:** `PAY_RUNS.DETAIL.OVERLAP_WARNING` said "could be paid more than once" — factually wrong. The motor filters `ConsumedAt == null` at calculation time (already excludes paid transactions) and `MarkPayRunPaidHandler` has a hard block guard. The overlap table shown is a period-date overlap, not a transaction overlap.
+
+**Data verification:** `store.run()!.totalAmounts` already reflects post-exclusion amounts (no backend change needed). Overlapping run info (period/status/totals) already in `approveOverlapRows()` / `markPaidOverlapRows()`.
+
+**Fix:** i18n-only. `PAY_RUNS.DETAIL.OVERLAP_WARNING` in EN/ES/PL rewritten to:
+- State the period overlap factually with count of overlapping runs
+- Explain that already-paid transactions were automatically excluded at calculation time
+- Confirm no transaction will be paid twice
+
+**Not changed:** `OverlapWarningComponent`, any TS, any HTML structure, `MarkPayRunPaidHandler` guard, `PAYOUTS.DETAIL.OVERLAP_WARNING` (individual payout context — separate WI if needed).
+
+**Build:** `ng build --configuration production` clean.
+
+## 2026-06-18 — WI-FIX-DATE-FILTER (Pay Runs + Payouts: filter by creation date)
+
+**Root cause:** `ListPayRunsHandler` filtered `PeriodFrom`/`PeriodTo` against `r.PeriodStart`/`r.PeriodEnd`; `ListPayoutsHandler` filtered against `p.Period.Start`/`p.Period.End`. A pay run created today for Apr–Jun appeared outside "This month" filter because June > Apr.
+
+**Backend changes:**
+- `ListPayRunsHandler.BuildQuery` (lines 67-76): `PeriodFrom` → `r.CreatedAt >= startOfDayUTC(from)`; `PeriodTo` → `r.CreatedAt < startOfDayUTC(to + 1)`. Sort was already `r.CreatedAt`.
+- `ListPayoutsHandler.BuildQuery` (lines 122-131): same pattern against `p.CalculatedAt`. Sort was already `p.CalculatedAt`.
+- `PayRunFilterQuery` + `PayoutFilterQuery` comments updated to `CreatedAt.Date` / `CalculatedAt.Date`.
+- `PayRunExportTests.cs` test renamed (was `MatchesRunPeriod` — misleading after fix; still only checks `IsSuccess`).
+
+**Frontend changes:**
+- `pay-runs.store.ts`: `sortBy: 'periodStart'` → `'createdAt'` (backend ignores sortBy for PayRuns but now semantically correct).
+- `payouts.store.ts`: `signal('updatedAt')` → `signal('calculatedAt')` (was functionally correct via `_` catch-all; now explicit).
+
+**Tests:** Application + IntegrationTests build succeeded. 22/22 pay-runs store tests, 20/20 payouts store tests. `ng build --configuration production` clean.
+
+**Owner action required:** verify "This month" preset in Pay Runs list shows the run created today for Apr–Jun.
+
 ## 2026-06-18 — WI-FIX-DRAG-RECALCULATE-PAYRUN: FASEs 1–4 (pay run detection + auto-delete + UI)
 
 **Context:** After Recalculate Credits ran successfully, the existing Draft pay run kept showing stale totals (€11,115.21) because the payout was not recalculated. Owner had to manually delete the draft. Auto-deletion + blocking makes the flow safe and self-contained.

@@ -17,8 +17,8 @@ public sealed record PayoutFilterQuery
     public string? PlanIds { get; init; }      // comma-separated GUIDs
     public string? Status { get; init; }       // Calculated|Approved|Paid|Disputed|All — default All
     public string? Currencies { get; init; }   // comma-separated 3-letter codes
-    public DateOnly? PeriodFrom { get; init; } // payouts where PeriodStart >= this
-    public DateOnly? PeriodTo { get; init; }   // payouts where PeriodEnd <= this
+    public DateOnly? PeriodFrom { get; init; } // payouts where CalculatedAt.Date >= this
+    public DateOnly? PeriodTo { get; init; }   // payouts where CalculatedAt.Date <= this
     public bool ExcludeZero { get; init; } = false; // exclude payouts with TotalCommission = 0
 
     // Optional: restrict to a specific pay run (used by the detail export and run-detail sub-table).

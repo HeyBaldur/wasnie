@@ -357,61 +357,77 @@
         </div>
       </form>
 
-      <aside class="rule-preview">
-        <div class="rule-preview__header">
-          <app-icon name="eye" [size]="16" />
-          <span>{{ 'PLANS.PREVIEW_TITLE' | translate }}</span>
-        </div>
-        <div class="rule-preview__body">
-          <div class="preview-section">
-            <span class="preview-label">{{ 'PLANS.FIELD_RULE_NAME' | translate }}</span>
-            <span class="preview-value">{{ form.get('name')?.value || '—' }}</span>
+      <div class="rule-sidebar">
+        <aside class="rule-preview">
+          <div class="rule-preview__header">
+            <app-icon name="eye" [size]="16" />
+            <span>{{ 'PLANS.PREVIEW_TITLE' | translate }}</span>
           </div>
-          <div class="preview-section">
-            <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
-            <span class="preview-value">
-              {{ measurementTypeKey(form.get('measurement.type')?.value) | translate }}
-              · {{ measurementAggregationKey(form.get('measurement.aggregation')?.value) | translate }}
-            </span>
+          <div class="rule-preview__body">
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.FIELD_RULE_NAME' | translate }}</span>
+              <span class="preview-value">{{ form.get('name')?.value || '—' }}</span>
+            </div>
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
+              <span class="preview-value">
+                {{ measurementTypeKey(form.get('measurement.type')?.value) | translate }}
+                · {{ measurementAggregationKey(form.get('measurement.aggregation')?.value) | translate }}
+              </span>
+            </div>
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</span>
+              <span class="preview-value">
+                @if (rateTableType() == RateTableType.Flat) {
+                  {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
+                } @else if (rateTableType() == RateTableType.Tiered) {
+                  {{ 'PLANS.RATE_TABLE_TIERED' | translate }} · {{ tiersArray.length }} {{ 'PLANS.TIERS' | translate }}
+                } @else {
+                  {{ 'PLANS.RATE_TABLE_ATTAINMENTBASED' | translate }} · {{ attainmentTiersArray.length }} {{ 'PLANS.TIERS' | translate }}
+                }
+              </span>
+            </div>
+            @if (hasTrigger()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</span>
+                <span class="preview-value">{{ conditionsArray.length }} {{ 'PLANS.CONDITIONS' | translate }}</span>
+              </div>
+            }
+            @if (hasModifier()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</span>
+                <span class="preview-value">× {{ form.get('modifier.factor')?.value }}</span>
+              </div>
+            }
+            @if (hasCap()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</span>
+                <span class="preview-value">{{ form.get('cap.amount')?.value }}</span>
+              </div>
+            }
+            @if (hasFloor()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</span>
+                <span class="preview-value">{{ form.get('floor.amount')?.value }}</span>
+              </div>
+            }
           </div>
-          <div class="preview-section">
-            <span class="preview-label">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</span>
-            <span class="preview-value">
-              @if (rateTableType() == RateTableType.Flat) {
-                {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
-              } @else if (rateTableType() == RateTableType.Tiered) {
-                {{ 'PLANS.RATE_TABLE_TIERED' | translate }} · {{ tiersArray.length }} {{ 'PLANS.TIERS' | translate }}
-              } @else {
-                {{ 'PLANS.RATE_TABLE_ATTAINMENTBASED' | translate }} · {{ attainmentTiersArray.length }} {{ 'PLANS.TIERS' | translate }}
-              }
-            </span>
+        </aside>
+
+        @if (!isEdit && !readOnly()) {
+          <div class="immutability-notice">
+            <div class="immutability-notice__icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <div>
+              <h5 class="immutability-notice__title">{{ 'PLANS.RULE_IMMUTABILITY_TITLE' | translate }}</h5>
+              <p class="immutability-notice__body">{{ 'PLANS.RULE_IMMUTABILITY_BODY' | translate }}</p>
+            </div>
           </div>
-          @if (hasTrigger()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</span>
-              <span class="preview-value">{{ conditionsArray.length }} {{ 'PLANS.CONDITIONS' | translate }}</span>
-            </div>
-          }
-          @if (hasModifier()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</span>
-              <span class="preview-value">× {{ form.get('modifier.factor')?.value }}</span>
-            </div>
-          }
-          @if (hasCap()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</span>
-              <span class="preview-value">{{ form.get('cap.amount')?.value }}</span>
-            </div>
-          }
-          @if (hasFloor()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</span>
-              <span class="preview-value">{{ form.get('floor.amount')?.value }}</span>
-            </div>
-          }
-        </div>
-      </aside>
+        }
+      </div>
     </div>
   </div>
 </app-shell>
