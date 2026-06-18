@@ -20,6 +20,7 @@ import { PaymentConflictItem, PayoutStatus } from '../../payouts/models/payout.m
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
 import { CreditsApiService } from '../../credits/services/credits.api.service';
+import { BlockingPayRunInfo } from '../../credits/models/credit.model';
 import {
   WsButtonComponent, WsBadgeComponent, WsCardComponent, WsPageLayoutComponent,
   WsTableComponent, WsTableEmptyComponent, WsPaginationComponent, WsModalComponent,
@@ -63,7 +64,8 @@ export class PayRunDetailComponent implements OnInit {
   readonly actionError = signal<string | null>(null);
   readonly recalculating = signal(false);
   readonly recalculateError = signal<string | null>(null);
-  readonly recalculateResult = signal<{ supersededCount: number; jobCount: number } | null>(null);
+  readonly recalculateResult = signal<{ supersededCount: number; jobCount: number; deletedDraftCount: number } | null>(null);
+  readonly recalculateBlockedRuns = signal<OverlapRow[]>([]);
   readonly doublePayConflicts = signal<OverlapRow[]>([]);
   readonly deleting = signal(false);
   readonly deleteError = signal<string | null>(null);
@@ -351,16 +353,45 @@ export class PayRunDetailComponent implements OnInit {
     this.recalculating.set(true);
     this.recalculateError.set(null);
     this.recalculateResult.set(null);
+    this.recalculateBlockedRuns.set([]);
     try {
       const result = await firstValueFrom(this.creditsApi.recalculate(run.periodStart, run.periodEnd));
-      this.recalculateResult.set({ supersededCount: result.supersededCount, jobCount: result.jobIds.length });
-      await this.store.reload();
+      this.recalculateResult.set({
+        supersededCount: result.supersededCount,
+        jobCount: result.jobIds.length,
+        deletedDraftCount: result.deletedDraftCount,
+      });
+      if (result.deletedDraftCount > 0) {
+        // This draft pay run was auto-deleted — navigating keeps the user from hitting a 404 reload.
+        await this.router.navigate(['/pay-runs']);
+      } else {
+        await this.store.reload();
+      }
     } catch (err) {
-      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
-      this.recalculateError.set(apiMsg ?? 'PAY_RUNS.DETAIL.RECALCULATE_ERROR');
+      const httpErr = err as {
+        status?: number;
+        error?: { blocked?: boolean; blockingPayRuns?: BlockingPayRunInfo[]; message?: string };
+      };
+      if (httpErr.status === 409 && httpErr.error?.blocked && httpErr.error.blockingPayRuns?.length) {
+        this.recalculateBlockedRuns.set(this._blockingRunsToRows(httpErr.error.blockingPayRuns));
+      } else {
+        this.recalculateError.set(httpErr.error?.message ?? 'PAY_RUNS.DETAIL.RECALCULATE_ERROR');
+      }
     } finally {
       this.recalculating.set(false);
     }
+  }
+
+  private _blockingRunsToRows(runs: BlockingPayRunInfo[]): OverlapRow[] {
+    return runs.map(r => ({
+      id: r.payRunId,
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+      statusLabel: `PAY_RUNS.STATUS_${r.status.toUpperCase()}`,
+      statusVariant: r.status === 'Paid' ? 'success' : ('brand' as const),
+      col3: '',
+      amounts: [],
+    }));
   }
 
   async onDelete(): Promise<void> {

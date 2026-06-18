@@ -300,6 +300,29 @@
     margin: 0;
   }
 
+  &__modal-steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  &__modal-step {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: var(--font-size-13);
+    color: var(--color-text-primary);
+
+    app-icon {
+      color: var(--color-success);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+  }
+
   &__modal-irreversible {
     font-weight: 600;
     color: var(--color-warning);

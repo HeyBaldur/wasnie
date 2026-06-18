@@ -43,7 +43,11 @@ public sealed class CreditsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Recalculate([FromBody] RecalculateCreditsCommand command, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+        if (result.Value!.BlockedByPayRuns?.Count > 0)
+            return Conflict(new { blocked = true, blockingPayRuns = result.Value.BlockedByPayRuns });
+        return Ok(result.Value);
     }
 
     [HttpGet("export")]

@@ -92,27 +92,59 @@ describe('PayRunDetailComponent — recalculate credits', () => {
     fixture.detectChanges();
   });
 
-  it('should close modal, set recalculateResult, and reload on success', async () => {
-    creditsApiSpy.recalculate.and.returnValue(of({ supersededCount: 6, skippedPaidCount: 0, jobIds: ['job-1'] }));
+  it('should close modal, set recalculateResult, and reload on success (no draft deleted)', async () => {
+    creditsApiSpy.recalculate.and.returnValue(of({ supersededCount: 6, skippedPaidCount: 0, jobIds: ['job-1'], deletedDraftCount: 0 }));
 
     component.recalculateConfirmOpen.set(true);
     await component.onRecalculate();
 
     expect(creditsApiSpy.recalculate).toHaveBeenCalledWith('2026-04-01', '2026-06-30');
-    expect(component.recalculateResult()).toEqual({ supersededCount: 6, jobCount: 1 });
+    expect(component.recalculateResult()).toEqual({ supersededCount: 6, jobCount: 1, deletedDraftCount: 0 });
     expect(component.recalculateError()).toBeNull();
     expect(storeSpy.reload).toHaveBeenCalledTimes(1);
     expect(component.recalculateConfirmOpen()).toBeFalse();
     expect(component.recalculating()).toBeFalse();
   });
 
-  it('should set recalculateError and not reload on API failure', async () => {
+  it('should navigate to /pay-runs when draft pay run is auto-deleted', async () => {
+    const routerSpy = TestBed.inject(Router) as jasmine.SpyObj<Router>;
+    (routerSpy.navigate as jasmine.Spy).and.returnValue(Promise.resolve(true));
+    creditsApiSpy.recalculate.and.returnValue(of({ supersededCount: 4, skippedPaidCount: 0, jobIds: ['job-1'], deletedDraftCount: 1 }));
+
+    await component.onRecalculate();
+
+    expect(routerSpy.navigate).toHaveBeenCalledWith(['/pay-runs']);
+    expect(storeSpy.reload).not.toHaveBeenCalled();
+    expect(component.recalculating()).toBeFalse();
+  });
+
+  it('should set recalculateBlockedRuns on 409 blocked response', async () => {
+    creditsApiSpy.recalculate.and.returnValue(throwError(() => ({
+      status: 409,
+      error: {
+        blocked: true,
+        blockingPayRuns: [{ payRunId: 'run-blocked', status: 'Approved', periodStart: '2026-04-01', periodEnd: '2026-06-30' }],
+      },
+    })));
+
+    await component.onRecalculate();
+
+    expect(component.recalculateBlockedRuns().length).toBe(1);
+    expect(component.recalculateBlockedRuns()[0].id).toBe('run-blocked');
+    expect(component.recalculateError()).toBeNull();
+    expect(component.recalculateResult()).toBeNull();
+    expect(storeSpy.reload).not.toHaveBeenCalled();
+    expect(component.recalculating()).toBeFalse();
+  });
+
+  it('should set recalculateError and not reload on generic API failure', async () => {
     creditsApiSpy.recalculate.and.returnValue(throwError(() => ({ error: { message: 'SERVER_ERROR' } })));
 
     await component.onRecalculate();
 
     expect(component.recalculateError()).toBe('SERVER_ERROR');
     expect(component.recalculateResult()).toBeNull();
+    expect(component.recalculateBlockedRuns().length).toBe(0);
     expect(storeSpy.reload).not.toHaveBeenCalled();
     expect(component.recalculating()).toBeFalse();
   });

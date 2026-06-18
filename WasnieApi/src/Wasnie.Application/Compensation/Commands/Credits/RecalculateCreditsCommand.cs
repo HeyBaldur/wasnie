@@ -19,4 +19,12 @@ public sealed record RecalculateCreditsCommand(
 public sealed record RecalculateCreditsResult(
     int SupersededCount,
     int SkippedPaidCount,
-    IReadOnlyList<Guid> JobIds);
+    IReadOnlyList<Guid> JobIds,
+    int DeletedDraftCount = 0,
+    IReadOnlyList<BlockingPayRunInfo>? BlockedByPayRuns = null);
+
+public sealed record BlockingPayRunInfo(
+    Guid PayRunId,
+    string Status,
+    DateOnly PeriodStart,
+    DateOnly PeriodEnd);

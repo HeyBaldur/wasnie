@@ -113,13 +113,31 @@
       </ws-card>
     }
 
+    @if (recalculateBlockedRuns().length > 0) {
+      <app-overlap-warning
+        [rows]="recalculateBlockedRuns()"
+        [loading]="false"
+        [showTotals]="false"
+        warningKey="PAY_RUNS.DETAIL.RECALCULATE_BLOCKED_WARNING"
+        col3HeaderKey=""
+        (rowClick)="viewOverlapRun($event)"
+      />
+    }
+
     @if (recalculateResult()) {
       <ws-card variant="raised" class="pay-run-detail__info-banner">
         <app-icon name="check-circle" [size]="16" />
-        {{ 'PAY_RUNS.DETAIL.RECALCULATE_SUCCESS' | translate: {
-            count: recalculateResult()!.supersededCount,
-            jobs: recalculateResult()!.jobCount
-          } }}
+        @if (recalculateResult()!.deletedDraftCount > 0) {
+          {{ 'PAY_RUNS.DETAIL.RECALCULATE_SUCCESS_WITH_DRAFT' | translate: {
+              count: recalculateResult()!.supersededCount,
+              jobs: recalculateResult()!.jobCount
+            } }}
+        } @else {
+          {{ 'PAY_RUNS.DETAIL.RECALCULATE_SUCCESS' | translate: {
+              count: recalculateResult()!.supersededCount,
+              jobs: recalculateResult()!.jobCount
+            } }}
+        }
       </ws-card>
     }
 
@@ -539,6 +557,20 @@
           periodEnd: (store.run()?.periodEnd ?? '') | dateFormat
         } }}
     </p>
+    <ul class="pay-run-detail__modal-steps">
+      <li class="pay-run-detail__modal-step">
+        <app-icon name="check-circle" [size]="16" />
+        <span>{{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_STEP_1' | translate }}</span>
+      </li>
+      <li class="pay-run-detail__modal-step">
+        <app-icon name="check-circle" [size]="16" />
+        <span>{{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_STEP_2' | translate }}</span>
+      </li>
+      <li class="pay-run-detail__modal-step">
+        <app-icon name="check-circle" [size]="16" />
+        <span>{{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_STEP_3' | translate }}</span>
+      </li>
+    </ul>
     <p class="pay-run-detail__modal-warning">
       <app-icon name="alert-triangle" [size]="14" />
       {{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_WARNING' | translate }}

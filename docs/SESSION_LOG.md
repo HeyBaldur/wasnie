@@ -4,6 +4,40 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-18 — WI-FIX-DRAG-RECALCULATE-PAYRUN: FASEs 1–4 (pay run detection + auto-delete + UI)
+
+**Context:** After Recalculate Credits ran successfully, the existing Draft pay run kept showing stale totals (€11,115.21) because the payout was not recalculated. Owner had to manually delete the draft. Auto-deletion + blocking makes the flow safe and self-contained.
+
+**FASE 1 — Backend: pay run detection + blocking**
+- `RecalculateCreditsHandler` now queries `CompensationPayouts` (tenant + affected payees) → `PayRuns` (period overlap) BEFORE superseding any credits.
+- Approved/Paid → returns `Result.Success(blockedResult)` with `BlockedByPayRuns` populated (mirrors `PayRunsController` 409 pattern). Nothing is mutated.
+- Draft → collects IDs for FASE 2.
+- Block-all design: if any payee has an Approved/Paid run, block everything — no partial state.
+- `RecalculateCreditsResult` extended: `DeletedDraftCount` + `BlockedByPayRuns?`.
+- `CreditsController.Recalculate`: `BlockedByPayRuns.Count > 0` → HTTP 409 `{ blocked: true, blockingPayRuns: [...] }`.
+
+**FASE 2 — Backend: auto-delete Draft pay runs**
+- Dispatches `DeletePayRunDraftCommand` per draft via injected `ISender` (reuses `DeletePayRunDraftHandler` — no logic duplication).
+- Deletion after `SaveChangesAsync` (credits already superseded). Any individual delete failure is logged as Warning and does not abort the flow.
+- Audit trail: `DeletePayRunDraftHandler` logs `PAY_RUN_DRAFT_DELETED` per run; `IMoneyCriticalCommand` covers the overall recalculate operation.
+
+**FASE 3 — UI**
+- `BlockingPayRunInfo` model added to `credit.model.ts`.
+- `recalculateBlockedRuns: signal<OverlapRow[]>` — populated on HTTP 409, shown via `<app-overlap-warning>` (zero new styles).
+- `recalculateResult` extended with `deletedDraftCount`; template shows `RECALCULATE_SUCCESS_WITH_DRAFT` key when `> 0`.
+- `onRecalculate()` navigates to `/pay-runs` when `deletedDraftCount > 0` (pay run was deleted — reload would 404).
+- i18n: `RECALCULATE_SUCCESS_WITH_DRAFT` + `RECALCULATE_BLOCKED_WARNING` × EN/ES/PL.
+
+**FASE 4 — Tests**
+- 4 new integration tests in `RecalculateCreditsHandlerTests`: draft auto-deleted, Approved blocks, Paid blocks, mix blocks all.
+- `NeverCalledSender` (for no-pay-run tests) + `DirectDeletePayRunSender` (for FASE 4 tests) stubs.
+- 5 frontend specs: success-no-draft (reload), draft-deleted (navigate), 409-blocked (overlap rows), generic error, idempotency guard.
+- Backend: 616/616 unit pass. Frontend: 387/406 pass (19 pre-existing failures unchanged). Build clean.
+
+**FASE 5 (owner action):** Draft run for Apr 1–Jun 30 → click "Recalculate credits" → run auto-deleted + navigate to list → "Calculate Pay Run" → verify Adrian €11,951.62.
+
+---
+
 ## 2026-06-18 — WI-FIX-DRAG-CALCULATION: FASEs 1–4 (F-2 + F-4)
 
 **Root causes fixed:**

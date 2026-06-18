@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Commands.Credits;
+using Wasnie.Application.Compensation.Commands.PayRuns;
 using Wasnie.Application.Models.Calculation;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
@@ -15,7 +17,9 @@ public sealed class RecalculateCreditsHandler(
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
     IAuthorizationService authorizationService,
-    IBackgroundJobService backgroundJobService)
+    IBackgroundJobService backgroundJobService,
+    ISender sender,
+    ILogger<RecalculateCreditsHandler> logger)
     : IRequestHandler<RecalculateCreditsCommand, Result<RecalculateCreditsResult>>
 {
     public async Task<Result<RecalculateCreditsResult>> Handle(
@@ -28,7 +32,6 @@ public sealed class RecalculateCreditsHandler(
         var userId = currentUser.UserId ?? "system";
 
         // Load non-superseded, non-consumed credits whose transaction falls in the period.
-        // Join via transaction date since Credit has no direct date field.
         var transactionIdsInPeriod = await db.CompensationTransactions
             .Where(t => t.TenantId == tenantId
                      && t.TransactionDate >= request.PeriodStart
@@ -66,10 +69,62 @@ public sealed class RecalculateCreditsHandler(
             .ToHashSet();
 
         int skippedPaidCount = transactions.Count - processableTransactionIds.Count;
-        int supersededCount = 0;
-        var affectedPayeeIds = new HashSet<Guid>();
+
+        // Build affected payee set before touching anything — needed for pay run detection.
+        var affectedPayeeIds = transactions
+            .Where(t => processableTransactionIds.Contains(t.Id) && t.PayeeId.HasValue)
+            .Select(t => t.PayeeId!.Value)
+            .ToHashSet();
+
+        // LÍNEA ROJA: detect pay runs covering affected payees in the period.
+        // Block entirely if any are Approved or Paid. Draft runs are auto-deleted before
+        // regenerating credits so they don't surface stale totals after recalculation.
+        var draftRunIds = new List<Guid>();
+        if (affectedPayeeIds.Count > 0)
+        {
+            var affectedPayeeIdsList = affectedPayeeIds.ToList();
+
+            var payRunIdsForAffectedPayees = await db.CompensationPayouts
+                .Where(p => p.TenantId == tenantId
+                         && p.PayRunId.HasValue
+                         && affectedPayeeIdsList.Contains(p.PayeeId))
+                .Select(p => p.PayRunId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            if (payRunIdsForAffectedPayees.Count > 0)
+            {
+                var affectingPayRuns = await db.PayRuns
+                    .Where(r => payRunIdsForAffectedPayees.Contains(r.Id)
+                             && r.PeriodStart <= request.PeriodEnd
+                             && r.PeriodEnd >= request.PeriodStart)
+                    .Select(r => new { r.Id, r.Status, r.PeriodStart, r.PeriodEnd })
+                    .ToListAsync(cancellationToken);
+
+                var blockedRuns = affectingPayRuns
+                    .Where(r => r.Status == PayRunStatus.Approved || r.Status == PayRunStatus.Paid)
+                    .Select(r => new BlockingPayRunInfo(r.Id, r.Status.ToString(), r.PeriodStart, r.PeriodEnd))
+                    .ToList();
+
+                if (blockedRuns.Count > 0)
+                {
+                    logger.LogWarning(
+                        "RecalculateCredits blocked: {Count} Approved/Paid pay run(s) cover period {Start}/{End}.",
+                        blockedRuns.Count, request.PeriodStart, request.PeriodEnd);
+
+                    return Result<RecalculateCreditsResult>.Success(
+                        new RecalculateCreditsResult(0, skippedPaidCount, [], 0, blockedRuns));
+                }
+
+                draftRunIds = affectingPayRuns
+                    .Where(r => r.Status == PayRunStatus.Draft)
+                    .Select(r => r.Id)
+                    .ToList();
+            }
+        }
 
         // Supersede credits for processable transactions only
+        int supersededCount = 0;
         var supersededReason = $"Recalculate by {userId} at {now:yyyy-MM-ddTHH:mm:ssZ}";
         foreach (var credit in credits)
         {
@@ -88,12 +143,28 @@ public sealed class RecalculateCreditsHandler(
 
             if (tx.Status == CompensationTransactionStatus.Calculated)
                 tx.RevertCalculatedToPending(userId, now);
-
-            if (tx.PayeeId.HasValue)
-                affectedPayeeIds.Add(tx.PayeeId.Value);
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // Auto-delete Draft pay runs via existing DeletePayRunDraftHandler (reuse, no duplication).
+        // Deletion happens after credits are superseded and reverted — stale data is already gone
+        // before the pay run disappears. Any deletion failure is logged but doesn't abort the flow.
+        int deletedDraftCount = 0;
+        foreach (var draftRunId in draftRunIds)
+        {
+            logger.LogInformation(
+                "RecalculateCredits: auto-deleting Draft PayRun {PayRunId} (period {Start}/{End}).",
+                draftRunId, request.PeriodStart, request.PeriodEnd);
+
+            var deleteResult = await sender.Send(new DeletePayRunDraftCommand(draftRunId), cancellationToken);
+            if (deleteResult.IsSuccess)
+                deletedDraftCount++;
+            else
+                logger.LogWarning(
+                    "RecalculateCredits: auto-delete of Draft PayRun {PayRunId} failed: {Error}",
+                    draftRunId, deleteResult.Error);
+        }
 
         // Enqueue one ProcessPending job per affected payee so chronological ordering runs fresh
         var jobIds = new List<Guid>();
@@ -117,6 +188,6 @@ public sealed class RecalculateCreditsHandler(
         request.AuditResourceId = $"Period:{request.PeriodStart:yyyy-MM-dd}/{request.PeriodEnd:yyyy-MM-dd}";
 
         return Result<RecalculateCreditsResult>.Success(
-            new RecalculateCreditsResult(supersededCount, skippedPaidCount, jobIds));
+            new RecalculateCreditsResult(supersededCount, skippedPaidCount, jobIds, deletedDraftCount));
     }
 }
