@@ -48,6 +48,7 @@ function makeApiRule(overrides: Partial<Rule> = {}): Rule {
       flatRate: 0.05,
       tiers: null,
       attainmentTiers: null,
+      splitAtQuota: false,
     },
     ...overrides,
   };
@@ -235,6 +236,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
           { from: 500, to: null, rate: 0.05 },
         ],
         attainmentTiers: null,
+        splitAtQuota: false,
       },
     });
     configureModule(makePlan(tieredRule));
@@ -258,6 +260,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
           { from: 500, to: null, rate: 0.05 },
         ],
         attainmentTiers: null,
+        splitAtQuota: false,
       },
     });
     configureModule(makePlan(tieredRule));
@@ -287,6 +290,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
           { attainmentFrom: 0, attainmentTo: 0.8, rate: 0.02 },
           { attainmentFrom: 0.8, attainmentTo: null, rate: 0.05 },
         ],
+        splitAtQuota: false,
       },
     });
     configureModule(makePlan(attRule));
@@ -310,6 +314,7 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
           { attainmentFrom: 0, attainmentTo: 0.8, rate: 0.02 },
           { attainmentFrom: 0.8, attainmentTo: null, rate: 0.05 },
         ],
+        splitAtQuota: false,
       },
     });
     configureModule(makePlan(attRule));
@@ -367,5 +372,44 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     tick();
 
     expect(comp.form.get('cap.scope')?.value).toBe(CapScope.PerPeriod);
+  }));
+
+  // -------------------------------------------------------------------------
+  // splitAtQuota hydration and serialization
+  // -------------------------------------------------------------------------
+
+  it('splitAtQuota defaults to false when loading a Flat rule', fakeAsync(() => {
+    configureModule(makePlan(makeApiRule()));
+    const fixture = TestBed.createComponent(RuleFormComponent);
+    const comp = fixture.componentInstance;
+
+    comp.ngOnInit();
+    tick();
+
+    expect(comp.form.get('rateTable.splitAtQuota')?.value).toBe(false);
+  }));
+
+  it('splitAtQuota is populated from API value true when loading an AttainmentBased rule', fakeAsync(() => {
+    const splitRule = makeApiRule({
+      rateTable: {
+        _schema: 1 as const,
+        type: 'AttainmentBased' as unknown as RateTableType,
+        flatRate: null,
+        tiers: null,
+        attainmentTiers: [
+          { attainmentFrom: 0, attainmentTo: 1.0, rate: 0.04 },
+          { attainmentFrom: 1.0, attainmentTo: null, rate: 0.07 },
+        ],
+        splitAtQuota: true,
+      },
+    });
+    configureModule(makePlan(splitRule));
+    const fixture = TestBed.createComponent(RuleFormComponent);
+    const comp = fixture.componentInstance;
+
+    comp.ngOnInit();
+    tick();
+
+    expect(comp.form.get('rateTable.splitAtQuota')?.value).toBe(true);
   }));
 });

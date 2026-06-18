@@ -1,11 +1,11 @@
 import {
-  Component, computed, effect, inject, OnInit, signal, DestroyRef, untracked, viewChild,
+  Component, computed, inject, OnInit, signal, DestroyRef,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { distinctUntilChanged, map, switchMap, takeWhile } from 'rxjs/operators';
-import { firstValueFrom, interval } from 'rxjs';
+import { distinctUntilChanged, map } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -17,9 +17,6 @@ import { PlansApiService } from '../../plans/services/plans.api.service';
 import { PayoutsApiService } from '../services/payouts.api.service';
 import { PayoutsStore, PayoutFilter, EMPTY_PAYOUT_FILTER } from '../state/payouts.store';
 import { PayoutStatus } from '../models/payout.model';
-import { WsDatePickerComponent as DatePickerRef } from '../../../shared/ui/ws-date-picker/ws-date-picker.component';
-import { PayoutJobStatus } from '../services/payouts.api.service';
-import { CalculateJobResult } from '../models/payout.model';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -62,12 +59,7 @@ export class PayoutsListComponent implements OnInit {
   private readonly plansApi = inject(PlansApiService);
   private readonly destroyRef = inject(DestroyRef);
 
-  // Period picker mutual exclusion — closing one when the other opens
-  private readonly _startPicker = viewChild<DatePickerRef>('startPicker');
-  private readonly _endPicker = viewChild<DatePickerRef>('endPicker');
-
   readonly filterOpen = signal(false);
-  readonly calculateModalOpen = signal(false);
   readonly bulkApproveConfirmOpen = signal(false);
   readonly bulkApproving = signal(false);
   readonly bulkMarkPaidConfirmOpen = signal(false);
@@ -76,11 +68,6 @@ export class PayoutsListComponent implements OnInit {
   readonly bulkMarkPaidCount = signal(0);
   readonly bulkOverlapCount = signal(0);
   readonly bulkOverlapsLoading = signal(false);
-  readonly calculating = signal(false);
-  readonly calculatePhase = signal<'form' | 'running' | 'done'>('form');
-  readonly calculateResult = signal<CalculateJobResult | null>(null);
-  readonly calculateError = signal<string | null>(null);
-
   readonly activePeriod = signal<PeriodKey>('this-month');
   readonly hideZero = signal(true);
 
@@ -90,19 +77,6 @@ export class PayoutsListComponent implements OnInit {
     { value: 'ytd',        label: 'PAYOUTS.FILTER.PERIOD_YTD' },
     { value: 'all-time',   label: 'PAYOUTS.FILTER.PERIOD_ALL_TIME' },
   ];
-
-  constructor() {
-    effect(() => {
-      const start = this._startPicker();
-      const end = this._endPicker();
-      if (start?.isOpen()) untracked(() => end?.close());
-    });
-    effect(() => {
-      const start = this._startPicker();
-      const end = this._endPicker();
-      if (end?.isOpen()) untracked(() => start?.close());
-    });
-  }
 
   private readonly _payeeCache = new Map<string, string>();
   private readonly _planCache = new Map<string, string>();
@@ -135,12 +109,6 @@ export class PayoutsListComponent implements OnInit {
     payeeSearch: new FormControl<string | number>('', { nonNullable: true }),
     planSearch: new FormControl<string | number>('', { nonNullable: true }),
     currencySearch: new FormControl<string | number>('', { nonNullable: true }),
-  });
-
-  readonly calculateForm = new FormGroup({
-    periodStart: new FormControl<string | null>(null),
-    periodEnd: new FormControl<string | null>(null),
-    payeeFilter: new FormControl<string | number>('', { nonNullable: true }),
   });
 
   readonly payeeSearchFn = (q: string) =>
@@ -449,69 +417,6 @@ export class PayoutsListComponent implements OnInit {
     } finally {
       this.bulkApproving.set(false);
     }
-  }
-
-  async onCalculate(): Promise<void> {
-    const { periodStart, periodEnd, payeeFilter } = this.calculateForm.value;
-    if (!periodStart || !periodEnd || this.calculating()) return;
-    this.calculating.set(true);
-    this.calculateError.set(null);
-    this.calculateResult.set(null);
-    try {
-      const { jobId } = await firstValueFrom(this.api.calculate({
-        periodStart,
-        periodEnd,
-        payeeIdFilter: payeeFilter ? String(payeeFilter) : null,
-      }));
-      this.calculatePhase.set('running');
-      this._pollJob(jobId);
-    } catch {
-      this.calculateError.set('PAYOUTS.CALCULATE_ERROR');
-      this.calculating.set(false);
-    }
-  }
-
-  private _pollJob(jobId: string): void {
-    interval(2000).pipe(
-      switchMap(() => this.api.getJobStatus(jobId)),
-      takeWhile(s => s.state === 'Pending' || s.state === 'Running', /* inclusive */ true),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe({
-      next: (status: PayoutJobStatus) => {
-        if (status.state === 'Succeeded') {
-          this._onJobDone(status);
-        } else if (status.state === 'Failed' || status.state === 'Cancelled') {
-          this.calculateError.set(status.errorMessage ?? 'PAYOUTS.CALCULATE_ERROR');
-          this.calculatePhase.set('form');
-          this.calculating.set(false);
-        }
-      },
-      error: () => {
-        this.calculateError.set('PAYOUTS.CALCULATE_ERROR');
-        this.calculatePhase.set('form');
-        this.calculating.set(false);
-      },
-    });
-  }
-
-  private _onJobDone(status: PayoutJobStatus): void {
-    let result: CalculateJobResult = { payoutsCreated: 0, conflicts: [], warnings: [] };
-    if (status.resultSummary) {
-      try { result = JSON.parse(status.resultSummary) as CalculateJobResult; } catch { /* keep default */ }
-    }
-    this.calculateResult.set(result);
-    this.calculatePhase.set('done');
-    this.calculating.set(false);
-    this.store.reload();
-  }
-
-  closeCalculateModal(): void {
-    const wasDone = this.calculatePhase() === 'done';
-    this.calculateModalOpen.set(false);
-    this.calculatePhase.set('form');
-    this.calculateResult.set(null);
-    this.calculateError.set(null);
-    if (wasDone) this.calculateForm.reset();
   }
 
   statusBadge(status: PayoutStatus): BadgeVariant {

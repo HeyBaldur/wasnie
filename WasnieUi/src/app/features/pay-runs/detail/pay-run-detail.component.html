@@ -26,6 +26,15 @@
           {{ 'PAY_RUNS.DELETE_DRAFT' | translate }}
         </ws-button>
         <ws-button
+          *hasPermission="'Credits.Recalculate'"
+          variant="secondary"
+          [disabled]="recalculating() || actioning()"
+          [loading]="recalculating()"
+          (click)="recalculateConfirmOpen.set(true)"
+        >
+          {{ 'PAY_RUNS.DETAIL.RECALCULATE_BTN' | translate }}
+        </ws-button>
+        <ws-button
           *hasPermission="'Payouts.Approve'"
           variant="primary"
           [disabled]="actioning()"
@@ -94,6 +103,23 @@
       <ws-card variant="raised" class="pay-run-detail__error-banner">
         <app-icon name="alert-circle" [size]="16" />
         {{ deleteError()! | translate }}
+      </ws-card>
+    }
+
+    @if (recalculateError()) {
+      <ws-card variant="raised" class="pay-run-detail__error-banner">
+        <app-icon name="alert-circle" [size]="16" />
+        {{ recalculateError()! | translate }}
+      </ws-card>
+    }
+
+    @if (recalculateResult()) {
+      <ws-card variant="raised" class="pay-run-detail__info-banner">
+        <app-icon name="check-circle" [size]="16" />
+        {{ 'PAY_RUNS.DETAIL.RECALCULATE_SUCCESS' | translate: {
+            count: recalculateResult()!.supersededCount,
+            jobs: recalculateResult()!.jobCount
+          } }}
       </ws-card>
     }
 
@@ -495,6 +521,35 @@
     </ws-button>
     <ws-button variant="secondary" [disabled]="actioning()" [loading]="actioning()" (click)="onReopen()">
       {{ 'PAY_RUNS.DETAIL.REOPEN_CONFIRM_BTN' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- Recalculate credits modal -->
+<ws-modal
+  [isOpen]="recalculateConfirmOpen()"
+  (isOpenChange)="recalculateConfirmOpen.set($event)"
+  [title]="'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_TITLE' | translate"
+  [closable]="!recalculating()"
+>
+  <div class="pay-run-detail__modal-body">
+    <p class="pay-run-detail__modal-intro">
+      {{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_BODY' | translate: {
+          periodStart: (store.run()?.periodStart ?? '') | dateFormat,
+          periodEnd: (store.run()?.periodEnd ?? '') | dateFormat
+        } }}
+    </p>
+    <p class="pay-run-detail__modal-warning">
+      <app-icon name="alert-triangle" [size]="14" />
+      {{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_WARNING' | translate }}
+    </p>
+  </div>
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="recalculating()" (click)="recalculateConfirmOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="secondary" [disabled]="recalculating()" [loading]="recalculating()" (click)="onRecalculate()">
+      {{ 'PAY_RUNS.DETAIL.RECALCULATE_CONFIRM_BTN' | translate }}
     </ws-button>
   </ng-container>
 </ws-modal>

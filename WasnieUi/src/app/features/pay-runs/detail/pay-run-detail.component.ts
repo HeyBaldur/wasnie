@@ -19,6 +19,7 @@ import { OverlappingPayRun, PayRunStatus } from '../models/pay-run.model';
 import { PaymentConflictItem, PayoutStatus } from '../../payouts/models/payout.model';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
+import { CreditsApiService } from '../../credits/services/credits.api.service';
 import {
   WsButtonComponent, WsBadgeComponent, WsCardComponent, WsPageLayoutComponent,
   WsTableComponent, WsTableEmptyComponent, WsPaginationComponent, WsModalComponent,
@@ -44,6 +45,7 @@ import {
 export class PayRunDetailComponent implements OnInit {
   readonly store = inject(PayRunDetailStore);
   private readonly api = inject(PayRunsApiService);
+  private readonly creditsApi = inject(CreditsApiService);
   private readonly payeesApi = inject(PayeesApiService);
   private readonly plansApi = inject(PlansApiService);
   private readonly route = inject(ActivatedRoute);
@@ -56,8 +58,12 @@ export class PayRunDetailComponent implements OnInit {
   readonly markPaidConfirmOpen = signal(false);
   readonly reopenConfirmOpen = signal(false);
   readonly deleteConfirmOpen = signal(false);
+  readonly recalculateConfirmOpen = signal(false);
   readonly actioning = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly recalculating = signal(false);
+  readonly recalculateError = signal<string | null>(null);
+  readonly recalculateResult = signal<{ supersededCount: number; jobCount: number } | null>(null);
   readonly doublePayConflicts = signal<OverlapRow[]>([]);
   readonly deleting = signal(false);
   readonly deleteError = signal<string | null>(null);
@@ -334,6 +340,26 @@ export class PayRunDetailComponent implements OnInit {
       this.actionError.set(apiMsg ?? 'PAY_RUNS.DETAIL.REOPEN_ERROR');
     } finally {
       this.actioning.set(false);
+    }
+  }
+
+  async onRecalculate(): Promise<void> {
+    if (this.recalculating()) return;
+    const run = this.store.run();
+    if (!run) return;
+    this.recalculateConfirmOpen.set(false);
+    this.recalculating.set(true);
+    this.recalculateError.set(null);
+    this.recalculateResult.set(null);
+    try {
+      const result = await firstValueFrom(this.creditsApi.recalculate(run.periodStart, run.periodEnd));
+      this.recalculateResult.set({ supersededCount: result.supersededCount, jobCount: result.jobIds.length });
+      await this.store.reload();
+    } catch (err) {
+      const apiMsg = (err as { error?: { message?: string } })?.error?.message;
+      this.recalculateError.set(apiMsg ?? 'PAY_RUNS.DETAIL.RECALCULATE_ERROR');
+    } finally {
+      this.recalculating.set(false);
     }
   }
 

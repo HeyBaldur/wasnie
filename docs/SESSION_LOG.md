@@ -4,6 +4,105 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-18 — WI-FIX-DRAG-CALCULATION: FASEs 1–4 (F-2 + F-4)
+
+**Root causes fixed:**
+- **F-4 (ordering):** `ProcessPendingTransactionsJobHandler` all 3 load methods processed transactions in SQL insertion order. `PriorCumulative` accumulated in wrong order → split-at-quota gave wrong per-tx amounts. Fix: `OrderBy(t => t.TransactionDate).ThenBy(t => t.Id)` on `LoadByAssignmentAsync`, `LoadByPlanAsync` (via intermediate list), `LoadByPayeeAndPeriodAsync`.
+- **F-2 (recalculate):** `CalculatePayoutsForPeriodHandler` only aggregates existing non-superseded credits. Toggling `splitAtQuota` and re-running pay run calculation has no effect on stale credits. New "Recalculate Credits" operation fills the gap.
+
+**FASE 1 — F-4 ordering fix** (3 load methods, backend)
+
+**FASE 2 — Domain method** `CompensationTransaction.RevertCalculatedToPending(updatedBy, now)`: transitions Calculated→Pending. Guards: throws on Paid (anti-double-pay) and Cancelled (terminal). 4 unit tests.
+
+**FASE 3 — RecalculateCredits (backend):**
+- `Permission.CreditsRecalculate` + `RolePermissions` (TenantAdmin + CompManager)
+- `AuditActions.CreditsRecalculated`, `ResourceTypes.Credit` (new)
+- `RecalculateCreditsCommand` + `RecalculateCreditsHandler`: loads non-superseded + non-consumed credits for period; skips Paid/Cancelled transactions; supersedes credits; reverts Calculated→Pending; enqueues one `ByPayeeAndPeriod` job per affected payee. Audit trail via `IMoneyCriticalCommand`.
+- `POST /api/credits/recalculate` added to `CreditsController`
+- 3 integration tests: happy path (2 credits superseded, 2 txs reverted, 1 job), consumed-credit guard, Paid-tx guard
+
+**FASE 4 — UI:**
+- "Recalculate credits" button (Draft only, `*hasPermission="'Credits.Recalculate'"`) in pay-run-detail header actions
+- `WsModal` confirmation with body explaining 2-step flow + irreversibility warning, Cancel + Recalculate buttons
+- Success banner showing superseded count + jobs queued; error banner on failure
+- `CreditsApiService.recalculate(periodStart, periodEnd)` + `RecalculateCreditsResult` model
+- i18n: 8 new keys in `PAY_RUNS.DETAIL` × EN/ES/PL
+- `pay-run-detail.component.spec.ts` (new): 3 tests — success closes modal + sets result + reloads, API error sets error signal, idempotency guard when already recalculating
+
+**Tests:** Backend 46/46 pay-runs specs. Frontend 46/46. `ng build --configuration production` clean.
+
+**FASE 5 (owner action):** EU Accelerator rule → toggle `splitAtQuota` ON + save → "Recalculate credits" on Apr 1–Jun 30 Draft run → wait for jobs → "Calculate Pay Run". Expected: Adrian €11,951.62.
+
+---
+
+## 2026-06-18 — WI-FIX: Persist splitAtQuota end-to-end (frontend → API → DB) + integration tests
+
+**Root cause (diagnosed in prior session):** The backend split-at-quota dispatch code (added in WI-FIX-MOTOR-ATTAINMENT) was correct, but the frontend `RateTable` TypeScript interface never included the `splitAtQuota` field. Every save from the rule-form emitted JSON without the field → EF Core deserialized `SplitAtQuota=false` → `BuildCreditsAsync` always chose the bracket path → Adrian's Q2 pay run showed €11,115.21 (all at 4%) instead of €11,951.62 (split at quota boundary).
+
+**FASE 1 — Frontend:**
+- `rule.model.ts`: added `splitAtQuota: boolean` to `RateTable` interface
+- `rule-form.component.ts`: added `splitAtQuota: [false]` FormControl; hydrated in `_loadExistingRule()` via patchValue; emitted in `_buildRateTable()` (only for AttainmentBased type, `false` for all others)
+- `rule-form.component.html`: added toggle switch inside `@if (rateTableType() == RateTableType.AttainmentBased)` block with `collapsible-header` pattern, tooltip via `wsTooltip`, read-only guard
+- `en.json` / `es.json` / `pl.json`: added `FIELD_SPLIT_AT_QUOTA` + `TOOLTIP_SPLIT_AT_QUOTA` under `PLANS` namespace (all three locales complete)
+- `rule-form.component.spec.ts`: updated all inline `rateTable` objects to include `splitAtQuota`; added 2 new tests (`splitAtQuota defaults to false when loading a Flat rule`, `splitAtQuota is populated from API value true when loading an AttainmentBased rule`)
+
+**FASE 2 — API:** No changes needed. `CompensationMapper.ToRuleDto` passes `rule.RateTable` as `object` directly; ASP.NET Core Web defaults (camelCase, case-insensitive) deserialize `splitAtQuota` correctly on POST/PUT.
+
+**FASE 3 — Data patch (owner action required):** Owner must open the "EU Accelerator Q2 2026" plan rule in the UI, activate the "Split commission at quota" toggle, and save. Then delete and recalculate the Apr 1–Jun 30 pay run. Expected results: Adrian €11,951.62 · Stefano €5,820.06 · Agnieszka €5,219.84 · Daan €3,363.33 · Birgit €1,960.46 · Camille €1,640.66.
+
+**FASE 4 — Backend integration tests:**
+- `StubQuotaAttainmentService.cs`: added optional `AttainmentSplitContext? splitContext = null` constructor parameter; `GetSplitContextAsync` now returns `_splitContext` instead of hardcoded `null`; backward-compatible (all existing callers unaffected)
+- `CreditAllocationServiceTests.cs`: added 4 new integration tests:
+  1. `AllocateAsync_SplitAtQuota_FlagSurvivesEfCoreRoundTrip` — EF Core JSON round-trip preserves `SplitAtQuota=true`
+  2. `AllocateAsync_SplitAtQuota_DispatchCallsGetSplitContext_NotComputeAsync` — stub split path; tx below quota → €4,000 (4%); `ComputeAsync.CallCount=0`
+  3. `AllocateAsync_SplitAtQuota_CasoAdrian_CommissionSplitsAtQuotaBoundary` — real `QuotaAttainmentService`; quota €250k; tx €277,880.25 → commission €11,951.6175
+  4. `AllocateAsync_SplitAtQuota_NoQuota_ReturnsZeroCommission` — no quota seeded → Phase 5 guard → €0
+
+**Tests:**
+- Backend unit: 612/612 pass (Release build, no regressions)
+- Backend integration: 4 new tests compile clean; all `CreditAllocationServiceTests` require Docker (Docker not running on this machine — pre-existing condition, not a regression)
+- Frontend spec: 15/15 pass (`rule-form.component.spec.ts` — 13 existing + 2 new)
+- `ng build --configuration production` clean (only pre-existing CommonJS warnings from `qrcode`)
+
+**Deferred:** FASE 3 owner action (edit rule in UI + recalculate pay run). Integration tests require Docker to execute.
+
+---
+
+## 2026-06-17 — WI-FIX-MOTOR-ATTAINMENT: EU Accelerator Tier 2 commission never applied — fix split-at-quota algorithm + data
+
+**Root cause (three-layer bug):**
+1. **Data:** Adrian had Apr €190k + Jun €10k monthly quotas instead of a single Q2 €250k quota. The other 5 EU Accelerator reps had zero Q2 quotas.
+2. **Algorithm (bracket-lookup):** `ComputeAttainmentCommission` applied one tier's rate to the full transaction amount. With a €250k quota and cumulative revenue near the boundary, the entire transaction was taxed at Tier 1 (4%) even if revenue crossed into Tier 2 (7%).
+3. **Algorithm (attainment ratio):** The look-back context was being converted to a ratio (`ComputeAsync`) and used to select a bracket, rather than being passed as an absolute `PriorCumulative` value for boundary splitting.
+
+**Changes — backend:**
+- `RateTable.cs`: new `SplitAtQuota: bool` property; `AttainmentBased` factory gains `splitAtQuota = false` parameter (backward-compatible)
+- `IQuotaAttainmentService.cs`: new `AttainmentSplitContext` record `(PriorCumulative, QuotaTarget)`; new `GetSplitContextAsync` method
+- `QuotaAttainmentService.cs`: `GetSplitContextAsync` implementation — queries active quota, filters by period in-memory (EF DateOnly workaround), resolves narrowest quota, calls `ComputeRevenueAchievedAsync` for `PriorCumulative`
+- `CommissionCalculator.cs`: new `ComputeAttainmentSplitCommission` method — iterates tiers, computes overlap of tx interval `[prior, prior+amount]` with tier interval `[from*quota, to*quota]`, sums
+- `CreditAllocationService.cs`: `BuildCreditsAsync` now queries both split and bracket contexts as needed; per-rule dispatch; Phase 5 guard: null split context → zero commission + `LogWarning`
+- `StubQuotaAttainmentService.cs`: added `GetSplitContextAsync` stub returning `null`
+- **DB (SQL Server, WasnieDb):** EU Accelerator rule `9edea449` updated to `"splitAtQuota":true`; Adrian's wrong quotas deleted (Apr €190k + Jun €10k); 6 Q2 2026 quotas inserted for all 6 reps (Apr 1–Jun 30, Status=Active, MeasurementType=0/Revenue, EUR)
+
+**Changes — frontend (Phase 4):**
+- `payouts-list.component.html`: "Calculate Payouts" button + calculate modal removed
+- `payouts-list.component.ts`: all calculate-related signals (`calculateModalOpen`, `calculating`, `calculatePhase`, `calculateResult`, `calculateError`), `calculateForm`, `_startPicker`/`_endPicker` viewChild refs, constructor effects, `onCalculate`, `_pollJob`, `_onJobDone`, `closeCalculateModal` methods removed; dead imports removed (`WsDatePickerComponent`, `PayoutJobStatus`, `CalculateJobResult`, `interval`, `switchMap`, `takeWhile`, `untracked`, `effect`, `viewChild`)
+- `payouts-list.component.spec.ts`: "poll-loop regression" `describe` block removed (3 tests) — feature no longer exists
+
+**Spec fixes (pre-existing mismatches):**
+- `payouts.store.spec.ts`: `pageSize` default assertion corrected from 25 to 10
+- `pay-runs.store.spec.ts`: same correction
+- `pay-run-detail.store.spec.ts`: `getById` call assertion corrected from `pageSize=25` to `pageSize=10`
+
+**Tests:**
+- Backend unit: 612 pass (10 new split-at-quota tests including mandatory caso Adrian)
+- Frontend: 399 total, 380 pass, 19 pre-existing failures (ProcessPendingComponent ×5, SubscriptionReactivation ×14)
+- `ng build --configuration production` clean
+
+**Deferred:** Backend `POST /api/payouts/calculate` endpoint kept (only UI button removed per WI scope).
+
+---
+
 ## 2026-06-17 — WI-DASHBOARD-PENDING-LABEL: Fix "ProcessPending" + global-scope note
 
 **Root cause:** `PENDING_BY_PLAN_DESC` in all three i18n locales contained the literal string `"ProcessPending"` — the i18n key name for the Process Pending feature accidentally leaked into the translation value. Also, the section shows all-time global totals regardless of the date filter, but nothing in the UI communicated this, causing user confusion when the number didn't change on filter switch.

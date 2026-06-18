@@ -81,7 +81,7 @@ describe('PayRunDetailStore', () => {
     await store.load('run-abc');
 
     expect(apiSpy.getById).toHaveBeenCalledOnceWith(
-      'run-abc', EMPTY_PAYOUTS_DETAIL_FILTER, 1, 25
+      'run-abc', EMPTY_PAYOUTS_DETAIL_FILTER, 1, 10
     );
   });
 

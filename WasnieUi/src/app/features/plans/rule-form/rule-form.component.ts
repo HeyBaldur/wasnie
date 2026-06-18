@@ -120,6 +120,7 @@ export class RuleFormComponent implements OnInit {
       flatRate: [0.05],
       tiers: this.fb.array<FormGroup>([]),
       attainmentTiers: this.fb.array<FormGroup>([]),
+      splitAtQuota: [false],
     }),
     hasTrigger: [false],
     trigger: this.fb.nonNullable.group({
@@ -220,6 +221,7 @@ export class RuleFormComponent implements OnInit {
       rateTable: {
         type: rateTableTypeNum,
         flatRate: rule.rateTable.flatRate ?? 0.05,
+        splitAtQuota: rule.rateTable.splitAtQuota ?? false,
       },
       hasTrigger: !!rule.trigger,
       hasModifier: !!rule.modifier,
@@ -386,6 +388,7 @@ export class RuleFormComponent implements OnInit {
       attainmentTiers: type === RateTableType.AttainmentBased
         ? v.rateTable.attainmentTiers.map((t) => ({ attainmentFrom: t['attainmentFrom'], attainmentTo: t['attainmentTo'], rate: t['rate'] }))
         : null,
+      splitAtQuota: type === RateTableType.AttainmentBased ? (v.rateTable.splitAtQuota ?? false) : false,
     };
   }
 

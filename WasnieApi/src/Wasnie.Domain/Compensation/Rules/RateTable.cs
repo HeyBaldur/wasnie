@@ -36,13 +36,21 @@ public sealed class RateTable
         return new() { Type = RateTableType.Tiered, Tiers = tiers };
     }
 
-    public static RateTable AttainmentBased(IReadOnlyList<AttainmentTier> tiers)
+    /// <summary>
+    /// When true, commission is split at the quota boundary: the revenue portion up to quota
+    /// earns the rate of the tier that contains it, and the excess above quota earns the rate
+    /// of the next tier. When false (default), the classic bracket-lookup applies: the entire
+    /// transaction amount earns the single rate of whichever tier the overall attainment falls in.
+    /// </summary>
+    public bool SplitAtQuota { get; init; }
+
+    public static RateTable AttainmentBased(IReadOnlyList<AttainmentTier> tiers, bool splitAtQuota = false)
     {
         if (tiers.Count == 0)
         {
             throw new DomainException("Attainment-based rate table must have at least one tier.");
         }
 
-        return new() { Type = RateTableType.AttainmentBased, AttainmentTiers = tiers };
+        return new() { Type = RateTableType.AttainmentBased, AttainmentTiers = tiers, SplitAtQuota = splitAtQuota };
     }
 }

@@ -159,14 +159,30 @@ public sealed class CreditAllocationService : ICreditAllocationService
         var txDate = transaction.TransactionDate;
         var credits = new List<Credit>();
 
-        // Short-circuit: only call ComputeAsync when at least one active rule uses attainment.
-        // This avoids a DB round-trip for Flat/Tiered plans (the common case).
-        var attainmentPct = 1.0m; // default — only used when PlanUsesAttainment is true
+        // Short-circuit: only load attainment data when at least one active rule needs it.
+        // This avoids DB round-trips for Flat/Tiered plans (the common case).
+        var attainmentPct = 1.0m;     // bracket-lookup path (SplitAtQuota = false)
+        AttainmentSplitContext? splitContext = null; // split-at-quota path (SplitAtQuota = true)
+
         if (CommissionCalculator.PlanUsesAttainment(plan))
         {
-            var attainment = await _quotaAttainmentService.ComputeAsync(
-                transaction.PayeeId!.Value, plan.Id, txDate, ct);
-            attainmentPct = attainment.Value;
+            var needsBracket = plan.Rules.Any(r =>
+                r.IsActive && r.RateTable.Type == RateTableType.AttainmentBased && !r.RateTable.SplitAtQuota);
+            var needsSplit = plan.Rules.Any(r =>
+                r.IsActive && r.RateTable.Type == RateTableType.AttainmentBased && r.RateTable.SplitAtQuota);
+
+            if (needsBracket)
+            {
+                var attainment = await _quotaAttainmentService.ComputeAsync(
+                    transaction.PayeeId!.Value, plan.Id, txDate, ct);
+                attainmentPct = attainment.Value;
+            }
+
+            if (needsSplit)
+            {
+                splitContext = await _quotaAttainmentService.GetSplitContextAsync(
+                    transaction.PayeeId!.Value, plan.Id, txDate, ct);
+            }
         }
 
         // Decision #41: filter rules by EffectivePeriod at runtime.
@@ -183,7 +199,30 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 continue;
 
             var baseAmount = transaction.Amount;
-            var commissionAmount = CommissionCalculator.ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
+
+            Money commissionAmount;
+            if (rule.RateTable.Type == RateTableType.AttainmentBased && rule.RateTable.SplitAtQuota)
+            {
+                if (splitContext is null)
+                {
+                    // Phase 5 guard: no quota configured for this rep → zero commission.
+                    _logger.LogWarning(
+                        "Split-at-quota: no active quota for payee={PayeeId}, plan={PlanId}, date={Date}. " +
+                        "Commission set to zero. Configure a quota to earn commission under this rule.",
+                        transaction.PayeeId, plan.Id, txDate);
+                    commissionAmount = Money.Zero(baseAmount.Currency);
+                }
+                else
+                {
+                    commissionAmount = CommissionCalculator.ComputeAttainmentSplitCommission(
+                        baseAmount, rule.RateTable.AttainmentTiers!,
+                        splitContext.PriorCumulative, splitContext.QuotaTarget);
+                }
+            }
+            else
+            {
+                commissionAmount = CommissionCalculator.ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
+            }
             commissionAmount = CommissionCalculator.ApplyModifier(commissionAmount, baseAmount, rule.Modifier);
             commissionAmount = CommissionCalculator.ApplyCap(commissionAmount, rule.Cap);
             commissionAmount = CommissionCalculator.ApplyFloor(commissionAmount, rule.Floor);

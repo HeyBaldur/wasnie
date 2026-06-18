@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, of, throwError } from 'rxjs';
 
@@ -58,108 +58,6 @@ function makeStoreMock(): jasmine.SpyObj<PayoutsStore> {
   m.reload.and.returnValue(Promise.resolve());
   return m;
 }
-
-// ─── Regression: _pollJob infinite loop ──────────────────────────────────────
-//
-// Bug: after a Calculate job reached Succeeded, _pollJob kept calling
-// getJobStatus every 2 s indefinitely (no takeWhile/takeUntil on terminal
-// state), and _onJobDone + store.reload fired on every tick.
-//
-// Fix: takeWhile(s => Pending|Running, inclusive=true) completes the observable
-// the moment a terminal state is received.
-//
-// These tests verify that the polling stops and reload fires exactly once.
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('PayoutsListComponent — poll-loop regression', () => {
-  let component: PayoutsListComponent;
-  let apiSpy: jasmine.SpyObj<PayoutsApiService>;
-  let storeMock: jasmine.SpyObj<PayoutsStore>;
-
-  beforeEach(() => {
-    apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
-      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid', 'exportPdf', 'exportToExcel',
-    ]);
-    apiSpy.list.and.returnValue(of(EMPTY_PAGE));
-
-    storeMock = makeStoreMock();
-
-    TestBed.configureTestingModule({
-      imports: [PayoutsListComponent],
-      providers: [
-        { provide: PayoutsApiService, useValue: apiSpy },
-        { provide: PayoutsStore,      useValue: storeMock },
-        { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
-        { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
-        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} } } },
-        { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
-      ],
-    });
-
-    // Strip all standalone imports and the template so the test focuses purely
-    // on component class behaviour, without needing every UI primitive.
-    TestBed.overrideComponent(PayoutsListComponent, {
-      set: { template: '<div></div>', imports: [] },
-    });
-
-    const fixture = TestBed.createComponent(PayoutsListComponent);
-    component = fixture.componentInstance;
-    fixture.detectChanges(); // runs ngOnInit
-    storeMock.reload.calls.reset(); // ngOnInit now calls reload() once on activation; reset so poll-loop tests measure only poll-triggered calls
-  });
-
-  it('stops polling after Succeeded and calls store.reload exactly once', fakeAsync(() => {
-    let callCount = 0;
-    apiSpy.getJobStatus.and.callFake(() => {
-      callCount++;
-      const state = callCount < 3 ? 'Pending' : 'Succeeded';
-      return of({
-        id: 'job-abc',
-        state,
-        errorMessage: null,
-        resultSummary: '{"payoutsCreated":2,"conflicts":[],"warnings":[]}',
-      });
-    });
-
-    (component as any)._pollJob('job-abc');
-
-    tick(2000);  // poll 1 → Pending  — no reload
-    tick(2000);  // poll 2 → Pending  — no reload
-    tick(2000);  // poll 3 → Succeeded — _onJobDone → store.reload, observable completes
-    tick(20000); // extra time — must NOT trigger any more polls
-
-    expect(apiSpy.getJobStatus).toHaveBeenCalledTimes(3);
-    expect(storeMock.reload).toHaveBeenCalledTimes(1);
-  }));
-
-  it('stops polling on Failed without calling store.reload', fakeAsync(() => {
-    apiSpy.getJobStatus.and.returnValue(
-      of({ id: 'job-xyz', state: 'Failed', errorMessage: 'PAYOUTS.CALCULATE_ERROR', resultSummary: null })
-    );
-
-    (component as any)._pollJob('job-xyz');
-
-    tick(2000);  // poll 1 → Failed — observable completes
-    tick(20000); // extra time — must NOT trigger any more polls
-
-    expect(apiSpy.getJobStatus).toHaveBeenCalledTimes(1);
-    expect(storeMock.reload).not.toHaveBeenCalled();
-  }));
-
-  it('stops polling on Cancelled without calling store.reload', fakeAsync(() => {
-    apiSpy.getJobStatus.and.returnValue(
-      of({ id: 'job-xyz', state: 'Cancelled', errorMessage: null, resultSummary: null })
-    );
-
-    (component as any)._pollJob('job-xyz');
-
-    tick(2000);
-    tick(20000);
-
-    expect(apiSpy.getJobStatus).toHaveBeenCalledTimes(1);
-    expect(storeMock.reload).not.toHaveBeenCalled();
-  }));
-});
 
 // ─── Bulk Mark as Paid ───────────────────────────────────────────────────────
 describe('PayoutsListComponent — onBulkMarkPaid', () => {

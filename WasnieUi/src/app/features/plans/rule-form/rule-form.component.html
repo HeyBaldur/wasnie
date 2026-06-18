@@ -167,6 +167,17 @@
                   </ws-button>
                 }
               </div>
+              <div class="collapsible-header mt-4"
+                [class.collapsible-header--readonly]="readOnly()"
+                (click)="!readOnly() && form.get('rateTable.splitAtQuota')?.setValue(!form.get('rateTable.splitAtQuota')?.value)">
+                <div class="section-title-with-help">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_SPLIT_AT_QUOTA' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_SPLIT_AT_QUOTA' | translate"
+                    (click)="$event.stopPropagation()" />
+                </div>
+                <div class="toggle-switch" [class.toggle-switch--on]="form.get('rateTable.splitAtQuota')?.value"></div>
+              </div>
             }
           </div>
         </div>

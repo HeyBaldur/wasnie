@@ -103,6 +103,42 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
         return amounts.Sum();
     }
 
+    public async Task<AttainmentSplitContext?> GetSplitContextAsync(
+        Guid payeeId,
+        Guid planId,
+        DateOnly asOfDate,
+        CancellationToken ct = default)
+    {
+        // No caching: PriorCumulative changes after each transaction is committed to DB.
+        var quotas = await _db.Quotas
+            .Where(q =>
+                q.PayeeId == payeeId &&
+                q.PlanId == planId &&
+                q.Status != QuotaStatus.Draft)
+            .ToListAsync(ct);
+
+        var matching = quotas
+            .Where(q => q.Period.Start <= asOfDate && q.Period.End >= asOfDate)
+            .ToList();
+
+        if (matching.Count == 0) return null;
+
+        var quota = matching
+            .OrderBy(q => q.Period.End.DayNumber - q.Period.Start.DayNumber)
+            .ThenByDescending(q => q.CreatedAt)
+            .First();
+
+        // Units-based quotas are not supported for split-at-quota: the tier Rate is a
+        // monetary percentage applied to transaction amount, not a per-unit amount.
+        if (quota.MeasurementType == QuotaMeasurementType.Units) return null;
+
+        var target = quota.Amount.Amount;
+        var prior = await ComputeRevenueAchievedAsync(
+            payeeId, planId, quota.Period.Start, quota.Period.End, quota.Amount.Currency, ct);
+
+        return new AttainmentSplitContext(prior, target);
+    }
+
     // Units: sum Quantity from source transactions of non-superseded Credits.
     private async Task<decimal> ComputeUnitsAchievedAsync(
         Guid payeeId,

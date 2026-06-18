@@ -597,4 +597,57 @@ public sealed class CompensationTransactionTests
 
     // ── RolePermissions (new permissions coverage) ────────────────────────────
     // (Remaining tests for PayeesDeactivate / TransactionsUpdate are in RolePermissionsTests)
+
+    // ── RevertCalculatedToPending ─────────────────────────────────────────────
+
+    [Fact]
+    public void RevertCalculatedToPending_FromCalculated_SucceedsAndSetsPending()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, ValidAmount, "user", ValidNow, Guid.NewGuid());
+        tx.Status.Should().Be(CompensationTransactionStatus.Calculated);
+
+        tx.RevertCalculatedToPending("user", ValidNow.AddMinutes(1));
+
+        tx.Status.Should().Be(CompensationTransactionStatus.Pending);
+    }
+
+    [Fact]
+    public void RevertCalculatedToPending_FromPaid_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, ValidAmount, "user", ValidNow, Guid.NewGuid());
+        tx.MarkPaid("user", ValidNow, Guid.NewGuid());
+        tx.Status.Should().Be(CompensationTransactionStatus.Paid);
+
+        var act = () => tx.RevertCalculatedToPending("user", ValidNow.AddMinutes(1));
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("*Paid*");
+    }
+
+    [Fact]
+    public void RevertCalculatedToPending_FromCancelled_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.Cancel("cancellation test", "user", ValidNow, Guid.NewGuid());
+        tx.Status.Should().Be(CompensationTransactionStatus.Cancelled);
+
+        var act = () => tx.RevertCalculatedToPending("user", ValidNow.AddMinutes(1));
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("*Cancelled*");
+    }
+
+    [Fact]
+    public void RevertCalculatedToPending_FromPending_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.Status.Should().Be(CompensationTransactionStatus.Pending);
+
+        var act = () => tx.RevertCalculatedToPending("user", ValidNow.AddMinutes(1));
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("*Calculated*");
+    }
 }

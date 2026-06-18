@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wasnie.Application.Compensation.Commands.Credits;
 using Wasnie.Application.Compensation.Queries.Credits;
 
 namespace Wasnie.Api.Controllers;
@@ -36,6 +37,13 @@ public sealed class CreditsController(IMediator mediator) : ControllerBase
     {
         var result = await mediator.Send(new GetCreditByIdQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
+    [HttpPost("recalculate")]
+    public async Task<IActionResult> Recalculate([FromBody] RecalculateCreditsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
     [HttpGet("export")]

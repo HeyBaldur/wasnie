@@ -1,3 +1,9 @@
+export interface RecalculateCreditsResult {
+  supersededCount: number;
+  skippedPaidCount: number;
+  jobIds: string[];
+}
+
 export interface CreditListItem {
   id: string;
   transactionId: string;
