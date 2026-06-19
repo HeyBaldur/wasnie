@@ -57,8 +57,17 @@
 .ws-select__value {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--font-size-14);
   color: var(--color-text-primary);
+  overflow: hidden;
+}
+
+.ws-select__option-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

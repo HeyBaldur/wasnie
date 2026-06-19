@@ -121,11 +121,18 @@ export class PayRunDetailComponent implements OnInit {
     );
 
   readonly planSearchFn = (q: string) =>
-    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q, filters: { statuses: 'Active,Archived' } }).pipe(
       map(r => r.items.map(p => {
         const label = `${p.name}`;
         this._planCache.set(p.id, label);
-        return { value: p.id, label };
+        return {
+          value: p.id,
+          label,
+          badge: {
+            text: `PLANS.STATUS_${p.status.toUpperCase()}`,
+            variant: (p.status === 'Active' ? 'success' : 'neutral') as BadgeVariant,
+          },
+        };
       })),
     );
 

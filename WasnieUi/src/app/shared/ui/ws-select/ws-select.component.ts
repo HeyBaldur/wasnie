@@ -15,17 +15,20 @@ import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { Observable, Subject, catchError, debounceTime, of, switchMap, tap } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { IconComponent } from '../../components/icon/icon.component';
+import { WsBadgeComponent, type BadgeVariant } from '../ws-badge/ws-badge.component';
 
 export interface SelectOption {
   value: string | number;
   label: string;
   disabled?: boolean;
+  /** Optional status badge rendered after the label. `text` is a translation key. */
+  badge?: { text: string; variant: BadgeVariant };
 }
 
 @Component({
   selector: 'ws-select',
   standalone: true,
-  imports: [IconComponent, TranslatePipe],
+  imports: [IconComponent, TranslatePipe, WsBadgeComponent],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,

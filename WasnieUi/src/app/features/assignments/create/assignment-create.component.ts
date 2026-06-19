@@ -17,6 +17,7 @@ import {
   WsPageHeaderComponent,
   type SelectOption,
   type DateRange,
+  type BadgeVariant,
 } from '../../../shared/ui';
 
 @Component({
@@ -56,11 +57,12 @@ export class AssignmentCreateComponent implements OnInit {
     );
 
   readonly planSearchFn = (q: string): Observable<SelectOption[]> =>
-    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
-      map(r => r.items
-        .filter(p => p.status === 'Active')
-        .map(p => ({ value: p.id, label: `${p.name} v${p.version}` }))
-      )
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q, filters: { status: 'Active' } }).pipe(
+      map(r => r.items.map(p => ({
+        value: p.id,
+        label: `${p.name} v${p.version}`,
+        badge: { text: 'PLANS.STATUS_ACTIVE', variant: 'success' as BadgeVariant },
+      })))
     );
 
   readonly form = this.fb.nonNullable.group({

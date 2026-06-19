@@ -31,10 +31,25 @@ public sealed class ListPlansHandler(IApplicationDbContext db, IAuthorizationSer
             query = query.Where(x => x.Name.ToLower().Contains(q));
         }
 
-        // Filters
+        // Status filters
+        // Singular ?status=Active takes precedence for backward compat.
+        // Plural ?statuses=Active,Archived supports multi-status (e.g. exclude Draft from lookup dropdowns).
         if (!string.IsNullOrWhiteSpace(p.Status) &&
             Enum.TryParse<PlanStatus>(p.Status, ignoreCase: true, out var status))
+        {
             query = query.Where(x => x.Status == status);
+        }
+        else if (!string.IsNullOrWhiteSpace(p.Statuses))
+        {
+            var statuses = p.Statuses
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => Enum.TryParse<PlanStatus>(s.Trim(), ignoreCase: true, out var st) ? (PlanStatus?)st : null)
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .ToHashSet();
+            if (statuses.Count > 0)
+                query = query.Where(x => statuses.Contains(x.Status));
+        }
 
         // Sort
         var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "name";

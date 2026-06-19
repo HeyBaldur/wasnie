@@ -12,6 +12,7 @@ import { PlansApiService } from '../../plans/services/plans.api.service';
 const makeStore = () => ({
   items: signal([]),
   total: signal(0),
+  totalCount: signal(0),
   loading: signal(false),
   page: signal(1),
   pageSize: signal(25),

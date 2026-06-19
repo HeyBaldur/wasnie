@@ -151,6 +151,66 @@ public sealed class PlansEndpointsTests : IAsyncLifetime
         result.Items.Should().NotContain(p => p.Name == "Draft Plan");
     }
 
+    [Fact]
+    public async Task ListPlans_FilterByStatuses_ReturnsActiveAndArchived_ExcludesDraft()
+    {
+        // Draft plan — should be excluded
+        await CreatePlanAsync(_clientA, "Draft Plan");
+
+        // Active plan
+        var activePlan = await CreatePlanAsync(_clientA, "Active Plan");
+        await AddRuleAsync(_clientA, activePlan.Id);
+        await _clientA.PostAsync($"/api/plans/{activePlan.Id}/activate", null);
+
+        // Archived plan: activate then archive
+        var archivedPlan = await CreatePlanAsync(_clientA, "Archived Plan");
+        await AddRuleAsync(_clientA, archivedPlan.Id);
+        await _clientA.PostAsync($"/api/plans/{archivedPlan.Id}/activate", null);
+        await _clientA.PostAsync($"/api/plans/{archivedPlan.Id}/archive", null);
+
+        var response = await _clientA.GetAsync("/api/plans?statuses=Active,Archived");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+        result.Items.Should().Contain(p => p.Name == "Active Plan");
+        result.Items.Should().Contain(p => p.Name == "Archived Plan");
+        result.Items.Should().NotContain(p => p.Name == "Draft Plan");
+    }
+
+    [Fact]
+    public async Task ListPlans_FilterByStatuses_TenantIsolation_AppliesBoth()
+    {
+        // TenantA has an active plan, TenantB also has one — statuses filter must not leak cross-tenant
+        var planA = await CreatePlanAsync(_clientA, "Tenant A Active");
+        await AddRuleAsync(_clientA, planA.Id);
+        await _clientA.PostAsync($"/api/plans/{planA.Id}/activate", null);
+
+        var planB = await CreatePlanAsync(_clientB, "Tenant B Active");
+        await AddRuleAsync(_clientB, planB.Id);
+        await _clientB.PostAsync($"/api/plans/{planB.Id}/activate", null);
+
+        var response = await _clientA.GetAsync("/api/plans?statuses=Active,Archived");
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+
+        result.Items.Should().ContainSingle(p => p.Name == "Tenant A Active");
+        result.Items.Should().NotContain(p => p.Name == "Tenant B Active");
+    }
+
+    [Fact]
+    public async Task ListPlans_SingleStatusSingular_StillWorks()
+    {
+        await CreatePlanAsync(_clientA, "Draft Only Plan");
+        var active = await CreatePlanAsync(_clientA, "Active Only Plan");
+        await AddRuleAsync(_clientA, active.Id);
+        await _clientA.PostAsync($"/api/plans/{active.Id}/activate", null);
+
+        var response = await _clientA.GetAsync("/api/plans?status=Active");
+        var result = await response.Content.ReadPagedResultAsync<PlanSummaryResponse>();
+
+        result.Items.Should().ContainSingle(p => p.Name == "Active Only Plan");
+        result.Items.Should().NotContain(p => p.Name == "Draft Only Plan");
+    }
+
     // ── Pagination ────────────────────────────────────────────────────────────
 
     [Fact]

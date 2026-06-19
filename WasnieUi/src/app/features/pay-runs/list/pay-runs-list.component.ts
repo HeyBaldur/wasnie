@@ -98,10 +98,14 @@ export class PayRunsListComponent implements OnInit {
   });
 
   readonly planSearchFn = (q: string) =>
-    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q, filters: { status: 'Active' } }).pipe(
       map(r => r.items.map(p => {
         this._planDateMap.set(p.id, { start: p.effectiveStart, end: p.effectiveEnd });
-        return { value: p.id, label: `${p.name} · ${p.effectiveStart} – ${p.effectiveEnd}` };
+        return {
+          value: p.id,
+          label: `${p.name} · ${p.effectiveStart} – ${p.effectiveEnd}`,
+          badge: { text: 'PLANS.STATUS_ACTIVE', variant: 'success' as BadgeVariant },
+        };
       }))
     );
 

@@ -19,6 +19,7 @@ import {
   WsPageHeaderComponent,
   type SelectOption,
   type DateRange,
+  type BadgeVariant,
 } from '../../../shared/ui';
 
 // V1: only Revenue and Units are supported (transaction data model).
@@ -67,11 +68,15 @@ export class QuotaCreateComponent implements OnInit {
     );
 
   readonly planSearchFn = (q: string): Observable<SelectOption[]> =>
-    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
-      map(r => r.items
-        .filter(p => p.status === 'Active' || p.status === 'Archived')
-        .map(p => ({ value: p.id, label: `${p.name} v${p.version}` }))
-      )
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q, filters: { statuses: 'Active,Archived' } }).pipe(
+      map(r => r.items.map(p => ({
+        value: p.id,
+        label: `${p.name} v${p.version}`,
+        badge: {
+          text: `PLANS.STATUS_${p.status.toUpperCase()}`,
+          variant: (p.status === 'Active' ? 'success' : 'neutral') as BadgeVariant,
+        },
+      })))
     );
 
   readonly form = this.fb.nonNullable.group({

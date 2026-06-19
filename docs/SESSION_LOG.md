@@ -4,6 +4,29 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-19 — WI-PLAN-DROPDOWN-STATUS (estado + filtrado contextual en dropdowns de planes)
+
+**Contexto:** Los dropdowns de planes en la app no mostraban el estado del plan ni filtraban por estado, causando que planes en Draft aparecieran donde no aplican (ej. "Sample Plan (Draft)" en el filtro de Credits).
+
+**Fase 1 — Auditoría:** 6 dropdowns identificados con sus reglas: Credits/Payouts/Pay Run Detail necesitan Active+Archived (histórico); Pay Runs Calculate + Assignments necesitan solo Active; Quotas necesita Active+Archived (carga retroactiva). Backend solo soportaba status singular — necesario añadir multi-estado.
+
+**Fase 2 — Backend:**
+- `ListPlansHandler.cs`: añadido `else if (!string.IsNullOrWhiteSpace(p.Statuses))` que parsea CSV de estados (compatible con el campo `Statuses` ya existente en `PaginationQuery`). El `?status=` singular sigue con prioridad (backward-compat).
+- 3 tests de integración nuevos en `PlansEndpointsTests.cs`: multi-estado retorna Active+Archived y excluye Draft, aislamiento tenant con multi-estado, singular sigue funcionando.
+
+**Fase 2 — Frontend:**
+- `SelectOption` interface: campo `badge?: { text: string; variant: BadgeVariant }` opcional (no rompe callers existentes).
+- `WsSelect`: importa `WsBadgeComponent`, template actualiza trigger y opciones para renderizar badge cuando presente. `.ws-select__value` → flex; `.ws-select__option-label` nuevo (ellipsis para el texto).
+- Seis `planSearchFn` actualizados con filtro server-side correcto + badge con clave i18n `PLANS.STATUS_{ACTIVE|ARCHIVED|DRAFT}` (ya existían en EN/ES/PL).
+- Assignments y Quotas: client-side `.filter()` eliminado, filtrado movido al servidor.
+- PayRunsListComponent spec: mock store corregido (añadido `totalCount: signal(0)` que faltaba — 4 tests recuperados).
+
+**Archivos modificados:**
+- Backend: `ListPlansHandler.cs`, `PlansEndpointsTests.cs`
+- Frontend: `ws-select.component.ts`, `ws-select.component.html`, `ws-select.component.scss`, `credits-list.component.ts`, `payouts-list.component.ts`, `pay-runs-list.component.ts`, `pay-runs-list.component.spec.ts`, `pay-run-detail.component.ts`, `assignment-create.component.ts`, `quota-create.component.ts`
+
+**Tests:** Backend Application project: 0 errores compilación. Frontend: 391/410 pass (19 pre-existing sin cambios). `ng build --configuration production` limpio.
+
 ## 2026-06-18 — WI-OVERLAP-WARNING-UX (pay run overlap warning — inform, not alarm)
 
 **Root cause:** `PAY_RUNS.DETAIL.OVERLAP_WARNING` said "could be paid more than once" — factually wrong. The motor filters `ConsumedAt == null` at calculation time (already excludes paid transactions) and `MarkPayRunPaidHandler` has a hard block guard. The overlap table shown is a period-date overlap, not a transaction overlap.
