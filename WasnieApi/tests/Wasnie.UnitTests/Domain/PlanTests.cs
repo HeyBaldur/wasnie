@@ -431,4 +431,79 @@ public sealed class PlanTests
 
         rule.Tag.Should().BeNull();
     }
+
+    // ── Units measurement validation (WI-UNITS-MEASUREMENT) ──────────────────
+
+    [Fact]
+    public void AddRule_UnitsWithFlat_Succeeds()
+    {
+        var plan = new PlanBuilder().Build();
+        var unitsMeasurement = new Measurement
+        {
+            Type = MeasurementType.Units,
+            SourceField = "amount",
+            Aggregation = MeasurementAggregation.Sum,
+        };
+
+        var rule = plan.AddRule("Units Commission", 1, unitsMeasurement, RateTable.Flat(2.00m));
+
+        rule.Measurement.Type.Should().Be(MeasurementType.Units);
+        rule.RateTable.FlatRate.Should().Be(2.00m);
+    }
+
+    [Fact]
+    public void AddRule_UnitsWithTiered_ThrowsDomainException()
+    {
+        var plan = new PlanBuilder().Build();
+        var unitsMeasurement = new Measurement
+        {
+            Type = MeasurementType.Units,
+            SourceField = "amount",
+            Aggregation = MeasurementAggregation.Sum,
+        };
+        var tieredTable = RateTable.Tiered([
+            new RateTier { From = 0, To = 100, Rate = 0.05m },
+            new RateTier { From = 100, To = null, Rate = 0.10m },
+        ]);
+
+        Action act = () => plan.AddRule("Units Tiered", 1, unitsMeasurement, tieredTable);
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("*Units measurement only supports a Flat rate table*");
+    }
+
+    [Fact]
+    public void AddRule_UnitsWithAttainment_ThrowsDomainException()
+    {
+        var plan = new PlanBuilder().Build();
+        var unitsMeasurement = new Measurement
+        {
+            Type = MeasurementType.Units,
+            SourceField = "amount",
+            Aggregation = MeasurementAggregation.Sum,
+        };
+        var attainmentTable = RateTable.AttainmentBased([
+            new AttainmentTier { AttainmentFrom = 0m, AttainmentTo = 1.0m, Rate = 0.05m },
+        ]);
+
+        Action act = () => plan.AddRule("Units Attainment", 1, unitsMeasurement, attainmentTable);
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("*Units measurement only supports a Flat rate table*");
+    }
+
+    [Fact]
+    public void AddRule_RevenueWithTiered_Succeeds()
+    {
+        // Regression: Revenue + Tiered must still be allowed after the Units guard was added.
+        var plan = new PlanBuilder().Build();
+        var tieredTable = RateTable.Tiered([
+            new RateTier { From = 0, To = 100, Rate = 0.05m },
+            new RateTier { From = 100, To = null, Rate = 0.10m },
+        ]);
+
+        var rule = plan.AddRule("Rev Tiered", 1, DefaultMeasurement, tieredTable);
+
+        rule.RateTable.Type.Should().Be(RateTableType.Tiered);
+    }
 }

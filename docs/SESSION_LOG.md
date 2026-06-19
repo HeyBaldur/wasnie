@@ -4,6 +4,37 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-19 — WI-UNITS-MEASUREMENT (medición por unidades implementada)
+
+**Contexto:** Diagnóstico (sesión anterior) confirmó que el campo `Measurement.Type = Units` era silenciosamente ignorado: el motor siempre usaba `transaction.Amount` sin leer la medición. `transaction.Quantity` existía en el dominio pero nunca se consultaba. Fix urgente porque la UI ofrecía la opción y el usuario creía estar configurando comisión por unidades cuando en realidad se calculaba por importe.
+
+**FASE 1 — Motor:**
+- `CommissionCalculator.ComputeUnitsCommission(int quantity, decimal ratePerUnit, string currency)` — pure math.
+- `CreditAllocationService.BuildCreditsAsync`: rama `rule.Measurement.Type == Units` llama al nuevo método. Revenue sigue sin cambios (regresión verificada). Guarda explícita: Units+Tiered/Attainment → `LogError` + comisión €0 (no silencio).
+- `RuleSnapshot`: campo `Measurement` añadido. JSON backward-compat (créditos históricos sin campo reciben default `Revenue/amount/Sum`). `Freeze` signature con `measurement` opcional (para no romper test helpers existentes).
+
+**FASE 2 — UI:**
+- Source Field y Aggregation eliminados de la pantalla "Add Rule" (form controls siguen existiendo con valores default para que el API reciba datos válidos).
+- Aggregation options filtradas a `[Sum]` — los 4 restantes no están implementados y no deben ofrecerse.
+- Modo Units: Rate Table Tiered/Attainment deshabilitados + nota `UNITS_RATE_TABLE_NOTE`. Label/hint/tooltip del campo Flat Rate cambian. Live Preview adapta fórmula.
+- `ngOnInit` suscripción: cambio a Units → fuerza `rateTable.type = Flat`.
+
+**FASE 3 — Validación de dominio:**
+- `Rule.Create` y `Rule.Update` → `ValidateMeasurementRateTableCompatibility` → `DomainException` si Units+Tiered o Units+Attainment. Imposible crear una regla inconsistente desde la UI o la API.
+
+**Tests:**
+- `CommissionCalculatorTests`: +5 (ComputeUnitsCommission standard/q1/large/fractional + Revenue regression).
+- `PlanTests`: +4 (Units+Flat OK, Units+Tiered throws, Units+Attainment throws, Revenue+Tiered OK regression).
+- `CreditAllocationServiceTests` (integration): +5 (Units Q1, Units Q10=€20, Units+Cap=€30, Units+Floor=€5, Revenue regression=€50).
+
+**i18n:** EN/ES/PL — 4 claves nuevas: `FIELD_FLAT_RATE_PER_UNIT`, `HINT_RATE_UNITS`, `UNITS_RATE_TABLE_NOTE`, `TOOLTIP_FLAT_RATE_UNITS`.
+
+**Resultado:** Backend 625 unit / 0 failures. Frontend 391/410 (19 pre-existing sin cambios). `ng build --configuration production` clean.
+
+**Verificación owner (FASE 4):** Crear regla Units+Flat €2,00/unidad. Ingestar transacción con Amount=€500, Quantity=10. Ejecutar Calculate. Crédito esperado: **€20,00**. Statement debe reflejar Rate per Unit. Revenue existente debe seguir calculando igual.
+
+---
+
 ## 2026-06-19 — WI-PLAN-DROPDOWN-STATUS (estado + filtrado contextual en dropdowns de planes)
 
 **Contexto:** Los dropdowns de planes en la app no mostraban el estado del plan ni filtraban por estado, causando que planes en Draft aparecieran donde no aplican (ej. "Sample Plan (Draft)" en el filtro de Credits).

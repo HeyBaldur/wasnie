@@ -1249,4 +1249,191 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
         credits[0].CreditedAmount.Amount.Should().Be(0m,
             "split-at-quota with no quota configured must return zero commission, not a silent fallback rate");
     }
+
+    // ── Units measurement (WI-UNITS-MEASUREMENT) ──────────────────────────────
+
+    private static Plan MakePlanWithUnitsFlatRule(Guid tenantId, Guid planId, decimal ratePerUnit,
+        DateOnly planStart, DateOnly planEnd)
+    {
+        var plan = Plan.Create(tenantId, "Units Plan", "desc",
+            DateRange.Of(planStart, planEnd),
+            Currency, "test-user", planId, Now, Guid.NewGuid());
+
+        plan.AddRule("Units Commission", 1,
+            new Measurement { Type = MeasurementType.Units, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+            RateTable.Flat(ratePerUnit));
+
+        return plan;
+    }
+
+    [Fact]
+    public async Task AllocateAsync_UnitsFlat_Quantity1_EarnsRatePerUnit()
+    {
+        // €2.00/unit × 1 unit (default) → €2.00
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlanWithUnitsFlatRule(tenantId, planId, ratePerUnit: 2.00m,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using var svcDb = fixture.CreateDbForTenant(tenantId);
+        var tx = CompensationTransaction.Ingest(
+            tenantId, "REF-UNITS-Q1", payeeId, Money.Of(500m, Currency),
+            TxDate, TransactionSource.Manual, "user",
+            Guid.NewGuid(), Now, Guid.NewGuid(), quantity: 1);
+
+        var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), svcDb);
+        var credits = await svc.AllocateAsync(tx);
+
+        credits.Should().HaveCount(1);
+        credits[0].CreditedAmount.Amount.Should().Be(2.00m, "€2.00/unit × 1 unit");
+        credits[0].CreditedAmount.Currency.Should().Be(Currency);
+    }
+
+    [Fact]
+    public async Task AllocateAsync_UnitsFlat_MultipleUnits_MultipliesCorrectly()
+    {
+        // €2.00/unit × 10 units → €20.00 (transaction.Amount is irrelevant in Units mode)
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlanWithUnitsFlatRule(tenantId, planId, ratePerUnit: 2.00m,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using var svcDb = fixture.CreateDbForTenant(tenantId);
+        var tx = CompensationTransaction.Ingest(
+            tenantId, "REF-UNITS-Q10", payeeId, Money.Of(500m, Currency),
+            TxDate, TransactionSource.Manual, "user",
+            Guid.NewGuid(), Now, Guid.NewGuid(), quantity: 10);
+
+        var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), svcDb);
+        var credits = await svc.AllocateAsync(tx);
+
+        credits.Should().HaveCount(1);
+        credits[0].CreditedAmount.Amount.Should().Be(20.00m, "€2.00/unit × 10 units");
+    }
+
+    [Fact]
+    public async Task AllocateAsync_UnitsFlat_WithPerTransactionCap_CapsResult()
+    {
+        // €5.00/unit × 10 units = €50.00, capped at €30.00 → €30.00
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = Plan.Create(tenantId, "Units Cap Plan", "desc",
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+                Currency, "test-user", planId, Now, Guid.NewGuid());
+            plan.AddRule("Capped Units", 1,
+                new Measurement { Type = MeasurementType.Units, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+                RateTable.Flat(5.00m),
+                cap: new Cap { Scope = CapScope.PerTransaction, Amount = Money.Of(30m, Currency) });
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using var svcDb = fixture.CreateDbForTenant(tenantId);
+        var tx = CompensationTransaction.Ingest(
+            tenantId, "REF-UNITS-CAP", payeeId, Money.Of(100m, Currency),
+            TxDate, TransactionSource.Manual, "user",
+            Guid.NewGuid(), Now, Guid.NewGuid(), quantity: 10);
+
+        var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), svcDb);
+        var credits = await svc.AllocateAsync(tx);
+
+        credits.Should().HaveCount(1);
+        credits[0].CreditedAmount.Amount.Should().Be(30.00m, "€5×10=€50 capped at €30");
+    }
+
+    [Fact]
+    public async Task AllocateAsync_UnitsFlat_WithFloor_FloorApplies()
+    {
+        // €0.50/unit × 2 units = €1.00, floor = €5.00 → €5.00
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = Plan.Create(tenantId, "Units Floor Plan", "desc",
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+                Currency, "test-user", planId, Now, Guid.NewGuid());
+            plan.AddRule("Floored Units", 1,
+                new Measurement { Type = MeasurementType.Units, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+                RateTable.Flat(0.50m),
+                floor: new Floor { Amount = Money.Of(5m, Currency) });
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using var svcDb = fixture.CreateDbForTenant(tenantId);
+        var tx = CompensationTransaction.Ingest(
+            tenantId, "REF-UNITS-FLOOR", payeeId, Money.Of(100m, Currency),
+            TxDate, TransactionSource.Manual, "user",
+            Guid.NewGuid(), Now, Guid.NewGuid(), quantity: 2);
+
+        var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), svcDb);
+        var credits = await svc.AllocateAsync(tx);
+
+        credits.Should().HaveCount(1);
+        credits[0].CreditedAmount.Amount.Should().Be(5.00m, "€0.50×2=€1.00 raised to floor €5.00");
+    }
+
+    [Fact]
+    public async Task AllocateAsync_Revenue_Regression_UnchangedByUnitsBranch()
+    {
+        // Revenue 5% × €1000 = €50 — must be identical to the behaviour before this WI.
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlanWithFlatRule(tenantId, planId, rate: 0.05m,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using var svcDb = fixture.CreateDbForTenant(tenantId);
+        var tx = CompensationTransaction.Ingest(
+            tenantId, "REF-REV-REG", payeeId, Money.Of(1000m, Currency),
+            TxDate, TransactionSource.Manual, "user",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), svcDb);
+        var credits = await svc.AllocateAsync(tx);
+
+        credits.Should().HaveCount(1);
+        credits[0].CreditedAmount.Amount.Should().Be(50.00m, "Revenue regression: 5% × €1000 = €50");
+    }
 }

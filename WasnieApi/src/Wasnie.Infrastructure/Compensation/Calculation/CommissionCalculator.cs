@@ -140,6 +140,14 @@ internal static class CommissionCalculator
 
     // ── Commission computation ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Units mode: flatRatePerUnit is the monetary amount earned per unit (e.g. €2.00).
+    /// commission = ratePerUnit × quantity.
+    /// Only valid with Flat rate tables — callers must validate before calling.
+    /// </summary>
+    internal static Money ComputeUnitsCommission(int quantity, decimal ratePerUnit, string currency)
+        => Money.Of(ratePerUnit * quantity, currency);
+
     internal static Money ComputeCommission(Money baseAmount, RateTable rateTable, decimal attainmentPct)
     {
         return rateTable.Type switch

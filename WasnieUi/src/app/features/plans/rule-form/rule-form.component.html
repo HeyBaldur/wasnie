@@ -38,7 +38,7 @@
 
         <div class="form-card" formGroupName="measurement">
           <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</h2>
-          <div class="form-row-3">
+          <div class="form-row-2">
             <div class="field-with-help">
               <div class="field-help-label">
                 <span class="form-field-label">{{ 'PLANS.FIELD_MEASUREMENT_TYPE' | translate }}</span>
@@ -46,22 +46,6 @@
                   [wsTooltip]="'PLANS.TOOLTIP_MEASUREMENT_TYPE' | translate" />
               </div>
               <ws-select formControlName="type" [options]="measurementTypeOptions" />
-            </div>
-            <div class="field-with-help">
-              <div class="field-help-label">
-                <span class="form-field-label">{{ 'PLANS.FIELD_SOURCE_FIELD' | translate }}</span>
-                <app-icon name="info" [size]="13" class="help-icon"
-                  [wsTooltip]="'PLANS.TOOLTIP_SOURCE_FIELD' | translate" />
-              </div>
-              <ws-input formControlName="sourceField" placeholder="amount" />
-            </div>
-            <div class="field-with-help">
-              <div class="field-help-label">
-                <span class="form-field-label">{{ 'PLANS.FIELD_AGGREGATION' | translate }}</span>
-                <app-icon name="info" [size]="13" class="help-icon"
-                  [wsTooltip]="'PLANS.TOOLTIP_AGGREGATION' | translate" />
-              </div>
-              <ws-select formControlName="aggregation" [options]="aggregationOptions" />
             </div>
           </div>
         </div>
@@ -79,29 +63,38 @@
                 @for (t of rateTableTypes; track t.value) {
                   <button type="button" class="type-btn"
                     [class.type-btn--active]="rateTableType() == t.value"
-                    [disabled]="readOnly()"
-                    (click)="!readOnly() && form.get('rateTable.type')?.setValue(t.value)">
+                    [disabled]="readOnly() || (isUnitsMode() && t.value !== RateTableType.Flat)"
+                    (click)="!readOnly() && !isUnitsMode() && form.get('rateTable.type')?.setValue(t.value)">
                     {{ t.label | translate }}
                   </button>
                 }
               </div>
+              @if (isUnitsMode()) {
+                <p class="form-hint mt-2">{{ 'PLANS.UNITS_RATE_TABLE_NOTE' | translate }}</p>
+              }
             </div>
 
             @if (rateTableType() == RateTableType.Flat) {
               <div class="form-field-group mt-4">
                 <div class="field-help-label">
-                  <span class="form-field-label">{{ 'PLANS.FIELD_FLAT_RATE' | translate }}</span>
+                  <span class="form-field-label">
+                    {{ (isUnitsMode() ? 'PLANS.FIELD_FLAT_RATE_PER_UNIT' : 'PLANS.FIELD_FLAT_RATE') | translate }}
+                  </span>
                   <app-icon name="info" [size]="13" class="help-icon"
-                    [wsTooltip]="'PLANS.TOOLTIP_FLAT_RATE' | translate" />
+                    [wsTooltip]="(isUnitsMode() ? 'PLANS.TOOLTIP_FLAT_RATE_UNITS' : 'PLANS.TOOLTIP_FLAT_RATE') | translate" />
                 </div>
                 <div class="input-with-suffix">
                   <ws-input
                     formControlName="flatRate"
                     type="number"
                   />
-                  <span class="input-suffix">%×100</span>
+                  @if (!isUnitsMode()) {
+                    <span class="input-suffix">%×100</span>
+                  }
                 </div>
-                <span class="form-hint">{{ 'PLANS.HINT_RATE' | translate }}</span>
+                <span class="form-hint">
+                  {{ (isUnitsMode() ? 'PLANS.HINT_RATE_UNITS' : 'PLANS.HINT_RATE') | translate }}
+                </span>
               </div>
             }
 
@@ -372,14 +365,17 @@
               <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
               <span class="preview-value">
                 {{ measurementTypeKey(form.get('measurement.type')?.value) | translate }}
-                · {{ measurementAggregationKey(form.get('measurement.aggregation')?.value) | translate }}
               </span>
             </div>
             <div class="preview-section">
               <span class="preview-label">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</span>
               <span class="preview-value">
                 @if (rateTableType() == RateTableType.Flat) {
-                  {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
+                  @if (isUnitsMode()) {
+                    {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) | number:'1.2-4' }} / {{ 'PLANS.MEASUREMENT_UNITS' | translate | lowercase }}
+                  } @else {
+                    {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
+                  }
                 } @else if (rateTableType() == RateTableType.Tiered) {
                   {{ 'PLANS.RATE_TABLE_TIERED' | translate }} · {{ tiersArray.length }} {{ 'PLANS.TIERS' | translate }}
                 } @else {

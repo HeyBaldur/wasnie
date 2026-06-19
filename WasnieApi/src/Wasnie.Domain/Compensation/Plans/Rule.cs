@@ -1,4 +1,5 @@
 using Wasnie.Domain.Common;
+using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
@@ -28,6 +29,16 @@ public sealed class Rule : Entity
             throw new DomainException("Rule tag must not exceed 50 characters.");
     }
 
+    // Units measurement calculates commission as ratePerUnit × quantity.
+    // Tiered/Attainment require an amount base — incompatible with per-unit math in this version.
+    private static void ValidateMeasurementRateTableCompatibility(Measurement measurement, RateTable rateTable)
+    {
+        if (measurement.Type == MeasurementType.Units && rateTable.Type != RateTableType.Flat)
+            throw new DomainException(
+                "Units measurement only supports a Flat rate table. " +
+                "Tiered and Attainment rate tables are not supported for unit-based commission.");
+    }
+
     internal static Rule Create(
         Guid planId,
         string name,
@@ -43,6 +54,7 @@ public sealed class Rule : Entity
         string? tag = null)
     {
         ValidateTag(tag);
+        ValidateMeasurementRateTableCompatibility(measurement, rateTable);
 
         return new()
         {
@@ -74,6 +86,7 @@ public sealed class Rule : Entity
         string? tag = null)
     {
         ValidateTag(tag);
+        ValidateMeasurementRateTableCompatibility(measurement, rateTable);
 
         Name = name;
         SortOrder = sortOrder;

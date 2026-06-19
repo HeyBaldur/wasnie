@@ -11,6 +11,8 @@ public sealed class RuleSnapshot : ValueObject
     public string RuleName { get; }
     public RateTable RateTable { get; }
     public Trigger Trigger { get; }
+    /// <summary>Measurement config at the time of credit allocation — drives statement explainability.</summary>
+    public Measurement Measurement { get; }
     public DateTimeOffset FrozenAt { get; }
 
     private RuleSnapshot(
@@ -20,6 +22,7 @@ public sealed class RuleSnapshot : ValueObject
         string ruleName,
         RateTable rateTable,
         Trigger trigger,
+        Measurement measurement,
         DateTimeOffset frozenAt)
     {
         RuleId = ruleId;
@@ -28,6 +31,7 @@ public sealed class RuleSnapshot : ValueObject
         RuleName = ruleName;
         RateTable = rateTable;
         Trigger = trigger;
+        Measurement = measurement;
         FrozenAt = frozenAt;
     }
 
@@ -38,8 +42,10 @@ public sealed class RuleSnapshot : ValueObject
         string ruleName,
         RateTable rateTable,
         Trigger trigger,
-        DateTimeOffset now) =>
-        new(ruleId, planId, planVersion, ruleName, rateTable, trigger, now);
+        DateTimeOffset now,
+        Measurement? measurement = null) =>
+        new(ruleId, planId, planVersion, ruleName, rateTable, trigger,
+            measurement ?? new Measurement(), now);
 
     protected override IEnumerable<object> GetEqualityComponents()
     {

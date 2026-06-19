@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
 
@@ -31,7 +32,20 @@ public sealed class RuleSnapshotJsonConverter : JsonConverter<RuleSnapshot>
             root.GetProperty("trigger").GetRawText(), NestedOptions)!;
         var frozenAt = root.GetProperty("frozenAt").GetDateTimeOffset();
 
-        return RuleSnapshot.Freeze(ruleId, planId, planVersion, ruleName, rateTable, trigger, frozenAt);
+        // Backward-compat: credits written before WI-UNITS-MEASUREMENT lack "measurement" in JSON.
+        // Default to Revenue/amount/Sum which is what the motor computed for all historic credits.
+        Measurement measurement;
+        if (root.TryGetProperty("measurement", out var mElem))
+            measurement = JsonSerializer.Deserialize<Measurement>(mElem.GetRawText(), NestedOptions)!;
+        else
+            measurement = new Measurement
+            {
+                Type = MeasurementType.Revenue,
+                SourceField = "amount",
+                Aggregation = MeasurementAggregation.Sum,
+            };
+
+        return RuleSnapshot.Freeze(ruleId, planId, planVersion, ruleName, rateTable, trigger, frozenAt, measurement: measurement);
     }
 
     public override void Write(Utf8JsonWriter writer, RuleSnapshot value, JsonSerializerOptions options)
@@ -45,6 +59,8 @@ public sealed class RuleSnapshotJsonConverter : JsonConverter<RuleSnapshot>
         JsonSerializer.Serialize(writer, value.RateTable, NestedOptions);
         writer.WritePropertyName("trigger");
         JsonSerializer.Serialize(writer, value.Trigger, NestedOptions);
+        writer.WritePropertyName("measurement");
+        JsonSerializer.Serialize(writer, value.Measurement, NestedOptions);
         writer.WriteString("frozenAt", value.FrozenAt);
         writer.WriteEndObject();
     }

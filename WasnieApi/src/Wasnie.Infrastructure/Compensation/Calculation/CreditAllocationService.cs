@@ -201,35 +201,58 @@ public sealed class CreditAllocationService : ICreditAllocationService
             var baseAmount = transaction.Amount;
 
             Money commissionAmount;
-            if (rule.RateTable.Type == RateTableType.AttainmentBased && rule.RateTable.SplitAtQuota)
+            if (rule.Measurement.Type == MeasurementType.Units)
             {
-                if (splitContext is null)
+                // Units: FlatRate is €/unit applied to transaction.Quantity.
+                // Domain validation rejects Units + non-Flat at save time; this guard is a runtime safety net.
+                if (rule.RateTable.Type != RateTableType.Flat)
                 {
-                    // Phase 5 guard: no quota configured for this rep → zero commission.
-                    _logger.LogWarning(
-                        "Split-at-quota: no active quota for payee={PayeeId}, plan={PlanId}, date={Date}. " +
-                        "Commission set to zero. Configure a quota to earn commission under this rule.",
-                        transaction.PayeeId, plan.Id, txDate);
-                    commissionAmount = Money.Zero(baseAmount.Currency);
+                    _logger.LogError(
+                        "Rule {RuleId}: Units measurement requires Flat rate table (got {RateType}). " +
+                        "Commission set to zero — data integrity issue, check plan configuration.",
+                        rule.Id, rule.RateTable.Type);
+                    commissionAmount = Money.Zero(plan.Currency);
                 }
                 else
                 {
-                    commissionAmount = CommissionCalculator.ComputeAttainmentSplitCommission(
-                        baseAmount, rule.RateTable.AttainmentTiers!,
-                        splitContext.PriorCumulative, splitContext.QuotaTarget);
+                    commissionAmount = CommissionCalculator.ComputeUnitsCommission(
+                        transaction.Quantity, rule.RateTable.FlatRate!.Value, plan.Currency);
                 }
             }
             else
             {
-                commissionAmount = CommissionCalculator.ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
+                // Revenue (default) and future measurement types: use transaction.Amount as base.
+                if (rule.RateTable.Type == RateTableType.AttainmentBased && rule.RateTable.SplitAtQuota)
+                {
+                    if (splitContext is null)
+                    {
+                        // Phase 5 guard: no quota configured for this rep → zero commission.
+                        _logger.LogWarning(
+                            "Split-at-quota: no active quota for payee={PayeeId}, plan={PlanId}, date={Date}. " +
+                            "Commission set to zero. Configure a quota to earn commission under this rule.",
+                            transaction.PayeeId, plan.Id, txDate);
+                        commissionAmount = Money.Zero(baseAmount.Currency);
+                    }
+                    else
+                    {
+                        commissionAmount = CommissionCalculator.ComputeAttainmentSplitCommission(
+                            baseAmount, rule.RateTable.AttainmentTiers!,
+                            splitContext.PriorCumulative, splitContext.QuotaTarget);
+                    }
+                }
+                else
+                {
+                    commissionAmount = CommissionCalculator.ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
+                }
             }
+
             commissionAmount = CommissionCalculator.ApplyModifier(commissionAmount, baseAmount, rule.Modifier);
             commissionAmount = CommissionCalculator.ApplyCap(commissionAmount, rule.Cap);
             commissionAmount = CommissionCalculator.ApplyFloor(commissionAmount, rule.Floor);
 
             var snapshot = RuleSnapshot.Freeze(
                 rule.Id, plan.Id, plan.Version, rule.Name,
-                rule.RateTable, rule.Trigger, now);
+                rule.RateTable, rule.Trigger, now, measurement: rule.Measurement);
 
             var credit = Credit.Allocate(
                 tenantId: transaction.TenantId,

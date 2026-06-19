@@ -1099,4 +1099,61 @@ public sealed class CommissionCalculatorTests
 
         commission.Amount.Should().Be(50.0000m);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // UNITS commission (WI-UNITS-MEASUREMENT)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ComputeUnitsCommission_StandardRate_ReturnsRateTimesQuantity()
+    {
+        // €2.00/unit × 10 units = €20.00
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 10, ratePerUnit: 2.00m, currency: "EUR");
+
+        result.Amount.Should().Be(20.0000m);
+        result.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_QuantityOne_ReturnsRateDirectly()
+    {
+        // default Quantity=1 → commission equals the per-unit rate exactly
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 1, ratePerUnit: 5.50m, currency: "EUR");
+
+        result.Amount.Should().Be(5.5000m);
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_LargeQuantity_NoOverflow()
+    {
+        // €0.25/unit × 10,000 units = €2,500
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 10_000, ratePerUnit: 0.25m, currency: "USD");
+
+        result.Amount.Should().Be(2_500.0000m);
+        result.Currency.Should().Be("USD");
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_FractionalRate_RoundedToFourDecimals()
+    {
+        // €1.33335/unit × 1 = 1.33335 → banker's rounding → 1.3334 (4th digit 3 is odd, rounds up)
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 1, ratePerUnit: 1.33335m, currency: "EUR");
+
+        result.Amount.Should().Be(1.3334m);
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_RevenueFlat_RegressionUnchanged()
+    {
+        // Revenue path still uses ComputeCommission; confirm result is unchanged (regression guard).
+        var revenue = CommissionCalculator.ComputeCommission(
+            Money.Of(1000m, "EUR"), RateTable.Flat(0.05m), attainmentPct: 1.0m);
+
+        revenue.Amount.Should().Be(50.0000m);
+        revenue.Currency.Should().Be("EUR");
+    }
 }
