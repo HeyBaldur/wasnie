@@ -39,7 +39,7 @@ public sealed class GetPayRunOverlapsHandler(
         var dtos = overlapping
             .Select(r => new OverlappingPayRunDto(
                 r.Id, r.PeriodStart, r.PeriodEnd, r.Status.ToString(),
-                r.PayeeCount, r.TotalAmounts, r.ApprovedAt, r.PaidAt))
+                r.SupplementalSequence, r.PayeeCount, r.TotalAmounts, r.ApprovedAt, r.PaidAt))
             .ToList();
 
         return Result<IReadOnlyList<OverlappingPayRunDto>>.Success(dtos);

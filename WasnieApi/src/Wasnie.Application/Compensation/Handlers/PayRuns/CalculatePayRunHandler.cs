@@ -33,37 +33,64 @@ public sealed class CalculatePayRunHandler(
         var actor = currentUser.Email ?? currentUser.UserId ?? "system";
         var now = clock.UtcNowOffset;
 
-        // ── 1. Find or create PayRun ──────────────────────────────────────────
-        // HasQueryFilter already scopes to tenantId, so no explicit TenantId == filter needed.
-        var payRun = await db.PayRuns
-            .FirstOrDefaultAsync(
-                r => r.PeriodStart == request.PeriodStart && r.PeriodEnd == request.PeriodEnd,
-                cancellationToken);
+        // ── 1. Determine which PayRun to use ─────────────────────────────────
+        // HasQueryFilter already scopes to tenantId.
+        // Load all runs for this period so we can:
+        //   a) reuse an existing Draft, or
+        //   b) create a supplemental run after the period has one or more Paid/Approved runs.
+        var existingRuns = await db.PayRuns
+            .Where(r => r.PeriodStart == request.PeriodStart && r.PeriodEnd == request.PeriodEnd)
+            .ToListAsync(cancellationToken);
 
-        if (payRun is not null)
+        PayRun payRun;
+        var isSupplemental = false;
+
+        var draftRun = existingRuns.FirstOrDefault(r => r.Status == PayRunStatus.Draft);
+
+        if (draftRun is not null)
         {
-            if (payRun.Status == PayRunStatus.Approved)
-                return Result<CalculatePayRunResult>.Failure(
-                    "This pay run is Approved. Reopen it before recalculating.");
-            if (payRun.Status == PayRunStatus.Paid)
-                return Result<CalculatePayRunResult>.Failure(
-                    "This pay run is Paid and locked. Paid runs cannot be recalculated.");
+            // A Draft already exists — recalculate it (idempotent path, same as before).
+            payRun = draftRun;
         }
-        else
+        else if (existingRuns.Count == 0)
         {
+            // No run for this period at all — create the primary run (sequence = 0).
             payRun = PayRun.Open(
                 tenantId: tenantId,
                 periodStart: request.PeriodStart,
                 periodEnd: request.PeriodEnd,
                 createdBy: actor,
                 id: guid.NewGuid(),
-                now: now);
+                now: now,
+                supplementalSequence: 0);
 
             db.PayRuns.Add(payRun);
             await db.SaveChangesAsync(cancellationToken);
         }
+        else
+        {
+            // All existing runs for this period are Approved or Paid — create a supplemental.
+            // The supplemental sequence is max(existing) + 1, keeping the unique index constraint.
+            var nextSeq = existingRuns.Max(r => r.SupplementalSequence) + 1;
+
+            payRun = PayRun.Open(
+                tenantId: tenantId,
+                periodStart: request.PeriodStart,
+                periodEnd: request.PeriodEnd,
+                createdBy: actor,
+                id: guid.NewGuid(),
+                now: now,
+                supplementalSequence: nextSeq);
+
+            db.PayRuns.Add(payRun);
+            await db.SaveChangesAsync(cancellationToken);
+            isSupplemental = true;
+        }
 
         // ── 2. Run per-payout calculation (existing idempotent engine) ────────
+        // The engine's own anti-double-pay guards (Layers 1–3) prevent re-paying
+        // already-Approved or already-Paid payees, so supplemental runs only
+        // pick up payees/plans that were not present in prior runs.
         var calcResult = await sender.Send(
             new CalculatePayoutsForPeriodCommand(request.PeriodStart, request.PeriodEnd),
             cancellationToken);
@@ -71,8 +98,10 @@ public sealed class CalculatePayRunHandler(
         if (!calcResult.IsSuccess)
             return Result<CalculatePayRunResult>.Failure(calcResult.Error!);
 
-        // ── 3. Assign PayRunId to newly-calculated and already-in-run payouts
-        // DateOnly owned-type EF caveat: exact period equality is filtered in-memory.
+        // ── 3. Assign PayRunId to payouts that belong to this run ────────────
+        // A payout belongs to THIS run if it either has no run assigned yet, or was
+        // previously assigned to this run (re-calculation path).
+        // DateOnly owned-type EF caveat: period equality filtered in-memory.
         var candidatePayouts = await db.CompensationPayouts
             .IgnoreQueryFilters()
             .Where(p => p.TenantId == tenantId
@@ -93,9 +122,11 @@ public sealed class CalculatePayRunHandler(
         await db.SaveChangesAsync(cancellationToken);
 
         return Result<CalculatePayRunResult>.Success(new CalculatePayRunResult(
-            payRun.Id,
-            calcResult.Value!.PayoutsCreated,
-            calcResult.Value.Conflicts,
-            calcResult.Value.Warnings));
+            PayRunId: payRun.Id,
+            PayoutsCreated: calcResult.Value!.PayoutsCreated,
+            Conflicts: calcResult.Value.Conflicts,
+            Warnings: calcResult.Value.Warnings,
+            IsSupplemental: isSupplemental,
+            SupplementalSequence: payRun.SupplementalSequence));
     }
 }

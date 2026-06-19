@@ -254,4 +254,27 @@ public sealed class PayRunTests
         run.PayeeCount.Should().Be(5);
         run.PaidPayeeCount.Should().Be(5);
     }
+
+    // ── SupplementalSequence ──────────────────────────────────────────────────
+
+    [Fact]
+    public void Open_DefaultSequence_IsZero()
+    {
+        var run = MakeRun();
+        run.SupplementalSequence.Should().Be(0);
+    }
+
+    [Fact]
+    public void Open_SupplementalSequence_IsPreserved()
+    {
+        var run = PayRun.Open(TenantId, PeriodStart, PeriodEnd, "admin@test.com", Guid.NewGuid(), Now, supplementalSequence: 3);
+        run.SupplementalSequence.Should().Be(3);
+    }
+
+    [Fact]
+    public void Open_NegativeSequence_Throws()
+    {
+        var act = () => PayRun.Open(TenantId, PeriodStart, PeriodEnd, "admin@test.com", Guid.NewGuid(), Now, supplementalSequence: -1);
+        act.Should().Throw<DomainException>().WithMessage("*SupplementalSequence*");
+    }
 }

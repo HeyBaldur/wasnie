@@ -13,7 +13,9 @@ public sealed record CalculatePayRunResult(
     Guid PayRunId,
     int PayoutsCreated,
     IReadOnlyList<PayoutConflict> Conflicts,
-    IReadOnlyList<PayoutWarning> Warnings);
+    IReadOnlyList<PayoutWarning> Warnings,
+    bool IsSupplemental = false,
+    int SupplementalSequence = 0);
 
 public sealed record ApprovePayRunCommand(Guid PayRunId) : IRequest<Result>;
 

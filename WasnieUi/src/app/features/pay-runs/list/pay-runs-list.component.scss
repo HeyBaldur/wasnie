@@ -79,6 +79,13 @@
     color: var(--color-text-tertiary);
   }
 
+  &__status-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
   &__payee-count {
     font-size: var(--font-size-13);
     color: var(--color-text-secondary);

@@ -8,6 +8,7 @@ export interface PayRunListItem {
   periodStart: string;
   periodEnd: string;
   status: PayRunStatus;
+  supplementalSequence: number;
   payeeCount: number;
   paidPayeeCount: number;
   zeroPayoutCount: number;
@@ -58,6 +59,8 @@ export interface CalculatePayRunResult {
   payoutsCreated: number;
   conflicts: PayRunConflict[];
   warnings: PayRunWarning[];
+  isSupplemental: boolean;
+  supplementalSequence: number;
 }
 
 export interface PayRunConflict {
@@ -83,6 +86,7 @@ export interface OverlappingPayRun {
   periodStart: string;
   periodEnd: string;
   status: PayRunStatus;
+  supplementalSequence: number;
   payeeCount: number;
   totalAmounts: Record<string, number>;
   approvedAt: string | null;

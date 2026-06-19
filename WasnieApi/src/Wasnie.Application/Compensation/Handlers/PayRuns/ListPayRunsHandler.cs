@@ -35,6 +35,7 @@ public sealed class ListPayRunsHandler(
             PeriodStart: r.PeriodStart,
             PeriodEnd: r.PeriodEnd,
             Status: r.Status.ToString(),
+            SupplementalSequence: r.SupplementalSequence,
             PayeeCount: r.PayeeCount,
             PaidPayeeCount: r.PaidPayeeCount,
             ZeroPayoutCount: r.ZeroPayoutCount,

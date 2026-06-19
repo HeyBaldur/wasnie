@@ -4,6 +4,21 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-19 — WI-FIX (supplemental pay runs)
+
+**Contexto:** Diagnóstico (sesión anterior) identificó que `CalculatePayRunHandler` bloqueaba con un error opaco si el período ya tenía un run Paid o Approved. Esto impedía calcular un nuevo payee/plan en un período ya cerrado. Las 3 capas de anti-doble-pago ya eran seguras (motor excluye créditos consumidos); el bloqueo era innecesariamente conservador.
+
+**Solución implementada (Opción A1 — supplemental runs):**
+- FASE 1 (Schema): `SupplementalSequence INT NOT NULL DEFAULT 0` en tabla `PayRuns`. Índice único ampliado de (TenantId, PeriodStart, PeriodEnd) a (TenantId, PeriodStart, PeriodEnd, SupplementalSequence). Migración B6 generada y aplicada.
+- FASE 2 (Backend): `CalculatePayRunHandler` reescrito — si el período tiene runs Paid/Approved y ningún Draft, crea un nuevo run con SupplementalSequence = max+1. `PayRun.Open()` acepta `supplementalSequence` (default=0). `CalculatePayRunResult` incluye `IsSupplemental` y `SupplementalSequence`. Todos los DTOs actualizados.
+- FASE 3 (UI): Badge "Supplemental" en columna Status de la lista. Aviso informativo en modal done. i18n EN/ES/PL: SUPPLEMENTAL, SUPPLEMENTAL_CREATED_TITLE, SUPPLEMENTAL_CREATED_DESC.
+- FASE 4 (Mensaje): `CALCULATE_SUBTITLE` corregido para describir el comportamiento real.
+- FASE 5 (Tests): +3 unit domain (SupplementalSequence), 2 integration tests actualizados (Approved/Paid→supplemental en vez de failure), +4 integration nuevos (supp seq1, supp×2, supp Draft reutilizado).
+
+**Resultados:** 628/628 unit tests. 23/23 PayRunEngineTests. `ng build` limpio.
+
+**Deuda técnica:** El campo `RowVersion` de Credits aparece en el snapshot de EF Core pero ya existía en DB — la migración B6 lo excluye manualmente del Up/Down. Si se hace `migrations remove` hay que re-editar. Investigar discrepancia en futura sesión de limpieza.
+
 ## 2026-06-19 — WI-UNITS-MEASUREMENT (medición por unidades implementada)
 
 **Contexto:** Diagnóstico (sesión anterior) confirmó que el campo `Measurement.Type = Units` era silenciosamente ignorado: el motor siempre usaba `transaction.Amount` sin leer la medición. `transaction.Quantity` existía en el dominio pero nunca se consultaba. Fix urgente porque la UI ofrecía la opción y el usuario creía estar configurando comisión por unidades cuando en realidad se calculaba por importe.

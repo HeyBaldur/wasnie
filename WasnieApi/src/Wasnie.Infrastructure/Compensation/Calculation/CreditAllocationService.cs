@@ -198,7 +198,10 @@ public sealed class CreditAllocationService : ICreditAllocationService
             if (!CommissionCalculator.EvaluateTrigger(rule.Trigger, transaction, _logger))
                 continue;
 
-            var baseAmount = transaction.Amount;
+            // Defensive copy: avoid sharing the same Money instance with the tracked
+            // transaction entity, which can confuse EF Core's owned-entity change tracker
+            // and produce a NULL OriginalAmount in the INSERT.
+            var baseAmount = Money.Of(transaction.Amount.Amount, transaction.Amount.Currency);
 
             Money commissionAmount;
             if (rule.Measurement.Type == MeasurementType.Units)

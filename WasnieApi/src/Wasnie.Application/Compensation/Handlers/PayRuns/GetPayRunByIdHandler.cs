@@ -84,6 +84,7 @@ public sealed class GetPayRunByIdHandler(
             PeriodStart: payRun.PeriodStart,
             PeriodEnd: payRun.PeriodEnd,
             Status: payRun.Status.ToString(),
+            SupplementalSequence: payRun.SupplementalSequence,
             PayeeCount: payRun.PayeeCount,
             PaidPayeeCount: payRun.PaidPayeeCount,
             ZeroPayoutCount: payRun.ZeroPayoutCount,
