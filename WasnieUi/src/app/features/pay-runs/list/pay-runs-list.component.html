@@ -201,6 +201,14 @@
   @if (calculatePhase() === 'form') {
     <div class="pay-runs-list__modal-form">
       <form [formGroup]="calculateForm">
+        <div class="pay-runs-list__modal-plan">
+          <ws-select
+            formControlName="planId"
+            [label]="'PAY_RUNS.CALCULATE_PLAN_LABEL' | translate"
+            [placeholder]="'PAY_RUNS.CALCULATE_PLAN_PLACEHOLDER' | translate"
+            [searchFn]="planSearchFn"
+          />
+        </div>
         <div class="pay-runs-list__modal-period">
           <ws-date-picker
             #startPicker

@@ -1234,6 +1234,8 @@
     "ACTION_REOPEN": "Reabrir ciclo",
     "CALCULATE_TITLE": "Calcular ciclo de pago",
     "CALCULATE_SUBTITLE": "Ejecuta el motor para un período. Crea un pago por beneficiario asignado. Un borrador existente será reemplazado.",
+    "CALCULATE_PLAN_LABEL": "Plan (opcional — rellena las fechas)",
+    "CALCULATE_PLAN_PLACEHOLDER": "Buscar planes…",
     "CALCULATE_PERIOD_FROM": "Inicio del período",
     "CALCULATE_PERIOD_TO": "Fin del período",
     "CALCULATE_RUN": "Calcular",

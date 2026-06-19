@@ -4,9 +4,10 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { distinctUntilChanged } from 'rxjs/operators';
+import { distinctUntilChanged, map } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
+import { PlansApiService } from '../../plans/services/plans.api.service';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
@@ -42,9 +43,12 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 export class PayRunsListComponent implements OnInit {
   readonly store = inject(PayRunsStore);
   private readonly api = inject(PayRunsApiService);
+  private readonly plansApi = inject(PlansApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+
+  private readonly _planDateMap = new Map<string, { start: string; end: string }>();
 
   // Filter bar date pickers
   private readonly _filterFromPicker = viewChild<DatePickerRef>('filterFromPicker');
@@ -88,9 +92,18 @@ export class PayRunsListComponent implements OnInit {
   });
 
   readonly calculateForm = new FormGroup({
+    planId: new FormControl<string | null>(null),
     periodStart: new FormControl<string | null>(null),
     periodEnd: new FormControl<string | null>(null),
   });
+
+  readonly planSearchFn = (q: string) =>
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
+      map(r => r.items.map(p => {
+        this._planDateMap.set(p.id, { start: p.effectiveStart, end: p.effectiveEnd });
+        return { value: p.id, label: `${p.name} · ${p.effectiveStart} – ${p.effectiveEnd}` };
+      }))
+    );
 
   constructor() {
     // Filter bar: close to/from when the other opens
@@ -137,6 +150,22 @@ export class PayRunsListComponent implements OnInit {
     this.store.setFilter({ status, periodFrom: from, periodTo: to });
 
     this._wireFormSubscriptions();
+    this._wirePlanSelection();
+  }
+
+  private _wirePlanSelection(): void {
+    this.calculateForm.controls.planId.valueChanges
+      .pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(id => {
+        if (!id) return;
+        const dates = this._planDateMap.get(id);
+        if (dates) {
+          this.calculateForm.patchValue(
+            { periodStart: dates.start, periodEnd: dates.end },
+            { emitEvent: false },
+          );
+        }
+      });
   }
 
   private _wireFormSubscriptions(): void {
@@ -228,6 +257,7 @@ export class PayRunsListComponent implements OnInit {
     this.calculateResult.set(null);
     this.calculateError.set(null);
     this.calculateForm.reset();
+    this._planDateMap.clear();
   }
 
   async onExport(): Promise<void> {

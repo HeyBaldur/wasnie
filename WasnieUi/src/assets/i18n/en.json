@@ -1234,6 +1234,8 @@
     "ACTION_REOPEN": "Reopen run",
     "CALCULATE_TITLE": "Calculate Pay Run",
     "CALCULATE_SUBTITLE": "Run the engine for a period. Creates one payout per assigned payee. An existing Draft run will be replaced.",
+    "CALCULATE_PLAN_LABEL": "Plan (optional — auto-fills dates)",
+    "CALCULATE_PLAN_PLACEHOLDER": "Search plans…",
     "CALCULATE_PERIOD_FROM": "Period start",
     "CALCULATE_PERIOD_TO": "Period end",
     "CALCULATE_RUN": "Calculate",

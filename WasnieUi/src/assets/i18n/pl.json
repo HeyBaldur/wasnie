@@ -1234,6 +1234,8 @@
     "ACTION_REOPEN": "Otwórz ponownie",
     "CALCULATE_TITLE": "Oblicz cykl wypłat",
     "CALCULATE_SUBTITLE": "Uruchom silnik dla danego okresu. Tworzy jedną wypłatę na przypisanego beneficjenta. Istniejący szkic zostanie zastąpiony.",
+    "CALCULATE_PLAN_LABEL": "Plan (opcjonalnie — wypełnia daty)",
+    "CALCULATE_PLAN_PLACEHOLDER": "Szukaj planów…",
     "CALCULATE_PERIOD_FROM": "Początek okresu",
     "CALCULATE_PERIOD_TO": "Koniec okresu",
     "CALCULATE_RUN": "Oblicz",

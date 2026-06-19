@@ -179,6 +179,10 @@
     padding: var(--space-5);
   }
 
+  &__modal-plan {
+    margin-bottom: var(--space-4);
+  }
+
   &__modal-period {
     display: grid;
     grid-template-columns: 1fr 1fr;
