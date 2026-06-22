@@ -193,8 +193,38 @@
     "PAY_GROUP": "Finanse",
     "ADMIN": "Ustawienia",
     "SUBSCRIPTION": "Subskrypcja",
+    "INTEGRATIONS": "Integracje",
     "IMPORT_TRANSACTIONS": "Importuj transakcje",
     "PROFILE": "Profil"
+  },
+  "INTEGRATIONS": {
+    "TITLE": "Integracje",
+    "SUBTITLE": "Połącz Wasnie z innymi narzędziami",
+    "LOAD_ERROR": "Nie udało się załadować integracji.",
+    "HUBSPOT": {
+      "NAME": "HubSpot",
+      "DESC": "Połącz swój CRM HubSpot, aby dane sprzedażowe płynęły do Wasnie.",
+      "STATUS_NEVERCONNECTED": "Niepołączono",
+      "STATUS_CONNECTED": "Połączono",
+      "STATUS_NEEDSRECONNECT": "Wymaga ponownego połączenia",
+      "STATUS_DISCONNECTED": "Rozłączono",
+      "PORTAL_ID": "Konto HubSpot",
+      "CONNECTED_AT": "Połączono dnia",
+      "NEEDS_RECONNECT_GENERIC": "Połączenie przestało działać. Połącz ponownie.",
+      "DISCONNECTED_NOTE": "HubSpot jest rozłączony. Połącz ponownie, aby wznowić.",
+      "CONNECT": "Połącz HubSpot",
+      "RECONNECT": "Połącz ponownie",
+      "DISCONNECT": "Rozłącz",
+      "TEST": "Testuj połączenie",
+      "TOAST_CONNECTED": "Połączono z HubSpot.",
+      "TOAST_CONNECT_ERROR": "Nie udało się połączyć z HubSpot. Spróbuj ponownie.",
+      "TOAST_DISCONNECTED": "Rozłączono HubSpot.",
+      "TOAST_DISCONNECT_ERROR": "Nie udało się rozłączyć HubSpot. Spróbuj ponownie.",
+      "TOAST_TEST_OK": "Połączenie działa — HubSpot odpowiedział.",
+      "TOAST_TEST_FAIL": "Testowe wywołanie HubSpot nie powiodło się.",
+      "TEST_HEALTHY": "Połączenie sprawne — HubSpot odpowiedział.",
+      "TEST_FAIL": "Testowe wywołanie HubSpot nie powiodło się."
+    }
   },
   "EMPTY_STATE": {
     "PLANS_TITLE": "Brak planów",

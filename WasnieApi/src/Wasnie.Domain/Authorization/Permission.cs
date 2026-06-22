@@ -48,4 +48,7 @@ public static class Permission
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";
     public const string SettingsUpdate = "Settings.Update";
+
+    // Connecting a CRM exposes the tenant's data to a third party — restricted to tenant admins.
+    public const string IntegrationsManage = "Integrations.Manage";
 }

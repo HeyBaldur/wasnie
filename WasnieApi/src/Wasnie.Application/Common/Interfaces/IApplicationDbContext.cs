@@ -10,6 +10,7 @@ using Wasnie.Domain.Compensation.Quotas;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Entities;
 using Wasnie.Domain.Identity;
+using Wasnie.Domain.Integrations.HubSpot;
 using Wasnie.Domain.Settings;
 using Wasnie.Domain.Subscription;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
@@ -41,6 +42,9 @@ public interface IApplicationDbContext
     DbSet<PayRun> PayRuns { get; }
     DbSet<UserSubscription> UserSubscriptions { get; }
     DbSet<ProcessedStripeEvent> ProcessedStripeEvents { get; }
+
+    DbSet<HubSpotConnection> HubSpotConnections { get; }
+    DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }
 
     DatabaseFacade Database { get; }
 

@@ -21,6 +21,7 @@ using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
 using Wasnie.Infrastructure.Services.Email;
+using Wasnie.Infrastructure.Services.HubSpot;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -94,6 +95,15 @@ public static class DependencyInjection
         services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
         services.AddScoped<IStripeWebhookService, StripeWebhookService>();
         services.AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>();
+
+        // HubSpot OAuth integration (Phase 1). Options are bound WITHOUT ValidateOnStart so the app still
+        // starts before the owner configures HubSpot; the endpoints fail gracefully until configured.
+        services.AddOptions<HubSpotOptions>()
+            .Bind(configuration.GetSection(HubSpotOptions.SectionName));
+        services.AddHttpClient("HubSpot");
+        services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
+        services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
+        services.AddScoped<IHubSpotTokenProvider, HubSpotTokenProvider>();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

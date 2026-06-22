@@ -12,4 +12,5 @@ public static class ResourceTypes
     public const string Payout = "Payout";
     public const string FieldRequirement = "FieldRequirement";
     public const string Subscription = "Subscription";
+    public const string Integration = "Integration";
 }

@@ -124,6 +124,19 @@
             }
           </a>
         </li>
+        <li *hasPermission="integrationsItem.permission" class="sidebar__nav-item">
+          <a
+            [routerLink]="integrationsItem.path"
+            class="sidebar__nav-link"
+            [class.sidebar__nav-link--active]="isNavActive(integrationsItem.path)"
+            [title]="!sidebarState.isExpanded() ? (integrationsItem.labelKey | translate) : ''"
+          >
+            <app-icon [name]="integrationsItem.icon" [size]="18" />
+            @if (sidebarState.isExpanded()) {
+              <span class="sidebar__nav-label">{{ integrationsItem.labelKey | translate }}</span>
+            }
+          </a>
+        </li>
         <li *hasPermission="settingsItem.permission" class="sidebar__nav-item">
           <a
             [routerLink]="settingsItem.path"

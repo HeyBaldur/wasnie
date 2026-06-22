@@ -4,6 +4,98 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-22 — WI-INTEGRATIONS-CARD-FIX (la card se veía apretada/mal)
+
+**Causa raíz:** `.int-card` (flex column + `gap`) estaba aplicada al elemento HOST `<ws-card class="int-card">`. Pero `WsCard` tiene template `<div [class]="classes()"><ng-content/></div>` → el contenido proyectado (logo/título/divisor/footer) vive DENTRO del `<div class="ws-card">` interno, no como hijo directo del host. Por eso el `gap` entre secciones no se aplicaba: las 4 secciones quedaban pegadas (divisor tocando el texto), card apretada → "mal". (El padding sí funcionaba porque está en el div interno de ws-card.)
+
+**Fix:** envolver el contenido en `<div class="int-card">` DENTRO de `<ws-card>` (ahora el flex/gap sí controla la separación de secciones). Además:
+- `ws-card padding="none"` + `.int-card { padding: var(--space-6) }` → p-6 UNIFORME (la referencia es p-6 24px; ws-card pad-lg daba 24/32).
+- Fidelidad a la referencia: título `--font-size-18`/700 (text-lg font-bold), descripción `--font-size-14`/line-height 1.6 (text-sm leading-relaxed), tile de logo + `--shadow-sm`.
+- Quitado el hover custom de `.int-card` (antes en el host sin fondo → sombra rara) y la media query reduced-motion asociada (ya no hay transición).
+
+Solo `integrations.component.{html,scss}`. Sin TS/i18n/otras páginas. `ng build --configuration production` limpio. Verificación en pantalla = owner (recargar `/integrations`).
+
+## 2026-06-22 — WI-INTEGRATIONS-CARD-REF (estructura de referencia adaptada a modo oscuro)
+
+**Alcance:** UI puro de la card de `/integrations`. Sin TS/lógica/OAuth/i18n este turno (las claves ya existían). Sin tocar otras páginas. Solo `integrations.component.{html,scss}`.
+
+**Estructura de referencia adoptada (layout), traducida a tokens oscuros de Wasnie (colores):**
+- Header: tile de logo arriba-izquierda (56px ≈ h-14 w-14, `--radius-xl`, bg `--color-bg-surface-sunken`, borde sutil, logo `/hubspot.png` `object-contain`) + `WsBadge` de estado arriba-derecha (Connected verde / NeedsReconnect ámbar / neutro).
+- Título "HubSpot" (bold, `--color-text-primary`) + descripción (`--color-text-secondary`).
+- **Divisor** `<hr class="int-card__divider">` (`border-top --color-border-subtle`).
+- Footer: detalle revelado al conectar (account/connected on) / notice needs-reconnect con StatusReason / nota disconnected / resultado inline de Test, y la fila de acciones.
+- Card = `WsCard` pad-lg (rounded `--radius-xl`, shadow-md), hover sutil (border+shadow-lg, sin transform) con `@media (prefers-reduced-motion: reduce)`. Grilla `repeat(auto-fill, minmax(min(100%,320px), 384px))` → tiles capeados a max-w-sm, 1 col mobile.
+
+**Adaptación dark (crítico):** la referencia usaba `bg-white/text-slate-900/bg-emerald-50/bg-blue-600` — NO se usó nada de eso. Todo con WsCard/WsButton/WsBadge + variables de color/espaciado/radio de Wasnie. Solo se tomó de la referencia: proporciones, spacing, radios, divisor y disposición.
+
+**SIN toggle/switch** (la referencia lo tiene): implica "pausar sin desconectar" = estado Paused reservado a Fase 3; hoy no hay sync que pausar. Omitido a propósito (decisión owner).
+
+**Verificación:** `ng build --configuration production` limpio. git: este turno solo cambió `features/integrations/integrations.component.{html,scss}` (las mods de app.routes/sidebar/i18n son de WIs previos, sin tocar). Sin clases `bg-white`/colores ajenos. Verificación en pantalla = owner. NUNCA git.
+
+## 2026-06-22 — WI-INTEGRATIONS-UI-REDESIGN (grilla de cards profesional + logo HubSpot)
+
+**Alcance:** UI puro de `/integrations`. Sin cambios de backend/endpoints/datos/lógica OAuth. Sin tocar otras páginas. Reusa el design system de Wasnie (WsCard/WsButton/WsBadge + tokens), no se introdujo paleta/tipografía nueva.
+
+**Cambios (solo `features/integrations/integrations.component.{ts,html,scss}` + i18n INTEGRATIONS):**
+- **Grilla directorio:** `.integrations-grid` con `repeat(auto-fill, minmax(320px,1fr))` — 1 col mobile, 2-3 en desktop, lista para más integraciones (auto-fill mantiene la card a tamaño tile, no full-width). Por ahora una card: HubSpot.
+- **Card HubSpot:** logo real `/hubspot.png` (de `public/`) en tile fijo 48px (`object-fit:contain`, bg `--color-bg-surface-sunken`, borde); nombre + descripción (sentence case); estado `WsBadge` (Connected→success, NeedsReconnect→warning, otro→neutral) arriba-derecha.
+- **Detalle revelado al conectar** (misma card, no modal): `HubSpot account` (portalId) + `Connected on`, con divisor superior; acciones Test/Disconnect. No conectado → Connect. Needs reconnect → StatusReason + Reconnect. Disconnected → nota + Connect.
+- **Test connection inline:** nuevo signal `testResult`; en vez de toast, muestra una línea ok ("Connection healthy") o error con el motivo del backend, con icono check/alert. Se limpia en load()/disconnect().
+- **Pulido:** hover sutil de card (border + shadow-lg, SIN transform), guarda `@media (prefers-reduced-motion: reduce)`; focus de teclado lo aportan los WsButton; spacing con tokens.
+- i18n EN/ES/PL: DESC ajustada a "...flows into Wasnie / fluyan a / płynęły do"; añadidas `TEST_HEALTHY` y `TEST_FAIL`. (Las viejas TOAST_TEST_* quedan sin uso, inofensivas.)
+
+**Verificación:** `ng build --configuration production` limpio. JSON i18n válidos. git: solo `features/integrations/` + i18n cambiaron en el frontend este turno (las modificaciones de `app.routes.ts`/`sidebar.*` son de la Fase 1, no de este WI). Verificación en pantalla = owner. NUNCA git.
+
+## 2026-06-22 — WI-HUBSPOT-FIX-SCOPES (quitar `oauth` de la authorize URL)
+
+**Problema (verificado en pantalla):** HubSpot rechazaba la conexión con "mismatch between the scopes in the install URL and the app's configured scopes". La app está configurada con 3 scopes CRM (sin `oauth`); el código pedía 4 (con `oauth`). `oauth` no es un scope de HubSpot (el flujo OAuth es implícito) — sobraba.
+
+**Fix:** quitado `oauth`. Set final EXACTO (3): `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read`. Estaba en 3 lugares, unificados todos: (1) default de `HubSpotOptions.Scopes` (+ comentario "no incluir oauth"); (2) `appsettings.json` (placeholder committed); (3) `appsettings.Development.json` (gitignored, el que aplica en runtime). La authorize URL se construye desde `_opts.Scopes` (`StartHubSpotConnectionCommand.BuildAuthorizationUrl`), así que ajustar la config basta — sin cambios de lógica. No se tocó nada más del flujo OAuth. Build Application limpio.
+
+**OWNER:** reiniciar API, reintentar Connect en `/integrations`; verificar también que la Redirect URL `http://localhost:5091/api/integrations/hubspot/callback` esté efectivamente agregada y guardada en la lista de Redirect URLs de la app (no solo en la Sample URL).
+
+## 2026-06-22 — WI-HUBSPOT-FASE1 (OAuth Public App: conexión, tokens, refresh, UI)
+
+**Alcance:** SOLO Fase 1 del diseño `docs/HUBSPOT_INTEGRATION_DESIGN.md` (la puerta OAuth). NO deals, NO polling, NO webhooks, NO mapeo a transacciones (Fases 2-4).
+
+**PASO 0 (diagnóstico):** Reutilizados los patrones existentes — servicios externos vía `IHttpClientFactory` named client + Options + impl en Infrastructure + DI (como Resend/Stripe); config de secretos en `appsettings.Development.json` (gitignored, confirmado); audit vía `IAuditService.LogAsync(AuditEntry)`; entidades EF + `IEntityTypeConfiguration` + query filters por `CurrentTenantId`. **Hallazgo crítico:** NO existía ningún mecanismo de cifrado en el repo → había que implementarlo.
+
+**Decisiones (reportadas):**
+- **Cifrado:** `AesTokenEncryptionService` AES-256-GCM; clave base64 (32 bytes) desde `HubSpot:TokenEncryptionKey` (gitignored). Blob = base64(nonce12||tag16||cipher). Comentado que prod debe usar KMS/envelope. (Sin ValidateOnStart para no romper el arranque cuando HubSpot no está configurado — los endpoints fallan con mensaje claro si falta config.)
+- **Anti-CSRF state:** tabla efímera `HubSpotOAuthStates` (one-time, TTL 10min) en vez de memoria, porque el dev server recicla y el callback es anónimo. SIN query filter de tenant (el callback no tiene JWT → recupera el tenant del state). La conexión sí tiene query filter; el callback usa `IgnoreQueryFilters` + tenant explícito.
+- **Permiso:** nuevo `Integrations.Manage` solo para TenantAdmin (conectar un CRM expone datos del tenant). UI+endpoints gated; el callback es `[AllowAnonymous]` (seguridad = validación del state).
+- **Disconnect:** mantiene la fila con Status=Disconnected + DisconnectedAt/By + StatusReason, pero BORRA los tokens cifrados (no guardar credenciales del CRM tras desconectar). Ausencia de fila = NeverConnected.
+
+**Backend:** Domain `HubSpotConnection`/`HubSpotConnectionStatus`/`HubSpotOAuthState`; Application Options/interfaces (`ITokenEncryptionService`, `IHubSpotOAuthClient`, `IHubSpotTokenProvider`) + commands/queries (Start/Callback/Disconnect/Status/Ping) con DTOs sin tokens; Infrastructure `AesTokenEncryptionService`, `HubSpotOAuthClient` (code-exchange/refresh/token-info portalId/account-info), `HubSpotTokenProvider` (refresh+skew, descarta viejo, BAD_REFRESH_TOKEN→NeedsReconnect sin loop); EF configs + DbSets + query filter; DI + named HttpClient "HubSpot"; `IntegrationsController` (connect/callback/disconnect/status/ping). Endpoints HubSpot vigentes confirmados: authorize `https://app.hubspot.com/oauth/authorize`, token `https://api.hubapi.com/oauth/v1/token`, portalId `/oauth/v1/access-tokens/{token}`, ping `/account-info/v3/details`. `expires_in` leído del response (no hardcode).
+
+**Migración:** `B7_HubSpotIntegration` (2 tablas + unique index en TenantId). Generada, aplicada y **verificada en BD** (HubSpotConnections 14 cols, HubSpotOAuthStates 6 cols) — Regla 13.
+
+**Frontend:** feature `integrations/` — `HubSpotApiService`, `IntegrationsComponent` (signals; Connect→`window.location.assign(authUrl)`; lee `?hubspot=connected|error` y muestra toast; Reconnect; Disconnect; Test=ping), `WsCard/WsButton/WsBadge/WsPageLayout`; ruta `/integrations` gated por `Integrations.Manage`; ítem en sidebar (sección Settings). i18n EN/ES/PL (`NAV.INTEGRATIONS` + bloque `INTEGRATIONS`). Callback NO necesita componente Angular: el backend redirige a `/integrations?hubspot=...`.
+
+**Tests:** +21 unit (no requieren Docker): `AesTokenEncryptionServiceTests` (round-trip, ciphertext≠plaintext, nonce aleatorio, wrong-key/tamper rechazados, key inválida); `HubSpotConnectionTests` (transiciones, disconnect limpia tokens); `HubSpotTokenProviderTests` (no refresca si válido; refresca y descarta el viejo; BAD_REFRESH_TOKEN→NeedsReconnect+null; disconnected→null sin llamar a HubSpot); `HandleHubSpotCallbackHandlerTests` (code→token persiste CIFRADO no plaintext; state desconocido/expirado rechazado; reconnect reutiliza la fila). Backend unit **649/649** pass. `ng build` prod limpio; full solution build limpio.
+
+**OWNER ACTION (FASE 3.2, en pantalla):** registrar la Public App dev en HubSpot (redirect `http://localhost:5091/api/integrations/hubspot/callback`; scopes `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read`), poner `HubSpot:ClientId`/`HubSpot:ClientSecret` en `appsettings.Development.json` (la `TokenEncryptionKey` dev ya está puesta), reiniciar la API (`api run`), ir a `/integrations`, Connect → autorizar en HubSpot → ver "Conectado" → Test trae info de cuenta. NOTA: se detuvo el `Wasnie.Api.exe` de dev para builds/migración — reiniciar.
+
+## 2026-06-22 — WI-IMPORT-PREVIEW-TABLE-STYLE (unificar tabla de preview del import con Credits)
+
+**Estado:** Ya implementado y commiteado como `b4043a8 "Enhance table styling and scrolling behavior"` (mergeado vía PR #17 a `WI-HUBSPOT-INTEGRATION`). En esta sesión re-derivé el cambio: resultó byte-idéntico al commiteado (blob hashes iguales, `git diff` vacío), así que no había nada nuevo que aplicar ni commitear. Documentado aquí porque las continuity docs no lo recogían.
+
+**Objetivo:** Alinear el diseño visual de la tabla de preview/validación del import con el estándar de la app (referencia: tabla de Credits / `WsTable`), sin cambiar comportamiento.
+
+**Decisión de enfoque (autonomía Sección 13):** NO migrar a `<ws-table>`; REPLICAR sus estilos sobre la estructura `.preview-table` existente. Razón: la tabla del preview tiene header **sticky** + scroll vertical con `max-height: 440px` (Credits usa paginación, su `ws-table-wrap` no tiene max-height) y la celda **Issues/Changes** es multi-línea/multi-badge. Migrar a `<ws-table>` habría perdido el scroll/sticky y arriesgado la celda Issues — justo lo que el WI prohíbe degradar.
+
+**Alcance:** 3 preview steps (todos comparten el patrón `.preview-table`): `imports/payees/steps/preview-step`, `imports/transactions/steps/preview-step` (create), `imports/transactions/steps/update-preview-step` (diff). Se incluyó el update-preview para uniformidad dentro del mismo wizard (su columna multi-línea es "Changes", tratada igual que Issues).
+
+**Cambios (6 archivos: 3 .scss + 3 .html):**
+- Wrap: `border-radius` md→lg, `+ background: surface`, `+ box-shadow: sm`; se mantiene `max-height` + overflow (scroll intacto).
+- Header (`__th`): bg `surface-sunken`→`surface-raised`, color `tertiary`→`secondary`, `letter-spacing` 0.04em→0.02em, border `subtle`→`default`, font 11px→12px; sigue sticky.
+- Celdas (`__td`): padding `space-1/space-2`→`space-3/space-4`, font tabla →14px peso 400, border-bottom subtle; **eliminada** la truncación `max-width:0 + overflow hidden + ellipsis` (Credits no trunca).
+- Hover de fila añadido (`bg surface-raised`).
+- Issues/Changes: `white-space: normal` + `vertical-align: top` (mantenido top a propósito para legibilidad multi-issue), sin truncar, anchos 28%/40% mantenidos; WsBadge intactos.
+- HTML: solo se añadió la clase global `ws-scroll-thin` al contenedor de scroll.
+
+**Sin cambios:** TS, columnas, contenido, tabs/filtros/conteos, botón import, checkbox consentimiento, datos, i18n. `ng build --configuration production` limpio. EN/ES/PL no afectados (sin cambios de texto; las celdas ahora envuelven en vez de truncar, lo que mejora textos largos en cualquier idioma).
+
 ## 2026-06-22 — WI-IMPORT-CANCEL-CONSENT (Cancel link + checkbox de consentimiento en wizards de import)
 
 **Contexto:** Dos mejoras de UI en ambos wizards de import (`/payees/import` y `/transactions/import`, este último con modos create y update): (A) un escape directo "Cancel" para no tener que pulsar Back varias veces, y (B) un checkbox de consentimiento obligatorio que habilita el botón Import.

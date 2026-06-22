@@ -110,4 +110,11 @@ public static class AuditActions
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";
+
+    // Integrations — HubSpot OAuth (Phase 1). Token values are NEVER included in audit metadata.
+    public const string HubSpotConnected = "HUBSPOT_CONNECTED";
+    public const string HubSpotReconnected = "HUBSPOT_RECONNECTED";
+    public const string HubSpotDisconnected = "HUBSPOT_DISCONNECTED";
+    public const string HubSpotNeedsReconnect = "HUBSPOT_NEEDS_RECONNECT";
+    public const string HubSpotTokenRefreshed = "HUBSPOT_TOKEN_REFRESHED";
 }

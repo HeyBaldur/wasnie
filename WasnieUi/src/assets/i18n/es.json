@@ -193,8 +193,38 @@
     "PAY_GROUP": "Finanzas",
     "ADMIN": "Configuración",
     "SUBSCRIPTION": "Suscripción",
+    "INTEGRATIONS": "Integraciones",
     "IMPORT_TRANSACTIONS": "Importar transacciones",
     "PROFILE": "Perfil"
+  },
+  "INTEGRATIONS": {
+    "TITLE": "Integraciones",
+    "SUBTITLE": "Conecta Wasnie con tus otras herramientas",
+    "LOAD_ERROR": "No se pudieron cargar las integraciones.",
+    "HUBSPOT": {
+      "NAME": "HubSpot",
+      "DESC": "Conecta tu CRM de HubSpot para que los datos de ventas fluyan a Wasnie.",
+      "STATUS_NEVERCONNECTED": "Sin conectar",
+      "STATUS_CONNECTED": "Conectado",
+      "STATUS_NEEDSRECONNECT": "Requiere reconexión",
+      "STATUS_DISCONNECTED": "Desconectado",
+      "PORTAL_ID": "Cuenta de HubSpot",
+      "CONNECTED_AT": "Conectado el",
+      "NEEDS_RECONNECT_GENERIC": "La conexión dejó de funcionar. Vuelve a conectar.",
+      "DISCONNECTED_NOTE": "HubSpot está desconectado. Vuelve a conectar para reanudar.",
+      "CONNECT": "Conectar HubSpot",
+      "RECONNECT": "Reconectar",
+      "DISCONNECT": "Desconectar",
+      "TEST": "Probar conexión",
+      "TOAST_CONNECTED": "HubSpot conectado.",
+      "TOAST_CONNECT_ERROR": "No se pudo conectar con HubSpot. Inténtalo de nuevo.",
+      "TOAST_DISCONNECTED": "HubSpot desconectado.",
+      "TOAST_DISCONNECT_ERROR": "No se pudo desconectar HubSpot. Inténtalo de nuevo.",
+      "TOAST_TEST_OK": "La conexión funciona — HubSpot respondió.",
+      "TOAST_TEST_FAIL": "La llamada de prueba a HubSpot falló.",
+      "TEST_HEALTHY": "Conexión correcta — HubSpot respondió.",
+      "TEST_FAIL": "La llamada de prueba a HubSpot falló."
+    }
   },
   "EMPTY_STATE": {
     "PLANS_TITLE": "Sin planes aún",

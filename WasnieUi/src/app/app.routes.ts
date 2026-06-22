@@ -104,6 +104,14 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'integrations',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Integrations.Manage')],
+    loadComponent: () =>
+      import('./features/integrations/integrations.component').then(
+        (m) => m.IntegrationsComponent
+      ),
+  },
+  {
     path: 'forbidden',
     canActivate: [planGuard, subscriptionGuard],
     loadComponent: () =>

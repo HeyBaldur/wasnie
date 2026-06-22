@@ -21,7 +21,7 @@ public static class RolePermissions
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
             Permission.PayoutsDeleteDraft,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
-            Permission.SettingsUpdate,
+            Permission.SettingsUpdate, Permission.IntegrationsManage,
         };
 
     private static readonly IReadOnlySet<string> CompManagerPermissions =
