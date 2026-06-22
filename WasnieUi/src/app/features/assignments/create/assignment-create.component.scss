@@ -40,6 +40,12 @@
   }
 }
 
+.field-hint {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+}
+
 .form-actions {
   @apply flex items-center justify-end;
   gap: var(--space-2);

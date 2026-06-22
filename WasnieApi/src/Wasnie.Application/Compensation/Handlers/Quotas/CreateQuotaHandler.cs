@@ -28,6 +28,14 @@ public sealed class CreateQuotaHandler(
         if (plan is null)
             return Result<QuotaSummaryDto>.Failure("Plan not found.");
 
+        // Integrity guard: the quota period must fall within the plan's effective period.
+        // The UI defaults to the plan period and validates this client-side, but a direct API
+        // call must not be able to set a window outside the plan that attainment is measured against.
+        if (request.PeriodStart < plan.EffectivePeriod.Start ||
+            request.PeriodEnd > plan.EffectivePeriod.End)
+            return Result<QuotaSummaryDto>.Failure(
+                "The quota period must fall within the selected plan's effective period.");
+
         var amount = Money.OfNonNegative(request.Amount, request.Currency);
         var period = DateRange.Of(request.PeriodStart, request.PeriodEnd);
 

@@ -4,6 +4,48 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-22 — WI-PLAN-PERIOD-ALIGNMENT (período de Assignment/Quota alineado al plan)
+
+**Contexto:** En Create Assignment y Create Quota el período era libremente editable aun con un plan elegido, permitiendo desalinear el período contra el que se mide el attainment → comisiones incorrectas. El WI pedía auto-rellenar y bloquear desde `plan.effectiveStart/End`.
+
+**Phase 2.4 (confirmado en código):** El plan es OBLIGATORIO en ambos formularios (`planId: Validators.required`) y en ambos comandos (`PlanId` Guid no-nullable). Por tanto el caso "sin plan → fechas libres" NO existe. El DTO del plan ya expone `effectiveStart`/`effectiveEnd` (Assignment ya lo usaba para auto-fill) — no hizo falta ampliar el endpoint.
+
+**Conflicto detectado y decidido por el owner:** Las quotas en el modelo/tests existentes son ventanas trimestrales DENTRO de un plan anual (multi-quota por plan; sin constraint de unicidad). "Quota period == plan period exacto" lo prohibiría. Pregunté al owner → decisión:
+- **Assignment:** período = período del plan EXACTO + bloqueado (UI `disable()`).
+- **Quota:** período debe estar DENTRO del período del plan, EDITABLE (no bloqueado). Esto anula deliberadamente el requisito "locked" del WI para Quota.
+
+**FASE 1 — Frontend:**
+- `assignment-create.component.ts`: suscripción a `planId` con `switchMap` (plan→`of(null)`); con plan: `setValue(plan period)` + `disable()` + `planPeriodLocked=true`; sin plan: `setValue(null)` + `enable()`. Decisión: al limpiar el plan se LIMPIA el valor (era el del plan, ya irrelevante). Hint `ASSIGNMENTS.PERIOD_LOCKED_HINT`.
+- `quota-create.component.ts`: misma suscripción `switchMap`; con plan: fija currency (ya existía) + `planPeriod` signal + auto-fill del date-range como DEFAULT editable. Validador `periodWithinPlanValidator` (containment con comparación lexicográfica ISO) → error `outsidePlanPeriod` → `QUOTAS.PERIOD_OUTSIDE_PLAN`. Hint `QUOTAS.PERIOD_WITHIN_PLAN_HINT`.
+- Hint estilado con `.field-hint` local (tokens) en ambos scss. `ws-date-range-picker` ya soporta `setDisabledState` (vía `disable()`) y `--disabled`.
+- i18n EN/ES/PL: 3 claves nuevas.
+
+**FASE 2 — Backend (integridad):**
+- `AssignPlanToPayeeHandler`: tras cargar el plan, si `EffectiveStart/End != plan.EffectivePeriod.Start/End` → `Result.Failure` (→400 por el controller).
+- `CreateQuotaHandler`: si `PeriodStart < plan.start || PeriodEnd > plan.end` → `Result.Failure` (→400). La regla va en el handler (necesita el plan cargado), no en el validator FluentValidation (stateless).
+- Scope = Create (el WI no pide Update; Update sigue sin esta validación → follow-up recomendado).
+
+**FASE 3 — Tests:**
+- +2 Assignment integración (PeriodMatchesPlan→200, PeriodDoesNotMatchPlan→400), +2 Quota (PeriodWithinPlan→201, PeriodOutsidePlan→400).
+- `CreateQuotaAsync` helper: offsets trimestrales→mensuales (el offset 4 caía en Q1 2026, fuera del plan anual 2025 → habría roto el test de paginación con la nueva validación).
+- Backend unit: 628/628 pass. Integración: NO ejecutada (Docker/Testcontainers no disponible en este entorno) — 39 tests compilan y se descubren; **correr con Docker antes de merge**.
+- `ng build --configuration production` limpio; build de la solución completa limpio.
+
+**Notas dev:** Se detuvo `Wasnie.Api.exe` (dev) porque bloqueaba los DLLs del build de tests — **reiniciar con `api run`**. Estos dos formularios no tenían specs de frontend; el WI scopea FASE 3 a tests backend + verificación en pantalla del owner. Specs de frontend = follow-up recomendado.
+
+## 2026-06-22 — WI-SIDEBAR-REORDER (menú lateral en orden lógico)
+
+**Contexto:** El orden del sidebar no seguía el flujo real de uso del ICM. En concreto Assignments aparecía ANTES que Payees, pero no se puede asignar un payee que aún no existe — el usuario tenía que saltar a Operations a crearlo y volver. Decisión del owner: Opción A (mover Payees al grupo de setup, antes de Assignments) + renombrar la sección a "Setup".
+
+**Cambio (navegación pura, sin backend/rutas/iconos/estilos):**
+- `WasnieUi/src/app/shared/components/sidebar/sidebar.component.ts` — el sidebar es enteramente data-driven (`navSections: NavSection[]`). Reordenado: la antigua sección "Compensation" pasa a `sectionKey: 'NAV.SECTION_SETUP'` y contiene Plans → Quotas → **Payees** → Assignments. Payees eliminado de "Operations", que queda con Transactions → Credits → Financials (grupo Pay Runs/Payouts).
+- i18n EN/ES/PL: clave `SECTION_COMPENSATION` renombrada a `SECTION_SETUP` con valores Setup / Configuración / Konfiguracja. Verificado que no quedan referencias a la clave antigua.
+- No tocado: rutas (`path`), iconos, permisos, comportamiento de colapso (`SidebarStateService`), ni el resaltado de item activo (`currentUrl` + `isNavActive`/auto-expand de grupos) — todo sigue funcionando porque depende del array, no de orden hardcodeado en plantilla.
+
+**Notas:** El orden NO estaba hardcodeado en varios sitios — un único array lo define; la plantilla itera dinámicamente. La sección inferior `SECTION_SETTINGS` (Subscription/Admin) es independiente y no se tocó.
+
+**Resultados:** `ng build --configuration production` limpio (solo warnings pre-existentes). Cambio sin tests nuevos (no es código de dinero/cálculo; es navegación declarativa).
+
 ## 2026-06-19 — WI-FIX (supplemental pay runs)
 
 **Contexto:** Diagnóstico (sesión anterior) identificó que `CalculatePayRunHandler` bloqueaba con un error opaco si el período ya tenía un run Paid o Approved. Esto impedía calcular un nuevo payee/plan en un período ya cerrado. Las 3 capas de anti-doble-pago ya eran seguras (motor excluye créditos consumidos); el bloqueo era innecesariamente conservador.
