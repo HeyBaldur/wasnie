@@ -300,62 +300,90 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
     }
 
     [Fact]
-    public async Task CalculatePayRun_ApprovedRun_ReturnsFailure()
+    public async Task CalculatePayRun_ApprovedRun_CreatesSupplementalRunSequence1()
     {
         var (tenantId, _, _) = await SeedEmptyRunAsync();
         var start = new DateOnly(2026, 1, 1);
         var end = new DateOnly(2026, 3, 31);
 
-        // Calculate then approve.
-        Guid runId;
+        // Calculate then approve the primary run.
+        Guid primaryRunId;
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            runId = (await CalcRunHandler(db, tenantId)
+            primaryRunId = (await CalcRunHandler(db, tenantId)
                 .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!.PayRunId;
         }
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            await ApproveHandler(db).Handle(new ApprovePayRunCommand(runId), CancellationToken.None);
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(primaryRunId), CancellationToken.None);
         }
 
-        // Second calculate on Approved run → must fail.
+        // Second calculate on Approved period → must succeed as supplemental #1.
+        CalculatePayRunResult supplementalResult;
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
             var result = await CalcRunHandler(db, tenantId)
                 .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None);
-            result.IsSuccess.Should().BeFalse("Approved run must block recalculation");
-            result.Error.Should().Contain("Approved");
+            result.IsSuccess.Should().BeTrue("an Approved period must allow a supplemental run");
+            supplementalResult = result.Value!;
+        }
+
+        supplementalResult.IsSupplemental.Should().BeTrue();
+        supplementalResult.SupplementalSequence.Should().Be(1);
+        supplementalResult.PayRunId.Should().NotBe(primaryRunId, "supplemental must be a new run");
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var runCount = await db.PayRuns.CountAsync(r => r.PeriodStart == start && r.PeriodEnd == end);
+            runCount.Should().Be(2, "primary (Approved) + supplemental (Draft) must coexist");
+
+            var supplemental = await db.PayRuns.FirstAsync(r => r.Id == supplementalResult.PayRunId);
+            supplemental.Status.Should().Be(PayRunStatus.Draft);
+            supplemental.SupplementalSequence.Should().Be(1);
         }
     }
 
     [Fact]
-    public async Task CalculatePayRun_PaidRun_ReturnsFailure()
+    public async Task CalculatePayRun_PaidRun_CreatesSupplementalRunSequence1()
     {
         var (tenantId, _, _) = await SeedEmptyRunAsync();
         var start = new DateOnly(2026, 1, 1);
         var end = new DateOnly(2026, 3, 31);
 
-        Guid runId;
+        Guid primaryRunId;
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            runId = (await CalcRunHandler(db, tenantId)
+            primaryRunId = (await CalcRunHandler(db, tenantId)
                 .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!.PayRunId;
         }
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            await ApproveHandler(db).Handle(new ApprovePayRunCommand(runId), CancellationToken.None);
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(primaryRunId), CancellationToken.None);
         }
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
-            await MarkPaidHandler(db).Handle(new MarkPayRunPaidCommand(runId), CancellationToken.None);
+            await MarkPaidHandler(db).Handle(new MarkPayRunPaidCommand(primaryRunId), CancellationToken.None);
         }
 
+        // Calculate on Paid period → supplemental run created instead of blocking.
+        CalculatePayRunResult supplementalResult;
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
             var result = await CalcRunHandler(db, tenantId)
                 .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None);
-            result.IsSuccess.Should().BeFalse("Paid run must be locked — no recalculation");
-            result.Error.Should().Contain("Paid");
+            result.IsSuccess.Should().BeTrue("a Paid period must allow a supplemental run for new payees");
+            supplementalResult = result.Value!;
+        }
+
+        supplementalResult.IsSupplemental.Should().BeTrue();
+        supplementalResult.SupplementalSequence.Should().Be(1);
+        supplementalResult.PayRunId.Should().NotBe(primaryRunId);
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var supplemental = await db.PayRuns.FirstAsync(r => r.Id == supplementalResult.PayRunId);
+            supplemental.Status.Should().Be(PayRunStatus.Draft);
+            supplemental.SupplementalSequence.Should().Be(1);
         }
     }
 
@@ -892,6 +920,115 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
             var runB = await db.PayRuns.FirstAsync(r => r.Id == runBId);
             runB.Status.Should().Be(PayRunStatus.Approved,
                 "pay run B must remain Approved — no double payment occurred");
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // GROUP 6: Supplemental run sequences
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task CalculatePayRun_TwoSupplementals_SequenceIncrementsCorrectly()
+    {
+        var (tenantId, _, _) = await SeedEmptyRunAsync();
+        var start = new DateOnly(2026, 1, 1);
+        var end = new DateOnly(2026, 3, 31);
+
+        // Primary run → approve → paid.
+        Guid primaryRunId;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            primaryRunId = (await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!.PayRunId;
+        }
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(primaryRunId), CancellationToken.None);
+        }
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await MarkPaidHandler(db).Handle(new MarkPayRunPaidCommand(primaryRunId), CancellationToken.None);
+        }
+
+        // Supplemental #1.
+        Guid supp1Id;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = (await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!;
+            r.SupplementalSequence.Should().Be(1);
+            supp1Id = r.PayRunId;
+        }
+
+        // Approve + pay supplemental #1 so a second supplemental can be created.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(supp1Id), CancellationToken.None);
+        }
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await MarkPaidHandler(db).Handle(new MarkPayRunPaidCommand(supp1Id), CancellationToken.None);
+        }
+
+        // Supplemental #2.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = (await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!;
+            r.SupplementalSequence.Should().Be(2);
+            r.IsSupplemental.Should().BeTrue();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var count = await db.PayRuns.CountAsync(r => r.PeriodStart == start && r.PeriodEnd == end);
+            count.Should().Be(3, "primary (seq=0) + supp1 (seq=1) + supp2 (seq=2)");
+        }
+    }
+
+    [Fact]
+    public async Task CalculatePayRun_SupplementalDraft_ReusesDraftNotCreatesAnother()
+    {
+        var (tenantId, _, _) = await SeedEmptyRunAsync();
+        var start = new DateOnly(2026, 1, 1);
+        var end = new DateOnly(2026, 3, 31);
+
+        // Primary run → approved.
+        Guid primaryRunId;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            primaryRunId = (await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!.PayRunId;
+        }
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            await ApproveHandler(db).Handle(new ApprovePayRunCommand(primaryRunId), CancellationToken.None);
+        }
+
+        // Create supplemental Draft.
+        Guid supp1Id;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            supp1Id = (await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!.PayRunId;
+        }
+
+        // Calculate again — must reuse the supplemental Draft, not create a third run.
+        Guid secondCallId;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = (await CalcRunHandler(db, tenantId)
+                .Handle(new CalculatePayRunCommand(start, end), CancellationToken.None)).Value!;
+            r.IsSupplemental.Should().BeFalse("reusing an existing Draft is not 'creating' a supplemental");
+            secondCallId = r.PayRunId;
+        }
+
+        secondCallId.Should().Be(supp1Id, "recalculating must reuse the existing supplemental Draft");
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var count = await db.PayRuns.CountAsync(r => r.PeriodStart == start && r.PeriodEnd == end);
+            count.Should().Be(2, "primary (Approved, seq=0) + supp1 (Draft, seq=1) — no third run");
         }
     }
 }

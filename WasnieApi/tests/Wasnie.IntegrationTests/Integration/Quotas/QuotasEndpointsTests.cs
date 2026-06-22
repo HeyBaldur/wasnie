@@ -250,6 +250,52 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task CreateQuota_PeriodWithinPlan_Returns201()
+    {
+        // Plan effective period is 2025-01-01 .. 2025-12-31; quota period is a sub-window inside it.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+
+        var request = new
+        {
+            payeeId = payee.Id,
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2025-04-01",
+            periodEnd = "2025-06-30"
+        };
+
+        var response = await _clientA.PostAsJsonAsync("/api/quotas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task CreateQuota_PeriodOutsidePlan_Returns400()
+    {
+        // Valid date range, but the end extends beyond the plan's 2025-12-31 effective end.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+
+        var request = new
+        {
+            payeeId = payee.Id,
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2025-01-01",
+            periodEnd = "2026-03-31"
+        };
+
+        var response = await _clientA.PostAsJsonAsync("/api/quotas", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     // ── Update Quota ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -438,8 +484,10 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
     private async Task<QuotaSummaryResponse> CreateQuotaAsync(
         HttpClient client, Guid payeeId, Guid planId, int periodOffset = 0)
     {
-        var start = new DateOnly(2025, 1, 1).AddMonths(periodOffset * 3);
-        var end = start.AddMonths(3).AddDays(-1);
+        // Monthly sub-periods so multiple quotas stay within the plan's effective period
+        // (2025-01-01 .. 2025-12-31) — quota period must be contained within the plan period.
+        var start = new DateOnly(2025, 1, 1).AddMonths(periodOffset);
+        var end = start.AddMonths(1).AddDays(-1);
         var request = new
         {
             payeeId,

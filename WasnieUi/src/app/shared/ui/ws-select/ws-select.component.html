@@ -16,7 +16,12 @@
   >
     <span class="ws-select__value" [class.ws-select__value--placeholder]="!selectedOption()">
       @if (selectedOption()) {
-        {{ selectedOption()!.label | translate }}
+        <span class="ws-select__option-label">{{ selectedOption()!.label | translate }}</span>
+        @if (selectedOption()!.badge) {
+          <ws-badge [variant]="selectedOption()!.badge!.variant" size="sm">
+            {{ selectedOption()!.badge!.text | translate }}
+          </ws-badge>
+        }
       } @else {
         {{ placeholder() | translate }}
       }
@@ -65,7 +70,10 @@
             (click)="select(opt); $event.stopPropagation()"
             (mouseenter)="activeIndex.set(i)"
           >
-            {{ opt.label | translate }}
+            <span class="ws-select__option-label">{{ opt.label | translate }}</span>
+            @if (opt.badge) {
+              <ws-badge [variant]="opt.badge.variant" size="sm">{{ opt.badge.text | translate }}</ws-badge>
+            }
             @if (value() === opt.value) {
               <app-icon name="check-circle" [size]="14" class="ws-select__check" />
             }

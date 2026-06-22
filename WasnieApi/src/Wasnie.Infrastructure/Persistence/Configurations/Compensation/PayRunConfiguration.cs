@@ -40,10 +40,11 @@ public sealed class PayRunConfiguration : IEntityTypeConfiguration<PayRun>
                 v => JsonSerializer.Deserialize<Dictionary<string, decimal>>(v, JsonOptions)
                      ?? new Dictionary<string, decimal>());
 
-        // Enforces one PayRun per period per tenant.
-        // Named uniquely — created by migration A6_AddPayRun as HasIndex cannot use DateOnly
-        // owned columns, but these ARE direct columns on PayRun so HasIndex works here.
-        builder.HasIndex(r => new { r.TenantId, r.PeriodStart, r.PeriodEnd })
+        builder.Property(r => r.SupplementalSequence).IsRequired().HasDefaultValue(0);
+
+        // 0 = primary run; 1, 2, … = supplemental runs after the period's primary was Paid/Approved.
+        // Migration B6_PayRunSupplementalSequence: dropped 3-col index, created this 4-col one.
+        builder.HasIndex(r => new { r.TenantId, r.PeriodStart, r.PeriodEnd, r.SupplementalSequence })
             .IsUnique()
             .HasDatabaseName("IX_PayRuns_Unique");
 

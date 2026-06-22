@@ -56,7 +56,7 @@ export class PayRunsStore {
     try {
       const filters = PayRunsStore._buildFilterRecord(f);
       const params: PaginationParams = {
-        page, pageSize, sortBy: 'periodStart', sortOrder: 'desc',
+        page, pageSize, sortBy: 'createdAt', sortOrder: 'desc',
         filters: Object.keys(filters).length > 0 ? filters : undefined,
       };
       const data = await firstValueFrom(this.api.list(params));

@@ -37,6 +37,14 @@ public sealed class AssignPlanToPayeeHandler(
         if (plan is null)
             return Result<PlanAssignmentDto>.Failure("Plan not found.");
 
+        // Integrity guard: the assignment period must match the plan's effective period exactly.
+        // The UI locks this field, but a direct API call must not be able to misalign the period
+        // against which attainment is measured.
+        if (request.EffectiveStart != plan.EffectivePeriod.Start ||
+            request.EffectiveEnd != plan.EffectivePeriod.End)
+            return Result<PlanAssignmentDto>.Failure(
+                "The assignment period must match the selected plan's effective period.");
+
         var payeeSnapshot = PayeeReference.Snapshot(payee.Id, payee.FullName, payee.EmployeeCode);
         var period = DateRange.Of(request.EffectiveStart, request.EffectiveEnd);
 

@@ -121,6 +121,22 @@ public sealed class CompensationTransaction : AggregateRoot
         RaiseDomainEvent(new TransactionMarkedPaidEvent(eventId, now, Id, TenantId, PayeeId ?? Guid.Empty));
     }
 
+    // Calculated → Pending: called when existing Credits are superseded so the engine can
+    // regenerate them with updated plan configuration (e.g. splitAtQuota toggled).
+    // Blocked from Paid (anti-double-pay) and Cancelled (terminal) — caller must check.
+    public void RevertCalculatedToPending(string updatedBy, DateTimeOffset now)
+    {
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException("Cannot revert a Paid transaction to Pending — it has already been paid out. Use the accounting correction workflow.");
+        if (Status == CompensationTransactionStatus.Cancelled)
+            throw new DomainException("Cannot revert a Cancelled transaction to Pending.");
+        if (Status != CompensationTransactionStatus.Calculated)
+            throw new DomainException($"Only Calculated transactions can be reverted to Pending for recalculation. Current status: {Status}.");
+
+        Status = CompensationTransactionStatus.Pending;
+        UpdatedAt = now;
+    }
+
     // Undo Paid status when a payout is reverted. Returns the transaction to Calculated so it
     // can be included in a future payout recalculation.
     public void RevertPaidToCalculated(string updatedBy, DateTimeOffset now)

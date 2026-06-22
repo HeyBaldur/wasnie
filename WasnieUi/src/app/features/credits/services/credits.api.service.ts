@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
-import { CreditListItem, CreditCounters, CreditByPayee, CreditDetail } from '../models/credit.model';
+import { CreditListItem, CreditCounters, CreditByPayee, CreditDetail, RecalculateCreditsResult } from '../models/credit.model';
 
 @Injectable({ providedIn: 'root' })
 export class CreditsApiService {
@@ -28,5 +28,9 @@ export class CreditsApiService {
 
   exportToExcel(params: PaginationParams): Observable<Blob> {
     return this.http.get(`${this.base}/export`, { params: buildHttpParams(params), responseType: 'blob' as const });
+  }
+
+  recalculate(periodStart: string, periodEnd: string): Observable<RecalculateCreditsResult> {
+    return this.http.post<RecalculateCreditsResult>(`${this.base}/recalculate`, { periodStart, periodEnd });
   }
 }

@@ -49,29 +49,37 @@
 
 // ── Table ────────────────────────────────────────────────────────────────────
 
+// Visual treatment mirrors the standard app table (WsTable / Credits): surface
+// background, card radius + subtle shadow, raised uppercase header, generous cell
+// padding and row hover. The sticky header + vertical scroll are kept (this table
+// shows all rows at once), and the Issues cell keeps its multi-line/multi-badge
+// capability — only colours/typography/padding/borders are aligned.
 .preview-table-wrap {
   overflow-x: auto;
   overflow-y: auto;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
   max-height: 440px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .preview-table {
-  @apply text-xs font-semibold;
   width: 100%;
   border-collapse: collapse;
+  font-size: var(--font-size-14);
+  font-weight: 400;
 
   &__th {
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-3) var(--space-4);
     text-align: left;
-    font-size: var(--font-size-11);
+    font-size: var(--font-size-12);
     font-weight: 600;
-    color: var(--color-text-tertiary);
+    color: var(--color-text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    background: var(--color-bg-surface-sunken);
-    border-bottom: 1px solid var(--color-border-subtle);
+    letter-spacing: 0.02em;
+    background: var(--color-bg-surface-raised);
+    border-bottom: 1px solid var(--color-border-default);
     white-space: nowrap;
     position: sticky;
     top: 0;
@@ -82,32 +90,33 @@
   }
 
   &__td {
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-3) var(--space-4);
     color: var(--color-text-primary);
     border-bottom: 1px solid var(--color-border-subtle);
     vertical-align: top;
-    max-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 
     &--num {
       width: 36px;
       color: var(--color-text-tertiary);
       white-space: nowrap;
-      max-width: none;
     }
 
     &--status {
       white-space: nowrap;
-      max-width: none;
     }
 
+    // Issues cell: keep full multi-line / multi-badge content visible (not truncated).
     &--issues {
       white-space: normal;
-      overflow: visible;
-      text-overflow: unset;
     }
+  }
+
+  &__row {
+    transition: background var(--transition-fast);
+  }
+
+  &__row:hover {
+    background: var(--color-bg-surface-raised);
   }
 
   &__row:last-child &__td { border-bottom: none; }
@@ -225,8 +234,28 @@
   margin: 0;
 }
 
+.consent-opt {
+  @apply flex items-start gap-2 font-semibold cursor-pointer;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+
+  input {
+    cursor: pointer;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+}
+
 .preview-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
+
+  &__primary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
 }

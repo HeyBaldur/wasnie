@@ -160,6 +160,46 @@ public sealed class AssignmentsEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task CreateAssignment_PeriodMatchesPlan_Returns200()
+    {
+        // Plan effective period is 2025-01-01 .. 2025-12-31 (see CreateActivePlanAsync).
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+
+        var request = new
+        {
+            planId = plan.Id,
+            payeeId = payee.Id,
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31"
+        };
+
+        var response = await _clientA.PostAsJsonAsync("/api/assignments", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task CreateAssignment_PeriodDoesNotMatchPlan_Returns400()
+    {
+        // Valid date range, but narrower than the plan's 2025-01-01 .. 2025-12-31 period.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+
+        var request = new
+        {
+            planId = plan.Id,
+            payeeId = payee.Id,
+            effectiveStart = "2025-02-01",
+            effectiveEnd = "2025-11-30"
+        };
+
+        var response = await _clientA.PostAsJsonAsync("/api/assignments", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     // ── Update Notes ──────────────────────────────────────────────────────────
 
     [Fact]

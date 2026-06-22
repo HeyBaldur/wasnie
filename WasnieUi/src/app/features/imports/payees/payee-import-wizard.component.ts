@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
-import { WsPageLayoutComponent, WsWizardComponent, WsWizardStepComponent } from '../../../shared/ui';
+import { WsPageLayoutComponent, WsWizardComponent, WsWizardStepComponent, WsConfirmationModalComponent } from '../../../shared/ui';
 import { UploadStepComponent } from './steps/upload-step.component';
 import { MappingStepComponent } from './steps/mapping-step.component';
 import { PreviewStepComponent } from './steps/preview-step.component';
@@ -37,6 +38,7 @@ interface PersistedWizardState {
     WsPageLayoutComponent,
     WsWizardComponent,
     WsWizardStepComponent,
+    WsConfirmationModalComponent,
     UploadStepComponent,
     MappingStepComponent,
     PreviewStepComponent,
@@ -49,8 +51,10 @@ interface PersistedWizardState {
 export class PayeeImportWizardComponent implements OnInit {
   private readonly payeesStore = inject(PayeesStore);
   private readonly subState = inject(SubscriptionStateService);
+  private readonly router = inject(Router);
 
   readonly currentStep = signal<WizardStep>('upload');
+  readonly cancelConfirmOpen = signal(false);
 
   private get payeesTierLimit(): number {
     const tier = this.subState.subscription()?.tier ?? 'Free';
@@ -174,5 +178,37 @@ export class PayeeImportWizardComponent implements OnInit {
     this.validateResponse.set(null);
     this.importResult.set(null);
     this.skipWarnings.set(false);
+  }
+
+  // Cancel = direct escape from the wizard. If there is work in progress, ask for a
+  // light confirmation first so an accidental click doesn't discard the import.
+  private hasWorkInProgress(): boolean {
+    return this.parseResult() !== null || this.columnMapping() !== null;
+  }
+
+  requestCancel(): void {
+    if (this.hasWorkInProgress()) {
+      this.cancelConfirmOpen.set(true);
+    } else {
+      this.doCancel();
+    }
+  }
+
+  confirmCancel(): void {
+    this.cancelConfirmOpen.set(false);
+    this.doCancel();
+  }
+
+  // Wipe ALL in-progress import state (file, mapping, preview, errors; the consent
+  // checkbox lives in the preview step and is destroyed with it) and leave the wizard.
+  private doCancel(): void {
+    sessionStorage.removeItem(STORAGE_KEY);
+    this.parseResult.set(null);
+    this.columnMapping.set(null);
+    this.validateResponse.set(null);
+    this.importResult.set(null);
+    this.skipWarnings.set(false);
+    this.currentStep.set('upload');
+    void this.router.navigate(['/payees']);
   }
 }

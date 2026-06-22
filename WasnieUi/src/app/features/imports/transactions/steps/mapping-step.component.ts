@@ -30,6 +30,7 @@ export class TxMappingStepComponent implements OnInit {
 
   readonly validated = output<{ response: TransactionValidateResponse; mapping: TransactionImportColumnMapping }>();
   readonly back = output<void>();
+  readonly cancel = output<void>();
 
   readonly form = this.fb.group({
     referenceNumberColumn: [''],
@@ -135,4 +136,6 @@ export class TxMappingStepComponent implements OnInit {
   }
 
   onBack(): void { this.back.emit(); }
+
+  onCancel(): void { this.cancel.emit(); }
 }

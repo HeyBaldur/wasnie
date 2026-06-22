@@ -4,6 +4,305 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-22 — WI-IMPORT-CANCEL-CONSENT (Cancel link + checkbox de consentimiento en wizards de import)
+
+**Contexto:** Dos mejoras de UI en ambos wizards de import (`/payees/import` y `/transactions/import`, este último con modos create y update): (A) un escape directo "Cancel" para no tener que pulsar Back varias veces, y (B) un checkbox de consentimiento obligatorio que habilita el botón Import.
+
+**Arquitectura observada:** `ws-wizard` es presentacional (indicador de pasos + `<ng-content>`); el estado y la navegación viven en los dos componentes padre. Los botones "Back" viven dentro de cada step (6 steps con Back: payee map/preview, tx-create map/preview, tx-update map/preview). El consentimiento va en los 3 preview steps (último paso antes de importar).
+
+**(A) Cancel:**
+- Cada uno de los 6 steps con Back recibe un output `cancel` y un link `ws-button variant="link"` (existe esa variante → link de bajo peso visual, sin estilo de botón) colocado a la izquierda, con el grupo Back+primario envuelto en `.{mapping,preview}-actions__primary` a la derecha (el contenedor ya era `justify-content: space-between`).
+- Los padres orquestan: `requestCancel()` → si hay trabajo en curso (`parseResult`/`columnMapping`, o sus equivalentes update) abre `ws-confirmation-modal`; si no, cancela directo. `confirmCancel()`→`doCancel()` limpia TODO el estado (signals de ambos modos en tx), borra sessionStorage (ambas claves), resetea a 'upload' y navega a la lista (`/payees` o `/transactions`). El padre payee no inyectaba Router → añadido.
+- El checkbox de consentimiento es local al preview step; al cancelar/cambiar de paso el step se destruye (`@if`) y el checkbox se resetea solo (cumple "cancelar resetea el checkbox").
+
+**(B) Consentimiento:**
+- Checkbox nativo (mirroring del patrón existente `skip-warnings-opt`) en los 3 preview steps; `consentAccepted` local; botón Import/Apply `[disabled]` suma `|| !consentAccepted`.
+- TEXTO PROVISIONAL: comentario `PROVISIONAL consent text — pending legal review before production. Do not treat as final.` en cada HTML, y clave i18n `IMPORTS.CONSENT_LABEL_NOTE` (en los 3 locales) documentando que es consentimiento de PROCESAMIENTO de datos GDPR, no anti-spam. No se inventó lenguaje legal adicional.
+- `update-preview-step` no importaba `FormsModule` (no tenía skip-warnings) → añadido para el `ngModel` del checkbox.
+
+**FASE 2 (decisión del owner): UI-only, SIN backend.** El consentimiento solo condiciona la UI; NO se persiste. La persistencia en el audit log (quién/cuándo/versión) queda PENDIENTE para cuando exista texto legal validado (registrar una versión provisional tiene poco valor de auditoría).
+
+**i18n:** 6 claves compartidas nuevas en `IMPORTS` (EN/ES/PL): `CONSENT_LABEL`, `CONSENT_LABEL_NOTE`, `CANCEL_CONFIRM_TITLE`, `CANCEL_CONFIRM_MSG`, `CANCEL_CONFIRM_DISCARD`, `CANCEL_CONFIRM_KEEP`. El link reusa `COMMON.CANCEL`. JSON validado en los 3 locales.
+
+**Verificación:** `ng build --configuration production` limpio (solo warnings pre-existentes). 25 archivos cambiados, todos bajo `imports/` + `i18n/`. **La suite Karma (`ng test`) no compila por errores PRE-EXISTENTES en specs de pay-runs (`supplementalSequence` falta en mocks — del WI supplemental pay runs, sin relación con este WI); mis cambios no introducen errores (confirmado: ningún error en `imports/`). Para desbloquear `ng test` hay que añadir `supplementalSequence` a los mocks de `pay-runs.store.spec.ts` y `pay-run-detail.store.spec.ts` — follow-up separado.** Verificación en pantalla = owner (FASE 3).
+
+## 2026-06-22 — WI-PLAN-PERIOD-ALIGNMENT (período de Assignment/Quota alineado al plan)
+
+**Contexto:** En Create Assignment y Create Quota el período era libremente editable aun con un plan elegido, permitiendo desalinear el período contra el que se mide el attainment → comisiones incorrectas. El WI pedía auto-rellenar y bloquear desde `plan.effectiveStart/End`.
+
+**Phase 2.4 (confirmado en código):** El plan es OBLIGATORIO en ambos formularios (`planId: Validators.required`) y en ambos comandos (`PlanId` Guid no-nullable). Por tanto el caso "sin plan → fechas libres" NO existe. El DTO del plan ya expone `effectiveStart`/`effectiveEnd` (Assignment ya lo usaba para auto-fill) — no hizo falta ampliar el endpoint.
+
+**Conflicto detectado y decidido por el owner:** Las quotas en el modelo/tests existentes son ventanas trimestrales DENTRO de un plan anual (multi-quota por plan; sin constraint de unicidad). "Quota period == plan period exacto" lo prohibiría. Pregunté al owner → decisión:
+- **Assignment:** período = período del plan EXACTO + bloqueado (UI `disable()`).
+- **Quota:** período debe estar DENTRO del período del plan, EDITABLE (no bloqueado). Esto anula deliberadamente el requisito "locked" del WI para Quota.
+
+**FASE 1 — Frontend:**
+- `assignment-create.component.ts`: suscripción a `planId` con `switchMap` (plan→`of(null)`); con plan: `setValue(plan period)` + `disable()` + `planPeriodLocked=true`; sin plan: `setValue(null)` + `enable()`. Decisión: al limpiar el plan se LIMPIA el valor (era el del plan, ya irrelevante). Hint `ASSIGNMENTS.PERIOD_LOCKED_HINT`.
+- `quota-create.component.ts`: misma suscripción `switchMap`; con plan: fija currency (ya existía) + `planPeriod` signal + auto-fill del date-range como DEFAULT editable. Validador `periodWithinPlanValidator` (containment con comparación lexicográfica ISO) → error `outsidePlanPeriod` → `QUOTAS.PERIOD_OUTSIDE_PLAN`. Hint `QUOTAS.PERIOD_WITHIN_PLAN_HINT`.
+- Hint estilado con `.field-hint` local (tokens) en ambos scss. `ws-date-range-picker` ya soporta `setDisabledState` (vía `disable()`) y `--disabled`.
+- i18n EN/ES/PL: 3 claves nuevas.
+
+**FASE 2 — Backend (integridad):**
+- `AssignPlanToPayeeHandler`: tras cargar el plan, si `EffectiveStart/End != plan.EffectivePeriod.Start/End` → `Result.Failure` (→400 por el controller).
+- `CreateQuotaHandler`: si `PeriodStart < plan.start || PeriodEnd > plan.end` → `Result.Failure` (→400). La regla va en el handler (necesita el plan cargado), no en el validator FluentValidation (stateless).
+- Scope = Create (el WI no pide Update; Update sigue sin esta validación → follow-up recomendado).
+
+**FASE 3 — Tests:**
+- +2 Assignment integración (PeriodMatchesPlan→200, PeriodDoesNotMatchPlan→400), +2 Quota (PeriodWithinPlan→201, PeriodOutsidePlan→400).
+- `CreateQuotaAsync` helper: offsets trimestrales→mensuales (el offset 4 caía en Q1 2026, fuera del plan anual 2025 → habría roto el test de paginación con la nueva validación).
+- Backend unit: 628/628 pass. Integración: NO ejecutada (Docker/Testcontainers no disponible en este entorno) — 39 tests compilan y se descubren; **correr con Docker antes de merge**.
+- `ng build --configuration production` limpio; build de la solución completa limpio.
+
+**Notas dev:** Se detuvo `Wasnie.Api.exe` (dev) porque bloqueaba los DLLs del build de tests — **reiniciar con `api run`**. Estos dos formularios no tenían specs de frontend; el WI scopea FASE 3 a tests backend + verificación en pantalla del owner. Specs de frontend = follow-up recomendado.
+
+## 2026-06-22 — WI-SIDEBAR-REORDER (menú lateral en orden lógico)
+
+**Contexto:** El orden del sidebar no seguía el flujo real de uso del ICM. En concreto Assignments aparecía ANTES que Payees, pero no se puede asignar un payee que aún no existe — el usuario tenía que saltar a Operations a crearlo y volver. Decisión del owner: Opción A (mover Payees al grupo de setup, antes de Assignments) + renombrar la sección a "Setup".
+
+**Cambio (navegación pura, sin backend/rutas/iconos/estilos):**
+- `WasnieUi/src/app/shared/components/sidebar/sidebar.component.ts` — el sidebar es enteramente data-driven (`navSections: NavSection[]`). Reordenado: la antigua sección "Compensation" pasa a `sectionKey: 'NAV.SECTION_SETUP'` y contiene Plans → Quotas → **Payees** → Assignments. Payees eliminado de "Operations", que queda con Transactions → Credits → Financials (grupo Pay Runs/Payouts).
+- i18n EN/ES/PL: clave `SECTION_COMPENSATION` renombrada a `SECTION_SETUP` con valores Setup / Configuración / Konfiguracja. Verificado que no quedan referencias a la clave antigua.
+- No tocado: rutas (`path`), iconos, permisos, comportamiento de colapso (`SidebarStateService`), ni el resaltado de item activo (`currentUrl` + `isNavActive`/auto-expand de grupos) — todo sigue funcionando porque depende del array, no de orden hardcodeado en plantilla.
+
+**Notas:** El orden NO estaba hardcodeado en varios sitios — un único array lo define; la plantilla itera dinámicamente. La sección inferior `SECTION_SETTINGS` (Subscription/Admin) es independiente y no se tocó.
+
+**Resultados:** `ng build --configuration production` limpio (solo warnings pre-existentes). Cambio sin tests nuevos (no es código de dinero/cálculo; es navegación declarativa).
+
+## 2026-06-19 — WI-FIX (supplemental pay runs)
+
+**Contexto:** Diagnóstico (sesión anterior) identificó que `CalculatePayRunHandler` bloqueaba con un error opaco si el período ya tenía un run Paid o Approved. Esto impedía calcular un nuevo payee/plan en un período ya cerrado. Las 3 capas de anti-doble-pago ya eran seguras (motor excluye créditos consumidos); el bloqueo era innecesariamente conservador.
+
+**Solución implementada (Opción A1 — supplemental runs):**
+- FASE 1 (Schema): `SupplementalSequence INT NOT NULL DEFAULT 0` en tabla `PayRuns`. Índice único ampliado de (TenantId, PeriodStart, PeriodEnd) a (TenantId, PeriodStart, PeriodEnd, SupplementalSequence). Migración B6 generada y aplicada.
+- FASE 2 (Backend): `CalculatePayRunHandler` reescrito — si el período tiene runs Paid/Approved y ningún Draft, crea un nuevo run con SupplementalSequence = max+1. `PayRun.Open()` acepta `supplementalSequence` (default=0). `CalculatePayRunResult` incluye `IsSupplemental` y `SupplementalSequence`. Todos los DTOs actualizados.
+- FASE 3 (UI): Badge "Supplemental" en columna Status de la lista. Aviso informativo en modal done. i18n EN/ES/PL: SUPPLEMENTAL, SUPPLEMENTAL_CREATED_TITLE, SUPPLEMENTAL_CREATED_DESC.
+- FASE 4 (Mensaje): `CALCULATE_SUBTITLE` corregido para describir el comportamiento real.
+- FASE 5 (Tests): +3 unit domain (SupplementalSequence), 2 integration tests actualizados (Approved/Paid→supplemental en vez de failure), +4 integration nuevos (supp seq1, supp×2, supp Draft reutilizado).
+
+**Resultados:** 628/628 unit tests. 23/23 PayRunEngineTests. `ng build` limpio.
+
+**Deuda técnica:** El campo `RowVersion` de Credits aparece en el snapshot de EF Core pero ya existía en DB — la migración B6 lo excluye manualmente del Up/Down. Si se hace `migrations remove` hay que re-editar. Investigar discrepancia en futura sesión de limpieza.
+
+## 2026-06-19 — WI-UNITS-MEASUREMENT (medición por unidades implementada)
+
+**Contexto:** Diagnóstico (sesión anterior) confirmó que el campo `Measurement.Type = Units` era silenciosamente ignorado: el motor siempre usaba `transaction.Amount` sin leer la medición. `transaction.Quantity` existía en el dominio pero nunca se consultaba. Fix urgente porque la UI ofrecía la opción y el usuario creía estar configurando comisión por unidades cuando en realidad se calculaba por importe.
+
+**FASE 1 — Motor:**
+- `CommissionCalculator.ComputeUnitsCommission(int quantity, decimal ratePerUnit, string currency)` — pure math.
+- `CreditAllocationService.BuildCreditsAsync`: rama `rule.Measurement.Type == Units` llama al nuevo método. Revenue sigue sin cambios (regresión verificada). Guarda explícita: Units+Tiered/Attainment → `LogError` + comisión €0 (no silencio).
+- `RuleSnapshot`: campo `Measurement` añadido. JSON backward-compat (créditos históricos sin campo reciben default `Revenue/amount/Sum`). `Freeze` signature con `measurement` opcional (para no romper test helpers existentes).
+
+**FASE 2 — UI:**
+- Source Field y Aggregation eliminados de la pantalla "Add Rule" (form controls siguen existiendo con valores default para que el API reciba datos válidos).
+- Aggregation options filtradas a `[Sum]` — los 4 restantes no están implementados y no deben ofrecerse.
+- Modo Units: Rate Table Tiered/Attainment deshabilitados + nota `UNITS_RATE_TABLE_NOTE`. Label/hint/tooltip del campo Flat Rate cambian. Live Preview adapta fórmula.
+- `ngOnInit` suscripción: cambio a Units → fuerza `rateTable.type = Flat`.
+
+**FASE 3 — Validación de dominio:**
+- `Rule.Create` y `Rule.Update` → `ValidateMeasurementRateTableCompatibility` → `DomainException` si Units+Tiered o Units+Attainment. Imposible crear una regla inconsistente desde la UI o la API.
+
+**Tests:**
+- `CommissionCalculatorTests`: +5 (ComputeUnitsCommission standard/q1/large/fractional + Revenue regression).
+- `PlanTests`: +4 (Units+Flat OK, Units+Tiered throws, Units+Attainment throws, Revenue+Tiered OK regression).
+- `CreditAllocationServiceTests` (integration): +5 (Units Q1, Units Q10=€20, Units+Cap=€30, Units+Floor=€5, Revenue regression=€50).
+
+**i18n:** EN/ES/PL — 4 claves nuevas: `FIELD_FLAT_RATE_PER_UNIT`, `HINT_RATE_UNITS`, `UNITS_RATE_TABLE_NOTE`, `TOOLTIP_FLAT_RATE_UNITS`.
+
+**Resultado:** Backend 625 unit / 0 failures. Frontend 391/410 (19 pre-existing sin cambios). `ng build --configuration production` clean.
+
+**Verificación owner (FASE 4):** Crear regla Units+Flat €2,00/unidad. Ingestar transacción con Amount=€500, Quantity=10. Ejecutar Calculate. Crédito esperado: **€20,00**. Statement debe reflejar Rate per Unit. Revenue existente debe seguir calculando igual.
+
+---
+
+## 2026-06-19 — WI-PLAN-DROPDOWN-STATUS (estado + filtrado contextual en dropdowns de planes)
+
+**Contexto:** Los dropdowns de planes en la app no mostraban el estado del plan ni filtraban por estado, causando que planes en Draft aparecieran donde no aplican (ej. "Sample Plan (Draft)" en el filtro de Credits).
+
+**Fase 1 — Auditoría:** 6 dropdowns identificados con sus reglas: Credits/Payouts/Pay Run Detail necesitan Active+Archived (histórico); Pay Runs Calculate + Assignments necesitan solo Active; Quotas necesita Active+Archived (carga retroactiva). Backend solo soportaba status singular — necesario añadir multi-estado.
+
+**Fase 2 — Backend:**
+- `ListPlansHandler.cs`: añadido `else if (!string.IsNullOrWhiteSpace(p.Statuses))` que parsea CSV de estados (compatible con el campo `Statuses` ya existente en `PaginationQuery`). El `?status=` singular sigue con prioridad (backward-compat).
+- 3 tests de integración nuevos en `PlansEndpointsTests.cs`: multi-estado retorna Active+Archived y excluye Draft, aislamiento tenant con multi-estado, singular sigue funcionando.
+
+**Fase 2 — Frontend:**
+- `SelectOption` interface: campo `badge?: { text: string; variant: BadgeVariant }` opcional (no rompe callers existentes).
+- `WsSelect`: importa `WsBadgeComponent`, template actualiza trigger y opciones para renderizar badge cuando presente. `.ws-select__value` → flex; `.ws-select__option-label` nuevo (ellipsis para el texto).
+- Seis `planSearchFn` actualizados con filtro server-side correcto + badge con clave i18n `PLANS.STATUS_{ACTIVE|ARCHIVED|DRAFT}` (ya existían en EN/ES/PL).
+- Assignments y Quotas: client-side `.filter()` eliminado, filtrado movido al servidor.
+- PayRunsListComponent spec: mock store corregido (añadido `totalCount: signal(0)` que faltaba — 4 tests recuperados).
+
+**Archivos modificados:**
+- Backend: `ListPlansHandler.cs`, `PlansEndpointsTests.cs`
+- Frontend: `ws-select.component.ts`, `ws-select.component.html`, `ws-select.component.scss`, `credits-list.component.ts`, `payouts-list.component.ts`, `pay-runs-list.component.ts`, `pay-runs-list.component.spec.ts`, `pay-run-detail.component.ts`, `assignment-create.component.ts`, `quota-create.component.ts`
+
+**Tests:** Backend Application project: 0 errores compilación. Frontend: 391/410 pass (19 pre-existing sin cambios). `ng build --configuration production` limpio.
+
+## 2026-06-18 — WI-OVERLAP-WARNING-UX (pay run overlap warning — inform, not alarm)
+
+**Root cause:** `PAY_RUNS.DETAIL.OVERLAP_WARNING` said "could be paid more than once" — factually wrong. The motor filters `ConsumedAt == null` at calculation time (already excludes paid transactions) and `MarkPayRunPaidHandler` has a hard block guard. The overlap table shown is a period-date overlap, not a transaction overlap.
+
+**Data verification:** `store.run()!.totalAmounts` already reflects post-exclusion amounts (no backend change needed). Overlapping run info (period/status/totals) already in `approveOverlapRows()` / `markPaidOverlapRows()`.
+
+**Fix:** i18n-only. `PAY_RUNS.DETAIL.OVERLAP_WARNING` in EN/ES/PL rewritten to:
+- State the period overlap factually with count of overlapping runs
+- Explain that already-paid transactions were automatically excluded at calculation time
+- Confirm no transaction will be paid twice
+
+**Not changed:** `OverlapWarningComponent`, any TS, any HTML structure, `MarkPayRunPaidHandler` guard, `PAYOUTS.DETAIL.OVERLAP_WARNING` (individual payout context — separate WI if needed).
+
+**Build:** `ng build --configuration production` clean.
+
+## 2026-06-18 — WI-FIX-DATE-FILTER (Pay Runs + Payouts: filter by creation date)
+
+**Root cause:** `ListPayRunsHandler` filtered `PeriodFrom`/`PeriodTo` against `r.PeriodStart`/`r.PeriodEnd`; `ListPayoutsHandler` filtered against `p.Period.Start`/`p.Period.End`. A pay run created today for Apr–Jun appeared outside "This month" filter because June > Apr.
+
+**Backend changes:**
+- `ListPayRunsHandler.BuildQuery` (lines 67-76): `PeriodFrom` → `r.CreatedAt >= startOfDayUTC(from)`; `PeriodTo` → `r.CreatedAt < startOfDayUTC(to + 1)`. Sort was already `r.CreatedAt`.
+- `ListPayoutsHandler.BuildQuery` (lines 122-131): same pattern against `p.CalculatedAt`. Sort was already `p.CalculatedAt`.
+- `PayRunFilterQuery` + `PayoutFilterQuery` comments updated to `CreatedAt.Date` / `CalculatedAt.Date`.
+- `PayRunExportTests.cs` test renamed (was `MatchesRunPeriod` — misleading after fix; still only checks `IsSuccess`).
+
+**Frontend changes:**
+- `pay-runs.store.ts`: `sortBy: 'periodStart'` → `'createdAt'` (backend ignores sortBy for PayRuns but now semantically correct).
+- `payouts.store.ts`: `signal('updatedAt')` → `signal('calculatedAt')` (was functionally correct via `_` catch-all; now explicit).
+
+**Tests:** Application + IntegrationTests build succeeded. 22/22 pay-runs store tests, 20/20 payouts store tests. `ng build --configuration production` clean.
+
+**Owner action required:** verify "This month" preset in Pay Runs list shows the run created today for Apr–Jun.
+
+## 2026-06-18 — WI-FIX-DRAG-RECALCULATE-PAYRUN: FASEs 1–4 (pay run detection + auto-delete + UI)
+
+**Context:** After Recalculate Credits ran successfully, the existing Draft pay run kept showing stale totals (€11,115.21) because the payout was not recalculated. Owner had to manually delete the draft. Auto-deletion + blocking makes the flow safe and self-contained.
+
+**FASE 1 — Backend: pay run detection + blocking**
+- `RecalculateCreditsHandler` now queries `CompensationPayouts` (tenant + affected payees) → `PayRuns` (period overlap) BEFORE superseding any credits.
+- Approved/Paid → returns `Result.Success(blockedResult)` with `BlockedByPayRuns` populated (mirrors `PayRunsController` 409 pattern). Nothing is mutated.
+- Draft → collects IDs for FASE 2.
+- Block-all design: if any payee has an Approved/Paid run, block everything — no partial state.
+- `RecalculateCreditsResult` extended: `DeletedDraftCount` + `BlockedByPayRuns?`.
+- `CreditsController.Recalculate`: `BlockedByPayRuns.Count > 0` → HTTP 409 `{ blocked: true, blockingPayRuns: [...] }`.
+
+**FASE 2 — Backend: auto-delete Draft pay runs**
+- Dispatches `DeletePayRunDraftCommand` per draft via injected `ISender` (reuses `DeletePayRunDraftHandler` — no logic duplication).
+- Deletion after `SaveChangesAsync` (credits already superseded). Any individual delete failure is logged as Warning and does not abort the flow.
+- Audit trail: `DeletePayRunDraftHandler` logs `PAY_RUN_DRAFT_DELETED` per run; `IMoneyCriticalCommand` covers the overall recalculate operation.
+
+**FASE 3 — UI**
+- `BlockingPayRunInfo` model added to `credit.model.ts`.
+- `recalculateBlockedRuns: signal<OverlapRow[]>` — populated on HTTP 409, shown via `<app-overlap-warning>` (zero new styles).
+- `recalculateResult` extended with `deletedDraftCount`; template shows `RECALCULATE_SUCCESS_WITH_DRAFT` key when `> 0`.
+- `onRecalculate()` navigates to `/pay-runs` when `deletedDraftCount > 0` (pay run was deleted — reload would 404).
+- i18n: `RECALCULATE_SUCCESS_WITH_DRAFT` + `RECALCULATE_BLOCKED_WARNING` × EN/ES/PL.
+
+**FASE 4 — Tests**
+- 4 new integration tests in `RecalculateCreditsHandlerTests`: draft auto-deleted, Approved blocks, Paid blocks, mix blocks all.
+- `NeverCalledSender` (for no-pay-run tests) + `DirectDeletePayRunSender` (for FASE 4 tests) stubs.
+- 5 frontend specs: success-no-draft (reload), draft-deleted (navigate), 409-blocked (overlap rows), generic error, idempotency guard.
+- Backend: 616/616 unit pass. Frontend: 387/406 pass (19 pre-existing failures unchanged). Build clean.
+
+**FASE 5 (owner action):** Draft run for Apr 1–Jun 30 → click "Recalculate credits" → run auto-deleted + navigate to list → "Calculate Pay Run" → verify Adrian €11,951.62.
+
+---
+
+## 2026-06-18 — WI-FIX-DRAG-CALCULATION: FASEs 1–4 (F-2 + F-4)
+
+**Root causes fixed:**
+- **F-4 (ordering):** `ProcessPendingTransactionsJobHandler` all 3 load methods processed transactions in SQL insertion order. `PriorCumulative` accumulated in wrong order → split-at-quota gave wrong per-tx amounts. Fix: `OrderBy(t => t.TransactionDate).ThenBy(t => t.Id)` on `LoadByAssignmentAsync`, `LoadByPlanAsync` (via intermediate list), `LoadByPayeeAndPeriodAsync`.
+- **F-2 (recalculate):** `CalculatePayoutsForPeriodHandler` only aggregates existing non-superseded credits. Toggling `splitAtQuota` and re-running pay run calculation has no effect on stale credits. New "Recalculate Credits" operation fills the gap.
+
+**FASE 1 — F-4 ordering fix** (3 load methods, backend)
+
+**FASE 2 — Domain method** `CompensationTransaction.RevertCalculatedToPending(updatedBy, now)`: transitions Calculated→Pending. Guards: throws on Paid (anti-double-pay) and Cancelled (terminal). 4 unit tests.
+
+**FASE 3 — RecalculateCredits (backend):**
+- `Permission.CreditsRecalculate` + `RolePermissions` (TenantAdmin + CompManager)
+- `AuditActions.CreditsRecalculated`, `ResourceTypes.Credit` (new)
+- `RecalculateCreditsCommand` + `RecalculateCreditsHandler`: loads non-superseded + non-consumed credits for period; skips Paid/Cancelled transactions; supersedes credits; reverts Calculated→Pending; enqueues one `ByPayeeAndPeriod` job per affected payee. Audit trail via `IMoneyCriticalCommand`.
+- `POST /api/credits/recalculate` added to `CreditsController`
+- 3 integration tests: happy path (2 credits superseded, 2 txs reverted, 1 job), consumed-credit guard, Paid-tx guard
+
+**FASE 4 — UI:**
+- "Recalculate credits" button (Draft only, `*hasPermission="'Credits.Recalculate'"`) in pay-run-detail header actions
+- `WsModal` confirmation with body explaining 2-step flow + irreversibility warning, Cancel + Recalculate buttons
+- Success banner showing superseded count + jobs queued; error banner on failure
+- `CreditsApiService.recalculate(periodStart, periodEnd)` + `RecalculateCreditsResult` model
+- i18n: 8 new keys in `PAY_RUNS.DETAIL` × EN/ES/PL
+- `pay-run-detail.component.spec.ts` (new): 3 tests — success closes modal + sets result + reloads, API error sets error signal, idempotency guard when already recalculating
+
+**Tests:** Backend 46/46 pay-runs specs. Frontend 46/46. `ng build --configuration production` clean.
+
+**FASE 5 (owner action):** EU Accelerator rule → toggle `splitAtQuota` ON + save → "Recalculate credits" on Apr 1–Jun 30 Draft run → wait for jobs → "Calculate Pay Run". Expected: Adrian €11,951.62.
+
+---
+
+## 2026-06-18 — WI-FIX: Persist splitAtQuota end-to-end (frontend → API → DB) + integration tests
+
+**Root cause (diagnosed in prior session):** The backend split-at-quota dispatch code (added in WI-FIX-MOTOR-ATTAINMENT) was correct, but the frontend `RateTable` TypeScript interface never included the `splitAtQuota` field. Every save from the rule-form emitted JSON without the field → EF Core deserialized `SplitAtQuota=false` → `BuildCreditsAsync` always chose the bracket path → Adrian's Q2 pay run showed €11,115.21 (all at 4%) instead of €11,951.62 (split at quota boundary).
+
+**FASE 1 — Frontend:**
+- `rule.model.ts`: added `splitAtQuota: boolean` to `RateTable` interface
+- `rule-form.component.ts`: added `splitAtQuota: [false]` FormControl; hydrated in `_loadExistingRule()` via patchValue; emitted in `_buildRateTable()` (only for AttainmentBased type, `false` for all others)
+- `rule-form.component.html`: added toggle switch inside `@if (rateTableType() == RateTableType.AttainmentBased)` block with `collapsible-header` pattern, tooltip via `wsTooltip`, read-only guard
+- `en.json` / `es.json` / `pl.json`: added `FIELD_SPLIT_AT_QUOTA` + `TOOLTIP_SPLIT_AT_QUOTA` under `PLANS` namespace (all three locales complete)
+- `rule-form.component.spec.ts`: updated all inline `rateTable` objects to include `splitAtQuota`; added 2 new tests (`splitAtQuota defaults to false when loading a Flat rule`, `splitAtQuota is populated from API value true when loading an AttainmentBased rule`)
+
+**FASE 2 — API:** No changes needed. `CompensationMapper.ToRuleDto` passes `rule.RateTable` as `object` directly; ASP.NET Core Web defaults (camelCase, case-insensitive) deserialize `splitAtQuota` correctly on POST/PUT.
+
+**FASE 3 — Data patch (owner action required):** Owner must open the "EU Accelerator Q2 2026" plan rule in the UI, activate the "Split commission at quota" toggle, and save. Then delete and recalculate the Apr 1–Jun 30 pay run. Expected results: Adrian €11,951.62 · Stefano €5,820.06 · Agnieszka €5,219.84 · Daan €3,363.33 · Birgit €1,960.46 · Camille €1,640.66.
+
+**FASE 4 — Backend integration tests:**
+- `StubQuotaAttainmentService.cs`: added optional `AttainmentSplitContext? splitContext = null` constructor parameter; `GetSplitContextAsync` now returns `_splitContext` instead of hardcoded `null`; backward-compatible (all existing callers unaffected)
+- `CreditAllocationServiceTests.cs`: added 4 new integration tests:
+  1. `AllocateAsync_SplitAtQuota_FlagSurvivesEfCoreRoundTrip` — EF Core JSON round-trip preserves `SplitAtQuota=true`
+  2. `AllocateAsync_SplitAtQuota_DispatchCallsGetSplitContext_NotComputeAsync` — stub split path; tx below quota → €4,000 (4%); `ComputeAsync.CallCount=0`
+  3. `AllocateAsync_SplitAtQuota_CasoAdrian_CommissionSplitsAtQuotaBoundary` — real `QuotaAttainmentService`; quota €250k; tx €277,880.25 → commission €11,951.6175
+  4. `AllocateAsync_SplitAtQuota_NoQuota_ReturnsZeroCommission` — no quota seeded → Phase 5 guard → €0
+
+**Tests:**
+- Backend unit: 612/612 pass (Release build, no regressions)
+- Backend integration: 4 new tests compile clean; all `CreditAllocationServiceTests` require Docker (Docker not running on this machine — pre-existing condition, not a regression)
+- Frontend spec: 15/15 pass (`rule-form.component.spec.ts` — 13 existing + 2 new)
+- `ng build --configuration production` clean (only pre-existing CommonJS warnings from `qrcode`)
+
+**Deferred:** FASE 3 owner action (edit rule in UI + recalculate pay run). Integration tests require Docker to execute.
+
+---
+
+## 2026-06-17 — WI-FIX-MOTOR-ATTAINMENT: EU Accelerator Tier 2 commission never applied — fix split-at-quota algorithm + data
+
+**Root cause (three-layer bug):**
+1. **Data:** Adrian had Apr €190k + Jun €10k monthly quotas instead of a single Q2 €250k quota. The other 5 EU Accelerator reps had zero Q2 quotas.
+2. **Algorithm (bracket-lookup):** `ComputeAttainmentCommission` applied one tier's rate to the full transaction amount. With a €250k quota and cumulative revenue near the boundary, the entire transaction was taxed at Tier 1 (4%) even if revenue crossed into Tier 2 (7%).
+3. **Algorithm (attainment ratio):** The look-back context was being converted to a ratio (`ComputeAsync`) and used to select a bracket, rather than being passed as an absolute `PriorCumulative` value for boundary splitting.
+
+**Changes — backend:**
+- `RateTable.cs`: new `SplitAtQuota: bool` property; `AttainmentBased` factory gains `splitAtQuota = false` parameter (backward-compatible)
+- `IQuotaAttainmentService.cs`: new `AttainmentSplitContext` record `(PriorCumulative, QuotaTarget)`; new `GetSplitContextAsync` method
+- `QuotaAttainmentService.cs`: `GetSplitContextAsync` implementation — queries active quota, filters by period in-memory (EF DateOnly workaround), resolves narrowest quota, calls `ComputeRevenueAchievedAsync` for `PriorCumulative`
+- `CommissionCalculator.cs`: new `ComputeAttainmentSplitCommission` method — iterates tiers, computes overlap of tx interval `[prior, prior+amount]` with tier interval `[from*quota, to*quota]`, sums
+- `CreditAllocationService.cs`: `BuildCreditsAsync` now queries both split and bracket contexts as needed; per-rule dispatch; Phase 5 guard: null split context → zero commission + `LogWarning`
+- `StubQuotaAttainmentService.cs`: added `GetSplitContextAsync` stub returning `null`
+- **DB (SQL Server, WasnieDb):** EU Accelerator rule `9edea449` updated to `"splitAtQuota":true`; Adrian's wrong quotas deleted (Apr €190k + Jun €10k); 6 Q2 2026 quotas inserted for all 6 reps (Apr 1–Jun 30, Status=Active, MeasurementType=0/Revenue, EUR)
+
+**Changes — frontend (Phase 4):**
+- `payouts-list.component.html`: "Calculate Payouts" button + calculate modal removed
+- `payouts-list.component.ts`: all calculate-related signals (`calculateModalOpen`, `calculating`, `calculatePhase`, `calculateResult`, `calculateError`), `calculateForm`, `_startPicker`/`_endPicker` viewChild refs, constructor effects, `onCalculate`, `_pollJob`, `_onJobDone`, `closeCalculateModal` methods removed; dead imports removed (`WsDatePickerComponent`, `PayoutJobStatus`, `CalculateJobResult`, `interval`, `switchMap`, `takeWhile`, `untracked`, `effect`, `viewChild`)
+- `payouts-list.component.spec.ts`: "poll-loop regression" `describe` block removed (3 tests) — feature no longer exists
+
+**Spec fixes (pre-existing mismatches):**
+- `payouts.store.spec.ts`: `pageSize` default assertion corrected from 25 to 10
+- `pay-runs.store.spec.ts`: same correction
+- `pay-run-detail.store.spec.ts`: `getById` call assertion corrected from `pageSize=25` to `pageSize=10`
+
+**Tests:**
+- Backend unit: 612 pass (10 new split-at-quota tests including mandatory caso Adrian)
+- Frontend: 399 total, 380 pass, 19 pre-existing failures (ProcessPendingComponent ×5, SubscriptionReactivation ×14)
+- `ng build --configuration production` clean
+
+**Deferred:** Backend `POST /api/payouts/calculate` endpoint kept (only UI button removed per WI scope).
+
+---
+
 ## 2026-06-17 — WI-DASHBOARD-PENDING-LABEL: Fix "ProcessPending" + global-scope note
 
 **Root cause:** `PENDING_BY_PLAN_DESC` in all three i18n locales contained the literal string `"ProcessPending"` — the i18n key name for the Process Pending feature accidentally leaked into the translation value. Also, the section shows all-time global totals regardless of the date filter, but nothing in the UI communicated this, causing user confusion when the number didn't change on filter switch.

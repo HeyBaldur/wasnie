@@ -61,12 +61,16 @@
           />
         </div>
 
-        <ws-date-range-picker
-          class="ws-form-grid__full"
-          label="QUOTAS.FIELD_PERIOD"
-          formControlName="dateRange"
-          [error]="rangeError"
-        />
+        <div class="ws-form-grid__full">
+          <ws-date-range-picker
+            label="QUOTAS.FIELD_PERIOD"
+            formControlName="dateRange"
+            [error]="rangeError"
+          />
+          @if (planPeriod()) {
+            <p class="field-hint">{{ 'QUOTAS.PERIOD_WITHIN_PLAN_HINT' | translate }}</p>
+          }
+        </div>
 
         <ws-input
           class="ws-form-grid__full"

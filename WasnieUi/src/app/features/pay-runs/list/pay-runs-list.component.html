@@ -97,9 +97,16 @@
                 </td>
                 <!-- Status -->
                 <td>
-                  <ws-badge [variant]="statusBadge(run.status)">
-                    {{ 'PAY_RUNS.STATUS_' + run.status.toUpperCase() | translate }}
-                  </ws-badge>
+                  <div class="pay-runs-list__status-cell">
+                    <ws-badge [variant]="statusBadge(run.status)">
+                      {{ 'PAY_RUNS.STATUS_' + run.status.toUpperCase() | translate }}
+                    </ws-badge>
+                    @if (run.supplementalSequence > 0) {
+                      <ws-badge variant="info">
+                        {{ 'PAY_RUNS.SUPPLEMENTAL' | translate }}
+                      </ws-badge>
+                    }
+                  </div>
                 </td>
                 <!-- Payee counts -->
                 <td>
@@ -201,6 +208,14 @@
   @if (calculatePhase() === 'form') {
     <div class="pay-runs-list__modal-form">
       <form [formGroup]="calculateForm">
+        <div class="pay-runs-list__modal-plan">
+          <ws-select
+            formControlName="planId"
+            [label]="'PAY_RUNS.CALCULATE_PLAN_LABEL' | translate"
+            [placeholder]="'PAY_RUNS.CALCULATE_PLAN_PLACEHOLDER' | translate"
+            [searchFn]="planSearchFn"
+          />
+        </div>
         <div class="pay-runs-list__modal-period">
           <ws-date-picker
             #startPicker
@@ -237,6 +252,18 @@
           }
         </p>
       </div>
+
+      @if (result.isSupplemental) {
+        <div class="pay-runs-list__result-section pay-runs-list__result-section--info">
+          <p class="pay-runs-list__result-section-title">
+            <app-icon name="info" [size]="14" />
+            {{ 'PAY_RUNS.SUPPLEMENTAL_CREATED_TITLE' | translate }}
+          </p>
+          <p class="pay-runs-list__result-section-desc">
+            {{ 'PAY_RUNS.SUPPLEMENTAL_CREATED_DESC' | translate: { seq: result.supplementalSequence } }}
+          </p>
+        </div>
+      }
 
       @if (result.warnings.length > 0) {
         <div class="pay-runs-list__result-section pay-runs-list__result-section--warning">

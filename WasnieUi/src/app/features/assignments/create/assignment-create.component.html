@@ -29,12 +29,16 @@
           [error]="hasError('planId', 'required') ? 'VALIDATION.REQUIRED' : ''"
         />
 
-        <ws-date-range-picker
-          class="ws-form-grid__full"
-          label="ASSIGNMENTS.FIELD_PERIOD"
-          formControlName="dateRange"
-          [error]="rangeError"
-        />
+        <div class="ws-form-grid__full">
+          <ws-date-range-picker
+            label="ASSIGNMENTS.FIELD_PERIOD"
+            formControlName="dateRange"
+            [error]="rangeError"
+          />
+          @if (planPeriodLocked()) {
+            <p class="field-hint">{{ 'ASSIGNMENTS.PERIOD_LOCKED_HINT' | translate }}</p>
+          }
+        </div>
       </div>
 
       <div class="form-actions">

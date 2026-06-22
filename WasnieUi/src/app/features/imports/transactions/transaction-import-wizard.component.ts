@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, OnInit, signal } from '@angular/co
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
-import { WsPageLayoutComponent, WsWizardComponent, WsWizardStepComponent } from '../../../shared/ui';
+import { WsPageLayoutComponent, WsWizardComponent, WsWizardStepComponent, WsConfirmationModalComponent } from '../../../shared/ui';
 import { TxUploadStepComponent } from './steps/upload-step.component';
 import { TxMappingStepComponent } from './steps/mapping-step.component';
 import { TxPreviewStepComponent } from './steps/preview-step.component';
@@ -47,6 +47,7 @@ interface PersistedCreateState {
     WsPageLayoutComponent,
     WsWizardComponent,
     WsWizardStepComponent,
+    WsConfirmationModalComponent,
     // CREATE steps
     TxUploadStepComponent,
     TxMappingStepComponent,
@@ -68,6 +69,7 @@ export class TransactionImportWizardComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly currentStep = signal<WizardStep>('upload');
+  readonly cancelConfirmOpen = signal(false);
 
   // Mode driven by ?mode=update query param; defaults to 'create'
   readonly mode = computed<WizardMode>(() => {
@@ -214,6 +216,49 @@ export class TransactionImportWizardComponent implements OnInit {
   }
 
   onDone(): void {
+    void this.router.navigate(['/transactions']);
+  }
+
+  // ── Cancel ─────────────────────────────────────────────────────────────────
+  // Direct escape from the wizard. If there is work in progress, ask for a light
+  // confirmation first so an accidental click doesn't discard the import/update.
+
+  private hasWorkInProgress(): boolean {
+    return this.parseResult() !== null
+      || this.columnMapping() !== null
+      || this.updateParseResult() !== null
+      || this.updateColumnMapping() !== null;
+  }
+
+  requestCancel(): void {
+    if (this.hasWorkInProgress()) {
+      this.cancelConfirmOpen.set(true);
+    } else {
+      this.doCancel();
+    }
+  }
+
+  confirmCancel(): void {
+    this.cancelConfirmOpen.set(false);
+    this.doCancel();
+  }
+
+  // Wipe ALL in-progress state for both modes (file, mapping, preview, errors; the
+  // consent checkbox lives in the preview step and is destroyed with it) and leave.
+  private doCancel(): void {
+    sessionStorage.removeItem(STORAGE_KEY_CREATE);
+    sessionStorage.removeItem(STORAGE_KEY_UPDATE);
+    this.parseResult.set(null);
+    this.columnMapping.set(null);
+    this.validateResponse.set(null);
+    this.jobId.set(null);
+    this.importResult.set(null);
+    this.updateParseResult.set(null);
+    this.updateColumnMapping.set(null);
+    this.updateValidateResponse.set(null);
+    this.updateJobId.set(null);
+    this.updateResult.set(null);
+    this.currentStep.set('upload');
     void this.router.navigate(['/transactions']);
   }
 }

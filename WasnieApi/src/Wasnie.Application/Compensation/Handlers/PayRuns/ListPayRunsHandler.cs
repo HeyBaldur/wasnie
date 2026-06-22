@@ -35,6 +35,7 @@ public sealed class ListPayRunsHandler(
             PeriodStart: r.PeriodStart,
             PeriodEnd: r.PeriodEnd,
             Status: r.Status.ToString(),
+            SupplementalSequence: r.SupplementalSequence,
             PayeeCount: r.PayeeCount,
             PaidPayeeCount: r.PaidPayeeCount,
             ZeroPayoutCount: r.ZeroPayoutCount,
@@ -65,10 +66,16 @@ public sealed class ListPayRunsHandler(
             query = query.Where(r => r.Status == status);
 
         if (f.PeriodFrom.HasValue)
-            query = query.Where(r => r.PeriodStart >= f.PeriodFrom.Value);
+        {
+            var from = new DateTimeOffset(f.PeriodFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query = query.Where(r => r.CreatedAt >= from);
+        }
 
         if (f.PeriodTo.HasValue)
-            query = query.Where(r => r.PeriodEnd <= f.PeriodTo.Value);
+        {
+            var to = new DateTimeOffset(f.PeriodTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            query = query.Where(r => r.CreatedAt < to);
+        }
 
         return query;
     }

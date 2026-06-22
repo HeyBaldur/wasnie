@@ -19,6 +19,8 @@ import { OverlappingPayRun, PayRunStatus } from '../models/pay-run.model';
 import { PaymentConflictItem, PayoutStatus } from '../../payouts/models/payout.model';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
+import { CreditsApiService } from '../../credits/services/credits.api.service';
+import { BlockingPayRunInfo } from '../../credits/models/credit.model';
 import {
   WsButtonComponent, WsBadgeComponent, WsCardComponent, WsPageLayoutComponent,
   WsTableComponent, WsTableEmptyComponent, WsPaginationComponent, WsModalComponent,
@@ -44,6 +46,7 @@ import {
 export class PayRunDetailComponent implements OnInit {
   readonly store = inject(PayRunDetailStore);
   private readonly api = inject(PayRunsApiService);
+  private readonly creditsApi = inject(CreditsApiService);
   private readonly payeesApi = inject(PayeesApiService);
   private readonly plansApi = inject(PlansApiService);
   private readonly route = inject(ActivatedRoute);
@@ -56,8 +59,13 @@ export class PayRunDetailComponent implements OnInit {
   readonly markPaidConfirmOpen = signal(false);
   readonly reopenConfirmOpen = signal(false);
   readonly deleteConfirmOpen = signal(false);
+  readonly recalculateConfirmOpen = signal(false);
   readonly actioning = signal(false);
   readonly actionError = signal<string | null>(null);
+  readonly recalculating = signal(false);
+  readonly recalculateError = signal<string | null>(null);
+  readonly recalculateResult = signal<{ supersededCount: number; jobCount: number; deletedDraftCount: number } | null>(null);
+  readonly recalculateBlockedRuns = signal<OverlapRow[]>([]);
   readonly doublePayConflicts = signal<OverlapRow[]>([]);
   readonly deleting = signal(false);
   readonly deleteError = signal<string | null>(null);
@@ -113,11 +121,18 @@ export class PayRunDetailComponent implements OnInit {
     );
 
   readonly planSearchFn = (q: string) =>
-    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q, filters: { statuses: 'Active,Archived' } }).pipe(
       map(r => r.items.map(p => {
         const label = `${p.name}`;
         this._planCache.set(p.id, label);
-        return { value: p.id, label };
+        return {
+          value: p.id,
+          label,
+          badge: {
+            text: `PLANS.STATUS_${p.status.toUpperCase()}`,
+            variant: (p.status === 'Active' ? 'success' : 'neutral') as BadgeVariant,
+          },
+        };
       })),
     );
 
@@ -335,6 +350,55 @@ export class PayRunDetailComponent implements OnInit {
     } finally {
       this.actioning.set(false);
     }
+  }
+
+  async onRecalculate(): Promise<void> {
+    if (this.recalculating()) return;
+    const run = this.store.run();
+    if (!run) return;
+    this.recalculateConfirmOpen.set(false);
+    this.recalculating.set(true);
+    this.recalculateError.set(null);
+    this.recalculateResult.set(null);
+    this.recalculateBlockedRuns.set([]);
+    try {
+      const result = await firstValueFrom(this.creditsApi.recalculate(run.periodStart, run.periodEnd));
+      this.recalculateResult.set({
+        supersededCount: result.supersededCount,
+        jobCount: result.jobIds.length,
+        deletedDraftCount: result.deletedDraftCount,
+      });
+      if (result.deletedDraftCount > 0) {
+        // This draft pay run was auto-deleted — navigating keeps the user from hitting a 404 reload.
+        await this.router.navigate(['/pay-runs']);
+      } else {
+        await this.store.reload();
+      }
+    } catch (err) {
+      const httpErr = err as {
+        status?: number;
+        error?: { blocked?: boolean; blockingPayRuns?: BlockingPayRunInfo[]; message?: string };
+      };
+      if (httpErr.status === 409 && httpErr.error?.blocked && httpErr.error.blockingPayRuns?.length) {
+        this.recalculateBlockedRuns.set(this._blockingRunsToRows(httpErr.error.blockingPayRuns));
+      } else {
+        this.recalculateError.set(httpErr.error?.message ?? 'PAY_RUNS.DETAIL.RECALCULATE_ERROR');
+      }
+    } finally {
+      this.recalculating.set(false);
+    }
+  }
+
+  private _blockingRunsToRows(runs: BlockingPayRunInfo[]): OverlapRow[] {
+    return runs.map(r => ({
+      id: r.payRunId,
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+      statusLabel: `PAY_RUNS.STATUS_${r.status.toUpperCase()}`,
+      statusVariant: r.status === 'Paid' ? 'success' : ('brand' as const),
+      col3: '',
+      amounts: [],
+    }));
   }
 
   async onDelete(): Promise<void> {

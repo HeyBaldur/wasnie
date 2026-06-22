@@ -100,6 +100,7 @@ export interface RateTable {
   flatRate: number | null;
   tiers: RateTier[] | null;
   attainmentTiers: AttainmentTier[] | null;
+  splitAtQuota: boolean;
 }
 
 export interface Modifier {

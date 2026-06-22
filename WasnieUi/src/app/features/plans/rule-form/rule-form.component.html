@@ -38,7 +38,7 @@
 
         <div class="form-card" formGroupName="measurement">
           <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</h2>
-          <div class="form-row-3">
+          <div class="form-row-2">
             <div class="field-with-help">
               <div class="field-help-label">
                 <span class="form-field-label">{{ 'PLANS.FIELD_MEASUREMENT_TYPE' | translate }}</span>
@@ -46,22 +46,6 @@
                   [wsTooltip]="'PLANS.TOOLTIP_MEASUREMENT_TYPE' | translate" />
               </div>
               <ws-select formControlName="type" [options]="measurementTypeOptions" />
-            </div>
-            <div class="field-with-help">
-              <div class="field-help-label">
-                <span class="form-field-label">{{ 'PLANS.FIELD_SOURCE_FIELD' | translate }}</span>
-                <app-icon name="info" [size]="13" class="help-icon"
-                  [wsTooltip]="'PLANS.TOOLTIP_SOURCE_FIELD' | translate" />
-              </div>
-              <ws-input formControlName="sourceField" placeholder="amount" />
-            </div>
-            <div class="field-with-help">
-              <div class="field-help-label">
-                <span class="form-field-label">{{ 'PLANS.FIELD_AGGREGATION' | translate }}</span>
-                <app-icon name="info" [size]="13" class="help-icon"
-                  [wsTooltip]="'PLANS.TOOLTIP_AGGREGATION' | translate" />
-              </div>
-              <ws-select formControlName="aggregation" [options]="aggregationOptions" />
             </div>
           </div>
         </div>
@@ -79,29 +63,38 @@
                 @for (t of rateTableTypes; track t.value) {
                   <button type="button" class="type-btn"
                     [class.type-btn--active]="rateTableType() == t.value"
-                    [disabled]="readOnly()"
-                    (click)="!readOnly() && form.get('rateTable.type')?.setValue(t.value)">
+                    [disabled]="readOnly() || (isUnitsMode() && t.value !== RateTableType.Flat)"
+                    (click)="!readOnly() && !isUnitsMode() && form.get('rateTable.type')?.setValue(t.value)">
                     {{ t.label | translate }}
                   </button>
                 }
               </div>
+              @if (isUnitsMode()) {
+                <p class="form-hint mt-2">{{ 'PLANS.UNITS_RATE_TABLE_NOTE' | translate }}</p>
+              }
             </div>
 
             @if (rateTableType() == RateTableType.Flat) {
               <div class="form-field-group mt-4">
                 <div class="field-help-label">
-                  <span class="form-field-label">{{ 'PLANS.FIELD_FLAT_RATE' | translate }}</span>
+                  <span class="form-field-label">
+                    {{ (isUnitsMode() ? 'PLANS.FIELD_FLAT_RATE_PER_UNIT' : 'PLANS.FIELD_FLAT_RATE') | translate }}
+                  </span>
                   <app-icon name="info" [size]="13" class="help-icon"
-                    [wsTooltip]="'PLANS.TOOLTIP_FLAT_RATE' | translate" />
+                    [wsTooltip]="(isUnitsMode() ? 'PLANS.TOOLTIP_FLAT_RATE_UNITS' : 'PLANS.TOOLTIP_FLAT_RATE') | translate" />
                 </div>
                 <div class="input-with-suffix">
                   <ws-input
                     formControlName="flatRate"
                     type="number"
                   />
-                  <span class="input-suffix">%×100</span>
+                  @if (!isUnitsMode()) {
+                    <span class="input-suffix">%×100</span>
+                  }
                 </div>
-                <span class="form-hint">{{ 'PLANS.HINT_RATE' | translate }}</span>
+                <span class="form-hint">
+                  {{ (isUnitsMode() ? 'PLANS.HINT_RATE_UNITS' : 'PLANS.HINT_RATE') | translate }}
+                </span>
               </div>
             }
 
@@ -166,6 +159,17 @@
                     {{ 'PLANS.ADD_TIER' | translate }}
                   </ws-button>
                 }
+              </div>
+              <div class="collapsible-header mt-4"
+                [class.collapsible-header--readonly]="readOnly()"
+                (click)="!readOnly() && form.get('rateTable.splitAtQuota')?.setValue(!form.get('rateTable.splitAtQuota')?.value)">
+                <div class="section-title-with-help">
+                  <span class="form-field-label">{{ 'PLANS.FIELD_SPLIT_AT_QUOTA' | translate }}</span>
+                  <app-icon name="info" [size]="13" class="help-icon"
+                    [wsTooltip]="'PLANS.TOOLTIP_SPLIT_AT_QUOTA' | translate"
+                    (click)="$event.stopPropagation()" />
+                </div>
+                <div class="toggle-switch" [class.toggle-switch--on]="form.get('rateTable.splitAtQuota')?.value"></div>
               </div>
             }
           </div>
@@ -346,61 +350,80 @@
         </div>
       </form>
 
-      <aside class="rule-preview">
-        <div class="rule-preview__header">
-          <app-icon name="eye" [size]="16" />
-          <span>{{ 'PLANS.PREVIEW_TITLE' | translate }}</span>
-        </div>
-        <div class="rule-preview__body">
-          <div class="preview-section">
-            <span class="preview-label">{{ 'PLANS.FIELD_RULE_NAME' | translate }}</span>
-            <span class="preview-value">{{ form.get('name')?.value || '—' }}</span>
+      <div class="rule-sidebar">
+        <aside class="rule-preview">
+          <div class="rule-preview__header">
+            <app-icon name="eye" [size]="16" />
+            <span>{{ 'PLANS.PREVIEW_TITLE' | translate }}</span>
           </div>
-          <div class="preview-section">
-            <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
-            <span class="preview-value">
-              {{ measurementTypeKey(form.get('measurement.type')?.value) | translate }}
-              · {{ measurementAggregationKey(form.get('measurement.aggregation')?.value) | translate }}
-            </span>
+          <div class="rule-preview__body">
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.FIELD_RULE_NAME' | translate }}</span>
+              <span class="preview-value">{{ form.get('name')?.value || '—' }}</span>
+            </div>
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</span>
+              <span class="preview-value">
+                {{ measurementTypeKey(form.get('measurement.type')?.value) | translate }}
+              </span>
+            </div>
+            <div class="preview-section">
+              <span class="preview-label">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</span>
+              <span class="preview-value">
+                @if (rateTableType() == RateTableType.Flat) {
+                  @if (isUnitsMode()) {
+                    {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) | number:'1.2-4' }} / {{ 'PLANS.MEASUREMENT_UNITS' | translate | lowercase }}
+                  } @else {
+                    {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
+                  }
+                } @else if (rateTableType() == RateTableType.Tiered) {
+                  {{ 'PLANS.RATE_TABLE_TIERED' | translate }} · {{ tiersArray.length }} {{ 'PLANS.TIERS' | translate }}
+                } @else {
+                  {{ 'PLANS.RATE_TABLE_ATTAINMENTBASED' | translate }} · {{ attainmentTiersArray.length }} {{ 'PLANS.TIERS' | translate }}
+                }
+              </span>
+            </div>
+            @if (hasTrigger()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</span>
+                <span class="preview-value">{{ conditionsArray.length }} {{ 'PLANS.CONDITIONS' | translate }}</span>
+              </div>
+            }
+            @if (hasModifier()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</span>
+                <span class="preview-value">× {{ form.get('modifier.factor')?.value }}</span>
+              </div>
+            }
+            @if (hasCap()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</span>
+                <span class="preview-value">{{ form.get('cap.amount')?.value }}</span>
+              </div>
+            }
+            @if (hasFloor()) {
+              <div class="preview-section">
+                <span class="preview-label">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</span>
+                <span class="preview-value">{{ form.get('floor.amount')?.value }}</span>
+              </div>
+            }
           </div>
-          <div class="preview-section">
-            <span class="preview-label">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</span>
-            <span class="preview-value">
-              @if (rateTableType() == RateTableType.Flat) {
-                {{ 'PLANS.RATE_TABLE_FLAT' | translate }} · {{ (form.get('rateTable.flatRate')?.value || 0) * 100 | number:'1.1-3' }}%
-              } @else if (rateTableType() == RateTableType.Tiered) {
-                {{ 'PLANS.RATE_TABLE_TIERED' | translate }} · {{ tiersArray.length }} {{ 'PLANS.TIERS' | translate }}
-              } @else {
-                {{ 'PLANS.RATE_TABLE_ATTAINMENTBASED' | translate }} · {{ attainmentTiersArray.length }} {{ 'PLANS.TIERS' | translate }}
-              }
-            </span>
+        </aside>
+
+        @if (!isEdit && !readOnly()) {
+          <div class="immutability-notice">
+            <div class="immutability-notice__icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <div>
+              <h5 class="immutability-notice__title">{{ 'PLANS.RULE_IMMUTABILITY_TITLE' | translate }}</h5>
+              <p class="immutability-notice__body">{{ 'PLANS.RULE_IMMUTABILITY_BODY' | translate }}</p>
+            </div>
           </div>
-          @if (hasTrigger()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</span>
-              <span class="preview-value">{{ conditionsArray.length }} {{ 'PLANS.CONDITIONS' | translate }}</span>
-            </div>
-          }
-          @if (hasModifier()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</span>
-              <span class="preview-value">× {{ form.get('modifier.factor')?.value }}</span>
-            </div>
-          }
-          @if (hasCap()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</span>
-              <span class="preview-value">{{ form.get('cap.amount')?.value }}</span>
-            </div>
-          }
-          @if (hasFloor()) {
-            <div class="preview-section">
-              <span class="preview-label">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</span>
-              <span class="preview-value">{{ form.get('floor.amount')?.value }}</span>
-            </div>
-          }
-        </div>
-      </aside>
+        }
+      </div>
     </div>
   </div>
 </app-shell>

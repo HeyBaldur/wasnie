@@ -28,6 +28,7 @@ export class TxUpdateMappingStepComponent implements OnInit {
 
   readonly validated = output<{ response: TransactionUpdateValidateResponse; mapping: TransactionUpdateColumnMapping }>();
   readonly back = output<void>();
+  readonly cancel = output<void>();
 
   readonly form = this.fb.group({
     referenceNumberColumn: [''],

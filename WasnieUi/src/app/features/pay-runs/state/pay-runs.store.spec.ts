@@ -56,9 +56,9 @@ describe('PayRunsStore', () => {
     expect(store.totalCount()).toBe(0);
   });
 
-  it('should have page=1 and pageSize=25 by default', () => {
+  it('should have page=1 and pageSize=10 by default', () => {
     expect(store.page()).toBe(1);
-    expect(store.pageSize()).toBe(25);
+    expect(store.pageSize()).toBe(10);
   });
 
   it('should start with EMPTY_PAY_RUN_FILTER', () => {

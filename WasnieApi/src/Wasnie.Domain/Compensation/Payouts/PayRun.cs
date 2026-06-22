@@ -11,6 +11,9 @@ public sealed class PayRun : AggregateRoot
     public DateOnly PeriodStart { get; private set; }
     public DateOnly PeriodEnd { get; private set; }
     public PayRunStatus Status { get; private set; } = PayRunStatus.Draft;
+    // 0 = primary run for the period; 1, 2, … = supplemental runs created after the primary was Paid/Approved.
+    // Enforced unique by (TenantId, PeriodStart, PeriodEnd, SupplementalSequence) in DB.
+    public int SupplementalSequence { get; private set; } = 0;
 
     // Lifecycle audit — Rule 10: every status write records actor + timestamp via IClock.
     public DateTimeOffset CreatedAt { get; private set; }
@@ -36,7 +39,8 @@ public sealed class PayRun : AggregateRoot
 
     /// <summary>
     /// Creates a new PayRun in Draft status for the given period.
-    /// One PayRun per (TenantId, PeriodStart, PeriodEnd) — enforced by unique index in DB.
+    /// Unique constraint is (TenantId, PeriodStart, PeriodEnd, SupplementalSequence) in DB.
+    /// Pass supplementalSequence = 0 for the primary run; use max+1 for supplemental runs.
     /// </summary>
     public static PayRun Open(
         Guid tenantId,
@@ -44,12 +48,15 @@ public sealed class PayRun : AggregateRoot
         DateOnly periodEnd,
         string createdBy,
         Guid id,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int supplementalSequence = 0)
     {
         if (periodStart > periodEnd)
             throw new DomainException("PeriodStart must be on or before PeriodEnd.");
         if (string.IsNullOrWhiteSpace(createdBy))
             throw new DomainException("CreatedBy is required.");
+        if (supplementalSequence < 0)
+            throw new DomainException("SupplementalSequence must be zero or positive.");
 
         return new PayRun
         {
@@ -60,6 +67,7 @@ public sealed class PayRun : AggregateRoot
             Status = PayRunStatus.Draft,
             CreatedAt = now,
             CreatedBy = createdBy,
+            SupplementalSequence = supplementalSequence,
         };
     }
 

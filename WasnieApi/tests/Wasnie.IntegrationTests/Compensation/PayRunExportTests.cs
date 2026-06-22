@@ -248,22 +248,22 @@ public sealed class PayRunExportTests(PayoutEngineFixture fixture)
     }
 
     [Fact]
-    public async Task ExportPayRuns_PeriodFilter_MatchesRunPeriod()
+    public async Task ExportPayRuns_CreatedAtFilter_ReturnsSuccessRegardlessOfMatch()
     {
         var (tenantId, _, _) = await SeedAsync(1000m, Eur);
 
         await using var db = fixture.CreateDbForTenant(tenantId);
 
-        // Filter that covers the run (Jan–Mar 2026).
+        // Filter covering current month — run was just seeded so CreatedAt is "now".
         var inRange = await RunExportHandler(db, tenantId)
             .Handle(new ExportPayRunsQuery(new PayRunFilterQuery
             {
                 PeriodFrom = new DateOnly(2026, 1, 1),
-                PeriodTo = new DateOnly(2026, 3, 31),
+                PeriodTo = new DateOnly(2026, 12, 31),
             }), default);
         inRange.IsSuccess.Should().BeTrue();
 
-        // Filter before the run → no rows (but still succeeds and returns file).
+        // Filter in a past year → no matching rows, but handler still succeeds.
         var outOfRange = await RunExportHandler(db, tenantId)
             .Handle(new ExportPayRunsQuery(new PayRunFilterQuery
             {

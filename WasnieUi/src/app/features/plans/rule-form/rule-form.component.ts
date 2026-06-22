@@ -1,4 +1,5 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   AbstractControl,
   FormArray,
@@ -8,9 +9,10 @@ import {
   Validators,
 } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { distinctUntilChanged } from 'rxjs';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { TranslateModule, TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -48,6 +50,7 @@ import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.dir
     TranslateModule,
     TranslatePipe,
     DecimalPipe,
+    LowerCasePipe,
     WsPageHeaderComponent,
     WsButtonComponent,
     WsInputComponent,
@@ -63,6 +66,8 @@ export class RuleFormComponent implements OnInit {
   private readonly router = inject(Router);
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
+
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly planId = this.route.snapshot.paramMap.get('planId')!;
   readonly ruleId = this.route.snapshot.paramMap.get('ruleId') ?? null;
@@ -87,9 +92,16 @@ export class RuleFormComponent implements OnInit {
     { label: 'PLANS.MEASUREMENT_UNITS', value: MeasurementType.Units },
   ];
 
-  readonly aggregationOptions: SelectOption[] = Object.entries(MeasurementAggregation)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({ label: `PLANS.AGGREGATION_${k.toUpperCase()}`, value: v as number }));
+  // Aggregation is not yet implemented in the motor — Sum is the only valid option.
+  // Average/Max/Min/Count are hidden from the UI to prevent silent misconfiguration.
+  readonly aggregationOptions: SelectOption[] = [
+    { label: 'PLANS.AGGREGATION_SUM', value: MeasurementAggregation.Sum },
+  ];
+
+  /** True when Measurement Type = Units is selected. Drives conditional UI rendering. */
+  readonly isUnitsMode = computed(() =>
+    Number(this.formValue()?.measurement?.type ?? MeasurementType.Revenue) === MeasurementType.Units
+  );
 
   readonly rateTableTypes = Object.entries(RateTableType)
     .filter(([, v]) => typeof v === 'number')
@@ -120,6 +132,7 @@ export class RuleFormComponent implements OnInit {
       flatRate: [0.05],
       tiers: this.fb.array<FormGroup>([]),
       attainmentTiers: this.fb.array<FormGroup>([]),
+      splitAtQuota: [false],
     }),
     hasTrigger: [false],
     trigger: this.fb.nonNullable.group({
@@ -168,6 +181,20 @@ export class RuleFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // When the user switches to Units mode, force rate table to Flat (only supported combination).
+    // Also ensure hidden fields stay at their defaults.
+    this.form.controls.measurement.controls.type.valueChanges.pipe(
+      distinctUntilChanged(),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(type => {
+      if (Number(type) === MeasurementType.Units) {
+        this.form.controls.rateTable.controls.type.setValue(RateTableType.Flat as number, { emitEvent: false });
+      }
+      // sourceField and aggregation are hidden; keep at defaults regardless of type.
+      this.form.controls.measurement.controls.sourceField.setValue('amount', { emitEvent: false });
+      this.form.controls.measurement.controls.aggregation.setValue(MeasurementAggregation.Sum as number, { emitEvent: false });
+    });
+
     const loadPromise = (!this.store.selectedPlan() || this.store.selectedPlan()?.id !== this.planId)
       ? this.store.loadPlan(this.planId)
       : Promise.resolve();
@@ -220,6 +247,7 @@ export class RuleFormComponent implements OnInit {
       rateTable: {
         type: rateTableTypeNum,
         flatRate: rule.rateTable.flatRate ?? 0.05,
+        splitAtQuota: rule.rateTable.splitAtQuota ?? false,
       },
       hasTrigger: !!rule.trigger,
       hasModifier: !!rule.modifier,
@@ -386,6 +414,7 @@ export class RuleFormComponent implements OnInit {
       attainmentTiers: type === RateTableType.AttainmentBased
         ? v.rateTable.attainmentTiers.map((t) => ({ attainmentFrom: t['attainmentFrom'], attainmentTo: t['attainmentTo'], rate: t['rate'] }))
         : null,
+      splitAtQuota: type === RateTableType.AttainmentBased ? (v.rateTable.splitAtQuota ?? false) : false,
     };
   }
 

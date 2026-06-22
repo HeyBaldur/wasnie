@@ -94,6 +94,9 @@ public static class AuditActions
     // Pay runs — lifecycle
     public const string PayRunDraftDeleted = "PAY_RUN_DRAFT_DELETED";
 
+    // Credits
+    public const string CreditsRecalculated = "CREDITS_RECALCULATED";
+
     // Pay runs — overlap override audit (anti-double-pay)
     public const string PayRunApprovedWithOverlap = "PAY_RUN_APPROVED_WITH_OVERLAP";
     public const string PayRunPaidWithOverlap = "PAY_RUN_PAID_WITH_OVERLAP";

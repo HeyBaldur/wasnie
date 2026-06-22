@@ -1,3 +1,17 @@
+export interface RecalculateCreditsResult {
+  supersededCount: number;
+  skippedPaidCount: number;
+  jobIds: string[];
+  deletedDraftCount: number;
+}
+
+export interface BlockingPayRunInfo {
+  payRunId: string;
+  status: string;
+  periodStart: string;
+  periodEnd: string;
+}
+
 export interface CreditListItem {
   id: string;
   transactionId: string;

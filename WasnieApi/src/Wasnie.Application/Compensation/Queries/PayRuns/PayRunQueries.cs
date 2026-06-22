@@ -13,8 +13,8 @@ public sealed record PayRunFilterQuery
     public string SortOrder { get; init; } = "desc";
 
     public string? Status { get; init; }          // Draft|Approved|Paid
-    public DateOnly? PeriodFrom { get; init; }    // runs where PeriodStart >= this
-    public DateOnly? PeriodTo { get; init; }      // runs where PeriodEnd <= this
+    public DateOnly? PeriodFrom { get; init; }    // runs where CreatedAt.Date >= this
+    public DateOnly? PeriodTo { get; init; }      // runs where CreatedAt.Date <= this
 }
 
 public sealed record ListPayRunsQuery(PayRunFilterQuery Filter)

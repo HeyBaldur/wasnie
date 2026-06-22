@@ -31,9 +31,13 @@ export class TxPreviewStepComponent {
 
   readonly executed = output<string>();
   readonly back = output<void>();
+  readonly cancel = output<void>();
 
   readonly rowFilter = signal<RowFilter>('all');
   skipWarnings = false;
+  // Consent gate: the Import button stays disabled until the user accepts.
+  // Local to this step, so it resets whenever the preview step is left/re-entered.
+  consentAccepted = false;
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -155,4 +159,6 @@ export class TxPreviewStepComponent {
   }
 
   onBack(): void { this.back.emit(); }
+
+  onCancel(): void { this.cancel.emit(); }
 }

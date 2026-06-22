@@ -26,6 +26,7 @@ public static class Permission
 
     public const string CreditsRead = "Credits.Read";
     public const string CreditsExport = "Credits.Export";
+    public const string CreditsRecalculate = "Credits.Recalculate";
 
     public const string TransactionsCreate = "Transactions.Create";
     public const string TransactionsRead = "Transactions.Read";

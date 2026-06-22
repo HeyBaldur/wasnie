@@ -2,7 +2,7 @@ import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { Observable, filter, firstValueFrom, map, switchMap } from 'rxjs';
+import { Observable, firstValueFrom, map, of, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { AssignmentsStore } from '../state/assignments.store';
@@ -17,6 +17,7 @@ import {
   WsPageHeaderComponent,
   type SelectOption,
   type DateRange,
+  type BadgeVariant,
 } from '../../../shared/ui';
 
 @Component({
@@ -49,6 +50,7 @@ export class AssignmentCreateComponent implements OnInit {
   readonly preselectedPayeeOption = signal<SelectOption | null>(null);
   readonly preselectedPlanOption = signal<SelectOption | null>(null);
   readonly returnTo = signal<string | null>(null);
+  readonly planPeriodLocked = signal(false);
 
   readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -56,11 +58,12 @@ export class AssignmentCreateComponent implements OnInit {
     );
 
   readonly planSearchFn = (q: string): Observable<SelectOption[]> =>
-    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q }).pipe(
-      map(r => r.items
-        .filter(p => p.status === 'Active')
-        .map(p => ({ value: p.id, label: `${p.name} v${p.version}` }))
-      )
+    this.plansApi.getPlans({ page: 1, pageSize: 20, search: q, filters: { status: 'Active' } }).pipe(
+      map(r => r.items.map(p => ({
+        value: p.id,
+        label: `${p.name} v${p.version}`,
+        badge: { text: 'PLANS.STATUS_ACTIVE', variant: 'success' as BadgeVariant },
+      })))
     );
 
   readonly form = this.fb.nonNullable.group({
@@ -70,15 +73,25 @@ export class AssignmentCreateComponent implements OnInit {
   });
 
   constructor() {
-    // When planId changes, fetch the full plan to auto-fill the date range.
-    // switchMap cancels any prior in-flight request if the user picks again quickly.
-    this.form.get('planId')!.valueChanges.pipe(
-      filter(Boolean),
-      switchMap(id => this.plansApi.getPlan(id)),
+    // The assignment period MUST equal the selected plan's effective period (it is the window
+    // attainment is measured against). When a plan is chosen we copy its dates and LOCK the field;
+    // when the plan is cleared we re-enable the field and clear the now-irrelevant value.
+    this.form.controls.planId.valueChanges.pipe(
+      // switchMap cancels any prior in-flight request if the user picks again quickly.
+      switchMap(id => (id ? this.plansApi.getPlan(id) : of(null))),
       takeUntilDestroyed(this._destroyRef),
     ).subscribe(plan => {
-      this.form.patchValue({ dateRange: { start: plan.effectiveStart, end: plan.effectiveEnd } });
-      this.preselectedPlanOption.set({ value: plan.id, label: `${plan.name} v${plan.version}` });
+      const dateRange = this.form.controls.dateRange;
+      if (plan) {
+        dateRange.setValue({ start: plan.effectiveStart, end: plan.effectiveEnd });
+        dateRange.disable();
+        this.planPeriodLocked.set(true);
+        this.preselectedPlanOption.set({ value: plan.id, label: `${plan.name} v${plan.version}` });
+      } else {
+        dateRange.setValue(null);
+        dateRange.enable();
+        this.planPeriodLocked.set(false);
+      }
     });
   }
 

@@ -140,6 +140,14 @@ internal static class CommissionCalculator
 
     // ── Commission computation ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Units mode: flatRatePerUnit is the monetary amount earned per unit (e.g. €2.00).
+    /// commission = ratePerUnit × quantity.
+    /// Only valid with Flat rate tables — callers must validate before calling.
+    /// </summary>
+    internal static Money ComputeUnitsCommission(int quantity, decimal ratePerUnit, string currency)
+        => Money.Of(ratePerUnit * quantity, currency);
+
     internal static Money ComputeCommission(Money baseAmount, RateTable rateTable, decimal attainmentPct)
     {
         return rateTable.Type switch
@@ -192,6 +200,43 @@ internal static class CommissionCalculator
 
         if (tier == null) return Money.Zero(baseAmount.Currency);
         return baseAmount.Multiply(tier.Rate);
+    }
+
+    /// <summary>
+    /// Split-at-quota attainment: walks every tier and earns each tier's rate on the
+    /// portion of this transaction that falls within that tier's absolute revenue range
+    /// [AttainmentFrom * quota, AttainmentTo * quota). The transaction's revenue interval
+    /// is [priorCumulative, priorCumulative + txAmount]. Each tier contributes its rate
+    /// to the overlap between the transaction interval and the tier's absolute range.
+    /// </summary>
+    internal static Money ComputeAttainmentSplitCommission(
+        Money txAmount,
+        IReadOnlyList<AttainmentTier> tiers,
+        decimal priorCumulative,
+        decimal quotaTarget)
+    {
+        if (quotaTarget <= 0m) return Money.Zero(txAmount.Currency);
+
+        var txValue = txAmount.Amount;
+        var txStart = priorCumulative;
+        var txEnd = priorCumulative + txValue;
+        var total = 0m;
+
+        foreach (var tier in tiers)
+        {
+            var tierFloor = tier.AttainmentFrom * quotaTarget;
+            var tierCeiling = tier.AttainmentTo.HasValue
+                ? tier.AttainmentTo.Value * quotaTarget
+                : decimal.MaxValue;
+
+            var overlapStart = Math.Max(txStart, tierFloor);
+            var overlapEnd = Math.Min(txEnd, tierCeiling);
+
+            if (overlapEnd > overlapStart)
+                total += (overlapEnd - overlapStart) * tier.Rate;
+        }
+
+        return Money.Of(total, txAmount.Currency);
     }
 
     // ── Modifiers, caps, floors ───────────────────────────────────────────────

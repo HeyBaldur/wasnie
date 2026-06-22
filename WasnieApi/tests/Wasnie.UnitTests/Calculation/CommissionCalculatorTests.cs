@@ -336,6 +336,166 @@ public sealed class CommissionCalculatorTests
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // ATTAINMENT SPLIT-AT-QUOTA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private static readonly IReadOnlyList<AttainmentTier> EuAcceleratorTiers =
+    [
+        new() { AttainmentFrom = 0m, AttainmentTo = 1.0m, Rate = 0.04m },
+        new() { AttainmentFrom = 1.0m, AttainmentTo = null, Rate = 0.07m }
+    ];
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_CasoAdrian_FullPeriodTotal()
+    {
+        // Adrian: quota €250,000. Total Q2 revenue €277,880.25.
+        // Under-quota: €250,000 × 4% = €10,000
+        // Over-quota:  €27,880.25 × 7% = €1,951.6175
+        // Simulated as single tx with prior=0 to verify aggregate math.
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(277_880.25m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 0m,
+            quotaTarget: 250_000m);
+
+        result.Amount.Should().Be(11_951.6175m);
+        result.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_CasoAdrian_LastTxCrossesQuota()
+    {
+        // prior=€240,000, quota=€250,000, tx=€37,880.25
+        // Tier 1: €10,000 (240k→250k) × 4% = €400
+        // Tier 2: €27,880.25 (250k→277,880.25) × 7% = €1,951.6175
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(37_880.25m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 240_000m,
+            quotaTarget: 250_000m);
+
+        result.Amount.Should().Be(2_351.6175m);
+        result.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_EntirelyBelowQuota_OnlyFirstTierRate()
+    {
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(50_000m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 0m,
+            quotaTarget: 250_000m);
+
+        result.Amount.Should().Be(2_000.0000m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_EntirelyAboveQuota_OnlySecondTierRate()
+    {
+        // prior=260,000 (already above quota), tx=10,000 → all at 7%
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(10_000m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 260_000m,
+            quotaTarget: 250_000m);
+
+        result.Amount.Should().Be(700.0000m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_ExactlyAtQuotaBoundary_NextTxAllInTier2()
+    {
+        // prior=250,000 (exactly at quota), tx=5,000 → all at 7%
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(5_000m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 250_000m,
+            quotaTarget: 250_000m);
+
+        result.Amount.Should().Be(350.0000m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_TxLandingExactlyOnQuota_FullFirstTierNoSecond()
+    {
+        // prior=0, tx=250,000 → exactly fills Tier 1, zero in Tier 2
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(250_000m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 0m,
+            quotaTarget: 250_000m);
+
+        result.Amount.Should().Be(10_000.0000m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_ZeroQuotaTarget_ReturnsZero()
+    {
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(10_000m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 0m,
+            quotaTarget: 0m);
+
+        result.Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_DifferentRepDifferentQuota_SplitsAtTheirQuota()
+    {
+        // Stefano: quota €180,000. prior=€170,000, tx=€20,000.
+        // Tier 1: €10,000 (170k→180k) × 4% = €400
+        // Tier 2: €10,000 (180k→190k) × 7% = €700
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(20_000m, "EUR"),
+            EuAcceleratorTiers,
+            priorCumulative: 170_000m,
+            quotaTarget: 180_000m);
+
+        result.Amount.Should().Be(1_100.0000m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_ThreeTiers_TxSpansTwo()
+    {
+        // 3 tiers: 0-1.0@4%, 1.0-1.5@7%, 1.5+@10%. Quota=100.
+        // prior=90, tx=50 → covers [90,140]
+        // Tier 1 [0,100]: overlap [90,100] = 10 × 4% = 0.40
+        // Tier 2 [100,150]: overlap [100,140] = 40 × 7% = 2.80
+        var threeTiers = new List<AttainmentTier>
+        {
+            new() { AttainmentFrom = 0m, AttainmentTo = 1.0m, Rate = 0.04m },
+            new() { AttainmentFrom = 1.0m, AttainmentTo = 1.5m, Rate = 0.07m },
+            new() { AttainmentFrom = 1.5m, AttainmentTo = null, Rate = 0.10m }
+        };
+
+        var result = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(50m, "EUR"),
+            threeTiers,
+            priorCumulative: 90m,
+            quotaTarget: 100m);
+
+        result.Amount.Should().Be(3.2000m);
+    }
+
+    [Fact]
+    public void ComputeAttainmentSplitCommission_AdditivityCheck_TwoTxsEqualOneCombined()
+    {
+        // Splitting a total into two transactions must give the same aggregate as one combined tx.
+        // tx1: prior=0, amount=150k → all Tier 1 → 6,000
+        // tx2: prior=150k, amount=127,880.25 → Tier 1 (100k×4%) + Tier 2 (27,880.25×7%)
+        //       = 4,000 + 1,951.6175 = 5,951.6175
+        // Total = 11,951.6175 (matches CasoAdrian single-shot test)
+        var tx1 = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(150_000m, "EUR"), EuAcceleratorTiers, 0m, 250_000m);
+        var tx2 = CommissionCalculator.ComputeAttainmentSplitCommission(
+            Money.Of(127_880.25m, "EUR"), EuAcceleratorTiers, 150_000m, 250_000m);
+
+        tx1.Add(tx2).Amount.Should().Be(11_951.6175m);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // MODIFIER
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -938,5 +1098,62 @@ public sealed class CommissionCalculatorTests
         commission = CommissionCalculator.ApplyFloor(commission, null);
 
         commission.Amount.Should().Be(50.0000m);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // UNITS commission (WI-UNITS-MEASUREMENT)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ComputeUnitsCommission_StandardRate_ReturnsRateTimesQuantity()
+    {
+        // €2.00/unit × 10 units = €20.00
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 10, ratePerUnit: 2.00m, currency: "EUR");
+
+        result.Amount.Should().Be(20.0000m);
+        result.Currency.Should().Be("EUR");
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_QuantityOne_ReturnsRateDirectly()
+    {
+        // default Quantity=1 → commission equals the per-unit rate exactly
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 1, ratePerUnit: 5.50m, currency: "EUR");
+
+        result.Amount.Should().Be(5.5000m);
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_LargeQuantity_NoOverflow()
+    {
+        // €0.25/unit × 10,000 units = €2,500
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 10_000, ratePerUnit: 0.25m, currency: "USD");
+
+        result.Amount.Should().Be(2_500.0000m);
+        result.Currency.Should().Be("USD");
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_FractionalRate_RoundedToFourDecimals()
+    {
+        // €1.33335/unit × 1 = 1.33335 → banker's rounding → 1.3334 (4th digit 3 is odd, rounds up)
+        var result = CommissionCalculator.ComputeUnitsCommission(
+            quantity: 1, ratePerUnit: 1.33335m, currency: "EUR");
+
+        result.Amount.Should().Be(1.3334m);
+    }
+
+    [Fact]
+    public void ComputeUnitsCommission_RevenueFlat_RegressionUnchanged()
+    {
+        // Revenue path still uses ComputeCommission; confirm result is unchanged (regression guard).
+        var revenue = CommissionCalculator.ComputeCommission(
+            Money.Of(1000m, "EUR"), RateTable.Flat(0.05m), attainmentPct: 1.0m);
+
+        revenue.Amount.Should().Be(50.0000m);
+        revenue.Currency.Should().Be("EUR");
     }
 }

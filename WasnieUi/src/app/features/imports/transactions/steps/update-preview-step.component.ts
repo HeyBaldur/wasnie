@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
+import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
 import { WsButtonComponent, WsBadgeComponent, WsStatCardComponent, BadgeVariant } from '../../../../shared/ui';
 import { TransactionUpdateService } from '../services/transaction-update.service';
@@ -16,7 +17,7 @@ type UpdateRowFilter = 'all' | 'willUpdate' | 'noChanges' | 'errors';
 @Component({
   selector: 'app-tx-update-preview-step',
   standalone: true,
-  imports: [TranslateModule, IconComponent, WsButtonComponent, WsBadgeComponent, WsStatCardComponent],
+  imports: [TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent, WsStatCardComponent],
   templateUrl: './update-preview-step.component.html',
   styleUrl: './update-preview-step.component.scss',
 })
@@ -29,10 +30,14 @@ export class TxUpdatePreviewStepComponent {
 
   readonly executed = output<string>();
   readonly back = output<void>();
+  readonly cancel = output<void>();
 
   readonly rowFilter = signal<UpdateRowFilter>('all');
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  // Consent gate: the Apply button stays disabled until the user accepts.
+  // Local to this step, so it resets whenever the preview step is left/re-entered.
+  consentAccepted = false;
 
   readonly filteredRows = computed(() => {
     const rows = this.validateResponse().rowResults;
@@ -103,4 +108,6 @@ export class TxUpdatePreviewStepComponent {
   }
 
   onBack(): void { this.back.emit(); }
+
+  onCancel(): void { this.cancel.emit(); }
 }

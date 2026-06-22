@@ -128,18 +128,23 @@
   }
 
   <div class="mapping-actions">
-    <ws-button variant="secondary" (click)="onBack()">
-      <app-icon name="arrow-left" [size]="14" />
-      {{ 'COMMON.BACK' | translate }}
+    <ws-button variant="link" (click)="onCancel()">
+      {{ 'COMMON.CANCEL' | translate }}
     </ws-button>
-    <ws-button
-      variant="primary"
-      [disabled]="!canContinue"
-      [loading]="loading()"
-      (click)="onContinue()"
-    >
-      {{ 'IMPORTS.PAYEES.BTN_VALIDATE' | translate }}
-      <app-icon name="arrow-right" [size]="14" />
-    </ws-button>
+    <div class="mapping-actions__primary">
+      <ws-button variant="secondary" (click)="onBack()">
+        <app-icon name="arrow-left" [size]="14" />
+        {{ 'COMMON.BACK' | translate }}
+      </ws-button>
+      <ws-button
+        variant="primary"
+        [disabled]="!canContinue"
+        [loading]="loading()"
+        (click)="onContinue()"
+      >
+        {{ 'IMPORTS.PAYEES.BTN_VALIDATE' | translate }}
+        <app-icon name="arrow-right" [size]="14" />
+      </ws-button>
+    </div>
   </div>
 </form>

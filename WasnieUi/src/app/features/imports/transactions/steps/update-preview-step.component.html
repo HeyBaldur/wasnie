@@ -21,7 +21,7 @@
   </div>
 
   <!-- Diff table -->
-  <div class="preview-table-wrap">
+  <div class="preview-table-wrap ws-scroll-thin">
     <table class="preview-table">
       <thead>
         <tr>
@@ -102,20 +102,32 @@
     </p>
   }
 
+  <!-- Consent gate (required before applying updates).
+       PROVISIONAL consent text — pending legal review before production. Do not treat as final. -->
+  <label class="consent-opt">
+    <input type="checkbox" [(ngModel)]="consentAccepted" />
+    {{ 'IMPORTS.CONSENT_LABEL' | translate }}
+  </label>
+
   <div class="preview-actions">
-    <ws-button variant="secondary" (click)="onBack()">
-      <app-icon name="arrow-left" [size]="14" />
-      {{ 'COMMON.BACK' | translate }}
+    <ws-button variant="link" (click)="onCancel()">
+      {{ 'COMMON.CANCEL' | translate }}
     </ws-button>
-    <ws-button
-      variant="primary"
-      [disabled]="validateResponse().willUpdateCount === 0 || loading()"
-      [loading]="loading()"
-      (click)="onExecute()"
-    >
-      {{ 'IMPORTS.UPDATE.EXECUTE_BTN' | translate: { count: validateResponse().willUpdateCount } }}
-      <app-icon name="arrow-right" [size]="14" />
-    </ws-button>
+    <div class="preview-actions__primary">
+      <ws-button variant="secondary" (click)="onBack()">
+        <app-icon name="arrow-left" [size]="14" />
+        {{ 'COMMON.BACK' | translate }}
+      </ws-button>
+      <ws-button
+        variant="primary"
+        [disabled]="validateResponse().willUpdateCount === 0 || loading() || !consentAccepted"
+        [loading]="loading()"
+        (click)="onExecute()"
+      >
+        {{ 'IMPORTS.UPDATE.EXECUTE_BTN' | translate: { count: validateResponse().willUpdateCount } }}
+        <app-icon name="arrow-right" [size]="14" />
+      </ws-button>
+    </div>
   </div>
 
 </div>

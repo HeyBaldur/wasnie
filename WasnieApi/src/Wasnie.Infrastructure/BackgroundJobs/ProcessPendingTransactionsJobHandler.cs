@@ -353,6 +353,8 @@ public sealed class ProcessPendingTransactionsJobHandler(
                      && t.TransactionDate >= start
                      && t.TransactionDate <= end
                      && t.Amount.Currency == plan.Currency)
+            .OrderBy(t => t.TransactionDate)
+            .ThenBy(t => t.Id)
             .Select(t => t.Id)
             .ToListAsync(ct);
     }
@@ -390,18 +392,22 @@ public sealed class ProcessPendingTransactionsJobHandler(
             .Select(t => new { t.Id, t.PayeeId, t.TransactionDate })
             .ToListAsync(ct);
 
-        var ids = new List<Guid>();
+        var txsWithDate = new List<(Guid Id, DateOnly Date)>();
         foreach (var a in activeAssignments)
         {
             var start = a.EffectivePeriod!.Start;
             var end = a.EffectivePeriod.End;
-            ids.AddRange(allPendingForPayees
+            txsWithDate.AddRange(allPendingForPayees
                 .Where(t => t.PayeeId == a.PayeeId
                          && t.TransactionDate >= start
                          && t.TransactionDate <= end)
-                .Select(t => t.Id));
+                .Select(t => (t.Id, t.TransactionDate)));
         }
-        return ids;
+        return txsWithDate
+            .OrderBy(t => t.Date)
+            .ThenBy(t => t.Id)
+            .Select(t => t.Id)
+            .ToList();
     }
 
     private async Task<List<Guid>> LoadByPayeeAndPeriodAsync(ProcessPendingTransactionsPayload payload, CancellationToken ct)
@@ -412,6 +418,8 @@ public sealed class ProcessPendingTransactionsJobHandler(
                      && t.PayeeId == payeeId
                      && (payload.PeriodStart == null || t.TransactionDate >= payload.PeriodStart.Value)
                      && (payload.PeriodEnd == null || t.TransactionDate <= payload.PeriodEnd.Value))
+            .OrderBy(t => t.TransactionDate)
+            .ThenBy(t => t.Id)
             .Select(t => t.Id)
             .ToListAsync(ct);
     }

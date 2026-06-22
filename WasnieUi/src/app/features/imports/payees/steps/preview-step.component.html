@@ -20,7 +20,7 @@
   </div>
 
   <!-- Rows table -->
-  <div class="preview-table-wrap">
+  <div class="preview-table-wrap ws-scroll-thin">
     <table class="preview-table">
       <thead>
         <tr>
@@ -131,15 +131,27 @@
     {{ 'IMPORTS.PAYEES.SKIP_WARNINGS' | translate }}
   </label>
 
+  <!-- Consent gate (required before import).
+       PROVISIONAL consent text — pending legal review before production. Do not treat as final. -->
+  <label class="consent-opt">
+    <input type="checkbox" [(ngModel)]="consentAccepted" />
+    {{ 'IMPORTS.CONSENT_LABEL' | translate }}
+  </label>
+
   <div class="preview-actions">
-    <ws-button variant="secondary" (click)="onBack()">
-      <app-icon name="arrow-left" [size]="14" />
-      {{ 'COMMON.BACK' | translate }}
+    <ws-button variant="link" (click)="onCancel()">
+      {{ 'COMMON.CANCEL' | translate }}
     </ws-button>
-    <ws-button variant="primary" [disabled]="willImportCount === 0 || atPayeesLimit()" (click)="onImport()">
-      <app-icon name="upload-cloud" [size]="14" />
-      {{ 'IMPORTS.PAYEES.BTN_IMPORT' | translate : { count: willImportCount } }}
-    </ws-button>
+    <div class="preview-actions__primary">
+      <ws-button variant="secondary" (click)="onBack()">
+        <app-icon name="arrow-left" [size]="14" />
+        {{ 'COMMON.BACK' | translate }}
+      </ws-button>
+      <ws-button variant="primary" [disabled]="willImportCount === 0 || atPayeesLimit() || !consentAccepted" (click)="onImport()">
+        <app-icon name="upload-cloud" [size]="14" />
+        {{ 'IMPORTS.PAYEES.BTN_IMPORT' | translate : { count: willImportCount } }}
+      </ws-button>
+    </div>
   </div>
 
 </div>
