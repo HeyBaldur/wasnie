@@ -26,6 +26,7 @@
           [initialMapping]="columnMapping()"
           (validated)="onValidated($event)"
           (back)="onBackToUpload()"
+          (cancel)="requestCancel()"
         />
       }
 
@@ -37,6 +38,7 @@
           [atPayeesLimit]="atPayeesLimit()"
           (importRequested)="onImportRequested($event)"
           (back)="onBackToMap()"
+          (cancel)="requestCancel()"
         />
       }
 
@@ -58,4 +60,15 @@
       }
     </ws-wizard>
   </ws-page-layout>
+
+  <ws-confirmation-modal
+    [(isOpen)]="cancelConfirmOpen"
+    [title]="'IMPORTS.CANCEL_CONFIRM_TITLE' | translate"
+    [message]="'IMPORTS.CANCEL_CONFIRM_MSG' | translate"
+    [confirmLabel]="'IMPORTS.CANCEL_CONFIRM_DISCARD' | translate"
+    [cancelLabel]="'IMPORTS.CANCEL_CONFIRM_KEEP' | translate"
+    variant="danger"
+    (confirmed)="confirmCancel()"
+    (cancelled)="cancelConfirmOpen.set(false)"
+  />
 </app-shell>

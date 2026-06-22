@@ -4,6 +4,28 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-22 — WI-IMPORT-CANCEL-CONSENT (Cancel link + checkbox de consentimiento en wizards de import)
+
+**Contexto:** Dos mejoras de UI en ambos wizards de import (`/payees/import` y `/transactions/import`, este último con modos create y update): (A) un escape directo "Cancel" para no tener que pulsar Back varias veces, y (B) un checkbox de consentimiento obligatorio que habilita el botón Import.
+
+**Arquitectura observada:** `ws-wizard` es presentacional (indicador de pasos + `<ng-content>`); el estado y la navegación viven en los dos componentes padre. Los botones "Back" viven dentro de cada step (6 steps con Back: payee map/preview, tx-create map/preview, tx-update map/preview). El consentimiento va en los 3 preview steps (último paso antes de importar).
+
+**(A) Cancel:**
+- Cada uno de los 6 steps con Back recibe un output `cancel` y un link `ws-button variant="link"` (existe esa variante → link de bajo peso visual, sin estilo de botón) colocado a la izquierda, con el grupo Back+primario envuelto en `.{mapping,preview}-actions__primary` a la derecha (el contenedor ya era `justify-content: space-between`).
+- Los padres orquestan: `requestCancel()` → si hay trabajo en curso (`parseResult`/`columnMapping`, o sus equivalentes update) abre `ws-confirmation-modal`; si no, cancela directo. `confirmCancel()`→`doCancel()` limpia TODO el estado (signals de ambos modos en tx), borra sessionStorage (ambas claves), resetea a 'upload' y navega a la lista (`/payees` o `/transactions`). El padre payee no inyectaba Router → añadido.
+- El checkbox de consentimiento es local al preview step; al cancelar/cambiar de paso el step se destruye (`@if`) y el checkbox se resetea solo (cumple "cancelar resetea el checkbox").
+
+**(B) Consentimiento:**
+- Checkbox nativo (mirroring del patrón existente `skip-warnings-opt`) en los 3 preview steps; `consentAccepted` local; botón Import/Apply `[disabled]` suma `|| !consentAccepted`.
+- TEXTO PROVISIONAL: comentario `PROVISIONAL consent text — pending legal review before production. Do not treat as final.` en cada HTML, y clave i18n `IMPORTS.CONSENT_LABEL_NOTE` (en los 3 locales) documentando que es consentimiento de PROCESAMIENTO de datos GDPR, no anti-spam. No se inventó lenguaje legal adicional.
+- `update-preview-step` no importaba `FormsModule` (no tenía skip-warnings) → añadido para el `ngModel` del checkbox.
+
+**FASE 2 (decisión del owner): UI-only, SIN backend.** El consentimiento solo condiciona la UI; NO se persiste. La persistencia en el audit log (quién/cuándo/versión) queda PENDIENTE para cuando exista texto legal validado (registrar una versión provisional tiene poco valor de auditoría).
+
+**i18n:** 6 claves compartidas nuevas en `IMPORTS` (EN/ES/PL): `CONSENT_LABEL`, `CONSENT_LABEL_NOTE`, `CANCEL_CONFIRM_TITLE`, `CANCEL_CONFIRM_MSG`, `CANCEL_CONFIRM_DISCARD`, `CANCEL_CONFIRM_KEEP`. El link reusa `COMMON.CANCEL`. JSON validado en los 3 locales.
+
+**Verificación:** `ng build --configuration production` limpio (solo warnings pre-existentes). 25 archivos cambiados, todos bajo `imports/` + `i18n/`. **La suite Karma (`ng test`) no compila por errores PRE-EXISTENTES en specs de pay-runs (`supplementalSequence` falta en mocks — del WI supplemental pay runs, sin relación con este WI); mis cambios no introducen errores (confirmado: ningún error en `imports/`). Para desbloquear `ng test` hay que añadir `supplementalSequence` a los mocks de `pay-runs.store.spec.ts` y `pay-run-detail.store.spec.ts` — follow-up separado.** Verificación en pantalla = owner (FASE 3).
+
 ## 2026-06-22 — WI-PLAN-PERIOD-ALIGNMENT (período de Assignment/Quota alineado al plan)
 
 **Contexto:** En Create Assignment y Create Quota el período era libremente editable aun con un plan elegido, permitiendo desalinear el período contra el que se mide el attainment → comisiones incorrectas. El WI pedía auto-rellenar y bloquear desde `plan.effectiveStart/End`.

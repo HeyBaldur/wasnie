@@ -609,6 +609,12 @@
     "ISSUE_CATEGORY_FORMAT": "Format",
     "ISSUE_CATEGORY_REQUIRED": "Required",
     "ISSUE_CATEGORY_OTHER": "Error",
+    "CONSENT_LABEL_NOTE": "PROVISIONAL consent text — pending legal review before production. Do not treat as final. This is a data-PROCESSING consent (GDPR), not email/marketing consent.",
+    "CONSENT_LABEL": "I confirm that my organization has a legal basis to process the personal and financial data included in this import for the purpose of calculating compensation, and that I am authorized to upload it to Wasnie.",
+    "CANCEL_CONFIRM_TITLE": "Discard this import?",
+    "CANCEL_CONFIRM_MSG": "Your uploaded file, column mapping and preview will be cleared. This can't be undone.",
+    "CANCEL_CONFIRM_DISCARD": "Discard",
+    "CANCEL_CONFIRM_KEEP": "Keep editing",
     "PAYEES": {
       "TITLE": "Import Payees",
       "SUBTITLE": "Upload your sales team from CSV or XLSX",

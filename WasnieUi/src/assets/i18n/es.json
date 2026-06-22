@@ -927,6 +927,12 @@
     "ISSUE_CATEGORY_FORMAT": "Formato",
     "ISSUE_CATEGORY_REQUIRED": "Obligatorio",
     "ISSUE_CATEGORY_OTHER": "Error",
+    "CONSENT_LABEL_NOTE": "PROVISIONAL consent text — pending legal review before production. Do not treat as final. This is a data-PROCESSING consent (GDPR), not email/marketing consent.",
+    "CONSENT_LABEL": "Confirmo que mi organización tiene base legal para procesar los datos personales y financieros incluidos en esta importación con el fin de calcular la compensación, y que estoy autorizado/a a cargarlos en Wasnie.",
+    "CANCEL_CONFIRM_TITLE": "¿Descartar esta importación?",
+    "CANCEL_CONFIRM_MSG": "Se borrará el archivo subido, el mapeo de columnas y la previsualización. Esta acción no se puede deshacer.",
+    "CANCEL_CONFIRM_DISCARD": "Descartar",
+    "CANCEL_CONFIRM_KEEP": "Seguir editando",
     "PAYEES": {
       "TITLE": "Importar Beneficiarios",
       "SUBTITLE": "Sube tu equipo de ventas desde CSV o XLSX",

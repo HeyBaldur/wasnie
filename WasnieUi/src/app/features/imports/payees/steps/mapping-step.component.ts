@@ -31,6 +31,7 @@ export class MappingStepComponent implements OnInit {
 
   readonly validated = output<{ response: ValidateResponse; mapping: PayeeImportColumnMapping }>();
   readonly back = output<void>();
+  readonly cancel = output<void>();
 
   readonly form = this.fb.group({
     employeeCodeColumn: [''],
@@ -171,4 +172,6 @@ export class MappingStepComponent implements OnInit {
   }
 
   onBack(): void { this.back.emit(); }
+
+  onCancel(): void { this.cancel.emit(); }
 }
