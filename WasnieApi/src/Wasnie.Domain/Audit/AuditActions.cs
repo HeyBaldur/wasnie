@@ -117,4 +117,8 @@ public static class AuditActions
     public const string HubSpotDisconnected = "HUBSPOT_DISCONNECTED";
     public const string HubSpotNeedsReconnect = "HUBSPOT_NEEDS_RECONNECT";
     public const string HubSpotTokenRefreshed = "HUBSPOT_TOKEN_REFRESHED";
+
+    // Integrations — CRM deal ingestion (Phase 2). Money-relevant: owner→payee links decide who is paid.
+    public const string CrmDealsImported = "CRM_DEALS_IMPORTED";
+    public const string CrmOwnerLinked = "CRM_OWNER_LINKED";
 }

@@ -51,6 +51,29 @@ public sealed class HubSpotOptions
     /// <summary>Where to send the browser after the OAuth callback completes (the integrations UI).</summary>
     public string FrontendReturnUrl { get; init; } = "http://localhost:4200/integrations";
 
+    /// <summary>
+    /// Path (relative to <see cref="ApiBaseUrl"/>) of the CRM deals SEARCH endpoint used in Phase 2 to
+    /// pull closed-won deals with server-side filtering + cursor pagination. Versioned so it can change
+    /// without code edits (HubSpot keeps /crm/v3 alive alongside the date-versioned endpoints).
+    /// </summary>
+    public string DealsSearchPath { get; init; } = "/crm/v3/objects/deals/search";
+
+    /// <summary>Path (relative to <see cref="ApiBaseUrl"/>) of the owners list endpoint (Phase 2).</summary>
+    public string OwnersPath { get; init; } = "/crm/v3/owners";
+
+    /// <summary>Page size for deal/owner reads (HubSpot caps the search API at 100 per page).</summary>
+    public int ReadPageSize { get; init; } = 100;
+
+    /// <summary>
+    /// Safety cap on the number of pages a single deal/owner read will follow, so a pathological cursor
+    /// can never loop forever. At 100/page this is 50k deals — far above any expected Phase 2 volume.
+    /// If hit, the read logs a warning (no silent truncation) and returns what it has.
+    /// </summary>
+    public int MaxReadPages { get; init; } = 500;
+
+    /// <summary>How many times to retry a HubSpot read after a 429 (rate limit) before giving up.</summary>
+    public int RateLimitMaxRetries { get; init; } = 5;
+
     /// <summary>Refresh the access token when it is within this many seconds of expiry.</summary>
     public int RefreshSkewSeconds { get; init; } = 300;
 

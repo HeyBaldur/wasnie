@@ -112,6 +112,14 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'integrations/hubspot/owners',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Integrations.Manage')],
+    loadComponent: () =>
+      import('./features/integrations/owner-mapping/owner-mapping.component').then(
+        (m) => m.CrmOwnerMappingComponent
+      ),
+  },
+  {
     path: 'forbidden',
     canActivate: [planGuard, subscriptionGuard],
     loadComponent: () =>

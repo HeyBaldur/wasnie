@@ -47,6 +47,11 @@ export class IntegrationsComponent implements OnInit {
   // Inline result of the last "Test connection" run (cleared on reload / disconnect).
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
+  // Phase 2 deal-sync state. syncResult carries a translation key + optional params (counts).
+  readonly previewing = signal(false);
+  readonly importing = signal(false);
+  readonly syncResult = signal<{ ok: boolean; key: string; params?: Record<string, unknown> } | null>(null);
+
   readonly currentStatus = computed<HubSpotStatus>(() => this.status()?.status ?? 'NeverConnected');
   readonly isConnected = computed(() => this.currentStatus() === 'Connected');
   readonly needsReconnect = computed(() => this.currentStatus() === 'NeedsReconnect');
@@ -80,6 +85,7 @@ export class IntegrationsComponent implements OnInit {
     this.loading.set(true);
     this.loadError.set(false);
     this.testResult.set(null);
+    this.syncResult.set(null);
     this.api.getStatus().subscribe({
       next: s => { this.status.set(s); this.loading.set(false); },
       error: () => { this.loading.set(false); this.loadError.set(true); },
@@ -129,6 +135,47 @@ export class IntegrationsComponent implements OnInit {
       error: err => {
         this.testing.set(false);
         this.testResult.set({ ok: false, message: err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.TEST_FAIL' });
+      },
+    });
+  }
+
+  /** FASE 2a verification: read-only preview of how many closed-won deals HubSpot returns. */
+  preview(): void {
+    this.previewing.set(true);
+    this.syncResult.set(null);
+    this.api.previewDeals().subscribe({
+      next: (r) => {
+        this.previewing.set(false);
+        this.syncResult.set({ ok: true, key: 'INTEGRATIONS.HUBSPOT.SYNC.PREVIEW_RESULT', params: { count: r.count } });
+      },
+      error: (err) => {
+        this.previewing.set(false);
+        this.syncResult.set({ ok: false, key: err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.SYNC.ERROR' });
+      },
+    });
+  }
+
+  /** FASE 2c: import closed-won deals as transactions (idempotent). */
+  import(): void {
+    this.importing.set(true);
+    this.syncResult.set(null);
+    this.api.importDeals().subscribe({
+      next: (r) => {
+        this.importing.set(false);
+        this.syncResult.set({
+          ok: true,
+          key: 'INTEGRATIONS.HUBSPOT.SYNC.IMPORT_RESULT',
+          params: {
+            created: r.created,
+            assigned: r.assignedToPayee,
+            unassigned: r.unassigned,
+            skipped: r.skippedAlreadyImported,
+          },
+        });
+      },
+      error: (err) => {
+        this.importing.set(false);
+        this.syncResult.set({ ok: false, key: err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.SYNC.ERROR' });
       },
     });
   }

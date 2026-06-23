@@ -4,6 +4,48 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-23 — WI-HUBSPOT-FASE2 (deals → transacciones, READ-ONLY desde HubSpot)
+
+Implementadas las 4 sub-fases del WI. **Wasnie solo LEE de HubSpot** — cero escrituras al CRM, sin scopes de write (los scopes ya concedidos `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read` bastan).
+
+**FASE 2a — capa de acceso (clean architecture):**
+- `Wasnie.Application/Integrations/Crm/ICrmDealSource.cs` (+ `CrmModels.cs` con `CrmDeal`/`CrmOwner` neutros, `CrmNotConnectedException`) — HubSpot es UNA implementación; el pipeline interno no se acopla al CRM.
+- `Wasnie.Infrastructure/Services/HubSpot/HubSpotCrmDealSource.cs`: deals vía CRM Search API con paginación cursor (`after`), owners (activos + archivados), moneda por defecto de la cuenta; resuelve el token vía `IHubSpotTokenProvider` (Fase 1, refresh ya resuelto); 429 → `Retry-After`/backoff; cap de páginas con warning (sin truncado silencioso); nunca loguea el token.
+- **Cómo se determina "closed-won" (decisión reportada):** propiedad CALCULADA de HubSpot `hs_is_closed_won = true` (filtro en el Search API), NO un stage id global hardcodeado → tolera pipelines/stages custom por cuenta.
+- Verificación 2a: `GET /api/integrations/hubspot/deals/preview` (lista deals closed-won con owner name/email; **no crea nada**).
+
+**FASE 2b — mapeo owner→payee:**
+- Entidad/tabla `CrmOwnerMapping` (`Domain/Integrations/Crm/`): TenantId, Source ("HubSpot"), CrmOwnerId, PayeeId, MatchMethod (Email|Manual), CreatedAt/By. Única `(TenantId,Source,CrmOwnerId)`; tenant query filter (Regla 9). Migración **`B8_CrmOwnerMapping` aplicada Y verificada en BD** (tabla + índice único + `__EFMigrationsHistory` confirmados con sqlcmd — Regla 13).
+- `ICrmOwnerResolver` / `CrmOwnerResolver`: (1) mapping existente → (2) match exacto por **email normalizado** (lower+trim; el email de payee es único por tenant → match inherentemente NO ambiguo; crea mapping `Email` automáticamente) → (3) no resuelto. **NUNCA auto-crea payees.**
+
+**FASE 2c — materialización idempotente (money-critical):**
+- `ImportHubSpotDealsCommand` (síncrono; `IMoneyCriticalCommand` → audit+escritura atómicos). Endpoint `POST /api/integrations/hubspot/deals/import`.
+- **Idempotencia (decisión reportada): lookup-before-create con `ExternalId = deal id` + `Source = CrmSync`, apoyado en el índice único `(TenantId,Source,ExternalId)` que YA existía.** `ReferenceNumber = "HUBSPOT-{dealId}"` (legible + satisface el único de Reference). Re-importar el mismo deal NO duplica.
+- Owner resuelto → transacción asignada; owner sin resolver / sin owner → **Unassigned** (PayeeId null, reusa soporte existente; UI de assign/reassign sirve igual). Entra al pipeline existente (Pending). NUNCA recalcula ni toca transacciones/créditos pagados (Regla 10).
+- Moneda: la del deal (`deal_currency_code`); si falta (cuenta single-currency) cae a la **company currency** de la cuenta; si tampoco hay, se saltea como inválida (reportado en warnings). FX no se almacena (gap conocido) — se registra el valor tal cual.
+- Tests (Regla 2): match por email→asignada; sin match→Unassigned; sin owner→Unassigned; **idempotencia** (mismo deal 2×→1 transacción); fallback de moneda; sin amount→saltea; **aislamiento de tenant**.
+
+**FASE 2d — cola de mapeo manual (UI):**
+- Backend: `GetUnresolvedCrmOwnersQuery` (owners con deals closed-won que NO auto-resuelven: sin mapping y sin email que matchee un payee; con conteo de deals y de transacciones Unassigned) + `LinkCrmOwnerCommand` (money-critical).
+- Frontend (`features/integrations/owner-mapping/`, ruta `/integrations/hubspot/owners`): WsTable de owners no resueltos, modal de link con WsSelect de payees (búsqueda async) + WsSegmentedControl (no existe primitivo checkbox — no se inventó, DESIGN_SYSTEM §10.3). i18n EN/ES/PL completo. Botones Preview/Import + acceso a la cola añadidos a la card de HubSpot.
+- **Política de re-asignación retroactiva (decisión reportada):** opción "Reassign existing" (default) → al vincular, re-lee los deals del owner y reasigna SOLO sus transacciones Unassigned NO pagadas (vía `transaction.Assign`, que rechaza Paid); "Future only" no toca nada existente. Las pagadas/ya asignadas NUNCA se modifican.
+
+**Build/tests:** `dotnet build` solución limpio; 660 unit backend verdes (11 nuevos). `ng build --configuration production` limpio (785 kB initial, dentro de budget); 10 specs frontend nuevos verdes. NOTA: el suite Karma completo tiene fallos PRE-EXISTENTES en `pay-runs`/`process-pending`/`subscription-reactivation` (ajenos a este WI, en HEAD) que impiden compilar el bundle de tests; validé mis specs aislando temporalmente los specs rotos (revertido). Se detuvo el proceso `Wasnie.Api` (PID 14320) con permiso del owner para construir/aplicar la migración; reiniciarlo queda a cargo del owner.
+
+**Verificación en pantalla pendiente del owner (cuenta HubSpot real + app corriendo):** 2a Preview lista los closed-won; 2c Import los crea como transacciones (re-import no duplica); Unassigned resolubles con la UI existente; 2d vincular un owner asigna sus futuros deals y (con Reassign) sus Unassigned no pagados.
+
+## 2026-06-22 — WI-HUBSPOT-FASE2-DIAGNOSTICO (owner→payee, READ-ONLY, sin código)
+
+Diagnóstico read-only para la Fase 2 (deals→transacciones). No se modificó código/datos/esquema/UI.
+
+**Hechos del modelo Payee (`Payee.cs` + `PayeeConfiguration.cs`):** EmployeeCode req+ÚNICO por tenant (índice `(TenantId,EmployeeCode)` + chequeo en `CreatePayeeHandler`/`UpdatePayeeHandler`). Email OPCIONAL, único por tenant SOLO cuando no es null (índice filtrado `[Email] IS NOT NULL`), guardado lowercased. FullName req (no único). Identidad única de negocio = **EmployeeCode** (Id Guid = PK interna). Anti-dup hoy: create chequea EmployeeCode (no email); import valida EmployeeCode + Email (rechaza) pero la ejecución es insert-only (el índice DB es el backstop); sin dedup por nombre; sin upsert.
+
+**Cruce crítico:** las transacciones se atribuyen a payee por **EmployeeCode** (`PayeeCodeColumn` en el import). HubSpot NO provee EmployeeCode → el owner→payee DEBE puentear por email o por mapeo manual, nunca por EmployeeCode.
+
+**HubSpot owners (de la doc, SIN llamada en vivo — el client actual no tiene método de owners y no hay token conectado accesible):** `GET /crm/v3/owners` (scope ya concedido) → por owner: `id` (owner id, = `hubspot_owner_id` del deal), `email`, `firstName`, `lastName`, `userId`, `archived`, `teams`. Email normalmente presente pero NO garantizado (owners archivados/no-usuario); `id` es estable. `hubspot_owner_id` puede venir vacío (deal sin owner).
+
+**Opciones de match (sin recomendar una):** email (auto, falla si payee sin email o emails distintos) / mapeo manual (a prueba de balas, más setup) / nombre (frágil, riesgo de mala atribución = error de pago) / híbrido (email auto + cola manual para no resueltos). **Owner sin payee:** dejar sin atribuir (transacción ya soporta payee nullable) / bloquear hasta mapear / auto-crear payee (RIESGOSO: sin EmployeeCode, posible duplicado del mismo humano). **Vínculo estable sugerido (no implementado):** `HubSpotOwnerId` en Payee (único por tenant) o tabla de mapeo `(TenantId, HubSpotOwnerId, PayeeId)`. Todo tenant-scoped (Regla 9). Decisión pendiente del owner. Informe completo entregado en el chat.
+
 ## 2026-06-22 — WI-INTEGRATIONS-CARD-FIX (la card se veía apretada/mal)
 
 **Causa raíz:** `.int-card` (flex column + `gap`) estaba aplicada al elemento HOST `<ws-card class="int-card">`. Pero `WsCard` tiene template `<div [class]="classes()"><ng-content/></div>` → el contenido proyectado (logo/título/divisor/footer) vive DENTRO del `<div class="ws-card">` interno, no como hijo directo del host. Por eso el `gap` entre secciones no se aplicaba: las 4 secciones quedaban pegadas (divisor tocando el texto), card apretada → "mal". (El padding sí funcionaba porque está en el div interno de ws-card.)

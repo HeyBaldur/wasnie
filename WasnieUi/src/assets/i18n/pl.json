@@ -223,7 +223,41 @@
       "TOAST_TEST_OK": "Połączenie działa — HubSpot odpowiedział.",
       "TOAST_TEST_FAIL": "Testowe wywołanie HubSpot nie powiodło się.",
       "TEST_HEALTHY": "Połączenie sprawne — HubSpot odpowiedział.",
-      "TEST_FAIL": "Testowe wywołanie HubSpot nie powiodło się."
+      "TEST_FAIL": "Testowe wywołanie HubSpot nie powiodło się.",
+      "SYNC": {
+        "TITLE": "Synchronizacja transakcji",
+        "DESC": "Przenieś wygrane transakcje (closed-won) z HubSpot do Wasnie jako transakcje.",
+        "PREVIEW": "Podgląd transakcji",
+        "IMPORT": "Importuj transakcje",
+        "OWNERS": "Mapowanie właścicieli",
+        "PREVIEW_RESULT": "Znaleziono {{count}} wygranych transakcji w HubSpot. Nic nie zostało utworzone.",
+        "IMPORT_RESULT": "Zaimportowano {{created}} transakcji: {{assigned}} przypisanych, {{unassigned}} nieprzypisanych. {{skipped}} już zaimportowanych (pominięto).",
+        "ERROR": "Synchronizacja transakcji HubSpot nie powiodła się. Spróbuj ponownie."
+      },
+      "OWNERS": {
+        "TITLE": "Mapowanie właścicieli",
+        "SUBTITLE": "Powiąż właścicieli transakcji HubSpot, którzy nie zostali automatycznie dopasowani do odbiorcy.",
+        "BACK": "Powrót do integracji",
+        "COL_OWNER": "Właściciel HubSpot",
+        "COL_EMAIL": "E-mail",
+        "COL_DEALS": "Wygrane transakcje",
+        "COL_UNASSIGNED": "Nieprzypisane",
+        "ARCHIVED": "Zarchiwizowany",
+        "NO_EMAIL": "Brak e-maila",
+        "LINK": "Powiąż z odbiorcą",
+        "EMPTY_TITLE": "Wszyscy właściciele są zmapowani",
+        "EMPTY_DESC": "Każdy właściciel transakcji HubSpot odpowiada odbiorcy. Nowe transakcje będą przypisywane automatycznie.",
+        "LINK_TITLE": "Powiąż właściciela z odbiorcą",
+        "PAYEE_LABEL": "Odbiorca",
+        "PAYEE_PLACEHOLDER": "Szukaj odbiorców…",
+        "APPLY_LABEL": "Zastosuj do",
+        "REASSIGN_EXISTING": "Przypisz istniejące",
+        "FUTURE_ONLY": "Tylko przyszłe transakcje",
+        "APPLY_HINT": "Ponowne przypisanie przenosi {{count}} nieprzypisanych, niezapłaconych transakcji do tego odbiorcy. Zapłacone transakcje nigdy nie są zmieniane.",
+        "LINK_SUBMIT": "Powiąż",
+        "TOAST_LINKED": "Właściciel powiązany. Przyszłe transakcje będą przypisywane automatycznie.",
+        "TOAST_LINKED_REASSIGNED": "Właściciel powiązany, a istniejące transakcje ponownie przypisane."
+      }
     }
   },
   "EMPTY_STATE": {

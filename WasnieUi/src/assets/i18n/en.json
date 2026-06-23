@@ -223,7 +223,41 @@
       "TOAST_TEST_OK": "Connection works — HubSpot responded.",
       "TOAST_TEST_FAIL": "The HubSpot test call failed.",
       "TEST_HEALTHY": "Connection healthy — HubSpot responded.",
-      "TEST_FAIL": "The test call to HubSpot failed."
+      "TEST_FAIL": "The test call to HubSpot failed.",
+      "SYNC": {
+        "TITLE": "Deal sync",
+        "DESC": "Bring your closed-won HubSpot deals into Wasnie as transactions.",
+        "PREVIEW": "Preview deals",
+        "IMPORT": "Import deals",
+        "OWNERS": "Owner mapping",
+        "PREVIEW_RESULT": "Found {{count}} closed-won deal(s) in HubSpot. Nothing was created.",
+        "IMPORT_RESULT": "Imported {{created}} transaction(s): {{assigned}} assigned, {{unassigned}} unassigned. {{skipped}} already imported (skipped).",
+        "ERROR": "The HubSpot deal sync failed. Please try again."
+      },
+      "OWNERS": {
+        "TITLE": "Owner mapping",
+        "SUBTITLE": "Link HubSpot deal owners that did not match a payee automatically.",
+        "BACK": "Back to integrations",
+        "COL_OWNER": "HubSpot owner",
+        "COL_EMAIL": "Email",
+        "COL_DEALS": "Closed-won deals",
+        "COL_UNASSIGNED": "Unassigned",
+        "ARCHIVED": "Archived",
+        "NO_EMAIL": "No email",
+        "LINK": "Link to payee",
+        "EMPTY_TITLE": "All owners are mapped",
+        "EMPTY_DESC": "Every HubSpot deal owner resolves to a payee. New deals will be assigned automatically.",
+        "LINK_TITLE": "Link owner to payee",
+        "PAYEE_LABEL": "Payee",
+        "PAYEE_PLACEHOLDER": "Search payees…",
+        "APPLY_LABEL": "Apply to",
+        "REASSIGN_EXISTING": "Reassign existing",
+        "FUTURE_ONLY": "Future deals only",
+        "APPLY_HINT": "Reassign moves {{count}} unassigned, unpaid transaction(s) to this payee. Paid transactions are never changed.",
+        "LINK_SUBMIT": "Link",
+        "TOAST_LINKED": "Owner linked. Future deals will be assigned automatically.",
+        "TOAST_LINKED_REASSIGNED": "Owner linked and existing transactions reassigned."
+      }
     }
   },
   "EMPTY_STATE": {

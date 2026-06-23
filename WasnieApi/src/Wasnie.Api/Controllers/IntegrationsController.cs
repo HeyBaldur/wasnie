@@ -72,6 +72,48 @@ public sealed class IntegrationsController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// FASE 2a verification (READ-ONLY): lists the closed-won deals read from the connected HubSpot account,
+    /// joined with owner name/email. Creates nothing — used to confirm the deal read + filter work.
+    /// </summary>
+    [HttpGet("deals/preview")]
+    public async Task<IActionResult> PreviewDeals(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new PreviewHubSpotDealsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>
+    /// FASE 2c: imports closed-won deals as Wasnie transactions (idempotent — re-running never duplicates).
+    /// Deals whose owner resolves become assigned; the rest are created Unassigned. Reads HubSpot only.
+    /// </summary>
+    [HttpPost("deals/import")]
+    public async Task<IActionResult> ImportDeals(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ImportHubSpotDealsCommand(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>FASE 2d: HubSpot owners (with closed-won deals) that did not auto-resolve to a payee.</summary>
+    [HttpGet("owners/unresolved")]
+    public async Task<IActionResult> GetUnresolvedOwners(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetUnresolvedCrmOwnersQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>FASE 2d: manually link a HubSpot owner to an existing payee (optionally reassign their Unassigned).</summary>
+    [HttpPost("owners/link")]
+    public async Task<IActionResult> LinkOwner([FromBody] LinkCrmOwnerRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new LinkCrmOwnerCommand(request.OwnerId, request.PayeeId, request.ReassignExistingUnassigned),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    public sealed record LinkCrmOwnerRequest(string OwnerId, Guid PayeeId, bool ReassignExistingUnassigned);
+
     private string ReturnUrl(string status)
     {
         var baseUrl = _opts.FrontendReturnUrl;

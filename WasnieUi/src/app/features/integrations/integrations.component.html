@@ -69,6 +69,37 @@
               <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.DISCONNECTED_NOTE' | translate }}</p>
             }
 
+            <!-- Deal sync (Phase 2): preview, import, and the owner mapping queue -->
+            @if (isConnected()) {
+              <div class="int-card__sync">
+                <span class="int-card__sync-label">{{ 'INTEGRATIONS.HUBSPOT.SYNC.TITLE' | translate }}</span>
+                <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.SYNC.DESC' | translate }}</p>
+                <div class="int-card__actions">
+                  <ws-button variant="secondary" [loading]="previewing()" [disabled]="previewing() || importing()" (click)="preview()">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.PREVIEW' | translate }}
+                  </ws-button>
+                  <ws-button variant="primary" [loading]="importing()" [disabled]="previewing() || importing()" (click)="import()">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.IMPORT' | translate }}
+                  </ws-button>
+                  <ws-button variant="ghost" routerLink="/integrations/hubspot/owners">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.OWNERS' | translate }}
+                  </ws-button>
+                </div>
+
+                @if (syncResult(); as sr) {
+                  <div
+                    class="int-card__notice"
+                    [class.int-card__notice--ok]="sr.ok"
+                    [class.int-card__notice--warning]="!sr.ok"
+                    role="status"
+                  >
+                    <app-icon [name]="sr.ok ? 'check-circle' : 'alert-circle'" [size]="16" />
+                    <p>{{ sr.key | translate: sr.params }}</p>
+                  </div>
+                }
+              </div>
+            }
+
             <!-- Inline test-connection result -->
             @if (testResult(); as tr) {
               <div

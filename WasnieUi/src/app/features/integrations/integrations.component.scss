@@ -155,3 +155,18 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* Phase 2 deal-sync sub-section, separated from connection actions by a hairline. */
+.int-card__sync {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.int-card__sync-label {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}

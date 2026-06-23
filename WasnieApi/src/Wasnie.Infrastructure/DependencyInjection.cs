@@ -104,6 +104,11 @@ public static class DependencyInjection
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
         services.AddScoped<IHubSpotTokenProvider, HubSpotTokenProvider>();
+        // Phase 2: deal/owner ingestion behind the CRM-neutral abstraction. HubSpot is one implementation;
+        // Salesforce/Pipedrive would register a different ICrmDealSource without touching the pipeline.
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmDealSource, HubSpotCrmDealSource>();
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmOwnerResolver,
+            Wasnie.Infrastructure.Services.Crm.CrmOwnerResolver>();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

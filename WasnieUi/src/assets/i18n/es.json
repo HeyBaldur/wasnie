@@ -223,7 +223,41 @@
       "TOAST_TEST_OK": "La conexión funciona — HubSpot respondió.",
       "TOAST_TEST_FAIL": "La llamada de prueba a HubSpot falló.",
       "TEST_HEALTHY": "Conexión correcta — HubSpot respondió.",
-      "TEST_FAIL": "La llamada de prueba a HubSpot falló."
+      "TEST_FAIL": "La llamada de prueba a HubSpot falló.",
+      "SYNC": {
+        "TITLE": "Sincronización de negocios",
+        "DESC": "Trae a Wasnie tus negocios ganados (closed-won) de HubSpot como transacciones.",
+        "PREVIEW": "Previsualizar negocios",
+        "IMPORT": "Importar negocios",
+        "OWNERS": "Mapeo de propietarios",
+        "PREVIEW_RESULT": "Se encontraron {{count}} negocio(s) ganado(s) en HubSpot. No se creó nada.",
+        "IMPORT_RESULT": "Se importaron {{created}} transacción(es): {{assigned}} asignadas, {{unassigned}} sin asignar. {{skipped}} ya importadas (omitidas).",
+        "ERROR": "La sincronización de negocios de HubSpot falló. Inténtalo de nuevo."
+      },
+      "OWNERS": {
+        "TITLE": "Mapeo de propietarios",
+        "SUBTITLE": "Vincula los propietarios de negocios de HubSpot que no coincidieron con un beneficiario automáticamente.",
+        "BACK": "Volver a integraciones",
+        "COL_OWNER": "Propietario de HubSpot",
+        "COL_EMAIL": "Correo",
+        "COL_DEALS": "Negocios ganados",
+        "COL_UNASSIGNED": "Sin asignar",
+        "ARCHIVED": "Archivado",
+        "NO_EMAIL": "Sin correo",
+        "LINK": "Vincular a beneficiario",
+        "EMPTY_TITLE": "Todos los propietarios están mapeados",
+        "EMPTY_DESC": "Cada propietario de negocio de HubSpot se resuelve a un beneficiario. Los negocios nuevos se asignarán automáticamente.",
+        "LINK_TITLE": "Vincular propietario a beneficiario",
+        "PAYEE_LABEL": "Beneficiario",
+        "PAYEE_PLACEHOLDER": "Buscar beneficiarios…",
+        "APPLY_LABEL": "Aplicar a",
+        "REASSIGN_EXISTING": "Reasignar existentes",
+        "FUTURE_ONLY": "Solo negocios futuros",
+        "APPLY_HINT": "Reasignar mueve {{count}} transacción(es) sin asignar y no pagadas a este beneficiario. Las transacciones pagadas nunca se modifican.",
+        "LINK_SUBMIT": "Vincular",
+        "TOAST_LINKED": "Propietario vinculado. Los negocios futuros se asignarán automáticamente.",
+        "TOAST_LINKED_REASSIGNED": "Propietario vinculado y transacciones existentes reasignadas."
+      }
     }
   },
   "EMPTY_STATE": {
