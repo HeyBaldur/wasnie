@@ -6,7 +6,7 @@ import {
   provideAppInitializer,
   provideZoneChangeDetection,
 } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, TitleStrategy } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { TranslateService, provideTranslateService } from '@ngx-translate/core';
 import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
@@ -22,6 +22,7 @@ import { GlobalErrorHandler } from './core/observability/global-error-handler';
 import { ThemeService } from './core/theme/theme.service';
 import { AuthService } from './core/services/auth.service';
 import { CurrentUserService } from './core/auth/current-user.service';
+import { TranslatedTitleStrategy } from './core/title-strategy';
 
 const SUPPORTED_LANGS = ['en', 'es', 'pl'];
 
@@ -30,6 +31,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
+    { provide: TitleStrategy, useClass: TranslatedTitleStrategy },
     provideHttpClient(withInterceptors([correlationIdInterceptor, authInterceptor, errorInterceptor, forbiddenResponseInterceptor])),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
     { provide: ErrorTrackingService, useClass: ConsoleErrorTrackingService },

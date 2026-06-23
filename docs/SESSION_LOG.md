@@ -4,6 +4,20 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-23 — WI-PAGE-TITLES (cada página fija su propio `<title>` de pestaña)
+
+Reportado: todas las pestañas del navegador mostraban `Wasnie | ICM & SPM` sin importar la página. Causa: ninguna ruta definía `title` y la app no tenía una `TitleStrategy`, por lo que Angular dejaba el `<title>` estático del `index.html`.
+
+**Fix:**
+- `WasnieUi/src/app/core/title-strategy.ts` — `TranslatedTitleStrategy extends TitleStrategy` (providedIn root). `updateTitle` lee `buildTitle(snapshot)` (la clave i18n de la ruta más profunda con título), la traduce con `TranslateService.instant` y fija el documento como `<Página> | Wasnie`. Si no hay título o la clave no existe, cae al brand `Wasnie | ICM & SPM`. Suscrito a `onLangChange` para re-traducir al cambiar idioma.
+- Registrada en `app.config.ts`: `{ provide: TitleStrategy, useClass: TranslatedTitleStrategy }`.
+- `app.routes.ts`: añadido `title` a cada ruta de nivel superior. Reutiliza claves existentes (`NAV.*`, `INTEGRATIONS.HUBSPOT.OWNERS.TITLE`, `ERRORS.FORBIDDEN_TITLE`, `AUTH.LOGIN`). Las sub-rutas (list/detail/create de cada feature) heredan el título de su sección vía `buildTitle`.
+- i18n: única clave nueva `NAV.ONBOARDING` en EN/ES/PL ("Choose your plan" / "Elige tu plan" / "Wybierz plan").
+
+Sin backend, sin migración. `ng build --configuration production` limpio (warnings de bundle budget e imports no usados son PRE-EXISTENTES, ajenos a este cambio).
+
+**Pendiente (no en este WI):** títulos específicos por sub-ruta (p. ej. "Edit Plan", detalle de payout con su id) si se quisiera más granularidad; hoy heredan el título de la sección, que ya resuelve el bug reportado.
+
 ## 2026-06-23 — WI-REFRESH-ON-ENTRY (fix transversal: data no se refresca al navegar)
 
 Fix del bug "la data queda vieja al navegar la SPA / tras importar; solo un full reload la trae". Causa raíz (diagnóstico previo): stores singleton `providedIn:'root'` que cachean en signals y solo fetchean al crearse o ante cambio de signal; al re-navegar el singleton sobrevive y nadie re-dispara el fetch. La inconsistencia: cada feature lo manejaba distinto — Dashboard (sin `ngOnInit`) y Transactions (carga solo si hay query params) NO recargaban al entrar = el bug; las otras tenían recargas ad-hoc en `ngOnInit` (payouts incluso documentaba el problema y su `reload()` manual).
