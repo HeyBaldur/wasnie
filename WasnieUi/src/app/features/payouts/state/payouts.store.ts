@@ -197,6 +197,11 @@ export class PayoutsStore {
 
   clearSelection(): void { this.selectedIds.set(new Set()); }
 
+  /** RefreshableStore — reload the current page/filter on route re-entry. */
+  refresh(): Promise<void> {
+    return this.reload();
+  }
+
   async reload(): Promise<void> {
     await this._loadList(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(), this.filter()

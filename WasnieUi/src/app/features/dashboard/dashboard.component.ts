@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
+import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DashboardStore } from './store/dashboard.store';
 import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem } from './models/dashboard.models';
@@ -31,6 +32,7 @@ import {
     LowerCasePipe,
     TranslatePipe,
     AppShellComponent,
+    RefreshOnEnterDirective,
     IconComponent,
     CurrencyFormatPipe,
     WsCardComponent,

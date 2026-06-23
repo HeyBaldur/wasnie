@@ -11,6 +11,7 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
 import { CreditsApiService } from '../services/credits.api.service';
@@ -36,7 +37,7 @@ import {
   selector: 'app-credits-list',
   standalone: true,
   imports: [
-    AppShellComponent, RouterLink, ReactiveFormsModule, TranslateModule, DecimalPipe,
+    AppShellComponent, RefreshOnEnterDirective, RouterLink, ReactiveFormsModule, TranslateModule, DecimalPipe,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
     WsInputComponent, WsSelectComponent, WsDatePickerComponent,
@@ -139,7 +140,7 @@ export class CreditsListComponent implements OnInit {
     if (Object.keys(qp).length > 0) {
       this.store.loadFromQueryParams(qp);
     }
-    void this.store.loadAll();
+    // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
     this._syncFormFromStore();
     this._wireFormSubscriptions();
   }

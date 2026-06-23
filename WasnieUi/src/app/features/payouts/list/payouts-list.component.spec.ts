@@ -193,7 +193,8 @@ describe('PayoutsStore — bulkApproveSummary', () => {
 //
 // PayoutsStore is providedIn: 'root' (singleton). Its effect() only fires when a
 // signal changes. On re-navigation with the same filter the effect is silent.
-// ngOnInit must call store.reload() once to guarantee a fresh load every time.
+// Refresh-on-entry is now handled by the shared [refreshOnEnter] directive (RouteRefreshTracker),
+// NOT by an ad-hoc store.reload() in ngOnInit. This test guards that the ad-hoc call was removed.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('PayoutsListComponent — ngOnInit reload', () => {
   let storeMock: jasmine.SpyObj<PayoutsStore>;
@@ -223,12 +224,11 @@ describe('PayoutsListComponent — ngOnInit reload', () => {
     });
   });
 
-  it('calls store.reload() exactly once on route activation regardless of filter state', () => {
+  it('does not reload in ngOnInit — refresh-on-entry is delegated to the shared [refreshOnEnter] directive', () => {
     const fixture = TestBed.createComponent(PayoutsListComponent);
-    fixture.componentInstance;
-    fixture.detectChanges(); // triggers ngOnInit
+    fixture.detectChanges(); // triggers ngOnInit (stubbed template has no directive)
 
-    expect(storeMock.reload).toHaveBeenCalledTimes(1);
+    expect(storeMock.reload).not.toHaveBeenCalled();
   });
 });
 

@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { ProcessPendingComponent } from '../process-pending/process-pending.component';
 import { TransactionFilterComponent } from '../filter/transaction-filter.component';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
@@ -39,6 +40,7 @@ import {
   standalone: true,
   imports: [
     AppShellComponent,
+    RefreshOnEnterDirective,
     FormsModule,
     RouterLink,
     TranslateModule,

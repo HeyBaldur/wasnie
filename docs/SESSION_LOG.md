@@ -4,6 +4,30 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-23 — WI-REFRESH-ON-ENTRY (fix transversal: data no se refresca al navegar)
+
+Fix del bug "la data queda vieja al navegar la SPA / tras importar; solo un full reload la trae". Causa raíz (diagnóstico previo): stores singleton `providedIn:'root'` que cachean en signals y solo fetchean al crearse o ante cambio de signal; al re-navegar el singleton sobrevive y nadie re-dispara el fetch. La inconsistencia: cada feature lo manejaba distinto — Dashboard (sin `ngOnInit`) y Transactions (carga solo si hay query params) NO recargaban al entrar = el bug; las otras tenían recargas ad-hoc en `ngOnInit` (payouts incluso documentaba el problema y su `reload()` manual).
+
+**Mecanismo compartido (UN solo lugar):**
+- `shared/state/refreshable-store.ts` — interfaz `RefreshableStore { refresh(): void | Promise<void> }`.
+- `shared/state/route-refresh.tracker.ts` — `RouteRefreshTracker` singleton con `WeakSet`: `onEntry(store)` saltea el PRIMER montaje de cada store (su `effect()` de constructor ya hace la carga inicial → evita doble fetch) y llama `store.refresh()` en cada re-entrada.
+- `shared/directives/refresh-on-enter.directive.ts` — `[refreshOnEnter]="store"`, aplicada en el `<app-shell>` raíz de cada página; su `ngOnInit` (corre en cada montaje, porque sin RouteReuseStrategy los componentes lazy se recrean) delega en el tracker.
+
+**Aplicación:**
+- **Rotos (fix):** Dashboard, Transactions → `refresh()` en el store + directiva en el template. (Transactions conserva su parseo de query params.)
+- **Unificados (quitado el reload ad-hoc del `ngOnInit`, conservando lógica URL→estado, + directiva):** payees, plans, quotas, assignments, payouts, credits. Cada store expone `refresh()` que delega en su carga actual con params vigentes (loadPayees/loadPlans/loadQuotas/loadAssignments/reload/loadAll). Se usó tipado estructural (no hizo falta `implements`).
+- **Matiz documentado (NO convertido):** pay-runs — su recarga al entrar es efecto colateral de `setFilter` (aplica período/estado de la URL) sin una línea de reload separable; añadir la directiva duplicaría el fetch en cada entrada. Queda con su mecanismo propio (funciona); unificarlo requeriría refactorizar cómo aplica los filtros de URL.
+
+**Evitar doble fetch:** el tracker saltea el primer montaje (cuando el `effect()` del store ya carga); en re-entrada solo corre la directiva. (Matiz benigno: re-entrar por deep-link con un filtro DISTINTO puede disparar el effect (cambio de signal) + la directiva = 2 fetches con la misma data; raro y sin efecto de corrección.)
+
+**Tests:** `RouteRefreshTracker` spec nuevo (3: no refresca en 1ª entrada, refresca en re-entradas, independencia por store). Spec de payouts actualizado: ya no espera `store.reload()` en `ngOnInit` (ahora se delega en `[refreshOnEnter]`). `ng build --configuration production` limpio (bundle sin cambio — directiva/tracker minúsculos). Karma: 19 fallos PRE-EXISTENTES ajenos (`pay-runs`/`process-pending`/`subscription-reactivation`), validado aislándolos (revertido).
+
+**Backend descartado en el diagnóstico:** import HubSpot síncrono y commiteado; sin caché de servidor ni interceptors de caché. (El import de **Excel** es un job Hangfire asíncrono — su data aparece al terminar el job, no por refrescar; es un tema de estado-de-job, fuera de este WI.)
+
+**Mejora futura (anotada, NO en este WI):** capa de invalidación tras mutación para refrescar una página YA abierta (sin navegar). El caso reportado (importar → navegar a Transactions) ya queda resuelto con refresh-on-entry.
+
+**Verificación en pantalla (owner):** importar deals → navegar a Transactions (sin reload del navegador) → aparece la data nueva; navegar ida/vuelta entre Dashboard/Transactions/Payees/Credits/etc. → cada una fresca al entrar; sin parpadeo/doble fetch visible; estilos y filtros intactos.
+
 ## 2026-06-23 — WI-BULK-VOID-REIMPORT (void en lote + re-import revive solo Void; unificado 3 fuentes)
 
 Feature money-critical en 4 pasos. PASO 0 (diagnóstico read-only) confirmó: idempotencia por DOS índices únicos (`(TenantId,ReferenceNumber)` y `(TenantId,Source,ExternalId)` filtrado por ExternalId not null); detección REPLICADA por fuente (HubSpot HashSet status-ciego, Excel solo constraint, Manual nada→500); Void = `Cancelled` (Cancel() solo desde Pending); crédito activo = `Credit.SupersededAt == null`; patrón bulk reutilizable (payouts/assignments); single-void ya tenía escudo de crédito activo. Refinamientos hallados antes de construir: (A) hay que filtrar AMBOS índices (HubSpot usa `ReferenceNumber="HUBSPOT-{dealId}"`); (B) Excel/Manual asignan crédito al instante (HubSpot no) → una Cancelled nunca tuvo crédito activo ni fue Paid → doble-pago estructuralmente imposible con Opción B.

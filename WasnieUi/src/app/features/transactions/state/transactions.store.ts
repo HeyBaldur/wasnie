@@ -10,6 +10,7 @@ import {
   VoidTransactionRequest,
 } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { RefreshableStore } from '../../../shared/state/refreshable-store';
 
 export interface TransactionFilter {
   reference: string;
@@ -47,7 +48,7 @@ export const EMPTY_FILTER: TransactionFilter = {
 };
 
 @Injectable({ providedIn: 'root' })
-export class TransactionsStore {
+export class TransactionsStore implements RefreshableStore {
   private readonly api = inject(TransactionsApiService);
 
   readonly loading = signal(false);
@@ -230,6 +231,11 @@ export class TransactionsStore {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(), this.filter()
     );
+  }
+
+  /** RefreshableStore — re-fetch the current page/filter when the route is re-entered. */
+  refresh(): Promise<void> {
+    return this.loadTransactions();
   }
 
   setFilter(partial: Partial<TransactionFilter>): void {

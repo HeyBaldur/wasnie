@@ -148,6 +148,11 @@ export class CreditsStore {
     await Promise.all([this.loadCounters(), this.loadByPayee()]);
   }
 
+  /** RefreshableStore — reload list + counters on route re-entry. */
+  refresh(): Promise<void> {
+    return this.loadAll();
+  }
+
   setFilter(partial: Partial<CreditFilter>): void {
     this.filter.update(f => ({ ...f, ...partial }));
     this.page.set(1);

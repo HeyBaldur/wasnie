@@ -101,6 +101,11 @@ export class PayeesStore {
     }
   }
 
+  /** RefreshableStore — reload the current page/filter on route re-entry. */
+  refresh(): Promise<void> {
+    return this.loadPayees();
+  }
+
   async loadPayees(): Promise<void> {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),
