@@ -16,7 +16,7 @@ const makeStoreMock = (overrides?: Partial<TransactionsStore>) =>
     pageSize: signal(10),
     sortBy: signal('transactiondate'),
     sortOrder: signal<'asc' | 'desc'>('desc'),
-    filter: signal({ reference: '', statuses: [], payeeIds: [], txDateFrom: null, txDateTo: null, ingestedFrom: null, ingestedTo: null, amountMin: null, amountMax: null, unassignedOnly: false, amountSort: null, referenceNumbers: [], currencies: [] }),
+    filter: signal({ reference: '', statuses: [], payeeIds: [], txDateFrom: null, txDateTo: null, ingestedFrom: null, ingestedTo: null, amountMin: null, amountMax: null, unassignedOnly: false, amountSort: null, referenceNumbers: [], currencies: [], attentionReason: null }),
     // Legacy computed aliases
     statusFilter: signal(null),
     statusesFilter: signal([]),

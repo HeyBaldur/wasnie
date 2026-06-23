@@ -227,6 +227,58 @@
       }
     </ws-card>
 
+    <!-- ── Transactions that need attention (not processable yet) ────────── -->
+    <ws-card padding="md"
+      [accent]="actionCardAccent(store.actionBand()?.unprocessablePendingItems?.length ?? 0)"
+      class="pending-plan-card">
+      <div class="stat-card__hd">
+        <div>
+          <h3 class="stat-card__title">{{ 'DASHBOARD.ATTENTION_TITLE' | translate }}</h3>
+          <p class="pending-plan-card__sub">{{ 'DASHBOARD.ATTENTION_DESC' | translate }}</p>
+          <p class="pending-plan-card__scope">
+            <app-icon name="globe" [size]="11" />
+            {{ 'DASHBOARD.PENDING_BY_PLAN_SCOPE' | translate }}
+          </p>
+        </div>
+        @if (!store.loading() && (store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0) {
+          <ws-badge variant="warning" size="sm">{{ attentionTotalCount() }}</ws-badge>
+        }
+      </div>
+
+      @if (store.loading()) {
+        <div class="pending-plan-card__list">
+          @for (_ of [1,2]; track $index) {
+            <div class="pending-plan-card__row pending-plan-card__row--skeleton">
+              <span class="skeleton skeleton--text"></span>
+              <span class="skeleton skeleton--badge"></span>
+            </div>
+          }
+        </div>
+      } @else if ((store.actionBand()?.unprocessablePendingItems?.length ?? 0) === 0) {
+        <div class="pending-plan-card__empty">
+          <app-icon name="check" [size]="14" />
+          {{ 'DASHBOARD.ATTENTION_EMPTY' | translate }}
+        </div>
+      } @else {
+        <div class="pending-plan-card__list ws-scroll-thin">
+          @for (item of store.actionBand()!.unprocessablePendingItems; track item.reason) {
+            <a [routerLink]="['/transactions']"
+               [queryParams]="attentionLinkParams(item)"
+               class="pending-plan-card__row attention-row">
+              <span class="attention-row__icon">
+                <app-icon [name]="attentionMeta(item.reason).icon" [size]="16" />
+              </span>
+              <span class="attention-row__text">
+                <span class="attention-row__label">{{ attentionMeta(item.reason).labelKey | translate }}</span>
+                <span class="attention-row__desc">{{ attentionMeta(item.reason).descKey | translate }}</span>
+              </span>
+              <ws-badge variant="warning" size="sm">{{ item.count }}</ws-badge>
+            </a>
+          }
+        </div>
+      }
+    </ws-card>
+
     <!-- ── Banda 2: Period KPIs + Activity feed ──────────────────────────── -->
     <div class="band-hd">
       <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_PERIOD' | translate }}</span>

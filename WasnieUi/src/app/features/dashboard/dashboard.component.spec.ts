@@ -418,6 +418,7 @@ function buildMockSummary(
       payoutsPendingApprovalByCurrency: [],
       payoutsApprovedUnpaidByCurrency: [],
       pendingByPlanItems: [],
+      unprocessablePendingItems: [],
       ...actionOverride,
     },
     periodBand: {

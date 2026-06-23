@@ -10,12 +10,20 @@ export interface PlanPendingItem {
   pendingCount: number;
 }
 
+/** A reason a Pending transaction can't be processed yet. `currencies` is set only for CurrencyMismatch. */
+export interface UnprocessablePendingItem {
+  reason: 'NoPayee' | 'CurrencyMismatch' | 'NoActiveAssignment';
+  count: number;
+  currencies: string[];
+}
+
 export interface DashboardActionBand {
   draftPayRunsCount: number;
   payoutsPendingApprovalCount: number;
   payoutsPendingApprovalByCurrency: CurrencyTotal[];
   payoutsApprovedUnpaidByCurrency: CurrencyTotal[];
   pendingByPlanItems: PlanPendingItem[];
+  unprocessablePendingItems: UnprocessablePendingItem[];
 }
 
 export interface DashboardPeriodBand {

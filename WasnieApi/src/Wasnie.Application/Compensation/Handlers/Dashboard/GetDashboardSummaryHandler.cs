@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Dashboard;
 using Wasnie.Domain.Authorization;
@@ -38,7 +39,12 @@ public sealed class GetDashboardSummaryHandler(
 
         var actionBand = await BuildActionBandAsync(cancellationToken);
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
-        actionBand = actionBand with { PendingByPlanItems = pendingByPlan };
+        var unprocessablePending = await BuildUnprocessablePendingAsync(cancellationToken);
+        actionBand = actionBand with
+        {
+            PendingByPlanItems = pendingByPlan,
+            UnprocessablePendingItems = unprocessablePending,
+        };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
             ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, periodLabel, priorLabel, cancellationToken)
@@ -94,7 +100,8 @@ public sealed class GetDashboardSummaryHandler(
             PayoutsPendingApprovalCount: pendingCount,
             PayoutsPendingApprovalByCurrency: pendingByCurrency,
             PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency,
-            PendingByPlanItems: []);
+            PendingByPlanItems: [],
+            UnprocessablePendingItems: []);
     }
 
     // ── Pending transactions grouped by plan (action band supplement) ─────────
@@ -164,6 +171,48 @@ public sealed class GetDashboardSummaryHandler(
                 Currency: plans[kvp.Key].Currency,
                 PendingCount: kvp.Value.Count))
             .ToList();
+    }
+
+    // ── Pending transactions that CANNOT be processed yet, grouped by reason ──
+    // Visibility supplement (WI): the inverse of BuildPendingByPlanAsync. A Pending transaction is
+    // processable iff it has a payee, that payee has an Active assignment whose EffectivePeriod covers
+    // the transaction date, AND tx.Currency == that plan's Currency (the rule the engine enforces in
+    // ProcessPendingTransactionsJobHandler). Anything Pending that fails this is surfaced here so it is
+    // not silently invisible. Period-independent (mirrors the existing panel). Anti-Cartesian: three
+    // queries + in-memory matching; no N+1.
+    //
+    // Primary reason per transaction (mutually exclusive — counted once):
+    //   NoPayee            → PayeeId is null
+    //   NoActiveAssignment → has payee but NO Active assignment covers the transaction date
+    //   CurrencyMismatch   → a covering Active assignment exists, but none of those plans' currency
+    //                        matches the transaction currency
+    private async Task<IReadOnlyList<UnprocessablePendingDto>> BuildUnprocessablePendingAsync(CancellationToken ct)
+    {
+        // Counts come straight from the shared spec so they are IDENTICAL to what the Transactions list
+        // shows when deep-linked by reason (no drift between the dashboard and the filter).
+        var noPayee = await UnprocessablePendingSpec.NoPayee(db).CountAsync(ct);
+        var currencyMismatch = await UnprocessablePendingSpec.CurrencyMismatch(db).CountAsync(ct);
+        var noActiveAssignment = await UnprocessablePendingSpec.NoActiveAssignment(db).CountAsync(ct);
+
+        var mismatchCurrencies = currencyMismatch > 0
+            ? await UnprocessablePendingSpec.CurrencyMismatch(db)
+                .Select(t => t.Amount.Currency)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToListAsync(ct)
+            : [];
+
+        var items = new List<UnprocessablePendingDto>(3);
+        if (noPayee > 0)
+            items.Add(new UnprocessablePendingDto(UnprocessablePendingSpec.NoPayeeReason, noPayee, []));
+        if (currencyMismatch > 0)
+            items.Add(new UnprocessablePendingDto(
+                UnprocessablePendingSpec.CurrencyMismatchReason, currencyMismatch, mismatchCurrencies));
+        if (noActiveAssignment > 0)
+            items.Add(new UnprocessablePendingDto(
+                UnprocessablePendingSpec.NoActiveAssignmentReason, noActiveAssignment, []));
+
+        return items;
     }
 
     // ── Banda 2 — period-filtered state ──────────────────────────────────────

@@ -31,4 +31,5 @@ public class PaginationQuery
     public string? ReferenceNumbers { get; set; }  // comma-separated exact ReferenceNumber values (for skip-log filter navigation)
     public string? Currencies { get; set; }         // comma-separated ISO 4217 currency codes (WI-PROD-FILTERS-CURRENCY-RULE)
     public string? Period { get; set; }             // "active" (current/future only) | "all" (no period filter)
+    public string? AttentionReason { get; set; }     // "NoPayee" | "CurrencyMismatch" | "NoActiveAssignment" — dashboard deep-link to unprocessable Pending
 }

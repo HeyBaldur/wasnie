@@ -666,7 +666,16 @@
     "PENDING_BY_PLAN_DESC": "Plany z transakcjami gotowymi do obliczenia.",
     "PENDING_BY_PLAN_SCOPE": "Wszystkie okresy · niezależne od filtra dat",
     "PENDING_BY_PLAN_EMPTY": "Brak oczekujących transakcji do przetworzenia.",
-    "PENDING_BY_PLAN_COUNT": "{{count}} oczekujących"
+    "PENDING_BY_PLAN_COUNT": "{{count}} oczekujących",
+    "ATTENTION_TITLE": "Transakcje wymagające uwagi",
+    "ATTENTION_DESC": "Te transakcje wpłynęły, ale nie można ich jeszcze przetworzyć. Oto co je blokuje.",
+    "ATTENTION_EMPTY": "Nic nie utknęło — każdą oczekującą transakcję można przetworzyć.",
+    "ATTENTION_NOPAYEE_LABEL": "Brak przypisanego odbiorcy",
+    "ATTENTION_NOPAYEE_DESC": "Wpłynęły bez dopasowanego odbiorcy. Przypisz odbiorcę, aby je przetworzyć.",
+    "ATTENTION_CURRENCY_LABEL": "Waluta nie pasuje do planu",
+    "ATTENTION_CURRENCY_DESC": "Są w walucie, której nie używa żaden plan odbiorcy (np. USD vs EUR). Rozwiąż walutę, aby je przetworzyć.",
+    "ATTENTION_NOASSIGN_LABEL": "Brak aktywnego przypisania planu",
+    "ATTENTION_NOASSIGN_DESC": "Odbiorca nie ma aktywnego planu obejmującego te daty. Aktywuj lub utwórz przypisanie."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",

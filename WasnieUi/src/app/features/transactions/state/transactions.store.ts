@@ -25,6 +25,8 @@ export interface TransactionFilter {
   amountSort: 'asc' | 'desc' | null;
   referenceNumbers: string[];
   currencies: string[];
+  // Dashboard "needs attention" deep-link: filters to one unprocessable-Pending reason (server-side).
+  attentionReason: string | null;
 }
 
 export const EMPTY_FILTER: TransactionFilter = {
@@ -41,6 +43,7 @@ export const EMPTY_FILTER: TransactionFilter = {
   amountSort: null,
   referenceNumbers: [],
   currencies: [],
+  attentionReason: null,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -94,6 +97,7 @@ export class TransactionsStore {
     if (f.amountSort) count++;
     if (f.referenceNumbers.length > 0) count++;
     if (f.currencies.length > 0) count++;
+    if (f.attentionReason) count++;
     return count;
   });
 
@@ -127,6 +131,7 @@ export class TransactionsStore {
     if (f.amountSort) filters['amountSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) filters['referenceNumbers'] = f.referenceNumbers.join(',');
     if (f.currencies.length > 0) filters['currencies'] = f.currencies.join(',');
+    if (f.attentionReason) filters['attentionReason'] = f.attentionReason;
     return filters;
   }
 
@@ -150,6 +155,7 @@ export class TransactionsStore {
     if (f.amountSort) body['amountSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) body['referenceNumbers'] = f.referenceNumbers.join(',');
     if (f.currencies.length > 0) body['currencies'] = f.currencies.join(',');
+    if (f.attentionReason) body['attentionReason'] = f.attentionReason;
     return body;
   }
 
@@ -250,6 +256,7 @@ export class TransactionsStore {
     if (f.amountSort) params['amtSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) params['refs'] = f.referenceNumbers.join(',');
     if (f.currencies.length > 0) params['currencies'] = f.currencies.join(',');
+    if (f.attentionReason) params['attention'] = f.attentionReason;
     return params;
   }
 
@@ -272,6 +279,7 @@ export class TransactionsStore {
     if (params['amtSort'] === 'asc' || params['amtSort'] === 'desc') f.amountSort = params['amtSort'];
     if (params['refs']) f.referenceNumbers = params['refs'].split(',').filter(Boolean);
     if (params['currencies']) f.currencies = params['currencies'].split(',').filter(Boolean);
+    if (params['attention']) f.attentionReason = params['attention'];
     this.filter.set(f);
   }
 

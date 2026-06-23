@@ -666,7 +666,16 @@
     "PENDING_BY_PLAN_DESC": "Planes con transacciones listas para calcular.",
     "PENDING_BY_PLAN_SCOPE": "Todos los periodos · no afectado por el filtro de fecha",
     "PENDING_BY_PLAN_EMPTY": "No hay transacciones pendientes de procesar.",
-    "PENDING_BY_PLAN_COUNT": "{{count}} pendientes"
+    "PENDING_BY_PLAN_COUNT": "{{count}} pendientes",
+    "ATTENTION_TITLE": "Transacciones que requieren atención",
+    "ATTENTION_DESC": "Estas transacciones ingresaron pero aún no se pueden procesar. Esto es lo que las detiene.",
+    "ATTENTION_EMPTY": "Nada atascado — todas las transacciones pendientes se pueden procesar.",
+    "ATTENTION_NOPAYEE_LABEL": "Sin beneficiario asignado",
+    "ATTENTION_NOPAYEE_DESC": "Llegaron sin un beneficiario coincidente. Asigna un beneficiario para procesarlas.",
+    "ATTENTION_CURRENCY_LABEL": "La moneda no coincide con el plan",
+    "ATTENTION_CURRENCY_DESC": "Están en una moneda que ningún plan del beneficiario usa (p. ej. USD vs EUR). Resuelve la moneda para procesarlas.",
+    "ATTENTION_NOASSIGN_LABEL": "Sin asignación de plan activa",
+    "ATTENTION_NOASSIGN_DESC": "El beneficiario no tiene un plan activo que cubra estas fechas. Activa o crea una asignación."
   },
   "QUOTAS": {
     "TITLE": "Cuotas",

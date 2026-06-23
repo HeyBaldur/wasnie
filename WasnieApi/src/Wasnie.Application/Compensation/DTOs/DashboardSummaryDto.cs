@@ -16,7 +16,8 @@ public sealed record DashboardActionBandDto(
     int PayoutsPendingApprovalCount,
     IReadOnlyList<CurrencyTotalDto> PayoutsPendingApprovalByCurrency,
     IReadOnlyList<CurrencyTotalDto> PayoutsApprovedUnpaidByCurrency,
-    IReadOnlyList<PlanPendingCountDto> PendingByPlanItems);
+    IReadOnlyList<PlanPendingCountDto> PendingByPlanItems,
+    IReadOnlyList<UnprocessablePendingDto> UnprocessablePendingItems);
 
 // Plans that have Pending transactions eligible for ProcessPending (ByPlan scope)
 public sealed record PlanPendingCountDto(
@@ -24,6 +25,15 @@ public sealed record PlanPendingCountDto(
     string PlanName,
     string Currency,
     int PendingCount);
+
+// Pending transactions that CANNOT be processed yet, grouped by primary reason.
+// Reason: "NoPayee" | "CurrencyMismatch" | "NoActiveAssignment". Each transaction is counted once.
+// Currencies is populated only for CurrencyMismatch (the distinct currencies involved) so the UI can
+// deep-link to Transactions filtered by those currencies; empty for the other reasons.
+public sealed record UnprocessablePendingDto(
+    string Reason,
+    int Count,
+    IReadOnlyList<string> Currencies);
 
 // ── Banda 2 — "Period state" ────────────────────────────────────────────────
 

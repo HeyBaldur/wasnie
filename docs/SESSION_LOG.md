@@ -4,6 +4,45 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-23 — WI-DASHBOARD-ATTENTION-CARD-FIX (conteo de la card ≠ resultados del filtro)
+
+**Bug reportado por el owner:** la card "Transactions that need attention" decía CurrencyMismatch=10, pero al hacer click el link `…/transactions?statuses=Pending&currencies=USD` mostraba **46** (porque `currencies=USD` también traía las 36 Unassigned USD, que son del bucket NoPayee). NoActiveAssignment linkeaba a `statuses=Pending` = TODAS las Pending. Los deep-links aproximados (que ya había marcado como gap) eran, en la práctica, resultados incorrectos.
+
+**Causa:** la card y la lista usaban lógicas distintas — la card clasificaba con assignments/moneda/fecha; la lista solo tenía filtros simples (status/currency/unassigned) que NO pueden expresar "no procesable por moneda" ni "sin assignment activo".
+
+**Fix (una sola fuente de verdad):**
+- Nuevo `UnprocessablePendingSpec` (`Wasnie.Application/Compensation/Common`): tres `IQueryable<CompensationTransaction>` (`NoPayee`, `CurrencyMismatch`, `NoActiveAssignment`) con la MISMA definición de "procesable" que el motor, compuestas como subqueries **EXISTS/NOT EXISTS** (server-paginadas, sin materializar; tenant-scoped por los query filters).
+- `GetDashboardSummaryHandler.BuildUnprocessablePendingAsync` reescrito: los counts salen del spec (`CountAsync` + monedas distintas) en vez de clasificar en memoria.
+- Filtro server-side `attentionReason` en `ListTransactionsHandler` (vía `PaginationQuery.AttentionReason`): cuando viene, la query base = `UnprocessablePendingSpec.ForReason(...)`. Como dashboard y lista usan el MISMO spec, el conteo de la card y el de la tabla coinciden por construcción.
+- Frontend: `attentionReason` threaded por `TransactionFilter` (+ `EMPTY_FILTER`, `_buildFilterRecord`, `toExportFilter`, `toQueryParams`→`attention`, `loadFromQueryParams`, `activeFilterCount`). Dashboard deep-link ahora: `{ statuses: 'Pending', attention: item.reason }` para las TRES razones (uniforme y exacto; se eliminó el `currencies=`/`unassigned=` aproximado).
+
+**Verificación contra la BD real (SQL Server, no solo InMemory):** test temporal (creado, ejecutado, **borrado**) que forzó `ToQueryString()` + `CountAsync` contra `WasnieDb`. EF traduce correctamente (EXISTS/NOT EXISTS, JOIN a Plans, columnas owned `EffectiveStart`/`EffectiveEnd`/`Amount.Currency`). Conteos reales: **NoPayee=36, CurrencyMismatch=10 (exactamente las 10 de Rudolph), NoActiveAssignment=0**. El bug 10↔46 queda 10↔10. (Las ~9978 PLN Pending NO son no-procesables → sus payees sí tienen assignment PLN que cubre y coincide en moneda; por eso no inflan los buckets.)
+
+**Build/tests:** 663 unit backend verdes (los 3 de `UnprocessablePendingTests` siguen pasando con el spec vía InMemory); specs frontend de transactions/dashboard sin regresión (validado aislando los specs PRE-EXISTENTES rotos de `pay-runs`; revertido); `dotnet build` + `ng build --configuration production` limpios. **Acción del owner:** reiniciar la API para que el filtro `attentionReason` tome efecto en runtime; verificar en pantalla que click en cada razón muestra exactamente N filas.
+
+## 2026-06-23 — WI-DASHBOARD-ATTENTION-CARD (visibilidad de Pending no procesables)
+
+Card nueva en el dashboard, debajo de "Pending to Process by Plan", para que las transacciones Pending que NO se pueden procesar dejen de ser invisibles (gap de confianza del diagnóstico previo: el usuario importa deals y no ve nada, cree que está roto). Sin migración, sin tocar el motor ni el panel existente.
+
+**Backend** (`GetDashboardSummaryHandler.cs`):
+- `BuildUnprocessablePendingAsync` — espejo INVERSO de `BuildPendingByPlanAsync`, con la MISMA definición de "procesable" que el motor (`ProcessPendingTransactionsJobHandler`: payee + assignment Active que cubre la fecha + `tx.Currency == plan.Currency`).
+- Clasificación en UNA razón primaria por transacción (mutuamente excluyentes, cada tx contada una vez). **Orden reportado:** `NoPayee` (PayeeId null) → `NoActiveAssignment` (con payee, pero NINGÚN assignment Active cubre la fecha de la tx) → `CurrencyMismatch` (hay assignment Active que cubre la fecha, pero ninguna moneda de esos planes coincide con la de la tx). Las procesables (cubierta + moneda coincide) se excluyen (ya las cuenta el panel hermano).
+- Period-independent (como el panel hermano), tenant-scoped (Regla 9), anti-cartesiano: 3 queries (assignments Active, currencies de planes, TODAS las Pending incl. sin payee) + match en memoria, sin N+1.
+- DTO `UnprocessablePendingDto(Reason, Count, Currencies)` agregado a `DashboardActionBandDto`. `Currencies` solo para CurrencyMismatch (distintas monedas involucradas, para el deep-link). El `DashboardActionBandDto` se inicializa con `UnprocessablePendingItems: []` y se setea vía `with` (como `PendingByPlanItems`).
+- Tests unit nuevos (`UnprocessablePendingTests.cs`, in-memory): clasifica cada razón; excluye procesables; tx fuera del rango de fechas del assignment → NoActiveAssignment. 663 unit verdes.
+
+**Frontend** (`dashboard.component.*`, `dashboard.models.ts`):
+- Interfaz `UnprocessablePendingItem` + campo `unprocessablePendingItems` en `DashboardActionBand`.
+- Card hermana (mismas clases `pending-plan-card`, tokens, scope "all periods"): una fila por razón con ícono + label + explicación en lenguaje plano (sin alarmar) + badge de conteo; estado "all clear" cuando no hay nada; filas con 0 no aparecen (el backend ya omite las de count 0).
+- Deep-links a Transactions con los query params existentes (`statuses`, `unassigned`, `currencies`): **NoPayee** → `statuses=Pending&unassigned=1` (EXACTO); **CurrencyMismatch** → `statuses=Pending&currencies=<monedas>` (APROXIMADO); **NoActiveAssignment** → `statuses=Pending` (APROXIMADO).
+- i18n EN/ES/PL (`DASHBOARD.ATTENTION_*`). No se usó checkbox (no existe primitivo).
+
+**Filtros que faltan en Transactions (reportado para WI futuro, NO inventados aquí):** no hay un filtro exacto "no procesable por moneda" (el `currencies=USD` también trae las Unassigned USD, que pertenecen a otra fila) ni "sin assignment activo". Se usó la mejor aproximación con filtros existentes; un WI futuro podría añadir un filtro server-side "unprocessable reason".
+
+**Verificación en pantalla (pendiente del owner, app corriendo):** con el estado real (Rudolph 10 USD + 36 Unassigned + otras Pending de test), la card aparece bajo "Pending to Process by Plan" con las razones y conteos; click en "No payee" → Transactions con Unassigned+Pending; click en las otras → Transactions Pending (con currencies para el caso de moneda). El panel "Pending to Process by Plan" sigue igual. NOTA: la BD de test tiene mucho Pending ajeno (p. ej. ~9978 PLN EtlImport) → los conteos de NoActiveAssignment/CurrencyMismatch pueden ser altos; es fiel a los datos, no un bug.
+
+**Build/tests:** `dotnet build` limpio; 663 unit backend verdes (3 nuevos). `ng build --configuration production` OK (785.69 kB; el warning de budget es PRE-EXISTENTE — esta card sumó +0.04 kB). Dashboard specs frontend verdes (validados aislando los specs PRE-EXISTENTES rotos de `pay-runs`; revertido). Integration tests no corren aquí (requieren Docker/Testcontainers).
+
 ## 2026-06-23 — WI-HUBSPOT-FASE2 (deals → transacciones, READ-ONLY desde HubSpot)
 
 Implementadas las 4 sub-fases del WI. **Wasnie solo LEE de HubSpot** — cero escrituras al CRM, sin scopes de write (los scopes ya concedidos `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read` bastan).
