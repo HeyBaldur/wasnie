@@ -115,6 +115,9 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, AuditService>();
 
         services.AddScoped<ICreditAllocationService, CreditAllocationService>();
+        // Single place for the "can I create this transaction?" rule — used by HubSpot/Excel/Manual ingest.
+        services.AddScoped<Wasnie.Application.Compensation.Common.ITransactionCreateGuard,
+            Wasnie.Application.Compensation.Common.TransactionCreateGuard>();
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();

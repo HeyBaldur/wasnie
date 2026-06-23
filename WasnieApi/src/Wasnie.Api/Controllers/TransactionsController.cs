@@ -99,6 +99,15 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>Void (cancel) many transactions at once. Returns the voided count + per-transaction errors.</summary>
+    [HttpPost("bulk-void")]
+    public async Task<IActionResult> BulkVoid([FromBody] BulkVoidRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new BulkVoidTransactionsCommand(body.TransactionIds, body.Reason), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("process-pending")]
     public async Task<IActionResult> ProcessPending([FromBody] ProcessPendingTransactionsCommand command, CancellationToken cancellationToken)
     {
@@ -126,6 +135,7 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
     public record AssignPayeeRequest(Guid PayeeId, string? Comment);
     public record ReassignPayeeRequest(Guid NewPayeeId, string Reason);
     public record VoidTransactionRequest(string Reason);
+    public record BulkVoidRequest(IReadOnlyList<Guid> TransactionIds, string Reason);
     public record PendingCountRequest(
         Wasnie.Application.Compensation.Calculation.ProcessPendingScope Scope,
         Guid? ScopeId,

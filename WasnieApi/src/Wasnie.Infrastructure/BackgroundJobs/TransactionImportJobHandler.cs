@@ -24,6 +24,7 @@ public sealed class TransactionImportJobHandler(
     IGuidGenerator guid,
     ITransactionImportValidationService validator,
     ICreditAllocationService creditAllocationService,
+    Wasnie.Application.Compensation.Common.ITransactionCreateGuard createGuard,
     ILogger<TransactionImportJobHandler> logger)
     : JobHandlerBase<TransactionImportPayload>
 {
@@ -67,6 +68,25 @@ public sealed class TransactionImportJobHandler(
         var processedSoFar = 0;
         var skippedByIdempotency = 0;
         var skippedByDomainValidation = 0;
+        var skippedByBlockedVoid = 0;
+
+        // Centralized create rule (shared with HubSpot/Manual): classify all candidate keys once. An ACTIVE
+        // row → skip (duplicate); only a VOID row → create a new one (Opción B); a void that carried credits
+        // → blocked (anti-double-pay). Status-aware, so re-importing a previously voided reference revives it.
+        var candidateRefs = validRows
+            .Select(r => GetField(r.Row, payload.ColumnMapping.ReferenceNumberColumn))
+            .ToList();
+        var candidateExternalIds = validRows
+            .Select(r => payload.ColumnMapping.ExternalIdColumn is not null
+                ? GetField(r.Row, payload.ColumnMapping.ExternalIdColumn)
+                : null)
+            .Select(e => string.IsNullOrEmpty(e) ? null : e)
+            .ToList();
+        var classification = await createGuard.ClassifyAsync(
+            TransactionSource.EtlImport, candidateRefs, candidateExternalIds, ct);
+
+        // Dedups the same reference appearing twice within THIS file (classification only knows the DB).
+        var seenInBatch = new HashSet<string>(StringComparer.Ordinal);
 
         // Process in chunks of 50, each in its own transaction.
         var chunks = validRows
@@ -118,6 +138,22 @@ public sealed class TransactionImportJobHandler(
 
                 var money = Money.Of(amount, currency);
                 var externalIdValue = string.IsNullOrEmpty(externalId) ? null : externalId;
+
+                // Centralized create rule (same as HubSpot/Manual).
+                if (!seenInBatch.Add(refNum))
+                {
+                    skippedByIdempotency++; // same reference twice in this file
+                    continue;
+                }
+                switch (classification.Decide(refNum, externalIdValue))
+                {
+                    case Wasnie.Application.Compensation.Common.TransactionCreateDecision.SkipActiveDuplicate:
+                        skippedByIdempotency++;
+                        continue;
+                    case Wasnie.Application.Compensation.Common.TransactionCreateDecision.BlockedVoidHadCredits:
+                        skippedByBlockedVoid++;
+                        continue;
+                }
 
                 var quantityStr = payload.ColumnMapping.QuantityColumn is not null
                     ? GetField(row, payload.ColumnMapping.QuantityColumn)
@@ -193,7 +229,7 @@ public sealed class TransactionImportJobHandler(
 
         var completedAt = clock.UtcNowOffset;
         var totalCreated = createdTransactions.Count;
-        var totalSkipped = skippedCount + skippedByIdempotency + skippedByDomainValidation;
+        var totalSkipped = skippedCount + skippedByIdempotency + skippedByDomainValidation + skippedByBlockedVoid;
 
         logger.LogInformation(
             "TransactionImportJob {JobId}: {Created} transactions created, {Skipped} skipped. " +

@@ -103,6 +103,45 @@ export class TransactionsStore {
 
   readonly hasActiveFilters = computed(() => this.activeFilterCount() > 0);
 
+  // ── Bulk selection for bulk void — only Pending transactions are voidable/selectable ──────────
+  readonly selectedIds = signal<Set<string>>(new Set());
+  readonly selectedCount = computed(() => this.selectedIds().size);
+  private readonly voidableOnPage = computed(() =>
+    this.transactions().filter(t => t.status === TransactionStatus.Pending));
+  readonly hasVoidableOnPage = computed(() => this.voidableOnPage().length > 0);
+  readonly allVoidableSelected = computed(() => {
+    const v = this.voidableOnPage();
+    const sel = this.selectedIds();
+    return v.length > 0 && v.every(t => sel.has(t.id));
+  });
+
+  toggleSelect(id: string): void {
+    this.selectedIds.update(sel => {
+      const next = new Set(sel);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  toggleSelectAllVoidable(): void {
+    this.selectedIds.set(this.allVoidableSelected()
+      ? new Set()
+      : new Set(this.voidableOnPage().map(t => t.id)));
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  /** Voids all currently-selected transactions in one call; clears selection and reloads. */
+  async bulkVoid(reason: string): Promise<import('../services/transactions.api.service').BulkVoidResult> {
+    const ids = [...this.selectedIds()];
+    const result = await firstValueFrom(this.api.bulkVoid({ transactionIds: ids, reason }));
+    this.clearSelection();
+    await this.loadTransactions();
+    return result;
+  }
+
   constructor() {
     effect(() => {
       const p = this.page();
@@ -196,17 +235,20 @@ export class TransactionsStore {
   setFilter(partial: Partial<TransactionFilter>): void {
     this.filter.update(f => ({ ...f, ...partial }));
     this.page.set(1);
+    this.clearSelection();
   }
 
   clearFilters(): void {
     this.filter.set({ ...EMPTY_FILTER });
     this.page.set(1);
+    this.clearSelection();
   }
 
   /** Set a single status (tab shortcut — replaces any current status filter). */
   setStatusTab(status: TransactionStatus | null): void {
     this.filter.update(f => ({ ...f, statuses: status ? [status] : [] }));
     this.page.set(1);
+    this.clearSelection();
   }
 
   // Legacy setters — kept for backward compat with ProcessPendingComponent

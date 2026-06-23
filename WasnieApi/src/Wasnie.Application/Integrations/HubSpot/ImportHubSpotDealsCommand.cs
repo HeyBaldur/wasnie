@@ -42,7 +42,8 @@ public sealed class ImportHubSpotDealsHandler(
     IGuidGenerator guid,
     IAuthorizationService authorizationService,
     ICrmDealSource dealSource,
-    ICrmOwnerResolver ownerResolver)
+    ICrmOwnerResolver ownerResolver,
+    Wasnie.Application.Compensation.Common.ITransactionCreateGuard createGuard)
     : IRequestHandler<ImportHubSpotDealsCommand, Result<HubSpotImportResultDto>>
 {
     public async Task<Result<HubSpotImportResultDto>> Handle(
@@ -75,18 +76,23 @@ public sealed class ImportHubSpotDealsHandler(
             .GroupBy(o => o.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Email, StringComparer.Ordinal);
 
-        // Lookup-before-create: ids of deals already imported for this tenant (idempotency).
-        var existingExternalIds = await db.CompensationTransactions
-            .Where(t => t.Source == TransactionSource.CrmSync && t.ExternalId != null)
-            .Select(t => t.ExternalId!)
-            .ToListAsync(cancellationToken);
-        var seen = new HashSet<string>(existingExternalIds, StringComparer.Ordinal);
+        // Centralized create rule (shared with Excel/Manual): classify each deal's key against the DB.
+        // ACTIVE row with this deal → skip (idempotent). Only a VOID row → create a NEW one (Opción B),
+        // unless that void carried credits (anti-double-pay → blocked). Status-aware, so re-importing a
+        // previously voided deal now revives it as a fresh transaction.
+        var dealIds = deals.Where(d => !string.IsNullOrWhiteSpace(d.Id)).Select(d => d.Id).ToList();
+        var dealReferences = dealIds.Select(id => $"HUBSPOT-{id}").ToList();
+        var classification = await createGuard.ClassifyAsync(
+            TransactionSource.CrmSync, dealReferences, dealIds.Cast<string?>().ToList(), cancellationToken);
+
+        // Dedups the same deal appearing twice within THIS import (the classification only knows the DB).
+        var seenInBatch = new HashSet<string>(StringComparer.Ordinal);
 
         var now = clock.UtcNowOffset;
         var today = DateOnly.FromDateTime(now.UtcDateTime);
         var actor = currentUser.UserId ?? "system";
 
-        int created = 0, assigned = 0, unassigned = 0, skippedExisting = 0, skippedInvalid = 0, newMappings = 0;
+        int created = 0, assigned = 0, unassigned = 0, skippedExisting = 0, skippedInvalid = 0, newMappings = 0, skippedBlocked = 0;
         var missingAmount = 0;
         var missingCurrency = 0;
         var missingCloseDate = 0;
@@ -113,12 +119,22 @@ public sealed class ImportHubSpotDealsHandler(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(deal.Id) || !seen.Add(deal.Id))
+            if (string.IsNullOrWhiteSpace(deal.Id) || !seenInBatch.Add(deal.Id))
             {
-                // Blank id (shouldn't happen) or already imported → skip (idempotent).
+                // Blank id (shouldn't happen) or repeated within this import → skip.
                 if (!string.IsNullOrWhiteSpace(deal.Id))
                     skippedExisting++;
                 continue;
+            }
+
+            switch (classification.Decide($"HUBSPOT-{deal.Id}", deal.Id))
+            {
+                case Wasnie.Application.Compensation.Common.TransactionCreateDecision.SkipActiveDuplicate:
+                    skippedExisting++;
+                    continue;
+                case Wasnie.Application.Compensation.Common.TransactionCreateDecision.BlockedVoidHadCredits:
+                    skippedBlocked++;
+                    continue;
             }
 
             if (deal.Amount is null)
@@ -187,6 +203,7 @@ public sealed class ImportHubSpotDealsHandler(
         if (missingAmount > 0) warnings.Add($"{missingAmount} deal(s) skipped: no amount.");
         if (missingCurrency > 0) warnings.Add($"{missingCurrency} deal(s) skipped: no currency (and no account default).");
         if (missingCloseDate > 0) warnings.Add($"{missingCloseDate} deal(s) had no close date — used today's date.");
+        if (skippedBlocked > 0) warnings.Add($"{skippedBlocked} deal(s) skipped: a prior voided transaction had already been processed — cannot re-import.");
 
         return Result<HubSpotImportResultDto>.Success(new HubSpotImportResultDto(
             DealsRead: deals.Count,

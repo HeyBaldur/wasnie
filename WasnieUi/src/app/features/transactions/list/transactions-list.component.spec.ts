@@ -49,6 +49,15 @@ const makeStoreMock = (overrides?: Partial<TransactionsStore>) =>
     loadFromQueryParams: jasmine.createSpy(),
     setPage: jasmine.createSpy(),
     setPageSize: jasmine.createSpy(),
+    // Bulk void selection
+    selectedIds: signal(new Set<string>()),
+    selectedCount: signal(0),
+    hasVoidableOnPage: signal(false),
+    allVoidableSelected: signal(false),
+    toggleSelect: jasmine.createSpy(),
+    toggleSelectAllVoidable: jasmine.createSpy(),
+    clearSelection: jasmine.createSpy(),
+    bulkVoid: jasmine.createSpy().and.resolveTo({ voidedCount: 0, errors: [] }),
     ...overrides,
   }) as unknown as TransactionsStore;
 
@@ -69,6 +78,51 @@ describe('TransactionsListComponent', () => {
     const fixture = TestBed.createComponent(TransactionsListComponent);
     fixture.detectChanges();
     expect(fixture.nativeElement).toBeTruthy();
+  });
+
+  it('openBulkVoid snapshots the selected count and opens the modal', () => {
+    TestBed.overrideProvider(TransactionsStore, {
+      useValue: makeStoreMock({ selectedCount: signal(3) as unknown as TransactionsStore['selectedCount'] }),
+    });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    const comp = fixture.componentInstance;
+    fixture.detectChanges();
+
+    comp.openBulkVoid();
+
+    expect(comp.bulkVoidCount()).toBe(3);
+    expect(comp.bulkVoidModalOpen()).toBeTrue();
+  });
+
+  it('confirmBulkVoid calls store.bulkVoid and keeps errors visible on partial failure', async () => {
+    const store = makeStoreMock({
+      bulkVoid: jasmine.createSpy().and.resolveTo({ voidedCount: 2, errors: ['REF-9: already paid'] }),
+    } as Partial<TransactionsStore>);
+    TestBed.overrideProvider(TransactionsStore, { useValue: store });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    const comp = fixture.componentInstance;
+    fixture.detectChanges();
+
+    comp.openBulkVoid();
+    comp.bulkVoidReason.set('wrong currency');
+    await comp.confirmBulkVoid();
+
+    expect(store.bulkVoid).toHaveBeenCalledWith('wrong currency');
+    expect(comp.bulkVoidErrors()).toEqual(['REF-9: already paid']);
+    expect(comp.bulkVoidModalOpen()).toBeTrue(); // stays open so the failures are shown
+  });
+
+  it('confirmBulkVoid does nothing when the reason is too short', async () => {
+    const store = makeStoreMock();
+    TestBed.overrideProvider(TransactionsStore, { useValue: store });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    const comp = fixture.componentInstance;
+    fixture.detectChanges();
+
+    comp.bulkVoidReason.set('ab');
+    await comp.confirmBulkVoid();
+
+    expect(store.bulkVoid).not.toHaveBeenCalled();
   });
 
   it('renders payee name from DTO when payeeName is provided', () => {

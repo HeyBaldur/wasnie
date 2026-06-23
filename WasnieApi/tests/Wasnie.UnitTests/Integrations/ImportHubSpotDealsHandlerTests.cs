@@ -54,9 +54,10 @@ public sealed class ImportHubSpotDealsHandlerTests
         dealSource.SourceName.Returns(Source);
 
         var resolver = new CrmOwnerResolver(db, clock, guid, currentUser);
+        var createGuard = new Wasnie.Application.Compensation.Common.TransactionCreateGuard(db);
 
         var handler = new ImportHubSpotDealsHandler(
-            db, tenantCtx, currentUser, clock, guid, authz, dealSource, resolver);
+            db, tenantCtx, currentUser, clock, guid, authz, dealSource, resolver, createGuard);
 
         return new Harness { Db = db, Handler = handler, DealSource = dealSource, TenantId = tenantId };
     }
@@ -135,6 +136,36 @@ public sealed class ImportHubSpotDealsHandlerTests
         tx.PayeeId.Should().BeNull();
         tx.Amount.Currency.Should().Be("EUR");
         (await h.Db.CrmOwnerMappings.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Re_importing_a_deal_whose_transaction_was_voided_creates_a_new_one()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Re_importing_a_deal_whose_transaction_was_voided_creates_a_new_one), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("101", "Big Deal", 5000m, "USD", new DateOnly(2026, 6, 1), "O1") },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "Alice", "A", false) });
+
+        var first = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+        first.Value!.Created.Should().Be(1);
+
+        // The imported transaction is voided (e.g. wrong currency).
+        var tx = await h.Db.CompensationTransactions.SingleAsync();
+        tx.Cancel("wrong currency", "user-1", new DateTimeOffset(Now), Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        // Re-importing the SAME deal now creates a NEW transaction (Opción B); the void stays as history.
+        var second = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+        second.Value!.Created.Should().Be(1);
+        second.Value.SkippedAlreadyImported.Should().Be(0);
+
+        (await h.Db.CompensationTransactions.CountAsync()).Should().Be(2);
+        (await h.Db.CompensationTransactions.CountAsync(t => t.Status == CompensationTransactionStatus.Cancelled))
+            .Should().Be(1);
+        (await h.Db.CompensationTransactions.CountAsync(t => t.Status == CompensationTransactionStatus.Pending))
+            .Should().Be(1);
     }
 
     [Fact]

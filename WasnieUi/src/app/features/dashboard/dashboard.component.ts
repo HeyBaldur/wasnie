@@ -232,7 +232,7 @@ export class DashboardComponent {
       case 'CurrencyMismatch':
         return { labelKey: 'DASHBOARD.ATTENTION_CURRENCY_LABEL', descKey: 'DASHBOARD.ATTENTION_CURRENCY_DESC', icon: 'coin' };
       case 'NoActiveAssignment':
-        return { labelKey: 'DASHBOARD.ATTENTION_NOASSIGN_LABEL', descKey: 'DASHBOARD.ATTENTION_NOASSIGN_DESC', icon: 'document-text' };
+        return { labelKey: 'DASHBOARD.ATTENTION_NOASSIGN_LABEL', descKey: 'DASHBOARD.ATTENTION_NOASSIGN_DESC', icon: 'briefcase' };
       default:
         return { labelKey: reason, descKey: '', icon: 'alert-circle' };
     }
