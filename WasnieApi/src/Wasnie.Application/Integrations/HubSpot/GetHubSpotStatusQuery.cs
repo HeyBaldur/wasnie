@@ -29,12 +29,14 @@ public sealed class GetHubSpotStatusHandler(
             return Result<HubSpotConnectionStatusDto>.Success(
                 new HubSpotConnectionStatusDto("NeverConnected", null, null, null, null, null));
 
+        var disconnected = c.Status == Domain.Integrations.HubSpot.HubSpotConnectionStatus.Disconnected;
         return Result<HubSpotConnectionStatusDto>.Success(new HubSpotConnectionStatusDto(
             Status: c.Status.ToString(),
             PortalId: c.PortalId,
             StatusReason: c.StatusReason,
-            ConnectedAt: c.Status == Domain.Integrations.HubSpot.HubSpotConnectionStatus.Disconnected ? null : c.ConnectedAt,
+            ConnectedAt: disconnected ? null : c.ConnectedAt,
             ConnectedBy: c.ConnectedBy,
-            DisconnectedAt: c.DisconnectedAt));
+            DisconnectedAt: c.DisconnectedAt,
+            LastSyncedAt: disconnected ? null : c.LastSyncedAt));
     }
 }

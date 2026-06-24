@@ -12,6 +12,8 @@ export interface HubSpotConnectionStatus {
   connectedAt: string | null;
   connectedBy: string | null;
   disconnectedAt: string | null;
+  /** When the automatic polling sync last ran successfully (Phase 3). Null = never auto-synced yet. */
+  lastSyncedAt: string | null;
 }
 
 export interface HubSpotConnectResult {

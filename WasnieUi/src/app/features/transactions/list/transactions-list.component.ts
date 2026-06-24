@@ -8,6 +8,7 @@ import { extractApiError } from '../../../shared/utils/api-error';
 import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { ProcessPendingComponent } from '../process-pending/process-pending.component';
 import { TransactionFilterComponent } from '../filter/transaction-filter.component';
+import { HubSpotSyncBannerComponent } from '../../integrations/components/hubspot-sync-banner/hubspot-sync-banner.component';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
@@ -64,6 +65,7 @@ import {
     VoidTransactionModalComponent,
     ProcessPendingComponent,
     TransactionFilterComponent,
+    HubSpotSyncBannerComponent,
   ],
   templateUrl: './transactions-list.component.html',
   styleUrl: './transactions-list.component.scss',

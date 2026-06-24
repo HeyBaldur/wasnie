@@ -4,6 +4,49 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-24 — WI-HUBSPOT-FASE3 (polling automático incremental + "Sync now")
+
+Hace automática la ingesta de deals que antes era manual (Integrations → "Import deals"): un job recurrente de Hangfire sincroniza, por tenant con conexión Connected, de forma incremental, y aplica la lógica YA construida (guard + drift policy). Procedido por pasos; el owner lo verificó en pantalla.
+
+**Reutilización (clave del WI):** extraído el cuerpo del import a `ICrmDealReconciler` (`Application/Integrations/Crm/`) — classify→crear vía `TransactionCreateGuard` + `ICrmDriftPolicy` + resolución owner→payee. `ImportHubSpotDealsHandler` quedó fino (auth + fetch + delegar + mapear DTO). El polling llama al MISMO servicio → no se reescribe lógica money. Los tests previos de import/drift validan que el refactor no rompió nada.
+
+**PASO 1 — checkpoint:** `LastSyncedAt` (DateTimeOffset?) en `HubSpotConnection` + `AdvanceSyncCheckpoint(runStart, now)` (no retrocede; reset a null en `Reconnect`). Primera corrida sin checkpoint → floor = `ConnectedAt` (incremental desde la conexión; el backfill histórico sigue siendo el botón manual). Migración B11 aplicada y verificada (Regla 13).
+
+**PASO 2 — job (money-critical):**
+- Deal source incremental `GetClosedWonDealsModifiedSinceAsync`: filtro `hs_is_closed_won=true AND hs_lastmodifieddate>=since` (epoch ms), sort asc por lastmodified, throttle entre páginas (`HubSpot:SearchThrottleMs`=250ms ⇒ ≤4 req/s Search). Refactor compartido `ReadClosedWonAsync(since?)` con el full read existente.
+- `HubSpotTenantSyncJob.SyncTenantAsync(tenantId)`: setea `BackgroundJobTenantContext`, saltea si no Connected, lee checkpoint, reconcilia, avanza checkpoint SOLO en éxito al instante de INICIO, audita `CRM_AUTO_SYNC_COMPLETED` con conteos. `CrmNotConnectedException`→saltea sin romper (el token provider ya marcó NeedsReconnect). Fallo duro propaga → Hangfire reintenta SOLO ese tenant; checkpoint no avanza → sin pérdida (idempotente).
+- `HubSpotSyncOrchestrator.RunAsync()` recurrente: lista tenants Connected (`IgnoreQueryFilters`, sin tenant ambiente) y agenda un job por-tenant con `IBackgroundJobClient.Schedule` + delay incremental (`TenantStaggerSeconds`). Anti thundering-herd + aislamiento de fallos por diseño.
+- Registro recurrente al startup (`Program.cs`, `IRecurringJobManager.AddOrUpdate`, cron de `HubSpotSync:CronExpression`, default hourly; `Enabled=false`→`RemoveIfExists`).
+- Config `HubSpotSyncOptions` (sección `HubSpotSync`). Para 15 min: `*/15 * * * *`.
+
+**PASO 3 — observabilidad/UI:**
+- `LastSyncedAt` en `HubSpotConnectionStatusDto` + handler.
+- Card `/integrations`: "Última sincronización: hace X" (`relativeTime` pipe; "Aún sin sincronizar" si null) + botón "Sync now".
+- "Sync now": `POST /api/integrations/hubspot/deals/sync-now` → `TriggerHubSpotSyncCommand` (auth IntegrationsManage, exige Connected) → `ICrmSyncScheduler`/`HangfireCrmSyncScheduler` encola el MISMO job por-tenant. 202.
+- i18n EN/ES/PL (`LAST_SYNCED`, `NEVER_SYNCED`, `SYNC.SYNC_NOW`, `SYNC.SYNC_NOW_STARTED`).
+
+**Decisiones técnicas (mías; las de negocio ya estaban):** reconciler compartido como punto de reuso; staggering vía `Schedule` con delays incrementales; primera corrida desde `ConnectedAt` (no full history). NO se construyó webhooks (Fase 4).
+
+**Tests:** 704 unit backend verdes (+13). `dotnet build Wasnie.sln -c Release` y `ng build --configuration production` limpios. Karma front bloqueado por specs PRE-EXISTENTES de `pay-runs` (ajeno).
+
+**Owner action:** reiniciar la API para que el recurring `hubspot-incremental-sync` quede registrado (se puede forzar una corrida desde el dashboard `/jobs`).
+
+## 2026-06-24 — WI-TX-DEFAULT-SORT (orden por defecto de Transactions = creación desc)
+
+Tras import/re-import con drift la tx nueva/recreada quedaba enterrada (la lista ordenaba por Tx date). **PASO 0 (read-only):** confirmado que el sort por `ingestedat` (=`IngestedAt`, fecha de creación) YA existía en backend (`ListTransactionsHandler.AllowedSortFields`, fallback ya `ingestedat` DESC); el default efectivo era `transactiondate` DESC solo porque el front lo enviaba. **Cambio mínimo:** `transactions.store.ts` default `sortBy` `'transactiondate'`→`'ingestedat'` (dirección ya `desc`) + mock del spec actualizado. Server-side global → lo recién creado/recreado (recibe `IngestedAt` nuevo) aparece arriba; el usuario puede re-ordenar con los controles existentes. Sin backend/migración. `ng build --configuration production` limpio.
+
+## 2026-06-24 — WI-HUBSPOT-DRIFT-POLICY (re-import detecta cambios y actúa por estado) — PASO 1+2+4 (PASO 3 pausado)
+
+Money-critical. Caso real: cambió el `Amount` de un deal closed-won en HubSpot y re-importar no hacía nada (idempotencia status-ciega "dealId existe → saltear"). Nuevo: comparar `Amount`(+moneda) y `CloseDate` vs la transacción y actuar según su estado. Principio del owner: HubSpot es fuente de verdad de las VENTAS, Wasnie de los PAGOS; una comisión calculada/pagada es de Wasnie e inmutable (Regla 10).
+
+**Detección:** normaliza ambos lados por `Money.Of` (4 dp) → sin falsos por redondeo; fecha faltante no cuenta como cambio.
+**Acción:** Pending → auto-void de la vieja (motivo automático) + nueva con valores actuales (Opción B, mismo payee, vieja Cancelled). Calculated/Paid → NO toca, registra alerta (`CrmDriftAlert`: dealId, tx, old→new, estado, detected-at; upsert idempotente vía índice único filtrado por no-resuelta). Blindaje: auto-void SOLO Pending; carrera Pending→Calculated entre detección y acción → degrada a alerta. Audit de ambas (`CRM_DRIFT_AUTO_RESOLVED`/`CRM_DRIFT_DETECTED`).
+**Reutilizable (PASO 4):** `ICrmDriftPolicy`/`CrmDriftPolicy` (CRM-neutral, persiste en 2 saves para respetar el índice filtrado void→create). El import manual la invoca; el polling de Fase 3 la invoca idéntica.
+**Persistencia:** entidad `CrmDriftAlert` + migración B10 aplicada y verificada.
+**Tests:** +9 (Pending void+recrea por amount/date, Calculated/Paid alerta-sin-tocar, carrera→degrada, redondeo→no-drift, refresh-no-duplica, aislamiento).
+
+**PENDIENTE (PASO 3, pausado por el owner):** extender la card "Transactions that need attention" del dashboard con la categoría "Deal changed in HubSpot after commission" — las alertas Calculated/Paid hoy se guardan en `CrmDriftAlerts` pero NO se muestran en UI — + deep-link a la tx (vía `?ref=HUBSPOT-{dealId}`, no hay ruta de detalle por-tx) + i18n EN/ES/PL. Verificado en pantalla casos 1 (Pending auto-resuelve) y 3 (sin cambios no duplica); el caso 2 (alerta visible) requiere PASO 3.
+
 ## 2026-06-23 — WI-TX-PAYEE-LINK (nombre de payee enlaza a su detalle, nueva pestaña)
 
 Mejora pedida: en la lista de Transactions, cuando el payee existe, su nombre debe ser un enlace al detalle del payee que abra en una nueva ventana.

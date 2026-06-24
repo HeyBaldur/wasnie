@@ -47,6 +47,11 @@ export class HubSpotApiService {
     return this.http.post<HubSpotImportResult>(`${this.base}/deals/import`, {});
   }
 
+  /** FASE 3: trigger an immediate incremental sync now (in addition to the hourly schedule). */
+  syncNow(): Observable<void> {
+    return this.http.post<void>(`${this.base}/deals/sync-now`, {});
+  }
+
   /** FASE 2d: owners with closed-won deals that did not auto-resolve to a payee. */
   getUnresolvedOwners(): Observable<UnresolvedCrmOwners> {
     return this.http.get<UnresolvedCrmOwners>(`${this.base}/owners/unresolved`);

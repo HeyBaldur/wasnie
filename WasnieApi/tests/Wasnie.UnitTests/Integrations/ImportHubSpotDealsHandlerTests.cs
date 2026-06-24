@@ -56,9 +56,11 @@ public sealed class ImportHubSpotDealsHandlerTests
         var resolver = new CrmOwnerResolver(db, clock, guid, currentUser);
         var createGuard = new Wasnie.Application.Compensation.Common.TransactionCreateGuard(db);
         var driftPolicy = new Wasnie.Application.Integrations.Crm.Drift.CrmDriftPolicy(db, guid);
+        var reconciler = new Wasnie.Application.Integrations.Crm.CrmDealReconciler(
+            db, guid, resolver, createGuard, driftPolicy);
 
         var handler = new ImportHubSpotDealsHandler(
-            db, tenantCtx, currentUser, clock, guid, authz, dealSource, resolver, createGuard, driftPolicy);
+            tenantCtx, currentUser, clock, authz, dealSource, reconciler);
 
         return new Harness { Db = db, Handler = handler, DealSource = dealSource, TenantId = tenantId };
     }

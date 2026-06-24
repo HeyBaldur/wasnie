@@ -27,6 +27,7 @@ public sealed class HubSpotConnectionConfiguration : IEntityTypeConfiguration<Hu
         builder.Property(c => c.ConnectedBy).IsRequired().HasMaxLength(450);
         builder.Property(c => c.DisconnectedAt);
         builder.Property(c => c.DisconnectedBy).HasMaxLength(450);
+        builder.Property(c => c.LastSyncedAt);
         builder.Property(c => c.UpdatedAt).IsRequired();
 
         builder.Property(c => c.RowVersion).IsRowVersion();

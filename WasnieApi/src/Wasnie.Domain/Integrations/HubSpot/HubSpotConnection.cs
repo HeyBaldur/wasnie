@@ -39,6 +39,15 @@ public sealed class HubSpotConnection : Entity
     public DateTimeOffset? DisconnectedAt { get; private set; }
     public string? DisconnectedBy { get; private set; }
 
+    /// <summary>
+    /// Phase 3 incremental-sync checkpoint: the start instant of the last SUCCESSFUL automatic sync for
+    /// this tenant. The polling job reads it to ask HubSpot only for deals modified since then
+    /// (<c>hs_lastmodifieddate &gt;= LastSyncedAt</c>). Null = never auto-synced → the first run falls back
+    /// to <see cref="ConnectedAt"/> as the floor (incremental from connection, NOT a full re-pull of
+    /// history — the manual "Import deals" backfill covers pre-connection deals).
+    /// </summary>
+    public DateTimeOffset? LastSyncedAt { get; private set; }
+
     public DateTimeOffset UpdatedAt { get; private set; }
 
     /// <summary>Optimistic-concurrency token (SQL Server rowversion).</summary>
@@ -94,6 +103,22 @@ public sealed class HubSpotConnection : Entity
         ConnectedBy = connectedBy;
         DisconnectedAt = null;
         DisconnectedBy = null;
+        // Fresh authorization → reset the sync checkpoint so the first run after reconnect uses the new
+        // ConnectedAt as its floor (don't silently chase a stale pre-disconnect checkpoint).
+        LastSyncedAt = null;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Advance the incremental-sync checkpoint after a SUCCESSFUL automatic sync. Pass the instant the run
+    /// STARTED (not finished) so deals modified during the run are picked up next time (a small, idempotent
+    /// overlap is intentional — better re-process than miss). Never moves the checkpoint backwards.
+    /// </summary>
+    public void AdvanceSyncCheckpoint(DateTimeOffset runStartedAt, DateTimeOffset now)
+    {
+        if (LastSyncedAt.HasValue && runStartedAt <= LastSyncedAt.Value)
+            return;
+        LastSyncedAt = runStartedAt;
         UpdatedAt = now;
     }
 

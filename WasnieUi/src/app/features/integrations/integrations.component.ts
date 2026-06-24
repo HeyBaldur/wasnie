@@ -12,6 +12,7 @@ import {
 } from '../../shared/ui';
 import { ToastService } from '../../shared/services/toast.service';
 import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
+import { RelativeTimePipe } from '../../shared/pipes/relative-time.pipe';
 import { HubSpotApiService } from './services/hubspot.api.service';
 import { HubSpotConnectionStatus, HubSpotStatus } from './models/hubspot.model';
 
@@ -27,6 +28,7 @@ import { HubSpotConnectionStatus, HubSpotStatus } from './models/hubspot.model';
     WsButtonComponent,
     WsBadgeComponent,
     DateFormatPipe,
+    RelativeTimePipe,
   ],
   templateUrl: './integrations.component.html',
   styleUrl: './integrations.component.scss',
@@ -51,6 +53,9 @@ export class IntegrationsComponent implements OnInit {
   readonly previewing = signal(false);
   readonly importing = signal(false);
   readonly syncResult = signal<{ ok: boolean; key: string; params?: Record<string, unknown> } | null>(null);
+
+  // Phase 3 "Sync now" (on-demand trigger of the automatic incremental sync).
+  readonly syncingNow = signal(false);
 
   readonly currentStatus = computed<HubSpotStatus>(() => this.status()?.status ?? 'NeverConnected');
   readonly isConnected = computed(() => this.currentStatus() === 'Connected');
@@ -176,6 +181,25 @@ export class IntegrationsComponent implements OnInit {
       error: (err) => {
         this.importing.set(false);
         this.syncResult.set({ ok: false, key: err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.SYNC.ERROR' });
+      },
+    });
+  }
+
+  /** FASE 3: trigger an immediate incremental sync. The job runs in the background; we refresh the
+   * status shortly after so "Last synced" updates once it finishes. */
+  syncNow(): void {
+    this.syncingNow.set(true);
+    this.syncResult.set(null);
+    this.api.syncNow().subscribe({
+      next: () => {
+        this.syncingNow.set(false);
+        this.toast.show('INTEGRATIONS.HUBSPOT.SYNC.SYNC_NOW_STARTED', 'success');
+        // The sync runs asynchronously; reload status after a short delay to pick up the new last-synced time.
+        setTimeout(() => this.load(), 5000);
+      },
+      error: (err) => {
+        this.syncingNow.set(false);
+        this.toast.show(err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.SYNC.ERROR', 'error');
       },
     });
   }

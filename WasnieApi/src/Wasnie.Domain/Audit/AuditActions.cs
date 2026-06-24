@@ -122,6 +122,9 @@ public static class AuditActions
     public const string CrmDealsImported = "CRM_DEALS_IMPORTED";
     public const string CrmOwnerLinked = "CRM_OWNER_LINKED";
 
+    // Integrations — CRM automatic polling sync (Phase 3). One entry per tenant per successful run.
+    public const string CrmAutoSyncCompleted = "CRM_AUTO_SYNC_COMPLETED";
+
     // Integrations — CRM drift policy. A deal's amount/close-date changed after import.
     // Auto-resolved: the still-Pending transaction was voided and re-created with the new values.
     public const string CrmDriftAutoResolved = "CRM_DRIFT_AUTO_RESOLVED";

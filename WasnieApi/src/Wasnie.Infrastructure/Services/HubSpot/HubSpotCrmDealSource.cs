@@ -49,8 +49,21 @@ public sealed class HubSpotCrmDealSource(
         "hubspot_owner_id", "deal_currency_code"
     ];
 
-    public async Task<IReadOnlyList<CrmDeal>> GetClosedWonDealsAsync(
-        Guid tenantId, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<CrmDeal>> GetClosedWonDealsAsync(
+        Guid tenantId, CancellationToken cancellationToken = default) =>
+        ReadClosedWonAsync(tenantId, modifiedSince: null, cancellationToken);
+
+    public Task<IReadOnlyList<CrmDeal>> GetClosedWonDealsModifiedSinceAsync(
+        Guid tenantId, DateTimeOffset modifiedSince, CancellationToken cancellationToken = default) =>
+        ReadClosedWonAsync(tenantId, modifiedSince, cancellationToken);
+
+    /// <summary>
+    /// Shared closed-won reader. When <paramref name="modifiedSince"/> is set it ALSO filters on
+    /// <c>hs_lastmodifieddate &gt;= since</c> (incremental Phase-3 polling) and throttles between pages to
+    /// stay within HubSpot's 4 req/s Search cap; when null it returns every closed-won deal (full backfill).
+    /// </summary>
+    private async Task<IReadOnlyList<CrmDeal>> ReadClosedWonAsync(
+        Guid tenantId, DateTimeOffset? modifiedSince, CancellationToken cancellationToken)
     {
         var accessToken = await tokenProvider.GetValidAccessTokenAsync(tenantId, cancellationToken)
             ?? throw new CrmNotConnectedException(SourceName);
@@ -64,7 +77,7 @@ public sealed class HubSpotCrmDealSource(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var requestBody = BuildSearchBody(after);
+            var requestBody = BuildSearchBody(after, modifiedSince);
             using var doc = await SendWithRetryAsync(
                 () =>
                 {
@@ -95,11 +108,16 @@ public sealed class HubSpotCrmDealSource(
                     _opts.MaxReadPages, deals.Count);
                 break;
             }
+
+            // Throttle Search to ≤4 req/s per tenant (only matters when there is a next page to fetch).
+            if (after is not null && _opts.SearchThrottleMs > 0)
+                await Task.Delay(_opts.SearchThrottleMs, cancellationToken);
         }
         while (after is not null);
 
-        logger.LogInformation("HubSpot closed-won deal read returned {Count} deals across {Pages} page(s).",
-            deals.Count, pages);
+        logger.LogInformation(
+            "HubSpot closed-won deal read ({Mode}) returned {Count} deals across {Pages} page(s).",
+            modifiedSince is null ? "full" : "incremental", deals.Count, pages);
         return deals;
     }
 
@@ -165,9 +183,10 @@ public sealed class HubSpotCrmDealSource(
         while (after is not null);
     }
 
-    private string BuildSearchBody(string? after)
+    private string BuildSearchBody(string? after, DateTimeOffset? modifiedSince)
     {
-        // CRM Search API body: filter on the calculated hs_is_closed_won boolean.
+        // CRM Search API body: filter on the calculated hs_is_closed_won boolean. Filters within one
+        // filterGroup are AND-ed, so adding hs_lastmodifieddate GTE narrows to "closed-won AND changed since".
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
@@ -181,7 +200,24 @@ public sealed class HubSpotCrmDealSource(
             writer.WriteString("operator", "EQ");
             writer.WriteString("value", "true");
             writer.WriteEndObject();
+            if (modifiedSince is { } since)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("propertyName", "hs_lastmodifieddate");
+                writer.WriteString("operator", "GTE");
+                // HubSpot datetime search values are epoch milliseconds (UTC).
+                writer.WriteString("value", since.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture));
+                writer.WriteEndObject();
+            }
             writer.WriteEndArray();
+            writer.WriteEndObject();
+            writer.WriteEndArray();
+
+            // Sort by last-modified ascending so paging is stable across the incremental window.
+            writer.WriteStartArray("sorts");
+            writer.WriteStartObject();
+            writer.WriteString("propertyName", "hs_lastmodifieddate");
+            writer.WriteString("direction", "ASCENDING");
             writer.WriteEndObject();
             writer.WriteEndArray();
 

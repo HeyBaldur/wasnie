@@ -100,6 +100,9 @@ public static class DependencyInjection
         // starts before the owner configures HubSpot; the endpoints fail gracefully until configured.
         services.AddOptions<HubSpotOptions>()
             .Bind(configuration.GetSection(HubSpotOptions.SectionName));
+        // Phase 3 automatic polling sync — cadence/staggering live here (config-only, default hourly).
+        services.AddOptions<HubSpotSyncOptions>()
+            .Bind(configuration.GetSection(HubSpotSyncOptions.SectionName));
         services.AddHttpClient("HubSpot");
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
@@ -122,6 +125,10 @@ public static class DependencyInjection
         // HubSpot import today and the future polling job (clean architecture; CRM-neutral).
         services.AddScoped<Wasnie.Application.Integrations.Crm.Drift.ICrmDriftPolicy,
             Wasnie.Application.Integrations.Crm.Drift.CrmDriftPolicy>();
+        // Single place that materialises CRM deals → transactions (guard + drift). Manual import AND the
+        // Phase-3 polling job both call this — the logic is written once, only invoked.
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmDealReconciler,
+            Wasnie.Application.Integrations.Crm.CrmDealReconciler>();
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
@@ -160,6 +167,12 @@ public static class DependencyInjection
 
         services.AddScoped<HangfireJobDispatcher>();
         services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
+
+        // Phase 3 HubSpot polling sync: recurring orchestrator + the per-tenant worker it fans out to.
+        services.AddScoped<HubSpotSyncOrchestrator>();
+        services.AddScoped<HubSpotTenantSyncJob>();
+        // "Sync now" enqueues the same per-tenant job on demand (Hangfire behind an Application abstraction).
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmSyncScheduler, HangfireCrmSyncScheduler>();
 
         // Register job handlers so the dispatcher can resolve them by interface type.
         services.AddScoped<IJobHandler<PingPayload>, PingJobHandler>();

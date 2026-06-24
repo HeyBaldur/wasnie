@@ -24,6 +24,16 @@ public interface ICrmDealSource
     Task<IReadOnlyList<CrmDeal>> GetClosedWonDealsAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// INCREMENTAL read (Phase 3 polling): returns CLOSED-WON deals whose last-modified timestamp is at or
+    /// after <paramref name="modifiedSince"/>. Brings BOTH brand-new closed-won deals and previously-imported
+    /// deals that changed, in one pass — so the polling job sees everything that moved since its last
+    /// checkpoint without re-pulling the whole history. Same cursor pagination + rate-limit handling as the
+    /// full read; pure read, creates nothing.
+    /// </summary>
+    Task<IReadOnlyList<CrmDeal>> GetClosedWonDealsModifiedSinceAsync(
+        Guid tenantId, DateTimeOffset modifiedSince, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the CRM owners for the tenant (used to resolve a deal's owner to a Wasnie payee by email).
     /// Includes archived owners where the CRM exposes them.
     /// </summary>

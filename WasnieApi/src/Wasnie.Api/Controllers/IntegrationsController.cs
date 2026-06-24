@@ -94,6 +94,18 @@ public sealed class IntegrationsController(
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// FASE 3 "Sync now": enqueue an immediate incremental sync for this tenant (in addition to the hourly
+    /// schedule). Returns 202 — the work runs in the background; the connection's LastSyncedAt updates when it
+    /// finishes.
+    /// </summary>
+    [HttpPost("deals/sync-now")]
+    public async Task<IActionResult> SyncNow(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new TriggerHubSpotSyncCommand(), cancellationToken);
+        return result.IsSuccess ? Accepted(new { message = "Sync started." }) : BadRequest(new { message = result.Error });
+    }
+
     /// <summary>FASE 2d: HubSpot owners (with closed-won deals) that did not auto-resolve to a payee.</summary>
     [HttpGet("owners/unresolved")]
     public async Task<IActionResult> GetUnresolvedOwners(CancellationToken cancellationToken)

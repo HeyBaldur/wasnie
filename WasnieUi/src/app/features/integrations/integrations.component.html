@@ -53,6 +53,16 @@
                     <dd>{{ status()!.connectedAt | dateFormat }}</dd>
                   </div>
                 }
+                <div class="int-card__detail-row">
+                  <dt>{{ 'INTEGRATIONS.HUBSPOT.LAST_SYNCED' | translate }}</dt>
+                  <dd>
+                    @if (status()?.lastSyncedAt) {
+                      {{ status()!.lastSyncedAt | relativeTime }}
+                    } @else {
+                      {{ 'INTEGRATIONS.HUBSPOT.NEVER_SYNCED' | translate }}
+                    }
+                  </dd>
+                </div>
               </dl>
             }
 
@@ -80,6 +90,9 @@
                   </ws-button>
                   <ws-button variant="primary" [loading]="importing()" [disabled]="previewing() || importing()" (click)="import()">
                     {{ 'INTEGRATIONS.HUBSPOT.SYNC.IMPORT' | translate }}
+                  </ws-button>
+                  <ws-button variant="secondary" [loading]="syncingNow()" [disabled]="syncingNow() || previewing() || importing()" (click)="syncNow()">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.SYNC_NOW' | translate }}
                   </ws-button>
                   <ws-button variant="ghost" routerLink="/integrations/hubspot/owners">
                     {{ 'INTEGRATIONS.HUBSPOT.SYNC.OWNERS' | translate }}

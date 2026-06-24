@@ -74,6 +74,13 @@ public sealed class HubSpotOptions
     /// <summary>How many times to retry a HubSpot read after a 429 (rate limit) before giving up.</summary>
     public int RateLimitMaxRetries { get; init; } = 5;
 
+    /// <summary>
+    /// Minimum gap between consecutive CRM Search requests for one tenant, in milliseconds. HubSpot's
+    /// Search API is capped at 4 requests/second PER account, so the incremental polling read waits at
+    /// least this long between pages (250ms ⇒ ≤4/s). Proactive throttle so we never approach the 429.
+    /// </summary>
+    public int SearchThrottleMs { get; init; } = 250;
+
     /// <summary>Refresh the access token when it is within this many seconds of expiry.</summary>
     public int RefreshSkewSeconds { get; init; } = 300;
 
