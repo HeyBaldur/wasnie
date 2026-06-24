@@ -21,6 +21,7 @@ const makeRun = (overrides: Partial<PayRunDetail> = {}): PayRunDetail => ({
   periodStart: '2026-06-01',
   periodEnd: '2026-06-30',
   status: 'Draft',
+  supplementalSequence: 0,
   payeeCount: 10,
   paidPayeeCount: 8,
   zeroPayoutCount: 2,

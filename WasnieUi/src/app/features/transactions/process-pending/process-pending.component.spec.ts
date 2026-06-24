@@ -28,7 +28,13 @@ describe('ProcessPendingComponent', () => {
   });
 
   afterEach(() => {
-    httpMock.verify();
+    // The component also fires GET /eligible-pending on init (eligible-list preview) — a side request no
+    // test here asserts on. Flush any still-open ones; tests that destroy the fixture cancel it instead
+    // (skip those, and let verify ignore cancelled). Keeps verify() meaningful for the asserted endpoints
+    // (pending-count, process-pending, jobs).
+    httpMock.match(r => r.url === '/api/transactions/eligible-pending')
+      .forEach(req => { if (!req.cancelled) req.flush({ transactions: [], totalCount: 0 }); });
+    httpMock.verify({ ignoreCancelled: true });
   });
 
   // Test 1: badge shows correct count from the count endpoint

@@ -148,10 +148,20 @@ describe('TransactionsListComponent', () => {
 
     const fixture = TestBed.createComponent(TransactionsListComponent);
     fixture.detectChanges();
-    const html: string = fixture.nativeElement.innerHTML;
 
-    expect(html).toContain('Anna Kowalska');
-    expect(html).not.toContain('payee-uuid-1234');
+    // The payee NAME is shown as visible text; the raw payee id is NOT user-visible — it lives only in the
+    // payee-link href (WI-TX-PAYEE-LINK feature). So assert on textContent (visible text), and verify the
+    // link target separately rather than forbidding the id anywhere in the markup.
+    const visibleText: string = fixture.nativeElement.textContent ?? '';
+    expect(visibleText).toContain('Anna Kowalska');
+    expect(visibleText).not.toContain('payee-uuid-1234');
+
+    const payeeLink: HTMLAnchorElement | null =
+      fixture.nativeElement.querySelector('a[href*="/payees/payee-uuid-1234"]');
+    expect(payeeLink)
+      .withContext('the payee name should be a link to the payee detail')
+      .not.toBeNull();
+    expect(payeeLink?.textContent).toContain('Anna Kowalska');
   });
 
   it('renders "Unassigned" (i18n key resolved) when payeeName is null — never shows raw GUID', () => {
