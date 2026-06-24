@@ -764,6 +764,7 @@
     "ACTION_CREATE": "Registrar Transacción",
     "TOAST_CREATED": "Transacción registrada correctamente.",
     "UNASSIGNED": "Sin asignar",
+    "OPEN_PAYEE": "Abrir el beneficiario en una pestaña nueva",
     "ACTION_ASSIGN": "Asignar",
     "ACTION_REASSIGN": "Reasignar",
     "REASSIGN_PAID_TOOLTIP": "No se puede reasignar una transacción pagada. Use el flujo de corrección contable.",

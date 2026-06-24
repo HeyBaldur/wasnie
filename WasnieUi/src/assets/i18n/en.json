@@ -921,6 +921,7 @@
     "ACTION_CREATE": "Record Transaction",
     "TOAST_CREATED": "Transaction recorded successfully.",
     "UNASSIGNED": "Unassigned",
+    "OPEN_PAYEE": "Open payee in a new tab",
     "ACTION_ASSIGN": "Assign",
     "ACTION_REASSIGN": "Reassign",
     "REASSIGN_PAID_TOOLTIP": "Paid transactions cannot be reassigned. Use the accounting correction workflow.",

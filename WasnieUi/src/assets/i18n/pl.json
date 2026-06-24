@@ -764,6 +764,7 @@
     "ACTION_CREATE": "Zarejestruj Transakcję",
     "TOAST_CREATED": "Transakcja została zarejestrowana.",
     "UNASSIGNED": "Bez przypisania",
+    "OPEN_PAYEE": "Otwórz odbiorcę w nowej karcie",
     "ACTION_ASSIGN": "Przypisz",
     "ACTION_REASSIGN": "Przepisz",
     "REASSIGN_PAID_TOOLTIP": "Nie można przepisać opłaconej transakcji. Użyj przepływu korekty księgowej.",

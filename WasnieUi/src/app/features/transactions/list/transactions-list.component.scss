@@ -77,6 +77,15 @@
   color: var(--color-text-secondary);
 }
 
+.col-payee-link {
+  color: var(--color-text-link);
+  font-weight: 600;
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}
+
 .col-unassigned {
   font-family: Consolas, monospace;
   font-weight: 600;

@@ -155,7 +155,17 @@
                   </td>
                   <td class="col-secondary">
                     @if (tx.payeeName) {
-                      {{ tx.payeeName }}
+                      @if (tx.payeeId) {
+                        <a
+                          class="col-payee-link"
+                          [routerLink]="['/payees', tx.payeeId]"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          [title]="'TRANSACTIONS.OPEN_PAYEE' | translate"
+                        >{{ tx.payeeName }}</a>
+                      } @else {
+                        {{ tx.payeeName }}
+                      }
                       @if (tx.payeeEmployeeCode) {
                         <span class="col-code">({{ tx.payeeEmployeeCode }})</span>
                       }

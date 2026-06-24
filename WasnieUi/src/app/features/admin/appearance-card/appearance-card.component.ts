@@ -5,6 +5,9 @@ import { ThemeMode, ThemeService } from '../../../core/theme/theme.service';
 const SUPPORTED_LANGS = ['en', 'es', 'pl'] as const;
 type SupportedLang = (typeof SUPPORTED_LANGS)[number];
 
+/** Must match the key read by App.ngOnInit so the choice survives a reload. */
+const LANG_STORAGE_KEY = 'wasnie_lang';
+
 const THEME_OPTIONS: { mode: ThemeMode; labelKey: string; icon: string }[] = [
   { mode: 'light', labelKey: 'THEME.LIGHT', icon: '☀️' },
   { mode: 'soft', labelKey: 'THEME.SOFT', icon: '🌤' },
@@ -32,6 +35,7 @@ export class AppearanceCardComponent {
 
   switchLanguage(lang: SupportedLang): void {
     this.translate.use(lang);
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
     this.currentLang.set(lang);
   }
 

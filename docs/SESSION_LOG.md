@@ -4,6 +4,32 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-23 — WI-TX-PAYEE-LINK (nombre de payee enlaza a su detalle, nueva pestaña)
+
+Mejora pedida: en la lista de Transactions, cuando el payee existe, su nombre debe ser un enlace al detalle del payee que abra en una nueva ventana.
+
+**Cambio:**
+- `transactions-list.component.html`: en la columna Payee, si `tx.payeeId` no es nulo, el nombre se renderiza como `<a [routerLink]="['/payees', tx.payeeId]" target="_blank" rel="noopener noreferrer" [title]="'TRANSACTIONS.OPEN_PAYEE'|translate">`. Si hay `payeeName` sin `payeeId` (caso defensivo) se muestra texto plano; sin payee, sigue el badge "Unassigned". El `payeeEmployeeCode` se conserva igual.
+- `transactions-list.component.scss`: clase `.col-payee-link` con tokens (`--color-text-link`, hover `--color-text-link-hover` + subrayado). El estilo global de `a` ya daba color de link; la clase añade affordance en hover.
+- i18n: `TRANSACTIONS.OPEN_PAYEE` (tooltip) en EN/ES/PL.
+
+`RouterLink` ya estaba en los imports del componente. Ruta destino `/payees/:payeeId` (confirmada en `payees.routes.ts`). Sin backend, sin migración. `ng build --configuration production` limpio.
+
+## 2026-06-23 — WI-LANG-PERSIST (el idioma elegido en Settings no persistía al recargar)
+
+Reportado: en la página de admin (Settings), al cambiar el idioma no persiste tras recargar.
+
+**Causa:** `App.ngOnInit` (`app.ts`) restaura el idioma leyendo `localStorage['wasnie_lang']` al arrancar, pero el selector — `AppearanceCardComponent.switchLanguage()` — solo aplicaba `translate.use(lang)` en memoria y **nunca escribía** `wasnie_lang`. Resultado: el cambio valía para la sesión, pero al recargar `app.ts` leía la clave inexistente y caía a `'en'`.
+
+**Fix:**
+- `appearance-card.component.ts`: `switchLanguage` ahora persiste con `localStorage.setItem('wasnie_lang', lang)` (constante `LANG_STORAGE_KEY` con comentario que apunta a `app.ts` para que ambas claves no diverjan).
+- Verificado por grep que `appearance-card` es el ÚNICO componente que llama `translate.use` (aparte de `app.config.ts` init y `app.ts` restore).
+- Spec nuevo `appearance-card.component.spec.ts` (mockea `TranslateService`/`ThemeService`): aplica+persiste el idioma y sobrescribe uno previo.
+
+Sin backend, sin migración. `ng build --configuration production` limpio.
+
+**Bloqueo preexistente (ajeno a este WI):** la suite Karma completa no compila por errores de TS en `pay-runs/detail/pay-run-detail.component.spec.ts`, `pay-runs/state/*.spec.ts` y `pay-runs/models/pay-run.model.ts` (`PayRunDetail`/`PayRunListItem`). Son los fallos preexistentes ya anotados; impiden correr el bundle de tests entero, por lo que el spec nuevo quedó sin ejecutar aunque es correcto.
+
 ## 2026-06-23 — WI-PAGE-TITLES (cada página fija su propio `<title>` de pestaña)
 
 Reportado: todas las pestañas del navegador mostraban `Wasnie | ICM & SPM` sin importar la página. Causa: ninguna ruta definía `title` y la app no tenía una `TitleStrategy`, por lo que Angular dejaba el `<title>` estático del `index.html`.
