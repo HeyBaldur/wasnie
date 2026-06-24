@@ -7,7 +7,7 @@ import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DashboardStore } from './store/dashboard.store';
-import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem } from './models/dashboard.models';
+import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem } from './models/dashboard.models';
 import {
   WsCardComponent,
   WsBadgeComponent,
@@ -247,6 +247,33 @@ export class DashboardComponent {
    */
   attentionLinkParams(item: UnprocessablePendingItem): Record<string, string> {
     return { statuses: 'Pending', attention: item.reason };
+  }
+
+  // ── Drift alerts (a deal changed in HubSpot AFTER its commission was calculated/paid) ──────────────
+
+  /** Unresolved CRM drift alerts to surface in the card (already money — distinct from "can't process"). */
+  driftAlerts(): DriftAlertItem[] {
+    return this.store.actionBand()?.driftAlerts ?? [];
+  }
+
+  /** True when the card has anything to show (unprocessable reasons OR drift alerts). */
+  hasAttentionItems(): boolean {
+    return (this.store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0 || this.driftAlerts().length > 0;
+  }
+
+  /** Header badge total: pending transactions that can't be processed + each drift alert. */
+  attentionBadgeTotal(): number {
+    return this.attentionTotalCount() + this.driftAlerts().length;
+  }
+
+  /** i18n key for the commission state of a drifted transaction (already calculated vs already paid). */
+  driftStatusKey(status: string): string {
+    return status === 'Paid' ? 'DASHBOARD.DRIFT_STATE_PAID' : 'DASHBOARD.DRIFT_STATE_CALCULATED';
+  }
+
+  /** Deep-link to the affected transaction via its reference (no per-tx detail route exists). */
+  driftLinkParams(alert: DriftAlertItem): Record<string, string> {
+    return { ref: alert.referenceNumber };
   }
 
   /** Total count of action items needing attention (for band header badge). */

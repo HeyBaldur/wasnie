@@ -40,10 +40,12 @@ public sealed class GetDashboardSummaryHandler(
         var actionBand = await BuildActionBandAsync(cancellationToken);
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
         var unprocessablePending = await BuildUnprocessablePendingAsync(cancellationToken);
+        var driftAlerts = await BuildDriftAlertsAsync(cancellationToken);
         actionBand = actionBand with
         {
             PendingByPlanItems = pendingByPlan,
             UnprocessablePendingItems = unprocessablePending,
+            DriftAlerts = driftAlerts,
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
@@ -101,7 +103,38 @@ public sealed class GetDashboardSummaryHandler(
             PayoutsPendingApprovalByCurrency: pendingByCurrency,
             PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency,
             PendingByPlanItems: [],
-            UnprocessablePendingItems: []);
+            UnprocessablePendingItems: [],
+            DriftAlerts: []);
+    }
+
+    // ── CRM drift alerts (WI-HubSpot-Drift-Policy, PASO 3) ─────────────────────
+    // Unresolved alerts for deals that changed in the CRM AFTER their transaction was Calculated/Paid.
+    // Read-only surfacing — nothing here resolves them. Tenant-scoped via the global query filter (Rule 9).
+    // Capped: these are exceptional; if a tenant somehow has many, show the most recent and the count badge
+    // reflects what's shown (a "resolve/acknowledge" flow is a possible future WI).
+    private async Task<IReadOnlyList<DriftAlertDto>> BuildDriftAlertsAsync(CancellationToken ct)
+    {
+        const int cap = 20;
+        var rows = await db.CrmDriftAlerts
+            .Where(a => a.ResolvedAt == null)
+            .OrderByDescending(a => a.DetectedAt)
+            .Take(cap)
+            .ToListAsync(ct);
+
+        return rows.Select(a => new DriftAlertDto(
+            TransactionId: a.TransactionId,
+            ReferenceNumber: a.ReferenceNumber,
+            ExternalDealId: a.ExternalDealId,
+            TransactionStatus: a.TransactionStatus.ToString(),
+            AmountChanged: a.AmountChanged,
+            OldAmount: a.OldAmount,
+            OldCurrency: a.OldCurrency,
+            NewAmount: a.NewAmount,
+            NewCurrency: a.NewCurrency,
+            DateChanged: a.DateChanged,
+            OldCloseDate: a.OldCloseDate,
+            NewCloseDate: a.NewCloseDate,
+            DetectedAt: a.DetectedAt)).ToList();
     }
 
     // ── Pending transactions grouped by plan (action band supplement) ─────────

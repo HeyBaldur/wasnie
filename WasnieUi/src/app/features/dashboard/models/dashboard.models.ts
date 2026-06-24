@@ -17,6 +17,27 @@ export interface UnprocessablePendingItem {
   currencies: string[];
 }
 
+/**
+ * A CRM drift alert: a HubSpot deal changed (amount and/or close date) AFTER its transaction was already
+ * Calculated/Paid — money that already moved, not auto-corrected, flagged for manual review. Different in
+ * kind from `UnprocessablePendingItem` (which is "can't process yet"). Deep-link target = `referenceNumber`.
+ */
+export interface DriftAlertItem {
+  transactionId: string;
+  referenceNumber: string;
+  externalDealId: string;
+  transactionStatus: 'Calculated' | 'Paid';
+  amountChanged: boolean;
+  oldAmount: number;
+  oldCurrency: string;
+  newAmount: number;
+  newCurrency: string;
+  dateChanged: boolean;
+  oldCloseDate: string;
+  newCloseDate: string;
+  detectedAt: string;
+}
+
 export interface DashboardActionBand {
   draftPayRunsCount: number;
   payoutsPendingApprovalCount: number;
@@ -24,6 +45,7 @@ export interface DashboardActionBand {
   payoutsApprovedUnpaidByCurrency: CurrencyTotal[];
   pendingByPlanItems: PlanPendingItem[];
   unprocessablePendingItems: UnprocessablePendingItem[];
+  driftAlerts: DriftAlertItem[];
 }
 
 export interface DashboardPeriodBand {

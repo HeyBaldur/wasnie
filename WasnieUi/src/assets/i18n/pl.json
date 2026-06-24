@@ -680,7 +680,13 @@
     "ATTENTION_CURRENCY_LABEL": "Waluta nie pasuje do planu",
     "ATTENTION_CURRENCY_DESC": "Są w walucie, której nie używa żaden plan odbiorcy (np. USD vs EUR). Rozwiąż walutę, aby je przetworzyć.",
     "ATTENTION_NOASSIGN_LABEL": "Brak aktywnego przypisania planu",
-    "ATTENTION_NOASSIGN_DESC": "Odbiorca nie ma aktywnego planu obejmującego te daty. Aktywuj lub utwórz przypisanie."
+    "ATTENTION_NOASSIGN_DESC": "Odbiorca nie ma aktywnego planu obejmującego te daty. Aktywuj lub utwórz przypisanie.",
+    "DRIFT_GROUP_TITLE": "Transakcja zmieniła się w HubSpot po naliczeniu prowizji",
+    "DRIFT_STATE_CALCULATED": "Już naliczona",
+    "DRIFT_STATE_PAID": "Już zapłacona",
+    "DRIFT_AMOUNT": "Kwota {{old}} → {{new}}",
+    "DRIFT_DATE": "Data zamknięcia {{old}} → {{new}}",
+    "DRIFT_ACTION": "Ta prowizja już została rozliczona — sprawdź i popraw ręcznie."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",

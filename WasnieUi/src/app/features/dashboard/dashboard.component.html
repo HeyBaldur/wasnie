@@ -229,7 +229,7 @@
 
     <!-- ── Transactions that need attention (not processable yet) ────────── -->
     <ws-card padding="md"
-      [accent]="actionCardAccent(store.actionBand()?.unprocessablePendingItems?.length ?? 0)"
+      [accent]="actionCardAccent(hasAttentionItems() ? 1 : 0)"
       class="pending-plan-card">
       <div class="stat-card__hd">
         <div>
@@ -240,8 +240,8 @@
             {{ 'DASHBOARD.PENDING_BY_PLAN_SCOPE' | translate }}
           </p>
         </div>
-        @if (!store.loading() && (store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0) {
-          <ws-badge variant="warning" size="sm">{{ attentionTotalCount() }}</ws-badge>
+        @if (!store.loading() && hasAttentionItems()) {
+          <ws-badge variant="warning" size="sm">{{ attentionBadgeTotal() }}</ws-badge>
         }
       </div>
 
@@ -254,14 +254,14 @@
             </div>
           }
         </div>
-      } @else if ((store.actionBand()?.unprocessablePendingItems?.length ?? 0) === 0) {
+      } @else if (!hasAttentionItems()) {
         <div class="pending-plan-card__empty">
           <app-icon name="check" [size]="14" />
           {{ 'DASHBOARD.ATTENTION_EMPTY' | translate }}
         </div>
       } @else {
         <div class="pending-plan-card__list ws-scroll-thin">
-          @for (item of store.actionBand()!.unprocessablePendingItems; track item.reason) {
+          @for (item of (store.actionBand()?.unprocessablePendingItems ?? []); track item.reason) {
             <a [routerLink]="['/transactions']"
                [queryParams]="attentionLinkParams(item)"
                class="pending-plan-card__row attention-row">
@@ -274,6 +274,33 @@
               </span>
               <ws-badge variant="warning" size="sm">{{ item.count }}</ws-badge>
             </a>
+          }
+
+          <!-- Drift alerts: a deal changed in HubSpot AFTER its commission was calculated/paid -->
+          @if (driftAlerts().length > 0) {
+            <div class="attention-group-label">{{ 'DASHBOARD.DRIFT_GROUP_TITLE' | translate }}</div>
+            @for (alert of driftAlerts(); track alert.transactionId) {
+              <a [routerLink]="['/transactions']"
+                 [queryParams]="driftLinkParams(alert)"
+                 class="pending-plan-card__row attention-row">
+                <span class="attention-row__icon">
+                  <app-icon name="alert-triangle" [size]="16" />
+                </span>
+                <span class="attention-row__text">
+                  <span class="attention-row__label">{{ alert.referenceNumber }}</span>
+                  <span class="attention-row__desc">
+                    @if (alert.amountChanged) {
+                      <span class="drift-change">{{ 'DASHBOARD.DRIFT_AMOUNT' | translate: { old: (alert.oldAmount | currencyFormat: alert.oldCurrency), new: (alert.newAmount | currencyFormat: alert.newCurrency) } }}</span>
+                    }
+                    @if (alert.dateChanged) {
+                      <span class="drift-change">{{ 'DASHBOARD.DRIFT_DATE' | translate: { old: alert.oldCloseDate, new: alert.newCloseDate } }}</span>
+                    }
+                    <span class="drift-action">{{ 'DASHBOARD.DRIFT_ACTION' | translate }}</span>
+                  </span>
+                </span>
+                <ws-badge variant="warning" size="sm">{{ driftStatusKey(alert.transactionStatus) | translate }}</ws-badge>
+              </a>
+            }
           }
         </div>
       }

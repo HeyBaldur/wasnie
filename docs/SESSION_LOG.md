@@ -4,6 +4,17 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-24 — Cierre de sesión (suite de tests verde + Drift UI; HubSpot completo)
+
+WIs finales de la sesión (1 línea c/u):
+
+1. **WI-Fix-Unblock-Frontend-Test-Suite** — agregó `supplementalSequence: 0` a 3 mocks de pay-runs → la suite del frontend **compila por primera vez en ~5 días**; expuso 20 fallos de runtime reales (antes ocultos por el error de compilación). **Verificado.**
+2. **WI-Fix-Frontend-Test-Suite-Green** — arregló los 20 fallos (3 causas: `provideHttpClient()`+testing en SubscriptionReactivation ×14; drain del `/eligible-pending` side-request en ProcessPending ×5; assertion a `textContent` + check del link en TransactionsList ×1). **Solo .spec, cero código de producción** (ningún fallo era bug real). Suite: **435 pass, 0 fail**. **Verificado.**
+3. **WI-Docs-Update-Session-2026-06-24** — actualizó PROJECT_STATUS + SESSION_LOG con la sesión. **Verificado.**
+4. **WI-HubSpot-Drift-Paso3-Alerts-UI** — alertas de drift (Calculated/Paid) visibles en la card "Transactions that need attention": grupo "Deal changed in HubSpot after commission" con referencia, cambio old→new (monto y/o fecha), badge del estado, deep-link vía referencia. Integrado en el dashboard summary (sin endpoint nuevo), read-only. Backend 704 / frontend 435 verdes. **Verificado en pantalla. Cierra la integración HubSpot end-to-end** (Fases 1-3 + Drift Policy + Drift UI).
+
+**Estado al cierre:** suite de tests del frontend restaurada a **verde (435/0)**; backend **704/0**; **integración HubSpot COMPLETA** (Fase 4 webhooks = opcional/futura). Pendientes menores: copy del subtítulo de la card de atención (cosmético, nuevo), Resend key a rotar, audit de transiciones de payout, campos del calc-engine ignorados.
+
 ## 2026-06-24 — RESUMEN DE SESIÓN (HubSpot Fase 3 + Drift + fixes UI)
 
 Bloque grande, sobre todo la integración HubSpot completa. WIs ejecutados en orden (cada uno con su entrada detallada más abajo donde aplica):

@@ -680,7 +680,13 @@
     "ATTENTION_CURRENCY_LABEL": "Currency doesn't match the plan",
     "ATTENTION_CURRENCY_DESC": "These are in a currency none of the payee's plans use (e.g. USD vs EUR). Resolve the currency to process them.",
     "ATTENTION_NOASSIGN_LABEL": "No active plan assignment",
-    "ATTENTION_NOASSIGN_DESC": "The payee has no active plan covering these dates. Activate or create an assignment."
+    "ATTENTION_NOASSIGN_DESC": "The payee has no active plan covering these dates. Activate or create an assignment.",
+    "DRIFT_GROUP_TITLE": "Deal changed in HubSpot after commission",
+    "DRIFT_STATE_CALCULATED": "Already calculated",
+    "DRIFT_STATE_PAID": "Already paid",
+    "DRIFT_AMOUNT": "Amount {{old}} → {{new}}",
+    "DRIFT_DATE": "Close date {{old}} → {{new}}",
+    "DRIFT_ACTION": "This commission already moved — review and adjust manually."
   },
   "IMPORTS": {
     "ISSUE_CATEGORY_REFERENCE": "Reference",

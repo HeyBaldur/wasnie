@@ -680,7 +680,13 @@
     "ATTENTION_CURRENCY_LABEL": "La moneda no coincide con el plan",
     "ATTENTION_CURRENCY_DESC": "Están en una moneda que ningún plan del beneficiario usa (p. ej. USD vs EUR). Resuelve la moneda para procesarlas.",
     "ATTENTION_NOASSIGN_LABEL": "Sin asignación de plan activa",
-    "ATTENTION_NOASSIGN_DESC": "El beneficiario no tiene un plan activo que cubra estas fechas. Activa o crea una asignación."
+    "ATTENTION_NOASSIGN_DESC": "El beneficiario no tiene un plan activo que cubra estas fechas. Activa o crea una asignación.",
+    "DRIFT_GROUP_TITLE": "Un deal cambió en HubSpot después de la comisión",
+    "DRIFT_STATE_CALCULATED": "Ya calculada",
+    "DRIFT_STATE_PAID": "Ya pagada",
+    "DRIFT_AMOUNT": "Monto {{old}} → {{new}}",
+    "DRIFT_DATE": "Fecha de cierre {{old}} → {{new}}",
+    "DRIFT_ACTION": "Esta comisión ya se movió — revisar y ajustar manualmente."
   },
   "QUOTAS": {
     "TITLE": "Cuotas",

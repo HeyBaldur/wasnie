@@ -17,7 +17,28 @@ public sealed record DashboardActionBandDto(
     IReadOnlyList<CurrencyTotalDto> PayoutsPendingApprovalByCurrency,
     IReadOnlyList<CurrencyTotalDto> PayoutsApprovedUnpaidByCurrency,
     IReadOnlyList<PlanPendingCountDto> PendingByPlanItems,
-    IReadOnlyList<UnprocessablePendingDto> UnprocessablePendingItems);
+    IReadOnlyList<UnprocessablePendingDto> UnprocessablePendingItems,
+    IReadOnlyList<DriftAlertDto> DriftAlerts);
+
+// A CRM drift alert (WI-HubSpot-Drift-Policy): a deal changed in HubSpot (amount and/or close date) AFTER
+// its transaction was already Calculated or Paid — so it was NOT auto-corrected (Rule 10, immutable), only
+// flagged for review. Distinct from the "unprocessable Pending" reasons: this is money that ALREADY moved
+// and whose source deal drifted. ReferenceNumber (HUBSPOT-{dealId}) is the deep-link target; the deal name
+// is not persisted on the alert, so the UI shows the deal id / reference.
+public sealed record DriftAlertDto(
+    Guid TransactionId,
+    string ReferenceNumber,
+    string ExternalDealId,
+    string TransactionStatus,   // "Calculated" | "Paid"
+    bool AmountChanged,
+    decimal OldAmount,
+    string OldCurrency,
+    decimal NewAmount,
+    string NewCurrency,
+    bool DateChanged,
+    DateOnly OldCloseDate,
+    DateOnly NewCloseDate,
+    DateTimeOffset DetectedAt);
 
 // Plans that have Pending transactions eligible for ProcessPending (ByPlan scope)
 public sealed record PlanPendingCountDto(
