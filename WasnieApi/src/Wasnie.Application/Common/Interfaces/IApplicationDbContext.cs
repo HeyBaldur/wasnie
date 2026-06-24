@@ -46,6 +46,7 @@ public interface IApplicationDbContext
     DbSet<HubSpotConnection> HubSpotConnections { get; }
     DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }
     DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings { get; }
+    DbSet<Wasnie.Domain.Integrations.Crm.CrmDriftAlert> CrmDriftAlerts { get; }
 
     DatabaseFacade Database { get; }
 

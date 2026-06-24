@@ -64,6 +64,7 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotConnection> HubSpotConnections => Set<HubSpotConnection>();
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotOAuthState> HubSpotOAuthStates => Set<HubSpotOAuthState>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings => Set<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Integrations.Crm.CrmDriftAlert> CrmDriftAlerts => Set<Wasnie.Domain.Integrations.Crm.CrmDriftAlert>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -97,6 +98,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new HubSpotConnectionConfiguration());
         builder.ApplyConfiguration(new HubSpotOAuthStateConfiguration());
         builder.ApplyConfiguration(new CrmOwnerMappingConfiguration());
+        builder.ApplyConfiguration(new CrmDriftAlertConfiguration());
 
         builder.Entity<Payee>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<FieldRequirementSetting>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
@@ -118,6 +120,7 @@ public sealed class ApplicationDbContext(
         // intentionally NOT filtered — the anonymous OAuth callback resolves the tenant from the state row.
         builder.Entity<HubSpotConnection>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Wasnie.Domain.Integrations.Crm.CrmDriftAlert>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

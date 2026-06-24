@@ -121,4 +121,10 @@ public static class AuditActions
     // Integrations — CRM deal ingestion (Phase 2). Money-relevant: owner→payee links decide who is paid.
     public const string CrmDealsImported = "CRM_DEALS_IMPORTED";
     public const string CrmOwnerLinked = "CRM_OWNER_LINKED";
+
+    // Integrations — CRM drift policy. A deal's amount/close-date changed after import.
+    // Auto-resolved: the still-Pending transaction was voided and re-created with the new values.
+    public const string CrmDriftAutoResolved = "CRM_DRIFT_AUTO_RESOLVED";
+    // Detected: the transaction was already Calculated/Paid (immutable) — recorded as an alert, untouched.
+    public const string CrmDriftDetected = "CRM_DRIFT_DETECTED";
 }

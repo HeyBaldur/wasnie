@@ -44,6 +44,10 @@ public sealed record HubSpotDealsPreviewDto(
 /// <summary>
 /// Summary of a deal import (FASE 2c). Idempotent: re-running re-reads the same deals but only creates
 /// transactions for deals not already imported (<see cref="SkippedAlreadyImported"/>).
+///
+/// Drift (WI-HUBSPOT-DRIFT): an already-imported deal whose amount/close-date changed in the CRM is
+/// reconciled — <see cref="DriftAutoResolved"/> still-Pending deals were re-created with the new values;
+/// <see cref="DriftAlertsRaised"/> already-Calculated/Paid deals were left untouched and flagged for review.
 /// </summary>
 public sealed record HubSpotImportResultDto(
     int DealsRead,
@@ -53,6 +57,8 @@ public sealed record HubSpotImportResultDto(
     int SkippedAlreadyImported,
     int SkippedInvalid,
     int NewOwnerMappings,
+    int DriftAutoResolved,
+    int DriftAlertsRaised,
     IReadOnlyList<string> Warnings);
 
 /// <summary>

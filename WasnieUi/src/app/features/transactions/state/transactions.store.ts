@@ -56,7 +56,10 @@ export class TransactionsStore implements RefreshableStore {
 
   readonly page = signal(1);
   readonly pageSize = signal(10);
-  readonly sortBy = signal('transactiondate');
+  // Default order = creation date (IngestedAt) descending — newest first. So freshly imported, created or
+  // drift-recreated transactions surface at the top instead of being buried among older Tx-dated rows.
+  // The backend already accepts 'ingestedat' as a sort field; the user can still re-sort (e.g. amount).
+  readonly sortBy = signal('ingestedat');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
 
   // Filter signals

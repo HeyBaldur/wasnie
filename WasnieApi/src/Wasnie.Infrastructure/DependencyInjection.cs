@@ -118,6 +118,10 @@ public static class DependencyInjection
         // Single place for the "can I create this transaction?" rule — used by HubSpot/Excel/Manual ingest.
         services.AddScoped<Wasnie.Application.Compensation.Common.ITransactionCreateGuard,
             Wasnie.Application.Compensation.Common.TransactionCreateGuard>();
+        // Single place for the "a CRM deal changed after import — what now?" rule. Used by the manual
+        // HubSpot import today and the future polling job (clean architecture; CRM-neutral).
+        services.AddScoped<Wasnie.Application.Integrations.Crm.Drift.ICrmDriftPolicy,
+            Wasnie.Application.Integrations.Crm.Drift.CrmDriftPolicy>();
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
