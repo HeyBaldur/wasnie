@@ -4,6 +4,23 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-24 — RESUMEN DE SESIÓN (HubSpot Fase 3 + Drift + fixes UI)
+
+Bloque grande, sobre todo la integración HubSpot completa. WIs ejecutados en orden (cada uno con su entrada detallada más abajo donde aplica):
+
+1. **WI-Fix-Frontend-Refresh-On-Route-Entry** — re-fetch al entrar a cada ruta vía contrato compartido (`RefreshableStore` + `RouteRefreshTracker` + directiva `refreshOnEnter`). **Verificado.** (Detalle en la entrada del 2026-06-23.)
+2. **WI-HubSpot-Drift-Policy** — backend de detección de drift (deals con monto/fecha cambiados tras importar): `ICrmDriftPolicy`/`CrmDriftPolicy` + entidad `CrmDriftAlert` (**migración B10_CrmDriftAlerts**). Pending → auto-void + recrear; Calculated/Paid → alerta sin tocar (Regla 10, anti-doble-pago). **Verificado el caso Pending en pantalla. Paso 3 (UI de alertas en la card de atención) PENDIENTE** (el backend ya las genera).
+3. **WI-Transactions-Default-Sort-CreatedDesc** — default sort de Transactions a `ingestedat` DESC (fecha de creación). Resultó **cambio de 1 línea** en el store; el sort ya existía en backend. **Verificado.**
+4. **WI-HubSpot-Phase3-Auto-Polling** — polling incremental con Hangfire recurring job por tenant (checkpoint `LastSyncedAt`, **migración B11_HubSpotLastSyncedAt**), trae deals nuevos + cambiados **reutilizando `ICrmDealReconciler`** (el MISMO servicio que el import manual — no se reescribió lógica money). Orquestador escalonado (anti thundering-herd), resiliente (un tenant que falla no aborta los demás), **checkpoint avanza solo en éxito**. Frecuencia configurable (default 1h, sección `HubSpotSync`). Botón **"Sync now"** (`POST /api/integrations/hubspot/deals/sync-now`). **Verificado corriendo solo + drift automático aplicado en vivo.**
+5. **WI-UI-Transactions-HubSpot-AutoSync-Banner → WI-UI-Move-AutoSync-Banner-To-Sidebar** — banner informativo (logo HubSpot, "se sincronizan automáticamente **cada hora**", "última sync hace X", link a Integraciones; **sin botón de sync**). Primero arriba de los filtros de Transactions; luego **movido al sidebar**, posición definitiva = fondo de la zona de nav **encima del separador de SETTINGS**; sidebar hecho **scrolleable**. Solo si HubSpot Connected. **Verificado.**
+6. **WI-Fix-Quota-Status-Profile-Consistency** — el perfil del payee mostraba una fase temporal por fechas en vez del **status persistido**; ahora usa el status real vía **pipe compartido** (`quota-status.pipe.ts`), y detalle/lista migrados al mismo pipe. **Verificado.**
+
+**Migraciones nuevas de la sesión:** B10_CrmDriftAlerts, B11_HubSpotLastSyncedAt (ambas aplicadas y verificadas en BD).
+
+**Lección recurrente reconfirmada:** reutilizar la lógica money existente vía un **servicio compartido** en vez de reescribirla (el polling de Fase 3 invoca el MISMO `ICrmDealReconciler`/`ICrmDriftPolicy` que el import manual), y **un solo lugar para mapeos transversales** (pipe compartido de status de cuota; mismo patrón que el spec compartido del count-vs-filter de la card de atención).
+
+**Pendiente principal:** Drift **Paso 3** (mostrar las alertas Calculated/Paid en la card "Transactions that need attention" — backend listo, falta UI). Otros pendientes vigentes: specs de pay-runs rotos (bloquean Karma), Resend API key a rotar, audit log de transiciones de payout, campos del calc-engine ignorados (SortOrder/Caps/Source-trigger).
+
 ## 2026-06-24 — WI-HUBSPOT-FASE3 (polling automático incremental + "Sync now")
 
 Hace automática la ingesta de deals que antes era manual (Integrations → "Import deals"): un job recurrente de Hangfire sincroniza, por tenant con conexión Connected, de forma incremental, y aplica la lógica YA construida (guard + drift policy). Procedido por pasos; el owner lo verificó en pantalla.

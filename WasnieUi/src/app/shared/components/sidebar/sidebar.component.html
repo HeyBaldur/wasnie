@@ -24,6 +24,7 @@
     </button>
   </div>
 
+  <div class="sidebar__scroll ws-scroll-thin">
   <div class="sidebar__body">
     @for (section of navSections; track section.sectionKey) {
       <div class="sidebar__section">
@@ -106,6 +107,14 @@
   </div>
 
   <div class="sidebar__footer">
+    <!-- HubSpot auto-sync reminder — sits ABOVE the SETTINGS block (between the operational nav and
+         SETTINGS). Self-gates on Connected; only when expanded and the user can manage integrations.
+         The SETTINGS items (Subscription / Integrations / Settings / Sign out) stay below, unchanged. -->
+    @if (sidebarState.isExpanded()) {
+      <div class="sidebar__banner">
+        <app-hubspot-sync-banner *hasPermission="'Integrations.Manage'" />
+      </div>
+    }
     <div class="sidebar__section">
       @if (sidebarState.isExpanded()) {
         <span class="sidebar__section-label">{{ 'NAV.SECTION_SETTINGS' | translate }}</span>
@@ -164,5 +173,6 @@
         <span>{{ 'AUTH.LOGOUT' | translate }}</span>
       }
     </button>
+  </div>
   </div>
 </nav>

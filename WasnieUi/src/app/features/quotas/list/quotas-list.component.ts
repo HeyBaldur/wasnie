@@ -11,6 +11,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
 import { QuotaStatus } from '../models/quota.model';
 import {
   WsButtonComponent,
@@ -38,6 +39,8 @@ import {
     TranslateModule,
     CurrencyFormatPipe,
     DateFormatPipe,
+    QuotaStatusVariantPipe,
+    QuotaStatusLabelPipe,
     HasPermissionDirective,
     HasPermissionPipe,
     WsButtonComponent,
@@ -163,14 +166,6 @@ export class QuotasListComponent implements OnInit {
       this.toast.show(extractApiError(err), 'error');
     } finally {
       this.closeSaving.set(false);
-    }
-  }
-
-  statusVariant(status: QuotaStatus): 'neutral' | 'success' | 'warning' {
-    switch (status) {
-      case 'Active': return 'success';
-      case 'Draft': return 'neutral';
-      case 'Closed': return 'warning';
     }
   }
 

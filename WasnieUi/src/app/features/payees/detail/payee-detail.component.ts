@@ -11,6 +11,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
 import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
 import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
@@ -53,6 +54,8 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     DecimalPipe,
     DateFormatPipe,
     CurrencyFormatPipe,
+    QuotaStatusVariantPipe,
+    QuotaStatusLabelPipe,
     PayeeFormComponent,
     HasPermissionDirective,
     WsLoadMoreDirective,
@@ -367,14 +370,6 @@ export class PayeeDetailComponent implements OnInit {
       case PayeeStatus.Active: return 'PAYEES.STATUS_ACTIVE';
       case PayeeStatus.OnLeave: return 'PAYEES.STATUS_ON_LEAVE';
       case PayeeStatus.Terminated: return 'PAYEES.STATUS_TERMINATED';
-    }
-  }
-
-  quotaStatusVariant(status: string): BadgeVariant {
-    switch (status) {
-      case 'Active': return 'success';
-      case 'Draft': return 'neutral';
-      default: return 'warning';
     }
   }
 

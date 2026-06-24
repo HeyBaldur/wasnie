@@ -17,10 +17,6 @@
       {{ 'TRANSACTIONS.NEW' | translate }}
     </ws-button>
 
-    <!-- HubSpot auto-sync reminder (above filters) — only renders when HubSpot is Connected.
-         Gated by Integrations.Manage so non-admins don't trigger a 403 status fetch. -->
-    <app-hubspot-sync-banner *hasPermission="'Integrations.Manage'" />
-
     <!-- Status tabs (quick shortcuts — feed into Status filter) -->
     <div class="transactions-list__toolbar">
       <ws-segmented-control

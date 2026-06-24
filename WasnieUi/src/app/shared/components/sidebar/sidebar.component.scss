@@ -65,8 +65,16 @@
   }
 }
 
+// Scrollable region holding BOTH the nav and the footer (settings/logout/banner), so on short
+// windows everything stays reachable. min-height:0 lets this flex child shrink and actually scroll
+// inside the fixed-height sidebar.
+.sidebar__scroll {
+  @apply flex-1 flex flex-col overflow-y-auto;
+  min-height: 0;
+}
+
 .sidebar__body {
-  @apply flex-1 overflow-y-auto font-semibold;
+  @apply font-semibold;
   padding: 8px 0;
 }
 
@@ -172,8 +180,23 @@
 
 .sidebar__footer {
   @apply shrink-0;
-  padding: 8px 0 4px;
+  // Pin to the bottom when there is spare height; when content overflows, it follows the nav and scrolls.
+  margin-top: auto;
+  padding: 0 0 4px;
+}
+
+// The divider that opens SETTINGS now sits BELOW the auto-sync banner: the banner sits at the bottom of
+// the nav zone (empty space above it) just on top of this line, and SETTINGS lives below it. Scoped to the
+// footer's SETTINGS section so the nav sections above are untouched.
+.sidebar__footer .sidebar__section {
   border-top: 1px solid var(--color-sidebar-border);
+  padding-top: 8px;
+}
+
+// Wrapper that fits the auto-sync banner card to the (narrow) sidebar width without changing its look.
+// Sits directly above the SETTINGS divider; the bottom padding is the small gap to that line.
+.sidebar__banner {
+  padding: 8px 8px 8px;
 }
 
 .sidebar__logout {

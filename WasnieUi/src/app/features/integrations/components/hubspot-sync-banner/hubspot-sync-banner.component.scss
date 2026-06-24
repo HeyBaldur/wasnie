@@ -3,7 +3,7 @@
 .hs-sync-banner {
   display: block;
   max-width: 32rem;                 // contained, not a full-width cartelón
-  margin-bottom: var(--space-4);
+  // (Outer spacing is owned by the host — the sidebar's .sidebar__banner wrapper.)
 }
 
 .hs-sync-banner__inner {
@@ -32,6 +32,7 @@
   margin: 0;
   font-size: var(--font-size-13);
   line-height: 1.5;
+  font-weight: 600;
   color: var(--color-text-secondary);
 }
 
