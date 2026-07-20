@@ -721,6 +721,7 @@
     "FIELD_PERIOD": "Período",
     "PERIOD_WITHIN_PLAN_HINT": "El período se toma por defecto del plan y debe permanecer dentro de él.",
     "PERIOD_OUTSIDE_PLAN": "El período debe estar dentro del período del plan.",
+    "NO_ACTIVE_ASSIGNMENT_WARNING": "Este payee no está asignado a este plan. La cuota no medirá cumplimiento hasta que crees la asignación.",
     "ACTION_CREATE": "Crear Cuota",
     "FIELD_MEASUREMENT_TYPE": "Tipo de medición",
     "FIELD_NOTES": "Notas",

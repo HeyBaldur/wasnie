@@ -4,6 +4,22 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-24 — WI-FIX-QUOTA-PERIOD-UPDATE-GUARD-AND-ASSIGNMENT-WARNING (Gap #1 + Gap #2)
+
+**Contexto / diagnóstico previo (read-only, ya reportado al owner antes de tocar código):** El WI original asumía que había que agregar de cero la validación "la cuota no puede tener fechas fuera del rango del plan/assignment". Al inspeccionar (Regla 3): el flujo de **CREAR** cuota YA lo hacía — `CreateQuotaHandler` bloquea si el período no está contenido en `plan.EffectivePeriod`, el frontend tiene `periodWithinPlanValidator`, y hay tests (`CreateQuota_PeriodWithinPlan_Returns201` / `_OutsidePlan_Returns400`). Además, el modelo que el WI asumía (planes = plantillas sin período) **es falso en este código**: `Plan` tiene `EffectivePeriod` propio, `PlanAssignment` también, y `AssignPlanToPayeeHandler` fuerza `assignment.EffectivePeriod == plan.EffectivePeriod` EXACTO → validar contra el plan ES validar contra el assignment (sin divergencia). El owner aprobó cerrar los **dos gaps** que el diagnóstico encontró.
+
+**Gap #1 — guard de período en Update (money-adjacent, CERRADO).** `UpdateQuotaHandler` no tenía el guard → una cuota Draft podía editarse a un período fuera de rango por la "puerta de atrás". Extraída la regla a un helper compartido **`QuotaPeriodGuard`** (`Application/Compensation/Common/QuotaPeriodGuard.cs`, método `Validate(planPeriod, start, end)` + const `PeriodOutsidePlanMessage`). **Ambos** handlers lo usan: Create refactorizado a llamarlo (comportamiento idéntico, mismo mensaje y condición) y Update lo agrega. Contención total (rechaza solapamiento parcial), backend = fuente de verdad. `UpdateDraft` sigue restringido a Draft (no se tocó). **No existe UI de editar cuota** (el detalle solo tiene Activate/Close) → Gap #1 es backend-only por diseño.
+
+**Gap #2 — advertencia de "payee sin assignment" (UX, ADVIERTE no bloquea).** En Create Quota, al elegir payee+plan, si el payee no tiene assignment **Active** a ese plan se muestra un banner no bloqueante (`combineLatest` de payee/plan → `AssignmentsApiService.getAssignmentsByPayee` filtrado por `planId`+`status==='Active'`, `switchMap` cancela lookups viejos). Banner con ícono `alert-triangle` y tokens `--color-warning*`. Se puede crear igual (decisión del owner). i18n EN/ES/PL (`QUOTAS.NO_ACTIVE_ASSIGNMENT_WARNING`). Sin backend nuevo.
+
+**Tests / build.** Unit nuevo `QuotaPeriodGuardTests` **7/7 verde** (within / exact-bounds / single-day / start-before / end-after / partial-overlap / fully-outside). +4 integration en `QuotasEndpointsTests` (Update within/before/after/partial) escritas y compilan. `dotnet build Wasnie.sln` limpio; `ng build --configuration production` limpio (la página es lazy → no afecta bundle inicial).
+
+**Bloqueo de entorno (ajeno).** La suite de **integración** no se pudo correr a verde: TODA prueba autenticada da **403 en `CreatePayeeAsync`** (confirmado idéntico en la suite NO relacionada de Payees) — pre-existente, ajeno a este WI. La autorización es mapa estático en código (`RolePermissions.HasPermission`), no DB-seed; el token de test (`ClaimTypes.Role=TenantAdmin`) no resuelve permisos corriendo vía `dotnet test` CLI en este entorno. Verifiqué el guard por unit tests + build limpio en su lugar.
+
+**Fuera de alcance (explícito).** NO se tocó la validación del flujo de CREAR (ya estaba bien, solo se compartió la regla sin cambiar comportamiento). NO se abordó el **measurement** (cuota Revenue/Units vs reglas del plan) = WI de diseño aparte, sigue pendiente.
+
+**Owner action:** verificar en pantalla (editar cuota fuera de rango → bloqueado; crear cuota sin assignment → banner) y reiniciar la API (se detuvo para buildear/correr tests).
+
 ## 2026-06-24 — Cierre de sesión (suite de tests verde + Drift UI; HubSpot completo)
 
 WIs finales de la sesión (1 línea c/u):

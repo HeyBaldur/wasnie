@@ -2,12 +2,14 @@ import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { Observable, firstValueFrom, map, of, switchMap } from 'rxjs';
+import { Observable, combineLatest, firstValueFrom, map, of, startWith, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { QuotasStore } from '../state/quotas.store';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
+import { AssignmentsApiService } from '../../assignments/services/assignments.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { QuotaMeasurementType } from '../models/quota.model';
@@ -34,6 +36,7 @@ const MEASUREMENT_TYPES: SelectOption[] = [
   standalone: true,
   imports: [
     AppShellComponent,
+    IconComponent,
     RouterLink,
     ReactiveFormsModule,
     TranslateModule,
@@ -52,6 +55,7 @@ export class QuotaCreateComponent implements OnInit {
   private readonly store = inject(QuotasStore);
   private readonly payeesApi = inject(PayeesApiService);
   private readonly plansApi = inject(PlansApiService);
+  private readonly assignmentsApi = inject(AssignmentsApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -61,6 +65,11 @@ export class QuotaCreateComponent implements OnInit {
   readonly preselectedPayeeOption = signal<SelectOption | null>(null);
   readonly returnTo = signal<string | null>(null);
   readonly planCurrencyLocked = signal(false);
+  // Gap #2 (non-blocking UX warning): true when the selected payee has NO active assignment to the
+  // selected plan. The quota can still be created, but its attainment will stay at 0 until the
+  // assignment exists, because transactions are only credited to a (payee, plan) within an
+  // active assignment window. We warn, we do not block (owner decision).
+  readonly noActiveAssignment = signal(false);
   // The selected plan's effective period — drives the auto-fill default and the containment
   // validator. The quota period stays editable but must fall within these bounds.
   readonly planPeriod = signal<{ start: string; end: string } | null>(null);
@@ -142,6 +151,24 @@ export class QuotaCreateComponent implements OnInit {
         this.planPeriod.set(null);
       }
       this.form.controls.dateRange.updateValueAndValidity();
+    });
+
+    // Gap #2: once both payee and plan are chosen, check whether the payee has an active
+    // assignment to that plan. If not, surface a non-blocking warning. switchMap cancels
+    // stale lookups when the selection changes again.
+    combineLatest([
+      this.form.controls.payeeId.valueChanges.pipe(startWith(this.form.controls.payeeId.value)),
+      this.form.controls.planId.valueChanges.pipe(startWith(this.form.controls.planId.value)),
+    ]).pipe(
+      switchMap(([payeeId, planId]) => {
+        if (!payeeId || !planId) return of<boolean | null>(null);
+        return this.assignmentsApi.getAssignmentsByPayee(payeeId, { page: 1, pageSize: 100 }).pipe(
+          map(r => r.items.some(a => a.planId === planId && a.status === 'Active')),
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(hasActiveAssignment => {
+      this.noActiveAssignment.set(hasActiveAssignment === false);
     });
   }
 

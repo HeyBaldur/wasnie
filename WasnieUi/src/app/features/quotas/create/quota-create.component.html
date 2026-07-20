@@ -40,6 +40,13 @@
           [error]="hasError('planId', 'required') ? 'VALIDATION.REQUIRED' : ''"
         />
 
+        @if (noActiveAssignment()) {
+          <p class="assignment-warning ws-form-grid__full" role="status">
+            <app-icon name="alert-triangle" [size]="16" />
+            {{ 'QUOTAS.NO_ACTIVE_ASSIGNMENT_WARNING' | translate }}
+          </p>
+        }
+
         <ws-select
           label="QUOTAS.FIELD_MEASUREMENT_TYPE"
           formControlName="measurementType"

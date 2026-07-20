@@ -721,6 +721,7 @@
     "FIELD_PERIOD": "Okres",
     "PERIOD_WITHIN_PLAN_HINT": "Okres jest domyślnie pobierany z planu i musi mieścić się w jego granicach.",
     "PERIOD_OUTSIDE_PLAN": "Okres musi mieścić się w okresie planu.",
+    "NO_ACTIVE_ASSIGNMENT_WARNING": "Ten odbiorca nie ma aktywnego przypisania do tego planu. Limit nie będzie mierzył realizacji, dopóki nie utworzysz przypisania.",
     "ACTION_CREATE": "Utwórz Kwotę",
     "FIELD_MEASUREMENT_TYPE": "Typ pomiaru",
     "FIELD_NOTES": "Notatki",

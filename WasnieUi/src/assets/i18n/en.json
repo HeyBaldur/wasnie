@@ -878,6 +878,7 @@
     "FIELD_PERIOD": "Period",
     "PERIOD_WITHIN_PLAN_HINT": "The period defaults to the plan's period and must stay within it.",
     "PERIOD_OUTSIDE_PLAN": "The period must fall within the plan's period.",
+    "NO_ACTIVE_ASSIGNMENT_WARNING": "This payee has no active assignment to this plan. The quota will not measure attainment until you create the assignment.",
     "ACTION_CREATE": "Create Quota",
     "FIELD_MEASUREMENT_TYPE": "Measurement type",
     "FIELD_NOTES": "Notes",
