@@ -249,12 +249,12 @@
                         }
                       </span>
                       <ws-badge
-                        [variant]="temporalVariant(q.periodStart, q.periodEnd, q.isCurrencyValid)"
+                        [variant]="q.status | quotaStatusVariant"
                         size="sm"
                         [wsTooltip]="!q.isCurrencyValid ? currencyMismatchTooltip(q.currency, q.planCurrency) : ''"
                         tooltipPlacement="top"
                       >
-                        {{ temporalKey(q.periodStart, q.periodEnd, q.isCurrencyValid) | translate }}
+                        {{ q.status | quotaStatusLabel | translate }}
                       </ws-badge>
                     </div>
                   </a>

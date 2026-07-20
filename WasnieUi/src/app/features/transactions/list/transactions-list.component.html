@@ -1,4 +1,4 @@
-<app-shell>
+<app-shell [refreshOnEnter]="store">
   <ws-page-layout
     icon="arrows-exchange"
     [title]="'TRANSACTIONS.TITLE' | translate"
@@ -45,6 +45,22 @@
       </div>
     }
 
+    <!-- Bulk void bar — shown when one or more voidable (Pending) transactions are selected -->
+    @if (store.selectedCount() > 0 && ('Transactions.Void' | hasPermission)) {
+      <div class="transactions-list__bulk-bar">
+        <span class="transactions-list__bulk-count">
+          {{ 'TRANSACTIONS.BULK_VOID.SELECTED' | translate: { count: store.selectedCount() } }}
+        </span>
+        <ws-button variant="danger" size="sm" (click)="openBulkVoid()">
+          <app-icon name="x-circle" [size]="14" />
+          {{ 'TRANSACTIONS.BULK_VOID.ACTION' | translate }}
+        </ws-button>
+        <ws-button variant="ghost" size="sm" (click)="store.clearSelection()">
+          {{ 'TRANSACTIONS.BULK_VOID.CLEAR' | translate }}
+        </ws-button>
+      </div>
+    }
+
     <!-- Export row -->
     @if ((store.totalCount() > 0) && ('Transactions.Export' | hasPermission)) {
       <div class="transactions-list__export-row">
@@ -77,6 +93,16 @@
         <table>
           <thead>
             <tr>
+              <th class="col-check" *hasPermission="'Transactions.Void'">
+                <input
+                  type="checkbox"
+                  [checked]="store.allVoidableSelected()"
+                  [indeterminate]="store.selectedCount() > 0 && !store.allVoidableSelected()"
+                  [disabled]="!store.hasVoidableOnPage()"
+                  (change)="store.toggleSelectAllVoidable()"
+                  [attr.aria-label]="'TRANSACTIONS.BULK_VOID.SELECT_ALL' | translate"
+                />
+              </th>
               <th>{{ 'TRANSACTIONS.COL_REFERENCE' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_PAYEE' | translate }}</th>
               <th>{{ 'TRANSACTIONS.COL_DATE' | translate }}</th>
@@ -91,6 +117,7 @@
             @if (store.loading()) {
               @for (row of skeletonRows; track row) {
                 <tr class="skeleton-row">
+                  <td class="col-check" *hasPermission="'Transactions.Void'"></td>
                   <td><span class="skeleton skeleton--text-wide"></span></td>
                   <td><span class="skeleton skeleton--text"></span></td>
                   <td><span class="skeleton skeleton--text"></span></td>
@@ -103,13 +130,23 @@
               }
             } @else if (store.transactions().length === 0) {
               <tr>
-                <td colspan="8">
+                <td [attr.colspan]="('Transactions.Void' | hasPermission) ? 9 : 8">
                   <ws-table-empty messageKey="TRANSACTIONS.EMPTY_FILTER_TITLE" />
                 </td>
               </tr>
             } @else {
               @for (tx of store.transactions(); track tx.id) {
-                <tr>
+                <tr [class.transactions-list__row--selected]="store.selectedIds().has(tx.id)">
+                  <td class="col-check" *hasPermission="'Transactions.Void'">
+                    @if (canVoid(tx)) {
+                      <input
+                        type="checkbox"
+                        [checked]="store.selectedIds().has(tx.id)"
+                        (change)="store.toggleSelect(tx.id)"
+                        [attr.aria-label]="'TRANSACTIONS.BULK_VOID.SELECT_ROW' | translate"
+                      />
+                    }
+                  </td>
                   <td class="col-ref" [class.col-ref--voided]="tx.status === TransactionStatus.Cancelled">
                     <span class="col-ref__number">{{ tx.referenceNumber }}</span>
                     @if (tx.status === TransactionStatus.Cancelled && tx.cancelledReason) {
@@ -118,7 +155,17 @@
                   </td>
                   <td class="col-secondary">
                     @if (tx.payeeName) {
-                      {{ tx.payeeName }}
+                      @if (tx.payeeId) {
+                        <a
+                          class="col-payee-link"
+                          [routerLink]="['/payees', tx.payeeId]"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          [title]="'TRANSACTIONS.OPEN_PAYEE' | translate"
+                        >{{ tx.payeeName }}</a>
+                      } @else {
+                        {{ tx.payeeName }}
+                      }
                       @if (tx.payeeEmployeeCode) {
                         <span class="col-code">({{ tx.payeeEmployeeCode }})</span>
                       }
@@ -200,3 +247,50 @@
     (saved)="onModalClosed()"
   />
 }
+
+<!-- Bulk void confirmation -->
+<ws-modal
+  [isOpen]="bulkVoidModalOpen()"
+  [title]="'TRANSACTIONS.BULK_VOID.MODAL_TITLE' | translate"
+  size="md"
+  (closed)="bulkVoidModalOpen.set(false)"
+>
+  <p class="bulk-void-modal__intro">
+    {{ 'TRANSACTIONS.BULK_VOID.MODAL_INTRO' | translate: { count: bulkVoidCount() } }}
+  </p>
+
+  <div class="bulk-void-modal__field">
+    <ws-input
+      [label]="'TRANSACTIONS.BULK_VOID.REASON_LABEL' | translate"
+      [placeholder]="'TRANSACTIONS.BULK_VOID.REASON_PLACEHOLDER' | translate"
+      [ngModel]="bulkVoidReason()"
+      (ngModelChange)="bulkVoidReason.set($event)"
+    />
+  </div>
+
+  @if (bulkVoidErrors().length > 0) {
+    <div class="bulk-void-modal__errors" role="alert">
+      <p>{{ 'TRANSACTIONS.BULK_VOID.SOME_FAILED' | translate }}</p>
+      <ul>
+        @for (e of bulkVoidErrors(); track e) {
+          <li>{{ e }}</li>
+        }
+      </ul>
+    </div>
+  }
+
+  <div slot="footer" class="bulk-void-modal__footer">
+    <ws-button type="button" variant="secondary" (click)="bulkVoidModalOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button
+      type="button"
+      variant="danger"
+      [loading]="bulkVoiding()"
+      [disabled]="bulkVoidReason().trim().length < 3 || bulkVoiding()"
+      (click)="confirmBulkVoid()"
+    >
+      {{ 'TRANSACTIONS.BULK_VOID.CONFIRM' | translate }}
+    </ws-button>
+  </div>
+</ws-modal>

@@ -951,7 +951,8 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ReferenceNumber")
                         .IsUnique()
-                        .HasDatabaseName("IX_CompensationTransactions_TenantId_ReferenceNumber");
+                        .HasDatabaseName("IX_CompensationTransactions_TenantId_ReferenceNumber")
+                        .HasFilter("[Status] <> 'Cancelled'");
 
                     b.HasIndex("TenantId", "Status")
                         .HasDatabaseName("IX_CompensationTransactions_TenantId_Status");
@@ -962,7 +963,7 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Source", "ExternalId")
                         .IsUnique()
                         .HasDatabaseName("IX_CompensationTransactions_TenantId_Source_ExternalId")
-                        .HasFilter("[ExternalId] IS NOT NULL");
+                        .HasFilter("[ExternalId] IS NOT NULL AND [Status] <> 'Cancelled'");
 
                     b.ToTable("CompensationTransactions", (string)null);
                 });
@@ -1404,6 +1405,236 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "TenantId");
 
                     b.ToTable("RefreshTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Integrations.Crm.CrmDriftAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AmountChanged")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("DateChanged")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("DetectedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DetectedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ExternalDealId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("NewAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateOnly>("NewCloseDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("NewCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<decimal>("OldAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateOnly>("OldCloseDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("OldCurrency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<string>("ReferenceNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TransactionStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ResolvedAt", "DetectedAt")
+                        .HasDatabaseName("IX_CrmDriftAlerts_TenantId_ResolvedAt_DetectedAt");
+
+                    b.HasIndex("TenantId", "Source", "ExternalDealId", "TransactionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CrmDriftAlerts_TenantId_Source_Deal_Transaction_Unresolved")
+                        .HasFilter("[ResolvedAt] IS NULL");
+
+                    b.ToTable("CrmDriftAlerts", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Integrations.Crm.CrmOwnerMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("CrmOwnerId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("MatchMethod")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("PayeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PayeeId")
+                        .HasDatabaseName("IX_CrmOwnerMappings_TenantId_PayeeId");
+
+                    b.HasIndex("TenantId", "Source", "CrmOwnerId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CrmOwnerMappings_TenantId_Source_CrmOwnerId");
+
+                    b.ToTable("CrmOwnerMappings", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Integrations.HubSpot.HubSpotConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AccessTokenEncrypted")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTimeOffset>("ConnectedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ConnectedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset?>("DisconnectedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DisconnectedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("PortalId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RefreshTokenEncrypted")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("TokenExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("HubSpotConnections", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Integrations.HubSpot.HubSpotOAuthState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("InitiatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("HubSpotOAuthStates", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Settings.FieldRequirementSetting", b =>

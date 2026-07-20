@@ -4,6 +4,348 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-06-24 — WI-FIX-QUOTA-PERIOD-UPDATE-GUARD-AND-ASSIGNMENT-WARNING (Gap #1 + Gap #2)
+
+**Contexto / diagnóstico previo (read-only, ya reportado al owner antes de tocar código):** El WI original asumía que había que agregar de cero la validación "la cuota no puede tener fechas fuera del rango del plan/assignment". Al inspeccionar (Regla 3): el flujo de **CREAR** cuota YA lo hacía — `CreateQuotaHandler` bloquea si el período no está contenido en `plan.EffectivePeriod`, el frontend tiene `periodWithinPlanValidator`, y hay tests (`CreateQuota_PeriodWithinPlan_Returns201` / `_OutsidePlan_Returns400`). Además, el modelo que el WI asumía (planes = plantillas sin período) **es falso en este código**: `Plan` tiene `EffectivePeriod` propio, `PlanAssignment` también, y `AssignPlanToPayeeHandler` fuerza `assignment.EffectivePeriod == plan.EffectivePeriod` EXACTO → validar contra el plan ES validar contra el assignment (sin divergencia). El owner aprobó cerrar los **dos gaps** que el diagnóstico encontró.
+
+**Gap #1 — guard de período en Update (money-adjacent, CERRADO).** `UpdateQuotaHandler` no tenía el guard → una cuota Draft podía editarse a un período fuera de rango por la "puerta de atrás". Extraída la regla a un helper compartido **`QuotaPeriodGuard`** (`Application/Compensation/Common/QuotaPeriodGuard.cs`, método `Validate(planPeriod, start, end)` + const `PeriodOutsidePlanMessage`). **Ambos** handlers lo usan: Create refactorizado a llamarlo (comportamiento idéntico, mismo mensaje y condición) y Update lo agrega. Contención total (rechaza solapamiento parcial), backend = fuente de verdad. `UpdateDraft` sigue restringido a Draft (no se tocó). **No existe UI de editar cuota** (el detalle solo tiene Activate/Close) → Gap #1 es backend-only por diseño.
+
+**Gap #2 — advertencia de "payee sin assignment" (UX, ADVIERTE no bloquea).** En Create Quota, al elegir payee+plan, si el payee no tiene assignment **Active** a ese plan se muestra un banner no bloqueante (`combineLatest` de payee/plan → `AssignmentsApiService.getAssignmentsByPayee` filtrado por `planId`+`status==='Active'`, `switchMap` cancela lookups viejos). Banner con ícono `alert-triangle` y tokens `--color-warning*`. Se puede crear igual (decisión del owner). i18n EN/ES/PL (`QUOTAS.NO_ACTIVE_ASSIGNMENT_WARNING`). Sin backend nuevo.
+
+**Tests / build.** Unit nuevo `QuotaPeriodGuardTests` **7/7 verde** (within / exact-bounds / single-day / start-before / end-after / partial-overlap / fully-outside). +4 integration en `QuotasEndpointsTests` (Update within/before/after/partial) escritas y compilan. `dotnet build Wasnie.sln` limpio; `ng build --configuration production` limpio (la página es lazy → no afecta bundle inicial).
+
+**Bloqueo de entorno (ajeno).** La suite de **integración** no se pudo correr a verde: TODA prueba autenticada da **403 en `CreatePayeeAsync`** (confirmado idéntico en la suite NO relacionada de Payees) — pre-existente, ajeno a este WI. La autorización es mapa estático en código (`RolePermissions.HasPermission`), no DB-seed; el token de test (`ClaimTypes.Role=TenantAdmin`) no resuelve permisos corriendo vía `dotnet test` CLI en este entorno. Verifiqué el guard por unit tests + build limpio en su lugar.
+
+**Fuera de alcance (explícito).** NO se tocó la validación del flujo de CREAR (ya estaba bien, solo se compartió la regla sin cambiar comportamiento). NO se abordó el **measurement** (cuota Revenue/Units vs reglas del plan) = WI de diseño aparte, sigue pendiente.
+
+**Owner action:** verificar en pantalla (editar cuota fuera de rango → bloqueado; crear cuota sin assignment → banner) y reiniciar la API (se detuvo para buildear/correr tests).
+
+## 2026-06-24 — Cierre de sesión (suite de tests verde + Drift UI; HubSpot completo)
+
+WIs finales de la sesión (1 línea c/u):
+
+1. **WI-Fix-Unblock-Frontend-Test-Suite** — agregó `supplementalSequence: 0` a 3 mocks de pay-runs → la suite del frontend **compila por primera vez en ~5 días**; expuso 20 fallos de runtime reales (antes ocultos por el error de compilación). **Verificado.**
+2. **WI-Fix-Frontend-Test-Suite-Green** — arregló los 20 fallos (3 causas: `provideHttpClient()`+testing en SubscriptionReactivation ×14; drain del `/eligible-pending` side-request en ProcessPending ×5; assertion a `textContent` + check del link en TransactionsList ×1). **Solo .spec, cero código de producción** (ningún fallo era bug real). Suite: **435 pass, 0 fail**. **Verificado.**
+3. **WI-Docs-Update-Session-2026-06-24** — actualizó PROJECT_STATUS + SESSION_LOG con la sesión. **Verificado.**
+4. **WI-HubSpot-Drift-Paso3-Alerts-UI** — alertas de drift (Calculated/Paid) visibles en la card "Transactions that need attention": grupo "Deal changed in HubSpot after commission" con referencia, cambio old→new (monto y/o fecha), badge del estado, deep-link vía referencia. Integrado en el dashboard summary (sin endpoint nuevo), read-only. Backend 704 / frontend 435 verdes. **Verificado en pantalla. Cierra la integración HubSpot end-to-end** (Fases 1-3 + Drift Policy + Drift UI).
+
+**Estado al cierre:** suite de tests del frontend restaurada a **verde (435/0)**; backend **704/0**; **integración HubSpot COMPLETA** (Fase 4 webhooks = opcional/futura). Pendientes menores: copy del subtítulo de la card de atención (cosmético, nuevo), Resend key a rotar, audit de transiciones de payout, campos del calc-engine ignorados.
+
+## 2026-06-24 — RESUMEN DE SESIÓN (HubSpot Fase 3 + Drift + fixes UI)
+
+Bloque grande, sobre todo la integración HubSpot completa. WIs ejecutados en orden (cada uno con su entrada detallada más abajo donde aplica):
+
+1. **WI-Fix-Frontend-Refresh-On-Route-Entry** — re-fetch al entrar a cada ruta vía contrato compartido (`RefreshableStore` + `RouteRefreshTracker` + directiva `refreshOnEnter`). **Verificado.** (Detalle en la entrada del 2026-06-23.)
+2. **WI-HubSpot-Drift-Policy** — backend de detección de drift (deals con monto/fecha cambiados tras importar): `ICrmDriftPolicy`/`CrmDriftPolicy` + entidad `CrmDriftAlert` (**migración B10_CrmDriftAlerts**). Pending → auto-void + recrear; Calculated/Paid → alerta sin tocar (Regla 10, anti-doble-pago). **Verificado el caso Pending en pantalla. Paso 3 (UI de alertas en la card de atención) PENDIENTE** (el backend ya las genera).
+3. **WI-Transactions-Default-Sort-CreatedDesc** — default sort de Transactions a `ingestedat` DESC (fecha de creación). Resultó **cambio de 1 línea** en el store; el sort ya existía en backend. **Verificado.**
+4. **WI-HubSpot-Phase3-Auto-Polling** — polling incremental con Hangfire recurring job por tenant (checkpoint `LastSyncedAt`, **migración B11_HubSpotLastSyncedAt**), trae deals nuevos + cambiados **reutilizando `ICrmDealReconciler`** (el MISMO servicio que el import manual — no se reescribió lógica money). Orquestador escalonado (anti thundering-herd), resiliente (un tenant que falla no aborta los demás), **checkpoint avanza solo en éxito**. Frecuencia configurable (default 1h, sección `HubSpotSync`). Botón **"Sync now"** (`POST /api/integrations/hubspot/deals/sync-now`). **Verificado corriendo solo + drift automático aplicado en vivo.**
+5. **WI-UI-Transactions-HubSpot-AutoSync-Banner → WI-UI-Move-AutoSync-Banner-To-Sidebar** — banner informativo (logo HubSpot, "se sincronizan automáticamente **cada hora**", "última sync hace X", link a Integraciones; **sin botón de sync**). Primero arriba de los filtros de Transactions; luego **movido al sidebar**, posición definitiva = fondo de la zona de nav **encima del separador de SETTINGS**; sidebar hecho **scrolleable**. Solo si HubSpot Connected. **Verificado.**
+6. **WI-Fix-Quota-Status-Profile-Consistency** — el perfil del payee mostraba una fase temporal por fechas en vez del **status persistido**; ahora usa el status real vía **pipe compartido** (`quota-status.pipe.ts`), y detalle/lista migrados al mismo pipe. **Verificado.**
+
+**Migraciones nuevas de la sesión:** B10_CrmDriftAlerts, B11_HubSpotLastSyncedAt (ambas aplicadas y verificadas en BD).
+
+**Lección recurrente reconfirmada:** reutilizar la lógica money existente vía un **servicio compartido** en vez de reescribirla (el polling de Fase 3 invoca el MISMO `ICrmDealReconciler`/`ICrmDriftPolicy` que el import manual), y **un solo lugar para mapeos transversales** (pipe compartido de status de cuota; mismo patrón que el spec compartido del count-vs-filter de la card de atención).
+
+**Pendiente principal:** Drift **Paso 3** (mostrar las alertas Calculated/Paid en la card "Transactions that need attention" — backend listo, falta UI). Otros pendientes vigentes: specs de pay-runs rotos (bloquean Karma), Resend API key a rotar, audit log de transiciones de payout, campos del calc-engine ignorados (SortOrder/Caps/Source-trigger).
+
+## 2026-06-24 — WI-HUBSPOT-FASE3 (polling automático incremental + "Sync now")
+
+Hace automática la ingesta de deals que antes era manual (Integrations → "Import deals"): un job recurrente de Hangfire sincroniza, por tenant con conexión Connected, de forma incremental, y aplica la lógica YA construida (guard + drift policy). Procedido por pasos; el owner lo verificó en pantalla.
+
+**Reutilización (clave del WI):** extraído el cuerpo del import a `ICrmDealReconciler` (`Application/Integrations/Crm/`) — classify→crear vía `TransactionCreateGuard` + `ICrmDriftPolicy` + resolución owner→payee. `ImportHubSpotDealsHandler` quedó fino (auth + fetch + delegar + mapear DTO). El polling llama al MISMO servicio → no se reescribe lógica money. Los tests previos de import/drift validan que el refactor no rompió nada.
+
+**PASO 1 — checkpoint:** `LastSyncedAt` (DateTimeOffset?) en `HubSpotConnection` + `AdvanceSyncCheckpoint(runStart, now)` (no retrocede; reset a null en `Reconnect`). Primera corrida sin checkpoint → floor = `ConnectedAt` (incremental desde la conexión; el backfill histórico sigue siendo el botón manual). Migración B11 aplicada y verificada (Regla 13).
+
+**PASO 2 — job (money-critical):**
+- Deal source incremental `GetClosedWonDealsModifiedSinceAsync`: filtro `hs_is_closed_won=true AND hs_lastmodifieddate>=since` (epoch ms), sort asc por lastmodified, throttle entre páginas (`HubSpot:SearchThrottleMs`=250ms ⇒ ≤4 req/s Search). Refactor compartido `ReadClosedWonAsync(since?)` con el full read existente.
+- `HubSpotTenantSyncJob.SyncTenantAsync(tenantId)`: setea `BackgroundJobTenantContext`, saltea si no Connected, lee checkpoint, reconcilia, avanza checkpoint SOLO en éxito al instante de INICIO, audita `CRM_AUTO_SYNC_COMPLETED` con conteos. `CrmNotConnectedException`→saltea sin romper (el token provider ya marcó NeedsReconnect). Fallo duro propaga → Hangfire reintenta SOLO ese tenant; checkpoint no avanza → sin pérdida (idempotente).
+- `HubSpotSyncOrchestrator.RunAsync()` recurrente: lista tenants Connected (`IgnoreQueryFilters`, sin tenant ambiente) y agenda un job por-tenant con `IBackgroundJobClient.Schedule` + delay incremental (`TenantStaggerSeconds`). Anti thundering-herd + aislamiento de fallos por diseño.
+- Registro recurrente al startup (`Program.cs`, `IRecurringJobManager.AddOrUpdate`, cron de `HubSpotSync:CronExpression`, default hourly; `Enabled=false`→`RemoveIfExists`).
+- Config `HubSpotSyncOptions` (sección `HubSpotSync`). Para 15 min: `*/15 * * * *`.
+
+**PASO 3 — observabilidad/UI:**
+- `LastSyncedAt` en `HubSpotConnectionStatusDto` + handler.
+- Card `/integrations`: "Última sincronización: hace X" (`relativeTime` pipe; "Aún sin sincronizar" si null) + botón "Sync now".
+- "Sync now": `POST /api/integrations/hubspot/deals/sync-now` → `TriggerHubSpotSyncCommand` (auth IntegrationsManage, exige Connected) → `ICrmSyncScheduler`/`HangfireCrmSyncScheduler` encola el MISMO job por-tenant. 202.
+- i18n EN/ES/PL (`LAST_SYNCED`, `NEVER_SYNCED`, `SYNC.SYNC_NOW`, `SYNC.SYNC_NOW_STARTED`).
+
+**Decisiones técnicas (mías; las de negocio ya estaban):** reconciler compartido como punto de reuso; staggering vía `Schedule` con delays incrementales; primera corrida desde `ConnectedAt` (no full history). NO se construyó webhooks (Fase 4).
+
+**Tests:** 704 unit backend verdes (+13). `dotnet build Wasnie.sln -c Release` y `ng build --configuration production` limpios. Karma front bloqueado por specs PRE-EXISTENTES de `pay-runs` (ajeno).
+
+**Owner action:** reiniciar la API para que el recurring `hubspot-incremental-sync` quede registrado (se puede forzar una corrida desde el dashboard `/jobs`).
+
+## 2026-06-24 — WI-TX-DEFAULT-SORT (orden por defecto de Transactions = creación desc)
+
+Tras import/re-import con drift la tx nueva/recreada quedaba enterrada (la lista ordenaba por Tx date). **PASO 0 (read-only):** confirmado que el sort por `ingestedat` (=`IngestedAt`, fecha de creación) YA existía en backend (`ListTransactionsHandler.AllowedSortFields`, fallback ya `ingestedat` DESC); el default efectivo era `transactiondate` DESC solo porque el front lo enviaba. **Cambio mínimo:** `transactions.store.ts` default `sortBy` `'transactiondate'`→`'ingestedat'` (dirección ya `desc`) + mock del spec actualizado. Server-side global → lo recién creado/recreado (recibe `IngestedAt` nuevo) aparece arriba; el usuario puede re-ordenar con los controles existentes. Sin backend/migración. `ng build --configuration production` limpio.
+
+## 2026-06-24 — WI-HUBSPOT-DRIFT-POLICY (re-import detecta cambios y actúa por estado) — PASO 1+2+4 (PASO 3 pausado)
+
+Money-critical. Caso real: cambió el `Amount` de un deal closed-won en HubSpot y re-importar no hacía nada (idempotencia status-ciega "dealId existe → saltear"). Nuevo: comparar `Amount`(+moneda) y `CloseDate` vs la transacción y actuar según su estado. Principio del owner: HubSpot es fuente de verdad de las VENTAS, Wasnie de los PAGOS; una comisión calculada/pagada es de Wasnie e inmutable (Regla 10).
+
+**Detección:** normaliza ambos lados por `Money.Of` (4 dp) → sin falsos por redondeo; fecha faltante no cuenta como cambio.
+**Acción:** Pending → auto-void de la vieja (motivo automático) + nueva con valores actuales (Opción B, mismo payee, vieja Cancelled). Calculated/Paid → NO toca, registra alerta (`CrmDriftAlert`: dealId, tx, old→new, estado, detected-at; upsert idempotente vía índice único filtrado por no-resuelta). Blindaje: auto-void SOLO Pending; carrera Pending→Calculated entre detección y acción → degrada a alerta. Audit de ambas (`CRM_DRIFT_AUTO_RESOLVED`/`CRM_DRIFT_DETECTED`).
+**Reutilizable (PASO 4):** `ICrmDriftPolicy`/`CrmDriftPolicy` (CRM-neutral, persiste en 2 saves para respetar el índice filtrado void→create). El import manual la invoca; el polling de Fase 3 la invoca idéntica.
+**Persistencia:** entidad `CrmDriftAlert` + migración B10 aplicada y verificada.
+**Tests:** +9 (Pending void+recrea por amount/date, Calculated/Paid alerta-sin-tocar, carrera→degrada, redondeo→no-drift, refresh-no-duplica, aislamiento).
+
+**PENDIENTE (PASO 3, pausado por el owner):** extender la card "Transactions that need attention" del dashboard con la categoría "Deal changed in HubSpot after commission" — las alertas Calculated/Paid hoy se guardan en `CrmDriftAlerts` pero NO se muestran en UI — + deep-link a la tx (vía `?ref=HUBSPOT-{dealId}`, no hay ruta de detalle por-tx) + i18n EN/ES/PL. Verificado en pantalla casos 1 (Pending auto-resuelve) y 3 (sin cambios no duplica); el caso 2 (alerta visible) requiere PASO 3.
+
+## 2026-06-23 — WI-TX-PAYEE-LINK (nombre de payee enlaza a su detalle, nueva pestaña)
+
+Mejora pedida: en la lista de Transactions, cuando el payee existe, su nombre debe ser un enlace al detalle del payee que abra en una nueva ventana.
+
+**Cambio:**
+- `transactions-list.component.html`: en la columna Payee, si `tx.payeeId` no es nulo, el nombre se renderiza como `<a [routerLink]="['/payees', tx.payeeId]" target="_blank" rel="noopener noreferrer" [title]="'TRANSACTIONS.OPEN_PAYEE'|translate">`. Si hay `payeeName` sin `payeeId` (caso defensivo) se muestra texto plano; sin payee, sigue el badge "Unassigned". El `payeeEmployeeCode` se conserva igual.
+- `transactions-list.component.scss`: clase `.col-payee-link` con tokens (`--color-text-link`, hover `--color-text-link-hover` + subrayado). El estilo global de `a` ya daba color de link; la clase añade affordance en hover.
+- i18n: `TRANSACTIONS.OPEN_PAYEE` (tooltip) en EN/ES/PL.
+
+`RouterLink` ya estaba en los imports del componente. Ruta destino `/payees/:payeeId` (confirmada en `payees.routes.ts`). Sin backend, sin migración. `ng build --configuration production` limpio.
+
+## 2026-06-23 — WI-LANG-PERSIST (el idioma elegido en Settings no persistía al recargar)
+
+Reportado: en la página de admin (Settings), al cambiar el idioma no persiste tras recargar.
+
+**Causa:** `App.ngOnInit` (`app.ts`) restaura el idioma leyendo `localStorage['wasnie_lang']` al arrancar, pero el selector — `AppearanceCardComponent.switchLanguage()` — solo aplicaba `translate.use(lang)` en memoria y **nunca escribía** `wasnie_lang`. Resultado: el cambio valía para la sesión, pero al recargar `app.ts` leía la clave inexistente y caía a `'en'`.
+
+**Fix:**
+- `appearance-card.component.ts`: `switchLanguage` ahora persiste con `localStorage.setItem('wasnie_lang', lang)` (constante `LANG_STORAGE_KEY` con comentario que apunta a `app.ts` para que ambas claves no diverjan).
+- Verificado por grep que `appearance-card` es el ÚNICO componente que llama `translate.use` (aparte de `app.config.ts` init y `app.ts` restore).
+- Spec nuevo `appearance-card.component.spec.ts` (mockea `TranslateService`/`ThemeService`): aplica+persiste el idioma y sobrescribe uno previo.
+
+Sin backend, sin migración. `ng build --configuration production` limpio.
+
+**Bloqueo preexistente (ajeno a este WI):** la suite Karma completa no compila por errores de TS en `pay-runs/detail/pay-run-detail.component.spec.ts`, `pay-runs/state/*.spec.ts` y `pay-runs/models/pay-run.model.ts` (`PayRunDetail`/`PayRunListItem`). Son los fallos preexistentes ya anotados; impiden correr el bundle de tests entero, por lo que el spec nuevo quedó sin ejecutar aunque es correcto.
+
+## 2026-06-23 — WI-PAGE-TITLES (cada página fija su propio `<title>` de pestaña)
+
+Reportado: todas las pestañas del navegador mostraban `Wasnie | ICM & SPM` sin importar la página. Causa: ninguna ruta definía `title` y la app no tenía una `TitleStrategy`, por lo que Angular dejaba el `<title>` estático del `index.html`.
+
+**Fix:**
+- `WasnieUi/src/app/core/title-strategy.ts` — `TranslatedTitleStrategy extends TitleStrategy` (providedIn root). `updateTitle` lee `buildTitle(snapshot)` (la clave i18n de la ruta más profunda con título), la traduce con `TranslateService.instant` y fija el documento como `<Página> | Wasnie`. Si no hay título o la clave no existe, cae al brand `Wasnie | ICM & SPM`. Suscrito a `onLangChange` para re-traducir al cambiar idioma.
+- Registrada en `app.config.ts`: `{ provide: TitleStrategy, useClass: TranslatedTitleStrategy }`.
+- `app.routes.ts`: añadido `title` a cada ruta de nivel superior. Reutiliza claves existentes (`NAV.*`, `INTEGRATIONS.HUBSPOT.OWNERS.TITLE`, `ERRORS.FORBIDDEN_TITLE`, `AUTH.LOGIN`). Las sub-rutas (list/detail/create de cada feature) heredan el título de su sección vía `buildTitle`.
+- i18n: única clave nueva `NAV.ONBOARDING` en EN/ES/PL ("Choose your plan" / "Elige tu plan" / "Wybierz plan").
+
+Sin backend, sin migración. `ng build --configuration production` limpio (warnings de bundle budget e imports no usados son PRE-EXISTENTES, ajenos a este cambio).
+
+**Pendiente (no en este WI):** títulos específicos por sub-ruta (p. ej. "Edit Plan", detalle de payout con su id) si se quisiera más granularidad; hoy heredan el título de la sección, que ya resuelve el bug reportado.
+
+## 2026-06-23 — WI-REFRESH-ON-ENTRY (fix transversal: data no se refresca al navegar)
+
+Fix del bug "la data queda vieja al navegar la SPA / tras importar; solo un full reload la trae". Causa raíz (diagnóstico previo): stores singleton `providedIn:'root'` que cachean en signals y solo fetchean al crearse o ante cambio de signal; al re-navegar el singleton sobrevive y nadie re-dispara el fetch. La inconsistencia: cada feature lo manejaba distinto — Dashboard (sin `ngOnInit`) y Transactions (carga solo si hay query params) NO recargaban al entrar = el bug; las otras tenían recargas ad-hoc en `ngOnInit` (payouts incluso documentaba el problema y su `reload()` manual).
+
+**Mecanismo compartido (UN solo lugar):**
+- `shared/state/refreshable-store.ts` — interfaz `RefreshableStore { refresh(): void | Promise<void> }`.
+- `shared/state/route-refresh.tracker.ts` — `RouteRefreshTracker` singleton con `WeakSet`: `onEntry(store)` saltea el PRIMER montaje de cada store (su `effect()` de constructor ya hace la carga inicial → evita doble fetch) y llama `store.refresh()` en cada re-entrada.
+- `shared/directives/refresh-on-enter.directive.ts` — `[refreshOnEnter]="store"`, aplicada en el `<app-shell>` raíz de cada página; su `ngOnInit` (corre en cada montaje, porque sin RouteReuseStrategy los componentes lazy se recrean) delega en el tracker.
+
+**Aplicación:**
+- **Rotos (fix):** Dashboard, Transactions → `refresh()` en el store + directiva en el template. (Transactions conserva su parseo de query params.)
+- **Unificados (quitado el reload ad-hoc del `ngOnInit`, conservando lógica URL→estado, + directiva):** payees, plans, quotas, assignments, payouts, credits. Cada store expone `refresh()` que delega en su carga actual con params vigentes (loadPayees/loadPlans/loadQuotas/loadAssignments/reload/loadAll). Se usó tipado estructural (no hizo falta `implements`).
+- **Matiz documentado (NO convertido):** pay-runs — su recarga al entrar es efecto colateral de `setFilter` (aplica período/estado de la URL) sin una línea de reload separable; añadir la directiva duplicaría el fetch en cada entrada. Queda con su mecanismo propio (funciona); unificarlo requeriría refactorizar cómo aplica los filtros de URL.
+
+**Evitar doble fetch:** el tracker saltea el primer montaje (cuando el `effect()` del store ya carga); en re-entrada solo corre la directiva. (Matiz benigno: re-entrar por deep-link con un filtro DISTINTO puede disparar el effect (cambio de signal) + la directiva = 2 fetches con la misma data; raro y sin efecto de corrección.)
+
+**Tests:** `RouteRefreshTracker` spec nuevo (3: no refresca en 1ª entrada, refresca en re-entradas, independencia por store). Spec de payouts actualizado: ya no espera `store.reload()` en `ngOnInit` (ahora se delega en `[refreshOnEnter]`). `ng build --configuration production` limpio (bundle sin cambio — directiva/tracker minúsculos). Karma: 19 fallos PRE-EXISTENTES ajenos (`pay-runs`/`process-pending`/`subscription-reactivation`), validado aislándolos (revertido).
+
+**Backend descartado en el diagnóstico:** import HubSpot síncrono y commiteado; sin caché de servidor ni interceptors de caché. (El import de **Excel** es un job Hangfire asíncrono — su data aparece al terminar el job, no por refrescar; es un tema de estado-de-job, fuera de este WI.)
+
+**Mejora futura (anotada, NO en este WI):** capa de invalidación tras mutación para refrescar una página YA abierta (sin navegar). El caso reportado (importar → navegar a Transactions) ya queda resuelto con refresh-on-entry.
+
+**Verificación en pantalla (owner):** importar deals → navegar a Transactions (sin reload del navegador) → aparece la data nueva; navegar ida/vuelta entre Dashboard/Transactions/Payees/Credits/etc. → cada una fresca al entrar; sin parpadeo/doble fetch visible; estilos y filtros intactos.
+
+## 2026-06-23 — WI-BULK-VOID-REIMPORT (void en lote + re-import revive solo Void; unificado 3 fuentes)
+
+Feature money-critical en 4 pasos. PASO 0 (diagnóstico read-only) confirmó: idempotencia por DOS índices únicos (`(TenantId,ReferenceNumber)` y `(TenantId,Source,ExternalId)` filtrado por ExternalId not null); detección REPLICADA por fuente (HubSpot HashSet status-ciego, Excel solo constraint, Manual nada→500); Void = `Cancelled` (Cancel() solo desde Pending); crédito activo = `Credit.SupersededAt == null`; patrón bulk reutilizable (payouts/assignments); single-void ya tenía escudo de crédito activo. Refinamientos hallados antes de construir: (A) hay que filtrar AMBOS índices (HubSpot usa `ReferenceNumber="HUBSPOT-{dealId}"`); (B) Excel/Manual asignan crédito al instante (HubSpot no) → una Cancelled nunca tuvo crédito activo ni fue Paid → doble-pago estructuralmente imposible con Opción B.
+
+**PASO 1 — índice filtrado:** `CompensationTransactionConfiguration` — ambos índices únicos con `HasFilter("[Status] <> 'Cancelled'")` (el de ExternalId mantiene `[ExternalId] IS NOT NULL AND …`). Migración **B9_FilteredUniqueIndexesExcludeCancelled** creada, aplicada (paré `Wasnie.Api` para liberar el lock) y **verificada en BD** vía `sys.indexes` (filter_definition correcto en ambos) + `__EFMigrationsHistory`. SQL Server acepta `<>` en filtered index.
+
+**PASO 2 — regla de creación única:** `TransactionCreateGuard` / `ITransactionCreateGuard` (`Wasnie.Application/Compensation/Common/`). `ClassifyAsync(source, refs, externalIds)` hace ≤4 queries batch y devuelve una clasificación in-memory por llave: `Create` (no hay activa con esa llave → se crea aunque exista una Void, Opción B), `SkipActiveDuplicate` (ya hay activa: Reference única por tenant cross-source, o (Source,ExternalId) activa), `BlockedVoidHadCredits` (solo Void con esa llave y la Void tiene CUALQUIER crédito → bloqueado, anti-doble-pago). Cableado en las TRES fuentes: `ImportHubSpotDealsCommand` (reemplazó el HashSet status-ciego; warning para blocked), `TransactionImportJobHandler` (Excel: clasifica todas las filas válidas al inicio + dedup intra-archivo; mantiene el catch de unique-constraint como backstop), `IngestTransactionHandler` (Manual: ya no 500 — devuelve error claro "ya existe" / "Void ya procesada").
+
+**PASO 3 — bulk void:** `BulkVoidTransactionsCommand/Handler` + `POST /api/transactions/bulk-void`. Sin N+1: 1 query de tx + 1 query agrupada de créditos activos; voids + un AuditLog por tx en UN solo `SaveChanges` (atómico). Solo Pending se anula (`Cancel()`); con crédito activo / Calculated / Paid → rechazadas con motivo; ids inexistentes y motivo <3 chars reportados. Frontend (lista Transactions): selección múltiple con checkbox nativo (mismo patrón que payouts; no hay primitivo WsCheckbox), barra "Anular seleccionadas" + modal con motivo y lista de las que no se pudieron anular (nunca en silencio); selección solo de filas Pending, gated `Transactions.Void`, limpia al cambiar filtro/tab. i18n `TRANSACTIONS.BULK_VOID.*` EN/ES/PL.
+
+**PASO 4 — re-import (3 fuentes):** comportamiento ya provisto por el guard del PASO 2 — re-importar/crear con una llave que solo existe como Void crea una nueva (la Void queda como histórico); con activa, saltea. 
+
+**Tests (Regla 2):** 682 unit backend verdes. Nuevos: `TransactionCreateGuardTests` (9: no-existe→Create, activa→Skip, solo-Void→Create, Void-con-crédito→Blocked, Reference cross-source, ExternalId per-source, re-import por externalId, tenant isolation, batch de 1000), `BulkVoidTransactionsHandlerTests` (5: lote, Paid/Calculated rechazadas, escudo crédito activo, no-encontradas/motivo corto, tenant isolation), re-import por fuente (`IngestTransactionReimportTests` x3 Manual, `ExcelImportReimportTests` x1, HubSpot `Re_importing_a_deal_whose_transaction_was_voided_creates_a_new_one`). 3 specs frontend de bulk void. **Limitación:** "dos activas misma llave → rechazado" lo impone el índice filtrado de BD (verificado en PASO 1), no testeable en InMemory; los integration tests requieren Docker (no disponible).
+
+**Build:** `dotnet build` solución + `ng build --configuration production` limpios. Fix menor extra: el ícono de la fila "No active plan assignment" del card de dashboard (`document-text` no existe en el set → `briefcase`).
+
+**Acción del owner:** reiniciar la API con `api run` (quedó detenida desde la migración del PASO 1). **Verificación en pantalla:** (1) seleccionar N Pending → Anular en lote → pasan a Void; intentar incluir una Paid → se anula el resto y se listan las que no; (2) re-importar HubSpot/Excel o crear manual con la misma Reference de una Void → se crean nuevas, las Void quedan; (3) re-importar algo con activa → no duplica.
+
+## 2026-06-23 — WI-DASHBOARD-ATTENTION-CARD-FIX (conteo de la card ≠ resultados del filtro)
+
+**Bug reportado por el owner:** la card "Transactions that need attention" decía CurrencyMismatch=10, pero al hacer click el link `…/transactions?statuses=Pending&currencies=USD` mostraba **46** (porque `currencies=USD` también traía las 36 Unassigned USD, que son del bucket NoPayee). NoActiveAssignment linkeaba a `statuses=Pending` = TODAS las Pending. Los deep-links aproximados (que ya había marcado como gap) eran, en la práctica, resultados incorrectos.
+
+**Causa:** la card y la lista usaban lógicas distintas — la card clasificaba con assignments/moneda/fecha; la lista solo tenía filtros simples (status/currency/unassigned) que NO pueden expresar "no procesable por moneda" ni "sin assignment activo".
+
+**Fix (una sola fuente de verdad):**
+- Nuevo `UnprocessablePendingSpec` (`Wasnie.Application/Compensation/Common`): tres `IQueryable<CompensationTransaction>` (`NoPayee`, `CurrencyMismatch`, `NoActiveAssignment`) con la MISMA definición de "procesable" que el motor, compuestas como subqueries **EXISTS/NOT EXISTS** (server-paginadas, sin materializar; tenant-scoped por los query filters).
+- `GetDashboardSummaryHandler.BuildUnprocessablePendingAsync` reescrito: los counts salen del spec (`CountAsync` + monedas distintas) en vez de clasificar en memoria.
+- Filtro server-side `attentionReason` en `ListTransactionsHandler` (vía `PaginationQuery.AttentionReason`): cuando viene, la query base = `UnprocessablePendingSpec.ForReason(...)`. Como dashboard y lista usan el MISMO spec, el conteo de la card y el de la tabla coinciden por construcción.
+- Frontend: `attentionReason` threaded por `TransactionFilter` (+ `EMPTY_FILTER`, `_buildFilterRecord`, `toExportFilter`, `toQueryParams`→`attention`, `loadFromQueryParams`, `activeFilterCount`). Dashboard deep-link ahora: `{ statuses: 'Pending', attention: item.reason }` para las TRES razones (uniforme y exacto; se eliminó el `currencies=`/`unassigned=` aproximado).
+
+**Verificación contra la BD real (SQL Server, no solo InMemory):** test temporal (creado, ejecutado, **borrado**) que forzó `ToQueryString()` + `CountAsync` contra `WasnieDb`. EF traduce correctamente (EXISTS/NOT EXISTS, JOIN a Plans, columnas owned `EffectiveStart`/`EffectiveEnd`/`Amount.Currency`). Conteos reales: **NoPayee=36, CurrencyMismatch=10 (exactamente las 10 de Rudolph), NoActiveAssignment=0**. El bug 10↔46 queda 10↔10. (Las ~9978 PLN Pending NO son no-procesables → sus payees sí tienen assignment PLN que cubre y coincide en moneda; por eso no inflan los buckets.)
+
+**Build/tests:** 663 unit backend verdes (los 3 de `UnprocessablePendingTests` siguen pasando con el spec vía InMemory); specs frontend de transactions/dashboard sin regresión (validado aislando los specs PRE-EXISTENTES rotos de `pay-runs`; revertido); `dotnet build` + `ng build --configuration production` limpios. **Acción del owner:** reiniciar la API para que el filtro `attentionReason` tome efecto en runtime; verificar en pantalla que click en cada razón muestra exactamente N filas.
+
+## 2026-06-23 — WI-DASHBOARD-ATTENTION-CARD (visibilidad de Pending no procesables)
+
+Card nueva en el dashboard, debajo de "Pending to Process by Plan", para que las transacciones Pending que NO se pueden procesar dejen de ser invisibles (gap de confianza del diagnóstico previo: el usuario importa deals y no ve nada, cree que está roto). Sin migración, sin tocar el motor ni el panel existente.
+
+**Backend** (`GetDashboardSummaryHandler.cs`):
+- `BuildUnprocessablePendingAsync` — espejo INVERSO de `BuildPendingByPlanAsync`, con la MISMA definición de "procesable" que el motor (`ProcessPendingTransactionsJobHandler`: payee + assignment Active que cubre la fecha + `tx.Currency == plan.Currency`).
+- Clasificación en UNA razón primaria por transacción (mutuamente excluyentes, cada tx contada una vez). **Orden reportado:** `NoPayee` (PayeeId null) → `NoActiveAssignment` (con payee, pero NINGÚN assignment Active cubre la fecha de la tx) → `CurrencyMismatch` (hay assignment Active que cubre la fecha, pero ninguna moneda de esos planes coincide con la de la tx). Las procesables (cubierta + moneda coincide) se excluyen (ya las cuenta el panel hermano).
+- Period-independent (como el panel hermano), tenant-scoped (Regla 9), anti-cartesiano: 3 queries (assignments Active, currencies de planes, TODAS las Pending incl. sin payee) + match en memoria, sin N+1.
+- DTO `UnprocessablePendingDto(Reason, Count, Currencies)` agregado a `DashboardActionBandDto`. `Currencies` solo para CurrencyMismatch (distintas monedas involucradas, para el deep-link). El `DashboardActionBandDto` se inicializa con `UnprocessablePendingItems: []` y se setea vía `with` (como `PendingByPlanItems`).
+- Tests unit nuevos (`UnprocessablePendingTests.cs`, in-memory): clasifica cada razón; excluye procesables; tx fuera del rango de fechas del assignment → NoActiveAssignment. 663 unit verdes.
+
+**Frontend** (`dashboard.component.*`, `dashboard.models.ts`):
+- Interfaz `UnprocessablePendingItem` + campo `unprocessablePendingItems` en `DashboardActionBand`.
+- Card hermana (mismas clases `pending-plan-card`, tokens, scope "all periods"): una fila por razón con ícono + label + explicación en lenguaje plano (sin alarmar) + badge de conteo; estado "all clear" cuando no hay nada; filas con 0 no aparecen (el backend ya omite las de count 0).
+- Deep-links a Transactions con los query params existentes (`statuses`, `unassigned`, `currencies`): **NoPayee** → `statuses=Pending&unassigned=1` (EXACTO); **CurrencyMismatch** → `statuses=Pending&currencies=<monedas>` (APROXIMADO); **NoActiveAssignment** → `statuses=Pending` (APROXIMADO).
+- i18n EN/ES/PL (`DASHBOARD.ATTENTION_*`). No se usó checkbox (no existe primitivo).
+
+**Filtros que faltan en Transactions (reportado para WI futuro, NO inventados aquí):** no hay un filtro exacto "no procesable por moneda" (el `currencies=USD` también trae las Unassigned USD, que pertenecen a otra fila) ni "sin assignment activo". Se usó la mejor aproximación con filtros existentes; un WI futuro podría añadir un filtro server-side "unprocessable reason".
+
+**Verificación en pantalla (pendiente del owner, app corriendo):** con el estado real (Rudolph 10 USD + 36 Unassigned + otras Pending de test), la card aparece bajo "Pending to Process by Plan" con las razones y conteos; click en "No payee" → Transactions con Unassigned+Pending; click en las otras → Transactions Pending (con currencies para el caso de moneda). El panel "Pending to Process by Plan" sigue igual. NOTA: la BD de test tiene mucho Pending ajeno (p. ej. ~9978 PLN EtlImport) → los conteos de NoActiveAssignment/CurrencyMismatch pueden ser altos; es fiel a los datos, no un bug.
+
+**Build/tests:** `dotnet build` limpio; 663 unit backend verdes (3 nuevos). `ng build --configuration production` OK (785.69 kB; el warning de budget es PRE-EXISTENTE — esta card sumó +0.04 kB). Dashboard specs frontend verdes (validados aislando los specs PRE-EXISTENTES rotos de `pay-runs`; revertido). Integration tests no corren aquí (requieren Docker/Testcontainers).
+
+## 2026-06-23 — WI-HUBSPOT-FASE2 (deals → transacciones, READ-ONLY desde HubSpot)
+
+Implementadas las 4 sub-fases del WI. **Wasnie solo LEE de HubSpot** — cero escrituras al CRM, sin scopes de write (los scopes ya concedidos `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read` bastan).
+
+**FASE 2a — capa de acceso (clean architecture):**
+- `Wasnie.Application/Integrations/Crm/ICrmDealSource.cs` (+ `CrmModels.cs` con `CrmDeal`/`CrmOwner` neutros, `CrmNotConnectedException`) — HubSpot es UNA implementación; el pipeline interno no se acopla al CRM.
+- `Wasnie.Infrastructure/Services/HubSpot/HubSpotCrmDealSource.cs`: deals vía CRM Search API con paginación cursor (`after`), owners (activos + archivados), moneda por defecto de la cuenta; resuelve el token vía `IHubSpotTokenProvider` (Fase 1, refresh ya resuelto); 429 → `Retry-After`/backoff; cap de páginas con warning (sin truncado silencioso); nunca loguea el token.
+- **Cómo se determina "closed-won" (decisión reportada):** propiedad CALCULADA de HubSpot `hs_is_closed_won = true` (filtro en el Search API), NO un stage id global hardcodeado → tolera pipelines/stages custom por cuenta.
+- Verificación 2a: `GET /api/integrations/hubspot/deals/preview` (lista deals closed-won con owner name/email; **no crea nada**).
+
+**FASE 2b — mapeo owner→payee:**
+- Entidad/tabla `CrmOwnerMapping` (`Domain/Integrations/Crm/`): TenantId, Source ("HubSpot"), CrmOwnerId, PayeeId, MatchMethod (Email|Manual), CreatedAt/By. Única `(TenantId,Source,CrmOwnerId)`; tenant query filter (Regla 9). Migración **`B8_CrmOwnerMapping` aplicada Y verificada en BD** (tabla + índice único + `__EFMigrationsHistory` confirmados con sqlcmd — Regla 13).
+- `ICrmOwnerResolver` / `CrmOwnerResolver`: (1) mapping existente → (2) match exacto por **email normalizado** (lower+trim; el email de payee es único por tenant → match inherentemente NO ambiguo; crea mapping `Email` automáticamente) → (3) no resuelto. **NUNCA auto-crea payees.**
+
+**FASE 2c — materialización idempotente (money-critical):**
+- `ImportHubSpotDealsCommand` (síncrono; `IMoneyCriticalCommand` → audit+escritura atómicos). Endpoint `POST /api/integrations/hubspot/deals/import`.
+- **Idempotencia (decisión reportada): lookup-before-create con `ExternalId = deal id` + `Source = CrmSync`, apoyado en el índice único `(TenantId,Source,ExternalId)` que YA existía.** `ReferenceNumber = "HUBSPOT-{dealId}"` (legible + satisface el único de Reference). Re-importar el mismo deal NO duplica.
+- Owner resuelto → transacción asignada; owner sin resolver / sin owner → **Unassigned** (PayeeId null, reusa soporte existente; UI de assign/reassign sirve igual). Entra al pipeline existente (Pending). NUNCA recalcula ni toca transacciones/créditos pagados (Regla 10).
+- Moneda: la del deal (`deal_currency_code`); si falta (cuenta single-currency) cae a la **company currency** de la cuenta; si tampoco hay, se saltea como inválida (reportado en warnings). FX no se almacena (gap conocido) — se registra el valor tal cual.
+- Tests (Regla 2): match por email→asignada; sin match→Unassigned; sin owner→Unassigned; **idempotencia** (mismo deal 2×→1 transacción); fallback de moneda; sin amount→saltea; **aislamiento de tenant**.
+
+**FASE 2d — cola de mapeo manual (UI):**
+- Backend: `GetUnresolvedCrmOwnersQuery` (owners con deals closed-won que NO auto-resuelven: sin mapping y sin email que matchee un payee; con conteo de deals y de transacciones Unassigned) + `LinkCrmOwnerCommand` (money-critical).
+- Frontend (`features/integrations/owner-mapping/`, ruta `/integrations/hubspot/owners`): WsTable de owners no resueltos, modal de link con WsSelect de payees (búsqueda async) + WsSegmentedControl (no existe primitivo checkbox — no se inventó, DESIGN_SYSTEM §10.3). i18n EN/ES/PL completo. Botones Preview/Import + acceso a la cola añadidos a la card de HubSpot.
+- **Política de re-asignación retroactiva (decisión reportada):** opción "Reassign existing" (default) → al vincular, re-lee los deals del owner y reasigna SOLO sus transacciones Unassigned NO pagadas (vía `transaction.Assign`, que rechaza Paid); "Future only" no toca nada existente. Las pagadas/ya asignadas NUNCA se modifican.
+
+**Build/tests:** `dotnet build` solución limpio; 660 unit backend verdes (11 nuevos). `ng build --configuration production` limpio (785 kB initial, dentro de budget); 10 specs frontend nuevos verdes. NOTA: el suite Karma completo tiene fallos PRE-EXISTENTES en `pay-runs`/`process-pending`/`subscription-reactivation` (ajenos a este WI, en HEAD) que impiden compilar el bundle de tests; validé mis specs aislando temporalmente los specs rotos (revertido). Se detuvo el proceso `Wasnie.Api` (PID 14320) con permiso del owner para construir/aplicar la migración; reiniciarlo queda a cargo del owner.
+
+**Verificación en pantalla pendiente del owner (cuenta HubSpot real + app corriendo):** 2a Preview lista los closed-won; 2c Import los crea como transacciones (re-import no duplica); Unassigned resolubles con la UI existente; 2d vincular un owner asigna sus futuros deals y (con Reassign) sus Unassigned no pagados.
+
+## 2026-06-22 — WI-HUBSPOT-FASE2-DIAGNOSTICO (owner→payee, READ-ONLY, sin código)
+
+Diagnóstico read-only para la Fase 2 (deals→transacciones). No se modificó código/datos/esquema/UI.
+
+**Hechos del modelo Payee (`Payee.cs` + `PayeeConfiguration.cs`):** EmployeeCode req+ÚNICO por tenant (índice `(TenantId,EmployeeCode)` + chequeo en `CreatePayeeHandler`/`UpdatePayeeHandler`). Email OPCIONAL, único por tenant SOLO cuando no es null (índice filtrado `[Email] IS NOT NULL`), guardado lowercased. FullName req (no único). Identidad única de negocio = **EmployeeCode** (Id Guid = PK interna). Anti-dup hoy: create chequea EmployeeCode (no email); import valida EmployeeCode + Email (rechaza) pero la ejecución es insert-only (el índice DB es el backstop); sin dedup por nombre; sin upsert.
+
+**Cruce crítico:** las transacciones se atribuyen a payee por **EmployeeCode** (`PayeeCodeColumn` en el import). HubSpot NO provee EmployeeCode → el owner→payee DEBE puentear por email o por mapeo manual, nunca por EmployeeCode.
+
+**HubSpot owners (de la doc, SIN llamada en vivo — el client actual no tiene método de owners y no hay token conectado accesible):** `GET /crm/v3/owners` (scope ya concedido) → por owner: `id` (owner id, = `hubspot_owner_id` del deal), `email`, `firstName`, `lastName`, `userId`, `archived`, `teams`. Email normalmente presente pero NO garantizado (owners archivados/no-usuario); `id` es estable. `hubspot_owner_id` puede venir vacío (deal sin owner).
+
+**Opciones de match (sin recomendar una):** email (auto, falla si payee sin email o emails distintos) / mapeo manual (a prueba de balas, más setup) / nombre (frágil, riesgo de mala atribución = error de pago) / híbrido (email auto + cola manual para no resueltos). **Owner sin payee:** dejar sin atribuir (transacción ya soporta payee nullable) / bloquear hasta mapear / auto-crear payee (RIESGOSO: sin EmployeeCode, posible duplicado del mismo humano). **Vínculo estable sugerido (no implementado):** `HubSpotOwnerId` en Payee (único por tenant) o tabla de mapeo `(TenantId, HubSpotOwnerId, PayeeId)`. Todo tenant-scoped (Regla 9). Decisión pendiente del owner. Informe completo entregado en el chat.
+
+## 2026-06-22 — WI-INTEGRATIONS-CARD-FIX (la card se veía apretada/mal)
+
+**Causa raíz:** `.int-card` (flex column + `gap`) estaba aplicada al elemento HOST `<ws-card class="int-card">`. Pero `WsCard` tiene template `<div [class]="classes()"><ng-content/></div>` → el contenido proyectado (logo/título/divisor/footer) vive DENTRO del `<div class="ws-card">` interno, no como hijo directo del host. Por eso el `gap` entre secciones no se aplicaba: las 4 secciones quedaban pegadas (divisor tocando el texto), card apretada → "mal". (El padding sí funcionaba porque está en el div interno de ws-card.)
+
+**Fix:** envolver el contenido en `<div class="int-card">` DENTRO de `<ws-card>` (ahora el flex/gap sí controla la separación de secciones). Además:
+- `ws-card padding="none"` + `.int-card { padding: var(--space-6) }` → p-6 UNIFORME (la referencia es p-6 24px; ws-card pad-lg daba 24/32).
+- Fidelidad a la referencia: título `--font-size-18`/700 (text-lg font-bold), descripción `--font-size-14`/line-height 1.6 (text-sm leading-relaxed), tile de logo + `--shadow-sm`.
+- Quitado el hover custom de `.int-card` (antes en el host sin fondo → sombra rara) y la media query reduced-motion asociada (ya no hay transición).
+
+Solo `integrations.component.{html,scss}`. Sin TS/i18n/otras páginas. `ng build --configuration production` limpio. Verificación en pantalla = owner (recargar `/integrations`).
+
+## 2026-06-22 — WI-INTEGRATIONS-CARD-REF (estructura de referencia adaptada a modo oscuro)
+
+**Alcance:** UI puro de la card de `/integrations`. Sin TS/lógica/OAuth/i18n este turno (las claves ya existían). Sin tocar otras páginas. Solo `integrations.component.{html,scss}`.
+
+**Estructura de referencia adoptada (layout), traducida a tokens oscuros de Wasnie (colores):**
+- Header: tile de logo arriba-izquierda (56px ≈ h-14 w-14, `--radius-xl`, bg `--color-bg-surface-sunken`, borde sutil, logo `/hubspot.png` `object-contain`) + `WsBadge` de estado arriba-derecha (Connected verde / NeedsReconnect ámbar / neutro).
+- Título "HubSpot" (bold, `--color-text-primary`) + descripción (`--color-text-secondary`).
+- **Divisor** `<hr class="int-card__divider">` (`border-top --color-border-subtle`).
+- Footer: detalle revelado al conectar (account/connected on) / notice needs-reconnect con StatusReason / nota disconnected / resultado inline de Test, y la fila de acciones.
+- Card = `WsCard` pad-lg (rounded `--radius-xl`, shadow-md), hover sutil (border+shadow-lg, sin transform) con `@media (prefers-reduced-motion: reduce)`. Grilla `repeat(auto-fill, minmax(min(100%,320px), 384px))` → tiles capeados a max-w-sm, 1 col mobile.
+
+**Adaptación dark (crítico):** la referencia usaba `bg-white/text-slate-900/bg-emerald-50/bg-blue-600` — NO se usó nada de eso. Todo con WsCard/WsButton/WsBadge + variables de color/espaciado/radio de Wasnie. Solo se tomó de la referencia: proporciones, spacing, radios, divisor y disposición.
+
+**SIN toggle/switch** (la referencia lo tiene): implica "pausar sin desconectar" = estado Paused reservado a Fase 3; hoy no hay sync que pausar. Omitido a propósito (decisión owner).
+
+**Verificación:** `ng build --configuration production` limpio. git: este turno solo cambió `features/integrations/integrations.component.{html,scss}` (las mods de app.routes/sidebar/i18n son de WIs previos, sin tocar). Sin clases `bg-white`/colores ajenos. Verificación en pantalla = owner. NUNCA git.
+
+## 2026-06-22 — WI-INTEGRATIONS-UI-REDESIGN (grilla de cards profesional + logo HubSpot)
+
+**Alcance:** UI puro de `/integrations`. Sin cambios de backend/endpoints/datos/lógica OAuth. Sin tocar otras páginas. Reusa el design system de Wasnie (WsCard/WsButton/WsBadge + tokens), no se introdujo paleta/tipografía nueva.
+
+**Cambios (solo `features/integrations/integrations.component.{ts,html,scss}` + i18n INTEGRATIONS):**
+- **Grilla directorio:** `.integrations-grid` con `repeat(auto-fill, minmax(320px,1fr))` — 1 col mobile, 2-3 en desktop, lista para más integraciones (auto-fill mantiene la card a tamaño tile, no full-width). Por ahora una card: HubSpot.
+- **Card HubSpot:** logo real `/hubspot.png` (de `public/`) en tile fijo 48px (`object-fit:contain`, bg `--color-bg-surface-sunken`, borde); nombre + descripción (sentence case); estado `WsBadge` (Connected→success, NeedsReconnect→warning, otro→neutral) arriba-derecha.
+- **Detalle revelado al conectar** (misma card, no modal): `HubSpot account` (portalId) + `Connected on`, con divisor superior; acciones Test/Disconnect. No conectado → Connect. Needs reconnect → StatusReason + Reconnect. Disconnected → nota + Connect.
+- **Test connection inline:** nuevo signal `testResult`; en vez de toast, muestra una línea ok ("Connection healthy") o error con el motivo del backend, con icono check/alert. Se limpia en load()/disconnect().
+- **Pulido:** hover sutil de card (border + shadow-lg, SIN transform), guarda `@media (prefers-reduced-motion: reduce)`; focus de teclado lo aportan los WsButton; spacing con tokens.
+- i18n EN/ES/PL: DESC ajustada a "...flows into Wasnie / fluyan a / płynęły do"; añadidas `TEST_HEALTHY` y `TEST_FAIL`. (Las viejas TOAST_TEST_* quedan sin uso, inofensivas.)
+
+**Verificación:** `ng build --configuration production` limpio. JSON i18n válidos. git: solo `features/integrations/` + i18n cambiaron en el frontend este turno (las modificaciones de `app.routes.ts`/`sidebar.*` son de la Fase 1, no de este WI). Verificación en pantalla = owner. NUNCA git.
+
+## 2026-06-22 — WI-HUBSPOT-FIX-SCOPES (quitar `oauth` de la authorize URL)
+
+**Problema (verificado en pantalla):** HubSpot rechazaba la conexión con "mismatch between the scopes in the install URL and the app's configured scopes". La app está configurada con 3 scopes CRM (sin `oauth`); el código pedía 4 (con `oauth`). `oauth` no es un scope de HubSpot (el flujo OAuth es implícito) — sobraba.
+
+**Fix:** quitado `oauth`. Set final EXACTO (3): `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read`. Estaba en 3 lugares, unificados todos: (1) default de `HubSpotOptions.Scopes` (+ comentario "no incluir oauth"); (2) `appsettings.json` (placeholder committed); (3) `appsettings.Development.json` (gitignored, el que aplica en runtime). La authorize URL se construye desde `_opts.Scopes` (`StartHubSpotConnectionCommand.BuildAuthorizationUrl`), así que ajustar la config basta — sin cambios de lógica. No se tocó nada más del flujo OAuth. Build Application limpio.
+
+**OWNER:** reiniciar API, reintentar Connect en `/integrations`; verificar también que la Redirect URL `http://localhost:5091/api/integrations/hubspot/callback` esté efectivamente agregada y guardada en la lista de Redirect URLs de la app (no solo en la Sample URL).
+
+## 2026-06-22 — WI-HUBSPOT-FASE1 (OAuth Public App: conexión, tokens, refresh, UI)
+
+**Alcance:** SOLO Fase 1 del diseño `docs/HUBSPOT_INTEGRATION_DESIGN.md` (la puerta OAuth). NO deals, NO polling, NO webhooks, NO mapeo a transacciones (Fases 2-4).
+
+**PASO 0 (diagnóstico):** Reutilizados los patrones existentes — servicios externos vía `IHttpClientFactory` named client + Options + impl en Infrastructure + DI (como Resend/Stripe); config de secretos en `appsettings.Development.json` (gitignored, confirmado); audit vía `IAuditService.LogAsync(AuditEntry)`; entidades EF + `IEntityTypeConfiguration` + query filters por `CurrentTenantId`. **Hallazgo crítico:** NO existía ningún mecanismo de cifrado en el repo → había que implementarlo.
+
+**Decisiones (reportadas):**
+- **Cifrado:** `AesTokenEncryptionService` AES-256-GCM; clave base64 (32 bytes) desde `HubSpot:TokenEncryptionKey` (gitignored). Blob = base64(nonce12||tag16||cipher). Comentado que prod debe usar KMS/envelope. (Sin ValidateOnStart para no romper el arranque cuando HubSpot no está configurado — los endpoints fallan con mensaje claro si falta config.)
+- **Anti-CSRF state:** tabla efímera `HubSpotOAuthStates` (one-time, TTL 10min) en vez de memoria, porque el dev server recicla y el callback es anónimo. SIN query filter de tenant (el callback no tiene JWT → recupera el tenant del state). La conexión sí tiene query filter; el callback usa `IgnoreQueryFilters` + tenant explícito.
+- **Permiso:** nuevo `Integrations.Manage` solo para TenantAdmin (conectar un CRM expone datos del tenant). UI+endpoints gated; el callback es `[AllowAnonymous]` (seguridad = validación del state).
+- **Disconnect:** mantiene la fila con Status=Disconnected + DisconnectedAt/By + StatusReason, pero BORRA los tokens cifrados (no guardar credenciales del CRM tras desconectar). Ausencia de fila = NeverConnected.
+
+**Backend:** Domain `HubSpotConnection`/`HubSpotConnectionStatus`/`HubSpotOAuthState`; Application Options/interfaces (`ITokenEncryptionService`, `IHubSpotOAuthClient`, `IHubSpotTokenProvider`) + commands/queries (Start/Callback/Disconnect/Status/Ping) con DTOs sin tokens; Infrastructure `AesTokenEncryptionService`, `HubSpotOAuthClient` (code-exchange/refresh/token-info portalId/account-info), `HubSpotTokenProvider` (refresh+skew, descarta viejo, BAD_REFRESH_TOKEN→NeedsReconnect sin loop); EF configs + DbSets + query filter; DI + named HttpClient "HubSpot"; `IntegrationsController` (connect/callback/disconnect/status/ping). Endpoints HubSpot vigentes confirmados: authorize `https://app.hubspot.com/oauth/authorize`, token `https://api.hubapi.com/oauth/v1/token`, portalId `/oauth/v1/access-tokens/{token}`, ping `/account-info/v3/details`. `expires_in` leído del response (no hardcode).
+
+**Migración:** `B7_HubSpotIntegration` (2 tablas + unique index en TenantId). Generada, aplicada y **verificada en BD** (HubSpotConnections 14 cols, HubSpotOAuthStates 6 cols) — Regla 13.
+
+**Frontend:** feature `integrations/` — `HubSpotApiService`, `IntegrationsComponent` (signals; Connect→`window.location.assign(authUrl)`; lee `?hubspot=connected|error` y muestra toast; Reconnect; Disconnect; Test=ping), `WsCard/WsButton/WsBadge/WsPageLayout`; ruta `/integrations` gated por `Integrations.Manage`; ítem en sidebar (sección Settings). i18n EN/ES/PL (`NAV.INTEGRATIONS` + bloque `INTEGRATIONS`). Callback NO necesita componente Angular: el backend redirige a `/integrations?hubspot=...`.
+
+**Tests:** +21 unit (no requieren Docker): `AesTokenEncryptionServiceTests` (round-trip, ciphertext≠plaintext, nonce aleatorio, wrong-key/tamper rechazados, key inválida); `HubSpotConnectionTests` (transiciones, disconnect limpia tokens); `HubSpotTokenProviderTests` (no refresca si válido; refresca y descarta el viejo; BAD_REFRESH_TOKEN→NeedsReconnect+null; disconnected→null sin llamar a HubSpot); `HandleHubSpotCallbackHandlerTests` (code→token persiste CIFRADO no plaintext; state desconocido/expirado rechazado; reconnect reutiliza la fila). Backend unit **649/649** pass. `ng build` prod limpio; full solution build limpio.
+
+**OWNER ACTION (FASE 3.2, en pantalla):** registrar la Public App dev en HubSpot (redirect `http://localhost:5091/api/integrations/hubspot/callback`; scopes `crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read`), poner `HubSpot:ClientId`/`HubSpot:ClientSecret` en `appsettings.Development.json` (la `TokenEncryptionKey` dev ya está puesta), reiniciar la API (`api run`), ir a `/integrations`, Connect → autorizar en HubSpot → ver "Conectado" → Test trae info de cuenta. NOTA: se detuvo el `Wasnie.Api.exe` de dev para builds/migración — reiniciar.
+
+## 2026-06-22 — WI-IMPORT-PREVIEW-TABLE-STYLE (unificar tabla de preview del import con Credits)
+
+**Estado:** Ya implementado y commiteado como `b4043a8 "Enhance table styling and scrolling behavior"` (mergeado vía PR #17 a `WI-HUBSPOT-INTEGRATION`). En esta sesión re-derivé el cambio: resultó byte-idéntico al commiteado (blob hashes iguales, `git diff` vacío), así que no había nada nuevo que aplicar ni commitear. Documentado aquí porque las continuity docs no lo recogían.
+
+**Objetivo:** Alinear el diseño visual de la tabla de preview/validación del import con el estándar de la app (referencia: tabla de Credits / `WsTable`), sin cambiar comportamiento.
+
+**Decisión de enfoque (autonomía Sección 13):** NO migrar a `<ws-table>`; REPLICAR sus estilos sobre la estructura `.preview-table` existente. Razón: la tabla del preview tiene header **sticky** + scroll vertical con `max-height: 440px` (Credits usa paginación, su `ws-table-wrap` no tiene max-height) y la celda **Issues/Changes** es multi-línea/multi-badge. Migrar a `<ws-table>` habría perdido el scroll/sticky y arriesgado la celda Issues — justo lo que el WI prohíbe degradar.
+
+**Alcance:** 3 preview steps (todos comparten el patrón `.preview-table`): `imports/payees/steps/preview-step`, `imports/transactions/steps/preview-step` (create), `imports/transactions/steps/update-preview-step` (diff). Se incluyó el update-preview para uniformidad dentro del mismo wizard (su columna multi-línea es "Changes", tratada igual que Issues).
+
+**Cambios (6 archivos: 3 .scss + 3 .html):**
+- Wrap: `border-radius` md→lg, `+ background: surface`, `+ box-shadow: sm`; se mantiene `max-height` + overflow (scroll intacto).
+- Header (`__th`): bg `surface-sunken`→`surface-raised`, color `tertiary`→`secondary`, `letter-spacing` 0.04em→0.02em, border `subtle`→`default`, font 11px→12px; sigue sticky.
+- Celdas (`__td`): padding `space-1/space-2`→`space-3/space-4`, font tabla →14px peso 400, border-bottom subtle; **eliminada** la truncación `max-width:0 + overflow hidden + ellipsis` (Credits no trunca).
+- Hover de fila añadido (`bg surface-raised`).
+- Issues/Changes: `white-space: normal` + `vertical-align: top` (mantenido top a propósito para legibilidad multi-issue), sin truncar, anchos 28%/40% mantenidos; WsBadge intactos.
+- HTML: solo se añadió la clase global `ws-scroll-thin` al contenedor de scroll.
+
+**Sin cambios:** TS, columnas, contenido, tabs/filtros/conteos, botón import, checkbox consentimiento, datos, i18n. `ng build --configuration production` limpio. EN/ES/PL no afectados (sin cambios de texto; las celdas ahora envuelven en vez de truncar, lo que mejora textos largos en cualquier idioma).
+
 ## 2026-06-22 — WI-IMPORT-CANCEL-CONSENT (Cancel link + checkbox de consentimiento en wizards de import)
 
 **Contexto:** Dos mejoras de UI en ambos wizards de import (`/payees/import` y `/transactions/import`, este último con modos create y update): (A) un escape directo "Cancel" para no tener que pulsar Back varias veces, y (B) un checkbox de consentimiento obligatorio que habilita el botón Import.

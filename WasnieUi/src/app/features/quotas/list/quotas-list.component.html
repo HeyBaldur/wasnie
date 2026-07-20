@@ -1,4 +1,4 @@
-<app-shell>
+<app-shell [refreshOnEnter]="store">
   <ws-page-layout
     icon="dollar-sign"
     [title]="'QUOTAS.TITLE' | translate"
@@ -75,8 +75,8 @@
                   <td class="col-secondary">{{ quota.periodStart | dateFormat:'short' }} – {{ quota.periodEnd | dateFormat:'short' }}</td>
                   <td class="col-num">{{ quota.amount | currencyFormat: quota.currency }}</td>
                   <td>
-                    <ws-badge [variant]="statusVariant(quota.status)">
-                      {{ 'QUOTAS.STATUS_' + quota.status.toUpperCase() | translate }}
+                    <ws-badge [variant]="quota.status | quotaStatusVariant">
+                      {{ quota.status | quotaStatusLabel | translate }}
                     </ws-badge>
                   </td>
                   <td class="col-actions" (click)="$event.stopPropagation()">

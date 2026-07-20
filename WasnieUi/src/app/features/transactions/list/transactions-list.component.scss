@@ -77,6 +77,15 @@
   color: var(--color-text-secondary);
 }
 
+.col-payee-link {
+  color: var(--color-text-link);
+  font-weight: 600;
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}
+
 .col-unassigned {
   font-family: Consolas, monospace;
   font-weight: 600;
@@ -125,4 +134,62 @@
   50% {
     opacity: 0.4;
   }
+}
+
+/* Bulk void — selection column, selected row, action bar, modal */
+.col-check {
+  width: 36px;
+  text-align: center;
+}
+
+.transactions-list__row--selected {
+  background-color: var(--color-bg-surface-raised);
+}
+
+.transactions-list__bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+}
+
+.transactions-list__bulk-count {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-right: auto;
+}
+
+.bulk-void-modal__intro {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+}
+
+.bulk-void-modal__field {
+  margin-bottom: var(--space-4);
+}
+
+.bulk-void-modal__errors {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+
+  p { margin: 0 0 var(--space-2); font-weight: 600; }
+  ul { margin: 0; padding-left: var(--space-4); }
+  li { color: var(--color-text-secondary); }
+}
+
+.bulk-void-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }

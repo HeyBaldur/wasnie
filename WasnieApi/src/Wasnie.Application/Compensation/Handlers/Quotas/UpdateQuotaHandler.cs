@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
@@ -25,6 +26,17 @@ public sealed class UpdateQuotaHandler(
             return Result<QuotaSummaryDto>.Failure("Quota not found.");
 
         var plan = await db.CompensationPlans.FirstOrDefaultAsync(p => p.Id == quota.PlanId, cancellationToken);
+
+        // Integrity guard (same rule as CreateQuotaHandler): the updated quota period must stay
+        // CONTAINED within the plan's effective period. The create flow already enforces this; the
+        // update endpoint is the back door for the same misalignment, so it must reject too. The
+        // backend is the source of truth even though the UI validates client-side.
+        if (plan is not null)
+        {
+            var periodError = QuotaPeriodGuard.Validate(plan.EffectivePeriod, request.PeriodStart, request.PeriodEnd);
+            if (periodError is not null)
+                return Result<QuotaSummaryDto>.Failure(periodError);
+        }
 
         try
         {

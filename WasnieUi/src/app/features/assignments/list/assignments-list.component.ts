@@ -2,6 +2,7 @@ import { Component, HostListener, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { OverlapWarningComponent } from '../../../shared/components/overlap-warning/overlap-warning.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
@@ -32,6 +33,7 @@ import {
   standalone: true,
   imports: [
     AppShellComponent,
+    RefreshOnEnterDirective,
     IconComponent,
     RouterLink,
     TranslateModule,
@@ -95,7 +97,7 @@ export class AssignmentsListComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.store.loadAssignments();
+    // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
   }
 
   onSearch(value: string): void {

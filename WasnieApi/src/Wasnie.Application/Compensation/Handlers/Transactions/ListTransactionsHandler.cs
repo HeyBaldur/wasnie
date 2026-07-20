@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Transactions;
 using Wasnie.Domain.Authorization;
@@ -33,6 +34,15 @@ public sealed class ListTransactionsHandler(
         var unfilteredTotal = await db.CompensationTransactions.CountAsync(cancellationToken);
 
         var query = db.CompensationTransactions.AsQueryable();
+
+        // ── Dashboard "needs attention" deep-link: filter to one unprocessable-Pending reason ──
+        // Uses the SAME spec as the dashboard counts, so the list count matches the card exactly.
+        if (!string.IsNullOrWhiteSpace(p.AttentionReason))
+        {
+            var reasonQuery = UnprocessablePendingSpec.ForReason(db, p.AttentionReason.Trim());
+            if (reasonQuery is not null)
+                query = reasonQuery;
+        }
 
         // ── Legacy single-value filters (backward compat) ──────────────────────
 

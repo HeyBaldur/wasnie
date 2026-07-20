@@ -1,0 +1,140 @@
+<app-shell>
+  <ws-page-layout
+    icon="users"
+    [title]="'INTEGRATIONS.HUBSPOT.OWNERS.TITLE' | translate"
+    [subtitle]="'INTEGRATIONS.HUBSPOT.OWNERS.SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="secondary" routerLink="/integrations">
+      <app-icon name="arrow-left" [size]="16" />
+      {{ 'INTEGRATIONS.HUBSPOT.OWNERS.BACK' | translate }}
+    </ws-button>
+
+    @if (loadError(); as err) {
+      <div class="owners-notice owners-notice--warning" role="alert">
+        <app-icon name="alert-circle" [size]="16" />
+        <p>{{ err | translate }}</p>
+        <ws-button variant="secondary" size="sm" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </div>
+    } @else if (!loading() && owners().length === 0) {
+      <ws-empty-state
+        icon="check-circle"
+        titleKey="INTEGRATIONS.HUBSPOT.OWNERS.EMPTY_TITLE"
+        descKey="INTEGRATIONS.HUBSPOT.OWNERS.EMPTY_DESC"
+      />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'INTEGRATIONS.HUBSPOT.OWNERS.COL_OWNER' | translate }}</th>
+              <th>{{ 'INTEGRATIONS.HUBSPOT.OWNERS.COL_EMAIL' | translate }}</th>
+              <th class="col-num">{{ 'INTEGRATIONS.HUBSPOT.OWNERS.COL_DEALS' | translate }}</th>
+              <th class="col-num">{{ 'INTEGRATIONS.HUBSPOT.OWNERS.COL_UNASSIGNED' | translate }}</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td class="col-num"><span class="skeleton skeleton--text-narrow"></span></td>
+                  <td class="col-num"><span class="skeleton skeleton--text-narrow"></span></td>
+                  <td class="col-actions"></td>
+                </tr>
+              }
+            } @else {
+              @for (owner of owners(); track owner.ownerId) {
+                <tr>
+                  <td class="col-owner">
+                    <span class="owner-name">{{ owner.name || owner.ownerId }}</span>
+                    @if (owner.archived) {
+                      <ws-badge variant="neutral" size="sm">
+                        {{ 'INTEGRATIONS.HUBSPOT.OWNERS.ARCHIVED' | translate }}
+                      </ws-badge>
+                    }
+                  </td>
+                  <td>{{ owner.email || ('INTEGRATIONS.HUBSPOT.OWNERS.NO_EMAIL' | translate) }}</td>
+                  <td class="col-num">{{ owner.closedWonDealCount }}</td>
+                  <td class="col-num">
+                    @if (owner.unassignedTransactionCount > 0) {
+                      <ws-badge variant="warning" size="sm">{{ owner.unassignedTransactionCount }}</ws-badge>
+                    } @else {
+                      <span class="owners-muted">0</span>
+                    }
+                  </td>
+                  <td class="col-actions">
+                    <ws-button variant="secondary" size="sm" (click)="openLink(owner)">
+                      {{ 'INTEGRATIONS.HUBSPOT.OWNERS.LINK' | translate }}
+                    </ws-button>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </ws-table>
+    }
+  </ws-page-layout>
+</app-shell>
+
+<!-- Link owner → payee -->
+<ws-modal
+  [isOpen]="linkOpen()"
+  [title]="'INTEGRATIONS.HUBSPOT.OWNERS.LINK_TITLE' | translate"
+  size="md"
+  (closed)="linkOpen.set(false)"
+>
+  @if (activeOwner(); as owner) {
+    <div class="link-modal__context">
+      <div class="link-modal__context-row">
+        <span class="link-modal__context-label">{{ 'INTEGRATIONS.HUBSPOT.OWNERS.COL_OWNER' | translate }}</span>
+        <span class="link-modal__context-value">{{ owner.name || owner.ownerId }}</span>
+      </div>
+      <div class="link-modal__context-row">
+        <span class="link-modal__context-label">{{ 'INTEGRATIONS.HUBSPOT.OWNERS.COL_EMAIL' | translate }}</span>
+        <span class="link-modal__context-value">{{ owner.email || ('INTEGRATIONS.HUBSPOT.OWNERS.NO_EMAIL' | translate) }}</span>
+      </div>
+    </div>
+
+    <div class="link-modal__field">
+      <ws-select
+        [label]="'INTEGRATIONS.HUBSPOT.OWNERS.PAYEE_LABEL' | translate"
+        [placeholder]="'INTEGRATIONS.HUBSPOT.OWNERS.PAYEE_PLACEHOLDER' | translate"
+        [searchFn]="payeeSearch"
+        [ngModel]="selectedPayeeId()"
+        (ngModelChange)="selectedPayeeId.set($event)"
+      />
+    </div>
+
+    @if (owner.unassignedTransactionCount > 0) {
+      <div class="link-modal__field">
+        <span class="link-modal__field-label">{{ 'INTEGRATIONS.HUBSPOT.OWNERS.APPLY_LABEL' | translate }}</span>
+        <ws-segmented-control
+          [options]="reassignOptions"
+          [value]="reassignChoice()"
+          (valueChange)="reassignChoice.set($event)"
+        />
+        <p class="link-modal__hint">
+          {{ 'INTEGRATIONS.HUBSPOT.OWNERS.APPLY_HINT' | translate: { count: owner.unassignedTransactionCount } }}
+        </p>
+      </div>
+    }
+  }
+
+  <div slot="footer" class="link-modal__footer">
+    <ws-button type="button" variant="secondary" (click)="linkOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button
+      type="button"
+      variant="primary"
+      [loading]="linking()"
+      [disabled]="!selectedPayeeId() || linking()"
+      (click)="confirmLink()"
+    >
+      {{ 'INTEGRATIONS.HUBSPOT.OWNERS.LINK_SUBMIT' | translate }}
+    </ws-button>
+  </div>
+</ws-modal>

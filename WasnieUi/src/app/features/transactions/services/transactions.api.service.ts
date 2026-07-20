@@ -9,6 +9,16 @@ import { JobState } from '../../imports/transactions/models/transaction-import.m
 
 export type ProcessPendingScope = 'ByPlanAssignment' | 'ByPlan' | 'ByPayeeAndPeriod';
 
+export interface BulkVoidRequest {
+  transactionIds: string[];
+  reason: string;
+}
+
+export interface BulkVoidResult {
+  voidedCount: number;
+  errors: string[];
+}
+
 export interface ProcessPendingRequest {
   scope: ProcessPendingScope;
   scopeId?: string | null;
@@ -95,6 +105,10 @@ export class TransactionsApiService {
 
   void(transactionId: string, request: VoidTransactionRequest): Observable<Transaction> {
     return this.http.post<Transaction>(`${this.base}/${transactionId}/void`, request);
+  }
+
+  bulkVoid(request: BulkVoidRequest): Observable<BulkVoidResult> {
+    return this.http.post<BulkVoidResult>(`${this.base}/bulk-void`, request);
   }
 
   getPendingCount(scope: ProcessPendingScope, scopeId?: string | null, periodStart?: string | null, periodEnd?: string | null): Observable<{ count: number }> {

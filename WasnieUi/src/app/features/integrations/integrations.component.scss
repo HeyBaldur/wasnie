@@ -1,0 +1,172 @@
+@reference "../../../styles.scss";
+
+.integrations__muted {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-3);
+}
+
+/* Directory grid — ready to grow as more integrations are added.
+   Tiles cap at ~max-w-sm (384px) so a single card never stretches across a wide screen;
+   collapses to full width on mobile. */
+.integrations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 384px));
+  gap: var(--space-5);
+  justify-content: start;
+}
+
+/* Reference layout adapted to Wasnie dark tokens:
+   logo tile + badge / title + description / divider / actions.
+   This is an inner wrapper INSIDE <ws-card> (which provides the surface, border, radius,
+   shadow and padding) — so it carries only the vertical rhythm of the card's sections. */
+.int-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6); /* p-6, uniform — matches the reference */
+}
+
+.int-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Fixed, consistent logo tile (≈ h-14 w-14, rounded-xl) — contained, never stretched. */
+.int-card__logo {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-sm);
+
+  img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+}
+
+.int-card__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.int-card__name {
+  font-size: var(--font-size-18); /* text-lg */
+  font-weight: 700; /* font-bold */
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.int-card__desc {
+  font-size: var(--font-size-14); /* text-sm */
+  color: var(--color-text-secondary);
+  line-height: 1.6; /* leading-relaxed */
+  margin: 0;
+}
+
+/* Horizontal divider between header and the action area. */
+.int-card__divider {
+  width: 100%;
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.int-card__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.int-card__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.int-card__detail-row {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+
+  dt {
+    color: var(--color-text-tertiary);
+    min-width: 120px;
+  }
+
+  dd {
+    color: var(--color-text-primary);
+    margin: 0;
+    font-weight: 600;
+  }
+}
+
+/* Inline notice (needs-reconnect reason, test result). Variant tints the border + icon. */
+.int-card__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+
+  p { margin: 0; }
+
+  &--warning {
+    border-color: var(--color-warning);
+    color: var(--color-text-primary);
+
+    app-icon { color: var(--color-warning); }
+  }
+
+  &--ok {
+    border-color: var(--color-success);
+    color: var(--color-text-primary);
+
+    app-icon { color: var(--color-success); }
+  }
+}
+
+.int-card__muted {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.int-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Phase 2 deal-sync sub-section, separated from connection actions by a hairline. */
+.int-card__sync {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.int-card__sync-label {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}

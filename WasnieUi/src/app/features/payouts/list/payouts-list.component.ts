@@ -12,6 +12,7 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
 import { PayoutsApiService } from '../services/payouts.api.service';
@@ -40,7 +41,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
   selector: 'app-payouts-list',
   standalone: true,
   imports: [
-    AppShellComponent, ReactiveFormsModule, TranslateModule,
+    AppShellComponent, RefreshOnEnterDirective, ReactiveFormsModule, TranslateModule,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
     WsSelectComponent, WsDatePickerComponent, WsSegmentedControlComponent,
@@ -163,11 +164,8 @@ export class PayoutsListComponent implements OnInit {
       void this._resolvePlanNames(uncachedPlanIds);
     }
 
-    // Always reload from backend on route activation so re-navigation never shows stale data.
-    // The store is a singleton (providedIn: 'root') and its reactive effect only fires when a
-    // signal changes — if the filter is unchanged from the previous visit, no reload would occur.
-    // This imperative call guarantees exactly one fresh load per route activation.
-    void this.store.reload();
+    // Refresh on route entry is handled centrally by [refreshOnEnter] (shared mechanism); the store's
+    // constructor effect covers the first mount. (Previously an ad-hoc reload() lived here.)
   }
 
   private _syncFormFromStore(): void {

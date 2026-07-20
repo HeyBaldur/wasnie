@@ -23,7 +23,8 @@ public sealed class IngestTransactionHandler(
     IGuidGenerator guid,
     IAuthorizationService authorizationService,
     IFieldRequirementService fieldRequirements,
-    ICreditAllocationService creditAllocationService)
+    ICreditAllocationService creditAllocationService,
+    Wasnie.Application.Compensation.Common.ITransactionCreateGuard createGuard)
     : IRequestHandler<IngestTransactionCommand, Result<TransactionDto>>
 {
     public async Task<Result<TransactionDto>> Handle(IngestTransactionCommand request, CancellationToken cancellationToken)
@@ -48,6 +49,22 @@ public sealed class IngestTransactionHandler(
 
             if (!payee.IsActive)
                 return Result<TransactionDto>.Failure($"Payee '{request.PayeeId}' is inactive. Use import to assign historical transactions to inactive payees.");
+        }
+
+        // Centralized create rule (same rule for HubSpot/Excel/Manual): an ACTIVE row with this reference
+        // is a real duplicate; a voided row with this reference does NOT block (Opción B) unless it carried
+        // credits (anti-double-pay). Manual transactions have no ExternalId.
+        var classification = await createGuard.ClassifyAsync(
+            Wasnie.Domain.Compensation.Enums.TransactionSource.Manual,
+            [request.ReferenceNumber], [null], cancellationToken);
+        switch (classification.Decide(request.ReferenceNumber, null))
+        {
+            case Wasnie.Application.Compensation.Common.TransactionCreateDecision.SkipActiveDuplicate:
+                return Result<TransactionDto>.Failure(
+                    $"A transaction with reference '{request.ReferenceNumber}' already exists.");
+            case Wasnie.Application.Compensation.Common.TransactionCreateDecision.BlockedVoidHadCredits:
+                return Result<TransactionDto>.Failure(
+                    $"Reference '{request.ReferenceNumber}' belongs to a voided transaction that was already processed and cannot be reused.");
         }
 
         Money amount;

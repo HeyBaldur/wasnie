@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Quotas;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
@@ -31,10 +32,10 @@ public sealed class CreateQuotaHandler(
         // Integrity guard: the quota period must fall within the plan's effective period.
         // The UI defaults to the plan period and validates this client-side, but a direct API
         // call must not be able to set a window outside the plan that attainment is measured against.
-        if (request.PeriodStart < plan.EffectivePeriod.Start ||
-            request.PeriodEnd > plan.EffectivePeriod.End)
-            return Result<QuotaSummaryDto>.Failure(
-                "The quota period must fall within the selected plan's effective period.");
+        // Shared with UpdateQuotaHandler via QuotaPeriodGuard so both paths enforce the same rule.
+        var periodError = QuotaPeriodGuard.Validate(plan.EffectivePeriod, request.PeriodStart, request.PeriodEnd);
+        if (periodError is not null)
+            return Result<QuotaSummaryDto>.Failure(periodError);
 
         var amount = Money.OfNonNegative(request.Amount, request.Currency);
         var period = DateRange.Of(request.PeriodStart, request.PeriodEnd);

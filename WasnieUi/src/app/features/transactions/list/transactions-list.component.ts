@@ -1,7 +1,11 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
+import { ToastService } from '../../../shared/services/toast.service';
+import { extractApiError } from '../../../shared/utils/api-error';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { ProcessPendingComponent } from '../process-pending/process-pending.component';
 import { TransactionFilterComponent } from '../filter/transaction-filter.component';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
@@ -25,6 +29,8 @@ import {
   WsTableEmptyComponent,
   WsEmptyStateComponent,
   WsPaginationComponent,
+  WsModalComponent,
+  WsInputComponent,
   type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
@@ -34,6 +40,8 @@ import {
   standalone: true,
   imports: [
     AppShellComponent,
+    RefreshOnEnterDirective,
+    FormsModule,
     RouterLink,
     TranslateModule,
     HasPermissionPipe,
@@ -49,6 +57,8 @@ import {
     WsTableEmptyComponent,
     WsEmptyStateComponent,
     WsPaginationComponent,
+    WsModalComponent,
+    WsInputComponent,
     AssignPayeeModalComponent,
     ReassignPayeeModalComponent,
     VoidTransactionModalComponent,
@@ -62,6 +72,14 @@ export class TransactionsListComponent implements OnInit {
   readonly store = inject(TransactionsStore);
   private readonly route = inject(ActivatedRoute);
   private readonly txApi = inject(TransactionsApiService);
+  private readonly toast = inject(ToastService);
+
+  // Bulk void
+  readonly bulkVoidModalOpen = signal(false);
+  readonly bulkVoidReason = signal('');
+  readonly bulkVoiding = signal(false);
+  readonly bulkVoidCount = signal(0);
+  readonly bulkVoidErrors = signal<string[]>([]);
 
   readonly exporting = signal(false);
   readonly exportError = signal<string | null>(null);
@@ -162,6 +180,40 @@ export class TransactionsListComponent implements OnInit {
 
   goToPage(page: number): void { this.store.setPage(page); }
   goToPageSize(size: number): void { this.store.setPageSize(size); }
+
+  // ── Bulk void ──────────────────────────────────────────────────────────────
+  openBulkVoid(): void {
+    this.bulkVoidCount.set(this.store.selectedCount());
+    this.bulkVoidReason.set('');
+    this.bulkVoidErrors.set([]);
+    this.bulkVoidModalOpen.set(true);
+  }
+
+  async confirmBulkVoid(): Promise<void> {
+    const reason = this.bulkVoidReason().trim();
+    if (reason.length < 3 || this.bulkVoiding()) return;
+    this.bulkVoiding.set(true);
+    this.bulkVoidErrors.set([]);
+    try {
+      const result = await this.store.bulkVoid(reason);
+      if (result.errors.length === 0) {
+        this.bulkVoidModalOpen.set(false);
+        this.toast.show('TRANSACTIONS.BULK_VOID.TOAST_SUCCESS', 'success');
+      } else {
+        // Some couldn't be voided (paid/calculated/active credits) — keep them visible, never silent.
+        this.bulkVoidErrors.set(result.errors);
+        this.toast.show(
+          result.voidedCount > 0
+            ? 'TRANSACTIONS.BULK_VOID.TOAST_PARTIAL'
+            : 'TRANSACTIONS.BULK_VOID.TOAST_NONE',
+          'warning');
+      }
+    } catch (err) {
+      this.toast.show(extractApiError(err), 'error');
+    } finally {
+      this.bulkVoiding.set(false);
+    }
+  }
 
   async onExport(): Promise<void> {
     if (this.exporting()) return;

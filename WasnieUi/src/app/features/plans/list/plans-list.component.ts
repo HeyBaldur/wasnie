@@ -3,6 +3,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
@@ -33,6 +34,7 @@ import {
   standalone: true,
   imports: [
     AppShellComponent,
+    RefreshOnEnterDirective,
     IconComponent,
     RouterLink,
     TranslateModule,
@@ -122,7 +124,7 @@ export class PlansListComponent implements OnInit {
     if (qp['status'] && ['Draft', 'Active', 'Archived'].includes(qp['status'])) {
       this.store.setStatus(qp['status'] as PlanStatus);
     }
-    this.store.loadPlans();
+    // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
   }
 
   onSearch(value: string): void {

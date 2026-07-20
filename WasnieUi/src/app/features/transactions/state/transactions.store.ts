@@ -10,6 +10,7 @@ import {
   VoidTransactionRequest,
 } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { RefreshableStore } from '../../../shared/state/refreshable-store';
 
 export interface TransactionFilter {
   reference: string;
@@ -25,6 +26,8 @@ export interface TransactionFilter {
   amountSort: 'asc' | 'desc' | null;
   referenceNumbers: string[];
   currencies: string[];
+  // Dashboard "needs attention" deep-link: filters to one unprocessable-Pending reason (server-side).
+  attentionReason: string | null;
 }
 
 export const EMPTY_FILTER: TransactionFilter = {
@@ -41,10 +44,11 @@ export const EMPTY_FILTER: TransactionFilter = {
   amountSort: null,
   referenceNumbers: [],
   currencies: [],
+  attentionReason: null,
 };
 
 @Injectable({ providedIn: 'root' })
-export class TransactionsStore {
+export class TransactionsStore implements RefreshableStore {
   private readonly api = inject(TransactionsApiService);
 
   readonly loading = signal(false);
@@ -52,7 +56,10 @@ export class TransactionsStore {
 
   readonly page = signal(1);
   readonly pageSize = signal(10);
-  readonly sortBy = signal('transactiondate');
+  // Default order = creation date (IngestedAt) descending — newest first. So freshly imported, created or
+  // drift-recreated transactions surface at the top instead of being buried among older Tx-dated rows.
+  // The backend already accepts 'ingestedat' as a sort field; the user can still re-sort (e.g. amount).
+  readonly sortBy = signal('ingestedat');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
 
   // Filter signals
@@ -94,10 +101,50 @@ export class TransactionsStore {
     if (f.amountSort) count++;
     if (f.referenceNumbers.length > 0) count++;
     if (f.currencies.length > 0) count++;
+    if (f.attentionReason) count++;
     return count;
   });
 
   readonly hasActiveFilters = computed(() => this.activeFilterCount() > 0);
+
+  // ── Bulk selection for bulk void — only Pending transactions are voidable/selectable ──────────
+  readonly selectedIds = signal<Set<string>>(new Set());
+  readonly selectedCount = computed(() => this.selectedIds().size);
+  private readonly voidableOnPage = computed(() =>
+    this.transactions().filter(t => t.status === TransactionStatus.Pending));
+  readonly hasVoidableOnPage = computed(() => this.voidableOnPage().length > 0);
+  readonly allVoidableSelected = computed(() => {
+    const v = this.voidableOnPage();
+    const sel = this.selectedIds();
+    return v.length > 0 && v.every(t => sel.has(t.id));
+  });
+
+  toggleSelect(id: string): void {
+    this.selectedIds.update(sel => {
+      const next = new Set(sel);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  toggleSelectAllVoidable(): void {
+    this.selectedIds.set(this.allVoidableSelected()
+      ? new Set()
+      : new Set(this.voidableOnPage().map(t => t.id)));
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+  }
+
+  /** Voids all currently-selected transactions in one call; clears selection and reloads. */
+  async bulkVoid(reason: string): Promise<import('../services/transactions.api.service').BulkVoidResult> {
+    const ids = [...this.selectedIds()];
+    const result = await firstValueFrom(this.api.bulkVoid({ transactionIds: ids, reason }));
+    this.clearSelection();
+    await this.loadTransactions();
+    return result;
+  }
 
   constructor() {
     effect(() => {
@@ -127,6 +174,7 @@ export class TransactionsStore {
     if (f.amountSort) filters['amountSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) filters['referenceNumbers'] = f.referenceNumbers.join(',');
     if (f.currencies.length > 0) filters['currencies'] = f.currencies.join(',');
+    if (f.attentionReason) filters['attentionReason'] = f.attentionReason;
     return filters;
   }
 
@@ -150,6 +198,7 @@ export class TransactionsStore {
     if (f.amountSort) body['amountSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) body['referenceNumbers'] = f.referenceNumbers.join(',');
     if (f.currencies.length > 0) body['currencies'] = f.currencies.join(',');
+    if (f.attentionReason) body['attentionReason'] = f.attentionReason;
     return body;
   }
 
@@ -187,20 +236,28 @@ export class TransactionsStore {
     );
   }
 
+  /** RefreshableStore — re-fetch the current page/filter when the route is re-entered. */
+  refresh(): Promise<void> {
+    return this.loadTransactions();
+  }
+
   setFilter(partial: Partial<TransactionFilter>): void {
     this.filter.update(f => ({ ...f, ...partial }));
     this.page.set(1);
+    this.clearSelection();
   }
 
   clearFilters(): void {
     this.filter.set({ ...EMPTY_FILTER });
     this.page.set(1);
+    this.clearSelection();
   }
 
   /** Set a single status (tab shortcut — replaces any current status filter). */
   setStatusTab(status: TransactionStatus | null): void {
     this.filter.update(f => ({ ...f, statuses: status ? [status] : [] }));
     this.page.set(1);
+    this.clearSelection();
   }
 
   // Legacy setters — kept for backward compat with ProcessPendingComponent
@@ -250,6 +307,7 @@ export class TransactionsStore {
     if (f.amountSort) params['amtSort'] = f.amountSort;
     if (f.referenceNumbers.length > 0) params['refs'] = f.referenceNumbers.join(',');
     if (f.currencies.length > 0) params['currencies'] = f.currencies.join(',');
+    if (f.attentionReason) params['attention'] = f.attentionReason;
     return params;
   }
 
@@ -272,6 +330,7 @@ export class TransactionsStore {
     if (params['amtSort'] === 'asc' || params['amtSort'] === 'desc') f.amountSort = params['amtSort'];
     if (params['refs']) f.referenceNumbers = params['refs'].split(',').filter(Boolean);
     if (params['currencies']) f.currencies = params['currencies'].split(',').filter(Boolean);
+    if (params['attention']) f.attentionReason = params['attention'];
     this.filter.set(f);
   }
 

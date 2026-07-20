@@ -1,0 +1,18 @@
+@if (connected()) {
+  <ws-card padding="none" class="hs-sync-banner">
+    <div class="hs-sync-banner__inner">
+      <img class="hs-sync-banner__logo" src="/hubspot.png" alt="HubSpot" />
+      <hr class="hs-sync-banner__divider" />
+      <p class="hs-sync-banner__text">
+        @if (status()?.lastSyncedAt) {
+          {{ 'TRANSACTIONS.HS_SYNC_BANNER' | translate: { time: (status()!.lastSyncedAt | relativeTime) } }}
+        } @else {
+          {{ 'TRANSACTIONS.HS_SYNC_BANNER_NEVER' | translate }}
+        }
+      </p>
+      <a class="hs-sync-banner__link" routerLink="/integrations">
+        {{ 'TRANSACTIONS.HS_SYNC_BANNER_LINK' | translate }}
+      </a>
+    </div>
+  </ws-card>
+}

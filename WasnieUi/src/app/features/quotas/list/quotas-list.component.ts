@@ -2,6 +2,7 @@ import { Component, HostListener, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
@@ -10,6 +11,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
 import { QuotaStatus } from '../models/quota.model';
 import {
   WsButtonComponent,
@@ -31,11 +33,14 @@ import {
   standalone: true,
   imports: [
     AppShellComponent,
+    RefreshOnEnterDirective,
     IconComponent,
     RouterLink,
     TranslateModule,
     CurrencyFormatPipe,
     DateFormatPipe,
+    QuotaStatusVariantPipe,
+    QuotaStatusLabelPipe,
     HasPermissionDirective,
     HasPermissionPipe,
     WsButtonComponent,
@@ -85,7 +90,7 @@ export class QuotasListComponent implements OnInit {
     if (qp['status'] && ['Draft', 'Active', 'Closed'].includes(qp['status'])) {
       this.store.setStatus(qp['status'] as QuotaStatus);
     }
-    this.store.loadQuotas();
+    // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
   }
 
   onSearch(value: string): void {
@@ -161,14 +166,6 @@ export class QuotasListComponent implements OnInit {
       this.toast.show(extractApiError(err), 'error');
     } finally {
       this.closeSaving.set(false);
-    }
-  }
-
-  statusVariant(status: QuotaStatus): 'neutral' | 'success' | 'warning' {
-    switch (status) {
-      case 'Active': return 'success';
-      case 'Draft': return 'neutral';
-      case 'Closed': return 'warning';
     }
   }
 

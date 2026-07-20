@@ -4,9 +4,10 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
+import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DashboardStore } from './store/dashboard.store';
-import { CurrencyTotal, DashboardTrendPoint } from './models/dashboard.models';
+import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem } from './models/dashboard.models';
 import {
   WsCardComponent,
   WsBadgeComponent,
@@ -31,6 +32,7 @@ import {
     LowerCasePipe,
     TranslatePipe,
     AppShellComponent,
+    RefreshOnEnterDirective,
     IconComponent,
     CurrencyFormatPipe,
     WsCardComponent,
@@ -215,6 +217,63 @@ export class DashboardComponent {
   /** Total pending transaction count across all plans (for the pending-by-plan card badge). */
   pendingByPlanTotalCount(): number {
     return this.store.actionBand()?.pendingByPlanItems?.reduce((s, x) => s + x.pendingCount, 0) ?? 0;
+  }
+
+  // ── "Transactions that need attention" card ───────────────────────────────
+
+  /** Total Pending transactions that can't be processed yet (sum across reasons). */
+  attentionTotalCount(): number {
+    return this.store.actionBand()?.unprocessablePendingItems?.reduce((s, x) => s + x.count, 0) ?? 0;
+  }
+
+  /** Per-reason label / explanation / icon for a row. */
+  attentionMeta(reason: string): { labelKey: string; descKey: string; icon: string } {
+    switch (reason) {
+      case 'NoPayee':
+        return { labelKey: 'DASHBOARD.ATTENTION_NOPAYEE_LABEL', descKey: 'DASHBOARD.ATTENTION_NOPAYEE_DESC', icon: 'users' };
+      case 'CurrencyMismatch':
+        return { labelKey: 'DASHBOARD.ATTENTION_CURRENCY_LABEL', descKey: 'DASHBOARD.ATTENTION_CURRENCY_DESC', icon: 'coin' };
+      case 'NoActiveAssignment':
+        return { labelKey: 'DASHBOARD.ATTENTION_NOASSIGN_LABEL', descKey: 'DASHBOARD.ATTENTION_NOASSIGN_DESC', icon: 'briefcase' };
+      default:
+        return { labelKey: reason, descKey: '', icon: 'alert-circle' };
+    }
+  }
+
+  /**
+   * Deep-link to Transactions filtered to EXACTLY this reason. `attention` drives a server-side filter
+   * that uses the same classification as the dashboard count, so the list count matches the card. The
+   * `statuses=Pending` is cosmetic (all reasons are Pending) so the Pending tab reads as selected.
+   */
+  attentionLinkParams(item: UnprocessablePendingItem): Record<string, string> {
+    return { statuses: 'Pending', attention: item.reason };
+  }
+
+  // ── Drift alerts (a deal changed in HubSpot AFTER its commission was calculated/paid) ──────────────
+
+  /** Unresolved CRM drift alerts to surface in the card (already money — distinct from "can't process"). */
+  driftAlerts(): DriftAlertItem[] {
+    return this.store.actionBand()?.driftAlerts ?? [];
+  }
+
+  /** True when the card has anything to show (unprocessable reasons OR drift alerts). */
+  hasAttentionItems(): boolean {
+    return (this.store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0 || this.driftAlerts().length > 0;
+  }
+
+  /** Header badge total: pending transactions that can't be processed + each drift alert. */
+  attentionBadgeTotal(): number {
+    return this.attentionTotalCount() + this.driftAlerts().length;
+  }
+
+  /** i18n key for the commission state of a drifted transaction (already calculated vs already paid). */
+  driftStatusKey(status: string): string {
+    return status === 'Paid' ? 'DASHBOARD.DRIFT_STATE_PAID' : 'DASHBOARD.DRIFT_STATE_CALCULATED';
+  }
+
+  /** Deep-link to the affected transaction via its reference (no per-tx detail route exists). */
+  driftLinkParams(alert: DriftAlertItem): Record<string, string> {
+    return { ref: alert.referenceNumber };
   }
 
   /** Total count of action items needing attention (for band header badge). */

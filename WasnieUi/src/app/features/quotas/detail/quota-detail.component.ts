@@ -8,13 +8,12 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
-import { QuotaStatus } from '../models/quota.model';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
 import {
   WsPageHeaderComponent,
   WsBadgeComponent,
   WsButtonComponent,
   WsConfirmationModalComponent,
-  type BadgeVariant,
 } from '../../../shared/ui';
 
 @Component({
@@ -31,6 +30,8 @@ import {
     WsBadgeComponent,
     WsButtonComponent,
     WsConfirmationModalComponent,
+    QuotaStatusVariantPipe,
+    QuotaStatusLabelPipe,
   ],
   templateUrl: './quota-detail.component.html',
   styleUrl: './quota-detail.component.scss',
@@ -47,14 +48,6 @@ export class QuotaDetailComponent implements OnInit {
 
   ngOnInit(): void {
     this.store.loadQuota(this.quotaId);
-  }
-
-  statusVariant(status: QuotaStatus): BadgeVariant {
-    switch (status) {
-      case 'Active': return 'success';
-      case 'Draft': return 'neutral';
-      case 'Closed': return 'warning';
-    }
   }
 
   async onActivate(): Promise<void> {

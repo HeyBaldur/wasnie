@@ -1,0 +1,104 @@
+@reference "../../../../styles.scss";
+
+.owners-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+
+  p { margin: 0; flex: 1; }
+
+  &--warning {
+    border-color: var(--color-warning);
+    color: var(--color-text-primary);
+
+    app-icon { color: var(--color-warning); }
+  }
+}
+
+.owners-muted {
+  color: var(--color-text-tertiary);
+}
+
+.col-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.col-actions {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.col-owner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.owner-name {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Skeleton rows reuse the shared .skeleton tokens (matches payees list). */
+.skeleton-row td { padding-block: var(--space-3); }
+
+/* --- Link modal --- */
+.link-modal__context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+}
+
+.link-modal__context-row {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--font-size-13);
+}
+
+.link-modal__context-label {
+  color: var(--color-text-tertiary);
+  min-width: 80px;
+}
+
+.link-modal__context-value {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.link-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.link-modal__field-label {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.link-modal__hint {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.link-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

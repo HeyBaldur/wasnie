@@ -1,0 +1,49 @@
+// Discreet, contained banner (reference "max-w-lg" vertical layout: logo → divider → text → link).
+// Wasnie dark theme + tokens only — no raw palette.
+.hs-sync-banner {
+  display: block;
+  max-width: 32rem;                 // contained, not a full-width cartelón
+  // (Outer spacing is owned by the host — the sidebar's .sidebar__banner wrapper.)
+}
+
+.hs-sync-banner__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.hs-sync-banner__logo {
+  height: 20px;
+  width: auto;
+  object-fit: contain;
+}
+
+.hs-sync-banner__divider {
+  width: 100%;
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.hs-sync-banner__text {
+  margin: 0;
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.hs-sync-banner__link {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-link);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}

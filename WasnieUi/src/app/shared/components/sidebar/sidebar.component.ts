@@ -9,6 +9,7 @@ import { SidebarStateService } from '../../../core/services/sidebar-state.servic
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
+import { HubSpotSyncBannerComponent } from '../../../features/integrations/components/hubspot-sync-banner/hubspot-sync-banner.component';
 
 interface NavItem {
   path: string;
@@ -36,7 +37,7 @@ interface NavSection {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [RouterLink, TranslatePipe, IconComponent, HasPermissionDirective],
+  imports: [RouterLink, TranslatePipe, IconComponent, HasPermissionDirective, HubSpotSyncBannerComponent],
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.scss',
 })
@@ -149,6 +150,7 @@ export class SidebarComponent {
   ];
 
   readonly subscriptionItem: NavItem = { path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
+  readonly integrationsItem: NavItem = { path: '/integrations', labelKey: 'NAV.INTEGRATIONS', icon: 'link-2', permission: 'Integrations.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
 
   logout(): void {

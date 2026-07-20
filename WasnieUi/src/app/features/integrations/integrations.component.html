@@ -1,0 +1,162 @@
+<app-shell>
+  <ws-page-layout
+    icon="link-2"
+    [title]="'INTEGRATIONS.TITLE' | translate"
+    [subtitle]="'INTEGRATIONS.SUBTITLE' | translate"
+  >
+    @if (loading()) {
+      <div class="integrations-grid">
+        <ws-card>
+          <p class="integrations__muted">{{ 'COMMON.LOADING' | translate }}</p>
+        </ws-card>
+      </div>
+    } @else if (loadError()) {
+      <ws-card>
+        <p class="integrations__muted">{{ 'INTEGRATIONS.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </ws-card>
+    } @else {
+      <div class="integrations-grid">
+
+        <ws-card padding="none">
+          <div class="int-card">
+          <!-- Header: logo tile (left) + status badge (right) -->
+          <div class="int-card__top">
+            <div class="int-card__logo">
+              <img src="/hubspot.png" [alt]="'INTEGRATIONS.HUBSPOT.NAME' | translate" />
+            </div>
+            <ws-badge [variant]="statusBadgeVariant()">{{ statusLabelKey() | translate }}</ws-badge>
+          </div>
+
+          <!-- Title + description -->
+          <div class="int-card__heading">
+            <h3 class="int-card__name">{{ 'INTEGRATIONS.HUBSPOT.NAME' | translate }}</h3>
+            <p class="int-card__desc">{{ 'INTEGRATIONS.HUBSPOT.DESC' | translate }}</p>
+          </div>
+
+          <hr class="int-card__divider" />
+
+          <!-- Footer: revealed detail/notice (by state) + actions -->
+          <div class="int-card__footer">
+            <!-- Connected → reveal account detail within the same card -->
+            @if (isConnected()) {
+              <dl class="int-card__detail">
+                @if (status()?.portalId) {
+                  <div class="int-card__detail-row">
+                    <dt>{{ 'INTEGRATIONS.HUBSPOT.PORTAL_ID' | translate }}</dt>
+                    <dd>{{ status()!.portalId }}</dd>
+                  </div>
+                }
+                @if (status()?.connectedAt) {
+                  <div class="int-card__detail-row">
+                    <dt>{{ 'INTEGRATIONS.HUBSPOT.CONNECTED_AT' | translate }}</dt>
+                    <dd>{{ status()!.connectedAt | dateFormat }}</dd>
+                  </div>
+                }
+                <div class="int-card__detail-row">
+                  <dt>{{ 'INTEGRATIONS.HUBSPOT.LAST_SYNCED' | translate }}</dt>
+                  <dd>
+                    @if (status()?.lastSyncedAt) {
+                      {{ status()!.lastSyncedAt | relativeTime }}
+                    } @else {
+                      {{ 'INTEGRATIONS.HUBSPOT.NEVER_SYNCED' | translate }}
+                    }
+                  </dd>
+                </div>
+              </dl>
+            }
+
+            <!-- Needs reconnect → explain why, in plain language -->
+            @if (needsReconnect()) {
+              <div class="int-card__notice int-card__notice--warning">
+                <app-icon name="alert-triangle" [size]="16" />
+                <p>{{ status()?.statusReason || ('INTEGRATIONS.HUBSPOT.NEEDS_RECONNECT_GENERIC' | translate) }}</p>
+              </div>
+            }
+
+            <!-- Disconnected → short note -->
+            @if (isDisconnected()) {
+              <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.DISCONNECTED_NOTE' | translate }}</p>
+            }
+
+            <!-- Deal sync (Phase 2): preview, import, and the owner mapping queue -->
+            @if (isConnected()) {
+              <div class="int-card__sync">
+                <span class="int-card__sync-label">{{ 'INTEGRATIONS.HUBSPOT.SYNC.TITLE' | translate }}</span>
+                <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.SYNC.DESC' | translate }}</p>
+                <div class="int-card__actions">
+                  <ws-button variant="secondary" [loading]="previewing()" [disabled]="previewing() || importing()" (click)="preview()">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.PREVIEW' | translate }}
+                  </ws-button>
+                  <ws-button variant="primary" [loading]="importing()" [disabled]="previewing() || importing()" (click)="import()">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.IMPORT' | translate }}
+                  </ws-button>
+                  <ws-button variant="secondary" [loading]="syncingNow()" [disabled]="syncingNow() || previewing() || importing()" (click)="syncNow()">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.SYNC_NOW' | translate }}
+                  </ws-button>
+                  <ws-button variant="ghost" routerLink="/integrations/hubspot/owners">
+                    {{ 'INTEGRATIONS.HUBSPOT.SYNC.OWNERS' | translate }}
+                  </ws-button>
+                </div>
+
+                @if (syncResult(); as sr) {
+                  <div
+                    class="int-card__notice"
+                    [class.int-card__notice--ok]="sr.ok"
+                    [class.int-card__notice--warning]="!sr.ok"
+                    role="status"
+                  >
+                    <app-icon [name]="sr.ok ? 'check-circle' : 'alert-circle'" [size]="16" />
+                    <p>{{ sr.key | translate: sr.params }}</p>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Inline test-connection result -->
+            @if (testResult(); as tr) {
+              <div
+                class="int-card__notice"
+                [class.int-card__notice--ok]="tr.ok"
+                [class.int-card__notice--warning]="!tr.ok"
+                role="status"
+              >
+                <app-icon [name]="tr.ok ? 'check-circle' : 'alert-circle'" [size]="16" />
+                <p>{{ tr.message | translate }}</p>
+              </div>
+            }
+
+            <div class="int-card__actions">
+              @if (neverConnected() || isDisconnected()) {
+                <ws-button variant="primary" [loading]="connecting()" [disabled]="connecting()" (click)="connect()">
+                  {{ 'INTEGRATIONS.HUBSPOT.CONNECT' | translate }}
+                </ws-button>
+              }
+
+              @if (needsReconnect()) {
+                <ws-button variant="primary" [loading]="connecting()" [disabled]="connecting()" (click)="connect()">
+                  <app-icon name="refresh" [size]="14" />
+                  {{ 'INTEGRATIONS.HUBSPOT.RECONNECT' | translate }}
+                </ws-button>
+              }
+
+              @if (isConnected()) {
+                <ws-button variant="secondary" [loading]="testing()" [disabled]="testing()" (click)="test()">
+                  {{ 'INTEGRATIONS.HUBSPOT.TEST' | translate }}
+                </ws-button>
+              }
+
+              @if (isConnected() || needsReconnect()) {
+                <ws-button variant="ghost" [loading]="disconnecting()" [disabled]="disconnecting()" (click)="disconnect()">
+                  {{ 'INTEGRATIONS.HUBSPOT.DISCONNECT' | translate }}
+                </ws-button>
+              }
+            </div>
+          </div>
+          </div>
+        </ws-card>
+
+      </div>
+    }
+  </ws-page-layout>
+</app-shell>

@@ -9,6 +9,7 @@ const makeRun = (id: string, status: PayRunListItem['status'] = 'Draft'): PayRun
   periodStart: '2026-06-01',
   periodEnd: '2026-06-30',
   status,
+  supplementalSequence: 0,
   payeeCount: 10,
   paidPayeeCount: 8,
   zeroPayoutCount: 2,

@@ -21,6 +21,7 @@ using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
 using Wasnie.Infrastructure.Services.Email;
+using Wasnie.Infrastructure.Services.HubSpot;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -95,11 +96,39 @@ public static class DependencyInjection
         services.AddScoped<IStripeWebhookService, StripeWebhookService>();
         services.AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>();
 
+        // HubSpot OAuth integration (Phase 1). Options are bound WITHOUT ValidateOnStart so the app still
+        // starts before the owner configures HubSpot; the endpoints fail gracefully until configured.
+        services.AddOptions<HubSpotOptions>()
+            .Bind(configuration.GetSection(HubSpotOptions.SectionName));
+        // Phase 3 automatic polling sync — cadence/staggering live here (config-only, default hourly).
+        services.AddOptions<HubSpotSyncOptions>()
+            .Bind(configuration.GetSection(HubSpotSyncOptions.SectionName));
+        services.AddHttpClient("HubSpot");
+        services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
+        services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
+        services.AddScoped<IHubSpotTokenProvider, HubSpotTokenProvider>();
+        // Phase 2: deal/owner ingestion behind the CRM-neutral abstraction. HubSpot is one implementation;
+        // Salesforce/Pipedrive would register a different ICrmDealSource without touching the pipeline.
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmDealSource, HubSpotCrmDealSource>();
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmOwnerResolver,
+            Wasnie.Infrastructure.Services.Crm.CrmOwnerResolver>();
+
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();
         services.AddScoped<IAuditService, AuditService>();
 
         services.AddScoped<ICreditAllocationService, CreditAllocationService>();
+        // Single place for the "can I create this transaction?" rule — used by HubSpot/Excel/Manual ingest.
+        services.AddScoped<Wasnie.Application.Compensation.Common.ITransactionCreateGuard,
+            Wasnie.Application.Compensation.Common.TransactionCreateGuard>();
+        // Single place for the "a CRM deal changed after import — what now?" rule. Used by the manual
+        // HubSpot import today and the future polling job (clean architecture; CRM-neutral).
+        services.AddScoped<Wasnie.Application.Integrations.Crm.Drift.ICrmDriftPolicy,
+            Wasnie.Application.Integrations.Crm.Drift.CrmDriftPolicy>();
+        // Single place that materialises CRM deals → transactions (guard + drift). Manual import AND the
+        // Phase-3 polling job both call this — the logic is written once, only invoked.
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmDealReconciler,
+            Wasnie.Application.Integrations.Crm.CrmDealReconciler>();
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
@@ -138,6 +167,12 @@ public static class DependencyInjection
 
         services.AddScoped<HangfireJobDispatcher>();
         services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
+
+        // Phase 3 HubSpot polling sync: recurring orchestrator + the per-tenant worker it fans out to.
+        services.AddScoped<HubSpotSyncOrchestrator>();
+        services.AddScoped<HubSpotTenantSyncJob>();
+        // "Sync now" enqueues the same per-tenant job on demand (Hangfire behind an Application abstraction).
+        services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmSyncScheduler, HangfireCrmSyncScheduler>();
 
         // Register job handlers so the dispatcher can resolve them by interface type.
         services.AddScoped<IJobHandler<PingPayload>, PingJobHandler>();

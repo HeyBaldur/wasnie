@@ -110,4 +110,24 @@ public static class AuditActions
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";
+
+    // Integrations — HubSpot OAuth (Phase 1). Token values are NEVER included in audit metadata.
+    public const string HubSpotConnected = "HUBSPOT_CONNECTED";
+    public const string HubSpotReconnected = "HUBSPOT_RECONNECTED";
+    public const string HubSpotDisconnected = "HUBSPOT_DISCONNECTED";
+    public const string HubSpotNeedsReconnect = "HUBSPOT_NEEDS_RECONNECT";
+    public const string HubSpotTokenRefreshed = "HUBSPOT_TOKEN_REFRESHED";
+
+    // Integrations — CRM deal ingestion (Phase 2). Money-relevant: owner→payee links decide who is paid.
+    public const string CrmDealsImported = "CRM_DEALS_IMPORTED";
+    public const string CrmOwnerLinked = "CRM_OWNER_LINKED";
+
+    // Integrations — CRM automatic polling sync (Phase 3). One entry per tenant per successful run.
+    public const string CrmAutoSyncCompleted = "CRM_AUTO_SYNC_COMPLETED";
+
+    // Integrations — CRM drift policy. A deal's amount/close-date changed after import.
+    // Auto-resolved: the still-Pending transaction was voided and re-created with the new values.
+    public const string CrmDriftAutoResolved = "CRM_DRIFT_AUTO_RESOLVED";
+    // Detected: the transaction was already Calculated/Paid (immutable) — recorded as an alert, untouched.
+    public const string CrmDriftDetected = "CRM_DRIFT_DETECTED";
 }

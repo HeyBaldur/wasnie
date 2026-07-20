@@ -2,9 +2,10 @@ import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { DashboardService } from '../services/dashboard.service';
 import { DashboardSummary } from '../models/dashboard.models';
+import { RefreshableStore } from '../../../shared/state/refreshable-store';
 
 @Injectable({ providedIn: 'root' })
-export class DashboardStore {
+export class DashboardStore implements RefreshableStore {
   private readonly api = inject(DashboardService);
 
   readonly period = signal<string>('this-month');
@@ -41,6 +42,11 @@ export class DashboardStore {
 
   async reload(): Promise<void> {
     await this._load(this.period());
+  }
+
+  /** RefreshableStore — re-fetch with the current period when the dashboard route is re-entered. */
+  refresh(): Promise<void> {
+    return this.reload();
   }
 
   private async _load(period: string): Promise<void> {

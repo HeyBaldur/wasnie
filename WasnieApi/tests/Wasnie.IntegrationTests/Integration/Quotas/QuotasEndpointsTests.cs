@@ -345,6 +345,99 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task UpdateQuota_PeriodStartBeforePlan_Returns400()
+    {
+        // Plan effective period is 2025-01-01 .. 2025-12-31; start spills before it.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+        var quota = await CreateQuotaAsync(_clientA, payee.Id, plan.Id);
+
+        var request = new
+        {
+            quotaId = quota.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2024-12-01",
+            periodEnd = "2025-03-31"
+        };
+
+        var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateQuota_PeriodEndAfterPlan_Returns400()
+    {
+        // Plan effective period is 2025-01-01 .. 2025-12-31; end spills past it.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+        var quota = await CreateQuotaAsync(_clientA, payee.Id, plan.Id);
+
+        var request = new
+        {
+            quotaId = quota.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2025-10-01",
+            periodEnd = "2026-03-31"
+        };
+
+        var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateQuota_PeriodPartiallyOverlapsPlan_Returns400()
+    {
+        // Starts inside the plan period but ends beyond it: partial overlap must be rejected —
+        // the quota period must be CONTAINED in the plan period, not merely intersect it.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+        var quota = await CreateQuotaAsync(_clientA, payee.Id, plan.Id);
+
+        var request = new
+        {
+            quotaId = quota.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2025-06-01",
+            periodEnd = "2026-06-30"
+        };
+
+        var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateQuota_PeriodWithinPlan_Returns200()
+    {
+        // A sub-window fully inside the plan's 2025-01-01 .. 2025-12-31 period is accepted.
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+        var quota = await CreateQuotaAsync(_clientA, payee.Id, plan.Id);
+
+        var request = new
+        {
+            quotaId = quota.Id,
+            measurementType = 0,
+            amount = 15000m,
+            currency = "EUR",
+            periodStart = "2025-07-01",
+            periodEnd = "2025-09-30"
+        };
+
+        var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     // ── Activate / Close Quota ────────────────────────────────────────────────
 
     [Fact]

@@ -2,6 +2,9 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Hangfire;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Wasnie.Application.Common.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -269,6 +272,27 @@ try
     {
         Authorization = [new HangfireDashboardAuthorizationFilter()],
     });
+
+    // Phase 3: register (or refresh) the recurring HubSpot incremental-sync orchestrator. The cadence comes
+    // from config (HubSpotSync:CronExpression, default hourly), so changing the schedule needs no code edit;
+    // restarting the app re-applies it. Disabled → the recurring job is removed.
+    using (var syncScope = app.Services.CreateScope())
+    {
+        var syncOptions = syncScope.ServiceProvider.GetRequiredService<IOptions<HubSpotSyncOptions>>().Value;
+        var recurringJobs = syncScope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+        const string hubSpotSyncJobId = "hubspot-incremental-sync";
+        if (syncOptions.Enabled)
+        {
+            recurringJobs.AddOrUpdate<HubSpotSyncOrchestrator>(
+                hubSpotSyncJobId,
+                o => o.RunAsync(CancellationToken.None),
+                syncOptions.CronExpression);
+        }
+        else
+        {
+            recurringJobs.RemoveIfExists(hubSpotSyncJobId);
+        }
+    }
 
     app.MapControllers();
 

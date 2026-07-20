@@ -120,6 +120,11 @@ export class AssignmentsStore {
     }
   }
 
+  /** RefreshableStore — reload the current page/filter on route re-entry. */
+  refresh(): Promise<void> {
+    return this.loadAssignments();
+  }
+
   async loadAssignments(): Promise<void> {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),

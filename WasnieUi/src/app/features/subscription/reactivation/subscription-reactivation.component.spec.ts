@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideTranslateService } from '@ngx-translate/core';
 import { of, throwError, Subject } from 'rxjs';
@@ -50,6 +52,10 @@ describe('SubscriptionReactivationComponent', () => {
       providers: [
         { provide: SubscriptionService, useValue: subscriptionMock },
         { provide: WsToastService, useValue: toastMock },
+        // AuthService (pulled in via the component's DI graph) injects HttpClient — provide the testing
+        // backend so construction succeeds. The component's own calls go through the mocked SubscriptionService.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         provideRouter([]),
         provideTranslateService({ defaultLanguage: 'en' }),
       ],

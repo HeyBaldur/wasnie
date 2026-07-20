@@ -85,6 +85,11 @@ export class QuotasStore {
     }
   }
 
+  /** RefreshableStore — reload the current page/filter on route re-entry. */
+  refresh(): Promise<void> {
+    return this.loadQuotas();
+  }
+
   async loadQuotas(): Promise<void> {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),

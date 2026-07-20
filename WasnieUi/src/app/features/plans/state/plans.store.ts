@@ -94,6 +94,11 @@ export class PlansStore {
     }
   }
 
+  /** RefreshableStore — reload the current page/filter on route re-entry. */
+  refresh(): Promise<void> {
+    return this.loadPlans();
+  }
+
   async loadPlans(): Promise<void> {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),

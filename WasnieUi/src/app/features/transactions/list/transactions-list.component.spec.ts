@@ -14,9 +14,9 @@ const makeStoreMock = (overrides?: Partial<TransactionsStore>) =>
     error: signal(null),
     page: signal(1),
     pageSize: signal(10),
-    sortBy: signal('transactiondate'),
+    sortBy: signal('ingestedat'),
     sortOrder: signal<'asc' | 'desc'>('desc'),
-    filter: signal({ reference: '', statuses: [], payeeIds: [], txDateFrom: null, txDateTo: null, ingestedFrom: null, ingestedTo: null, amountMin: null, amountMax: null, unassignedOnly: false, amountSort: null, referenceNumbers: [], currencies: [] }),
+    filter: signal({ reference: '', statuses: [], payeeIds: [], txDateFrom: null, txDateTo: null, ingestedFrom: null, ingestedTo: null, amountMin: null, amountMax: null, unassignedOnly: false, amountSort: null, referenceNumbers: [], currencies: [], attentionReason: null }),
     // Legacy computed aliases
     statusFilter: signal(null),
     statusesFilter: signal([]),
@@ -49,6 +49,15 @@ const makeStoreMock = (overrides?: Partial<TransactionsStore>) =>
     loadFromQueryParams: jasmine.createSpy(),
     setPage: jasmine.createSpy(),
     setPageSize: jasmine.createSpy(),
+    // Bulk void selection
+    selectedIds: signal(new Set<string>()),
+    selectedCount: signal(0),
+    hasVoidableOnPage: signal(false),
+    allVoidableSelected: signal(false),
+    toggleSelect: jasmine.createSpy(),
+    toggleSelectAllVoidable: jasmine.createSpy(),
+    clearSelection: jasmine.createSpy(),
+    bulkVoid: jasmine.createSpy().and.resolveTo({ voidedCount: 0, errors: [] }),
     ...overrides,
   }) as unknown as TransactionsStore;
 
@@ -69,6 +78,51 @@ describe('TransactionsListComponent', () => {
     const fixture = TestBed.createComponent(TransactionsListComponent);
     fixture.detectChanges();
     expect(fixture.nativeElement).toBeTruthy();
+  });
+
+  it('openBulkVoid snapshots the selected count and opens the modal', () => {
+    TestBed.overrideProvider(TransactionsStore, {
+      useValue: makeStoreMock({ selectedCount: signal(3) as unknown as TransactionsStore['selectedCount'] }),
+    });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    const comp = fixture.componentInstance;
+    fixture.detectChanges();
+
+    comp.openBulkVoid();
+
+    expect(comp.bulkVoidCount()).toBe(3);
+    expect(comp.bulkVoidModalOpen()).toBeTrue();
+  });
+
+  it('confirmBulkVoid calls store.bulkVoid and keeps errors visible on partial failure', async () => {
+    const store = makeStoreMock({
+      bulkVoid: jasmine.createSpy().and.resolveTo({ voidedCount: 2, errors: ['REF-9: already paid'] }),
+    } as Partial<TransactionsStore>);
+    TestBed.overrideProvider(TransactionsStore, { useValue: store });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    const comp = fixture.componentInstance;
+    fixture.detectChanges();
+
+    comp.openBulkVoid();
+    comp.bulkVoidReason.set('wrong currency');
+    await comp.confirmBulkVoid();
+
+    expect(store.bulkVoid).toHaveBeenCalledWith('wrong currency');
+    expect(comp.bulkVoidErrors()).toEqual(['REF-9: already paid']);
+    expect(comp.bulkVoidModalOpen()).toBeTrue(); // stays open so the failures are shown
+  });
+
+  it('confirmBulkVoid does nothing when the reason is too short', async () => {
+    const store = makeStoreMock();
+    TestBed.overrideProvider(TransactionsStore, { useValue: store });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    const comp = fixture.componentInstance;
+    fixture.detectChanges();
+
+    comp.bulkVoidReason.set('ab');
+    await comp.confirmBulkVoid();
+
+    expect(store.bulkVoid).not.toHaveBeenCalled();
   });
 
   it('renders payee name from DTO when payeeName is provided', () => {
@@ -94,10 +148,20 @@ describe('TransactionsListComponent', () => {
 
     const fixture = TestBed.createComponent(TransactionsListComponent);
     fixture.detectChanges();
-    const html: string = fixture.nativeElement.innerHTML;
 
-    expect(html).toContain('Anna Kowalska');
-    expect(html).not.toContain('payee-uuid-1234');
+    // The payee NAME is shown as visible text; the raw payee id is NOT user-visible — it lives only in the
+    // payee-link href (WI-TX-PAYEE-LINK feature). So assert on textContent (visible text), and verify the
+    // link target separately rather than forbidding the id anywhere in the markup.
+    const visibleText: string = fixture.nativeElement.textContent ?? '';
+    expect(visibleText).toContain('Anna Kowalska');
+    expect(visibleText).not.toContain('payee-uuid-1234');
+
+    const payeeLink: HTMLAnchorElement | null =
+      fixture.nativeElement.querySelector('a[href*="/payees/payee-uuid-1234"]');
+    expect(payeeLink)
+      .withContext('the payee name should be a link to the payee detail')
+      .not.toBeNull();
+    expect(payeeLink?.textContent).toContain('Anna Kowalska');
   });
 
   it('renders "Unassigned" (i18n key resolved) when payeeName is null — never shows raw GUID', () => {

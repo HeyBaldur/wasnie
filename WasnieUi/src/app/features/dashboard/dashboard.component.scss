@@ -202,6 +202,30 @@
 .pending-plan-card__name { flex: 1 1 0; font-size: var(--font-size-14); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pending-plan-card__empty { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) 0; font-size: var(--font-size-12); color: var(--color-text-tertiary); }
 
+// Attention rows reuse the pending-plan card shell but show icon + label + plain-language description.
+.attention-row { align-items: flex-start; padding-block: var(--space-3); }
+.attention-row__icon {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken); color: var(--color-warning);
+}
+.attention-row__text { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.attention-row__label { font-size: var(--font-size-14); font-weight: 600; color: var(--color-text-primary); }
+.attention-row__desc { font-size: var(--font-size-12); color: var(--color-text-secondary); line-height: 1.4; }
+
+// Drift sub-group: separates "a deal changed after commission" (money already moved) from the
+// "can't process yet" reasons above it. Reuses the attention-row shell.
+.attention-group-label {
+  padding: var(--space-3) var(--space-1) var(--space-1);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.drift-change { display: block; }
+.drift-action { display: block; color: var(--color-text-placeholder); }
+
 // ── KPI card — TailAdmin pattern ───────────────────────────────────────────────
 // Pattern: icon box alone at top → mt-5 gap → body pushed to bottom
 // Ref: ecommerce-metrics: "flex h-12 w-12 rounded-xl bg-gray-100" +

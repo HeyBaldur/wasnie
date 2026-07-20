@@ -33,19 +33,24 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
             m.Property(x => x.Currency).HasColumnName("Currency").HasMaxLength(3).IsRequired();
         });
 
-        // Internal reference uniqueness (unchanged).
+        // Internal reference uniqueness — filtered to EXCLUDE Cancelled (void) rows so that a voided
+        // transaction does NOT block re-creating an active one with the same Reference (WI bulk-void +
+        // re-import, Opción B). Two ACTIVE rows with the same (TenantId, ReferenceNumber) are still
+        // forbidden. Status is stored as a string; "not cancelled" keeps any future status active.
         builder.HasIndex(t => new { t.TenantId, t.ReferenceNumber })
             .IsUnique()
+            .HasFilter("[Status] <> 'Cancelled'")
             .HasDatabaseName("IX_CompensationTransactions_TenantId_ReferenceNumber");
 
         builder.HasIndex(t => new { t.TenantId, t.PayeeId })
             .HasDatabaseName("IX_CompensationTransactions_TenantId_PayeeId");
 
-        // Idempotency: external systems cannot re-ingest the same transaction.
-        // Filtered so manual transactions (null ExternalId) are exempt.
+        // Idempotency for external systems (HubSpot deal id, etc.). Filtered so manual transactions
+        // (null ExternalId) are exempt AND so a voided row no longer blocks re-ingesting the same
+        // external id as a new active transaction (WI bulk-void + re-import, Opción B).
         builder.HasIndex(t => new { t.TenantId, t.Source, t.ExternalId })
             .IsUnique()
-            .HasFilter("[ExternalId] IS NOT NULL")
+            .HasFilter("[ExternalId] IS NOT NULL AND [Status] <> 'Cancelled'")
             .HasDatabaseName("IX_CompensationTransactions_TenantId_Source_ExternalId");
 
         // Read-path indexes (Rule 3.2.2 — every ORDER BY / WHERE column must be indexed).
