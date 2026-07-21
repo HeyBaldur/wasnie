@@ -7,9 +7,41 @@
   <div class="subscription-page">
 
     @if (loading()) {
-      <div class="subscription-skeleton">
-        <div class="subscription-skeleton__card"></div>
-        <div class="subscription-skeleton__card subscription-skeleton__card--wide"></div>
+      <!-- Mirrors the loaded layout below (plan card → capabilities → upgrade section) so the
+           page does not reflow when the data arrives. Uses the app-wide .skeleton convention. -->
+      <ws-card class="current-plan-card">
+        <div class="current-plan-card__header">
+          <div class="current-plan-card__title-row">
+            <span class="skeleton skeleton--title"></span>
+            <span class="skeleton skeleton--badge"></span>
+          </div>
+          <span class="skeleton skeleton--text-wide"></span>
+        </div>
+        <div class="skeleton-rows">
+          <span class="skeleton skeleton--row"></span>
+          <span class="skeleton skeleton--row"></span>
+        </div>
+      </ws-card>
+
+      <section class="sub-capabilities" aria-hidden="true">
+        <span class="skeleton skeleton--heading"></span>
+        <div class="sub-capabilities__grid">
+          @for (i of skeletonCapabilities; track i) {
+            <span class="skeleton skeleton--cap"></span>
+          }
+        </div>
+      </section>
+
+      <div class="upgrade-section" aria-hidden="true">
+        <div class="upgrade-section__header-group">
+          <span class="skeleton skeleton--heading"></span>
+          <span class="skeleton skeleton--text-wide"></span>
+        </div>
+        <div class="skeleton-plan-grid">
+          @for (i of skeletonPlans; track i) {
+            <span class="skeleton skeleton--plan"></span>
+          }
+        </div>
       </div>
     }
 
