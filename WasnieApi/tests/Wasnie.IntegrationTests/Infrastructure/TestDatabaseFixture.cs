@@ -50,8 +50,21 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
         {
             if (!await db.Tenants.AnyAsync(t => t.Id == id))
             {
-                var tenant = Tenant.Create($"Test Tenant {id}", id.ToString("N")[..20], id, DateTimeOffset.UtcNow);
+                var now = DateTimeOffset.UtcNow;
+                var tenant = Tenant.Create($"Test Tenant {id}", id.ToString("N")[..20], id, now);
                 tenant.SetTier(Tier.Enterprise);
+                // Mirror what the real onboarding does (CompleteQualificationCommandHandler):
+                // mark the seeded tenant qualified so ActivationEnforcementMiddleware Gate 2
+                // does not 403 every authenticated request with "qualification_required".
+                tenant.Qualify(
+                    country: "US",
+                    phoneNumber: "+10000000000",
+                    howHeardAboutUs: "Test",
+                    salesVolumeRange: "0-1M",
+                    currentSystem: "None",
+                    legalAcceptedAt: now,
+                    legalAcceptedVersion: "1.0",
+                    now: now);
                 db.Tenants.Add(tenant);
             }
 
