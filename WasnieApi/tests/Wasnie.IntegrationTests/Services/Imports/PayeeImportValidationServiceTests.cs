@@ -19,18 +19,32 @@ public sealed class PayeeImportValidationServiceTests
     // ──────────────────────────────────────────────────────────
 
     // All existing tests treat Email + HireDate as required (pre-WI-PROD-A.1 behaviour).
+    //
+    // This used to return true for EVERY field name. That became wrong once the required-check for
+    // Role / EmploymentType / Location / ManagerId was hoisted out of the "is this column mapped?"
+    // guard: a tenant that marks Role Required now gets an error when the column is absent, which is
+    // the intended behaviour. Under the old blanket-true fake, DefaultMapping() (which maps none of
+    // those columns) made every row fail. Narrowed to the two fields the name has always meant.
     private static IFieldRequirementService AllRequiredFields() => new AlwaysRequiredService();
 
     private sealed class AlwaysRequiredService : IFieldRequirementService
     {
+        private static readonly HashSet<string> Required =
+            new(["Email", "HireDate"], StringComparer.OrdinalIgnoreCase);
+
         public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+            Task.FromResult(Required.Contains(fieldName));
     }
 
+    // Same narrowing as AlwaysRequiredService above: the normally-required pair, minus one field.
     private sealed class AlwaysRequiredExceptService(string exemptField) : IFieldRequirementService
     {
+        private static readonly HashSet<string> Required =
+            new(["Email", "HireDate"], StringComparer.OrdinalIgnoreCase);
+
         public Task<bool> IsRequiredAsync(string entityName, string fieldName, CancellationToken ct = default) =>
-            Task.FromResult(fieldName != exemptField);
+            Task.FromResult(Required.Contains(fieldName) &&
+                            !string.Equals(fieldName, exemptField, StringComparison.OrdinalIgnoreCase));
     }
 
     private static ApplicationDbContext CreateDb(Guid tenantId)

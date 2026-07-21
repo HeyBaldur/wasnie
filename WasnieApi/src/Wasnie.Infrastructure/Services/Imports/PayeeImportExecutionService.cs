@@ -128,7 +128,10 @@ public sealed class PayeeImportExecutionService(
 
                 if (managerId.HasValue && newPayees.TryGetValue(code, out var payee))
                 {
-                    payee.Update(payee.FullName, payee.EmployeeCode, payee.Email, payee.HireDate, payee.Role, managerId, importedBy, clock.UtcNowOffset);
+                    // AssignManager, not Update: this pass only resolves the manager reference.
+                    // Update() is a full replace and would null out every field not re-supplied —
+                    // it previously erased EmploymentType and Location on every payee with a manager.
+                    payee.AssignManager(managerId, importedBy, clock.UtcNowOffset);
                     hasManagerUpdates = true;
                 }
             }

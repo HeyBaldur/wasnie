@@ -3,7 +3,11 @@ namespace Wasnie.Application.Models.Imports;
 public sealed class TransactionImportColumnMapping
 {
     public required string ReferenceNumberColumn { get; init; }
-    public required string PayeeCodeColumn { get; init; }
+    // Optional: whether a payee is required is tenant-configurable (Transaction.PayeeId), and a
+    // blank payee is a supported outcome — the row imports Unassigned, exactly like a HubSpot deal
+    // whose owner matches no payee. A tenant with the setting Optional must therefore be able to
+    // import a file that has no payee-code column at all, so this cannot be `required`.
+    public string? PayeeCodeColumn { get; init; }
     public required string AmountColumn { get; init; }
     public required string CurrencyColumn { get; init; }
     public required string TransactionDateColumn { get; init; }

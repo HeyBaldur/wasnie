@@ -1,6 +1,6 @@
 export interface TransactionImportColumnMapping {
   referenceNumberColumn: string;
-  payeeCodeColumn: string;
+  payeeCodeColumn?: string | null;
   amountColumn: string;
   currencyColumn: string;
   transactionDateColumn: string;

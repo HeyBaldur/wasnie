@@ -918,6 +918,7 @@
     "EMPTY_FILTER_TITLE": "No transactions match your filters.",
     "CREATE_TITLE": "Record Transaction",
     "FIELD_PAYEE": "Payee",
+    "FIELD_PAYEE_OPTIONAL": "Payee (optional)",
     "FIELD_REFERENCE_NUMBER": "Reference number",
     "FIELD_DATE": "Transaction date",
     "FIELD_AMOUNT": "Amount",

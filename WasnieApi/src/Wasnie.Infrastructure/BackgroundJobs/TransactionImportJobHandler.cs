@@ -314,8 +314,10 @@ public sealed class TransactionImportJobHandler(
                && (sqlEx.Number == 2627 || sqlEx.Number == 2601);
     }
 
-    private static string GetField(Dictionary<string, string> row, string column) =>
-        row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
+    // Accepts a null column so an unmapped optional column (PayeeCodeColumn when the tenant has
+    // "require payee" set to Optional) resolves to empty rather than throwing.
+    private static string GetField(Dictionary<string, string> row, string? column) =>
+        column is not null && row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
 
     private static bool TryParseDate(string s, out DateOnly result) =>
         DateOnly.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,

@@ -219,8 +219,10 @@ public sealed class TransactionImportValidationService(
         return results;
     }
 
-    private static string GetField(Dictionary<string, string> row, string column) =>
-        row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
+    // Accepts a null column so an unmapped optional column (PayeeCodeColumn when the tenant has
+    // "require payee" set to Optional) resolves to empty rather than throwing.
+    private static string GetField(Dictionary<string, string> row, string? column) =>
+        column is not null && row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
 
     private static ValidationIssue Error(string field, string msg, IssueCategory cat = IssueCategory.Other) =>
         new() { Field = field, Message = msg, Severity = IssueSeverity.Error, Category = cat };

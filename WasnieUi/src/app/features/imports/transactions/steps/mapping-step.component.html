@@ -12,13 +12,18 @@
         <ws-select formControlName="referenceNumberColumn" [options]="columnOptions()" />
       </div>
 
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
-          <span class="mapping-row__required">*</span>
+      <!-- Payee code sits here only while the tenant's "Require payee on new transactions"
+           setting is Required; otherwise it renders in the Optional section below and a row
+           without it imports as Unassigned, the same as an unmatched HubSpot deal owner. -->
+      @if (payeeRequired()) {
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+            <span class="mapping-row__required">*</span>
+          </div>
+          <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
-      </div>
+      }
 
       <div class="mapping-row">
         <div class="mapping-row__field">
@@ -50,6 +55,14 @@
   <div class="mapping-section">
     <h3 class="mapping-section__title">{{ 'IMPORTS.TRANSACTIONS.MAP_OPTIONAL' | translate }}</h3>
     <div class="mapping-rows">
+      @if (!payeeRequired()) {
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PAYEE_CODE' | translate }}</span>
+          </div>
+          <ws-select formControlName="payeeCodeColumn" [options]="columnOptions()" />
+        </div>
+      }
       <div class="mapping-row">
         <div class="mapping-row__field">
           <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_EXTERNAL_ID' | translate }}</span>

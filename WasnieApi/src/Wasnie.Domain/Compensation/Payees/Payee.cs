@@ -96,6 +96,29 @@ public sealed class Payee : BaseAuditableEntity
         UpdatedBy = updatedBy;
     }
 
+    /// <summary>
+    /// Assigns (or clears) the manager without touching any other field.
+    /// </summary>
+    /// <remarks>
+    /// Update() is a full replace: every field it declares is assigned unconditionally, and the
+    /// optional parameters default to null. A caller that only wants to change the manager but goes
+    /// through Update() must therefore re-supply every other field, and silently erases any it
+    /// forgets. The payee import's manager-resolution pass did exactly that and wiped EmploymentType
+    /// and Location off every payee that had a manager code.
+    ///
+    /// This method exists so that a partial update cannot lose data by omission: fields added to
+    /// Payee in the future are unaffected here by construction.
+    /// </remarks>
+    public void AssignManager(Guid? managerId, string updatedBy, DateTimeOffset now)
+    {
+        if (managerId == Id)
+            throw new DomainException("A payee cannot be their own manager.");
+
+        ManagerId = managerId;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
     public void MarkAsActive(string updatedBy, DateTimeOffset now)
     {
         if (Status == PayeeStatus.Active) return;

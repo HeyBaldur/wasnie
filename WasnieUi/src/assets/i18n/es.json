@@ -760,6 +760,7 @@
     "EMPTY_FILTER_TITLE": "Ninguna transacción coincide con los filtros.",
     "CREATE_TITLE": "Registrar Transacción",
     "FIELD_PAYEE": "Beneficiario",
+    "FIELD_PAYEE_OPTIONAL": "Beneficiario (opcional)",
     "FIELD_REFERENCE_NUMBER": "Número de referencia",
     "FIELD_DATE": "Fecha de transacción",
     "FIELD_AMOUNT": "Importe",

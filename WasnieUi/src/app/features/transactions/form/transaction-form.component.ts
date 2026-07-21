@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { Observable, map } from 'rxjs';
@@ -7,6 +7,7 @@ import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { Transaction } from '../models/transaction.model';
+import { SettingsApiService, FieldRequirement } from '../../admin/services/settings.api.service';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -33,11 +34,12 @@ const CURRENCIES: SelectOption[] = [
   templateUrl: './transaction-form.component.html',
   styleUrl: './transaction-form.component.scss',
 })
-export class TransactionFormComponent {
+export class TransactionFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly store = inject(TransactionsStore);
   private readonly payeesApi = inject(PayeesApiService);
   private readonly toast = inject(ToastService);
+  private readonly settingsApi = inject(SettingsApiService);
 
   readonly transaction = input<Transaction | null>(null);
   readonly saved = output<Transaction>();
@@ -52,8 +54,20 @@ export class TransactionFormComponent {
       map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
     );
 
+  // Whether a payee is required is a per-tenant setting ("Require payee on new transactions").
+  // The backend already gates on it in IngestTransactionHandler; this form previously hardcoded
+  // Validators.required, making the UI stricter than its own API. Default false to match the
+  // backend fallback (FieldRequirementService: `?.IsRequired ?? false`) and the seeded default.
+  readonly fieldRequirements = signal<FieldRequirement[]>([]);
+
+  readonly payeeRequired = computed(() =>
+    this.fieldRequirements().find(
+      r => r.entityName === 'Transaction' && r.fieldName === 'PayeeId'
+    )?.isRequired ?? false
+  );
+
   readonly form = this.fb.nonNullable.group({
-    payeeId: ['', Validators.required],
+    payeeId: [''],
     referenceNumber: ['', [Validators.required, Validators.maxLength(100)]],
     transactionDate: ['', Validators.required],
     amount: [0 as number, [Validators.required, Validators.min(0.01)]],
@@ -61,6 +75,25 @@ export class TransactionFormComponent {
     quantity: [1 as number, [Validators.required, Validators.min(1)]],
     processImmediately: [true],
   });
+
+  constructor() {
+    effect(() => {
+      const ctrl = this.form.controls.payeeId;
+      if (this.payeeRequired()) {
+        ctrl.addValidators(Validators.required);
+      } else {
+        ctrl.removeValidators(Validators.required);
+      }
+      ctrl.updateValueAndValidity({ emitEvent: false });
+    });
+  }
+
+  ngOnInit(): void {
+    this.settingsApi.getFieldRequirements().subscribe({
+      next: reqs => this.fieldRequirements.set(reqs),
+      error: () => { /* keep the safe default (optional), matching the backend fallback */ },
+    });
+  }
 
   async onSubmit(): Promise<void> {
     if (this.form.invalid) {
@@ -71,7 +104,9 @@ export class TransactionFormComponent {
     this.saving.set(true);
     try {
       const result = await this.store.createTransaction({
-        payeeId: v.payeeId,
+        // Blank means "no payee" (Unassigned), not an empty GUID — the backend validator
+        // rejects Guid.Empty but accepts null when the tenant setting is Optional.
+        payeeId: v.payeeId || null,
         referenceNumber: v.referenceNumber.trim(),
         transactionDate: v.transactionDate,
         amount: v.amount,
