@@ -385,7 +385,7 @@
           }
           <div class="profile-field">
             <span class="profile-field__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
-            <span class="profile-field__value">{{ payee.hireDate | dateFormat }}</span>
+            <span class="profile-field__value">{{ (payee.hireDate | dateFormat) || '—' }}</span>
           </div>
           @if (payee.terminationDate) {
             <div class="profile-field">

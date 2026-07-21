@@ -46,6 +46,10 @@ public sealed class PayeeImportValidationService(
         var roleRequired = await fieldRequirements.IsRequiredAsync("Payee", "Role", cancellationToken);
         var employmentTypeRequired = await fieldRequirements.IsRequiredAsync("Payee", "EmploymentType", cancellationToken);
         var locationRequired = await fieldRequirements.IsRequiredAsync("Payee", "Location", cancellationToken);
+        // Catalog key is "ManagerId" (the manual form's field); the import expresses the same
+        // relationship as ManagerEmployeeCode. Previously unchecked here, so a tenant with
+        // Manager=Required had it enforced on Create/Update but silently ignored on import.
+        var managerRequired = await fieldRequirements.IsRequiredAsync("Payee", "ManagerId", cancellationToken);
 
         var fileCodesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fileEmailsInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -138,60 +142,58 @@ public sealed class PayeeImportValidationService(
                     issues.Add(Warn("HireDate", $"Hire date '{hireDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}' is within the last 30 days — verify this is intentional."));
             }
 
+            // NOTE on the blocks below: the "is this column mapped?" guard is deliberately NOT
+            // wrapped around the required-check. GetField returns empty for an unmapped column,
+            // so a tenant that marks a field Required now gets an error when the column is absent
+            // entirely — previously the check was skipped and the requirement silently ignored.
+            // The mapped-column guard is kept only where it gates a *warning*, so not mapping an
+            // optional column does not emit a warning on every row.
+
             // ── ManagerEmployeeCode (cross-row) ───────────────────────────
-            if (mapping.ManagerEmployeeCodeColumn is not null)
+            var managerCode = GetField(row, mapping.ManagerEmployeeCodeColumn);
+            if (string.IsNullOrWhiteSpace(managerCode))
             {
-                var managerCode = GetField(row, mapping.ManagerEmployeeCodeColumn);
-                if (!string.IsNullOrWhiteSpace(managerCode)
-                    && !existingCodes.Contains(managerCode)
-                    && !allCodesInFile.Contains(managerCode))
-                {
-                    issues.Add(Error("ManagerEmployeeCode", $"Manager code '{managerCode}' not found in this tenant or in this file. Create the manager payee first or correct the code.", IssueCategory.Reference));
-                }
+                if (managerRequired)
+                    issues.Add(Error("ManagerEmployeeCode", "Manager is required by your tenant's current settings.", IssueCategory.Required));
+            }
+            else if (!existingCodes.Contains(managerCode) && !allCodesInFile.Contains(managerCode))
+            {
+                issues.Add(Error("ManagerEmployeeCode", $"Manager code '{managerCode}' not found in this tenant or in this file. Create the manager payee first or correct the code.", IssueCategory.Reference));
             }
 
             // ── Role ──────────────────────────────────────────────────────
-            if (mapping.RoleColumn is not null)
+            var role = GetField(row, mapping.RoleColumn);
+            if (string.IsNullOrWhiteSpace(role))
             {
-                var role = GetField(row, mapping.RoleColumn);
-                if (string.IsNullOrWhiteSpace(role))
-                {
-                    if (roleRequired)
-                        issues.Add(Error("Role", "Role is required by your tenant's current settings.", IssueCategory.Required));
-                    else
-                        issues.Add(Warn("Role", "Role is empty. Consider filling in the payee's role for better reporting."));
-                }
+                if (roleRequired)
+                    issues.Add(Error("Role", "Role is required by your tenant's current settings.", IssueCategory.Required));
+                else if (mapping.RoleColumn is not null)
+                    issues.Add(Warn("Role", "Role is empty. Consider filling in the payee's role for better reporting."));
             }
 
             // ── EmploymentType ─────────────────────────────────────────────
-            if (mapping.EmploymentTypeColumn is not null)
+            var et = GetField(row, mapping.EmploymentTypeColumn);
+            if (string.IsNullOrWhiteSpace(et))
             {
-                var et = GetField(row, mapping.EmploymentTypeColumn);
-                if (string.IsNullOrWhiteSpace(et))
-                {
-                    if (employmentTypeRequired)
-                        issues.Add(Error("EmploymentType", "Employment type is required by your tenant's current settings.", IssueCategory.Required));
-                }
-                else if (!Enum.TryParse<EmploymentType>(et, ignoreCase: true, out _))
-                {
-                    issues.Add(Error("EmploymentType",
-                        $"'{et}' is not a valid employment type. Expected one of: FullTime, PartTime, Temporary, Contractor.", IssueCategory.Format));
-                }
+                if (employmentTypeRequired)
+                    issues.Add(Error("EmploymentType", "Employment type is required by your tenant's current settings.", IssueCategory.Required));
+            }
+            else if (!Enum.TryParse<EmploymentType>(et, ignoreCase: true, out _))
+            {
+                issues.Add(Error("EmploymentType",
+                    $"'{et}' is not a valid employment type. Expected one of: FullTime, PartTime, Temporary, Contractor.", IssueCategory.Format));
             }
 
             // ── Location ──────────────────────────────────────────────────
-            if (mapping.LocationColumn is not null)
+            var location = GetField(row, mapping.LocationColumn);
+            if (string.IsNullOrWhiteSpace(location))
             {
-                var location = GetField(row, mapping.LocationColumn);
-                if (string.IsNullOrWhiteSpace(location))
-                {
-                    if (locationRequired)
-                        issues.Add(Error("Location", "Location is required by your tenant's current settings.", IssueCategory.Required));
-                }
-                else if (location.Length > 200)
-                {
-                    issues.Add(Error("Location", "Location must be 200 characters or fewer.", IssueCategory.Format));
-                }
+                if (locationRequired)
+                    issues.Add(Error("Location", "Location is required by your tenant's current settings.", IssueCategory.Required));
+            }
+            else if (location.Length > 200)
+            {
+                issues.Add(Error("Location", "Location must be 200 characters or fewer.", IssueCategory.Format));
             }
 
             results.Add(new PayeeRowValidationResult
@@ -212,8 +214,10 @@ public sealed class PayeeImportValidationService(
         return GetField(row, mapping.FullNameColumn);
     }
 
-    private static string GetField(Dictionary<string, string> row, string column) =>
-        row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
+    // Accepts a null column so unmapped optional columns (e.g. HireDate when the tenant has it
+    // set to Optional) resolve to empty rather than throwing. Matches PayeeImportExecutionService.
+    private static string GetField(Dictionary<string, string> row, string? column) =>
+        column is not null && row.TryGetValue(column, out var val) ? val.Trim() : string.Empty;
 
     private static bool TryParseDate(string s, out DateOnly result)
     {
