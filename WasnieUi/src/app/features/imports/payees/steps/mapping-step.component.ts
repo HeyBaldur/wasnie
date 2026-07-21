@@ -12,6 +12,7 @@ import {
   ParseResponse,
 } from '../models/payee-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
+import { SettingsApiService, FieldRequirement } from '../../../admin/services/settings.api.service';
 import { detectFullNameColumns, detectOtherField, OTHER_FIELD_PATTERNS } from '../helpers/column-auto-detect';
 import { composeFullName } from '../helpers/fullname-composer';
 
@@ -25,6 +26,7 @@ import { composeFullName } from '../helpers/fullname-composer';
 export class MappingStepComponent implements OnInit {
   private readonly importService = inject(PayeeImportService);
   private readonly fb = inject(FormBuilder);
+  private readonly settingsApi = inject(SettingsApiService);
 
   readonly parseResult = input.required<ParseResponse & { fileName: string; fileSize: number }>();
   readonly initialMapping = input<PayeeImportColumnMapping | null>(null);
@@ -49,6 +51,38 @@ export class MappingStepComponent implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
+  // Requiredness comes from the per-tenant setting (Settings → Field requirements), the same
+  // source PayeeFormComponent uses, so the wizard and the manual form can never disagree.
+  // Full name and Employee code are NOT here: they are structurally required always
+  // (identity + the match key) and are not tenant-configurable.
+  //
+  // `defaultRequired` is the fallback when the settings call fails or the field is absent
+  // from the catalog. It mirrors PayeeFormComponent's defaults exactly: Email/HireDate fall
+  // back to required, the rest to optional — so a failed request never silently relaxes a
+  // requirement that was already enforced by default.
+  private readonly CONFIGURABLE_FIELDS = [
+    { control: 'emailColumn',          labelKey: 'PAYEES.FIELD_EMAIL',              setting: 'Email',          defaultRequired: true  },
+    { control: 'hireDateColumn',       labelKey: 'PAYEES.FIELD_HIRE_DATE',          setting: 'HireDate',       defaultRequired: true  },
+    { control: 'roleColumn',           labelKey: 'PAYEES.FIELD_ROLE',               setting: 'Role',           defaultRequired: false },
+    { control: 'managerColumn',        labelKey: 'IMPORTS.PAYEES.FIELD_MANAGER_CODE', setting: 'ManagerId',    defaultRequired: false },
+    { control: 'employmentTypeColumn', labelKey: 'PAYEES.FIELD_EMPLOYMENT_TYPE',    setting: 'EmploymentType', defaultRequired: false },
+    { control: 'locationColumn',       labelKey: 'PAYEES.FIELD_LOCATION',           setting: 'Location',       defaultRequired: false },
+  ] as const;
+
+  readonly fieldRequirements = signal<FieldRequirement[]>([]);
+
+  private readonly resolvedFields = computed(() =>
+    this.CONFIGURABLE_FIELDS.map(f => ({
+      control: f.control,
+      labelKey: f.labelKey,
+      required: this.fieldRequirements().find(r => r.fieldName === f.setting)?.isRequired
+        ?? f.defaultRequired,
+    }))
+  );
+
+  readonly requiredFields = computed(() => this.resolvedFields().filter(f => f.required));
+  readonly optionalFields = computed(() => this.resolvedFields().filter(f => !f.required));
+
   readonly columnOptions = computed<SelectOption[]>(() => {
     const blank: SelectOption = { value: '', label: '— Select column —' };
     return [blank, ...this.parseResult().headers.map(h => ({ value: h, label: h }))];
@@ -70,11 +104,10 @@ export class MappingStepComponent implements OnInit {
   });
 
   get canContinue(): boolean {
-    const v = this.form.value;
-    return (
-      this.fullNameColumns().length > 0 &&
-      !!(v.employeeCodeColumn && v.emailColumn && v.hireDateColumn)
-    );
+    // Full name + Employee code: always. Everything else: only when the tenant setting says so.
+    if (this.fullNameColumns().length === 0) return false;
+    if (!this.form.value.employeeCodeColumn) return false;
+    return this.requiredFields().every(f => !!this.form.get(f.control)?.value);
   }
 
   get previewRows(): Record<string, string>[] {
@@ -110,6 +143,11 @@ export class MappingStepComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.settingsApi.getFieldRequirements().subscribe({
+      next: reqs => this.fieldRequirements.set(reqs),
+      error: () => { /* keep the safe default (required) if settings can't be read */ },
+    });
+
     const headers = this.parseResult().headers;
     const restored = this.initialMapping();
 
@@ -118,7 +156,7 @@ export class MappingStepComponent implements OnInit {
       this.form.patchValue({
         employeeCodeColumn: restored.employeeCodeColumn,
         emailColumn: restored.emailColumn,
-        hireDateColumn: restored.hireDateColumn,
+        hireDateColumn: restored.hireDateColumn ?? '',
         roleColumn: restored.roleColumn ?? '',
         managerColumn: restored.managerEmployeeCodeColumn ?? '',
         employmentTypeColumn: restored.employmentTypeColumn ?? '',
@@ -145,8 +183,8 @@ export class MappingStepComponent implements OnInit {
     return {
       fullNameColumns: this.fullNameColumns(),
       employeeCodeColumn: v.employeeCodeColumn ?? '',
-      emailColumn: v.emailColumn ?? '',
-      hireDateColumn: v.hireDateColumn ?? '',
+      emailColumn: v.emailColumn || null,
+      hireDateColumn: v.hireDateColumn || null,
       roleColumn: v.roleColumn || null,
       managerEmployeeCodeColumn: v.managerColumn || null,
       employmentTypeColumn: v.employmentTypeColumn || null,

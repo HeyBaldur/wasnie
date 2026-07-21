@@ -346,7 +346,7 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UpdateQuota_PeriodStartBeforePlan_Returns400()
+    public async Task UpdateQuota_PeriodStartBeforePlan_Returns422()
     {
         // Plan effective period is 2025-01-01 .. 2025-12-31; start spills before it.
         var payee = await CreatePayeeAsync(_clientA);
@@ -365,11 +365,12 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
 
         var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        // UpdateQuota returns 422 (Result-failure → UnprocessableEntity) for period-outside-plan.
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
-    public async Task UpdateQuota_PeriodEndAfterPlan_Returns400()
+    public async Task UpdateQuota_PeriodEndAfterPlan_Returns422()
     {
         // Plan effective period is 2025-01-01 .. 2025-12-31; end spills past it.
         var payee = await CreatePayeeAsync(_clientA);
@@ -388,11 +389,12 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
 
         var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        // UpdateQuota returns 422 (Result-failure → UnprocessableEntity) for period-outside-plan.
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
-    public async Task UpdateQuota_PeriodPartiallyOverlapsPlan_Returns400()
+    public async Task UpdateQuota_PeriodPartiallyOverlapsPlan_Returns422()
     {
         // Starts inside the plan period but ends beyond it: partial overlap must be rejected —
         // the quota period must be CONTAINED in the plan period, not merely intersect it.
@@ -412,7 +414,8 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
 
         var response = await _clientA.PutAsJsonAsync($"/api/quotas/{quota.Id}", request);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        // UpdateQuota returns 422 (Result-failure → UnprocessableEntity) for period-outside-plan.
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]

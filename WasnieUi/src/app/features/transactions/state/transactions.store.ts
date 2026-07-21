@@ -202,6 +202,13 @@ export class TransactionsStore implements RefreshableStore {
     return body;
   }
 
+  // Monotonic request counter. Two loads can legitimately be in flight at once — e.g. entering
+  // /transactions?ref=X fires refresh() from the refreshOnEnter directive (current filter) while
+  // ngOnInit applies the URL filter and re-triggers the effect (filtered). Without this guard the
+  // response that ARRIVES last wins rather than the one requested last, so the unfiltered result
+  // could overwrite the filtered one — the page then looked unfiltered until a manual reload.
+  private _loadSeq = 0;
+
   private async _loadInternal(
     page: number,
     pageSize: number,
@@ -209,6 +216,7 @@ export class TransactionsStore implements RefreshableStore {
     sortOrder: 'asc' | 'desc',
     f: TransactionFilter,
   ): Promise<void> {
+    const seq = ++this._loadSeq;
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -222,11 +230,15 @@ export class TransactionsStore implements RefreshableStore {
         filters: Object.keys(filters).length > 0 ? filters : undefined,
       };
       const data = await firstValueFrom(this.api.list(params));
+      if (seq !== this._loadSeq) return;   // superseded by a newer load — discard
       this.pagedResult.set(data);
     } catch {
+      if (seq !== this._loadSeq) return;   // don't let a stale failure clobber a fresh result
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      // Only the newest request owns the spinner; a stale one finishing must not clear it while
+      // the current load is still running.
+      if (seq === this._loadSeq) this.loading.set(false);
     }
   }
 

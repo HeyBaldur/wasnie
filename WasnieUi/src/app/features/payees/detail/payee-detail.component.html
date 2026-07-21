@@ -34,7 +34,14 @@
             }
             @if (payee.managerName) {
               <span class="pd-meta-sep">·</span>
-              <span>{{ 'PAYEES.FIELD_MANAGER' | translate }}: {{ payee.managerName }}</span>
+              <span>
+                {{ 'PAYEES.FIELD_MANAGER' | translate }}:
+                @if (payee.managerId) {
+                  <a class="pd-meta-manager" [routerLink]="['/payees', payee.managerId]">{{ payee.managerName }}</a>
+                } @else {
+                  {{ payee.managerName }}
+                }
+              </span>
             }
           </div>
         </div>
@@ -380,12 +387,23 @@
           @if (payee.managerName) {
             <div class="profile-field">
               <span class="profile-field__label">{{ 'PAYEES.FIELD_MANAGER' | translate }}</span>
-              <span class="profile-field__value">{{ payee.managerName }}</span>
+              <!-- Linked only when we actually have the manager's id to navigate to; falls back to
+                   plain text otherwise so a name without an id never renders as a dead link. -->
+              @if (payee.managerId) {
+                <a class="profile-field__value profile-field__link" [routerLink]="['/payees', payee.managerId]">
+                  {{ payee.managerName }}
+                  @if (payee.managerEmployeeCode) {
+                    <span class="profile-field__link-code">{{ payee.managerEmployeeCode }}</span>
+                  }
+                </a>
+              } @else {
+                <span class="profile-field__value">{{ payee.managerName }}</span>
+              }
             </div>
           }
           <div class="profile-field">
             <span class="profile-field__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
-            <span class="profile-field__value">{{ payee.hireDate | dateFormat }}</span>
+            <span class="profile-field__value">{{ (payee.hireDate | dateFormat) || '—' }}</span>
           </div>
           @if (payee.terminationDate) {
             <div class="profile-field">

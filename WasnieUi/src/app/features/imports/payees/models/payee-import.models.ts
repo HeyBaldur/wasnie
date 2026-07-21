@@ -1,8 +1,8 @@
 export interface PayeeImportColumnMapping {
   fullNameColumns: string[];
   employeeCodeColumn: string;
-  emailColumn: string;
-  hireDateColumn: string;
+  emailColumn?: string | null;
+  hireDateColumn?: string | null;
   roleColumn?: string | null;
   managerEmployeeCodeColumn?: string | null;
   employmentTypeColumn?: string | null;

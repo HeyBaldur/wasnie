@@ -91,7 +91,17 @@
         <ws-button variant="ghost" [routerLink]="returnTo() ?? '/quotas'">
           {{ 'COMMON.CANCEL' | translate }}
         </ws-button>
-        <ws-button variant="primary" type="submit" [loading]="saving()" [disabled]="saving()">
+        <!-- Disabled on the out-of-plan period specifically, not on form.invalid in general.
+             Every other form in the app keeps submit enabled so that clicking it reveals all
+             errors at once (markAllAsTouched), and disabling on form.invalid would break that
+             discoverability on a fresh form. The period error is the one case that is already
+             visible before submit, so an enabled button here contradicted the screen. -->
+        <ws-button
+          variant="primary"
+          type="submit"
+          [loading]="saving()"
+          [disabled]="saving() || periodOutsidePlan()"
+        >
           {{ 'QUOTAS.ACTION_CREATE' | translate }}
         </ws-button>
       </div>

@@ -219,12 +219,70 @@
 
 // ── Bottom bar ───────────────────────────────────────────────────────────────
 
-.skip-warnings-opt {
-  @apply flex items-center gap-2 font-semibold cursor-pointer;
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
+// ── Option cards (skip-warnings / consent) ───────────────────────────────────
+//
+// Card treatment mirrors ws-stat-card (the sibling card in this same container):
+// --color-bg-surface-raised + --color-border-subtle + --radius-md, so both sit at
+// the same elevation above the wizard card (--color-bg-surface-deep). Checked state
+// mirrors the appearance-card --active convention (brand border + --color-brand-muted).
+// Checkbox sizing/accent mirrors the onboarding qualification legal checkbox.
+.opt-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 
-  input { cursor: pointer; }
+  &:hover { border-color: var(--color-border-default); }
+
+  &--checked {
+    border-color: var(--color-brand);
+    background: var(--color-brand-muted);
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  &__icon {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-1);
+  }
+
+  &__title {
+    user-select: none;
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    line-height: 1.5;
+  }
+
+  &__desc {
+    user-select: none;
+    font-size: var(--font-size-12);
+    font-weight: 400;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+  }
+
+  &__check {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-top: var(--space-1);
+    accent-color: var(--color-brand);
+    cursor: pointer;
+  }
 }
 
 .preview-error {
@@ -232,19 +290,6 @@
   font-size: var(--font-size-12);
   color: var(--color-danger);
   margin: 0;
-}
-
-.consent-opt {
-  @apply flex items-start gap-2 font-semibold cursor-pointer;
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-
-  input {
-    cursor: pointer;
-    margin-top: 2px;
-    flex-shrink: 0;
-  }
 }
 
 .preview-actions {

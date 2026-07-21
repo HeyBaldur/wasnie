@@ -4,8 +4,17 @@
 
 | Project | Count | Runner |
 |---|---|---|
-| `Wasnie.UnitTests` | 85 tests | Pure in-process (no Docker) |
-| `Wasnie.IntegrationTests` | 21 tests | Requires Docker |
+| `Wasnie.UnitTests` | 711 tests | Pure in-process (no Docker) |
+| `Wasnie.IntegrationTests` | 671 tests | Mostly Docker — see note |
+
+Counts verified 2026-07-21 (`dotnet test`): unit **711/711**; integration **660 pass / 9 fail / 2 skip** of 671.
+The 9 failures are known test debt (shared-container isolation, date-relative seed data, a login
+precondition), documented in `docs/PROJECT_STATUS.md` — none is a production bug.
+
+> **Note on the Docker requirement:** most of `Wasnie.IntegrationTests` needs Docker, but the
+> service-layer tests under `Services/` run against EF InMemory and do not. For example
+> `Services/Imports/PayeeImportCaseMatrixTests` can be run with
+> `--filter "FullyQualifiedName~PayeeImportCaseMatrixTests"` without Docker running.
 
 Run all tests:
 

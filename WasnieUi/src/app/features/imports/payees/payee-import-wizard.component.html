@@ -6,7 +6,8 @@
     backLink="/payees"
     [backLabel]="'PAYEES.TITLE' | translate"
   >
-    <ws-wizard
+    <div class="wizard-card">
+      <ws-wizard
       [currentStep]="currentStep()"
       hideOnComplete="complete"
     >
@@ -59,6 +60,7 @@
         />
       }
     </ws-wizard>
+    </div>
   </ws-page-layout>
 
   <ws-confirmation-modal

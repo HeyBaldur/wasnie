@@ -79,7 +79,10 @@ public sealed class PayeeImportExecutionService(
             var etStr = mapping.EmploymentTypeColumn is not null ? GetField(row, mapping.EmploymentTypeColumn) : null;
             var location = mapping.LocationColumn is not null ? GetField(row, mapping.LocationColumn) : null;
 
-            TryParseDate(hireDateStr, out var hireDate);
+            // Honour the parse result: an unmapped column or a blank cell must persist as NULL,
+            // not default(DateOnly) (0001-01-01). Unparseable values are already a blocking error
+            // in PayeeImportValidationService, so reaching null here means "genuinely absent".
+            DateOnly? hireDate = TryParseDate(hireDateStr, out var parsedHireDate) ? parsedHireDate : null;
 
             EmploymentType? employmentType = null;
             if (!string.IsNullOrWhiteSpace(etStr) &&
@@ -125,7 +128,10 @@ public sealed class PayeeImportExecutionService(
 
                 if (managerId.HasValue && newPayees.TryGetValue(code, out var payee))
                 {
-                    payee.Update(payee.FullName, payee.EmployeeCode, payee.Email, payee.HireDate, payee.Role, managerId, importedBy, clock.UtcNowOffset);
+                    // AssignManager, not Update: this pass only resolves the manager reference.
+                    // Update() is a full replace and would null out every field not re-supplied —
+                    // it previously erased EmploymentType and Location on every payee with a manager.
+                    payee.AssignManager(managerId, importedBy, clock.UtcNowOffset);
                     hasManagerUpdates = true;
                 }
             }

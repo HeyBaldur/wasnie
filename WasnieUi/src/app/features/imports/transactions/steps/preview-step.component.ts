@@ -94,7 +94,8 @@ export class TxPreviewStepComponent {
     return 'IMPORTS.TRANSACTIONS.ROW_VALID';
   }
 
-  getCell(row: TransactionRowValidationResult, colKey: string): string {
+  // colKey may be null/undefined when an optional column (payee code) was never mapped.
+  getCell(row: TransactionRowValidationResult, colKey: string | null | undefined): string {
     if (!colKey) return '';
     return row.originalData[colKey] ?? '';
   }

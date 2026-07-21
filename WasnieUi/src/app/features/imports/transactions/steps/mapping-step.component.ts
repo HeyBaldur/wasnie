@@ -13,6 +13,7 @@ import {
 } from '../models/transaction-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
 import { detectField, TRANSACTION_FIELD_PATTERNS } from '../helpers/column-auto-detect';
+import { SettingsApiService, FieldRequirement } from '../../../admin/services/settings.api.service';
 
 @Component({
   selector: 'app-tx-mapping-step',
@@ -24,6 +25,7 @@ import { detectField, TRANSACTION_FIELD_PATTERNS } from '../helpers/column-auto-
 export class TxMappingStepComponent implements OnInit {
   private readonly importService = inject(TransactionImportService);
   private readonly fb = inject(FormBuilder);
+  private readonly settingsApi = inject(SettingsApiService);
 
   readonly parseResult = input.required<ParseResponse & { fileName: string; fileSize: number }>();
   readonly initialMapping = input<TransactionImportColumnMapping | null>(null);
@@ -44,6 +46,22 @@ export class TxMappingStepComponent implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
+  // Whether a payee is required comes from the per-tenant setting (Settings → Field
+  // requirements → "Require payee on new transactions"), the same source the backend uses
+  // in TransactionImportValidationService and IngestTransactionHandler.
+  //
+  // Default false, matching the backend's own fallback (FieldRequirementService returns
+  // `?.IsRequired ?? false`) and the seeded tenant default. Unlike the payee fields, the
+  // safe default here is Optional: a blank payee is a supported outcome (Unassigned), so
+  // falling back to required would block an import the backend would have accepted.
+  readonly fieldRequirements = signal<FieldRequirement[]>([]);
+
+  readonly payeeRequired = computed(() =>
+    this.fieldRequirements().find(
+      r => r.entityName === 'Transaction' && r.fieldName === 'PayeeId'
+    )?.isRequired ?? false
+  );
+
   readonly columnOptions = computed<SelectOption[]>(() => {
     const blank: SelectOption = { value: '', label: '— Select column —' };
     return [blank, ...this.parseResult().headers.map(h => ({ value: h, label: h }))];
@@ -53,11 +71,10 @@ export class TxMappingStepComponent implements OnInit {
     const v = this.form.value;
     return !!(
       v.referenceNumberColumn &&
-      v.payeeCodeColumn &&
       v.amountColumn &&
       v.currencyColumn &&
       v.transactionDateColumn
-    );
+    ) && (!this.payeeRequired() || !!v.payeeCodeColumn);
   }
 
   get previewRows(): Record<string, string>[] {
@@ -81,13 +98,18 @@ export class TxMappingStepComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.settingsApi.getFieldRequirements().subscribe({
+      next: reqs => this.fieldRequirements.set(reqs),
+      error: () => { /* keep the safe default (optional), matching the backend fallback */ },
+    });
+
     const headers = this.parseResult().headers;
     const restored = this.initialMapping();
 
     if (restored) {
       this.form.patchValue({
         referenceNumberColumn: restored.referenceNumberColumn,
-        payeeCodeColumn: restored.payeeCodeColumn,
+        payeeCodeColumn: restored.payeeCodeColumn ?? '',
         amountColumn: restored.amountColumn,
         currencyColumn: restored.currencyColumn,
         transactionDateColumn: restored.transactionDateColumn,
@@ -110,7 +132,7 @@ export class TxMappingStepComponent implements OnInit {
     const v = this.form.value;
     return {
       referenceNumberColumn: v.referenceNumberColumn ?? '',
-      payeeCodeColumn: v.payeeCodeColumn ?? '',
+      payeeCodeColumn: v.payeeCodeColumn || null,
       amountColumn: v.amountColumn ?? '',
       currencyColumn: v.currencyColumn ?? '',
       transactionDateColumn: v.transactionDateColumn ?? '',

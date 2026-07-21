@@ -45,20 +45,17 @@
         </div>
         <ws-select formControlName="employeeCodeColumn" [options]="columnOptions()" />
       </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'PAYEES.FIELD_EMAIL' | translate }}</span>
-          <span class="mapping-row__required">*</span>
+      <!-- Configurable fields land in this section only while the tenant's Field requirements
+           setting marks them Required; otherwise they render in the Optional section below. -->
+      @for (f of requiredFields(); track f.control) {
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ f.labelKey | translate }}</span>
+            <span class="mapping-row__required">*</span>
+          </div>
+          <ws-select [formControlName]="f.control" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="emailColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'PAYEES.FIELD_HIRE_DATE' | translate }}</span>
-          <span class="mapping-row__required">*</span>
-        </div>
-        <ws-select formControlName="hireDateColumn" [options]="columnOptions()" />
-      </div>
+      }
     </div>
   </div>
 
@@ -66,30 +63,14 @@
   <div class="mapping-section">
     <h3 class="mapping-section__title">{{ 'IMPORTS.PAYEES.MAP_OPTIONAL' | translate }}</h3>
     <div class="mapping-rows">
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'PAYEES.FIELD_ROLE' | translate }}</span>
+      @for (f of optionalFields(); track f.control) {
+        <div class="mapping-row">
+          <div class="mapping-row__field">
+            <span class="mapping-row__label">{{ f.labelKey | translate }}</span>
+          </div>
+          <ws-select [formControlName]="f.control" [options]="columnOptions()" />
         </div>
-        <ws-select formControlName="roleColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'IMPORTS.PAYEES.FIELD_MANAGER_CODE' | translate }}</span>
-        </div>
-        <ws-select formControlName="managerColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'PAYEES.FIELD_EMPLOYMENT_TYPE_OPTIONAL' | translate }}</span>
-        </div>
-        <ws-select formControlName="employmentTypeColumn" [options]="columnOptions()" />
-      </div>
-      <div class="mapping-row">
-        <div class="mapping-row__field">
-          <span class="mapping-row__label">{{ 'PAYEES.FIELD_LOCATION_OPTIONAL' | translate }}</span>
-        </div>
-        <ws-select formControlName="locationColumn" [options]="columnOptions()" />
-      </div>
+      }
     </div>
   </div>
 

@@ -209,6 +209,14 @@ export class QuotaCreateComponent implements OnInit {
     return !!(ctrl?.touched && ctrl.hasError(error));
   }
 
+  /// True when the chosen period falls outside the selected plan's effective window. Drives both
+  /// the field error and the disabled state of the submit button, so the button can never look
+  /// actionable while that error is on screen. Deliberately independent of `touched`: the plan
+  /// auto-fills the range, so a later plan change can invalidate an untouched range too.
+  periodOutsidePlan(): boolean {
+    return this.form.controls.dateRange.hasError('outsidePlanPeriod');
+  }
+
   get rangeError(): string {
     const ctrl = this.form.get('dateRange');
     if (ctrl?.touched && ctrl.hasError('required')) return 'VALIDATION.REQUIRED';

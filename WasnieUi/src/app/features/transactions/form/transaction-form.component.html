@@ -3,7 +3,7 @@
   <div class="ws-form-grid">
     <ws-select
       class="ws-form-grid__full"
-      label="TRANSACTIONS.FIELD_PAYEE"
+      [label]="payeeRequired() ? 'TRANSACTIONS.FIELD_PAYEE' : 'TRANSACTIONS.FIELD_PAYEE_OPTIONAL'"
       formControlName="payeeId"
       [searchFn]="payeeSearchFn"
       [error]="hasError('payeeId', 'required') ? 'VALIDATION.REQUIRED' : ''"
