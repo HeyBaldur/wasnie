@@ -104,9 +104,12 @@
 
   <!-- Consent gate (required before applying updates).
        PROVISIONAL consent text — pending legal review before production. Do not treat as final. -->
-  <label class="consent-opt">
-    <input type="checkbox" [(ngModel)]="consentAccepted" />
-    {{ 'IMPORTS.CONSENT_LABEL' | translate }}
+  <label class="opt-card" [class.opt-card--checked]="consentAccepted">
+    <span class="opt-card__body">
+      <app-icon class="opt-card__icon" name="shield-check" [size]="20" />
+      <span class="opt-card__title">{{ 'IMPORTS.CONSENT_LABEL' | translate }}</span>
+    </span>
+    <input class="opt-card__check" type="checkbox" [(ngModel)]="consentAccepted" />
   </label>
 
   <div class="preview-actions">

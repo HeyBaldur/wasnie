@@ -1034,6 +1034,7 @@
     "ISSUE_CATEGORY_OTHER": "Błąd",
     "CONSENT_LABEL_NOTE": "PROVISIONAL consent text — pending legal review before production. Do not treat as final. This is a data-PROCESSING consent (GDPR), not email/marketing consent.",
     "CONSENT_LABEL": "Potwierdzam, że moja organizacja ma podstawę prawną do przetwarzania danych osobowych i finansowych zawartych w tym imporcie w celu obliczenia wynagrodzeń oraz że jestem upoważniony/a do przesłania ich do Wasnie.",
+    "SKIP_WARNINGS_DESC": "Wiersze z ostrzeżeniami zostaną pominięte przy imporcie; pozostaw niezaznaczone, aby zaimportować je bez zmian. Wiersze z błędami są zawsze pomijane.",
     "CANCEL_CONFIRM_TITLE": "Odrzucić ten import?",
     "CANCEL_CONFIRM_MSG": "Przesłany plik, mapowanie kolumn i podgląd zostaną usunięte. Tej operacji nie można cofnąć.",
     "CANCEL_CONFIRM_DISCARD": "Odrzuć",

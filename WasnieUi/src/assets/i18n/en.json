@@ -695,6 +695,7 @@
     "ISSUE_CATEGORY_OTHER": "Error",
     "CONSENT_LABEL_NOTE": "PROVISIONAL consent text — pending legal review before production. Do not treat as final. This is a data-PROCESSING consent (GDPR), not email/marketing consent.",
     "CONSENT_LABEL": "I confirm that my organization has a legal basis to process the personal and financial data included in this import for the purpose of calculating compensation, and that I am authorized to upload it to Wasnie.",
+    "SKIP_WARNINGS_DESC": "Rows flagged with warnings are left out of the import; leave this unchecked to import them as they are. Rows with errors are always skipped.",
     "CANCEL_CONFIRM_TITLE": "Discard this import?",
     "CANCEL_CONFIRM_MSG": "Your uploaded file, column mapping and preview will be cleared. This can't be undone.",
     "CANCEL_CONFIRM_DISCARD": "Discard",

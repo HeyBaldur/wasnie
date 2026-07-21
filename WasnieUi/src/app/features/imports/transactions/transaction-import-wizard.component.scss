@@ -2,3 +2,19 @@
 
 // Layout handled by ws-page-layout and ws-wizard
 :host { display: block; }
+
+// Same frame as the create-form card (.form-card in payee-create / transaction-create):
+// same border, radius and no-shadow treatment. Width comes from ws-page-layout (1200px),
+// and padding steps up from --space-5 to --space-6 because the wizard content is wide.
+//
+// Background is --color-bg-surface-deep, NOT the --color-bg-surface-raised the create-form
+// card uses: this card contains ws-stat-card and the preview table, which already sit at
+// --color-bg-surface / --color-bg-surface-raised (same as ws-table app-wide). At `raised`
+// the card collided with its own children. `deep` sits below both in all three themes, so
+// the contents keep the standard table elevation instead of being restyled.
+.wizard-card {
+  background: var(--color-bg-surface-deep);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
