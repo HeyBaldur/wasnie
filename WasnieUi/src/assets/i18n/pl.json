@@ -742,7 +742,7 @@
   },
   "TRANSACTIONS": {
     "TITLE": "Transakcje",
-    "SUBTITLE": "Przeglądaj i rejestruj transakcje sprzedaży.",
+    "SUBTITLE": "Przeglądaj i rejestruj transakcje sprzedaży. Powinny one reprezentować wygrane transakcje (closed-won).",
     "NEW": "Nowa Transakcja",
     "ACTION_IMPORT": "Importuj",
     "ACTION_UPDATE_EXCEL": "Aktualizuj z Excela",
@@ -761,6 +761,7 @@
     "EMPTY_DESCRIPTION": "Transakcje pojawią się tutaj po zaimportowaniu lub zarejestrowaniu danych sprzedażowych.",
     "EMPTY_FILTER_TITLE": "Żadna transakcja nie pasuje do filtrów.",
     "CREATE_TITLE": "Zarejestruj Transakcję",
+    "CREATE_SUBTITLE": "Powinna reprezentować wygraną sprzedaż (closed-won).",
     "FIELD_PAYEE": "Beneficjent",
     "FIELD_PAYEE_OPTIONAL": "Beneficjent (opcjonalne)",
     "FIELD_REFERENCE_NUMBER": "Numer referencyjny",
@@ -1097,7 +1098,7 @@
     },
     "TRANSACTIONS": {
       "TITLE": "Importuj Transakcje",
-      "SUBTITLE": "Prześlij transakcje sprzedaży z pliku CSV lub XLSX",
+      "SUBTITLE": "Prześlij transakcje sprzedaży z pliku CSV lub XLSX. Wiersze powinny reprezentować wygrane transakcje (closed-won).",
       "STEP_UPLOAD": "Prześlij",
       "STEP_MAP": "Mapuj kolumny",
       "STEP_PREVIEW": "Podgląd i importuj",

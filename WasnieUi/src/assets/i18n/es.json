@@ -742,7 +742,7 @@
   },
   "TRANSACTIONS": {
     "TITLE": "Transacciones",
-    "SUBTITLE": "Ver y registrar transacciones de ventas.",
+    "SUBTITLE": "Ver y registrar transacciones de ventas. Se espera que representen ventas ganadas (closed-won).",
     "NEW": "Nueva Transacción",
     "ACTION_IMPORT": "Importar",
     "ACTION_UPDATE_EXCEL": "Actualizar desde Excel",
@@ -761,6 +761,7 @@
     "EMPTY_DESCRIPTION": "Las transacciones aparecerán aquí una vez que los datos de ventas sean importados o registrados.",
     "EMPTY_FILTER_TITLE": "Ninguna transacción coincide con los filtros.",
     "CREATE_TITLE": "Registrar Transacción",
+    "CREATE_SUBTITLE": "Debería representar una venta ganada (closed-won).",
     "FIELD_PAYEE": "Beneficiario",
     "FIELD_PAYEE_OPTIONAL": "Beneficiario (opcional)",
     "FIELD_REFERENCE_NUMBER": "Número de referencia",
@@ -1097,7 +1098,7 @@
     },
     "TRANSACTIONS": {
       "TITLE": "Importar Transacciones",
-      "SUBTITLE": "Sube transacciones de ventas desde CSV o XLSX",
+      "SUBTITLE": "Sube transacciones de ventas desde CSV o XLSX. Se espera que las filas representen ventas ganadas (closed-won).",
       "STEP_UPLOAD": "Subir",
       "STEP_MAP": "Mapear columnas",
       "STEP_PREVIEW": "Vista previa e importar",

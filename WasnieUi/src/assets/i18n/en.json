@@ -757,7 +757,7 @@
     },
     "TRANSACTIONS": {
       "TITLE": "Import Transactions",
-      "SUBTITLE": "Upload sales transactions from CSV or XLSX",
+      "SUBTITLE": "Upload sales transactions from CSV or XLSX. Rows are expected to represent closed-won sales.",
       "STEP_UPLOAD": "Upload",
       "STEP_MAP": "Map columns",
       "STEP_PREVIEW": "Preview & Import",
@@ -900,7 +900,7 @@
   },
   "TRANSACTIONS": {
     "TITLE": "Transactions",
-    "SUBTITLE": "View and record sales transactions.",
+    "SUBTITLE": "View and record sales transactions. These are expected to represent closed-won sales.",
     "NEW": "New Transaction",
     "ACTION_IMPORT": "Import",
     "ACTION_UPDATE_EXCEL": "Update from Excel",
@@ -919,6 +919,7 @@
     "EMPTY_DESCRIPTION": "Transactions will appear here once sales data is imported or recorded.",
     "EMPTY_FILTER_TITLE": "No transactions match your filters.",
     "CREATE_TITLE": "Record Transaction",
+    "CREATE_SUBTITLE": "This should represent a closed-won sale.",
     "FIELD_PAYEE": "Payee",
     "FIELD_PAYEE_OPTIONAL": "Payee (optional)",
     "FIELD_REFERENCE_NUMBER": "Reference number",
