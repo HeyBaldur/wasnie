@@ -218,6 +218,8 @@
       "CONNECT": "Połącz HubSpot",
       "RECONNECT": "Połącz ponownie",
       "DISCONNECT": "Rozłącz",
+      "DISCONNECT_CONFIRM_TITLE": "Rozłączyć HubSpot?",
+      "DISCONNECT_CONFIRM_MSG": "Automatyczna synchronizacja deali zostanie zatrzymana, a ponowne połączenie będzie wymagało ponownej autoryzacji Wasnie w HubSpot. Zaimportowane już transakcje zostaną zachowane.",
       "TEST": "Testuj połączenie",
       "TOAST_CONNECTED": "Połączono z HubSpot.",
       "TOAST_CONNECT_ERROR": "Nie udało się połączyć z HubSpot. Spróbuj ponownie.",

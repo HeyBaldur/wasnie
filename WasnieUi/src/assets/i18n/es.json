@@ -218,6 +218,8 @@
       "CONNECT": "Conectar HubSpot",
       "RECONNECT": "Reconectar",
       "DISCONNECT": "Desconectar",
+      "DISCONNECT_CONFIRM_TITLE": "¿Desconectar HubSpot?",
+      "DISCONNECT_CONFIRM_MSG": "La sincronización automática de deals se detendrá y para reconectar habrá que volver a autorizar Wasnie en HubSpot. Las transacciones ya importadas se conservan.",
       "TEST": "Probar conexión",
       "TOAST_CONNECTED": "HubSpot conectado.",
       "TOAST_CONNECT_ERROR": "No se pudo conectar con HubSpot. Inténtalo de nuevo.",

@@ -1,4 +1,5 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -77,6 +78,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 export class PayeeDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(FormBuilder);
   private readonly payeesApi = inject(PayeesApiService);
   readonly store = inject(PayeesStore);
@@ -85,7 +87,10 @@ export class PayeeDetailComponent implements OnInit {
   readonly PayeeStatus = PayeeStatus;
   readonly QuotaMeasurementType = QuotaMeasurementType;
 
-  readonly payeeId = this.route.snapshot.paramMap.get('payeeId')!;
+  // A getter, not a captured field: Angular REUSES this component when navigating between two
+  // payees (e.g. clicking the manager link), so a value captured at construction would go stale
+  // and every subsequent request would still target the previous payee.
+  get payeeId(): string { return this.route.snapshot.paramMap.get('payeeId')!; }
   // Stable timestamp for the component's lifetime — prevents NG0100 from
   // computePacing() returning slightly-different floats on each CD pass.
   private readonly _nowMs = Date.now();
@@ -148,12 +153,28 @@ export class PayeeDetailComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.store.loadPayee(this.payeeId);
-
     // Read period from URL; default is this-month
     const p = this.route.snapshot.queryParamMap.get('period') as PeriodKey | null;
     if (p === 'last-month' || p === 'ytd' || p === 'all-time') this.period.set(p);
 
+    // paramMap emits immediately, so this covers the first render AND every later navigation
+    // between payees. Without it, clicking the manager link would change the URL but leave the
+    // previously-loaded payee on screen, because Angular reuses the component.
+    this.route.paramMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.initForCurrentPayee());
+  }
+
+  /// Mirrors the original init sequence (loadPayee + loadOverview, which loads the list cards in
+  /// its finally) and additionally clears the previous payee's data so nothing bleeds across.
+  private initForCurrentPayee(): void {
+    this.activeTab.set('overview');
+    this.dashboard.set(null);
+    this.assignments.set([]); this.assignmentsPage.set(1); this.assignmentsTotal.set(0);
+    this.quotas.set([]); this.quotasPage.set(1); this.quotasTotal.set(0);
+    this.credits.set([]); this.creditsPage.set(1); this.creditsTotal.set(0);
+
+    this.store.loadPayee(this.payeeId);
     this.loadOverview();
   }
 

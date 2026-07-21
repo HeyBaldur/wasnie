@@ -147,7 +147,7 @@
               }
 
               @if (isConnected() || needsReconnect()) {
-                <ws-button variant="ghost" [loading]="disconnecting()" [disabled]="disconnecting()" (click)="disconnect()">
+                <ws-button variant="ghost" [loading]="disconnecting()" [disabled]="disconnecting()" (click)="requestDisconnect()">
                   {{ 'INTEGRATIONS.HUBSPOT.DISCONNECT' | translate }}
                 </ws-button>
               }
@@ -158,5 +158,17 @@
 
       </div>
     }
+
+    <ws-confirmation-modal
+      [(isOpen)]="disconnectConfirmOpen"
+      [title]="'INTEGRATIONS.HUBSPOT.DISCONNECT_CONFIRM_TITLE' | translate"
+      [message]="'INTEGRATIONS.HUBSPOT.DISCONNECT_CONFIRM_MSG' | translate"
+      [confirmLabel]="'INTEGRATIONS.HUBSPOT.DISCONNECT' | translate"
+      [cancelLabel]="'COMMON.CANCEL' | translate"
+      variant="danger"
+      [loading]="disconnecting()"
+      (confirmed)="confirmDisconnect()"
+      (cancelled)="disconnectConfirmOpen.set(false)"
+    />
   </ws-page-layout>
 </app-shell>

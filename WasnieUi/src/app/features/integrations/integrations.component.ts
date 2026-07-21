@@ -8,6 +8,7 @@ import {
   WsCardComponent,
   WsButtonComponent,
   WsBadgeComponent,
+  WsConfirmationModalComponent,
   type BadgeVariant,
 } from '../../shared/ui';
 import { ToastService } from '../../shared/services/toast.service';
@@ -27,6 +28,7 @@ import { HubSpotConnectionStatus, HubSpotStatus } from './models/hubspot.model';
     WsCardComponent,
     WsButtonComponent,
     WsBadgeComponent,
+    WsConfirmationModalComponent,
     DateFormatPipe,
     RelativeTimePipe,
   ],
@@ -45,6 +47,7 @@ export class IntegrationsComponent implements OnInit {
 
   readonly connecting = signal(false);
   readonly disconnecting = signal(false);
+  readonly disconnectConfirmOpen = signal(false);
   readonly testing = signal(false);
   // Inline result of the last "Test connection" run (cleared on reload / disconnect).
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
@@ -112,17 +115,25 @@ export class IntegrationsComponent implements OnInit {
     });
   }
 
-  disconnect(): void {
+  /// Disconnecting clears the stored OAuth tokens, so it cannot be undone without re-authorizing
+  /// in HubSpot — it goes through the app's standard confirmation modal rather than firing on click.
+  requestDisconnect(): void {
+    this.disconnectConfirmOpen.set(true);
+  }
+
+  confirmDisconnect(): void {
     this.disconnecting.set(true);
     this.testResult.set(null);
     this.api.disconnect().subscribe({
       next: () => {
         this.disconnecting.set(false);
+        this.disconnectConfirmOpen.set(false);
         this.toast.show('INTEGRATIONS.HUBSPOT.TOAST_DISCONNECTED', 'success');
         this.load();
       },
       error: err => {
         this.disconnecting.set(false);
+        // Modal stays open so the error is visible in context and the user can retry or cancel.
         this.toast.show(err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.TOAST_DISCONNECT_ERROR', 'error');
       },
     });

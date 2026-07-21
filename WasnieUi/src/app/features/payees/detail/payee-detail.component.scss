@@ -88,6 +88,17 @@
   color: var(--color-text-link);
 }
 
+.pd-meta-manager {
+  color: var(--color-text-link);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}
+
 .pd-header__actions {
   display: flex;
   align-items: center;
@@ -476,6 +487,29 @@
     font-size: var(--font-size-14);
     color: var(--color-text-primary);
     &.mono { font-family: var(--font-mono); font-size: var(--font-size-13); }
+  }
+
+  // Manager shown as a link to that payee's own profile: several people can share a name,
+  // so the employee code disambiguates without needing to navigate.
+  &__link {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    width: fit-content;
+    color: var(--color-text-link);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+
+    &:hover {
+      color: var(--color-text-link-hover);
+      text-decoration: underline;
+    }
+  }
+
+  &__link-code {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-12);
+    color: var(--color-text-tertiary);
   }
 }
 
