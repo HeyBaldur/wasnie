@@ -6,6 +6,7 @@ using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Exceptions;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
@@ -23,6 +24,13 @@ public sealed class AddRuleToPlanHandler(IApplicationDbContext db, IAuthorizatio
         if (plan is null)
         {
             return Result<RuleDto>.Failure("Plan not found.");
+        }
+
+        // Fail loud: the engine only honors PerTransaction caps today (PerPeriod/Total are
+        // deferred). Reject other scopes instead of storing a cap the engine silently ignores.
+        if (request.Cap is not null && request.Cap.Scope != CapScope.PerTransaction)
+        {
+            return Result<RuleDto>.Failure("Only Per Transaction cap scope is currently supported.");
         }
 
         try

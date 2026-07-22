@@ -7,7 +7,7 @@ numbers and what appears on screen at each step.
 - **Operators / owner** — a reference for how the system actually behaves.
 - **New customers** — a first-use guide, in the order you'd really do it.
 
-**Verified against the code on 2026-07-21.** Every statement about Wasnie's behaviour in this
+**Verified against the code on 2026-07-22.** Every statement about Wasnie's behaviour in this
 document was checked by reading the source, not from memory, and cites `file:line` so you can
 re-check it. **If the calculation engine changes, this document must be re-verified** — a guide that
 misdescribes the engine is worse than no guide. The highest-risk sections are
@@ -127,8 +127,13 @@ Either **all transactions**, or a set of conditions combined with **And** / **Or
 > rule silently never fires. There is no dropdown and no validation preventing this. Use only those
 > three names.
 >
-> Also: `In` / `NotIn` operators can never match, because the UI always sends an empty value set
-> (`rule-form.component.ts:428`).
+> Also, **only `Equal` / `NotEqual` are reliable through the UI.** Every condition value is sent as
+> a **string** (`rule-form.component.ts:331`), so the engine routes all comparisons through the
+> string path (`CommissionCalculator.cs:62-69`), which handles only `Equal` / `NotEqual` / `In` /
+> `NotIn`. The **ordering operators `>`, `>=`, `<`, `<=` fall through to `false`** and the rule never
+> fires (`CommissionCalculator.cs:112-126`) — they only work if the value type is Number/Date, which
+> the UI never sends. And `In` / `NotIn` can never match either, because the UI always sends an empty
+> value set (`rule-form.component.ts:445`). In practice: use only `Equal` or `NotEqual`.
 
 ### 4.2 Measurement — what is being measured
 
@@ -164,18 +169,34 @@ Applied after the rate table, in sequence: **modifier → cap → floor**
 > *(The master spec lists a "decelerator" type — it does not exist in the code. To decelerate, use a
 > factor below 1.0.)*
 
-> ⚠️ **Cap: only "Per transaction" works, and it is not the default.** `CapScope` offers
-> *Per transaction / Per period / Per payee per period*, but only **Per transaction** is
-> implemented; the other two return the commission unchanged
-> (`CommissionCalculator.cs:252-264`). The rule form **defaults to Per period**
-> (`rule-form.component.ts:151`) — i.e. the default cap silently does nothing. Set the scope to
-> **Per transaction** explicitly. A cap in a different currency to the commission is also skipped
-> silently.
+> ⚠️ **Cap is always per-transaction.** The rule form now offers **only "Per transaction"** as the
+> scope and defaults to it (`rule-form.component.ts:116-117,156`), so there is nothing to get wrong —
+> the old "set the scope explicitly or it does nothing" trap is gone. The engine applies a cap only
+> for the per-transaction scope (`CommissionCalculator.cs:252-264`). The backend enum still carries
+> *Per period* and *Total* for future use, but they are not selectable and any request with a
+> non-per-transaction scope is rejected outright — *"Only Per Transaction cap scope is currently
+> supported."* (`AddRuleToPlanHandler.cs:31-33`, `UpdateRuleHandler.cs:31-33`). A cap in a different
+> currency to the commission is still skipped silently (`CommissionCalculator.cs:258-259`).
 
 **Floor** works as expected (raises commission up to the floor amount).
 
 **On screen.** The rule form shows Trigger, Measurement, Rate table (three buttons), and
 collapsible Modifier / Cap / Floor sections.
+
+### 4.5 Plan lifecycle and assignments
+
+**Archiving a plan deactivates its assignments.** Archiving sets every Active assignment of the plan
+to Deactivated in the same operation (`ArchivePlanHandler.cs:43-49`), so an archived plan drops out
+of processing and out of the "pending eligible" lists — a payee is no longer resolved against it.
+
+> ⚠️ **A payee can be assigned to several active plans at once**, and that is valid configuration
+> (e.g. a base plan plus another). When a transaction for that payee is processed it is credited to
+> **one plan only**, chosen by an internal priority rule: the resolver takes the assignment with the
+> **shortest effective period, breaking ties by smallest Id** (`PlanAssignmentResolver.cs:60-63`).
+> **The admin does not choose which plan today** — processing "from" a plan's screen does *not*
+> direct the credit there (the plan id only selects candidate transactions, not the crediting plan).
+> The plan screen shows an informational banner when some of its payees are also in another active
+> plan, so the situation is at least visible.
 
 ---
 
@@ -528,7 +549,7 @@ accidentally presents them as features.
 | **Named frequency** (monthly/quarterly as a formal concept) | Not implemented. `PlanPeriodType` exists but is inert metadata. |
 | **Weighted averages** | Not implemented anywhere. |
 | **Second KPI unlocking a rate** (e.g. margin gate on a revenue rate) | Not implemented. One measurement per rule; conditions resolve only three transaction fields. |
-| **Period-scoped caps** | Declared but non-functional — only per-transaction caps apply. See 4.4. |
+| **Period-scoped caps** | Not offered in the UI and rejected by the API — only per-transaction caps apply (the backend enum keeps *Per period* / *Total* for future use). See 4.4. |
 | **Tier accumulation across a period (Tiered tables)** | Tiered restarts per transaction. Period accumulation exists only via attainment + SplitAtQuota. |
 
 ---
@@ -537,8 +558,8 @@ accidentally presents them as features.
 
 Collected from the verification passes — real behaviours, not bugs to work around silently.
 
-1. **A cap left on the default scope does nothing.** Set caps to *Per transaction*.
-2. **A condition on any field other than the three supported names silently never fires.**
+1. **Caps are always per-transaction** — the only scope offered; other scopes are rejected by the API.
+2. **A condition silently never fires** if its field is outside the three supported names, or if it uses an ordering operator (`>`, `>=`, `<`, `<=`) or `In` / `NotIn` — only `Equal` / `NotEqual` work through the UI.
 3. **`Measurement` aggregation and source field are inert.**
 4. **Tiered tables do not accumulate across transactions.**
 5. **Attainment sums the whole quota period**, so backdated or out-of-order ingestion shifts figures for already-processed transactions.
@@ -549,6 +570,8 @@ Collected from the verification passes — real behaviours, not bugs to work aro
 10. **Overlapping pay runs are possible**; only credit consumption prevents double payment.
 11. **€0 payouts are correct**, not errors — assigned payees with no sales in the period.
 12. **Changing a rule does not retroactively change existing credits.** Use *Recalculate credits* on a Draft run.
+13. **Archiving a plan deactivates its assignments** — it drops out of processing and the pending-eligible lists.
+14. **A payee can be in several active plans**; each transaction credits exactly one, chosen by internal priority (shortest assignment period, then smallest Id) — the admin does not pick which.
 
 ---
 

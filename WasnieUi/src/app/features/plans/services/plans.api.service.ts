@@ -6,6 +6,23 @@ import { AddRuleRequest, Rule, UpdateRuleRequest } from '../models/rule.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
+export interface OtherActivePlan {
+  planId: string;
+  planName: string;
+}
+
+export interface MultiPlanPayee {
+  payeeId: string;
+  fullName: string;
+  employeeCode: string;
+  otherPlans: OtherActivePlan[];
+}
+
+export interface MultiPlanPayees {
+  count: number;
+  items: MultiPlanPayee[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class PlansApiService {
   private readonly http = inject(HttpClient);
@@ -59,5 +76,9 @@ export class PlansApiService {
   getPlanAssignments(planId: string, params?: PaginationParams): Observable<PagedResult<import('../../assignments/models/assignment.model').Assignment>> {
     return this.http.get<PagedResult<import('../../assignments/models/assignment.model').Assignment>>(
       `/api/assignments/plan/${planId}`, { params: buildHttpParams(params) });
+  }
+
+  getMultiPlanPayees(planId: string): Observable<MultiPlanPayees> {
+    return this.http.get<MultiPlanPayees>(`${this.base}/${planId}/multi-plan-payees`);
   }
 }

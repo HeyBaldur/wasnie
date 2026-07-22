@@ -253,6 +253,13 @@ public sealed class CreditAllocationService : ICreditAllocationService
             commissionAmount = CommissionCalculator.ApplyCap(commissionAmount, rule.Cap);
             commissionAmount = CommissionCalculator.ApplyFloor(commissionAmount, rule.Floor);
 
+            // Defensive copy (same reasoning as baseAmount above): ApplyCap/ApplyFloor may return the
+            // rule's OWN cap/floor Money instance, which is shared across every capped transaction in
+            // the chunk (the rule is loaded once per chunk). Each Credit must own an EXCLUSIVE Money
+            // instance, or EF's owned-type tracker throws "CreditedAmount#Money.CreditId is part of a
+            // key and cannot be modified" on the second Credit. Same Amount/Currency → payout unchanged.
+            var creditedAmount = Money.Of(commissionAmount.Amount, commissionAmount.Currency);
+
             var snapshot = RuleSnapshot.Freeze(
                 rule.Id, plan.Id, plan.Version, rule.Name,
                 rule.RateTable, rule.Trigger, now, measurement: rule.Measurement);
@@ -265,7 +272,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 ruleId: rule.Id,
                 ruleSnapshot: snapshot,
                 originalAmount: baseAmount,
-                creditedAmount: commissionAmount,
+                creditedAmount: creditedAmount,
                 splitPercentage: Percentage.FromPercent(100),
                 role: CreditRole.Primary,
                 allocatedBy: transaction.IngestedBy,

@@ -52,6 +52,21 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
         return plan;
     }
 
+    private static Plan MakePlanWithCappedRule(Guid tenantId, Guid planId, decimal rate, decimal capAmount,
+        DateOnly planStart, DateOnly planEnd)
+    {
+        var plan = Plan.Create(tenantId, "Capped Plan", "desc",
+            DateRange.Of(planStart, planEnd),
+            Currency, "test-user", planId, Now, Guid.NewGuid());
+
+        plan.AddRule("Capped Commission", 1,
+            new Measurement { Type = MeasurementType.Revenue, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+            RateTable.Flat(rate),
+            cap: new Cap { Amount = Money.Of(capAmount, Currency), Scope = CapScope.PerTransaction });
+
+        return plan;
+    }
+
     private static PlanAssignment MakeAssignment(Guid tenantId, Guid planId, Guid payeeId,
         DateOnly start, DateOnly end)
     {
@@ -82,6 +97,66 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
     }
 
     // ── Core allocation ───────────────────────────────────────────────────────
+
+    // Regression: two transactions that both exceed the SAME per-transaction cap, processed in one
+    // batch (plan loaded once, as the chunked job does), used to share the rule's cap.Amount Money
+    // instance. EF then threw "Credit.CreditedAmount#Money.CreditId is part of a key and cannot be
+    // modified" on the second SaveChanges. The defensive copy in CreditAllocationService fixes it.
+    [Fact]
+    public async Task AllocateAsync_TwoTransactionsHittingSameCap_PersistsBothCredits()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationPlans.Add(MakePlanWithCappedRule(tenantId, planId, rate: 0.10m, capAmount: 50m,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            // Pre-load the plan ONCE, exactly as the batch job does, so both transactions share the
+            // same in-memory rule instance (and therefore its single cap.Amount Money instance).
+            var plan = await db.CompensationPlans.Include(p => p.Rules).FirstAsync(p => p.Id == planId);
+            var assignment = await db.PlanAssignments.FirstAsync(a => a.PlanId == planId);
+            var plansById = new Dictionary<Guid, Plan> { [planId] = plan };
+            var assignmentsByPayee = new Dictionary<Guid, IReadOnlyList<PlanAssignment>>
+            {
+                [payeeId] = new List<PlanAssignment> { assignment },
+            };
+
+            var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db);
+
+            var tx1 = CompensationTransaction.Ingest(tenantId, "REF-CAP-001", payeeId, Money.Of(1000m, Currency),
+                TxDate, TransactionSource.Manual, "user", Guid.NewGuid(), Now, Guid.NewGuid());
+            var tx2 = CompensationTransaction.Ingest(tenantId, "REF-CAP-002", payeeId, Money.Of(2000m, Currency),
+                TxDate, TransactionSource.Manual, "user", Guid.NewGuid(), Now, Guid.NewGuid());
+
+            var credits1 = await svc.AllocateAsync(tx1, assignmentsByPayee, plansById);
+            var credits2 = await svc.AllocateAsync(tx2, assignmentsByPayee, plansById);
+
+            db.CompensationTransactions.Add(tx1);
+            db.CompensationTransactions.Add(tx2);
+            foreach (var c in credits1) db.Credits.Add(c);
+            foreach (var c in credits2) db.Credits.Add(c);
+
+            // Before the fix this SaveChanges threw the owned-type key error. It must now succeed.
+            var save = async () => await db.SaveChangesAsync();
+            await save.Should().NotThrowAsync();
+
+            credits1.Should().HaveCount(1);
+            credits2.Should().HaveCount(1);
+            // 1000*0.10=100 and 2000*0.10=200 both exceed the 50 cap → both capped to exactly 50 (math unchanged).
+            credits1[0].CreditedAmount.Amount.Should().Be(50m);
+            credits2[0].CreditedAmount.Amount.Should().Be(50m);
+        }
+    }
 
     [Fact]
     public async Task AllocateAsync_WithFlatRule_ReturnsOneCredit()

@@ -8,6 +8,7 @@ using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payouts;
+using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.ValueObjects;
 
@@ -57,10 +58,13 @@ public sealed class CalculatePayoutsForPeriodHandler(
                 new CalculatePayoutsResult(0, [], []));
 
         // Batch-load plan currencies for all relevant plan IDs (one query).
+        // Defense in depth: exclude Archived plans. An archived plan must never contribute to a
+        // payout, even if credits were somehow attributed to it — assignments for archived plans
+        // fall out of this dictionary and are skipped by the TryGetValue guard in the loop below.
         var planIds = overlapping.Select(a => a.PlanId).Distinct().ToList();
         var planCurrencyById = (await db.CompensationPlans
             .IgnoreQueryFilters()
-            .Where(p => p.TenantId == tenantId && planIds.Contains(p.Id))
+            .Where(p => p.TenantId == tenantId && planIds.Contains(p.Id) && p.Status != PlanStatus.Archived)
             .Select(p => new { p.Id, p.Currency })
             .ToListAsync(cancellationToken))
             .ToDictionary(p => p.Id, p => p.Currency);

@@ -33,6 +33,13 @@ public sealed class PlansController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    [HttpGet("{planId:guid}/multi-plan-payees")]
+    public async Task<IActionResult> MultiPlanPayees(Guid planId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetMultiPlanPayeesQuery(planId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreatePlanCommand command, CancellationToken cancellationToken)
     {

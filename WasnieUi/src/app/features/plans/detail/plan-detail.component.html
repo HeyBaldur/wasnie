@@ -225,6 +225,37 @@
               {{ 'PLANS.ACTION_ASSIGN_PAYEE' | translate }}
             </ws-button>
           </div>
+          @if (multiPlanCount() > 0) {
+            <div class="multi-plan-notice">
+              <div class="multi-plan-notice__row">
+                <app-icon name="info" [size]="16" class="multi-plan-notice__icon" />
+                <span class="multi-plan-notice__text">
+                  {{ 'PLANS.MULTI_PLAN_NOTICE' | translate: { n: multiPlanCount() } }}
+                </span>
+                <button type="button" class="multi-plan-notice__toggle" (click)="toggleMultiPlanDetail()">
+                  {{ (multiPlanDetailOpen() ? 'PLANS.MULTI_PLAN_HIDE' : 'PLANS.MULTI_PLAN_VIEW') | translate }}
+                </button>
+              </div>
+              @if (multiPlanDetailOpen()) {
+                <ul class="multi-plan-notice__list">
+                  @for (mp of multiPlanPayees()?.items ?? []; track mp.payeeId) {
+                    <li class="multi-plan-notice__item">
+                      <span class="multi-plan-notice__payee">
+                        {{ mp.fullName }}
+                        <span class="multi-plan-notice__code">{{ mp.employeeCode }}</span>
+                      </span>
+                      <span class="multi-plan-notice__plans">
+                        {{ 'PLANS.MULTI_PLAN_ALSO_IN' | translate }}
+                        @for (op of mp.otherPlans; track op.planId; let last = $last) {
+                          <span class="multi-plan-notice__chip">{{ op.planName }}</span>{{ last ? '' : ' ' }}
+                        }
+                      </span>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
           <div *hasPermission="'Transactions.ProcessPending'" class="assignments-tab-process-pending">
             <app-process-pending
               scope="ByPlan"
