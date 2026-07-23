@@ -69,6 +69,8 @@ export class TransactionFormComponent implements OnInit {
   readonly form = this.fb.nonNullable.group({
     payeeId: [''],
     referenceNumber: ['', [Validators.required, Validators.maxLength(100)]],
+    // Optional label so an auditor can tell what the transaction is for without opening the CRM.
+    description: ['', [Validators.maxLength(500)]],
     transactionDate: ['', Validators.required],
     amount: [0 as number, [Validators.required, Validators.min(0.01)]],
     currency: ['USD', Validators.required],
@@ -108,6 +110,7 @@ export class TransactionFormComponent implements OnInit {
         // rejects Guid.Empty but accepts null when the tenant setting is Optional.
         payeeId: v.payeeId || null,
         referenceNumber: v.referenceNumber.trim(),
+        description: v.description.trim() || null,
         transactionDate: v.transactionDate,
         amount: v.amount,
         currency: v.currency,

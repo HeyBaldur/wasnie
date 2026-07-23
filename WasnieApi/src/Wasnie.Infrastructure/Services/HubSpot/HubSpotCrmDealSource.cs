@@ -115,11 +115,170 @@ public sealed class HubSpotCrmDealSource(
         }
         while (after is not null);
 
+        var dealsWithLines = await AttachLineItemsAsync(deals, accessToken, cancellationToken);
+
         logger.LogInformation(
             "HubSpot closed-won deal read ({Mode}) returned {Count} deals across {Pages} page(s).",
-            modifiedSince is null ? "full" : "incremental", deals.Count, pages);
-        return deals;
+            modifiedSince is null ? "full" : "incremental", dealsWithLines.Count, pages);
+        return dealsWithLines;
     }
+
+    private static readonly string[] LineItemProperties = ["quantity", "price", "amount", "name"];
+
+    /// <summary>
+    /// For each deal, fetch its line items (v4 associations batch-read → line items batch-read) and attach
+    /// them. Chunked at 100 per HubSpot batch and throttled like the deal read. Deals with no line items are
+    /// returned unchanged (empty <see cref="CrmDeal.Lines"/>). Requires the crm.objects.line_items.read scope.
+    /// </summary>
+    private async Task<IReadOnlyList<CrmDeal>> AttachLineItemsAsync(
+        List<CrmDeal> deals, string accessToken, CancellationToken cancellationToken)
+    {
+        if (deals.Count == 0) return deals;
+
+        // 1) deal id → line item ids (v4 associations batch read).
+        var lineItemIdsByDeal = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var assocUrl = $"{_opts.ApiBaseUrl.TrimEnd('/')}{_opts.DealLineItemAssociationsPath}";
+        var dealIds = deals.Select(d => d.Id).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+
+        foreach (var chunk in dealIds.Chunk(100))
+        {
+            using var doc = await SendWithRetryAsync(
+                () => PostJson(assocUrl, BuildIdInputsBody(chunk), accessToken), "line_items.associations", cancellationToken);
+
+            if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var r in results.EnumerateArray())
+                {
+                    var fromId = r.TryGetProperty("from", out var f) && f.TryGetProperty("id", out var fid)
+                        ? fid.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(fromId)) continue;
+
+                    var ids = new List<string>();
+                    if (r.TryGetProperty("to", out var to) && to.ValueKind == JsonValueKind.Array)
+                        foreach (var t in to.EnumerateArray())
+                        {
+                            var liId = t.TryGetProperty("toObjectId", out var oid) ? RawId(oid)
+                                : t.TryGetProperty("id", out var idv) ? RawId(idv) : null;
+                            if (!string.IsNullOrWhiteSpace(liId)) ids.Add(liId!);
+                        }
+                    if (ids.Count > 0) lineItemIdsByDeal[fromId!] = ids;
+                }
+            }
+
+            if (_opts.SearchThrottleMs > 0) await Task.Delay(_opts.SearchThrottleMs, cancellationToken);
+        }
+
+        if (lineItemIdsByDeal.Count == 0) return deals;
+
+        // 2) line item id → CrmLineItem (batch read with quantity/price/amount/name).
+        var lineItemById = new Dictionary<string, CrmLineItem>(StringComparer.Ordinal);
+        var liUrl = $"{_opts.ApiBaseUrl.TrimEnd('/')}{_opts.LineItemsBatchReadPath}";
+        var allLineItemIds = lineItemIdsByDeal.Values.SelectMany(v => v).Distinct().ToList();
+
+        foreach (var chunk in allLineItemIds.Chunk(100))
+        {
+            using var doc = await SendWithRetryAsync(
+                () => PostJson(liUrl, BuildLineItemsReadBody(chunk), accessToken), "line_items.read", cancellationToken);
+
+            if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in results.EnumerateArray())
+                {
+                    var id = GetString(el, "id");
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+                    var props = el.TryGetProperty("properties", out var p) ? p : default;
+                    lineItemById[id!] = new CrmLineItem(
+                        Id: id!,
+                        Name: NullIfBlank(GetString(props, "name")),
+                        Quantity: ParseDecimal(GetString(props, "quantity")),
+                        Price: ParseDecimal(GetString(props, "price")),
+                        Amount: ParseDecimal(GetString(props, "amount")));
+                }
+            }
+
+            if (_opts.SearchThrottleMs > 0) await Task.Delay(_opts.SearchThrottleMs, cancellationToken);
+        }
+
+        // 3) attach line items to their deals (deals without associations are returned unchanged).
+        var withLines = new List<CrmDeal>(deals.Count);
+        foreach (var d in deals)
+        {
+            if (lineItemIdsByDeal.TryGetValue(d.Id, out var liIds))
+            {
+                var lines = liIds
+                    .Where(lineItemById.ContainsKey)
+                    .Select(id => lineItemById[id])
+                    .ToList();
+                withLines.Add(d with { LineItems = lines });
+            }
+            else
+            {
+                withLines.Add(d);
+            }
+        }
+        return withLines;
+    }
+
+    private static HttpRequestMessage PostJson(string url, string body, string accessToken)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return req;
+    }
+
+    // {"inputs":[{"id":"..."}, ...]}
+    private static string BuildIdInputsBody(IEnumerable<string> ids)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteStartArray("inputs");
+            foreach (var id in ids)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("id", id);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    // {"properties":[...],"inputs":[{"id":"..."}, ...]}
+    private static string BuildLineItemsReadBody(IEnumerable<string> ids)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteStartArray("properties");
+            foreach (var p in LineItemProperties)
+                writer.WriteStringValue(p);
+            writer.WriteEndArray();
+            writer.WriteStartArray("inputs");
+            foreach (var id in ids)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("id", id);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static string? RawId(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => value.GetString(),
+        JsonValueKind.Number => value.GetRawText(),
+        _ => null,
+    };
 
     public async Task<IReadOnlyList<CrmOwner>> GetOwnersAsync(
         Guid tenantId, CancellationToken cancellationToken = default)

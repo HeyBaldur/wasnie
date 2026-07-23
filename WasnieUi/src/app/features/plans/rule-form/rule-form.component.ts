@@ -111,9 +111,11 @@ export class RuleFormComponent implements OnInit {
     .filter(([, v]) => typeof v === 'number')
     .map(([k, v]) => ({ label: `PLANS.MODIFIER_${k.toUpperCase()}`, value: v as number }));
 
-  readonly capScopeOptions: SelectOption[] = Object.entries(CapScope)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({ label: `PLANS.CAP_SCOPE_${k.toUpperCase()}`, value: v as number }));
+  // Only Per Transaction is honored by the engine today; Per Period / Total exist backend-side
+  // but are deferred, so we never offer an option that would silently do nothing.
+  readonly capScopeOptions: SelectOption[] = [
+    { label: 'PLANS.CAP_SCOPE_PERTRANSACTION', value: CapScope.PerTransaction },
+  ];
 
   readonly conditionOperatorOptions: SelectOption[] = Object.entries(ConditionOperator)
     .filter(([, v]) => typeof v === 'number')
@@ -121,7 +123,10 @@ export class RuleFormComponent implements OnInit {
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
-    sortOrder: [1, [Validators.required, Validators.min(1)]],
+    // Sort order is auto-assigned (max existing + 1) and presentation-only, so the field
+    // is locked — users can't type arbitrary values. getRawValue() still submits it, and
+    // setValue/patchValue below update disabled controls fine.
+    sortOrder: [{ value: 1, disabled: true }, [Validators.required, Validators.min(1)]],
     measurement: this.fb.nonNullable.group({
       type: [MeasurementType.Revenue as number, Validators.required],
       sourceField: ['amount', Validators.required],
@@ -148,7 +153,7 @@ export class RuleFormComponent implements OnInit {
     hasCap: [false],
     cap: this.fb.nonNullable.group({
       amount: [0, Validators.min(0)],
-      scope: [CapScope.PerPeriod as number],
+      scope: [CapScope.PerTransaction as number],
     }),
     hasFloor: [false],
     floor: this.fb.nonNullable.group({
@@ -203,6 +208,14 @@ export class RuleFormComponent implements OnInit {
       if (this.isEdit) {
         this._loadExistingRule();  // populate signals while form is still enabled
       } else {
+        // Default the sort order to max(existing) + 1 so new rules don't all land on #1.
+        // Sort order is presentation-only (it does not affect payout amounts), so no
+        // uniqueness validation is needed — this just avoids silent collisions by default.
+        const existingRules = this.store.selectedPlan()?.rules ?? [];
+        const nextSortOrder = existingRules.length > 0
+          ? Math.max(...existingRules.map((r) => r.sortOrder)) + 1
+          : 1;
+        this.form.controls.sortOrder.setValue(nextSortOrder, { emitEvent: false });
         this._addTier();
       }
 
@@ -363,6 +376,8 @@ export class RuleFormComponent implements OnInit {
     if (this.readOnly()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      // Never fail silently: tell the user why nothing happened on Save.
+      this.toast.show('PLANS.TOAST_RULE_INVALID', 'error');
       return;
     }
     this.saving.set(true);
@@ -383,7 +398,9 @@ export class RuleFormComponent implements OnInit {
         rateTable: this._buildRateTable(v),
         trigger: v.hasTrigger ? this._buildTrigger(v) : null,
         modifier: v.hasModifier ? this._buildModifier(v) : null,
-        cap: v.hasCap ? { _schema: 1, amount: { amount: v.cap.amount, currency }, scope: Number(v.cap.scope) } : null,
+        // Send the enum NAME (not the number) so the backend deserializes by name — this makes
+        // any frontend/backend numeric misalignment of CapScope harmless. See WI CapScope.
+        cap: v.hasCap ? { _schema: 1, amount: { amount: v.cap.amount, currency }, scope: CapScope[Number(v.cap.scope)] as unknown as CapScope } : null,
         floor: v.hasFloor ? { _schema: 1, amount: { amount: v.floor.amount, currency } } : null,
       };
 

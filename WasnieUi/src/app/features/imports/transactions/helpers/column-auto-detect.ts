@@ -27,6 +27,11 @@ export const TRANSACTION_FIELD_PATTERNS: Record<string, string[]> = {
     'quantity', 'qty', 'units', 'count', 'items',
     'cantidad', 'unidades', 'ilość', 'sztuki',
   ],
+  descriptionColumn: [
+    'description', 'deal name', 'dealname', 'deal', 'name', 'concept', 'detail',
+    'descripcion', 'descripción', 'concepto', 'nombre', 'nombre del negocio', 'detalle',
+    'opis', 'nazwa', 'nazwa transakcji', 'szczegóły',
+  ],
 };
 
 function matchesPhrase(normalized: string, pattern: string): boolean {

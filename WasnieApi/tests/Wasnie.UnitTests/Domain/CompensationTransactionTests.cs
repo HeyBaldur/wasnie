@@ -60,6 +60,39 @@ public sealed class CompensationTransactionTests
         tx.ExternalId.Should().BeNull();
     }
 
+    // ── Description (descriptive label — HubSpot deal name / manual / Excel) ──────────────────
+
+    private static CompensationTransaction IngestWithDescription(string? description) =>
+        CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(), description: description);
+
+    [Fact]
+    public void Ingest_WithDescription_TrimsAndStoresIt()
+    {
+        IngestWithDescription("  Contrato Acme 2026  ").Description.Should().Be("Contrato Acme 2026");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Ingest_NullOrBlankDescription_LeavesDescriptionNull(string? description)
+    {
+        IngestWithDescription(description).Description.Should().BeNull();
+    }
+
+    // A label longer than the column is truncated, never rejected — a descriptive field must never
+    // block ingesting a real sale.
+    [Fact]
+    public void Ingest_OverlongDescription_IsTruncatedNotRejected()
+    {
+        var tx = IngestWithDescription(new string('x', CompensationTransaction.MaxDescriptionLength + 50));
+
+        tx.Description.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+    }
+
     [Fact]
     public void Ingest_EmptyTenantId_ThrowsDomainException()
     {

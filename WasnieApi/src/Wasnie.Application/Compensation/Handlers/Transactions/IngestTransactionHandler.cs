@@ -91,7 +91,8 @@ public sealed class IngestTransactionHandler(
             id: txId,
             now: now,
             eventId: guid.NewGuid(),
-            quantity: request.Quantity);
+            quantity: request.Quantity,
+            description: request.Description);
 
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync(cancellationToken);
@@ -123,6 +124,7 @@ public sealed class IngestTransactionHandler(
             tx.Amount.Amount, tx.Amount.Currency, tx.Quantity, tx.TransactionDate,
             tx.Source.ToString(), tx.Status.ToString(), tx.ExternalId,
             tx.IngestedAt, tx.IngestedBy, tx.UpdatedAt,
+            Description: tx.Description,
             CancelledBy: tx.CancelledBy,
             CancelledAt: tx.CancelledAt,
             CancelledReason: tx.CancelledReason);

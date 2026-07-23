@@ -6,7 +6,7 @@ import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
-import { PlansApiService } from '../services/plans.api.service';
+import { PlansApiService, MultiPlanPayees } from '../services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
 import { TierLimitModalService } from '../../../shared/components/tier-limit-modal/tier-limit-modal.service';
@@ -85,6 +85,11 @@ export class PlanDetailComponent implements OnInit {
   readonly assignmentsLoading = signal(false);
   readonly assignmentsPage = signal(1);
 
+  // Payees of this plan that are ALSO in another active plan (informational banner).
+  readonly multiPlanPayees = signal<MultiPlanPayees | null>(null);
+  readonly multiPlanDetailOpen = signal(false);
+  readonly multiPlanCount = computed(() => this.multiPlanPayees()?.count ?? 0);
+
   readonly activateOpen = signal(false);
   readonly activateSaving = signal(false);
   readonly archiveOpen = signal(false);
@@ -98,7 +103,9 @@ export class PlanDetailComponent implements OnInit {
   readonly sortedRules = computed(() => {
     const plan = this.store.selectedPlan();
     if (!plan) return [];
-    return [...plan.rules].sort((a, b) => a.sortOrder - b.sortOrder);
+    // Only show active rules — a deleted (soft-deactivated) rule must not appear, otherwise
+    // its Edit action opens a form whose save fails with "rule not found in this plan".
+    return [...plan.rules].filter((r) => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
   });
 
   ngOnInit(): void {
@@ -116,7 +123,21 @@ export class PlanDetailComponent implements OnInit {
     this.activeTab.set(tab);
     if (tab === 'assignments' && !this.planAssignmentsResult()) {
       this.loadPlanAssignments(1);
+      this.loadMultiPlanPayees();
     }
+  }
+
+  private async loadMultiPlanPayees(): Promise<void> {
+    try {
+      const data = await firstValueFrom(this.plansApi.getMultiPlanPayees(this.planId));
+      this.multiPlanPayees.set(data);
+    } catch {
+      // non-critical — the banner just stays hidden.
+    }
+  }
+
+  toggleMultiPlanDetail(): void {
+    this.multiPlanDetailOpen.update((v) => !v);
   }
 
   async loadPlanAssignments(page: number): Promise<void> {

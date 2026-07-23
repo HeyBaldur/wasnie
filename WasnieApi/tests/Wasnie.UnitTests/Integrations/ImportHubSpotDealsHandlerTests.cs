@@ -283,4 +283,206 @@ public sealed class ImportHubSpotDealsHandlerTests
         result.Value.SkippedInvalid.Should().Be(1);
         (await h.Db.CompensationTransactions.AnyAsync()).Should().BeFalse();
     }
+
+    // ── Line items → one transaction per line, with real quantity (WI-PROD-QUANTITY) ──────────────
+
+    // (a) one line item of N units → a transaction whose Quantity is N (not 1).
+    [Fact]
+    public async Task Deal_with_one_line_item_creates_transaction_with_real_quantity()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Deal_with_one_line_item_creates_transaction_with_real_quantity), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("101", "Bulk", 50000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[] { new CrmLineItem("li1", "Widget", 5000m, 10m, 50000m) }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(1);
+        var tx = await h.Db.CompensationTransactions.SingleAsync();
+        tx.Quantity.Should().Be(5000);
+        tx.Amount.Amount.Should().Be(50000m);
+        tx.ReferenceNumber.Should().Be("HUBSPOT-101-li1");
+        tx.ExternalId.Should().Be("101-li1");
+    }
+
+    // (b) M line items → M transactions, each with its own quantity/amount (no averaged unit price).
+    [Fact]
+    public async Task Deal_with_multiple_line_items_creates_one_transaction_each()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Deal_with_multiple_line_items_creates_one_transaction_each), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("102", "Multi", 65000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[]
+                {
+                    new CrmLineItem("a", "Widget", 5000m, 10m, 50000m),
+                    new CrmLineItem("b", "Gadget", 300m, 50m, 15000m),
+                }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(2);
+        var txs = await h.Db.CompensationTransactions.ToListAsync();
+        txs.Should().HaveCount(2);
+        txs.Single(t => t.ExternalId == "102-a").Quantity.Should().Be(5000);
+        txs.Single(t => t.ExternalId == "102-a").Amount.Amount.Should().Be(50000m);
+        txs.Single(t => t.ExternalId == "102-b").Quantity.Should().Be(300);
+        txs.Single(t => t.ExternalId == "102-b").Amount.Amount.Should().Be(15000m);
+    }
+
+    // (d) Σ(line items) ≠ deal amount → flagged (TotalsMismatch), NOT ingested silently.
+    [Fact]
+    public async Task Deal_whose_line_items_do_not_sum_to_deal_amount_is_flagged_not_ingested()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Deal_whose_line_items_do_not_sum_to_deal_amount_is_flagged_not_ingested), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        // Line items sum to 65000 but the deal amount is 60000 (a deal-level discount) → do not guess.
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("103", "Discounted", 60000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[]
+                {
+                    new CrmLineItem("x", "Widget", 5000m, 10m, 50000m),
+                    new CrmLineItem("y", "Gadget", 300m, 50m, 15000m),
+                }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(0);
+        result.Value.TotalsMismatch.Should().Be(1);
+        (await h.Db.CompensationTransactions.AnyAsync()).Should().BeFalse();
+    }
+
+    // (f) re-syncing the same deal with line items does NOT duplicate (idempotency per line item id).
+    [Fact]
+    public async Task Re_syncing_a_deal_with_line_items_does_not_duplicate()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Re_syncing_a_deal_with_line_items_does_not_duplicate), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("102", "Multi", 65000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[]
+                {
+                    new CrmLineItem("a", "Widget", 5000m, 10m, 50000m),
+                    new CrmLineItem("b", "Gadget", 300m, 50m, 15000m),
+                }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var first = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+        first.Value!.Created.Should().Be(2);
+
+        var second = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+        second.Value!.Created.Should().Be(0);
+        (await h.Db.CompensationTransactions.CountAsync()).Should().Be(2);
+    }
+
+    // (g) a line item's amount changing in HubSpot is detected as drift per line and (Pending) re-created.
+    [Fact]
+    public async Task Line_item_amount_change_is_detected_as_drift_per_line()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Line_item_amount_change_is_detected_as_drift_per_line), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+        var owners = new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) };
+        h.DealSource.GetOwnersAsync(tenantId, Arg.Any<CancellationToken>()).Returns(owners);
+        h.DealSource.GetDefaultCurrencyAsync(tenantId, Arg.Any<CancellationToken>()).Returns("USD");
+
+        h.DealSource.GetClosedWonDealsAsync(tenantId, Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new CrmDeal("104", "D", 50000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[] { new CrmLineItem("li", "Widget", 5000m, 10m, 50000m) }),
+        });
+        await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        // The line item's amount changed in HubSpot (deal total moves with it to keep the totals reconciled).
+        h.DealSource.GetClosedWonDealsAsync(tenantId, Arg.Any<CancellationToken>()).Returns(new[]
+        {
+            new CrmDeal("104", "D", 60000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[] { new CrmLineItem("li", "Widget", 5000m, 12m, 60000m) }),
+        });
+        var second = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        second.Value!.DriftAutoResolved.Should().Be(1);
+        var active = await h.Db.CompensationTransactions.SingleAsync(t => t.Status == CompensationTransactionStatus.Pending);
+        active.Amount.Amount.Should().Be(60000m);
+        active.ExternalId.Should().Be("104-li");
+    }
+
+    // ── Deal name persisted as the transaction Description (WI readable transaction name) ──────────
+
+    // A deal WITHOUT line items → the single transaction carries the deal name.
+    [Fact]
+    public async Task Deal_without_line_items_persists_deal_name_as_description()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Deal_without_line_items_persists_deal_name_as_description), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("901", "Contrato Acme 2026", 5000m, "USD", new DateOnly(2026, 6, 1), "O1") },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(1);
+        var tx = await h.Db.CompensationTransactions.SingleAsync();
+        tx.Description.Should().Be("Contrato Acme 2026");
+    }
+
+    // A deal WITH line items → every line transaction carries the SAME deal name; the rows are told
+    // apart by their per-line reference, never by the label.
+    [Fact]
+    public async Task Deal_with_line_items_persists_same_deal_name_on_every_transaction()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Deal_with_line_items_persists_same_deal_name_on_every_transaction), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("902", "Contrato Acme 2026", 65000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[]
+                {
+                    new CrmLineItem("a", "Widget", 5000m, 10m, 50000m),
+                    new CrmLineItem("b", "Gadget", 300m, 50m, 15000m),
+                }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(2);
+        var txs = await h.Db.CompensationTransactions.ToListAsync();
+        txs.Should().OnlyContain(t => t.Description == "Contrato Acme 2026");
+        txs.Select(t => t.ReferenceNumber).Should().BeEquivalentTo(["HUBSPOT-902-a", "HUBSPOT-902-b"]);
+    }
+
+    // A deal with NO name must still ingest — the label is descriptive, never a precondition.
+    [Fact]
+    public async Task Deal_without_a_name_still_ingests_with_null_description()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Deal_without_a_name_still_ingests_with_null_description), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("903", null, 5000m, "USD", new DateOnly(2026, 6, 1), "O1") },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(1);
+        var tx = await h.Db.CompensationTransactions.SingleAsync();
+        tx.Description.Should().BeNull();
+        tx.Amount.Amount.Should().Be(5000m);
+    }
 }

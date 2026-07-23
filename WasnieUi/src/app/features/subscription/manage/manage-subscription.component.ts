@@ -43,6 +43,11 @@ export class ManageSubscriptionComponent implements OnInit, OnDestroy {
     { nameKey: 'ONBOARDING.CAP_AUDIT_NAME',         descKey: 'ONBOARDING.CAP_AUDIT_DESC'         },
   ] as const;
 
+  // Skeleton placeholder counts — sized to match the loaded layout so it does not reflow:
+  // one per capability tile, and a 3-wide plan grid.
+  readonly skeletonCapabilities = Array.from({ length: 9 }, (_, i) => i);
+  readonly skeletonPlans = Array.from({ length: 3 }, (_, i) => i);
+
   readonly subscription = signal<CurrentSubscription | null>(null);
   readonly plans = signal<SubscriptionPlan[]>([]);
   readonly loading = signal(true);

@@ -16,6 +16,14 @@
       [error]="hasError('referenceNumber', 'required') ? 'VALIDATION.REQUIRED' : hasError('referenceNumber', 'maxlength') ? 'VALIDATION.INVALID' : ''"
     />
 
+    <ws-input
+      class="ws-form-grid__full"
+      label="TRANSACTIONS.FIELD_DESCRIPTION"
+      formControlName="description"
+      [placeholder]="'TRANSACTIONS.FIELD_DESCRIPTION_PLACEHOLDER' | translate"
+      [error]="hasError('description', 'maxlength') ? 'VALIDATION.INVALID' : ''"
+    />
+
     <ws-date-picker
       [label]="'TRANSACTIONS.FIELD_DATE'"
       formControlName="transactionDate"

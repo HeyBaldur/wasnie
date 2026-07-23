@@ -100,6 +100,13 @@ public sealed class HangfireBackgroundJobService(
 
     public async Task MarkFailedAsync(Guid jobId, string errorMessage, CancellationToken ct = default)
     {
+        // The failing job shares this scoped DbContext, so its ChangeTracker may still hold the
+        // broken entities that caused the failure. Detach them first — otherwise SaveChanges below
+        // re-runs DetectChanges over them and re-throws the SAME error, so the "Failed" state and
+        // real error message never persist and the job is stuck "Running" (Hangfire retries forever).
+        // Clearing leaves only the freshly-loaded job record to persist.
+        db.ChangeTracker.Clear();
+
         var record = await db.BackgroundJobRecords.FindAsync([jobId], ct);
         if (record is null)
         {

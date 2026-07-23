@@ -77,6 +77,8 @@ export interface PayoutLine {
   commissionCurrency: string;
   transactionId: string | null;
   transactionReference: string | null;
+  /** Human-readable label of the source sale — display only. */
+  transactionDescription: string | null;
   transactionExternalId: string | null;
   transactionDate: string | null;
   transactionAmount: number | null;

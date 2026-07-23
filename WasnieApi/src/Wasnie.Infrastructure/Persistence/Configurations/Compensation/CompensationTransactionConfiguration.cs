@@ -15,6 +15,8 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.TenantId).IsRequired();
         builder.Property(t => t.ReferenceNumber).IsRequired().HasMaxLength(200);
         builder.Property(t => t.Quantity).IsRequired().HasDefaultValue(1);
+        // Descriptive label (HubSpot deal name / manual / Excel). Nullable — pre-existing rows have none.
+        builder.Property(t => t.Description).HasMaxLength(CompensationTransaction.MaxDescriptionLength);
         // Nullable per Decision D: transactions may exist without an assigned payee.
         builder.Property(t => t.TransactionDate).IsRequired();
         builder.Property(t => t.Source).HasConversion<string>().HasMaxLength(50).IsRequired();

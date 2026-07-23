@@ -8,26 +8,44 @@
 
 // ── Loading skeleton ──────────────────────────────────────────────────────────
 
-.subscription-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.subscription-skeleton__card {
-  height: 160px;
-  border-radius: var(--radius-lg);
+// Same convention as the rest of the app (payees list, quota detail, plans list):
+// a `.skeleton` base with size modifiers, animated by a `shimmer` keyframe.
+.skeleton {
+  display: inline-block;
+  border-radius: var(--radius-xs);
   background: var(--color-bg-surface-sunken);
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  animation: shimmer 1.4s ease infinite;
+  height: 14px;
 
-  &--wide {
-    height: 240px;
-  }
+  &--title      { width: 180px; height: 28px; border-radius: var(--radius-sm); }
+  &--badge      { width: 72px;  height: 22px; border-radius: var(--radius-full); }
+  &--text-wide  { width: 240px; }
+  &--heading    { width: 200px; height: 18px; }
+  &--row        { width: 100%;  height: 20px; }
+  &--cap        { width: 100%;  height: 64px; border-radius: var(--radius-md); }
+  &--plan       { width: 100%;  height: 200px; border-radius: var(--radius-lg); }
 }
 
-@keyframes skeleton-pulse {
+@keyframes shimmer {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+// Placeholder containers that mirror the loaded layout's spacing.
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeleton-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+
+  @media (max-width: 860px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 // ── Error state ───────────────────────────────────────────────────────────────

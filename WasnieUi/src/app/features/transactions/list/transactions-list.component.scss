@@ -58,6 +58,19 @@
   display: block;
 }
 
+/* Deal name / manual label under the technical reference — what the sale actually was. */
+.col-ref__description {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-12);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-top: var(--space-1);
+  white-space: normal;
+  word-break: break-word;
+  max-width: 220px;
+}
+
 .col-ref__reason {
   display: block;
   font-family: var(--font-sans);

@@ -75,6 +75,7 @@ public sealed class ImportHubSpotDealsHandler(
         if (result.MissingAmount > 0) warnings.Add($"{result.MissingAmount} deal(s) skipped: no amount.");
         if (result.MissingCurrency > 0) warnings.Add($"{result.MissingCurrency} deal(s) skipped: no currency (and no account default).");
         if (result.MissingCloseDate > 0) warnings.Add($"{result.MissingCloseDate} deal(s) had no close date — used today's date.");
+        if (result.TotalsMismatch > 0) warnings.Add($"{result.TotalsMismatch} deal(s) skipped: the line item totals don't match the deal amount (deal-level discount/tax/override?) — review before importing.");
         if (result.SkippedBlocked > 0) warnings.Add($"{result.SkippedBlocked} deal(s) skipped: a prior voided transaction had already been processed — cannot re-import.");
         if (result.DriftAutoResolved > 0) warnings.Add($"{result.DriftAutoResolved} deal(s) changed in HubSpot and were updated automatically (the pending transaction was re-created with the new values).");
         if (result.DriftAlertsRaised > 0) warnings.Add($"{result.DriftAlertsRaised} deal(s) changed in HubSpot after their commission was already calculated or paid — review the “needs attention” card.");
@@ -89,6 +90,7 @@ public sealed class ImportHubSpotDealsHandler(
             NewOwnerMappings: result.NewOwnerMappings,
             DriftAutoResolved: result.DriftAutoResolved,
             DriftAlertsRaised: result.DriftAlertsRaised,
+            TotalsMismatch: result.TotalsMismatch,
             Warnings: warnings));
     }
 }

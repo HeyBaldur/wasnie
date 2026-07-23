@@ -149,6 +149,9 @@
                   </td>
                   <td class="col-ref" [class.col-ref--voided]="tx.status === TransactionStatus.Cancelled">
                     <span class="col-ref__number">{{ tx.referenceNumber }}</span>
+                    @if (tx.description) {
+                      <span class="col-ref__description" [title]="tx.description">{{ tx.description }}</span>
+                    }
                     @if (tx.status === TransactionStatus.Cancelled && tx.cancelledReason) {
                       <span class="col-ref__reason">{{ tx.cancelledReason }}</span>
                     }

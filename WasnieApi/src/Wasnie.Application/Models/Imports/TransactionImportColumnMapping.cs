@@ -13,4 +13,6 @@ public sealed class TransactionImportColumnMapping
     public required string TransactionDateColumn { get; init; }
     public string? ExternalIdColumn { get; init; }
     public string? QuantityColumn { get; init; }
+    // Optional human-readable label of the sale. Unmapped → the transaction keeps a null Description.
+    public string? DescriptionColumn { get; init; }
 }

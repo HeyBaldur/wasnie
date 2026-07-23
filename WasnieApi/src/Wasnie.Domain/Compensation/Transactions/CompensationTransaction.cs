@@ -10,8 +10,16 @@ public sealed class CompensationTransaction : AggregateRoot
 {
     private static readonly DateOnly MinTransactionDate = new DateOnly(2000, 1, 1);
 
+    // Max persisted length of Description — mirrors ExternalId/Notes elsewhere in the model.
+    public const int MaxDescriptionLength = 500;
+
     public Guid TenantId { get; private set; }
     public string ReferenceNumber { get; private set; } = string.Empty;
+    // Human-readable label for the sale this transaction represents (HubSpot deal name, a manually
+    // typed description, or an Excel column). PURELY DESCRIPTIVE — never used in calculation,
+    // matching, idempotency or attribution; those all key off ReferenceNumber/ExternalId.
+    // Null for transactions ingested before this field existed and whenever no name is supplied.
+    public string? Description { get; private set; }
     // Nullable per Decision D: e-commerce/house-pool/system-return rows may have no payee at ingest.
     // Phase 3 filter: PayeeId IS NOT NULL AND Status = Pending to find processable transactions.
     public Guid? PayeeId { get; private set; }
@@ -45,7 +53,8 @@ public sealed class CompensationTransaction : AggregateRoot
         DateTimeOffset now,
         Guid eventId,
         string? externalId = null,
-        int quantity = 1)
+        int quantity = 1,
+        string? description = null)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("TenantId must not be empty.");
@@ -68,6 +77,7 @@ public sealed class CompensationTransaction : AggregateRoot
             PayeeId = payeeId,
             Amount = amount,
             Quantity = quantity,
+            Description = NormalizeDescription(description),
             TransactionDate = transactionDate,
             Source = source,
             Status = CompensationTransactionStatus.Pending,
@@ -81,6 +91,19 @@ public sealed class CompensationTransaction : AggregateRoot
             eventId, now, tx.Id, tenantId, referenceNumber));
 
         return tx;
+    }
+
+    // Blank → null; trimmed; truncated rather than rejected. A label that is too long must never
+    // block ingesting a real sale — this field is descriptive only and carries no money semantics.
+    private static string? NormalizeDescription(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return null;
+
+        var trimmed = description.Trim();
+        return trimmed.Length > MaxDescriptionLength
+            ? trimmed[..MaxDescriptionLength]
+            : trimmed;
     }
 
     // Pending → Eligible: transaction validated and ready for the calculation engine.

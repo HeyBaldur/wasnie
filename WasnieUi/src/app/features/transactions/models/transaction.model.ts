@@ -14,6 +14,8 @@ export interface Transaction {
   id: string;
   tenantId: string;
   referenceNumber: string;
+  /** Human-readable label of the sale (HubSpot deal name / manual / Excel). Display only. */
+  description?: string | null;
   payeeId: string | null;
   amount: number;
   currency: string;
@@ -31,6 +33,7 @@ export interface Transaction {
 
 export interface CreateTransactionRequest {
   referenceNumber: string;
+  description?: string | null;
   payeeId: string | null;
   amount: number;
   currency: string;
