@@ -41,11 +41,13 @@ public sealed class GetDashboardSummaryHandler(
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
         var unprocessablePending = await BuildUnprocessablePendingAsync(cancellationToken);
         var driftAlerts = await BuildDriftAlertsAsync(cancellationToken);
+        var ambiguousAttribution = await BuildAmbiguousAttributionAsync(cancellationToken);
         actionBand = actionBand with
         {
             PendingByPlanItems = pendingByPlan,
             UnprocessablePendingItems = unprocessablePending,
             DriftAlerts = driftAlerts,
+            AmbiguousAttributionPayees = ambiguousAttribution,
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
@@ -104,7 +106,106 @@ public sealed class GetDashboardSummaryHandler(
             PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency,
             PendingByPlanItems: [],
             UnprocessablePendingItems: [],
-            DriftAlerts: []);
+            DriftAlerts: [],
+            AmbiguousAttributionPayees: []);
+    }
+
+    // ── Pending transactions whose plan cannot be determined, grouped BY PAYEE ────────────────
+    // A payee on 2+ eligible plans with no declared choice: the engine refuses to guess (see
+    // AmbiguousAttributionSpec), so these sit Pending until someone resolves the overlap. Grouped by
+    // payee because that is the unit of the FIX — one payee's overlapping assignments cause all of
+    // their blocked transactions, and deactivating the surplus assignment unblocks them together.
+    //
+    // Anti-Cartesian, no N+1: three bounded queries (pending transactions → their payees' assignments
+    // → those plans) and all matching in memory through the engine's own Candidates rule.
+    private async Task<IReadOnlyList<AmbiguousAttributionPayeeDto>> BuildAmbiguousAttributionAsync(
+        CancellationToken ct)
+    {
+        // Only rows that could possibly be ambiguous: Pending, with a payee, without a declared plan.
+        // Projected to the three fields the rule needs — a tenant can have tens of thousands of Pending
+        // rows and the dashboard must not materialise them as entities.
+        var pending = await db.CompensationTransactions
+            .Where(t => t.Status == CompensationTransactionStatus.Pending
+                     && t.PayeeId != null
+                     && t.SelectedPlanAssignmentId == null)
+            .Select(t => new
+            {
+                PayeeId = t.PayeeId!.Value,
+                t.TransactionDate,
+                Currency = t.Amount.Currency,
+            })
+            .ToListAsync(ct);
+
+        if (pending.Count == 0) return [];
+
+        var payeeIds = pending.Select(t => t.PayeeId).Distinct().ToList();
+
+        // ALL assignments for those payees (any status) — Candidates applies the status/period filter.
+        var assignments = await db.PlanAssignments
+            .Where(a => payeeIds.Contains(a.PayeeId))
+            .ToListAsync(ct);
+
+        if (assignments.Count == 0) return [];
+
+        var assignmentsByPayee = assignments
+            .GroupBy(a => a.PayeeId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<PlanAssignment>)g.ToList());
+
+        var planIds = assignments.Select(a => a.PlanId).Distinct().ToList();
+        var plans = await db.CompensationPlans
+            .Where(p => planIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, p.Currency })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        var planCurrencyById = plans.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+
+        // Count per payee, and collect the DISTINCT plans that made each one ambiguous — that list is
+        // what tells the admin which overlap to look at.
+        var countByPayee = new Dictionary<Guid, int>();
+        var planNamesByPayee = new Dictionary<Guid, HashSet<string>>();
+
+        foreach (var tx in pending)
+        {
+            if (!assignmentsByPayee.TryGetValue(tx.PayeeId, out var payeeAssignments)) continue;
+
+            // The projection already excluded rows with a declared plan, hence the null selection.
+            var candidates = AmbiguousAttributionSpec.AmbiguousCandidates(
+                selectedPlanAssignmentId: null, tx.TransactionDate, tx.Currency,
+                payeeAssignments, planCurrencyById);
+            if (candidates.Count == 0) continue;
+
+            var payeeId = tx.PayeeId;
+            countByPayee.TryGetValue(payeeId, out var existing);
+            countByPayee[payeeId] = existing + 1;
+
+            if (!planNamesByPayee.TryGetValue(payeeId, out var names))
+                planNamesByPayee[payeeId] = names = [];
+            foreach (var c in candidates)
+                if (plans.TryGetValue(c.PlanId, out var plan))
+                    names.Add(plan.Name);
+        }
+
+        if (countByPayee.Count == 0) return [];
+
+        var affectedPayeeIds = countByPayee.Keys.ToList();
+        var payees = await db.Payees
+            .Where(p => affectedPayeeIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.FullName, p.EmployeeCode })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        return countByPayee
+            .OrderByDescending(kvp => kvp.Value)
+            .Select(kvp =>
+            {
+                var payee = payees.GetValueOrDefault(kvp.Key);
+                return new AmbiguousAttributionPayeeDto(
+                    PayeeId: kvp.Key,
+                    PayeeName: payee?.FullName ?? string.Empty,
+                    EmployeeCode: payee?.EmployeeCode,
+                    TransactionCount: kvp.Value,
+                    PlanNames: planNamesByPayee[kvp.Key].OrderBy(n => n).ToList());
+            })
+            .ToList();
     }
 
     // ── CRM drift alerts (WI-HubSpot-Drift-Policy, PASO 3) ─────────────────────

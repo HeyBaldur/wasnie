@@ -26,6 +26,22 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
+    /// <summary>
+    /// Plans this payee could be credited under for the given date and currency. The manual form uses
+    /// it to decide whether the admin must choose a plan (2+ options) before the transaction can be saved.
+    /// </summary>
+    [HttpGet("plan-options")]
+    public async Task<IActionResult> PlanOptions(
+        [FromQuery] Guid payeeId,
+        [FromQuery] DateOnly transactionDate,
+        [FromQuery] string currency,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new GetPlanOptionsForTransactionQuery(payeeId, transactionDate, currency), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost]
     public async Task<IActionResult> Ingest([FromBody] IngestTransactionCommand command, CancellationToken cancellationToken)
     {

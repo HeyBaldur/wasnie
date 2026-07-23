@@ -68,6 +68,24 @@
   }
 }
 
+/* Plan attribution — shown only when the payee is on several applicable plans. */
+.plan-attribution {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+
+  &__hint {
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
+    background: var(--color-bg-surface-sunken);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    margin: 0;
+    line-height: 1.45;
+  }
+}
+
 .form-info-note {
   display: flex;
   align-items: flex-start;

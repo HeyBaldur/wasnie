@@ -11,6 +11,29 @@
 
 .assignments-list__search { flex: 0 0 280px; }
 
+/* Active payee filter arriving from a deep-link. Visible and dismissible on purpose: a silently
+   filtered list is worse than an unfiltered one, because the user can't tell what they're missing. */
+.assignments-list__payee-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+
+  strong { color: var(--color-text-primary); font-weight: 600; }
+
+  &:hover {
+    background: var(--color-bg-surface-raised);
+    color: var(--color-text-primary);
+  }
+}
+
 .col-check { width: 40px; padding-left: var(--space-3) !important; }
 .col-name { min-width: 200px; }
 .col-secondary { font-size: var(--font-size-13); color: var(--color-text-secondary); }

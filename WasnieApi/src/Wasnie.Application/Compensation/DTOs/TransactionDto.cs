@@ -17,6 +17,8 @@ public sealed record TransactionDto(
     DateTimeOffset UpdatedAt,
     // Human-readable label of the sale (HubSpot deal name / manual / Excel). Display only.
     string? Description = null,
+    // The admin's explicit plan attribution, when one was required at ingest.
+    Guid? SelectedPlanAssignmentId = null,
     string? PayeeName = null,
     string? PayeeEmployeeCode = null,
     string? CancelledBy = null,

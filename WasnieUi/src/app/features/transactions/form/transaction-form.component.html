@@ -52,6 +52,22 @@
       [error]="hasError('quantity', 'min') ? 'TRANSACTIONS.FIELD_QUANTITY_MIN' : ''"
     />
 
+    <!-- Plan attribution: only shown when the payee is on 2+ applicable plans, where the engine
+         would otherwise pick one by an arbitrary tie-break. -->
+    @if (planSelectionRequired()) {
+      <div class="plan-attribution ws-form-grid__full">
+        <p class="plan-attribution__hint">
+          {{ 'TRANSACTIONS.FIELD_PLAN_HINT' | translate }}
+        </p>
+        <ws-select
+          label="TRANSACTIONS.FIELD_PLAN"
+          formControlName="selectedPlanAssignmentId"
+          [options]="planSelectOptions()"
+          [error]="hasError('selectedPlanAssignmentId', 'required') ? 'VALIDATION.REQUIRED' : ''"
+        />
+      </div>
+    }
+
     <!-- Process-immediately checkbox -->
     <div class="process-immediately ws-form-grid__full">
       <label class="process-immediately__label">

@@ -22,6 +22,10 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.Source).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(t => t.ExternalId).HasMaxLength(500);
+        // Admin's explicit plan attribution (manual ingest, multi-plan payees). Nullable: every other
+        // origin resolves through PlanAssignmentResolver as before. No FK on purpose — this records
+        // what the admin decided; deleting an assignment must not cascade into transaction history.
+        builder.Property(t => t.SelectedPlanAssignmentId);
         builder.Property(t => t.IngestedAt).IsRequired();
         builder.Property(t => t.IngestedBy).IsRequired().HasMaxLength(450);
         builder.Property(t => t.UpdatedAt).IsRequired();

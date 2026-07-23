@@ -7,6 +7,7 @@ using Wasnie.Application.BackgroundJobs;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.Calculation;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Models.Calculation;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Enums;
@@ -158,6 +159,10 @@ public sealed class ProcessPendingTransactionsJobHandler(
                     .ToDictionaryAsync(p => p.Id, ct)
                 : new Dictionary<Guid, Wasnie.Domain.Compensation.Plans.Plan>();
 
+            // Plan currencies for the ambiguity check below — derived from the already-loaded plans,
+            // so no extra query and no N+1.
+            var planCurrencyById = plansInChunk.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+
             logger.LogDebug(
                 "ProcessPendingTransactionsJob {JobId}: chunk {ChunkSize} tx pre-loaded in {Ms}ms " +
                 "({Assignments} assignments, {Plans} plans).",
@@ -170,6 +175,40 @@ public sealed class ProcessPendingTransactionsJobHandler(
             {
                 // Re-check status inside the transaction (state may have changed since ID was loaded).
                 if (transaction.Status != CompensationTransactionStatus.Pending) continue;
+
+                // Ambiguous plan attribution → refuse to guess. CreditAllocationService already returns
+                // no credits for these; checking here too is what turns a silent no-op into a visible,
+                // explained skip alongside the other skip reasons. Same helper, so the two agree.
+                if (transaction.PayeeId.HasValue
+                    && assignmentsByPayee.TryGetValue(transaction.PayeeId.Value, out var txPayeeAssignments))
+                {
+                    var ambiguousCandidates = AmbiguousAttributionSpec.AmbiguousCandidates(
+                        transaction, txPayeeAssignments, planCurrencyById);
+
+                    if (ambiguousCandidates.Count > 0)
+                    {
+                        var ambiguousReason = AmbiguousAttributionSpec.SkipReason(ambiguousCandidates.Count);
+                        logger.LogWarning(
+                            "ProcessPendingTransactionsJob {JobId}: skipping transaction {TxId} — {Reason}",
+                            context.JobId, transaction.Id, ambiguousReason);
+
+                        (string FullName, string EmployeeCode) ambiguousPayee = default;
+                        payeeById.TryGetValue(transaction.PayeeId.Value, out ambiguousPayee);
+
+                        skipDetails.Add((
+                            transaction.Id,
+                            transaction.ReferenceNumber,
+                            transaction.TransactionDate,
+                            transaction.Amount.Amount,
+                            transaction.Amount.Currency,
+                            string.IsNullOrEmpty(ambiguousPayee.FullName) ? null : ambiguousPayee.FullName,
+                            string.IsNullOrEmpty(ambiguousPayee.EmployeeCode) ? null : ambiguousPayee.EmployeeCode,
+                            ambiguousReason));
+                        skipReasonCounts.TryGetValue(ambiguousReason, out var ambiguousExisting);
+                        skipReasonCounts[ambiguousReason] = ambiguousExisting + 1;
+                        continue;
+                    }
+                }
 
                 try
                 {

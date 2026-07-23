@@ -31,6 +31,13 @@ public sealed class CompensationTransaction : AggregateRoot
     public TransactionSource Source { get; private set; }
     public CompensationTransactionStatus Status { get; private set; } = CompensationTransactionStatus.Pending;
     public string? ExternalId { get; private set; }
+    // The admin's EXPLICIT attribution decision, captured at manual ingest when the payee belongs to
+    // more than one applicable plan. It is a declaration of intent, NOT a computed result: the engine
+    // must credit THIS assignment instead of applying its tie-break. Null for every other origin
+    // (Excel, HubSpot, pre-existing rows) and for payees with a single unambiguous plan — those keep
+    // resolving exactly as before. Cleared whenever the payee changes, since the decision was made
+    // about a different person's plans and cannot meaningfully survive that.
+    public Guid? SelectedPlanAssignmentId { get; private set; }
     public DateTimeOffset IngestedAt { get; private set; }
     public string IngestedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -54,7 +61,8 @@ public sealed class CompensationTransaction : AggregateRoot
         Guid eventId,
         string? externalId = null,
         int quantity = 1,
-        string? description = null)
+        string? description = null,
+        Guid? selectedPlanAssignmentId = null)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("TenantId must not be empty.");
@@ -68,6 +76,10 @@ public sealed class CompensationTransaction : AggregateRoot
             throw new DomainException("IngestedBy is required.");
         if (quantity < 1)
             throw new DomainException("Quantity must be at least 1.");
+        if (selectedPlanAssignmentId.HasValue && selectedPlanAssignmentId.Value == Guid.Empty)
+            throw new DomainException("SelectedPlanAssignmentId must not be empty when provided.");
+        if (selectedPlanAssignmentId.HasValue && !payeeId.HasValue)
+            throw new DomainException("A plan assignment cannot be selected for a transaction with no payee.");
 
         var tx = new CompensationTransaction
         {
@@ -82,6 +94,7 @@ public sealed class CompensationTransaction : AggregateRoot
             Source = source,
             Status = CompensationTransactionStatus.Pending,
             ExternalId = externalId,
+            SelectedPlanAssignmentId = selectedPlanAssignmentId,
             IngestedAt = now,
             IngestedBy = ingestedBy,
             UpdatedAt = now
@@ -185,6 +198,9 @@ public sealed class CompensationTransaction : AggregateRoot
             throw new DomainException("PayeeId must not be empty.");
 
         PayeeId = payeeId;
+        // The selection (if any) named an assignment of a DIFFERENT payee — it cannot carry over.
+        // Clearing returns this transaction to normal resolution rather than inventing an attribution.
+        SelectedPlanAssignmentId = null;
         RevertToPendingIfNeeded(updatedBy, now);
         UpdatedAt = now;
 
@@ -206,6 +222,8 @@ public sealed class CompensationTransaction : AggregateRoot
 
         var oldPayeeId = PayeeId.Value;
         PayeeId = newPayeeId;
+        // Same reasoning as Assign: the selected assignment belongs to the previous payee.
+        SelectedPlanAssignmentId = null;
         RevertToPendingIfNeeded(updatedBy, now);
         UpdatedAt = now;
 
@@ -253,8 +271,12 @@ public sealed class CompensationTransaction : AggregateRoot
             TransactionDate = newDate.Value;
         }
 
-        if (newPayeeId.HasValue)
+        if (newPayeeId.HasValue && newPayeeId.Value != PayeeId)
+        {
             PayeeId = newPayeeId.Value;
+            // Invariant: a plan selection dies with the payee it was made for (see Assign/Reassign).
+            SelectedPlanAssignmentId = null;
+        }
 
         // Any value change on a Calculated transaction reverts it to Pending.
         if (Status == CompensationTransactionStatus.Calculated)

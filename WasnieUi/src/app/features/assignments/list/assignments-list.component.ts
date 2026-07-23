@@ -1,5 +1,5 @@
-import { Component, HostListener, inject, OnInit, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, HostListener, computed, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
@@ -58,6 +58,8 @@ import {
 export class AssignmentsListComponent implements OnInit {
   readonly store = inject(AssignmentsStore);
   private readonly toast = inject(ToastService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   readonly openMenuId = signal<string | null>(null);
   readonly menuPosition = signal<{ top?: number; bottom?: number; right: number } | null>(null);
@@ -96,8 +98,34 @@ export class AssignmentsListComponent implements OnInit {
     this.onStatusFilter(value === '' ? null : (value as AssignmentStatus));
   }
 
+  /**
+   * Label for the active payee filter. Read off the loaded rows (they already carry the payee's name
+   * and code) so no extra request is needed just to render the chip. Null while loading or when the
+   * filter matched nothing — the chip then falls back to a generic label so it stays dismissible.
+   */
+  readonly payeeFilterLabel = computed(() => {
+    if (!this.store.payeeId()) return null;
+    const first = this.store.assignments()[0];
+    return first ? `${first.payeeFullName} (${first.payeeEmployeeCode})` : null;
+  });
+
   ngOnInit(): void {
+    // Deep-link from a payee's Assignments card ("View all") arrives pre-filtered.
+    const qp = this.route.snapshot.queryParams as Record<string, string>;
+    if (Object.keys(qp).length > 0) {
+      this.store.loadFromQueryParams(qp);
+    }
     // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
+  }
+
+  /** Drops the payee filter and strips it from the URL so a refresh doesn't bring it back. */
+  clearPayeeFilter(): void {
+    this.store.clearPayeeFilter();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { payeeId: null },
+      queryParamsHandling: 'merge',
+    });
   }
 
   onSearch(value: string): void {

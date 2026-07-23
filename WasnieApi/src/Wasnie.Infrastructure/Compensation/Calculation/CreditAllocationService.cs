@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
@@ -76,9 +77,9 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 .ToDictionary(p => p.Id, p => p.Currency)
             : new Dictionary<Guid, string>();
 
-        // Pattern B resolution: pick the assignment whose plan currency matches the transaction currency.
-        var assignment = PlanAssignmentResolver.Resolve(
-            allPayeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
+        // An explicit admin selection wins over Pattern B's tie-break; without one, nothing changes.
+        var assignment = ResolveAssignment(
+            transaction, allPayeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
         if (assignment is null) return Array.Empty<Credit>();
 
@@ -120,9 +121,9 @@ public sealed class CreditAllocationService : ICreditAllocationService
         // Pattern B: build planCurrencyById from the pre-loaded plans dictionary (no DB query).
         var planCurrencyById = plansById.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
 
-        // Pattern B resolution: pick the assignment whose plan currency matches the transaction currency.
-        var assignment = PlanAssignmentResolver.Resolve(
-            payeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
+        // An explicit admin selection wins over Pattern B's tie-break; without one, nothing changes.
+        var assignment = ResolveAssignment(
+            transaction, payeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
         if (assignment is null)
             return Array.Empty<Credit>();
@@ -132,6 +133,45 @@ public sealed class CreditAllocationService : ICreditAllocationService
             return Array.Empty<Credit>();
 
         return await BuildCreditsAsync(transaction, assignment, plan, ct);
+    }
+
+    /// <summary>
+    /// Single decision point for "which assignment carries this transaction", shared by both overloads.
+    ///
+    /// With no admin selection this is byte-for-byte the previous behaviour — Excel, HubSpot and every
+    /// row created before the field existed keep resolving through Pattern B's tie-break.
+    ///
+    /// With a selection, the engine credits THAT assignment or none: a selection that stopped being
+    /// eligible throws so the caller's existing skip machinery records a readable reason. Falling back
+    /// to the tie-break here would silently pay the commission against a plan the admin did not choose.
+    /// </summary>
+    private static PlanAssignment? ResolveAssignment(
+        CompensationTransaction transaction,
+        IEnumerable<PlanAssignment> payeeAssignments,
+        DateOnly txDate,
+        string txCurrency,
+        IReadOnlyDictionary<Guid, string> planCurrencyById)
+    {
+        if (transaction.SelectedPlanAssignmentId is not { } selectedId)
+        {
+            // Fail-loud on ambiguity: with 2+ eligible plans and no declared choice, the tie-break
+            // would silently decide the commission. Return no credits instead — the transaction stays
+            // Pending and untouched, and the job records a readable skip. Deliberately NOT an exception:
+            // ReassignPayeeHandler also calls this, and reassigning to a multi-plan payee must not fail
+            // the reassignment itself — it should just leave the transaction awaiting a decision.
+            if (AmbiguousAttributionSpec.IsAmbiguous(transaction, payeeAssignments, planCurrencyById))
+                return null;
+
+            return PlanAssignmentResolver.Resolve(payeeAssignments, txDate, txCurrency, planCurrencyById);
+        }
+
+        var resolution = PlanAssignmentResolver.ResolveSelected(
+            payeeAssignments, txDate, txCurrency, planCurrencyById, selectedId);
+
+        if (!resolution.IsAccepted)
+            throw new DomainException(resolution.RejectionReason!);
+
+        return resolution.Assignment;
     }
 
     // ── Shared credit-building logic ──────────────────────────────────────────

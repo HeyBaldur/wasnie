@@ -29,6 +29,27 @@ export interface Transaction {
   cancelledBy?: string | null;
   cancelledAt?: string | null;
   cancelledReason?: string | null;
+  /** The admin's explicit plan attribution, when one was required at ingest. */
+  selectedPlanAssignmentId?: string | null;
+}
+
+/**
+ * One plan a transaction could be credited to. Identified by ASSIGNMENT, not plan: a payee can hold
+ * two assignments to the same plan over different periods, and only the assignment is unambiguous.
+ */
+export interface PlanOption {
+  planAssignmentId: string;
+  planId: string;
+  planName: string;
+  planCurrency: string;
+  effectiveStart: string;
+  effectiveEnd: string;
+}
+
+export interface PlanOptions {
+  options: PlanOption[];
+  /** Server-computed (2+ options). The form must not decide this for itself. */
+  selectionRequired: boolean;
 }
 
 export interface CreateTransactionRequest {
@@ -40,6 +61,8 @@ export interface CreateTransactionRequest {
   quantity: number;
   transactionDate: string;
   processImmediately?: boolean;
+  /** Required when the payee has 2+ applicable plans; the server re-validates it. */
+  selectedPlanAssignmentId?: string | null;
 }
 
 export interface AssignPayeeRequest {

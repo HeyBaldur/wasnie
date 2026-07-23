@@ -18,6 +18,21 @@ export interface UnprocessablePendingItem {
 }
 
 /**
+ * A payee whose transactions are blocked because their plan can't be determined: the payee has 2+
+ * eligible plans and nobody said which applies, so the engine refuses to guess.
+ *
+ * Grouped by payee because that's the unit of the FIX — one payee's overlapping assignments block all
+ * of their transactions at once, and resolving the overlap unblocks them together.
+ */
+export interface AmbiguousAttributionPayee {
+  payeeId: string;
+  payeeName: string;
+  employeeCode: string | null;
+  transactionCount: number;
+  planNames: string[];
+}
+
+/**
  * A CRM drift alert: a HubSpot deal changed (amount and/or close date) AFTER its transaction was already
  * Calculated/Paid — money that already moved, not auto-corrected, flagged for manual review. Different in
  * kind from `UnprocessablePendingItem` (which is "can't process yet"). Deep-link target = `referenceNumber`.
@@ -46,6 +61,7 @@ export interface DashboardActionBand {
   pendingByPlanItems: PlanPendingItem[];
   unprocessablePendingItems: UnprocessablePendingItem[];
   driftAlerts: DriftAlertItem[];
+  ambiguousAttributionPayees: AmbiguousAttributionPayee[];
 }
 
 export interface DashboardPeriodBand {

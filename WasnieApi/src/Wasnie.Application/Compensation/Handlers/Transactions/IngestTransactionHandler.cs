@@ -5,6 +5,7 @@ using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Commands.Transactions;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
@@ -77,6 +78,14 @@ public sealed class IngestTransactionHandler(
             return Result<TransactionDto>.Failure(ex.Message);
         }
 
+        // ── Plan attribution (money-critical) ─────────────────────────────────────────────────
+        // A payee on several applicable plans used to have the plan picked by an arbitrary tie-break
+        // (shortest period, then smallest Id), which silently decided how much commission was paid.
+        // The admin must now state the plan; the server re-validates rather than trusting the client.
+        var attributionError = await ValidatePlanAttributionAsync(request, cancellationToken);
+        if (attributionError is not null)
+            return Result<TransactionDto>.Failure(attributionError);
+
         var txId = guid.NewGuid();
         var now = clock.UtcNowOffset;
 
@@ -92,7 +101,8 @@ public sealed class IngestTransactionHandler(
             now: now,
             eventId: guid.NewGuid(),
             quantity: request.Quantity,
-            description: request.Description);
+            description: request.Description,
+            selectedPlanAssignmentId: request.SelectedPlanAssignmentId);
 
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync(cancellationToken);
@@ -119,12 +129,46 @@ public sealed class IngestTransactionHandler(
         return Result<TransactionDto>.Success(ToDto(tx));
     }
 
+    /// <summary>
+    /// Returns null when the attribution is acceptable, otherwise the message to fail with.
+    ///
+    /// The ambiguity threshold is the candidate COUNT from <see cref="PayeePlanCandidates"/> — the
+    /// engine's own eligibility rule — so the form and this check can never disagree about when a
+    /// choice is required. Rules: 2+ candidates → a choice is mandatory and must be one of them;
+    /// 0 or 1 candidate → no choice needed, but anything supplied must still be a real candidate
+    /// (a stale or hand-crafted id must never reach the engine).
+    /// </summary>
+    private async Task<string?> ValidatePlanAttributionAsync(
+        IngestTransactionCommand request, CancellationToken ct)
+    {
+        if (request.PayeeId is null)
+        {
+            return request.SelectedPlanAssignmentId.HasValue
+                ? "A plan cannot be selected for a transaction with no payee."
+                : null;
+        }
+
+        var candidates = await PayeePlanCandidates.LoadAsync(
+            db, tenantContext.TenantId, request.PayeeId.Value,
+            request.TransactionDate, request.Currency, ct);
+
+        if (candidates.Count >= 2 && request.SelectedPlanAssignmentId is null)
+            return "This payee is on more than one applicable plan. Select which plan this transaction belongs to.";
+
+        if (request.SelectedPlanAssignmentId is { } selectedId &&
+            !candidates.Any(c => c.Id == selectedId))
+            return "The selected plan is not applicable to this payee for this transaction's date and currency.";
+
+        return null;
+    }
+
     internal static TransactionDto ToDto(CompensationTransaction tx) =>
         new(tx.Id, tx.TenantId, tx.ReferenceNumber, tx.PayeeId,
             tx.Amount.Amount, tx.Amount.Currency, tx.Quantity, tx.TransactionDate,
             tx.Source.ToString(), tx.Status.ToString(), tx.ExternalId,
             tx.IngestedAt, tx.IngestedBy, tx.UpdatedAt,
             Description: tx.Description,
+            SelectedPlanAssignmentId: tx.SelectedPlanAssignmentId,
             CancelledBy: tx.CancelledBy,
             CancelledAt: tx.CancelledAt,
             CancelledReason: tx.CancelledReason);
