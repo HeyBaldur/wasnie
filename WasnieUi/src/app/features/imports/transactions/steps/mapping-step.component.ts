@@ -42,6 +42,7 @@ export class TxMappingStepComponent implements OnInit {
     payeeCodeColumn: [''],
     externalIdColumn: [''],
     descriptionColumn: [''],
+    quantityColumn: [''],
   });
 
   readonly loading = signal(false);
@@ -92,6 +93,7 @@ export class TxMappingStepComponent implements OnInit {
       { label: 'Transaction Date', col: v.transactionDateColumn ?? '' },
       ...(v.externalIdColumn ? [{ label: 'External ID', col: v.externalIdColumn }] : []),
       ...(v.descriptionColumn ? [{ label: 'Description', col: v.descriptionColumn }] : []),
+      ...(v.quantityColumn ? [{ label: 'Quantity', col: v.quantityColumn }] : []),
     ].filter(h => h.col.length > 0);
   }
 
@@ -117,6 +119,7 @@ export class TxMappingStepComponent implements OnInit {
         transactionDateColumn: restored.transactionDateColumn,
         externalIdColumn: restored.externalIdColumn ?? '',
         descriptionColumn: restored.descriptionColumn ?? '',
+        quantityColumn: restored.quantityColumn ?? '',
       });
       return;
     }
@@ -129,6 +132,7 @@ export class TxMappingStepComponent implements OnInit {
       transactionDateColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['transactionDateColumn']),
       externalIdColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['externalIdColumn']),
       descriptionColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['descriptionColumn']),
+      quantityColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['quantityColumn']),
     });
   }
 
@@ -142,6 +146,8 @@ export class TxMappingStepComponent implements OnInit {
       transactionDateColumn: v.transactionDateColumn ?? '',
       externalIdColumn: v.externalIdColumn || null,
       descriptionColumn: v.descriptionColumn || null,
+      // Unmapped → the backend leaves Quantity at its default of 1 (TransactionImportJobHandler).
+      quantityColumn: v.quantityColumn || null,
     };
   }
 

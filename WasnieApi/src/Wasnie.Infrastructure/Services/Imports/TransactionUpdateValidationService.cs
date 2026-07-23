@@ -4,6 +4,7 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Application.Services.Imports;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Infrastructure.Persistence;
 
 namespace Wasnie.Infrastructure.Services.Imports;
@@ -28,7 +29,7 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db, 
             .Where(t => refNumbers.Contains(t.ReferenceNumber))
             .Select(t => new ExistingTxProjection(
                 t.Id, t.ReferenceNumber, t.Amount.Amount, t.Amount.Currency,
-                t.Quantity, t.TransactionDate, t.PayeeId, t.Status))
+                t.Quantity, t.TransactionDate, t.PayeeId, t.Status, t.Description))
             .ToDictionaryAsync(t => t.ReferenceNumber, StringComparer.OrdinalIgnoreCase, ct);
 
         // Pre-load payees — include IsActive for inactive warning (mirrors IMPORT behavior).
@@ -174,6 +175,30 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db, 
                 }
             }
 
+            // Description: a label, never a money value. It can never make a row invalid — the only
+            // issue it can raise is the truncation Warning. Blank cell = "no change", same rule as
+            // every other column here (so a re-upload cannot blank out an existing description).
+            if (mapping.DescriptionColumn is not null)
+            {
+                var descriptionStr = GetField(row, mapping.DescriptionColumn);
+                if (!string.IsNullOrWhiteSpace(descriptionStr))
+                {
+                    var descriptionIssue = TransactionFieldValidators.ValidateDescription(descriptionStr);
+                    if (descriptionIssue is not null)
+                        issues.Add(descriptionIssue);
+
+                    // Same normalization the domain will apply, so the previewed value is the stored value.
+                    var newDescription = CompensationTransaction.NormalizeDescription(descriptionStr);
+                    if (!string.Equals(newDescription, existing.Description, StringComparison.Ordinal))
+                        diffs.Add(new FieldDiff
+                        {
+                            FieldName = "Description",
+                            OldValue = existing.Description ?? string.Empty,
+                            NewValue = newDescription,
+                        });
+                }
+            }
+
             if (mapping.PayeeCodeColumn is not null)
             {
                 var newCode = GetField(row, mapping.PayeeCodeColumn).Trim();
@@ -255,5 +280,6 @@ public sealed class TransactionUpdateValidationService(ApplicationDbContext db, 
 
     private sealed record ExistingTxProjection(
         Guid Id, string ReferenceNumber, decimal Amount, string Currency,
-        int Quantity, DateOnly TransactionDate, Guid? PayeeId, CompensationTransactionStatus Status);
+        int Quantity, DateOnly TransactionDate, Guid? PayeeId, CompensationTransactionStatus Status,
+        string? Description);
 }

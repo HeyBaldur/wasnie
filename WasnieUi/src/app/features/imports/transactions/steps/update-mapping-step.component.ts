@@ -36,6 +36,8 @@ export class TxUpdateMappingStepComponent implements OnInit {
     currencyColumn: [''],
     transactionDateColumn: [''],
     payeeCodeColumn: [''],
+    quantityColumn: [''],
+    descriptionColumn: [''],
   });
 
   readonly loading = signal(false);
@@ -62,6 +64,8 @@ export class TxUpdateMappingStepComponent implements OnInit {
       currencyColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['currencyColumn']) ?? '',
       transactionDateColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['transactionDateColumn']) ?? '',
       payeeCodeColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['payeeCodeColumn']) ?? '',
+      quantityColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['quantityColumn']) ?? '',
+      descriptionColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['descriptionColumn']) ?? '',
     });
   }
 
@@ -75,6 +79,8 @@ export class TxUpdateMappingStepComponent implements OnInit {
       currencyColumn: v.currencyColumn || null,
       transactionDateColumn: v.transactionDateColumn || null,
       payeeCodeColumn: v.payeeCodeColumn || null,
+      quantityColumn: v.quantityColumn || null,
+      descriptionColumn: v.descriptionColumn || null,
     };
     try {
       const response = await firstValueFrom(

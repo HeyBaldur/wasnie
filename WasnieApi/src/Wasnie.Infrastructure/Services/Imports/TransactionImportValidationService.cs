@@ -144,6 +144,14 @@ public sealed class TransactionImportValidationService(
                 if (quantityIssue is not null) issues.Add(quantityIssue);
             }
 
+            // ── description (optional column; only ever raises the truncation warning) ─
+            if (mapping.DescriptionColumn is not null)
+            {
+                var descriptionIssue = TransactionFieldValidators.ValidateDescription(
+                    GetField(row, mapping.DescriptionColumn));
+                if (descriptionIssue is not null) issues.Add(descriptionIssue);
+            }
+
             // ── currency ──────────────────────────────────────────────────────
             var currency = GetField(row, mapping.CurrencyColumn);
             var currencyIssue = TransactionFieldValidators.ValidateCurrency(currency);

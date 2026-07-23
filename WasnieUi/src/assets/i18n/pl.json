@@ -1169,6 +1169,8 @@
       "COL_CURRENCY": "Waluta",
       "COL_DATE": "Data transakcji",
       "COL_STAFF_ID": "ID pracownika (kod payee)",
+      "COL_QUANTITY": "Ilość",
+      "COL_DESCRIPTION": "Opis",
       "KEY_BADGE": "KLUCZ",
       "KEY_NOTE": "Ta kolumna identyfikuje istniejącą transakcję. Nigdy nie wolno jej zmieniać w pliku.",
       "SUMMARY_TOTAL": "Łączna liczba wierszy",

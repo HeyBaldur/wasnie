@@ -1169,6 +1169,8 @@
       "COL_CURRENCY": "Moneda",
       "COL_DATE": "Fecha de transacción",
       "COL_STAFF_ID": "ID de empleado (código payee)",
+      "COL_QUANTITY": "Cantidad",
+      "COL_DESCRIPTION": "Descripción",
       "KEY_BADGE": "CLAVE",
       "KEY_NOTE": "Esta columna identifica la transacción existente. Nunca debe modificarse en tu archivo.",
       "SUMMARY_TOTAL": "Total filas",

@@ -7,6 +7,7 @@ namespace Wasnie.Application.Compensation.DTOs;
 public sealed record TransactionExportRow(
     Guid Id,
     string ReferenceNumber,
+    string? Description,
     string? StaffId,
     string? PayeeName,
     decimal Amount,

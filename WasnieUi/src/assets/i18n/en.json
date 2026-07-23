@@ -826,6 +826,8 @@
       "COL_CURRENCY": "Currency",
       "COL_DATE": "Transaction Date",
       "COL_STAFF_ID": "Staff ID (Payee Code)",
+      "COL_QUANTITY": "Quantity",
+      "COL_DESCRIPTION": "Description",
       "KEY_BADGE": "KEY",
       "KEY_NOTE": "This column identifies the existing transaction. It must never be changed in your file.",
       "SUMMARY_TOTAL": "Total rows",

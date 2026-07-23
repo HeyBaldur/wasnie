@@ -135,6 +135,7 @@ public sealed class ExportTransactionsHandler(
             return new TransactionExportRow(
                 Id: t.Id,
                 ReferenceNumber: t.ReferenceNumber,
+                Description: t.Description,
                 StaffId: payee?.EmployeeCode,
                 PayeeName: payee?.FullName,
                 Amount: t.Amount.Amount,

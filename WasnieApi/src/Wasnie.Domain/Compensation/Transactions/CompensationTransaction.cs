@@ -95,7 +95,9 @@ public sealed class CompensationTransaction : AggregateRoot
 
     // Blank → null; trimmed; truncated rather than rejected. A label that is too long must never
     // block ingesting a real sale — this field is descriptive only and carries no money semantics.
-    private static string? NormalizeDescription(string? description)
+    // Public so the import/update preview can show exactly the value that will be stored instead of
+    // re-implementing the rule (the two drifting apart is how a preview starts lying).
+    public static string? NormalizeDescription(string? description)
     {
         if (string.IsNullOrWhiteSpace(description))
             return null;
@@ -258,6 +260,21 @@ public sealed class CompensationTransaction : AggregateRoot
         if (Status == CompensationTransactionStatus.Calculated)
             Status = CompensationTransactionStatus.Pending;
 
+        UpdatedAt = now;
+    }
+
+    // Description is deliberately NOT part of ApplyExcelUpdate. That method reverts a Calculated
+    // transaction to Pending (and its caller supersedes the Credits first) because every field it
+    // touches feeds the calculation. Description feeds nothing — it is a label. Routing it through
+    // ApplyExcelUpdate would mean that fixing a typo in a deal name invalidates already-calculated
+    // commissions, i.e. exactly the "descriptive field must never drive money logic" rule the field
+    // was introduced under. So it gets its own method: same Paid guard, no status transition.
+    public void UpdateDescription(string? newDescription, string updatedBy, DateTimeOffset now)
+    {
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException("Cannot update a Paid transaction via Excel re-upload.");
+
+        Description = NormalizeDescription(newDescription);
         UpdatedAt = now;
     }
 

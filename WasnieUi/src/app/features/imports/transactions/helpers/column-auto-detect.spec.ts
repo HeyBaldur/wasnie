@@ -77,6 +77,40 @@ describe('detectField — transaction columns', () => {
     });
   });
 
+  // The quantity patterns existed long before the wizard exposed the control; now that the field is
+  // mappable, these are what make the wizard suggest the column on its own.
+  describe('quantityColumn', () => {
+    it('detects "Quantity" (EN)', () => {
+      expect(detectField(['Quantity'], TRANSACTION_FIELD_PATTERNS['quantityColumn'])).toBe('Quantity');
+    });
+
+    it('detects "Cantidad" (ES)', () => {
+      expect(detectField(['Cantidad'], TRANSACTION_FIELD_PATTERNS['quantityColumn'])).toBe('Cantidad');
+    });
+
+    it('detects "Ilość" (PL)', () => {
+      expect(detectField(['Ilość'], TRANSACTION_FIELD_PATTERNS['quantityColumn'])).toBe('Ilość');
+    });
+
+    it('detects the "Qty" abbreviation', () => {
+      expect(detectField(['Qty'], TRANSACTION_FIELD_PATTERNS['quantityColumn'])).toBe('Qty');
+    });
+  });
+
+  describe('descriptionColumn', () => {
+    it('detects "Deal Name"', () => {
+      expect(detectField(['Deal Name'], TRANSACTION_FIELD_PATTERNS['descriptionColumn'])).toBe('Deal Name');
+    });
+
+    it('detects "Descripción" (ES)', () => {
+      expect(detectField(['Descripción'], TRANSACTION_FIELD_PATTERNS['descriptionColumn'])).toBe('Descripción');
+    });
+
+    it('detects "Opis" (PL)', () => {
+      expect(detectField(['Opis'], TRANSACTION_FIELD_PATTERNS['descriptionColumn'])).toBe('Opis');
+    });
+  });
+
   describe('exact-match priority', () => {
     it('prefers exact match over partial match regardless of order', () => {
       expect(detectField(['My Amount Column', 'Amount'], TRANSACTION_FIELD_PATTERNS['amountColumn'])).toBe('Amount');

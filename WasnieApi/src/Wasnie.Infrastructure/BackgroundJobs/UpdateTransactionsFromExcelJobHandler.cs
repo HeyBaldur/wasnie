@@ -7,6 +7,7 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Models.Imports;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
 using Wasnie.Infrastructure.Persistence;
@@ -149,8 +150,27 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
                     }
                 }
 
+                // Description is a label, not a value: blank cell = no change (so a re-upload can never
+                // blank an existing name), and it is kept OUT of the money-change set below on purpose.
+                string? newDescription = null;
+                if (payload.ColumnMapping.DescriptionColumn is not null)
+                {
+                    var descriptionStr = GetField(row, payload.ColumnMapping.DescriptionColumn);
+                    if (!string.IsNullOrWhiteSpace(descriptionStr))
+                    {
+                        var normalized = CompensationTransaction.NormalizeDescription(descriptionStr);
+                        if (!string.Equals(normalized, tx.Description, StringComparison.Ordinal))
+                            newDescription = normalized;
+                    }
+                }
+
+                // Only these four feed the calculation, so only these trigger credit supersession and
+                // the Calculated → Pending revert. A description-only edit must not invalidate money.
+                var hasValueChange = newAmount is not null || newQuantity is not null
+                                  || newDate is not null || newPayeeId is not null;
+
                 // No changes — skip silently.
-                if (newAmount is null && newQuantity is null && newDate is null && newPayeeId is null)
+                if (!hasValueChange && newDescription is null)
                 {
                     skippedNoChanges++;
                     continue;
@@ -165,10 +185,12 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
                     TransactionDate = tx.TransactionDate.ToString("yyyy-MM-dd"),
                     PayeeId = tx.PayeeId,
                     Status = tx.Status.ToString(),
+                    Description = tx.Description,
                 };
 
                 // If Calculated: supersede non-superseded Credits first (Decision #46 Case A pattern).
-                if (tx.Status == Wasnie.Domain.Compensation.Enums.CompensationTransactionStatus.Calculated)
+                if (hasValueChange &&
+                    tx.Status == Wasnie.Domain.Compensation.Enums.CompensationTransactionStatus.Calculated)
                 {
                     var credits = await db.Credits
                         .Where(c => c.TransactionId == tx.Id && c.SupersededAt == null)
@@ -184,7 +206,13 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
 
                 try
                 {
-                    tx.ApplyExcelUpdate(newAmount, newQuantity, newDate, newPayeeId, payload.RequestedByUserId, clock.UtcNowOffset);
+                    if (hasValueChange)
+                        tx.ApplyExcelUpdate(newAmount, newQuantity, newDate, newPayeeId, payload.RequestedByUserId, clock.UtcNowOffset);
+
+                    // Separate call by design: same Paid guard, no status transition (see UpdateDescription).
+                    if (newDescription is not null)
+                        tx.UpdateDescription(newDescription, payload.RequestedByUserId, clock.UtcNowOffset);
+
                     await db.SaveChangesAsync(ct);
 
                     var afterSnapshot = new
@@ -195,6 +223,7 @@ public sealed class UpdateTransactionsFromExcelJobHandler(
                         TransactionDate = tx.TransactionDate.ToString("yyyy-MM-dd"),
                         PayeeId = tx.PayeeId,
                         Status = tx.Status.ToString(),
+                        Description = tx.Description,
                     };
 
                     auditEntries.Add(AuditLog.Create(

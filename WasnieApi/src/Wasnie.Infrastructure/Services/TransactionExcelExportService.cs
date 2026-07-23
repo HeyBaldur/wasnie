@@ -10,6 +10,7 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
     [
         "Id",
         "ReferenceNumber [KEY — DO NOT CHANGE]",
+        "Description",
         "StaffId",
         "PayeeName",
         "Amount",
@@ -46,17 +47,18 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
 
             ws.Cell(excelRow, 1).Value = row.Id.ToString();
             ws.Cell(excelRow, 2).Value = row.ReferenceNumber;
-            ws.Cell(excelRow, 3).Value = row.StaffId ?? string.Empty;
-            ws.Cell(excelRow, 4).Value = row.PayeeName ?? string.Empty;
-            var txAmountCell = ws.Cell(excelRow, 5);
+            ws.Cell(excelRow, 3).Value = row.Description ?? string.Empty;
+            ws.Cell(excelRow, 4).Value = row.StaffId ?? string.Empty;
+            ws.Cell(excelRow, 5).Value = row.PayeeName ?? string.Empty;
+            var txAmountCell = ws.Cell(excelRow, 6);
             txAmountCell.Value = row.Amount;
             txAmountCell.Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(excelRow, 6).Value = row.Currency;
-            ws.Cell(excelRow, 7).Value = row.Quantity;
-            ws.Cell(excelRow, 8).Value = row.TransactionDate.ToString("yyyy-MM-dd");
-            ws.Cell(excelRow, 9).Value = row.Source;
-            ws.Cell(excelRow, 10).Value = row.Status;
-            ws.Cell(excelRow, 11).Value = row.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            ws.Cell(excelRow, 7).Value = row.Currency;
+            ws.Cell(excelRow, 8).Value = row.Quantity;
+            ws.Cell(excelRow, 9).Value = row.TransactionDate.ToString("yyyy-MM-dd");
+            ws.Cell(excelRow, 10).Value = row.Source;
+            ws.Cell(excelRow, 11).Value = row.Status;
+            ws.Cell(excelRow, 12).Value = row.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
         }
 
         // Auto-fit columns

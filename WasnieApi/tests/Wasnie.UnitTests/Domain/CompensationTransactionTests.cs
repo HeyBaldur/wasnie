@@ -93,6 +93,47 @@ public sealed class CompensationTransactionTests
         tx.Description.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
     }
 
+    // ── UpdateDescription (Excel re-upload path) ─────────────────────────────────────────────
+
+    // The whole reason Description has its own method: relabelling must not invalidate money.
+    // A Calculated transaction stays Calculated, so its Credits are never superseded.
+    [Fact]
+    public void UpdateDescription_OnCalculatedTransaction_DoesNotChangeStatus()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, Money.Of(100m, "EUR"), "user@test.com", ValidNow, Guid.NewGuid());
+
+        tx.UpdateDescription("Renamed deal", "user@test.com", ValidNow);
+
+        tx.Status.Should().Be(CompensationTransactionStatus.Calculated);
+        tx.Description.Should().Be("Renamed deal");
+    }
+
+    // The existing Excel-update rule (Paid is untouchable) applies to Description too — it is not
+    // a loophole around the guard that protects already-paid money.
+    [Fact]
+    public void UpdateDescription_OnPaidTransaction_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, Money.Of(100m, "EUR"), "user@test.com", ValidNow, Guid.NewGuid());
+        tx.MarkPaid("user@test.com", ValidNow, Guid.NewGuid());
+
+        var act = () => tx.UpdateDescription("Renamed deal", "user@test.com", ValidNow);
+
+        act.Should().Throw<DomainException>().WithMessage("*Paid*");
+    }
+
+    [Fact]
+    public void UpdateDescription_AppliesTheSameNormalizationAsIngest()
+    {
+        var tx = IngestValid();
+
+        tx.UpdateDescription("  " + new string('y', CompensationTransaction.MaxDescriptionLength + 20) + "  ",
+            "user@test.com", ValidNow);
+
+        tx.Description.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+    }
+
     [Fact]
     public void Ingest_EmptyTenantId_ThrowsDomainException()
     {
