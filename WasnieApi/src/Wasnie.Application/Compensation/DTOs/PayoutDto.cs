@@ -57,6 +57,8 @@ public sealed record PayoutLineDto(
     // Source transaction — null only if data is missing (should not occur in normal operation)
     Guid? TransactionId,
     string? TransactionReference,
+    // Human-readable label of the source sale — the audit trail from a commission back to its deal.
+    string? TransactionDescription,
     string? TransactionExternalId,
     DateOnly? TransactionDate,
     decimal? TransactionAmount,

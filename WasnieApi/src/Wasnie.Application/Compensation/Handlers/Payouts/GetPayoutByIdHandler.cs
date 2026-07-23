@@ -83,6 +83,7 @@ public sealed class GetPayoutByIdHandler(
             {
                 t.Id,
                 t.ReferenceNumber,
+                t.Description,
                 t.ExternalId,
                 t.TransactionDate,
                 AmountValue = t.Amount.Amount,
@@ -110,6 +111,7 @@ public sealed class GetPayoutByIdHandler(
                 CommissionCurrency: l.CommissionAmount.Currency,
                 TransactionId: tx?.Id,
                 TransactionReference: tx?.ReferenceNumber,
+                TransactionDescription: tx?.Description,
                 TransactionExternalId: tx?.ExternalId,
                 TransactionDate: tx?.TransactionDate,
                 TransactionAmount: tx?.AmountValue,

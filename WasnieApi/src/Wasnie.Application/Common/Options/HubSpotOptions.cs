@@ -30,7 +30,7 @@ public sealed class HubSpotOptions
     /// read set needed by later phases (deals, owners, pipelines/schemas) so the user doesn't re-consent.
     /// NOTE: do NOT include "oauth" — it is not a HubSpot scope and breaks the scope match.
     /// </summary>
-    public string Scopes { get; init; } = "crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read";
+    public string Scopes { get; init; } = "crm.objects.deals.read crm.objects.owners.read crm.schemas.deals.read crm.objects.line_items.read";
 
     /// <summary>HubSpot authorization URL (where the user is sent to grant access).</summary>
     public string AuthorizationEndpoint { get; init; } = "https://app.hubspot.com/oauth/authorize";
@@ -60,6 +60,15 @@ public sealed class HubSpotOptions
 
     /// <summary>Path (relative to <see cref="ApiBaseUrl"/>) of the owners list endpoint (Phase 2).</summary>
     public string OwnersPath { get; init; } = "/crm/v3/owners";
+
+    /// <summary>
+    /// Path of the v4 associations batch-read endpoint used to fetch a deal's line item ids
+    /// (deals → line_items). Requires the <c>crm.objects.line_items.read</c> scope.
+    /// </summary>
+    public string DealLineItemAssociationsPath { get; init; } = "/crm/v4/associations/deals/line_items/batch/read";
+
+    /// <summary>Path of the line items batch-read endpoint (reads quantity/price/amount per line item id).</summary>
+    public string LineItemsBatchReadPath { get; init; } = "/crm/v3/objects/line_items/batch/read";
 
     /// <summary>Page size for deal/owner reads (HubSpot caps the search API at 100 per page).</summary>
     public int ReadPageSize { get; init; } = 100;

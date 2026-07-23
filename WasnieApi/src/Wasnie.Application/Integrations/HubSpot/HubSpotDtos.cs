@@ -61,6 +61,7 @@ public sealed record HubSpotImportResultDto(
     int NewOwnerMappings,
     int DriftAutoResolved,
     int DriftAlertsRaised,
+    int TotalsMismatch,
     IReadOnlyList<string> Warnings);
 
 /// <summary>

@@ -41,6 +41,7 @@ export class TxMappingStepComponent implements OnInit {
     transactionDateColumn: [''],
     payeeCodeColumn: [''],
     externalIdColumn: [''],
+    descriptionColumn: [''],
   });
 
   readonly loading = signal(false);
@@ -90,6 +91,7 @@ export class TxMappingStepComponent implements OnInit {
       { label: 'Currency', col: v.currencyColumn ?? '' },
       { label: 'Transaction Date', col: v.transactionDateColumn ?? '' },
       ...(v.externalIdColumn ? [{ label: 'External ID', col: v.externalIdColumn }] : []),
+      ...(v.descriptionColumn ? [{ label: 'Description', col: v.descriptionColumn }] : []),
     ].filter(h => h.col.length > 0);
   }
 
@@ -114,6 +116,7 @@ export class TxMappingStepComponent implements OnInit {
         currencyColumn: restored.currencyColumn,
         transactionDateColumn: restored.transactionDateColumn,
         externalIdColumn: restored.externalIdColumn ?? '',
+        descriptionColumn: restored.descriptionColumn ?? '',
       });
       return;
     }
@@ -125,6 +128,7 @@ export class TxMappingStepComponent implements OnInit {
       currencyColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['currencyColumn']),
       transactionDateColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['transactionDateColumn']),
       externalIdColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['externalIdColumn']),
+      descriptionColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['descriptionColumn']),
     });
   }
 
@@ -137,6 +141,7 @@ export class TxMappingStepComponent implements OnInit {
       currencyColumn: v.currencyColumn ?? '',
       transactionDateColumn: v.transactionDateColumn ?? '',
       externalIdColumn: v.externalIdColumn || null,
+      descriptionColumn: v.descriptionColumn || null,
     };
   }
 

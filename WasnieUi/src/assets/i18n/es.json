@@ -770,6 +770,8 @@
     "FIELD_PAYEE": "Beneficiario",
     "FIELD_PAYEE_OPTIONAL": "Beneficiario (opcional)",
     "FIELD_REFERENCE_NUMBER": "Número de referencia",
+    "FIELD_DESCRIPTION": "Descripción (opcional)",
+    "FIELD_DESCRIPTION_PLACEHOLDER": "ej. Contrato Acme 2026",
     "FIELD_DATE": "Fecha de transacción",
     "FIELD_AMOUNT": "Importe",
     "FIELD_AMOUNT_MIN": "El importe debe ser mayor que 0.",
@@ -1154,7 +1156,8 @@
       "FIELD_CURRENCY": "Moneda",
       "FIELD_TRANSACTION_DATE": "Fecha de transacción",
       "FIELD_EXTERNAL_ID": "ID externo",
-      "FIELD_QUANTITY": "Cantidad"
+      "FIELD_QUANTITY": "Cantidad",
+      "FIELD_DESCRIPTION": "Descripción"
     },
     "UPDATE": {
       "TITLE": "Actualizar transacciones desde Excel",

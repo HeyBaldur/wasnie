@@ -163,6 +163,11 @@ public sealed class TransactionImportJobHandler(
                     int.TryParse(quantityStr.Trim(), out var parsedQty) && parsedQty >= 1)
                     quantity = parsedQty;
 
+                // Optional descriptive label — unmapped column or blank cell leaves it null.
+                var description = payload.ColumnMapping.DescriptionColumn is not null
+                    ? GetField(row, payload.ColumnMapping.DescriptionColumn)
+                    : null;
+
                 var transaction = CompensationTransaction.Ingest(
                     tenantId: payload.TenantId,
                     referenceNumber: refNum,
@@ -175,7 +180,8 @@ public sealed class TransactionImportJobHandler(
                     now: clock.UtcNowOffset,
                     eventId: guid.NewGuid(),
                     externalId: externalIdValue,
-                    quantity: quantity);
+                    quantity: quantity,
+                    description: description);
 
                 db.CompensationTransactions.Add(transaction);
 

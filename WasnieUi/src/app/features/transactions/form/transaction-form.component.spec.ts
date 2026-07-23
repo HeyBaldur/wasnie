@@ -191,12 +191,36 @@ describe('TransactionFormComponent', () => {
     expect(storeSpy.createTransaction).toHaveBeenCalledWith({
       payeeId: 'payee-1',
       referenceNumber: 'REF-001',
+      // Left blank on the form → sent as null, not an empty string.
+      description: null,
       transactionDate: '2024-01-15',
       amount: 500,
       currency: 'USD',
       quantity: 1,
       processImmediately: true,
     });
+  }));
+
+  it('onSubmit() sends the trimmed description when one is typed', fakeAsync(async () => {
+    const fixture = TestBed.createComponent(TransactionFormComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.form.patchValue({
+      payeeId: 'payee-1',
+      referenceNumber: 'REF-001',
+      description: '  Acme Contract 2026  ',
+      transactionDate: '2024-01-15',
+      amount: 500,
+      currency: 'USD',
+    });
+
+    await component.onSubmit();
+    tick();
+
+    expect(storeSpy.createTransaction).toHaveBeenCalledWith(
+      jasmine.objectContaining({ description: 'Acme Contract 2026' }),
+    );
   }));
 
   it('processImmediately defaults to true (checkbox checked)', () => {

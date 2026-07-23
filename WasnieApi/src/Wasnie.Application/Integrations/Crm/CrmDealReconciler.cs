@@ -19,6 +19,14 @@ public sealed class CrmDealReconciler(
     ICrmDriftPolicy driftPolicy)
     : ICrmDealReconciler
 {
+    // Tolerance (currency minor unit) for Σ(line item amounts) vs the deal amount. Above this the deal is
+    // flagged for review instead of ingested — we never invent numbers to force a match.
+    private const decimal TotalsTolerance = 0.01m;
+
+    private static string DealRef(string dealId) => $"HUBSPOT-{dealId}";
+    private static string LineRef(string dealId, string lineId) => $"HUBSPOT-{dealId}-{lineId}";
+    private static string LineExt(string dealId, string lineId) => $"{dealId}-{lineId}";
+
     public async Task<CrmSyncResult> ReconcileAsync(
         Guid tenantId,
         string sourceName,
@@ -34,30 +42,41 @@ public sealed class CrmDealReconciler(
             .GroupBy(o => o.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Email, StringComparer.Ordinal);
 
-        // Centralized create rule (shared with Excel/Manual): classify each deal's key against the DB.
-        // ACTIVE row with this deal → skip (idempotent). Only a VOID row → create a NEW one (Opción B),
-        // unless that void carried credits (anti-double-pay → blocked). Status-aware, so re-importing a
-        // previously voided deal now revives it as a fresh transaction.
-        var dealIds = deals.Where(d => !string.IsNullOrWhiteSpace(d.Id)).Select(d => d.Id).ToList();
-        var dealReferences = dealIds.Select(id => $"HUBSPOT-{id}").ToList();
-        var classification = await createGuard.ClassifyAsync(
-            TransactionSource.CrmSync, dealReferences, dealIds.Cast<string?>().ToList(), cancellationToken);
+        var dealsWithId = deals.Where(d => !string.IsNullOrWhiteSpace(d.Id)).ToList();
 
-        // DRIFT DETECTION: load the ACTIVE transaction for each already-imported deal so we can compare the
-        // deal's current amount/close-date against what Wasnie stored. The filtered unique index guarantees
-        // at most one active row per (tenant, CrmSync, externalId), so First() is safe.
-        var activeTxByDealId = (await db.CompensationTransactions
+        // Build ALL candidate keys in one classification pass (no N+1). Two levels:
+        //  - Deal-level key ("HUBSPOT-{dealId}" / externalId {dealId}) — detects LEGACY per-deal transactions
+        //    imported before the line-item migration. Their presence means forward-only coexistence (Opción 1):
+        //    keep the legacy row, run its deal-level drift, and do NOT create line-item rows for that deal.
+        //  - Line-item keys ("HUBSPOT-{dealId}-{lineItemId}" / externalId {dealId}-{lineItemId}) — the new scheme.
+        var refs = new List<string>();
+        var exts = new List<string?>();
+        foreach (var d in dealsWithId)
+        {
+            refs.Add(DealRef(d.Id));
+            exts.Add(d.Id);
+            foreach (var li in d.Lines.Where(li => !string.IsNullOrWhiteSpace(li.Id)))
+            {
+                refs.Add(LineRef(d.Id, li.Id));
+                exts.Add(LineExt(d.Id, li.Id));
+            }
+        }
+        var classification = await createGuard.ClassifyAsync(
+            TransactionSource.CrmSync, refs, exts, cancellationToken);
+
+        // Preload active CrmSync transactions for every candidate externalId (deal-level AND line-item),
+        // keyed by externalId — used for drift comparison. Filtered unique index guarantees ≤1 active per key.
+        var extIdSet = exts.Where(e => e is not null).Select(e => e!).Distinct().ToList();
+        var activeTxByExternalId = (await db.CompensationTransactions
                 .Where(t => t.Status != CompensationTransactionStatus.Cancelled
                          && t.Source == TransactionSource.CrmSync
                          && t.ExternalId != null
-                         && dealIds.Contains(t.ExternalId))
+                         && extIdSet.Contains(t.ExternalId))
                 .ToListAsync(cancellationToken))
             .GroupBy(t => t.ExternalId!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
-        // Dedups the same deal appearing twice within THIS batch (the classification only knows the DB).
         var seenInBatch = new HashSet<string>(StringComparer.Ordinal);
-
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
         int created = 0, assigned = 0, unassigned = 0, skippedExisting = 0, skippedInvalid = 0, newMappings = 0, skippedBlocked = 0;
@@ -65,8 +84,8 @@ public sealed class CrmDealReconciler(
         var missingAmount = 0;
         var missingCurrency = 0;
         var missingCloseDate = 0;
+        var totalsMismatch = 0;
 
-        // Resolve each distinct owner once, caching the result (and any new email-match mapping).
         var ownerResolutionCache = new Dictionary<string, CrmOwnerResolution>(StringComparer.Ordinal);
 
         async Task<Guid?> ResolvePayeeAsync(string? ownerId)
@@ -84,124 +103,136 @@ public sealed class CrmDealReconciler(
             return resolution.PayeeId;
         }
 
-        // Builds the comparable (amount+currency, close date) for an already-imported deal. Mirrors the
-        // create-path validation. Missing close date stays null (a missing date must NOT look like drift).
-        static bool TryBuildDriftIncoming(CrmDeal deal, string? defaultCurrency, out CrmDriftIncoming incoming)
-        {
-            incoming = null!;
-            if (deal.Amount is null)
-                return false;
-            var currency = deal.CurrencyCode ?? defaultCurrency;
-            if (string.IsNullOrWhiteSpace(currency))
-                return false;
-            Money money;
-            try
-            {
-                money = Money.Of(deal.Amount.Value, currency);
-            }
-            catch (DomainException)
-            {
-                return false;
-            }
-            incoming = new CrmDriftIncoming(deal.Id, money, deal.CloseDate);
-            return true;
-        }
-
-        foreach (var deal in deals)
+        foreach (var deal in dealsWithId)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(deal.Id) || !seenInBatch.Add(deal.Id))
+            if (!seenInBatch.Add(deal.Id))
             {
-                // Blank id (shouldn't happen) or repeated within this batch → skip.
-                if (!string.IsNullOrWhiteSpace(deal.Id))
-                    skippedExisting++;
-                continue;
-            }
-
-            switch (classification.Decide($"HUBSPOT-{deal.Id}", deal.Id))
-            {
-                case TransactionCreateDecision.SkipActiveDuplicate:
-                    // Not "blindly skip": the deal already exists, but it may have CHANGED in the CRM. Pair
-                    // it with its active transaction and hand it to the drift policy, which decides (no drift
-                    // → skip; Pending → auto-void+recreate; Calculated/Paid → alert). If we can't build
-                    // comparable values or can't find the active row, fall back to the old skip.
-                    if (TryBuildDriftIncoming(deal, defaultCurrency, out var incoming)
-                        && activeTxByDealId.TryGetValue(deal.Id, out var activeTx))
-                        driftCandidates.Add(new CrmDriftCandidate(incoming, activeTx));
-                    else
-                        skippedExisting++;
-                    continue;
-                case TransactionCreateDecision.BlockedVoidHadCredits:
-                    skippedBlocked++;
-                    continue;
-            }
-
-            if (deal.Amount is null)
-            {
-                skippedInvalid++;
-                missingAmount++;
+                skippedExisting++;
                 continue;
             }
 
             var currency = deal.CurrencyCode ?? defaultCurrency;
-            if (string.IsNullOrWhiteSpace(currency))
+
+            // ── Legacy coexistence (Opción 1, forward-only) ─────────────────────────────
+            // A per-deal transaction already exists (pre-migration). Keep it: run deal-level drift and do
+            // NOT create line-item rows — never re-import a deal already imported under the old scheme.
+            var dealDecision = classification.Decide(DealRef(deal.Id), deal.Id);
+            if (dealDecision == TransactionCreateDecision.SkipActiveDuplicate)
             {
-                skippedInvalid++;
-                missingCurrency++;
+                if (TryBuildDealDriftIncoming(deal, currency, out var legacyIncoming)
+                    && activeTxByExternalId.TryGetValue(deal.Id, out var legacyTx))
+                    driftCandidates.Add(new CrmDriftCandidate(legacyIncoming, legacyTx));
+                else
+                    skippedExisting++;
+                continue;
+            }
+            if (dealDecision == TransactionCreateDecision.BlockedVoidHadCredits)
+            {
+                skippedBlocked++;
                 continue;
             }
 
-            Money amount;
-            try
+            // ── New deal WITHOUT line items → one transaction (unchanged legacy behaviour) ──
+            if (deal.Lines.Count == 0)
             {
-                amount = Money.Of(deal.Amount.Value, currency);
-            }
-            catch (DomainException)
-            {
-                skippedInvalid++;
+                if (deal.Amount is null) { skippedInvalid++; missingAmount++; continue; }
+                if (string.IsNullOrWhiteSpace(currency)) { skippedInvalid++; missingCurrency++; continue; }
+
+                Money dealAmount;
+                try { dealAmount = Money.Of(deal.Amount.Value, currency); }
+                catch (DomainException) { skippedInvalid++; continue; }
+
+                var dealDate = deal.CloseDate ?? today;
+                if (deal.CloseDate is null) missingCloseDate++;
+                var dealPayeeId = await ResolvePayeeAsync(deal.OwnerId);
+
+                try
+                {
+                    var dealTx = CompensationTransaction.Ingest(
+                        tenantId: tenantId, referenceNumber: DealRef(deal.Id), payeeId: dealPayeeId,
+                        amount: dealAmount, transactionDate: dealDate, source: TransactionSource.CrmSync,
+                        ingestedBy: actor, id: guid.NewGuid(), now: now, eventId: guid.NewGuid(),
+                        externalId: deal.Id, quantity: 1, description: deal.Name);
+                    db.CompensationTransactions.Add(dealTx);
+                    created++;
+                    if (dealPayeeId.HasValue) assigned++; else unassigned++;
+                }
+                catch (DomainException) { skippedInvalid++; }
                 continue;
+            }
+
+            // ── New deal WITH line items → one transaction per line item ─────────────────
+            if (deal.Amount is null) { skippedInvalid++; missingAmount++; continue; }
+            if (string.IsNullOrWhiteSpace(currency)) { skippedInvalid++; missingCurrency++; continue; }
+
+            // Totals guard: Σ(line item amount) must reconcile with the deal amount. A gap (deal-level
+            // discount/tax/override) is flagged for review — we do NOT prorate or invent numbers.
+            var lineSum = deal.Lines.Sum(li => li.Amount ?? 0m);
+            if (Math.Abs(lineSum - deal.Amount.Value) > TotalsTolerance)
+            {
+                totalsMismatch++;
+                continue; // signalled, not ingested
             }
 
             var transactionDate = deal.CloseDate ?? today;
-            if (deal.CloseDate is null)
-                missingCloseDate++;
-
+            if (deal.CloseDate is null) missingCloseDate++;
             var payeeId = await ResolvePayeeAsync(deal.OwnerId);
 
-            CompensationTransaction tx;
-            try
+            foreach (var li in deal.Lines)
             {
-                tx = CompensationTransaction.Ingest(
-                    tenantId: tenantId,
-                    referenceNumber: $"HUBSPOT-{deal.Id}",
-                    payeeId: payeeId,
-                    amount: amount,
-                    transactionDate: transactionDate,
-                    source: TransactionSource.CrmSync,
-                    ingestedBy: actor,
-                    id: guid.NewGuid(),
-                    now: now,
-                    eventId: guid.NewGuid(),
-                    externalId: deal.Id,
-                    quantity: 1);
-            }
-            catch (DomainException)
-            {
-                skippedInvalid++;
-                continue;
-            }
+                if (string.IsNullOrWhiteSpace(li.Id)) { skippedInvalid++; continue; }
 
-            db.CompensationTransactions.Add(tx);
-            created++;
-            if (payeeId.HasValue) assigned++; else unassigned++;
+                var lineRef = LineRef(deal.Id, li.Id);
+                var lineExt = LineExt(deal.Id, li.Id);
+
+                var lineDecision = classification.Decide(lineRef, lineExt);
+                if (lineDecision == TransactionCreateDecision.SkipActiveDuplicate)
+                {
+                    // Already imported this line item → drift-check the existing line-item transaction
+                    // (amount/close-date compared per line). Idempotent: no duplicate row.
+                    if (TryBuildLineDriftIncoming(deal, li, currency, out var lineIncoming)
+                        && activeTxByExternalId.TryGetValue(lineExt, out var lineTx))
+                        driftCandidates.Add(new CrmDriftCandidate(lineIncoming, lineTx));
+                    else
+                        skippedExisting++;
+                    continue;
+                }
+                if (lineDecision == TransactionCreateDecision.BlockedVoidHadCredits) { skippedBlocked++; continue; }
+
+                if (li.Amount is null) { skippedInvalid++; continue; }
+
+                // Quantity must be a whole number ≥ 1 (the domain enforces ≥ 1). Round HubSpot's decimal
+                // quantity; a non-positive/fractional-to-zero quantity is invalid, not silently coerced.
+                var qty = li.Quantity is { } q && q >= 0.5m ? (int)Math.Round(q, MidpointRounding.AwayFromZero) : 0;
+
+                Money lineAmount;
+                try { lineAmount = Money.Of(li.Amount.Value, currency); }
+                catch (DomainException) { skippedInvalid++; continue; }
+
+                CompensationTransaction tx;
+                try
+                {
+                    tx = CompensationTransaction.Ingest(
+                        tenantId: tenantId, referenceNumber: lineRef, payeeId: payeeId,
+                        amount: lineAmount, transactionDate: transactionDate, source: TransactionSource.CrmSync,
+                        ingestedBy: actor, id: guid.NewGuid(), now: now, eventId: guid.NewGuid(),
+                        externalId: lineExt, quantity: qty,
+                        // Every line item of a deal carries the SAME deal name (product decision):
+                        // the rows are told apart by their per-line reference, not by the label.
+                        description: deal.Name);
+                }
+                catch (DomainException) { skippedInvalid++; continue; }
+
+                db.CompensationTransactions.Add(tx);
+                created++;
+                if (payeeId.HasValue) assigned++; else unassigned++;
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);
 
-        // DRIFT POLICY: for every already-imported deal, reconcile changes against the existing transaction.
-        // Pending → auto-void + recreate with the new values; Calculated/Paid → record an alert, untouched.
-        // A no-drift candidate is just a normal "already imported" skip, so it folds back into SkippedExisting.
         var drift = driftCandidates.Count == 0
             ? CrmDriftResult.Empty
             : await driftPolicy.ReconcileAsync(
@@ -222,6 +253,31 @@ public sealed class CrmDealReconciler(
             SkippedBlocked: skippedBlocked,
             MissingAmount: missingAmount,
             MissingCurrency: missingCurrency,
-            MissingCloseDate: missingCloseDate);
+            MissingCloseDate: missingCloseDate,
+            TotalsMismatch: totalsMismatch);
+    }
+
+    // Deal-level drift comparable (legacy per-deal transactions). Missing close date stays null so the
+    // importer's "today" substitution never masquerades as a change.
+    private static bool TryBuildDealDriftIncoming(CrmDeal deal, string? currency, out CrmDriftIncoming incoming)
+    {
+        incoming = null!;
+        if (deal.Amount is null || string.IsNullOrWhiteSpace(currency))
+            return false;
+        try { incoming = new CrmDriftIncoming(deal.Id, Money.Of(deal.Amount.Value, currency), deal.CloseDate); }
+        catch (DomainException) { return false; }
+        return true;
+    }
+
+    // Line-item drift comparable: the line item's own amount, the deal's close date. Amount/date changes of
+    // a line item are detected per line. (Quantity-only drift with an unchanged amount is a documented gap.)
+    private static bool TryBuildLineDriftIncoming(CrmDeal deal, CrmLineItem li, string? currency, out CrmDriftIncoming incoming)
+    {
+        incoming = null!;
+        if (li.Amount is null || string.IsNullOrWhiteSpace(currency))
+            return false;
+        try { incoming = new CrmDriftIncoming(deal.Id, Money.Of(li.Amount.Value, currency), deal.CloseDate); }
+        catch (DomainException) { return false; }
+        return true;
     }
 }

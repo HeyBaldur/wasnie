@@ -6,6 +6,7 @@ export interface TransactionImportColumnMapping {
   transactionDateColumn: string;
   externalIdColumn?: string | null;
   quantityColumn?: string | null;
+  descriptionColumn?: string | null;
 }
 
 export interface ParseResponse {

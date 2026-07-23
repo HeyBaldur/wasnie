@@ -1,5 +1,6 @@
 using FluentValidation;
 using Wasnie.Application.Compensation.Commands.Transactions;
+using Wasnie.Domain.Compensation.Transactions;
 
 namespace Wasnie.Application.Compensation.Validators.Transactions;
 
@@ -19,6 +20,9 @@ public sealed class IngestTransactionCommandValidator : AbstractValidator<Ingest
         RuleFor(x => x.Amount).GreaterThan(0m);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
         RuleFor(x => x.Quantity).GreaterThanOrEqualTo(1).WithMessage("Quantity must be at least 1.");
+        RuleFor(x => x.Description)
+            .MaximumLength(CompensationTransaction.MaxDescriptionLength)
+            .When(x => x.Description is not null);
         RuleFor(x => x.TransactionDate)
             .GreaterThanOrEqualTo(MinDate)
             .WithMessage($"TransactionDate cannot be before {MinDate:yyyy-MM-dd}.");

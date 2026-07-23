@@ -18,9 +18,10 @@ public sealed record CrmSyncResult(
     int SkippedBlocked,
     int MissingAmount,
     int MissingCurrency,
-    int MissingCloseDate)
+    int MissingCloseDate,
+    int TotalsMismatch)
 {
-    public static CrmSyncResult Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    public static CrmSyncResult Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     /// <summary>True if this run changed anything in Wasnie (created, auto-resolved drift, or new mapping).</summary>
     public bool ChangedAnything => Created > 0 || DriftAutoResolved > 0 || DriftAlertsRaised > 0 || NewOwnerMappings > 0;

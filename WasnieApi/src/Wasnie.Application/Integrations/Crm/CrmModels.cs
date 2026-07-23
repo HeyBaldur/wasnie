@@ -12,7 +12,24 @@ public sealed record CrmDeal(
     decimal? Amount,
     string? CurrencyCode,
     DateOnly? CloseDate,
-    string? OwnerId);
+    string? OwnerId,
+    IReadOnlyList<CrmLineItem>? LineItems = null)
+{
+    /// <summary>Line items of the deal (empty when the deal has none, or when they weren't fetched).</summary>
+    public IReadOnlyList<CrmLineItem> Lines => LineItems ?? [];
+}
+
+/// <summary>
+/// A CRM line item of a deal, mapped to a neutral shape. In HubSpot each line item carries its own
+/// <c>quantity</c>, <c>price</c> (unit price) and <c>amount</c> (= quantity × price), and a stable
+/// <see cref="Id"/> — the key used for per-line-item idempotency.
+/// </summary>
+public sealed record CrmLineItem(
+    string Id,
+    string? Name,
+    decimal? Quantity,
+    decimal? Price,
+    decimal? Amount);
 
 /// <summary>
 /// A CRM owner (the user who owns a deal) mapped to a neutral shape. <see cref="Email"/> may be null

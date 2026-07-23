@@ -170,6 +170,9 @@
                              (click)="openTransaction(line.transactionReference)"
                              role="button"
                              tabindex="0">{{ line.transactionReference }}</a>
+                          @if (line.transactionDescription) {
+                            <span class="payout-detail__source-description">{{ line.transactionDescription }}</span>
+                          }
                           @if (line.transactionDate) {
                             <span class="payout-detail__source-date">{{ line.transactionDate | dateFormat }}</span>
                           }

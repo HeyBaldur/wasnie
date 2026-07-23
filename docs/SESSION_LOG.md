@@ -4,6 +4,34 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-23 — WI-TX-READABLE-NAME: nombre legible de la transacción (HubSpot + manual + Excel)
+
+**El problema.** Una transacción solo mostraba su referencia técnica (`HUBSPOT-{dealId}-{lineItemId}`). Un admin auditando una comisión no podía saber a qué venta correspondía sin copiar el id e irlo a buscar a HubSpot — justo donde la trazabilidad más importa, porque la gente audita su propio sueldo.
+
+**PASO 0 (inspección antes de crear).** Confirmado que NO existía ningún campo descriptivo en `CompensationTransaction` (ni `Name`, ni `Description`, ni `Notes`) → sí hacía falta columna nueva, no era un refactor. También confirmado que el `dealname` **ya se traía** de HubSpot (`HubSpotCrmDealSource.cs:48` lo pide en `DealProperties`) y **ya estaba mapeado** al modelo neutral (`CrmDeal.Name`, `HubSpotCrmDealSource.cs:404`) — no hizo falta pedirle nada nuevo a la API ni tocar `CrmModels`. Lo único que faltaba era persistirlo.
+
+**Nombre elegido: `Description`.** Convención del repo: `Description` se usa para el label descriptivo de una entidad (`Plan.cs:13`), `Notes` para anotaciones libres del usuario (`Quota.cs:18`, `PlanAssignment.cs:24`). El deal name es lo primero. Se descartó `Name` porque, conviviendo con `ReferenceNumber` en la misma entidad, sugeriría identidad/unicidad — y este campo explícitamente no la tiene. Largo 500 (igual que `ExternalId` y `Notes`).
+
+**Decisión de diseño no obvia: truncar, no rechazar.** `NormalizeDescription` (`CompensationTransaction.cs:96-106`) hace trim, convierte blanco→null y **trunca** a 500 en vez de tirar `DomainException`. Razón: es un campo descriptivo y está en el camino de ingesta de ventas reales; un label largo jamás debe hacer fallar el import de una venta. Es la única concesión de "silencio" del WI y está acotada a un campo sin semántica de dinero.
+
+**Regla 12 respetada literalmente.** El campo no se usa en NADA: ni en `ClassifyAsync`/`Decide` (idempotencia), ni en los drift comparables (`TryBuildDealDriftIncoming` / `TryBuildLineDriftIncoming` siguen comparando solo amount + close date), ni en el resolver de owner, ni en el motor. Solo se asigna en el punto de mapeo y se lee para mostrar. No se tocó la lógica de line items/idempotencia recién implementada más allá de agregar `description:` a las dos llamadas a `Ingest`.
+
+**Deal con N line items → N transacciones con el MISMO deal name** (decisión de producto de Rodolfo: no concatenar el nombre del producto). Se distinguen por su referencia, que ya es por línea. Cubierto por test.
+
+**Migración.** `B12_TransactionDescription` — una sola `AddColumn` nullable, sin migración de datos; las transacciones existentes quedan en `NULL`, que es el resultado correcto. **Verificada contra la BD** (Regla 13), no solo generada: `sys.columns` devuelve `Description / nvarchar / 500 / nullable=True` y `B12` es la última fila de `__EFMigrationsHistory`.
+
+**Dónde se muestra.** (a) Lista de transacciones: segunda línea dentro de la celda de referencia, reusando el patrón apilado que esa celda ya tenía para `cancelledReason` — cero restyling de la tabla, y las filas viejas sin nombre simplemente no rinden la línea. (b) Detalle de payout: dentro de la celda "source", que ya era un `flex-column` con ref + fecha. Ese segundo punto era el "si es fácil" del WI y salió barato porque el DTO y la celda ya tenían la forma correcta; es el caso de auditoría que motivó todo (comisión → venta).
+
+**Import de Excel.** `DescriptionColumn` opcional siguiendo exactamente el patrón de `ExternalIdColumn` — mapeo, job handler, modelo de front, wizard (sección Optional) y auto-detección con patrones EN/ES/PL (incluye `deal name`/`dealname`, `descripción`/`concepto`, `opis`/`nazwa`). **Dato al pasar:** `QuantityColumn` existe en el backend pero **nunca se expuso en el wizard** (`mapping-step.component.ts` no lo tiene en el form) — gap pre-existente, ajeno a este WI, no tocado.
+
+**Tests.** Unit backend **728/728** (720 antes, +8): 3 en `ImportHubSpotDealsHandlerTests` (deal sin line items persiste el nombre; deal con 2 line items → ambas transacciones con el mismo nombre y referencias distintas; deal **sin** nombre igual ingesta con `Description = null`) y 5 en `CompensationTransactionTests` (trim, 3 casos de null/blanco vía Theory, truncado). Frontend **440/440** (+1): se ajustó la aserción de payload de `TransactionFormComponent` (ahora incluye `description: null`) y se agregó cobertura del trim.
+
+**Bloqueo de entorno (ajeno, no es regresión).** La suite de **integración** no corre: **Docker está apagado**, así que `TestDatabaseFixture` no puede levantar el contenedor MSSQL (`System.ArgumentException: Docker is either not running or misconfigured`). 503 fallos, todos con ese mismo origen — incluidos tests de Auth que no tienen ninguna relación con este cambio. No se intentó arreglar el entorno.
+
+**Pendiente de Rodolfo.** Los 6 puntos de verificación en runtime (sync real de HubSpot, deal multi-línea, alta manual, import de Excel con la columna mapeada, transacciones viejas, no-regresión de montos/cantidades/estados) requieren la app corriendo con conexión HubSpot.
+
+**Follow-up anotado (fuera de alcance A–E).** El camino **update-from-Excel** (`UpdateTransactionsFromExcelJobHandler` + `TransactionUpdateValidationService`) no actualiza `Description`: re-subir un export editado no cambia el nombre. El WI cubría import, no update.
+
 ## 2026-07-21 — Diagnóstico READ-ONLY: measurement period vs payment period + attainment
 
 **Sin cambios de código.** WI de diagnóstico puro; el entregable era responder con certeza (archivo:línea) cómo el sistema maneja hoy el período de medición, el de pago y el cálculo de attainment. Se registran hechos y deuda observada.

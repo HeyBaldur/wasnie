@@ -813,7 +813,8 @@
       "FIELD_CURRENCY": "Currency",
       "FIELD_TRANSACTION_DATE": "Transaction date",
       "FIELD_EXTERNAL_ID": "External ID",
-      "FIELD_QUANTITY": "Quantity"
+      "FIELD_QUANTITY": "Quantity",
+      "FIELD_DESCRIPTION": "Description"
     },
     "UPDATE": {
       "TITLE": "Update Transactions from Excel",
@@ -928,6 +929,8 @@
     "FIELD_PAYEE": "Payee",
     "FIELD_PAYEE_OPTIONAL": "Payee (optional)",
     "FIELD_REFERENCE_NUMBER": "Reference number",
+    "FIELD_DESCRIPTION": "Description (optional)",
+    "FIELD_DESCRIPTION_PLACEHOLDER": "e.g. Acme Contract 2026",
     "FIELD_DATE": "Transaction date",
     "FIELD_AMOUNT": "Amount",
     "FIELD_AMOUNT_MIN": "Amount must be greater than 0.",

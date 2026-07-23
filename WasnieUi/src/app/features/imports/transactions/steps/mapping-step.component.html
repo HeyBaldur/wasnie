@@ -69,6 +69,12 @@
         </div>
         <ws-select formControlName="externalIdColumn" [options]="columnOptions()" />
       </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_DESCRIPTION' | translate }}</span>
+        </div>
+        <ws-select formControlName="descriptionColumn" [options]="columnOptions()" />
+      </div>
     </div>
   </div>
 
