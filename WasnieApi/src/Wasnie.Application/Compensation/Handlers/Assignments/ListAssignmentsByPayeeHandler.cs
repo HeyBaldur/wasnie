@@ -16,6 +16,9 @@ namespace Wasnie.Application.Compensation.Handlers.Assignments;
 public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService, IClock clock)
     : IRequestHandler<ListAssignmentsByPayeeQuery, Result<PagedResult<PlanAssignmentDto>>>
 {
+    /// <summary>Explicit opt-in to return every status. Mirrors the `period=all` convention.</summary>
+    public const string AllStatuses = "all";
+
     private sealed record AssignmentRow(Wasnie.Domain.Compensation.Assignments.PlanAssignment Assignment, string PlanName, int PlanVersion);
 
     public async Task<Result<PagedResult<PlanAssignmentDto>>> Handle(
@@ -35,11 +38,28 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
 
-        // Apply status filter
+        // Status filter — the DEFAULT IS SAFE: callers that say nothing get only Active assignments.
+        // It used to be the opposite (no status → every status), which is why a payee's profile card
+        // counted and listed deactivated assignments as if they were current. Seeing deactivated rows
+        // now requires asking for them, so a caller can no longer surface them by omission.
+        //
+        // "all" is the repo's existing no-filter sentinel (same convention as PaginationQuery.Period,
+        // see PeriodHelper). Anything unrecognised falls back to Active rather than to "everything":
+        // the permissive outcome must be explicit, never the result of a typo.
         var filtered = allJoined.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(p.Status) &&
-            Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
+        if (string.Equals(p.Status, AllStatuses, StringComparison.OrdinalIgnoreCase))
+        {
+            // Explicit opt-in: no status filter at all.
+        }
+        else if (!string.IsNullOrWhiteSpace(p.Status) &&
+                 Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
+        {
             filtered = filtered.Where(x => x.Assignment.Status == status);
+        }
+        else
+        {
+            filtered = filtered.Where(x => x.Assignment.Status == AssignmentStatus.Active);
+        }
 
         // Apply period intersection filter — assignment period [Start, End] must intersect [from, to]
         var (from, to) = PeriodHelper.ComputeDateRange(p.Period, today);

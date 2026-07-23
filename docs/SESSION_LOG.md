@@ -4,6 +4,85 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-23 — WI-ALL-ASSIGNMENTS-CREDIT (money-critical): se elimina el `Resolve()` — EL PASO QUE CAMBIA LO QUE SE PAGA
+
+**PASO 3.** A diferencia de los Pasos 1 y 2 (deliberadamente invisibles), **este cambia lo que el sistema paga**: una transacción de un payee en 2+ planes vigentes ahora genera créditos en TODOS los que apliquen. `ResolveAssignment` (que de N candidatas devolvía UNA por desempate `período más corto → ThenBy pa.Id`) fue reemplazado por `ResolveAssignments`, que itera todas.
+
+**Step 0 — GATE del attainment: PASA.** `QuotaAttainmentService` filtra `c.PlanId == planId` tanto en `ComputeRevenueAchievedAsync` (`:96`) como en `ComputeUnitsAchievedAsync` (`:152`), y `GetSplitContextAsync` calcula su `PriorCumulative` a través del mismo método (`:137-138`). **El attainment está scopeado por plan: ningún plan puede contaminar el número de otro**, procesen en el orden que procesen. El caché de `ComputeAsync` es por (payee, plan, fecha) → planIds distintos, claves distintas, sin colisión.
+
+**PERO el Step 0 encontró un riesgo real que el WI no anticipaba, y está VIVO en los datos: 3 payees tienen HOY dos asignaciones ACTIVAS al MISMO plan.** Con el bucle externo, ambas son elegibles, ambas evalúan las mismas reglas y la segunda intentaría insertar un crédito duplicado con la misma `(tx, plan, regla)` → lo frenaría el índice único del Paso 1 → **la DB actuando como control de flujo**, justo lo prohibido, y además el attainment de ese plan se contaría doble. Resuelto en `BuildCreditsForAllAsync` (`CreditAllocationService.cs:229-260`): el set de claves cubiertas **se arrastra ENTRE asignaciones**, no solo desde la precarga del batch. Cubierto por el test `Two_assignments_to_the_same_plan_credit_it_only_once` (2 reglas → 2 créditos, no 4).
+
+**Punto 4 — el fail-loud habría bloqueado exactamente lo que este WI habilita.** El chequeo de `ProcessPendingTransactionsJobHandler` saltaba la transacción entera si el payee tenía 2+ candidatos: es decir, el caso normal del modelo nuevo. **Se eliminó el skip** (`job:178-190`), no el concepto. `AmbiguousAttributionSpec` y su card quedan en pie a propósito: la card cuenta transacciones **Pending** con 2+ candidatos, así que **se vacía sola** a medida que se procesan. Rediseñar esa superficie a lo que deba significar ahora ("ninguna regla matcheó", "filtros solapados") es el Paso 5.
+
+**Otros puntos del Step 0.** (1) Ambos overloads necesitaban el cambio y lo tienen. (2) `MarkCalculated` se llama UNA sola vez: el job lo invoca después de que `AllocateAsync` devuelve el total acumulado, y solo si hay créditos — no hay camino donde se llame dos veces. (3) `SelectedPlanAssignmentId` pasa a ser un **pin que restringe**: si existe, se itera SOLO esa asignación (`:200-208`); los tests de elección manual siguen verdes sin tocarlos. (5) El guard de moneda es inalcanzable porque `Candidates` ya filtra por moneda — una asignación en otra moneda ni llega al builder, y la elegible acredita igual (test dedicado). (7) Orden determinístico (período más angosto → Id, el orden viejo) solo por reproducibilidad; no tiene significado porque el attainment es per-plan.
+
+**Sin N+1.** El overload batch usa los diccionarios precargados (`plansById.GetValueOrDefault`). El single-tx pasó de cargar UN plan a cargar **todos los planes resueltos en una sola query** con `Include(p => p.Rules)` (`:86-92`) — una query, no una por asignación.
+
+**Dos tests que fijaban el comportamiento anterior se reescribieron, y era correcto que fallaran.** `Ambiguous_attribution_produces_no_credits_at_all` y `Without_a_selection_two_eligible_plans_now_credit_nothing` codificaban el fail-loud del WI anterior. La aserción de ese escenario va por su tercera versión y vale la pena dejarla escrita: (1) el desempate acreditaba €2,50 en Revenue en silencio — el bug; (2) el fail-loud no acreditaba nada — negarse a adivinar; (3) **ahora acreditan AMBOS, €2,50 + €112** — nunca hubo nada que adivinar.
+
+**Tests: 797/797 → 800/800** (+3 netos, con 2 reescritos). Cubren: 1 plan → sin regresión; 2 planes → ambos con sus montos; re-proceso multi-plan → no-op; elección manual → solo ese plan; otra moneda → se saltea sin abortar; dos asignaciones al mismo plan → un solo juego de créditos; multi-regla dentro de cada plan intacto.
+
+**PENDIENTE de Rodolfo — y hay un prerrequisito.** Antes de verificar hay que **RE-ACTIVAR la asignación de Rudolph que se desactivó a mano** para poder procesar. Los 7 puntos, en especial: el 6 (ningún error 2601 en logs — si aparece, el bucle duplica y hay que parar) y el 7 (**el total pagado a Rudolph SUBE**, y el aumento debe explicarse por los créditos del segundo plan, no por duplicados).
+
+## 2026-07-23 — WI-GUARD-FINE-KEY (money-critical): el guard pasa de "por transacción" a (tx, plan, regla)
+
+**PASO 2 de la secuencia hacia el modelo de industria.** El guard excluía del batch toda transacción con **cualquier** crédito vivo (`ProcessPendingTransactionsJobHandler.cs:74-84`), sin mirar plan ni regla. Funcionaba solo porque el resolver elige un plan, y **bloqueaba el modelo correcto**: dos reglas distintas que matchean la misma transacción deben generar dos créditos (base + SPIFF apilados) — concurrencia intencionada, no doble pago.
+
+**Step 0 — el hallazgo central.** El guard corre **una vez por batch, en la selección de candidatos** (candidatos = Pending + PayeeId NOT NULL), es decir **antes de que existan plan y regla**: eso lo decide `ResolveAssignment` mucho después (`CreditAllocationService.cs:148-177`). Por eso el guard **no puede** filtrar por la clave fina donde está hoy. Opciones evaluadas:
+- **(a) mover la protección dentro de `BuildCreditsAsync` y que consulte la DB** → **RECHAZADA**: rompería el contrato "sin queries por transacción" del overload batch (`job:216`) y sería un **N+1** sobre el chunk.
+- **(b) precargar las claves cubiertas y pasarlas al punto de creación** → **ELEGIDA**. Una consulta acotada por batch (la misma que ya existía, con dos columnas más), consumida donde plan y regla SÍ se conocen.
+- (c) mantener el filtro por transacción y agregar la fina como defensa en profundidad → no cambia nada pero **tampoco habilita el Paso 3**, que es el objetivo.
+
+**GATE pasó**: la idempotencia se mantiene sin tocar el resolver.
+
+**Implementación.** `LoadLiveCreditKeysAsync` (`CreditAllocationService.cs:137-155`) devuelve los triples `(TransactionId, PlanId, RuleId)` con crédito vivo — **espeja exactamente el filtro del índice del Paso 1**: superseded fuera, **consumido DENTRO** (es justo la fila contra la que no debe crearse un duplicado). El job lo carga una vez (`job:74-86`) y lo pasa al overload batch (`:216-217`); el overload single-tx lo carga para su única transacción (`:131-135`). El descarte ocurre en el loop de reglas, antes de `Credit.Allocate` (`:245-249`). **La constraint de la DB nunca se usa como control de flujo.**
+
+**Cómo se preserva la idempotencia.** Antes: la transacción no entraba al batch. Ahora: entra, y **cada (plan, regla) ya cubierto se saltea** → como el resolver sigue eligiendo el mismo plan y las reglas son las mismas, **todas las combinaciones están cubiertas → 0 créditos nuevos**. Con 0 créditos no se llama `MarkCalculated` (`job:232`), así que tampoco hay riesgo de excepción por `Status != Pending`.
+
+**Dos detalles de reporting que había que cuidar para que "nada observable cambie" fuera literal:**
+1. El contador `skippedByOverlapRule` se preserva contando las transacciones que **no generaron nada y ya tenían crédito vivo** (`job:224-228`) — el resumen del job sigue significando lo mismo.
+2. El chequeo de atribución ambigua se saltea para transacciones que ya tienen crédito vivo (`job:186-188`). Antes ni siquiera llegaban ahí; sin esta condición, un re-proceso las habría reportado como "no se puede determinar el plan" — ruido sobre trabajo ya hecho.
+
+**Comportamiento observable: idéntico.** No se tocó `PlanAssignmentResolver`, ni `CommissionCalculator`, ni el payout, ni la lógica de resolución. Tests **790/790 → 797/797** (+7): re-proceso = no-op; transacción nueva acredita igual; **regla A cubierta no bloquea a la regla B** (la habilitación del Paso 3); dos reglas sin cubrir acreditan ambas; post-supersede se vuelve a acreditar; `SelectedPlanAssignmentId` intacto; y `LoadLiveCreditKeysAsync` excluye superseded pero conserva consumidos. `dotnet build` de la solución completa limpio.
+
+**PENDIENTE de Rodolfo.** Los 6 puntos de verificación en runtime — en particular el 6: **si aparece un `DbUpdateException` por el índice único, es señal de que el código está usando la DB como control de flujo y hay que reportarlo.**
+
+## 2026-07-23 — WI-CREDIT-UNIQUE-INDEX (money-critical, defensivo): la red antes de tocar el guard
+
+**Por qué va PRIMERO.** El diagnóstico del modelo de industria mostró que Wasnie se va a mover hacia "todas las reglas vigentes evalúan la transacción, cada match genera su crédito". Pero encontró la trampa: **la unicidad de créditos era PURAMENTE PROCEDIMENTAL**. El guard de `ProcessPendingTransactionsJobHandler.cs:74-84` era lo ÚNICO que impedía re-crear créditos, y **`Credit` no tenía ningún índice único** (`CreditConfiguration.cs:65-71`: los 4 índices eran de lookup). Aflojar ese guard sin constraint declarativa habría producido créditos duplicados **en silencio** — y se pagan. Secuencia segura = índice primero, guard después. Este WI es el "primero" y **no cambia ningún comportamiento observable**.
+
+**Step 0 — GATE PASÓ LIMPIO.** `Credit` **NO tiene `PlanAssignmentId`** (ni en código, `Credit.cs:11-29`, ni en la DB — verificado en `sys.columns`), así que la clave propuesta en el WI no era construible sin agregar una columna (fuera de alcance). Se probaron las dos candidatas contra los datos reales: **0 violaciones en ambas** (1195 créditos, 541 vivos, **243 vivos-y-consumidos**).
+
+**Clave elegida: `(TenantId, TransactionId, PlanId, RuleId)`.** `PlanId` es funcionalmente redundante — `Rule.PlanId` (`Rule.cs:11`) significa que una regla pertenece a UN solo plan, y en datos reales ningún `RuleId` abarca dos planes (verificado). Se conserva igual para que la constraint se lea como la regla de negocio que codifica y para que la dimensión "plan" quede explícita cuando el motor pase a acreditar varios planes por transacción. Es equivalente en estrictez a `(Tx, Rule)`.
+
+**Filtro `[SupersededAt] IS NULL`, y la decisión no obvia: un crédito CONSUMIDO sigue ocupando la clave.** Superseded se exime porque `RecalculateCredits` supersedea y recrea con la MISMA clave — sin el filtro, cada recálculo fallaría. Pero consumido (= ya pagado) **no** se exime: es exactamente la fila contra la que jamás debe crearse un duplicado. Hay 243 créditos vivos-y-consumidos, así que la distinción es concreta, no teórica.
+
+**Migración `B14_CreditUniqueLiveIndex`** — solo `CreateIndex`, sin migración de datos. **Aplicada y verificada** (Regla 13): `sys.indexes` devuelve `is_unique=True`, `has_filter=True`, `filter_definition=([SupersededAt] IS NULL)`, `KeyColumns=TenantId, TransactionId, PlanId, RuleId`; `B14` es la última fila de `__EFMigrationsHistory`.
+
+**Prueba de que la base REALMENTE rechaza** (INSERT dentro de transacción con ROLLBACK, net-zero — datos confirmados intactos en 1195/541 después): (A) duplicado vivo → **RECHAZADO, error 2601**; (B) supersede + recrear con la misma clave (el flujo de `RecalculateCredits`) → **ACEPTADO**; (C) misma tx, misma plan, regla distinta (base + SPIFF apilados) → **ACEPTADO**. Los tres resultados son exactamente los buscados: bloquea el duplicado real, no rompe el recálculo, y **deja habilitado el multi-crédito que el modelo de industria necesita**.
+
+**Los tests son sobre el MODELO EF, no sobre inserts.** El provider InMemory **no aplica índices únicos**, así que un test de inserción habría pasado existiera o no el índice — habría dado falsa confianza. Se aserta la definición (que exista, que sea único, las 4 columnas en orden, el filtro exacto, y que `ConsumedAt` NO esté en el filtro); la aplicación real quedó probada contra SQL Server arriba.
+
+**Nada de lógica se tocó**: guard de overlap, resolver, `CreditAllocationService`, `CommissionCalculator` y el payout quedaron sin una línea de cambio. **786/786 → 790/790** (+4). `dotnet build` de la solución completa limpio.
+
+**PENDIENTE de Rodolfo.** Los 5 puntos de verificación en runtime (procesar pendientes, recalcular, anular, pay run) — la app quedó parada.
+
+## 2026-07-23 — WI-PAYEE-ASSIGNMENTS-SAFE-DEFAULT: default seguro + badge que dice la verdad
+
+**Dos bugs confirmados por diagnóstico read-only, ambos en la card de asignaciones del detalle del payee.** (1) El filtro de estado de `ListAssignmentsByPayeeHandler` era **condicional al caller** y la card no mandaba `status`, así que el default del handler era "todas" — el valor peligroso. (2) El badge se derivaba **solo del período** (`temporalKey/temporalVariant`), así que una asignación desactivada cuyo período contenía hoy salía verde y "In Progress". Combinados: Rudolph veía 5 asignaciones vigentes cuando solo 2 lo están.
+
+**Consumidores revisados ANTES de invertir el default (obligatorio, punto B).** Tres, todos seguros: (a) la card del payee — es justo la que quería solo Active; (b) `quota-create.component.ts:165-166`, que llamaba sin `status` y **ya compensaba filtrando en el cliente** por `status === 'Active'` → con el nuevo default recibe exactamente lo mismo, su filtro queda redundante pero inocuo (se dejó: tocarlo no aporta y sí arriesga); (c) el test de integración `AssignmentsEndpointsTests.cs:84-100`, que crea asignaciones Active y afirma su presencia → no afectado. Ningún consumidor necesita ver desactivadas por default.
+
+**El default invertido** (`ListAssignmentsByPayeeHandler.cs:41-58`): sin `status` ⇒ **solo Active**; un valor de enum válido ⇒ ese estado; `status=all` ⇒ todas. Se usó **`"all"`** porque ya es el centinela de "sin filtro" del repo para `period` (`PeriodHelper.cs:25`, `PaginationQuery.cs:33`, `ListCreditsHandler.cs:62`) — no se inventó convenio nuevo. Detalle deliberado: un valor **irreconocible cae en Active**, no en "todas" — el resultado permisivo tiene que ser explícito, nunca consecuencia de un typo.
+
+**La card no se tocó.** Con el default seguro ya recibe solo Active sin pasar nada. Se evaluó agregarle `status:'Active'` como defensa en profundidad y **se decidió NO hacerlo**: repetiría el patrón de "cada caller se acuerda", que es exactamente lo que causó el bug. El default es la protección; agregar el parámetro redundante la disimularía.
+
+**El badge** (`payee-detail.component.ts:399-421` + `.html:307-309`): el estado real gana sobre el período — `Deactivated` ⇒ chip neutro con `ASSIGNMENTS.STATUS_DEACTIVATED` (clave ya existente en EN/ES/PL, sin i18n nueva); si no, el chip temporal de siempre. Se hizo **aunque el filtro ya oculte las desactivadas**: es lo que impide que el bug vuelva si algún día se muestran (ej. un toggle "ver todas"). Los helpers son usados SOLO por esta card (verificado), así que extenderlos no afecta nada más.
+
+**Tests.** Unit backend **786/786** (781 antes, +5): sin status ⇒ solo Active (conteo **y** lista — el `totalCount` alimenta el "N in this month"), string en blanco ⇒ igual que ausente, `Deactivated` explícito ⇒ solo esas, `all` ⇒ todas, valor irreconocible ⇒ Active. Frontend **461/461** (457 antes, +4, primer spec de `payee-detail`): Active dentro de período ⇒ "In Progress"; Deactivated con las MISMAS fechas ⇒ no dice "In Progress"; Deactivated a futuro ⇒ tampoco; sin status ⇒ comportamiento temporal intacto. Sin migración.
+
+**PENDIENTE de Rodolfo.** Los 6 puntos de verificación en runtime (la app estaba parada al cerrar; el build de la solución completa quedó limpio con 0 errores).
+
 ## 2026-07-23 — WI-TX-AMBIGUOUS-FAILLOUD (money-critical): Excel y HubSpot dejan de adivinar el plan
 
 **El mismo hueco por la otra cara.** El WI anterior arregló el alta manual (el admin elige). Excel y HubSpot seguían atribuyendo por desempate arbitrario, sin humano a quien preguntar. Ahora: si el payee tiene 2+ asignaciones elegibles y nadie declaró plan, la transacción **NO genera crédito**; queda Pending, intacta y visible en la attention card.

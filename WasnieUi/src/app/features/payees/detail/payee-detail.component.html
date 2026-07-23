@@ -304,8 +304,8 @@
                       <span class="bento-list-row__sub">{{ a.effectiveStart | dateFormat }} – {{ a.effectiveEnd | dateFormat }}</span>
                     </div>
                     <div class="bento-list-row__end">
-                      <ws-badge [variant]="temporalVariant(a.effectiveStart, a.effectiveEnd)" size="sm">
-                        {{ temporalKey(a.effectiveStart, a.effectiveEnd) | translate }}
+                      <ws-badge [variant]="temporalVariant(a.effectiveStart, a.effectiveEnd, true, a.status)" size="sm">
+                        {{ temporalKey(a.effectiveStart, a.effectiveEnd, true, a.status) | translate }}
                       </ws-badge>
                     </div>
                   </a>

@@ -113,19 +113,22 @@ public sealed class CreditAllocationPlanChoiceTests
             TransactionSource.Manual, "admin", Guid.NewGuid(), Now, Guid.NewGuid(),
             quantity: 112, selectedPlanAssignmentId: selectedAssignmentId);
 
-    // SUPERSEDED BEHAVIOUR — this used to assert that no selection still credited Revenue €2.50 via the
-    // tie-break, pinned while only the manual path was fixed. The fail-loud WI removed that fallback:
-    // with 2+ eligible plans and nobody declaring one, the engine now credits NOTHING rather than
-    // guessing. The €2.50 outcome was the bug, so it is no longer something to preserve.
+    // THE CHANGE THIS WI MAKES — and the third answer this assertion has had.
+    //   1. Originally: no selection → the tie-break silently credited Revenue €2.50 (the bug).
+    //   2. Fail-loud WI: no selection with 2 eligible plans → credited NOTHING, refusing to guess.
+    //   3. Now: BOTH plans credit, each under its own rules. There was never anything to guess —
+    //      a payee on a base plan and a stacked SPIFF earns from both. €2.50 AND €112.
     [Fact]
-    public async Task Without_a_selection_two_eligible_plans_now_credit_nothing()
+    public async Task Without_a_selection_every_eligible_plan_credits()
     {
-        var f = BuildFixture(nameof(Without_a_selection_two_eligible_plans_now_credit_nothing));
+        var f = BuildFixture(nameof(Without_a_selection_every_eligible_plan_credits));
 
         var credits = await f.Service.AllocateAsync(
             MakeTransaction(selectedAssignmentId: null), f.AssignmentsByPayee, f.PlansById);
 
-        credits.Should().BeEmpty();
+        credits.Should().HaveCount(2);
+        credits.Single(c => c.PlanId == f.RevenuePlan.Id).CreditedAmount.Amount.Should().Be(2.50m);
+        credits.Single(c => c.PlanId == f.UnitsPlan.Id).CreditedAmount.Amount.Should().Be(112m);
     }
 
     // (b) The fix: choosing the Units plan credits the Units plan, at the Units plan's rate.
@@ -172,17 +175,19 @@ public sealed class CreditAllocationPlanChoiceTests
 
     // ── Fail-loud on ambiguity (Excel / HubSpot, where nobody can be asked) ────────────────────
 
-    // (a) The change: with 2+ eligible plans and no declared choice, NOTHING is credited. Previously
-    // the tie-break silently produced €2.50 against a plan nobody picked.
+    // An Excel/HubSpot row — nobody to ask at load time — now credits every eligible plan instead of
+    // being held back. This is what removed the need to deactivate a legitimate assignment by hand
+    // just to get transactions through.
     [Fact]
-    public async Task Ambiguous_attribution_produces_no_credits_at_all()
+    public async Task An_excel_transaction_credits_every_eligible_plan()
     {
-        var f = BuildFixture(nameof(Ambiguous_attribution_produces_no_credits_at_all));
+        var f = BuildFixture(nameof(An_excel_transaction_credits_every_eligible_plan));
 
         var credits = await f.Service.AllocateAsync(
             MakeExcelTransaction(), f.AssignmentsByPayee, f.PlansById);
 
-        credits.Should().BeEmpty();
+        credits.Should().HaveCount(2);
+        credits.Select(c => c.PlanId).Should().BeEquivalentTo([f.RevenuePlan.Id, f.UnitsPlan.Id]);
     }
 
     // (b) One eligible plan → unchanged: still credited exactly as before. No regression.
@@ -214,6 +219,30 @@ public sealed class CreditAllocationPlanChoiceTests
 
         credits.Should().ContainSingle();
         credits[0].PlanId.Should().Be(f.UnitsPlan.Id);
+    }
+
+    // (e) An assignment whose plan is in ANOTHER currency is filtered out by Candidates, so it never
+    // reaches the credit builder — the eligible one still credits instead of the whole transaction
+    // aborting on the defensive currency guard.
+    [Fact]
+    public async Task An_assignment_in_another_currency_is_skipped_without_aborting_the_others()
+    {
+        var f = BuildFixture(nameof(An_assignment_in_another_currency_is_skipped_without_aborting_the_others));
+
+        // The Units plan is re-denominated in USD; the EUR transaction must still credit Revenue.
+        var usdPlans = new Dictionary<Guid, CompensationPlan>
+        {
+            [f.RevenuePlan.Id] = f.RevenuePlan,
+            [f.UnitsPlan.Id] = new PlanBuilder()
+                .WithTenantId(TenantId).WithName("Units Plan USD").WithCurrency("USD")
+                .WithPeriod(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)).Build(),
+        };
+
+        var credits = await f.Service.AllocateAsync(
+            MakeTransaction(selectedAssignmentId: null), f.AssignmentsByPayee, usdPlans);
+
+        credits.Should().ContainSingle();
+        credits[0].PlanId.Should().Be(f.RevenuePlan.Id);
     }
 
     // (e) No eligible plan at all → unchanged (empty, surfaced as NoActiveAssignment elsewhere).

@@ -77,23 +77,51 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 .ToDictionary(p => p.Id, p => p.Currency)
             : new Dictionary<Guid, string>();
 
-        // An explicit admin selection wins over Pattern B's tie-break; without one, nothing changes.
-        var assignment = ResolveAssignment(
+        // Every eligible assignment contributes its rules — an explicit selection restricts to one.
+        var assignments = ResolveAssignments(
             transaction, allPayeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
-        if (assignment is null) return Array.Empty<Credit>();
+        if (assignments.Count == 0) return Array.Empty<Credit>();
 
-        // Load Plan with rules eagerly — Rules is a related entity collection, not auto-loaded.
-        var planId = assignment.PlanId;
-        var plan = await _db.CompensationPlans
+        // Load the Plans with rules eagerly in ONE query for all resolved assignments — Rules is a
+        // related collection, not auto-loaded, and querying per assignment would be an N+1.
+        var resolvedPlanIds = assignments.Select(a => a.PlanId).Distinct().ToList();
+        var plansById = await _db.CompensationPlans
             .IgnoreQueryFilters()
             .Include(p => p.Rules)
-            .Where(p => p.Id == planId && p.TenantId == tenantId)
-            .FirstOrDefaultAsync(ct);
+            .Where(p => resolvedPlanIds.Contains(p.Id) && p.TenantId == tenantId)
+            .ToDictionaryAsync(p => p.Id, ct);
 
-        if (plan is null) return Array.Empty<Credit>();
+        // Single-transaction path: load this transaction's live credit keys itself. One bounded query
+        // for one transaction — the N+1 concern that keeps this out of BuildCreditsAsync applies to
+        // the batch path, which loads the whole chunk's keys up front instead.
+        var alreadyCredited = await LoadLiveCreditKeysAsync([transaction.Id], ct);
 
-        return await BuildCreditsAsync(transaction, assignment, plan, ct);
+        return await BuildCreditsForAllAsync(
+            transaction, assignments,
+            planId => plansById.GetValueOrDefault(planId),
+            alreadyCredited, ct);
+    }
+
+    /// <summary>
+    /// The (TransactionId, PlanId, RuleId) triples that currently hold a live (non-superseded) credit.
+    /// Superseded rows are excluded so RecalculateCredits can supersede and re-create the same key —
+    /// mirrors the filter of UX_Credits_Tenant_Transaction_Plan_Rule_Live exactly. A CONSUMED credit is
+    /// still live here: it is precisely the one a duplicate must never be created against.
+    /// </summary>
+    public async Task<IReadOnlySet<(Guid TransactionId, Guid PlanId, Guid RuleId)>> LoadLiveCreditKeysAsync(
+        IReadOnlyCollection<Guid> transactionIds,
+        CancellationToken ct = default)
+    {
+        if (transactionIds.Count == 0)
+            return new HashSet<(Guid, Guid, Guid)>();
+
+        var rows = await _db.Credits
+            .Where(c => c.SupersededAt == null && transactionIds.Contains(c.TransactionId))
+            .Select(c => new { c.TransactionId, c.PlanId, c.RuleId })
+            .ToListAsync(ct);
+
+        return rows.Select(r => (r.TransactionId, r.PlanId, r.RuleId)).ToHashSet();
     }
 
     /// <inheritdoc/>
@@ -101,6 +129,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
         CompensationTransaction transaction,
         IReadOnlyDictionary<Guid, IReadOnlyList<PlanAssignment>> assignmentsByPayee,
         IReadOnlyDictionary<Guid, CompensationPlan> plansById,
+        IReadOnlySet<(Guid TransactionId, Guid PlanId, Guid RuleId)>? alreadyCredited = null,
         CancellationToken ct = default)
     {
         // Decision #44: unassigned transactions never produce Credits.
@@ -121,65 +150,120 @@ public sealed class CreditAllocationService : ICreditAllocationService
         // Pattern B: build planCurrencyById from the pre-loaded plans dictionary (no DB query).
         var planCurrencyById = plansById.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
 
-        // An explicit admin selection wins over Pattern B's tie-break; without one, nothing changes.
-        var assignment = ResolveAssignment(
+        // Every eligible assignment contributes its rules — an explicit selection restricts to one.
+        var assignments = ResolveAssignments(
             transaction, payeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
 
-        if (assignment is null)
-            return Array.Empty<Credit>();
-
-        // Resolve plan from the caller-supplied pre-loaded dictionary (no DB query).
-        if (!plansById.TryGetValue(assignment.PlanId, out var plan))
-            return Array.Empty<Credit>();
-
-        return await BuildCreditsAsync(transaction, assignment, plan, ct);
+        // Plans come from the caller-supplied dictionary — no DB query per assignment (no N+1).
+        return await BuildCreditsForAllAsync(
+            transaction, assignments,
+            planId => plansById.GetValueOrDefault(planId),
+            alreadyCredited ?? new HashSet<(Guid, Guid, Guid)>(), ct);
     }
 
     /// <summary>
-    /// Single decision point for "which assignment carries this transaction", shared by both overloads.
+    /// EVERY assignment that should contribute rules to this transaction, shared by both overloads.
     ///
-    /// With no admin selection this is byte-for-byte the previous behaviour — Excel, HubSpot and every
-    /// row created before the field existed keep resolving through Pattern B's tie-break.
+    /// This used to return a single assignment picked by tie-break (shortest period, then smallest Id),
+    /// so the rules of every other eligible plan were never evaluated. That is the inverse of how
+    /// incentive compensation works: transactions are not routed to a plan — every rule in force reads
+    /// the transaction and decides for itself. Two rules matching one sale must BOTH credit (a base
+    /// plan and a stacked SPIFF); a plan that should not apply expresses that in its own filters, not
+    /// by losing a tie-break.
     ///
-    /// With a selection, the engine credits THAT assignment or none: a selection that stopped being
-    /// eligible throws so the caller's existing skip machinery records a readable reason. Falling back
-    /// to the tie-break here would silently pay the commission against a plan the admin did not choose.
+    /// An explicit admin selection still wins, and now means "restrict to exactly this assignment" —
+    /// a pin, not a hint. If it stopped being eligible this throws, so the caller's existing skip
+    /// machinery records a readable reason instead of silently crediting somewhere else.
+    ///
+    /// Ordering is deterministic (narrowest period, then Id — the old tie-break order) purely so runs
+    /// are reproducible. It carries no meaning now that every candidate is used: attainment is scoped
+    /// per plan (QuotaAttainmentService filters on PlanId), so no assignment can influence another's
+    /// numbers regardless of the order they are processed in.
     /// </summary>
-    private static PlanAssignment? ResolveAssignment(
+    private static IReadOnlyList<PlanAssignment> ResolveAssignments(
         CompensationTransaction transaction,
         IEnumerable<PlanAssignment> payeeAssignments,
         DateOnly txDate,
         string txCurrency,
         IReadOnlyDictionary<Guid, string> planCurrencyById)
     {
-        if (transaction.SelectedPlanAssignmentId is not { } selectedId)
+        if (transaction.SelectedPlanAssignmentId is { } selectedId)
         {
-            // Fail-loud on ambiguity: with 2+ eligible plans and no declared choice, the tie-break
-            // would silently decide the commission. Return no credits instead — the transaction stays
-            // Pending and untouched, and the job records a readable skip. Deliberately NOT an exception:
-            // ReassignPayeeHandler also calls this, and reassigning to a multi-plan payee must not fail
-            // the reassignment itself — it should just leave the transaction awaiting a decision.
-            if (AmbiguousAttributionSpec.IsAmbiguous(transaction, payeeAssignments, planCurrencyById))
-                return null;
+            var resolution = PlanAssignmentResolver.ResolveSelected(
+                payeeAssignments, txDate, txCurrency, planCurrencyById, selectedId);
 
-            return PlanAssignmentResolver.Resolve(payeeAssignments, txDate, txCurrency, planCurrencyById);
+            if (!resolution.IsAccepted)
+                throw new DomainException(resolution.RejectionReason!);
+
+            return [resolution.Assignment!];
         }
 
-        var resolution = PlanAssignmentResolver.ResolveSelected(
-            payeeAssignments, txDate, txCurrency, planCurrencyById, selectedId);
+        // Candidates already applies the three eligibility filters (Active + period covers the date +
+        // plan currency matches). Its full list is now used instead of being narrowed to one.
+        return PlanAssignmentResolver
+            .Candidates(payeeAssignments, txDate, txCurrency, planCurrencyById)
+            .OrderBy(a => a.EffectivePeriod!.End.DayNumber - a.EffectivePeriod.Start.DayNumber)
+            .ThenBy(a => a.Id)
+            .ToList();
+    }
 
-        if (!resolution.IsAccepted)
-            throw new DomainException(resolution.RejectionReason!);
+    /// <summary>
+    /// Runs every resolved assignment through the credit builder and accumulates the results.
+    ///
+    /// The covered-key set carries forward BETWEEN assignments, not just from the batch pre-load. That
+    /// matters because a payee can hold two active assignments to the SAME plan (3 payees do today):
+    /// both are eligible, both would evaluate the same rules, and without carrying the keys forward the
+    /// second would try to insert a duplicate (transaction, plan, rule) and be stopped by the unique
+    /// index — using the database as flow control, and double-counting that plan's attainment.
+    /// </summary>
+    private async Task<IReadOnlyList<Credit>> BuildCreditsForAllAsync(
+        CompensationTransaction transaction,
+        IReadOnlyList<PlanAssignment> assignments,
+        Func<Guid, CompensationPlan?> planLookup,
+        IReadOnlySet<(Guid TransactionId, Guid PlanId, Guid RuleId)> alreadyCredited,
+        CancellationToken ct)
+    {
+        if (assignments.Count == 0) return Array.Empty<Credit>();
 
-        return resolution.Assignment;
+        var covered = new HashSet<(Guid, Guid, Guid)>(alreadyCredited);
+        var allCredits = new List<Credit>();
+
+        foreach (var assignment in assignments)
+        {
+            var plan = planLookup(assignment.PlanId);
+            if (plan is null) continue;
+
+            var credits = await BuildCreditsAsync(transaction, assignment, plan, covered, ct);
+
+            foreach (var credit in credits)
+                covered.Add((transaction.Id, credit.PlanId, credit.RuleId));
+
+            allCredits.AddRange(credits);
+        }
+
+        return allCredits;
     }
 
     // ── Shared credit-building logic ──────────────────────────────────────────
 
+    /// <param name="alreadyCredited">
+    /// (TransactionId, PlanId, RuleId) triples that ALREADY have a live credit. Rules matching one of
+    /// these are skipped instead of allocating a duplicate.
+    ///
+    /// This is the fine-grained half of anti-double-pay, and it lives here because this is the first
+    /// point in the pipeline where plan and rule are known — the batch guard runs at candidate
+    /// selection, long before <see cref="ResolveAssignment"/> decides anything. The set is supplied by
+    /// the caller rather than queried here so the batch path keeps its "no DB queries per transaction"
+    /// contract; querying inside this method would be an N+1 across the chunk.
+    ///
+    /// The unique index UX_Credits_Tenant_Transaction_Plan_Rule_Live is the last line of defence, not
+    /// the control-flow mechanism: reaching it means this check was bypassed.
+    /// </param>
     private async Task<IReadOnlyList<Credit>> BuildCreditsAsync(
         CompensationTransaction transaction,
         PlanAssignment assignment,
         CompensationPlan plan,
+        IReadOnlySet<(Guid TransactionId, Guid PlanId, Guid RuleId)> alreadyCredited,
         CancellationToken ct)
     {
         // Multi-tenant guard.
@@ -235,6 +319,11 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
         foreach (var rule in applicableRules)
         {
+            // Already credited for this exact (transaction, plan, rule) → nothing to add. Re-running
+            // the job over an allocated transaction is therefore a no-op instead of a duplicate.
+            if (alreadyCredited.Contains((transaction.Id, plan.Id, rule.Id)))
+                continue;
+
             if (!CommissionCalculator.EvaluateTrigger(rule.Trigger, transaction, _logger))
                 continue;
 

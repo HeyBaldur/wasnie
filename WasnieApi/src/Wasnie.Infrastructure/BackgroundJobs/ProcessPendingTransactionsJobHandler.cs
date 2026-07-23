@@ -71,22 +71,30 @@ public sealed class ProcessPendingTransactionsJobHandler(
                 "Processing with chunking.", context.JobId, candidateIds.Count);
         }
 
-        // Skipping rule (Decision #54 / Decision #61 Case B):
-        // Exclude transactions that already have non-superseded Credits (from any plan).
-        var idsWithExistingCredits = await db.Credits
-            .Where(c => c.SupersededAt == null && candidateIds.Contains(c.TransactionId))
-            .Select(c => c.TransactionId)
-            .Distinct()
-            .ToListAsync(ct);
+        // Anti-double-pay, fine-grained (Decision #54 / Decision #61 Case B, refined).
+        //
+        // This used to exclude any transaction that already had a live credit "from any plan". That was
+        // safe only because the resolver picks a single plan, and it blocks the model the engine is
+        // moving to: two DIFFERENT rules matching one transaction must each produce their own credit
+        // (a base plan and a stacked SPIFF), which is intentional concurrency, not double payment.
+        //
+        // The exclusion now happens per (transaction, plan, rule) at the point of allocation — the same
+        // key as UX_Credits_Tenant_Transaction_Plan_Rule_Live. Loaded once for the whole batch, so a
+        // re-run is still a no-op without any per-transaction query.
+        var alreadyCredited = await creditAllocationService.LoadLiveCreditKeysAsync(candidateIds, ct);
 
-        var idsToSkipSet = new HashSet<Guid>(idsWithExistingCredits);
-        var eligibleIds = candidateIds.Where(id => !idsToSkipSet.Contains(id)).ToList();
-        var skippedByOverlapRule = idsToSkipSet.Count;
+        // Transactions already carrying a live credit. Nothing is excluded on this basis any more —
+        // it only tells the attribution check below to stay quiet about work that is already done,
+        // and feeds the skip metric so the job report keeps meaning the same thing.
+        var txWithLiveCredits = alreadyCredited.Select(k => k.TransactionId).ToHashSet();
+
+        var eligibleIds = candidateIds;
+        var skippedByOverlapRule = 0;
 
         logger.LogInformation(
-            "ProcessPendingTransactionsJob {JobId}: {Total} candidates, {SkippedByOverlap} skipped " +
-            "(existing Credits). Processing {Eligible} transactions.",
-            context.JobId, candidateIds.Count, skippedByOverlapRule, eligibleIds.Count);
+            "ProcessPendingTransactionsJob {JobId}: {Total} candidates, {AlreadyCredited} with existing " +
+            "credits (re-checked per plan+rule). Processing {Eligible} transactions.",
+            context.JobId, candidateIds.Count, txWithLiveCredits.Count, eligibleIds.Count);
 
         // Pre-load payee name/code for skip log enrichment — two batched queries, not per-row.
         var txPayeeMap = await db.CompensationTransactions
@@ -176,45 +184,31 @@ public sealed class ProcessPendingTransactionsJobHandler(
                 // Re-check status inside the transaction (state may have changed since ID was loaded).
                 if (transaction.Status != CompensationTransactionStatus.Pending) continue;
 
-                // Ambiguous plan attribution → refuse to guess. CreditAllocationService already returns
-                // no credits for these; checking here too is what turns a silent no-op into a visible,
-                // explained skip alongside the other skip reasons. Same helper, so the two agree.
-                if (transaction.PayeeId.HasValue
-                    && assignmentsByPayee.TryGetValue(transaction.PayeeId.Value, out var txPayeeAssignments))
-                {
-                    var ambiguousCandidates = AmbiguousAttributionSpec.AmbiguousCandidates(
-                        transaction, txPayeeAssignments, planCurrencyById);
-
-                    if (ambiguousCandidates.Count > 0)
-                    {
-                        var ambiguousReason = AmbiguousAttributionSpec.SkipReason(ambiguousCandidates.Count);
-                        logger.LogWarning(
-                            "ProcessPendingTransactionsJob {JobId}: skipping transaction {TxId} — {Reason}",
-                            context.JobId, transaction.Id, ambiguousReason);
-
-                        (string FullName, string EmployeeCode) ambiguousPayee = default;
-                        payeeById.TryGetValue(transaction.PayeeId.Value, out ambiguousPayee);
-
-                        skipDetails.Add((
-                            transaction.Id,
-                            transaction.ReferenceNumber,
-                            transaction.TransactionDate,
-                            transaction.Amount.Amount,
-                            transaction.Amount.Currency,
-                            string.IsNullOrEmpty(ambiguousPayee.FullName) ? null : ambiguousPayee.FullName,
-                            string.IsNullOrEmpty(ambiguousPayee.EmployeeCode) ? null : ambiguousPayee.EmployeeCode,
-                            ambiguousReason));
-                        skipReasonCounts.TryGetValue(ambiguousReason, out var ambiguousExisting);
-                        skipReasonCounts[ambiguousReason] = ambiguousExisting + 1;
-                        continue;
-                    }
-                }
+                // NOTE — the ambiguous-attribution skip that used to sit here has been REMOVED.
+                //
+                // It refused to process a transaction whose payee had 2+ eligible plans, because the
+                // engine then picked one by tie-break and would have paid an arbitrary plan. That
+                // premise no longer holds: every eligible assignment now contributes its own rules and
+                // credits its own plan, so there is nothing left to guess. Leaving the check would have
+                // blocked precisely the transactions this change exists to process — the multi-plan
+                // payee is the normal case now, not an error.
+                //
+                // AmbiguousAttributionSpec and its dashboard card are intentionally left in place: the
+                // card counts PENDING transactions with 2+ candidates, so it drains on its own as those
+                // transactions get processed. Reworking that surface into whatever it should mean now
+                // ("no rule matched", "overlapping filters") is a separate piece of work.
 
                 try
                 {
                     // Batch path: no DB queries inside AllocateAsync — uses pre-loaded lookups.
                     var credits = await creditAllocationService.AllocateAsync(
-                        transaction, assignmentsByPayee, plansInChunk, ct);
+                        transaction, assignmentsByPayee, plansInChunk, alreadyCredited, ct);
+
+                    // Nothing new AND already credited → this is a re-run over settled work. Counted as
+                    // an overlap skip so the job report reads exactly as it did when such transactions
+                    // were filtered out of the batch entirely.
+                    if (credits.Count == 0 && txWithLiveCredits.Contains(transaction.Id))
+                        skippedByOverlapRule++;
 
                     foreach (var credit in credits)
                         db.Credits.Add(credit);
