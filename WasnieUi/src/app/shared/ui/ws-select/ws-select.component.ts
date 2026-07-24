@@ -179,13 +179,42 @@ export class WsSelectComponent implements ControlValueAccessor {
       this.asyncOptions.set(options);
       this.asyncLoading.set(false);
     });
+
+    // Safety net: if the component is destroyed while the panel is open, the capture-phase scroll/resize
+    // listeners must not outlive it (a scroll listener that survives its panel is a leak).
+    this._destroyRef.onDestroy(() => this._detachViewportListeners());
   }
 
   openDropdown(): void {
     if (this.isDisabled()) return;
-    // Measure the trigger button specifically, not the host (which includes the label above).
+    this._positionDropdown();
+    this.isOpen.set(true);
+    this._attachViewportListeners();
+    this.searchQuery.set('');
+    this.activeIndex.set(
+      Math.max(0, this.filteredOptions().findIndex(o => o.value === this.value()))
+    );
+    setTimeout(() => this.searchInputRef?.nativeElement?.focus(), 10);
+
+    // In async mode trigger an initial load (empty query = first server page) so the
+    // dropdown is not blank before the user starts typing.
+    if (this.searchFn()) {
+      this._searchSubject$.next('');
+    }
+  }
+
+  // Measures the trigger and pins the position:fixed panel to it. Called on open AND on every scroll /
+  // resize so the panel FOLLOWS its trigger instead of being left behind (position:fixed is measured
+  // relative to the viewport, so an ancestor scroll changes where the trigger is). If the trigger has
+  // scrolled out of the viewport, the panel must not linger over unrelated content — close it.
+  private _positionDropdown(): void {
     const triggerEl = (this.triggerRef?.nativeElement ?? this.host.nativeElement) as HTMLElement;
     const triggerRect = triggerEl.getBoundingClientRect();
+
+    if (this.isOpen() && (triggerRect.bottom < 0 || triggerRect.top > window.innerHeight)) {
+      this.closeDropdown();
+      return;
+    }
 
     const containerBottom = window.innerHeight - 8;
     const containerTop = 8;
@@ -221,24 +250,12 @@ export class WsSelectComponent implements ControlValueAccessor {
       this.dropdownFixedTop.set(triggerRect.bottom + 4);
       this.dropdownFixedBottom.set(null);
     }
-
-    this.isOpen.set(true);
-    this.searchQuery.set('');
-    this.activeIndex.set(
-      Math.max(0, this.filteredOptions().findIndex(o => o.value === this.value()))
-    );
-    setTimeout(() => this.searchInputRef?.nativeElement?.focus(), 10);
-
-    // In async mode trigger an initial load (empty query = first server page) so the
-    // dropdown is not blank before the user starts typing.
-    if (this.searchFn()) {
-      this._searchSubject$.next('');
-    }
   }
 
   closeDropdown(): void {
     this.isOpen.set(false);
     this.dropdownFixed.set(false);
+    this._detachViewportListeners();
     this.onTouched();
   }
 
@@ -315,14 +332,40 @@ export class WsSelectComponent implements ControlValueAccessor {
     }
   }
 
-  @HostListener('window:scroll')
-  onWindowScroll(): void {
-    if (this.isOpen()) this.closeDropdown();
+  // The panel is position:fixed, measured relative to the viewport, so any ancestor scroll moves the
+  // trigger out from under it. The page scrolls inside app-shell's `overflow-y-auto` container (not
+  // `window`), so a `window:scroll` HostListener never fires — we listen on `window` in the CAPTURE
+  // phase, which sees scrolls from every nested container. Behaviour: REPOSITION so the panel follows
+  // its trigger (a normal dropdown stays open while scrolling; only an outside click closes it). A scroll
+  // INSIDE the panel's own option list is ignored (the trigger didn't move). Reposition is throttled to
+  // one rAF so rapid scroll doesn't thrash layout with getBoundingClientRect.
+  private _repositionScheduled = false;
+  private readonly _onViewportScroll = (e: Event): void => {
+    if (!this.isOpen()) return;
+    if (this.host.nativeElement.contains(e.target as Node)) return;
+    this._scheduleReposition();
+  };
+  private readonly _onViewportResize = (): void => {
+    if (this.isOpen()) this._scheduleReposition();
+  };
+
+  private _scheduleReposition(): void {
+    if (this._repositionScheduled) return;
+    this._repositionScheduled = true;
+    requestAnimationFrame(() => {
+      this._repositionScheduled = false;
+      if (this.isOpen()) this._positionDropdown();
+    });
   }
 
-  @HostListener('window:resize')
-  onWindowResize(): void {
-    if (this.isOpen()) this.closeDropdown();
+  private _attachViewportListeners(): void {
+    window.addEventListener('scroll', this._onViewportScroll, { capture: true, passive: true });
+    window.addEventListener('resize', this._onViewportResize, { passive: true });
+  }
+
+  private _detachViewportListeners(): void {
+    window.removeEventListener('scroll', this._onViewportScroll, { capture: true } as EventListenerOptions);
+    window.removeEventListener('resize', this._onViewportResize);
   }
 
   writeValue(val: string | number): void {

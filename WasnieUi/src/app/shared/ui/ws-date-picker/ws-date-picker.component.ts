@@ -200,6 +200,7 @@ export class WsDatePickerComponent implements ControlValueAccessor, AfterViewIni
 
   ngOnDestroy(): void {
     this.langSub?.unsubscribe();
+    this._detachViewportListeners();
   }
 
   // --- Open / close ---
@@ -224,17 +225,59 @@ export class WsDatePickerComponent implements ControlValueAccessor, AfterViewIni
       this.viewYear.set(now.getFullYear());
     }
     this.isOpen.set(true);
+    this._attachViewportListeners();
     this.onTouched();
   }
 
   close(): void {
     this.isOpen.set(false);
     this.viewMode.set('date');
+    this._detachViewportListeners();
+  }
+
+  // The calendar is position:fixed, measured relative to the viewport, so any ancestor scroll moves the
+  // trigger out from under it. The page scrolls inside app-shell's `overflow-y-auto` container (not
+  // `window`), so a `window:scroll` listener would never fire — we listen on `window` in the CAPTURE
+  // phase, which sees scrolls from every nested container, and REPOSITION so the calendar follows its
+  // trigger (a normal dropdown stays open while scrolling; only an outside click closes it). A scroll
+  // INSIDE the calendar itself is ignored. resize = same. Throttled to one rAF to avoid layout thrash.
+  private _repositionScheduled = false;
+  private readonly _onViewportScroll = (e: Event): void => {
+    if (!this.isOpen()) return;
+    if ((this.host.nativeElement as HTMLElement).contains(e.target as Node)) return;
+    this._scheduleReposition();
+  };
+  private readonly _onViewportResize = (): void => {
+    if (this.isOpen()) this._scheduleReposition();
+  };
+
+  private _scheduleReposition(): void {
+    if (this._repositionScheduled) return;
+    this._repositionScheduled = true;
+    requestAnimationFrame(() => {
+      this._repositionScheduled = false;
+      if (this.isOpen()) this.computePlacement();
+    });
+  }
+
+  private _attachViewportListeners(): void {
+    window.addEventListener('scroll', this._onViewportScroll, { capture: true, passive: true });
+    window.addEventListener('resize', this._onViewportResize, { passive: true });
+  }
+
+  private _detachViewportListeners(): void {
+    window.removeEventListener('scroll', this._onViewportScroll, { capture: true } as EventListenerOptions);
+    window.removeEventListener('resize', this._onViewportResize);
   }
 
   private computePlacement(): void {
     const el = this.host.nativeElement as HTMLElement;
     const rect = el.getBoundingClientRect();
+    // If the trigger has scrolled out of the viewport, the calendar must not linger over other content.
+    if (this.isOpen() && (rect.bottom < 0 || rect.top > window.innerHeight)) {
+      this.close();
+      return;
+    }
     const spaceBelow = window.innerHeight - 8 - rect.bottom;
     const spaceAbove = rect.top - 8;
     const goUpward = spaceBelow < 350 && spaceAbove > spaceBelow;
