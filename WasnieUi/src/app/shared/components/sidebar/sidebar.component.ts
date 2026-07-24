@@ -127,6 +127,7 @@ export class SidebarComponent {
         { path: '/quotas', labelKey: 'NAV.QUOTAS', icon: 'target', permission: 'Quotas.Read' },
         { path: '/payees', labelKey: 'NAV.PAYEES', icon: 'users', permission: 'Payees.Read' },
         { path: '/assignments', labelKey: 'NAV.ASSIGNMENTS', icon: 'user-check', permission: 'Assignments.Read' },
+        { path: '/category-mappings', labelKey: 'NAV.CATEGORY_MAPPINGS', icon: 'tag', permission: 'CategoryMappings.Read' },
       ],
     },
     {

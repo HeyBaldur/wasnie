@@ -88,6 +88,13 @@ export const routes: Routes = [
       import('./features/assignments/assignments.routes').then((m) => m.assignmentsRoutes),
   },
   {
+    path: 'category-mappings',
+    title: 'NAV.CATEGORY_MAPPINGS',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('CategoryMappings.Read')],
+    loadChildren: () =>
+      import('./features/category-mappings/category-mappings.routes').then((m) => m.categoryMappingsRoutes),
+  },
+  {
     path: 'subscription',
     title: 'NAV.SUBSCRIPTION',
     canActivate: [planGuard, hasPermissionGuard('Subscription.Manage')],

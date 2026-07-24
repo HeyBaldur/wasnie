@@ -483,6 +483,39 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("Credits", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Enrichment.CategoryMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("InputField")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InputValue")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "InputField", "InputValue")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CategoryMappings_TenantId_InputField_InputValue");
+
+                    b.ToTable("CategoryMappings", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Compensation.Payees.Payee", b =>
                 {
                     b.Property<Guid>("Id")
@@ -902,6 +935,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("Category")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -920,6 +957,14 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("PayeeId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ProductName")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ProductSku")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<int>("Quantity")
                         .ValueGeneratedOnAdd()
@@ -1564,6 +1609,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("CategoryPropertyName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<DateTimeOffset>("ConnectedAt")
                         .HasColumnType("datetimeoffset");

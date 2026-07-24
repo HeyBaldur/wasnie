@@ -203,6 +203,8 @@ describe('TransactionFormComponent', () => {
       referenceNumber: 'REF-001',
       // Left blank on the form → sent as null, not an empty string.
       description: null,
+      productName: null,
+      productSku: null,
       transactionDate: '2024-01-15',
       amount: 500,
       currency: 'USD',

@@ -29,11 +29,39 @@
     margin: 0;
   }
 
+  // Status/result messages sit at the card's content column — indented to line up with the eligible
+  // table's content (which is inset by the table padding), so they read as part of the results rather
+  // than jutting out to the raw card edge. text-align is pinned left so no embedding context can center it.
+  &__success,
+  &__notice,
+  &__slow,
+  &__cancelled,
+  &__error {
+    padding-left: var(--space-2);
+    text-align: left;
+  }
+
   &__success {
     font-size: var(--font-size-13);
     color: var(--color-success);
     font-weight: 500;
     margin: 0;
+  }
+
+  // Job finished but produced no credits (or nothing to do) — a neutral/caution outcome, NOT a full
+  // success. Deliberately not green so it never reads as "everything was paid".
+  &__notice {
+    font-size: var(--font-size-13);
+    color: var(--color-warning);
+    font-weight: 500;
+    margin: 0;
+  }
+
+  &__slow {
+    font-size: var(--font-size-13);
+    color: var(--color-warning);
+    margin: 0;
+    max-width: 480px;
   }
 
   &__cancelled {

@@ -58,6 +58,31 @@
   display: block;
 }
 
+/* Reference is a link to the transaction detail (mirrors the payee link pattern in this table). */
+.col-ref__link {
+  color: var(--color-text-primary);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--color-brand);
+    text-decoration: underline;
+  }
+}
+
+/* Enrichment category — the discriminating value, shown as a small tag so it stands out from the
+   quieter product line without adding a whole column (keeps the table's density). */
+.col-ref__category {
+  display: inline-block;
+  margin-top: var(--space-1);
+  padding: 1px var(--space-2);
+  font-size: var(--font-size-11);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+}
+
 /* Deal name / manual label under the technical reference — what the sale actually was. */
 .col-ref__description {
   display: block;
@@ -69,6 +94,24 @@
   white-space: normal;
   word-break: break-word;
   max-width: 220px;
+}
+
+/* What was sold — sits under the sale label, with the SKU as a quieter trailing token. */
+.col-ref__product {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-11);
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+  white-space: normal;
+  word-break: break-word;
+  max-width: 220px;
+}
+
+.col-ref__sku {
+  font-family: ui-monospace, monospace;
+  margin-left: var(--space-1);
 }
 
 .col-ref__reason {

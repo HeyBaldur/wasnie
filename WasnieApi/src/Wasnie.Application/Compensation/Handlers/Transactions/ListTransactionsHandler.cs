@@ -108,6 +108,12 @@ public sealed class ListTransactionsHandler(
         if (p.UnassignedOnly == true)
             query = query.Where(t => t.PayeeId == null);
 
+        // WI-ENRICHMENT: informational filter — Pending transactions with no resolved category.
+        // Composes with the other filters; it never restricts processing, only what the list shows.
+        if (p.UncategorizedOnly == true)
+            query = query.Where(t =>
+                t.Status == CompensationTransactionStatus.Pending && t.Category == null);
+
         if (!string.IsNullOrWhiteSpace(p.ReferenceNumbers))
         {
             var refList = p.ReferenceNumbers.Split(',', StringSplitOptions.RemoveEmptyEntries)

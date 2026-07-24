@@ -17,6 +17,7 @@ import { TranslateModule, TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
+import { PlansApiService } from '../services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { getPlanPermissions } from '../services/plan-permissions';
 import {
@@ -29,7 +30,7 @@ import {
   ModifierType,
   RateTableType,
 } from '../models/rule.model';
-import { AddRuleRequest, UpdateRuleRequest } from '../models/rule.model';
+import { AddRuleRequest, TriggerField, UpdateRuleRequest } from '../models/rule.model';
 import {
   WsPageHeaderComponent,
   WsButtonComponent,
@@ -66,6 +67,7 @@ export class RuleFormComponent implements OnInit {
   private readonly router = inject(Router);
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
+  private readonly plansApi = inject(PlansApiService);
 
   private readonly destroyRef = inject(DestroyRef);
 
@@ -117,9 +119,75 @@ export class RuleFormComponent implements OnInit {
     { label: 'PLANS.CAP_SCOPE_PERTRANSACTION', value: CapScope.PerTransaction },
   ];
 
-  readonly conditionOperatorOptions: SelectOption[] = Object.entries(ConditionOperator)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({ label: `PLANS.COND_OP_${k.toUpperCase()}`, value: v as number }));
+  // ── Trigger fields ────────────────────────────────────────────────────────────────────────
+  // Fetched from the engine's catalog rather than declared here. A second copy in the browser is
+  // exactly how the form came to offer field names the engine had never heard of, producing rules
+  // that saved cleanly and then silently never fired.
+  readonly triggerFields = signal<TriggerField[]>([]);
+
+  readonly fieldOptions = computed<SelectOption[]>(() =>
+    this.triggerFields().map(f => ({
+      // Labels stay translatable; the LIST is the backend's.
+      label: `PLANS.TRIGGER_FIELD_${f.field.toUpperCase()}`,
+      value: f.field,
+    }))
+  );
+
+  /** Operators this field's evaluator genuinely implements — never the full enum. */
+  operatorOptionsFor(index: number): SelectOption[] {
+    const definition = this._definitionAt(index);
+    if (!definition) return [];
+    return definition.operators.map(op => ({
+      label: `PLANS.COND_OP_${op.operator.toUpperCase()}`,
+      value: ConditionOperator[op.operator as keyof typeof ConditionOperator] as number,
+    }));
+  }
+
+  /** True when the selected operator reads a LIST (In/NotIn) instead of a single value. */
+  usesSet(index: number): boolean {
+    const definition = this._definitionAt(index);
+    const operator = Number(this.conditionsArray.at(index).get('operator')?.value);
+    return definition?.operators.some(
+      op => op.usesSet && ConditionOperator[op.operator as keyof typeof ConditionOperator] === operator
+    ) ?? false;
+  }
+
+  /** A stored condition whose field is not in the catalog — it can never match. */
+  isUnknownField(index: number): boolean {
+    const field = this.fieldValueAt(index);
+    if (!field || this.triggerFields().length === 0) return false;
+    return !this.triggerFields().some(f => f.field.toLowerCase() === field.toLowerCase());
+  }
+
+  fieldValueAt(index: number): string {
+    return this.conditionsArray.at(index).get('field')?.value ?? '';
+  }
+
+  private _definitionAt(index: number): TriggerField | undefined {
+    const field = this.fieldValueAt(index);
+    return this.triggerFields().find(f => f.field.toLowerCase() === field.toLowerCase());
+  }
+
+  /** Keeps valueType aligned with the picked field, so numeric/date comparisons use the right
+   *  evaluator. Previously every condition was saved as String, which is why ordering operators
+   *  never matched. */
+  onFieldChange(index: number): void {
+    const group = this.conditionsArray.at(index);
+    const definition = this._definitionAt(index);
+    if (!definition) return;
+
+    group.get('valueType')?.setValue(
+      ConditionValueType[definition.valueType as keyof typeof ConditionValueType] as number
+    );
+
+    // Drop an operator the new field does not support rather than submitting a dead filter.
+    const allowed = definition.operators.map(
+      op => ConditionOperator[op.operator as keyof typeof ConditionOperator] as number
+    );
+    if (!allowed.includes(Number(group.get('operator')?.value))) {
+      group.get('operator')?.setValue(allowed[0]);
+    }
+  }
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
@@ -186,6 +254,14 @@ export class RuleFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // The field catalog drives the picker, the operator lists and the value-type. Without it the
+    // form has nothing valid to offer, so failures leave the list empty rather than falling back to
+    // a hardcoded copy that could drift from the engine.
+    this.plansApi.getTriggerFields().subscribe({
+      next: fields => this.triggerFields.set(fields),
+      error: () => this.triggerFields.set([]),
+    });
+
     // When the user switches to Units mode, force rate table to Flat (only supported combination).
     // Also ensure hidden fields stay at their defaults.
     this.form.controls.measurement.controls.type.valueChanges.pipe(
@@ -279,8 +355,11 @@ export class RuleFormComponent implements OnInit {
             operator: [this._enumToNumber(ConditionOperator, c.operator)],
             valueType: [this._enumToNumber(ConditionValueType, c.value.type)],
             valueRaw: [c.value.raw],
+            // Stored as a list; edited as comma-separated text.
+            valueSet: [(c.value.set ?? []).join(', ')],
           })
         );
+        this._wireFieldChange(this.conditionsArray.length - 1);
       });
     }
 
@@ -330,8 +409,17 @@ export class RuleFormComponent implements OnInit {
         operator: [ConditionOperator.Equal],
         valueType: [ConditionValueType.String],
         valueRaw: [''],
+        valueSet: [''],
       })
     );
+    this._wireFieldChange(this.conditionsArray.length - 1);
+  }
+
+  /** Re-aligns valueType and the operator list whenever the picked field changes. */
+  private _wireFieldChange(index: number): void {
+    this.conditionsArray.at(index).get('field')?.valueChanges
+      .pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.onFieldChange(index));
   }
 
   removeCondition(i: number): void { this.conditionsArray.removeAt(i); }
@@ -439,11 +527,25 @@ export class RuleFormComponent implements OnInit {
     return {
       _schema: 1 as const,
       logicalOperator: v.trigger.logicalOperator,
-      conditions: v.trigger.conditions.map((c) => ({
-        field: c['field'],
-        operator: Number(c['operator']),
-        value: { type: Number(c['valueType']), raw: c['valueRaw'], set: null },
-      })),
+      conditions: v.trigger.conditions.map((c) => {
+        const operator = Number(c['operator']);
+        // In/NotIn are read from `set`; everything else from `raw`. The form used to send set: null
+        // unconditionally, which made those two operators unreachable however they were configured.
+        const isSetOperator =
+          operator === ConditionOperator.In || operator === ConditionOperator.NotIn;
+        const set = isSetOperator
+          ? String(c['valueSet'] ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+          : null;
+        return {
+          field: c['field'],
+          operator,
+          value: {
+            type: Number(c['valueType']),
+            raw: isSetOperator ? '' : c['valueRaw'],
+            set,
+          },
+        };
+      }),
     };
   }
 

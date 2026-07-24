@@ -16,6 +16,11 @@ export interface Transaction {
   referenceNumber: string;
   /** Human-readable label of the sale (HubSpot deal name / manual / Excel). Display only. */
   description?: string | null;
+  /** What was sold — `description` says which sale, these say which product. */
+  productName?: string | null;
+  productSku?: string | null;
+  /** Enrichment output — the resolved category a rule trigger can filter on. Null when unmapped. */
+  category?: string | null;
   payeeId: string | null;
   amount: number;
   currency: string;
@@ -24,6 +29,8 @@ export interface Transaction {
   ingestedAt: string;
   source: TransactionSource;
   status: TransactionStatus;
+  /** External system id (e.g. HubSpot deal-lineitem). Null for manual transactions. */
+  externalId?: string | null;
   payeeName?: string | null;
   payeeEmployeeCode?: string | null;
   cancelledBy?: string | null;
@@ -55,6 +62,8 @@ export interface PlanOptions {
 export interface CreateTransactionRequest {
   referenceNumber: string;
   description?: string | null;
+  productName?: string | null;
+  productSku?: string | null;
   payeeId: string | null;
   amount: number;
   currency: string;

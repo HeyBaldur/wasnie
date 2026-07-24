@@ -134,6 +134,53 @@ public sealed class CompensationTransactionTests
         tx.Description.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
     }
 
+    // ── Product fields (what was sold) ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Ingest_WithProductFields_TrimsAndStoresThem()
+    {
+        var tx = CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(),
+            productName: "  Industrial Press 3000  ", productSku: "  MCH-0042  ");
+
+        tx.ProductName.Should().Be("Industrial Press 3000");
+        tx.ProductSku.Should().Be("MCH-0042");
+    }
+
+    // Same rule as Description: a product label can never be why a real sale fails to ingest.
+    [Fact]
+    public void Ingest_OverlongProductFields_AreTruncatedNotRejected()
+    {
+        var tooLong = new string('x', CompensationTransaction.MaxDescriptionLength + 25);
+
+        var tx = CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(),
+            productName: tooLong, productSku: tooLong);
+
+        tx.ProductName.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+        tx.ProductSku.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Ingest_BlankProductFields_AreStoredAsNull(string? value)
+    {
+        var tx = CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(),
+            productName: value, productSku: value);
+
+        tx.ProductName.Should().BeNull();
+        tx.ProductSku.Should().BeNull();
+    }
+
     [Fact]
     public void Ingest_EmptyTenantId_ThrowsDomainException()
     {

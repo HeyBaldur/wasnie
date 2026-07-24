@@ -15,4 +15,8 @@ public sealed class TransactionImportColumnMapping
     public string? QuantityColumn { get; init; }
     // Optional human-readable label of the sale. Unmapped → the transaction keeps a null Description.
     public string? DescriptionColumn { get; init; }
+    // What was sold. Optional: unmapped → null, exactly like a HubSpot line item with no catalogued
+    // product. Kept separate from Description so a rule can eventually filter on the SKU.
+    public string? ProductNameColumn { get; init; }
+    public string? ProductSkuColumn { get; init; }
 }

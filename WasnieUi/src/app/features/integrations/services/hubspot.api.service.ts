@@ -32,6 +32,11 @@ export class HubSpotApiService {
     return this.http.post<void>(`${this.base}/disconnect`, {});
   }
 
+  /** WI-CRM-CATEGORY: set (or clear, with null/empty) the HubSpot property that feeds Category. */
+  setCategoryProperty(propertyName: string | null): Observable<void> {
+    return this.http.put<void>(`${this.base}/category-property`, { propertyName });
+  }
+
   /** Verification-only test call. */
   ping(): Observable<HubSpotPingResult> {
     return this.http.post<HubSpotPingResult>(`${this.base}/ping`, {});

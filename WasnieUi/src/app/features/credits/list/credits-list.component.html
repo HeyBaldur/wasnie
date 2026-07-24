@@ -264,9 +264,14 @@
               </tr>
             } @else {
               @for (credit of store.items(); track credit.id) {
-                <tr class="credits-list__row">
+                <tr class="credits-list__row credits-list__row--clickable" (click)="openCredit(credit.id)">
                   <td class="col-ref">
-                    <a [routerLink]="['/credits', credit.id]" target="_blank" class="credits-list__ref-link">
+                    <a
+                      [routerLink]="['/transactions', credit.transactionId]"
+                      (click)="$event.stopPropagation()"
+                      class="credits-list__ref-link"
+                      [title]="'CREDITS.OPEN_TRANSACTION' | translate"
+                    >
                       {{ credit.referenceNumber }}
                     </a>
                   </td>
@@ -281,8 +286,18 @@
                     }
                   </td>
                   <td class="credits-list__plan-rule">
-                    <span class="credits-list__plan-name">{{ credit.planName }}</span>
-                    <span class="credits-list__rule-name">{{ credit.ruleName }}</span>
+                    <a
+                      class="credits-list__plan-name credits-list__entity-link"
+                      [routerLink]="['/plans', credit.planId]"
+                      (click)="$event.stopPropagation()"
+                      [title]="'CREDITS.OPEN_PLAN' | translate"
+                    >{{ credit.planName }}</a>
+                    <a
+                      class="credits-list__rule-name credits-list__entity-link"
+                      [routerLink]="['/plans', credit.planId, 'rules', credit.ruleId]"
+                      (click)="$event.stopPropagation()"
+                      [title]="'CREDITS.OPEN_RULE' | translate"
+                    >{{ credit.ruleName }}</a>
                   </td>
                   <td class="col-num col-secondary">{{ credit.originalAmount | currencyFormat: credit.originalCurrency }}</td>
                   <td class="col-num col-primary">{{ credit.creditedAmount | currencyFormat: credit.creditedCurrency }}</td>

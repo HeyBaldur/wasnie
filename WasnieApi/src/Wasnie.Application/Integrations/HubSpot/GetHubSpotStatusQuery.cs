@@ -37,6 +37,7 @@ public sealed class GetHubSpotStatusHandler(
             ConnectedAt: disconnected ? null : c.ConnectedAt,
             ConnectedBy: c.ConnectedBy,
             DisconnectedAt: c.DisconnectedAt,
-            LastSyncedAt: disconnected ? null : c.LastSyncedAt));
+            LastSyncedAt: disconnected ? null : c.LastSyncedAt,
+            CategoryPropertyName: c.CategoryPropertyName));
     }
 }

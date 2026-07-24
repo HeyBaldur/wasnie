@@ -98,6 +98,7 @@ public sealed class IngestTransactionPlanChoiceTests
         var handler = new IngestTransactionHandler(
             db, tenantCtx, currentUser, new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
             Substitute.For<IAuthorizationService>(), fieldRequirements, credits,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService(),
             new TransactionCreateGuard(db));
 
         return new Harness(db, handler, tenantId, payee.Id, assignments);

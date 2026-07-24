@@ -24,6 +24,20 @@
       [error]="hasError('description', 'maxlength') ? 'VALIDATION.INVALID' : ''"
     />
 
+    <ws-input
+      label="TRANSACTIONS.FIELD_PRODUCT_NAME"
+      formControlName="productName"
+      [placeholder]="'TRANSACTIONS.FIELD_PRODUCT_NAME_PLACEHOLDER' | translate"
+      [error]="hasError('productName', 'maxlength') ? 'VALIDATION.INVALID' : ''"
+    />
+
+    <ws-input
+      label="TRANSACTIONS.FIELD_PRODUCT_SKU"
+      formControlName="productSku"
+      [placeholder]="'TRANSACTIONS.FIELD_PRODUCT_SKU_PLACEHOLDER' | translate"
+      [error]="hasError('productSku', 'maxlength') ? 'VALIDATION.INVALID' : ''"
+    />
+
     <ws-date-picker
       [label]="'TRANSACTIONS.FIELD_DATE'"
       formControlName="transactionDate"

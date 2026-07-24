@@ -326,3 +326,11 @@
     margin: 0;
   }
 }
+
+/* A stored condition whose field the engine cannot read — left untouched, but never silently. */
+.condition-warning {
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-warning);
+  line-height: 1.4;
+}

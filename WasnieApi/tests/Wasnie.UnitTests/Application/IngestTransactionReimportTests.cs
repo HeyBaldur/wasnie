@@ -43,7 +43,8 @@ public sealed class IngestTransactionReimportTests
 
         var handler = new IngestTransactionHandler(
             db, tenantCtx, currentUser, new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
-            Substitute.For<IAuthorizationService>(), fieldReq, creditAlloc, new TransactionCreateGuard(db));
+            Substitute.For<IAuthorizationService>(), fieldReq, creditAlloc,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService(), new TransactionCreateGuard(db));
         return (db, handler);
     }
 

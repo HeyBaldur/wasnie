@@ -21,6 +21,12 @@ public sealed class CompensationTransactionConfiguration : IEntityTypeConfigurat
         builder.Property(t => t.TransactionDate).IsRequired();
         builder.Property(t => t.Source).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        // What was sold. Descriptive today; ProductSku is the discrete value rule triggers will filter
+        // on later, which is why it is its own column rather than text inside the label.
+        builder.Property(t => t.ProductName).HasMaxLength(CompensationTransaction.MaxDescriptionLength);
+        builder.Property(t => t.ProductSku).HasMaxLength(CompensationTransaction.MaxDescriptionLength);
+        // Enrichment output (WI-ENRICHMENT): the resolved category a rule trigger can filter on.
+        builder.Property(t => t.Category).HasMaxLength(CompensationTransaction.MaxDescriptionLength);
         builder.Property(t => t.ExternalId).HasMaxLength(500);
         // Admin's explicit plan attribution (manual ingest, multi-plan payees). Nullable: every other
         // origin resolves through PlanAssignmentResolver as before. No FK on purpose — this records

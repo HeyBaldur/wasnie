@@ -32,4 +32,7 @@ public class PaginationQuery
     public string? Currencies { get; set; }         // comma-separated ISO 4217 currency codes (WI-PROD-FILTERS-CURRENCY-RULE)
     public string? Period { get; set; }             // "active" (current/future only) | "all" (no period filter)
     public string? AttentionReason { get; set; }     // "NoPayee" | "CurrencyMismatch" | "NoActiveAssignment" — dashboard deep-link to unprocessable Pending
+    // WI-ENRICHMENT: informational (non-blocking) — filter to Pending transactions with no resolved
+    // Category. These are NOT unprocessable; they still credit under rules that don't filter on category.
+    public bool? UncategorizedOnly { get; set; }
 }

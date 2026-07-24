@@ -11,7 +11,7 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { timer, Subscription, of } from 'rxjs';
-import { switchMap, catchError } from 'rxjs/operators';
+import { switchMap, catchError, map } from 'rxjs/operators';
 import {
   TransactionsApiService,
   ProcessPendingScope,
@@ -57,6 +57,7 @@ export class ProcessPendingComponent implements OnInit {
   readonly dispatching = signal(false);
   readonly cancelling = signal(false);
   readonly netError = signal(false);
+  readonly slowRunning = signal(false);
   readonly skipLogOpen = signal(false);
   readonly copiedRef = signal<string | null>(null);
 
@@ -66,11 +67,26 @@ export class ProcessPendingComponent implements OnInit {
     try { return JSON.parse(raw) as ProcessPendingResultSummary; } catch { return null; }
   }
 
+  /**
+   * The final message must not read as a full success unless real credits were created. Processing N
+   * transactions that match no rule leaves them Pending (backend only marks calculated when a credit is
+   * created), so "N processed" alone would lie. Success tone is reserved for creditsCreated > 0.
+   */
+  get resultTone(): 'success' | 'notice' {
+    const s = this.resultSummary;
+    return s && s.creditsCreated > 0 ? 'success' : 'notice';
+  }
+
   private _polling: Subscription | null = null;
 
   readonly VOLUME_THRESHOLD = 5000;
   readonly ELIGIBLE_INLINE_MAX = 200;
   readonly ELIGIBLE_URL_REF_LIMIT = 100;
+
+  // Polling cadence and the point past which we stop pretending this is instant. The job is normally
+  // sub-second; crossing the slow threshold shows an honest "taking longer" notice — it never claims done.
+  readonly POLL_INTERVAL_MS = 1000;
+  readonly POLL_SLOW_THRESHOLD_MS = 30000;
 
   ngOnInit(): void {
     this._loadCount();
@@ -146,7 +162,12 @@ export class ProcessPendingComponent implements OnInit {
   }
 
   onProcessPending(): void {
-    if (this.dispatching()) return;
+    if (this.dispatching() || this.isRunning) return;
+    // Clear any prior run's terminal state so a re-dispatch never briefly shows a stale result.
+    this._polling?.unsubscribe();
+    this.jobStatus.set(null);
+    this.slowRunning.set(false);
+    this.netError.set(false);
     this.dispatching.set(true);
 
     this.txApi
@@ -179,24 +200,32 @@ export class ProcessPendingComponent implements OnInit {
   }
 
   private _startPolling(jobId: string): void {
-    this._polling = timer(0, 1000)
+    this._polling = timer(0, this.POLL_INTERVAL_MS)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        switchMap(() =>
+        switchMap((tick) =>
           this.txApi.getJobStatus(jobId).pipe(
+            map((s) => ({ s, tick })),
             catchError(() => {
               this.netError.set(true);
-              return of(null as JobStatus | null);
+              return of({ s: null as JobStatus | null, tick });
             }),
           ),
         ),
       )
-      .subscribe((s) => {
+      .subscribe(({ s, tick }) => {
         if (!s) return;
         this.netError.set(false);
         this.jobStatus.set(s);
-        if (s.state === 'Succeeded' || s.state === 'Cancelled' || s.state === 'Failed') {
+        const terminal = s.state === 'Succeeded' || s.state === 'Cancelled' || s.state === 'Failed';
+        if (!terminal && tick * this.POLL_INTERVAL_MS >= this.POLL_SLOW_THRESHOLD_MS) {
+          // Don't lie or hang: surface an honest "this is taking longer" notice and keep polling so
+          // the real result still lands here when the job finishes.
+          this.slowRunning.set(true);
+        }
+        if (terminal) {
           this._polling?.unsubscribe();
+          this.slowRunning.set(false);
           if (s.state === 'Succeeded') {
             this._loadCount();
             this._loadEligible();

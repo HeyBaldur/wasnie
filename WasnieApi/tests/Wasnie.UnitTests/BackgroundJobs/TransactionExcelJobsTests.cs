@@ -74,6 +74,7 @@ public sealed class TransactionExcelJobsTests
 
         return new TransactionImportJobHandler(
             db, new FakeClock(Now), new FakeGuidGenerator(), validator, credits,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService(),
             new TransactionCreateGuard(db), NullLogger<TransactionImportJobHandler>.Instance);
     }
 
@@ -133,6 +134,62 @@ public sealed class TransactionExcelJobsTests
 
         var tx = await db.CompensationTransactions.SingleAsync();
         tx.Quantity.Should().Be(1);
+    }
+
+    // Product columns mapped → the transaction carries what was sold. Unmapped → null (covered by the
+    // quantity/description cases above, which map neither).
+    [Fact]
+    public async Task Import_with_product_columns_mapped_stores_the_product()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = BuildDb(nameof(Import_with_product_columns_mapped_stores_the_product), tenantId);
+        var row = new Dictionary<string, string>
+        {
+            ["Reference"] = "REF-PROD-1", ["Amount"] = "5000", ["Currency"] = "USD",
+            ["Date"] = "2026-06-01", ["Item"] = "Industrial Press 3000", ["Code"] = "MCH-0042",
+        };
+
+        var payload = new TransactionImportPayload(
+            TenantId: tenantId,
+            RequestedByUserId: "user-1",
+            RequestedByEmail: "user@test.com",
+            OriginalFileName: "tx.xlsx",
+            ColumnMapping: new TransactionImportColumnMapping
+            {
+                ReferenceNumberColumn = "Reference",
+                AmountColumn = "Amount",
+                CurrencyColumn = "Currency",
+                TransactionDateColumn = "Date",
+                ProductNameColumn = "Item",
+                ProductSkuColumn = "Code",
+            },
+            Rows: [row],
+            Options: new TransactionImportOptions(SkipRowsWithWarnings: false));
+
+        await BuildImportHandler(db).HandleAsync(payload, BuildJobContext(), default);
+
+        var tx = await db.CompensationTransactions.SingleAsync();
+        tx.ProductName.Should().Be("Industrial Press 3000");
+        tx.ProductSku.Should().Be("MCH-0042");
+    }
+
+    [Fact]
+    public async Task Import_without_product_columns_leaves_them_null()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = BuildDb(nameof(Import_without_product_columns_leaves_them_null), tenantId);
+        var row = new Dictionary<string, string>
+        {
+            ["Reference"] = "REF-PROD-2", ["Amount"] = "5000", ["Currency"] = "USD",
+            ["Date"] = "2026-06-01",
+        };
+
+        await BuildImportHandler(db).HandleAsync(
+            BuildImportPayload(tenantId, row, quantityColumn: null), BuildJobContext(), default);
+
+        var tx = await db.CompensationTransactions.SingleAsync();
+        tx.ProductName.Should().BeNull();
+        tx.ProductSku.Should().BeNull();
     }
 
     // ── Update job: Description ───────────────────────────────────────────────────────────────

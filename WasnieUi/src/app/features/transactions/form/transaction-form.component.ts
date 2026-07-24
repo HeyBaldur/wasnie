@@ -76,6 +76,9 @@ export class TransactionFormComponent implements OnInit {
     referenceNumber: ['', [Validators.required, Validators.maxLength(100)]],
     // Optional label so an auditor can tell what the transaction is for without opening the CRM.
     description: ['', [Validators.maxLength(500)]],
+    // What was sold. Optional — description says which sale, these say which product.
+    productName: ['', [Validators.maxLength(500)]],
+    productSku: ['', [Validators.maxLength(500)]],
     transactionDate: ['', Validators.required],
     amount: [0 as number, [Validators.required, Validators.min(0.01)]],
     currency: ['USD', Validators.required],
@@ -183,6 +186,8 @@ export class TransactionFormComponent implements OnInit {
         payeeId: v.payeeId || null,
         referenceNumber: v.referenceNumber.trim(),
         description: v.description.trim() || null,
+        productName: v.productName.trim() || null,
+        productSku: v.productSku.trim() || null,
         transactionDate: v.transactionDate,
         amount: v.amount,
         currency: v.currency,

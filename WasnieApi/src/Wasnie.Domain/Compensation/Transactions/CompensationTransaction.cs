@@ -30,6 +30,23 @@ public sealed class CompensationTransaction : AggregateRoot
     public DateOnly TransactionDate { get; private set; }
     public TransactionSource Source { get; private set; }
     public CompensationTransactionStatus Status { get; private set; } = CompensationTransactionStatus.Pending;
+    // ── What was sold ─────────────────────────────────────────────────────────────────────────
+    // Description (above) says WHICH SALE this is; these say WHAT product. Both are needed to audit a
+    // commission: "Contrato Acme 2026" plus "Industrial Press 3000 / SKU MCH-0042".
+    //
+    // ProductName is for humans. ProductSku is the discrete, comparable one — it is what rule triggers
+    // will filter on once they can, which is why it is kept as its own field instead of being parsed
+    // out of a label. Both are DESCRIPTIVE today: nothing reads them for calculation, attribution or
+    // idempotency yet. Null wherever the origin supplies nothing (deal-level rows, older data, an
+    // uncatalogued line item).
+    public string? ProductName { get; private set; }
+    public string? ProductSku { get; private set; }
+    // Enrichment output (WI-ENRICHMENT): a stable, discrete category resolved at ingest from a
+    // tenant-maintained lookup table (ProductSku first, ProductName as fallback). Rule triggers filter
+    // on THIS instead of on the raw origin field, so the discriminating value being in the "wrong"
+    // column (LAP-12 in ProductName) no longer means a rule silently never fires. Null when no mapping
+    // matched — the transaction still processes normally for rules that don't filter on category.
+    public string? Category { get; private set; }
     public string? ExternalId { get; private set; }
     // The admin's EXPLICIT attribution decision, captured at manual ingest when the payee belongs to
     // more than one applicable plan. It is a declaration of intent, NOT a computed result: the engine
@@ -62,7 +79,10 @@ public sealed class CompensationTransaction : AggregateRoot
         string? externalId = null,
         int quantity = 1,
         string? description = null,
-        Guid? selectedPlanAssignmentId = null)
+        Guid? selectedPlanAssignmentId = null,
+        string? productName = null,
+        string? productSku = null,
+        string? category = null)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("TenantId must not be empty.");
@@ -90,6 +110,13 @@ public sealed class CompensationTransaction : AggregateRoot
             Amount = amount,
             Quantity = quantity,
             Description = NormalizeDescription(description),
+            // Same normalization as Description: trimmed, blank → null, truncated rather than rejected.
+            // A product label must never be the reason a real sale fails to ingest.
+            ProductName = NormalizeDescription(productName),
+            ProductSku = NormalizeDescription(productSku),
+            // Same normalization as the other descriptive fields: trimmed, blank → null, truncated
+            // rather than rejected. Enrichment must never be the reason a real sale fails to ingest.
+            Category = NormalizeDescription(category),
             TransactionDate = transactionDate,
             Source = source,
             Status = CompensationTransactionStatus.Pending,

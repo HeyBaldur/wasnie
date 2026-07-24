@@ -1,0 +1,29 @@
+.cm-toolbar {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* Rows open the edit modal — same clickable affordance the other tables use. */
+.cm-row {
+  cursor: pointer;
+
+  &:hover { background: var(--color-bg-surface-sunken); }
+}
+
+.cm-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cm-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+
+  &__spacer {
+    flex: 1 1 auto;
+  }
+}

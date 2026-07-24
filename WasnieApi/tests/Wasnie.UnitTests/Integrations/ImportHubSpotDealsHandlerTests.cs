@@ -57,7 +57,8 @@ public sealed class ImportHubSpotDealsHandlerTests
         var createGuard = new Wasnie.Application.Compensation.Common.TransactionCreateGuard(db);
         var driftPolicy = new Wasnie.Application.Integrations.Crm.Drift.CrmDriftPolicy(db, guid);
         var reconciler = new Wasnie.Application.Integrations.Crm.CrmDealReconciler(
-            db, guid, resolver, createGuard, driftPolicy);
+            db, guid, resolver, createGuard, driftPolicy,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService());
 
         var handler = new ImportHubSpotDealsHandler(
             tenantCtx, currentUser, clock, authz, dealSource, reconciler);
@@ -464,6 +465,87 @@ public sealed class ImportHubSpotDealsHandlerTests
         var txs = await h.Db.CompensationTransactions.ToListAsync();
         txs.Should().OnlyContain(t => t.Description == "Contrato Acme 2026");
         txs.Select(t => t.ReferenceNumber).Should().BeEquivalentTo(["HUBSPOT-902-a", "HUBSPOT-902-b"]);
+    }
+
+    // ── What was sold: the line item's own product data (Paso 4a) ─────────────────────────────
+
+    // The link that was broken: the line item's name and SKU were fetched and then thrown away, with
+    // the DEAL name persisted in their place. Description keeps saying WHICH SALE; the product fields
+    // say WHAT was sold, so a deal mixing two economies keeps them apart.
+    [Fact]
+    public async Task Line_item_name_and_sku_are_persisted_alongside_the_deal_name()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Line_item_name_and_sku_are_persisted_alongside_the_deal_name), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("910", "Contrato Acme 2026", 65000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[]
+                {
+                    new CrmLineItem("a", "Industrial Press 3000", 1m, 50000m, 50000m, Sku: "MCH-0042"),
+                    new CrmLineItem("b", "Installation Course", 1m, 15000m, 15000m, Sku: "CRS-0007"),
+                }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(2);
+        var txs = await h.Db.CompensationTransactions.ToListAsync();
+
+        // Both lines share the sale label...
+        txs.Should().OnlyContain(t => t.Description == "Contrato Acme 2026");
+
+        // ...but carry their own product identity.
+        var machine = txs.Single(t => t.ExternalId == "910-a");
+        machine.ProductName.Should().Be("Industrial Press 3000");
+        machine.ProductSku.Should().Be("MCH-0042");
+
+        var course = txs.Single(t => t.ExternalId == "910-b");
+        course.ProductName.Should().Be("Installation Course");
+        course.ProductSku.Should().Be("CRS-0007");
+    }
+
+    // A line item with no catalogued product is normal — null, and the sale still ingests.
+    [Fact]
+    public async Task A_line_item_without_a_sku_still_ingests_with_null_product_fields()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(A_line_item_without_a_sku_still_ingests_with_null_product_fields), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("911", "Contrato Sin Catalogo", 5000m, "USD", new DateOnly(2026, 6, 1), "O1",
+                new[] { new CrmLineItem("li", null, 1m, 5000m, 5000m) }) },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(1);
+        var tx = await h.Db.CompensationTransactions.SingleAsync();
+        tx.ProductName.Should().BeNull();
+        tx.ProductSku.Should().BeNull();
+        tx.Amount.Amount.Should().Be(5000m);
+    }
+
+    // A deal WITHOUT line items has no product to speak of — unchanged behaviour, no regression.
+    [Fact]
+    public async Task A_deal_without_line_items_keeps_the_deal_name_and_no_product()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(A_deal_without_line_items_keeps_the_deal_name_and_no_product), tenantId);
+        SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+
+        SetupSource(h.DealSource, tenantId,
+            deals: new[] { new CrmDeal("912", "Deal Sin Lineas", 5000m, "USD", new DateOnly(2026, 6, 1), "O1") },
+            owners: new[] { new CrmOwner("O1", "alice@example.com", "A", "A", false) });
+
+        await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        var tx = await h.Db.CompensationTransactions.SingleAsync();
+        tx.Description.Should().Be("Deal Sin Lineas");
+        tx.ProductName.Should().BeNull();
+        tx.ProductSku.Should().BeNull();
     }
 
     // A deal with NO name must still ingest — the label is descriptive, never a precondition.

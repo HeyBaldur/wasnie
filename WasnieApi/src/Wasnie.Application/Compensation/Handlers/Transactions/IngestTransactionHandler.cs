@@ -25,6 +25,7 @@ public sealed class IngestTransactionHandler(
     IAuthorizationService authorizationService,
     IFieldRequirementService fieldRequirements,
     ICreditAllocationService creditAllocationService,
+    Wasnie.Application.Compensation.Enrichment.ITransactionEnrichmentService enrichmentService,
     Wasnie.Application.Compensation.Common.ITransactionCreateGuard createGuard)
     : IRequestHandler<IngestTransactionCommand, Result<TransactionDto>>
 {
@@ -89,6 +90,12 @@ public sealed class IngestTransactionHandler(
         var txId = guid.NewGuid();
         var now = clock.UtcNowOffset;
 
+        // Enrichment phase: derive a discrete Category from the tenant lookup table (SKU first, name
+        // fallback). Descriptive-only for calculation, but a rule trigger can filter on it. No match →
+        // null, and the transaction still ingests and processes normally.
+        var resolver = await enrichmentService.LoadResolverAsync(tenantContext.TenantId, cancellationToken);
+        var category = resolver.Resolve(request.ProductSku, request.ProductName);
+
         var tx = CompensationTransaction.Ingest(
             tenantId: tenantContext.TenantId,
             referenceNumber: request.ReferenceNumber,
@@ -102,7 +109,10 @@ public sealed class IngestTransactionHandler(
             eventId: guid.NewGuid(),
             quantity: request.Quantity,
             description: request.Description,
-            selectedPlanAssignmentId: request.SelectedPlanAssignmentId);
+            selectedPlanAssignmentId: request.SelectedPlanAssignmentId,
+            productName: request.ProductName,
+            productSku: request.ProductSku,
+            category: category);
 
         db.CompensationTransactions.Add(tx);
         await db.SaveChangesAsync(cancellationToken);
@@ -169,6 +179,9 @@ public sealed class IngestTransactionHandler(
             tx.IngestedAt, tx.IngestedBy, tx.UpdatedAt,
             Description: tx.Description,
             SelectedPlanAssignmentId: tx.SelectedPlanAssignmentId,
+            ProductName: tx.ProductName,
+            ProductSku: tx.ProductSku,
+            Category: tx.Category,
             CancelledBy: tx.CancelledBy,
             CancelledAt: tx.CancelledAt,
             CancelledReason: tx.CancelledReason);

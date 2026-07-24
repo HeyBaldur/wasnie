@@ -213,14 +213,23 @@
               <div class="conditions-list mt-3" formArrayName="conditions">
                 @for (cond of conditionsArray.controls; track $index; let i = $index) {
                   <div class="condition-row" [formGroupName]="i">
-                    <input class="form-input form-input--sm" type="text" formControlName="field"
-                      [placeholder]="'PLANS.COND_FIELD_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    <!-- Field is a picker fed by the engine's own catalog: a name typed by hand used
+                         to save fine and then never match. -->
+                    <ws-select
+                      formControlName="field"
+                      [options]="fieldOptions()"
+                    />
                     <ws-select
                       formControlName="operator"
-                      [options]="conditionOperatorOptions"
-                            />
-                    <input class="form-input form-input--sm" type="text" formControlName="valueRaw"
-                      [placeholder]="'PLANS.COND_VALUE_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                      [options]="operatorOptionsFor(i)"
+                    />
+                    @if (usesSet(i)) {
+                      <input class="form-input form-input--sm" type="text" formControlName="valueSet"
+                        [placeholder]="'PLANS.COND_SET_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    } @else {
+                      <input class="form-input form-input--sm" type="text" formControlName="valueRaw"
+                        [placeholder]="'PLANS.COND_VALUE_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    }
                     @if (!readOnly()) {
                       <button type="button" class="tier-remove" (click)="removeCondition(i)">
                         <app-icon name="x" [size]="14" />
@@ -229,6 +238,13 @@
                       <span></span>
                     }
                   </div>
+                  <!-- A condition saved before this field existed in the catalog. Left exactly as it
+                       is — never rewritten silently — but called out, because it cannot ever match. -->
+                  @if (isUnknownField(i)) {
+                    <p class="condition-warning">
+                      {{ 'PLANS.COND_UNKNOWN_FIELD' | translate: { field: fieldValueAt(i) } }}
+                    </p>
+                  }
                 }
               </div>
               @if (!readOnly()) {

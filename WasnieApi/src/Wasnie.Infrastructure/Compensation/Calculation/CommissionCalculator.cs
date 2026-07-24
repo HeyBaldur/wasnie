@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
@@ -43,19 +44,29 @@ internal static class CommissionCalculator
         CompensationTransaction tx,
         ILogger? logger = null)
     {
-        string? fieldValue = condition.Field.ToLowerInvariant() switch
-        {
-            "transactionamount" => tx.Amount.Amount.ToString(CultureInfo.InvariantCulture),
-            "transactiondate"   => tx.TransactionDate.ToString("yyyy-MM-dd"),
-            "source"            => tx.Source.ToString(),
-            _                   => null
-        };
+        // Resolution comes from TriggerFieldCatalog, the same list the field picker and the save-time
+        // validator use. It used to be a private switch here, which is how the UI ended up offering
+        // names the engine had never heard of.
+        var definition = TriggerFieldCatalog.Find(condition.Field);
 
-        if (fieldValue == null)
+        if (definition is null)
         {
             logger?.LogWarning(
-                "CreditEngine: unknown condition field '{Field}' on rule — treating as not-matched.",
+                "CreditEngine: condition field '{Field}' is not a known transaction attribute — rule " +
+                "cannot match. Edit the rule and pick a field from the list.",
                 condition.Field);
+            return false;
+        }
+
+        var fieldValue = definition.Resolve(tx);
+
+        if (fieldValue is null)
+        {
+            // A KNOWN field the transaction simply has no value for (e.g. a SKU on a deal-level row
+            // with no line item). Not a misconfiguration — the condition just does not match.
+            logger?.LogDebug(
+                "CreditEngine: transaction {TxId} has no value for '{Field}' — condition not matched.",
+                tx.Id, definition.Field);
             return false;
         }
 

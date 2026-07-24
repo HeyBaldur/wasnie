@@ -24,6 +24,7 @@ public sealed class TransactionImportJobHandler(
     IGuidGenerator guid,
     ITransactionImportValidationService validator,
     ICreditAllocationService creditAllocationService,
+    Wasnie.Application.Compensation.Enrichment.ITransactionEnrichmentService enrichmentService,
     Wasnie.Application.Compensation.Common.ITransactionCreateGuard createGuard,
     ILogger<TransactionImportJobHandler> logger)
     : JobHandlerBase<TransactionImportPayload>
@@ -49,6 +50,9 @@ public sealed class TransactionImportJobHandler(
         // Pre-load payee codes for chunk processing (tenant context is already set by dispatcher).
         var payeesByCode = await db.Payees
             .ToDictionaryAsync(p => p.EmployeeCode, p => p.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        // Enrichment: load the tenant's category lookup ONCE for the whole import (no per-row query).
+        var categoryResolver = await enrichmentService.LoadResolverAsync(payload.TenantId, ct);
 
         // Split rows into valid vs skipped.
         var validRows = new List<(int Index, Dictionary<string, string> Row, TransactionRowValidationResult Vr)>();
@@ -168,6 +172,17 @@ public sealed class TransactionImportJobHandler(
                     ? GetField(row, payload.ColumnMapping.DescriptionColumn)
                     : null;
 
+                // What was sold. Same rule: unmapped or blank → null, never a reason to fail the row.
+                var productName = payload.ColumnMapping.ProductNameColumn is not null
+                    ? GetField(row, payload.ColumnMapping.ProductNameColumn)
+                    : null;
+                var productSku = payload.ColumnMapping.ProductSkuColumn is not null
+                    ? GetField(row, payload.ColumnMapping.ProductSkuColumn)
+                    : null;
+
+                // Enrichment: resolve the category in-memory from the pre-loaded lookup (no DB call here).
+                var category = categoryResolver.Resolve(productSku, productName);
+
                 var transaction = CompensationTransaction.Ingest(
                     tenantId: payload.TenantId,
                     referenceNumber: refNum,
@@ -181,7 +196,10 @@ public sealed class TransactionImportJobHandler(
                     eventId: guid.NewGuid(),
                     externalId: externalIdValue,
                     quantity: quantity,
-                    description: description);
+                    description: description,
+                    productName: productName,
+                    productSku: productSku,
+                    category: category);
 
                 db.CompensationTransactions.Add(transaction);
 

@@ -64,6 +64,19 @@ public sealed class IntegrationsController(
         return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// WI-CRM-CATEGORY: sets (or clears) the HubSpot property whose value feeds a transaction's Category.
+    /// The tenant declares which of their properties holds the category; a blank value turns it off.
+    /// </summary>
+    [HttpPut("category-property")]
+    public async Task<IActionResult> SetCategoryProperty([FromBody] SetCategoryPropertyRequest request, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new SetHubSpotCategoryPropertyCommand(request.PropertyName), cancellationToken);
+        return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
+    }
+
+    public sealed record SetCategoryPropertyRequest(string? PropertyName);
+
     /// <summary>Verification-only: makes one trivial authenticated HubSpot call to confirm the connection works.</summary>
     [HttpPost("ping")]
     public async Task<IActionResult> Ping(CancellationToken cancellationToken)

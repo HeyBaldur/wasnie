@@ -121,6 +121,10 @@ public static class DependencyInjection
         // Single place for the "can I create this transaction?" rule — used by HubSpot/Excel/Manual ingest.
         services.AddScoped<Wasnie.Application.Compensation.Common.ITransactionCreateGuard,
             Wasnie.Application.Compensation.Common.TransactionCreateGuard>();
+        // Enrichment phase (WI-ENRICHMENT): resolves a transaction's Category from the tenant lookup
+        // table. Same "written once, invoked by all three ingest origins" shape as the create guard.
+        services.AddScoped<Wasnie.Application.Compensation.Enrichment.ITransactionEnrichmentService,
+            Wasnie.Application.Compensation.Enrichment.TransactionEnrichmentService>();
         // Single place for the "a CRM deal changed after import — what now?" rule. Used by the manual
         // HubSpot import today and the future polling job (clean architecture; CRM-neutral).
         services.AddScoped<Wasnie.Application.Integrations.Crm.Drift.ICrmDriftPolicy,

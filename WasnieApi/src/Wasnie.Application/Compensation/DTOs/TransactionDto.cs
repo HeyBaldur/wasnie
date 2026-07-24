@@ -19,6 +19,11 @@ public sealed record TransactionDto(
     string? Description = null,
     // The admin's explicit plan attribution, when one was required at ingest.
     Guid? SelectedPlanAssignmentId = null,
+    // What was sold — Description says which sale, these say which product.
+    string? ProductName = null,
+    string? ProductSku = null,
+    // Enrichment output — the resolved category a rule trigger can filter on. Null when unmapped.
+    string? Category = null,
     string? PayeeName = null,
     string? PayeeEmployeeCode = null,
     string? CancelledBy = null,

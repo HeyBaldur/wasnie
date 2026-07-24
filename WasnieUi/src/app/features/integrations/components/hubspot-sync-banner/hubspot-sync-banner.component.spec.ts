@@ -15,6 +15,7 @@ function statusOf(status: HubSpotStatus, lastSyncedAt: string | null): HubSpotCo
     connectedBy: 'owner',
     disconnectedAt: null,
     lastSyncedAt,
+    categoryPropertyName: null,
   };
 }
 

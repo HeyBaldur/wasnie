@@ -80,6 +80,7 @@ public sealed class ExcelImportReimportTests
 
         var handler = new TransactionImportJobHandler(
             db, new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(), validator, creditAlloc,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService(),
             new TransactionCreateGuard(db), NullLogger<TransactionImportJobHandler>.Instance);
 
         var payload = new TransactionImportPayload(

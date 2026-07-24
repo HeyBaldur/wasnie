@@ -44,6 +44,11 @@ public static class Permission
     public const string PayoutsExport = "Payouts.Export";
     public const string PayoutsDeleteDraft = "Payouts.DeleteDraft";
 
+    // Enrichment lookup table (product → category). Routes money by deciding a rule's category filter,
+    // so managed by the same roles that edit plans.
+    public const string CategoryMappingsRead = "CategoryMappings.Read";
+    public const string CategoryMappingsManage = "CategoryMappings.Manage";
+
     public const string ImportsExecute = "Imports.Execute";
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";

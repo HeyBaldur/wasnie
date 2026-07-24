@@ -55,6 +55,7 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<Quota> Quotas => Set<Quota>();
     public Microsoft.EntityFrameworkCore.DbSet<PlanAssignment> PlanAssignments => Set<PlanAssignment>();
     public Microsoft.EntityFrameworkCore.DbSet<CompensationTransaction> CompensationTransactions => Set<CompensationTransaction>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Compensation.Enrichment.CategoryMapping> CategoryMappings => Set<Wasnie.Domain.Compensation.Enrichment.CategoryMapping>();
     public Microsoft.EntityFrameworkCore.DbSet<Credit> Credits => Set<Credit>();
     public Microsoft.EntityFrameworkCore.DbSet<CompensationPayout> CompensationPayouts => Set<CompensationPayout>();
     public Microsoft.EntityFrameworkCore.DbSet<PayRun> PayRuns => Set<PayRun>();
@@ -86,6 +87,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new QuotaConfiguration());
         builder.ApplyConfiguration(new PlanAssignmentConfiguration());
         builder.ApplyConfiguration(new CompensationTransactionConfiguration());
+        builder.ApplyConfiguration(new CategoryMappingConfiguration());
         builder.ApplyConfiguration(new CreditConfiguration());
         builder.ApplyConfiguration(new CompensationPayoutConfiguration());
         builder.ApplyConfiguration(new PayoutLineConfiguration());
@@ -109,6 +111,7 @@ public sealed class ApplicationDbContext(
         builder.Entity<Quota>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<PlanAssignment>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<CompensationTransaction>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Wasnie.Domain.Compensation.Enrichment.CategoryMapping>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Credit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<CompensationPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<PayRun>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

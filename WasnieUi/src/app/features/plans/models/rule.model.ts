@@ -57,6 +57,19 @@ export enum CapScope {
   PerPayeePerPeriod = 2,
 }
 
+/**
+ * A transaction attribute a rule trigger can filter on, as declared by the ENGINE.
+ *
+ * Deliberately not a hardcoded list here: the field picker used to be a free-text box, so a name the
+ * engine could not resolve saved fine and then never matched. `operators` carries only what that
+ * field's evaluator genuinely implements, and `usesSet` marks the ones that read a list (In/NotIn).
+ */
+export interface TriggerField {
+  field: string;
+  valueType: 'String' | 'Number' | 'Boolean' | 'Date';
+  operators: { operator: string; usesSet: boolean }[];
+}
+
 export interface ConditionValue {
   type: ConditionValueType;
   raw: string;

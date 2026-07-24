@@ -20,7 +20,10 @@ public sealed record IngestTransactionCommand(
     // REQUIRED when the payee has 2+ applicable plan assignments: the admin must state which plan
     // this sale belongs to instead of letting the engine tie-break. Ignored (and rejected as
     // unnecessary) when there is no ambiguity. See IngestTransactionHandler.
-    Guid? SelectedPlanAssignmentId = null) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand
+    Guid? SelectedPlanAssignmentId = null,
+    // What was sold. Optional and descriptive — Description says which sale, these say which product.
+    string? ProductName = null,
+    string? ProductSku = null) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand
 {
     public string AuditAction => AuditActions.TransactionIngested;
     public string AuditResourceType => ResourceTypes.Transaction;

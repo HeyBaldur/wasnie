@@ -33,6 +33,18 @@ public sealed class PlansController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// Transaction attributes a rule trigger can filter on, with the operators each one honours.
+    /// The rule builder's field picker is driven by this so it can never offer a field or operator
+    /// the engine ignores.
+    /// </summary>
+    [HttpGet("trigger-fields")]
+    public async Task<IActionResult> TriggerFields(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetTriggerFieldsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpGet("{planId:guid}/multi-plan-payees")]
     public async Task<IActionResult> MultiPlanPayees(Guid planId, CancellationToken cancellationToken)
     {

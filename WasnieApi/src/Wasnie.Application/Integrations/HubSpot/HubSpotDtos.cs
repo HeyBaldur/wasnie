@@ -15,7 +15,9 @@ public sealed record HubSpotConnectionStatusDto(
     string? ConnectedBy,
     DateTimeOffset? DisconnectedAt,
     // Phase 3: when the automatic polling sync last ran successfully for this tenant. Null = never auto-synced.
-    DateTimeOffset? LastSyncedAt = null);
+    DateTimeOffset? LastSyncedAt = null,
+    // WI-CRM-CATEGORY: the HubSpot property the tenant declared feeds Category. Null = not configured.
+    string? CategoryPropertyName = null);
 
 /// <summary>Result of the verification "ping" — non-secret account info proving the token works.</summary>
 public sealed record HubSpotPingResultDto(

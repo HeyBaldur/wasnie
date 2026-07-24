@@ -139,7 +139,13 @@
           </div>
           <div class="credit-detail__dl-row">
             <dt>{{ 'CREDITS.DETAIL.RULE_NAME' | translate }}</dt>
-            <dd>{{ c.ruleName }}</dd>
+            <dd>
+              {{ c.ruleName }}
+              <ws-button variant="ghost" size="sm" (click)="openRule()">
+                <app-icon name="external-link" [size]="13" />
+                {{ 'CREDITS.DETAIL.VIEW_RULE' | translate }}
+              </ws-button>
+            </dd>
           </div>
         </dl>
       </ws-card>

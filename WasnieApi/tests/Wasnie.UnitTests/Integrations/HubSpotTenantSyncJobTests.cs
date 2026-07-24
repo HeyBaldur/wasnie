@@ -57,7 +57,8 @@ public sealed class HubSpotTenantSyncJobTests
         var resolver = new CrmOwnerResolver(db, clock, guid, currentUser);
         var createGuard = new Wasnie.Application.Compensation.Common.TransactionCreateGuard(db);
         var driftPolicy = new CrmDriftPolicy(db, guid);
-        var reconciler = new CrmDealReconciler(db, guid, resolver, createGuard, driftPolicy);
+        var reconciler = new CrmDealReconciler(db, guid, resolver, createGuard, driftPolicy,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService());
 
         var job = new HubSpotTenantSyncJob(
             tenantCtx, db, dealSource, reconciler, clock, NullLogger<HubSpotTenantSyncJob>.Instance);
