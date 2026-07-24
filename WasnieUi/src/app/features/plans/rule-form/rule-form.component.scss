@@ -162,6 +162,26 @@
   &--sm { padding: var(--space-1) var(--space-2); font-size: var(--font-size-13); }
 }
 
+/* A condition's free-text value must match the field/operator selects exactly (same height, padding,
+   radius and focus) — the value column reads as one row of identical controls, not a shrunken input. */
+.condition-value-input {
+  width: 100%;
+  height: var(--height-control-md);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-14);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  &::placeholder { color: var(--color-text-placeholder); }
+  &:focus { border-color: var(--color-border-focus); box-shadow: var(--shadow-focus); }
+  &:read-only { opacity: 0.55; }
+}
+
 .tier-table {
   @apply flex flex-col gap-2;
 
@@ -333,4 +353,51 @@
   font-size: var(--font-size-12);
   color: var(--color-warning);
   line-height: 1.4;
+}
+
+/* Category extras (escape-hatch toggle, empty-list hint, unknown-value warning) align UNDER the value
+   column of the condition grid, left-aligned — not centered across the row. */
+.condition-extras {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 28px;
+  gap: var(--space-2);
+  margin-top: calc(var(--space-1) * -1);
+  margin-bottom: var(--space-1);
+}
+
+.condition-extras__value {
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  // Sit the toggle/warning just inside the value control's box edge so they line up with the field's
+  // content, not poking out to the left of it.
+  padding-left: var(--space-2);
+}
+
+/* Escape-hatch toggle between the category list and free text. */
+.condition-value-toggle {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--font-size-12);
+  color: var(--color-brand);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover { color: var(--color-brand-hover); }
+}
+
+/* Shown when the tenant has no categories yet — the admin still writes the rule via free text. */
+.condition-hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  line-height: 1.4;
+}
+
+/* When inside the value column, the field-value warning drops its negative offset. */
+.condition-extras__value .condition-warning {
+  margin: 0;
 }

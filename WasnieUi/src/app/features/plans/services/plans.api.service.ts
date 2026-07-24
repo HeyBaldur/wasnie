@@ -83,6 +83,11 @@ export class PlansApiService {
     return this.http.get<TriggerField[]>(`${this.base}/trigger-fields`);
   }
 
+  /** Distinct category values that exist for the tenant — the choices for a condition on `category`. */
+  getCategoryValues(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/category-values`);
+  }
+
   getMultiPlanPayees(planId: string): Observable<MultiPlanPayees> {
     return this.http.get<MultiPlanPayees>(`${this.base}/${planId}/multi-plan-payees`);
   }

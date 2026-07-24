@@ -454,6 +454,22 @@ public sealed class TransactionReadEndpointsTests : IAsyncLifetime
         bodyA.Items.Should().Contain(t => t.PayeeName == "Alpha Payee");
     }
 
+    // Regression: the detail screen showed "Unassigned" for a transaction the list showed as assigned,
+    // because get-by-id returned PayeeId but not the enriched PayeeName/Code the list resolves.
+    [Fact]
+    public async Task GetById_ReturnsPayeeNameAndCode_ForTransactionWithPayee()
+    {
+        var created = await CreateTransactionAsync(_clientA, _payeeAId, "TXN-GBY-NAME-001", 500m);
+
+        var response = await _clientA.GetAsync($"/api/transactions/{created.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<TransactionResponse>();
+        body!.PayeeId.Should().Be(_payeeAId);
+        body.PayeeName.Should().Be("Alpha Payee");
+        body.PayeeEmployeeCode.Should().Be("PA001");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task<TransactionResponse> CreateTransactionAsync(

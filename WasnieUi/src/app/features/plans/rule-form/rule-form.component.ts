@@ -125,6 +125,19 @@ export class RuleFormComponent implements OnInit {
   // that saved cleanly and then silently never fired.
   readonly triggerFields = signal<TriggerField[]>([]);
 
+  // ── Category values ───────────────────────────────────────────────────────────────────────
+  // A condition on `category` picks its value from the tenant's real categories rather than free text,
+  // so a typo ("Laptps") can no longer save a rule that silently never fires. The list is short and
+  // stable by design (one per business line), which is exactly why a picker is viable.
+  readonly CATEGORY_FIELD = 'category';
+  readonly categoryValues = signal<string[]>([]);
+  readonly categoryValuesLoaded = signal(false);
+
+  /** The tenant's categories as select options (value === label — category names aren't i18n keys). */
+  readonly categoryOptions = computed<SelectOption[]>(() =>
+    this.categoryValues().map(c => ({ value: c, label: c }))
+  );
+
   readonly fieldOptions = computed<SelectOption[]>(() =>
     this.triggerFields().map(f => ({
       // Labels stay translatable; the LIST is the backend's.
@@ -168,6 +181,76 @@ export class RuleFormComponent implements OnInit {
     return this.triggerFields().find(f => f.field.toLowerCase() === field.toLowerCase());
   }
 
+  // ── Category value picker ─────────────────────────────────────────────────────────────────
+  // Only the `category` field is affected; every other field keeps its existing value input.
+
+  isCategoryField(index: number): boolean {
+    return this.fieldValueAt(index).toLowerCase() === this.CATEGORY_FIELD;
+  }
+
+  customValueAt(index: number): boolean {
+    return !!this.conditionsArray.at(index).get('customValue')?.value;
+  }
+
+  valueRawAt(index: number): string {
+    return this.conditionsArray.at(index).get('valueRaw')?.value ?? '';
+  }
+
+  valueSetAt(index: number): string {
+    return this.conditionsArray.at(index).get('valueSet')?.value ?? '';
+  }
+
+  private _parseSet(csv: string): string[] {
+    return String(csv ?? '').split(',').map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  /** True when the value is edited by picking from the category list rather than typing. */
+  useCategoryPicker(index: number): boolean {
+    return this.isCategoryField(index)
+      && !this.customValueAt(index)
+      && this.categoryValues().length > 0;
+  }
+
+  /** Escape hatch (B): flip a category condition between the picker and free text, explicitly. */
+  toggleCustomValue(index: number): void {
+    const ctrl = this.conditionsArray.at(index).get('customValue');
+    ctrl?.setValue(!ctrl.value);
+  }
+
+  /**
+   * A category condition whose value is not among the tenant's categories — it can never match, exactly
+   * the silent typo this WI exists to surface. Only judged once the list has loaded and is non-empty.
+   */
+  categoryValueUnknown(index: number): boolean {
+    if (!this.isCategoryField(index) || this.categoryValues().length === 0) return false;
+    const known = new Set(this.categoryValues().map(c => c.toLowerCase()));
+    if (this.usesSet(index)) {
+      const set = this._parseSet(this.valueSetAt(index));
+      return set.length > 0 && set.some(s => !known.has(s.toLowerCase()));
+    }
+    const raw = this.valueRawAt(index).trim();
+    return raw.length > 0 && !known.has(raw.toLowerCase());
+  }
+
+  /** No categories exist yet (new/un-synced tenant): the admin still writes the rule via free text. */
+  categoryListEmpty(index: number): boolean {
+    return this.isCategoryField(index) && this.categoryValuesLoaded() && this.categoryValues().length === 0;
+  }
+
+  /**
+   * Once the category list is known, force free-text mode for any stored condition whose value does not
+   * match — so the value stays VISIBLE (never hidden behind an empty picker) alongside its warning, and
+   * is never rewritten. Safe to run whenever either the list or the rule finishes loading.
+   */
+  private _reconcileCategoryModes(): void {
+    if (this.categoryValues().length === 0) return;
+    this.conditionsArray.controls.forEach((_, i) => {
+      if (this.isCategoryField(i) && this.categoryValueUnknown(i)) {
+        this.conditionsArray.at(i).get('customValue')?.setValue(true, { emitEvent: false });
+      }
+    });
+  }
+
   /** Keeps valueType aligned with the picked field, so numeric/date comparisons use the right
    *  evaluator. Previously every condition was saved as String, which is why ordering operators
    *  never matched. */
@@ -186,6 +269,14 @@ export class RuleFormComponent implements OnInit {
     );
     if (!allowed.includes(Number(group.get('operator')?.value))) {
       group.get('operator')?.setValue(allowed[0]);
+    }
+
+    // Switching TO category starts the value fresh in picker mode: a leftover value from the previous
+    // field (e.g. a product SKU) would otherwise be an unknown category and silently never match.
+    if (this.fieldValueAt(index).toLowerCase() === this.CATEGORY_FIELD) {
+      group.get('valueRaw')?.setValue('');
+      group.get('valueSet')?.setValue('');
+      group.get('customValue')?.setValue(false);
     }
   }
 
@@ -260,6 +351,18 @@ export class RuleFormComponent implements OnInit {
     this.plansApi.getTriggerFields().subscribe({
       next: fields => this.triggerFields.set(fields),
       error: () => this.triggerFields.set([]),
+    });
+
+    // The category picker's choices. Arrives independently of the rule load, so reconcile once it lands
+    // (the rule may already be on screen). A failure leaves the list empty → free-text fallback, so the
+    // admin is never blocked.
+    this.plansApi.getCategoryValues().subscribe({
+      next: values => {
+        this.categoryValues.set(values);
+        this.categoryValuesLoaded.set(true);
+        this._reconcileCategoryModes();
+      },
+      error: () => this.categoryValuesLoaded.set(true),
     });
 
     // When the user switches to Units mode, force rate table to Flat (only supported combination).
@@ -357,10 +460,14 @@ export class RuleFormComponent implements OnInit {
             valueRaw: [c.value.raw],
             // Stored as a list; edited as comma-separated text.
             valueSet: [(c.value.set ?? []).join(', ')],
+            customValue: [false],
           })
         );
         this._wireFieldChange(this.conditionsArray.length - 1);
       });
+      // If the category list already loaded, drop unknown-valued category conditions to free text so
+      // their value stays visible next to the warning (and is never rewritten).
+      this._reconcileCategoryModes();
     }
 
     if (rule.modifier) {
@@ -410,6 +517,8 @@ export class RuleFormComponent implements OnInit {
         valueType: [ConditionValueType.String],
         valueRaw: [''],
         valueSet: [''],
+        // Category only: false = pick from the list, true = the explicit "use another value" escape hatch.
+        customValue: [false],
       })
     );
     this._wireFieldChange(this.conditionsArray.length - 1);

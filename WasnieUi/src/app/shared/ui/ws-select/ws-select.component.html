@@ -14,8 +14,17 @@
     (focus)="isFocused.set(true)"
     (blur)="isFocused.set(false)"
   >
-    <span class="ws-select__value" [class.ws-select__value--placeholder]="!selectedOption()">
-      @if (selectedOption()) {
+    <span
+      class="ws-select__value"
+      [class.ws-select__value--placeholder]="multiple() ? selectedValues().length === 0 : !selectedOption()"
+    >
+      @if (multiple()) {
+        @if (selectedValues().length > 0) {
+          <span class="ws-select__option-label">{{ multiLabel() }}</span>
+        } @else {
+          {{ placeholder() | translate }}
+        }
+      } @else if (selectedOption()) {
         <span class="ws-select__option-label">{{ selectedOption()!.label | translate }}</span>
         @if (selectedOption()!.badge) {
           <ws-badge [variant]="selectedOption()!.badge!.variant" size="sm">
@@ -62,11 +71,11 @@
         @for (opt of filteredOptions(); track opt.value; let i = $index) {
           <div
             class="ws-select__option"
-            [class.ws-select__option--selected]="value() === opt.value"
+            [class.ws-select__option--selected]="isOptionSelected(opt)"
             [class.ws-select__option--active]="activeIndex() === i"
             [class.ws-select__option--disabled]="opt.disabled"
             role="option"
-            [attr.aria-selected]="value() === opt.value"
+            [attr.aria-selected]="isOptionSelected(opt)"
             (click)="select(opt); $event.stopPropagation()"
             (mouseenter)="activeIndex.set(i)"
           >
@@ -74,7 +83,7 @@
             @if (opt.badge) {
               <ws-badge [variant]="opt.badge.variant" size="sm">{{ opt.badge.text | translate }}</ws-badge>
             }
-            @if (value() === opt.value) {
+            @if (isOptionSelected(opt)) {
               <app-icon name="check-circle" [size]="14" class="ws-select__check" />
             }
           </div>

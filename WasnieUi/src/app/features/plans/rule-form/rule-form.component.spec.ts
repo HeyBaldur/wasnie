@@ -4,7 +4,7 @@ import { ActivatedRoute, provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { signal } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { RuleFormComponent } from './rule-form.component';
 import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
@@ -411,5 +411,167 @@ describe('RuleFormComponent — enum rehydration from string API values', () => 
     tick();
 
     expect(comp.form.get('rateTable.splitAtQuota')?.value).toBe(true);
+  }));
+});
+
+// ---------------------------------------------------------------------------
+// Category value picker (WI — condition value on `category` is chosen, not typed)
+// ---------------------------------------------------------------------------
+
+describe('RuleFormComponent — category value picker', () => {
+  const CATEGORY_FIELD_DEF = {
+    field: 'category',
+    valueType: 'String',
+    operators: [
+      { operator: 'Equal', usesSet: false },
+      { operator: 'NotEqual', usesSet: false },
+      { operator: 'In', usesSet: true },
+      { operator: 'NotIn', usesSet: true },
+    ],
+  };
+  const SKU_FIELD_DEF = {
+    field: 'productsku',
+    valueType: 'String',
+    operators: [
+      { operator: 'Equal', usesSet: false },
+      { operator: 'In', usesSet: true },
+    ],
+  };
+
+  let httpMock: HttpTestingController;
+
+  function setup(plan: Plan, ruleId: string | null): RuleFormComponent {
+    const planSignal = signal<Plan | null>(plan);
+    TestBed.configureTestingModule({
+      imports: [RuleFormComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: PlansStore,
+          useValue: {
+            selectedPlan: planSignal as unknown as PlansStore['selectedPlan'],
+            loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()),
+          },
+        },
+        { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: (k: string) => k === 'planId' ? PLAN_ID : k === 'ruleId' ? ruleId : null },
+            },
+          },
+        },
+      ],
+    });
+    TestBed.overrideComponent(RuleFormComponent, {
+      set: { imports: [ReactiveFormsModule, TranslateModule], template: `<form [formGroup]="form"></form>` },
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    return TestBed.createComponent(RuleFormComponent).componentInstance;
+  }
+
+  /** Flush the two catalog requests ngOnInit fires. Categories default to the tenant's three. */
+  function flushCatalogs(categories: string[] = ['Laptops', 'Servers', 'Calculators']): void {
+    httpMock.expectOne('/api/plans/trigger-fields').flush([CATEGORY_FIELD_DEF, SKU_FIELD_DEF]);
+    httpMock.expectOne('/api/plans/category-values').flush(categories);
+  }
+
+  afterEach(() => {
+    httpMock.verify();
+    TestBed.resetTestingModule();
+  });
+
+  // (a) A condition on `category` uses the picker, not a free-text input.
+  it('uses the category picker (not free text) for a condition on category', fakeAsync(() => {
+    const comp = setup(makePlan(makeApiRule()), null);
+    comp.ngOnInit();
+    tick();
+    flushCatalogs();
+
+    comp.addCondition();
+    comp.conditionsArray.at(0).get('field')?.setValue('category');
+    tick();
+
+    expect(comp.isCategoryField(0)).toBeTrue();
+    expect(comp.useCategoryPicker(0)).toBeTrue();   // → chips render
+    expect(comp.customValueAt(0)).toBeFalse();       // → not free text by default
+  }));
+
+  // (e — no regression) A non-category field keeps its existing free-text input.
+  it('does NOT use the picker for a non-category field (productsku)', fakeAsync(() => {
+    const comp = setup(makePlan(makeApiRule()), null);
+    comp.ngOnInit();
+    tick();
+    flushCatalogs();
+
+    comp.addCondition();
+    comp.conditionsArray.at(0).get('field')?.setValue('productsku');
+    tick();
+
+    expect(comp.isCategoryField(0)).toBeFalse();
+    expect(comp.useCategoryPicker(0)).toBeFalse();   // → existing input path
+  }));
+
+  // (b) With In, the value is a multi-select picker (bound to the CSV `valueSet` the form submits).
+  it('shows the multi-select category picker when the operator is In', fakeAsync(() => {
+    const comp = setup(makePlan(makeApiRule()), null);
+    comp.ngOnInit();
+    tick();
+    flushCatalogs();
+
+    comp.addCondition();
+    comp.conditionsArray.at(0).get('field')?.setValue('category');
+    comp.conditionsArray.at(0).get('operator')?.setValue(6); // In
+    tick();
+
+    expect(comp.usesSet(0)).toBeTrue();          // → ws-select [multiple] path renders
+    expect(comp.useCategoryPicker(0)).toBeTrue();
+    expect(comp.categoryOptions().map(o => o.value)).toEqual(['Laptops', 'Servers', 'Calculators']);
+
+    // The picker writes the CSV set the form submits; a stored set round-trips unchanged.
+    comp.conditionsArray.at(0).get('valueSet')?.setValue('Laptops, Calculators');
+    expect(comp.categoryValueUnknown(0)).toBeFalse();   // both are real categories
+  }));
+
+  // (c) A saved value that matches no category is shown with a warning, kept, and not rewritten.
+  it('flags a saved category value that matches nothing, without deleting it', fakeAsync(() => {
+    const typoRule = makeApiRule({
+      trigger: {
+        _schema: 1 as const,
+        logicalOperator: 'And' as unknown as never,
+        conditions: [
+          { field: 'category', operator: 'Equal' as unknown as never, value: { type: 'String' as unknown as never, raw: 'Laptps', set: null } },
+        ],
+      },
+    });
+    const comp = setup(makePlan(typoRule), RULE_ID);
+    comp.ngOnInit();
+    tick();              // loadPromise → _loadExistingRule pushes the condition
+    flushCatalogs();     // categories arrive → reconcile runs
+    tick();
+
+    expect(comp.categoryValueUnknown(0)).toBeTrue();     // warning shown
+    expect(comp.valueRawAt(0)).toBe('Laptps');           // value preserved, never rewritten
+    expect(comp.customValueAt(0)).toBeTrue();            // dropped to free text so it stays visible
+  }));
+
+  // (d) With no categories yet, the picker is off and the admin can still type a value (escape hatch).
+  it('lets the admin type a value when there are no categories yet', fakeAsync(() => {
+    const comp = setup(makePlan(makeApiRule()), null);
+    comp.ngOnInit();
+    tick();
+    flushCatalogs([]);   // empty tenant / not synced
+
+    comp.addCondition();
+    comp.conditionsArray.at(0).get('field')?.setValue('category');
+    tick();
+
+    expect(comp.categoryListEmpty(0)).toBeTrue();
+    expect(comp.useCategoryPicker(0)).toBeFalse();       // free text, not blocked
+    comp.conditionsArray.at(0).get('valueRaw')?.setValue('Laptops');
+    expect(comp.valueRawAt(0)).toBe('Laptops');
   }));
 });

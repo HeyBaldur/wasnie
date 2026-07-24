@@ -47,6 +47,10 @@ export class WsSelectComponent implements ControlValueAccessor {
   readonly options = input<SelectOption[]>([]);
   readonly placeholder = input('');
   readonly searchable = input(false);
+
+  // Multi-select mode. The control value stays a COMMA-SEPARATED STRING (not an array) so the same
+  // reactive-forms binding and CSV consumers work unchanged; single-select behaviour is untouched.
+  readonly multiple = input(false);
   readonly label = input('');
   readonly error = input('');
   readonly noResultsLabel = input('COMMON.NO_RESULTS');
@@ -102,6 +106,33 @@ export class WsSelectComponent implements ControlValueAccessor {
     }
     return this.options().find(o => o.value === v) ?? null;
   });
+
+  // ── Multi-select ─────────────────────────────────────────────────────────────────────────
+  // The selected values, parsed from the CSV control value. Comparison is case-insensitive so a stored
+  // value keeps matching its option regardless of casing.
+  readonly selectedValues = computed<string[]>(() =>
+    this.multiple()
+      ? String(this.value() ?? '').split(',').map(s => s.trim()).filter(s => s.length > 0)
+      : []
+  );
+
+  /** Trigger text in multi mode: each selected value shown by its option label (translated) or as-is. */
+  readonly multiLabel = computed(() => {
+    const opts = this.options();
+    return this.selectedValues()
+      .map(v => {
+        const o = opts.find(op => String(op.value).toLowerCase() === v.toLowerCase());
+        return o ? this._translate.instant(String(o.label)) : v;
+      })
+      .join(', ');
+  });
+
+  isOptionSelected(opt: SelectOption): boolean {
+    if (this.multiple()) {
+      return this.selectedValues().some(v => v.toLowerCase() === String(opt.value).toLowerCase());
+    }
+    return this.value() === opt.value;
+  }
 
   // In async mode, the server already filtered — return asyncOptions as-is (no client-side filter).
   // In client-side mode, filter against the TRANSLATED label, normalizing diacritics so "espana"
@@ -221,6 +252,19 @@ export class WsSelectComponent implements ControlValueAccessor {
 
   select(option: SelectOption): void {
     if (option.disabled) return;
+    if (this.multiple()) {
+      // Toggle membership and keep the dropdown open so several values can be picked in one go.
+      const val = String(option.value);
+      const current = this.selectedValues();
+      const exists = current.some(v => v.toLowerCase() === val.toLowerCase());
+      const next = exists
+        ? current.filter(v => v.toLowerCase() !== val.toLowerCase())
+        : [...current, val];
+      const csv = next.join(', ');
+      this.value.set(csv);
+      this.onChange(csv);
+      return;
+    }
     this.value.set(option.value);
     this.onChange(option.value);
     this.closeDropdown();

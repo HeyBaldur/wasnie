@@ -184,4 +184,53 @@ describe('WsSelectComponent', () => {
     expect(fixture.nativeElement.querySelector('.ws-select__loading')).toBeNull();
     expect(fixture.nativeElement.querySelector('.ws-select__empty')).toBeTruthy();
   }));
+
+  // --- Multi-select mode (value stays a comma-separated string) ---
+
+  it('multiple: select() toggles membership in the CSV value and keeps the dropdown open', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.componentRef.setInput('multiple', true);
+    fixture.detectChanges();
+    const changes: (string | number)[] = [];
+    comp.registerOnChange(v => changes.push(v));
+    comp.openDropdown();
+
+    comp.select(OPTIONS[0]); // a
+    comp.select(OPTIONS[1]); // b
+    expect(comp.value()).toBe('a, b');
+    expect(comp.selectedValues()).toEqual(['a', 'b']);
+    expect(comp.isOpen()).toBeTrue();          // stays open for further picks
+
+    comp.select(OPTIONS[0]); // toggle a off
+    expect(comp.value()).toBe('b');
+    expect(changes.at(-1)).toBe('b');
+  });
+
+  it('multiple: isOptionSelected reflects CSV membership (case-insensitive)', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.componentRef.setInput('multiple', true);
+    fixture.detectChanges();
+    comp.writeValue('A, b');
+    expect(comp.isOptionSelected(OPTIONS[0])).toBeTrue();  // 'a' matches 'A'
+    expect(comp.isOptionSelected(OPTIONS[1])).toBeTrue();
+    expect(comp.isOptionSelected(OPTIONS[2])).toBeFalse();
+  });
+
+  it('multiple: multiLabel joins the selected option labels', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.componentRef.setInput('multiple', true);
+    fixture.detectChanges();
+    comp.writeValue('a, b');
+    expect(comp.multiLabel()).toBe('Alpha, Beta');
+  });
+
+  it('single mode is unaffected: selectedValues is empty and select still closes', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.detectChanges();
+    comp.openDropdown();
+    expect(comp.selectedValues()).toEqual([]);
+    comp.select(OPTIONS[1]);
+    expect(comp.value()).toBe('b');
+    expect(comp.isOpen()).toBeFalse();
+  });
 });
