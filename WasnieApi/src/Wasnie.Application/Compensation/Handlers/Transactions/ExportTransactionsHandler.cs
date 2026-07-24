@@ -29,10 +29,15 @@ public sealed class ExportTransactionsHandler(
         // Apply the same filter predicates as ListTransactionsHandler.
         // (shared predicate helper deferred; duplication is acceptable at current scale.)
 
+        // Mirror ListTransactionsHandler exactly: the text search matches ReferenceNumber OR deal name
+        // (Description). The export exports the FILTERED set, so this MUST stay in lockstep with the list
+        // or the file would omit rows the user sees (or vice versa).
         if (!string.IsNullOrWhiteSpace(p.Reference))
         {
-            var refLower = p.Reference.Trim().ToLower();
-            query = query.Where(t => t.ReferenceNumber.ToLower().Contains(refLower));
+            var term = p.Reference.Trim().ToLower();
+            query = query.Where(t =>
+                t.ReferenceNumber.ToLower().Contains(term) ||
+                (t.Description != null && t.Description.ToLower().Contains(term)));
         }
 
         if (!string.IsNullOrWhiteSpace(p.Statuses))

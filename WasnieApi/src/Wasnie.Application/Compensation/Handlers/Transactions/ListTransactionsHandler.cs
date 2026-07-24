@@ -65,10 +65,17 @@ public sealed class ListTransactionsHandler(
 
         // ── Extended filters (WI-PROD-I.2) ─────────────────────────────────────
 
+        // Text search: the same input matches ReferenceNumber OR the deal name (Description). Case-
+        // insensitive via ToLower (same mechanism as before); Description is nullable, so the null-guard
+        // keeps a row without a deal name from matching (never throws). Scope is Reference + Description
+        // only — NOT ProductName/Sku/Category/Payee (deliberate, per WI). ExportTransactionsHandler mirrors
+        // this exact predicate so the Excel export of the filtered set stays consistent.
         if (!string.IsNullOrWhiteSpace(p.Reference))
         {
-            var refLower = p.Reference.Trim().ToLower();
-            query = query.Where(t => t.ReferenceNumber.ToLower().Contains(refLower));
+            var term = p.Reference.Trim().ToLower();
+            query = query.Where(t =>
+                t.ReferenceNumber.ToLower().Contains(term) ||
+                (t.Description != null && t.Description.ToLower().Contains(term)));
         }
 
         if (!string.IsNullOrWhiteSpace(p.Statuses))

@@ -972,8 +972,8 @@
     "FILTER": {
       "TITLE": "Filtry",
       "CLEAR": "Wyczyść wszystko",
-      "REFERENCE": "Referencja",
-      "REFERENCE_PLACEHOLDER": "Szukaj po referencji…",
+      "REFERENCE": "Referencja lub nazwa transakcji",
+      "REFERENCE_PLACEHOLDER": "Szukaj po referencji lub nazwie transakcji…",
       "STATUS": "Status",
       "PAYEE": "Sprzedawca",
       "PAYEE_PLACEHOLDER": "Szukaj sprzedawcy…",

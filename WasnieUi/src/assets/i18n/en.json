@@ -1142,8 +1142,8 @@
     "FILTER": {
       "TITLE": "Filters",
       "CLEAR": "Clear all",
-      "REFERENCE": "Reference",
-      "REFERENCE_PLACEHOLDER": "Search by reference…",
+      "REFERENCE": "Reference or deal name",
+      "REFERENCE_PLACEHOLDER": "Search by reference or deal name…",
       "STATUS": "Status",
       "PAYEE": "Payee",
       "PAYEE_PLACEHOLDER": "Search payee…",

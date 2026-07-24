@@ -972,8 +972,8 @@
     "FILTER": {
       "TITLE": "Filtros",
       "CLEAR": "Limpiar todo",
-      "REFERENCE": "Referencia",
-      "REFERENCE_PLACEHOLDER": "Buscar por referencia…",
+      "REFERENCE": "Referencia o nombre del deal",
+      "REFERENCE_PLACEHOLDER": "Buscar por referencia o nombre del deal…",
       "STATUS": "Estado",
       "PAYEE": "Vendedor",
       "PAYEE_PLACEHOLDER": "Buscar vendedor…",
