@@ -488,10 +488,12 @@ public sealed class GetDashboardSummaryHandler(
         return raw.Select(p => (p.Amount, p.Currency)).ToList();
     }
 
-    // ── Avg quota attainment — anti-Cartesian ─────────────────────────────────
-    // Doc 15 invariant: credits joined to transactions is 1:1 (Credit.TransactionId FK).
-    // We load quotas and all relevant credits in two separate queries; matching is in-memory.
-    // This avoids any join that could multiply rows across the quota-credit relationship.
+    // ── Avg quota attainment ──────────────────────────────────────────────────
+    // Achieved is the same DISTINCT-sale definition as QuotaAchievedQuery (the shared source of truth):
+    // Step 3 lets several rules credit one sale, so summing credits double-counts. That canonical query is
+    // per-(payee,plan) and would be an N+1 here — this handler iterates EVERY active quota in the tenant —
+    // so we keep the single bulk load and dedup in-memory by transaction id (GroupBy TxId → count each sale
+    // once). If the dedup rule ever changes, change QuotaAchievedQuery AND this block together.
     private async Task<decimal?> ComputeAvgAttainmentAsync(
         DateOnly? from, DateOnly? to, CancellationToken ct)
     {
@@ -514,8 +516,8 @@ public sealed class GetDashboardSummaryHandler(
 
         if (quotas.Count == 0) return null;
 
-        // Load all non-superseded credits with their transaction dates and amounts in one query.
-        // No quota join here — matching is done in-memory below (no Cartesian risk).
+        // Load all non-superseded credits with their transaction id/date/amount in one query. TxId lets us
+        // dedup below so a multi-rule sale counts once. No quota join here (matching is in-memory).
         var allCredits = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
@@ -524,6 +526,7 @@ public sealed class GetDashboardSummaryHandler(
             {
                 c.PayeeId,
                 c.PlanId,
+                TxId = t.Id,
                 TxAmount = t.Amount.Amount,
                 Currency = t.Amount.Currency,
                 Quantity = t.Quantity,
@@ -540,7 +543,8 @@ public sealed class GetDashboardSummaryHandler(
                 achieved = allCredits
                     .Where(c => c.PayeeId == q.PayeeId && c.PlanId == q.PlanId
                                 && c.TransactionDate >= q.Start && c.TransactionDate <= q.End)
-                    .Sum(c => (decimal)c.Quantity);
+                    .GroupBy(c => c.TxId)
+                    .Sum(g => (decimal)g.First().Quantity);
             }
             else
             {
@@ -548,7 +552,8 @@ public sealed class GetDashboardSummaryHandler(
                     .Where(c => c.PayeeId == q.PayeeId && c.PlanId == q.PlanId
                                 && c.Currency == q.Currency
                                 && c.TransactionDate >= q.Start && c.TransactionDate <= q.End)
-                    .Sum(c => c.TxAmount);
+                    .GroupBy(c => c.TxId)
+                    .Sum(g => g.First().TxAmount);
             }
 
             if (q.Target > 0m)

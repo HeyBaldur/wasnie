@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payees;
 using Wasnie.Domain.Authorization;
@@ -44,22 +45,6 @@ public sealed class GetPayeeDashboardHandler(
             (!rangeTo.HasValue || q.Period.Start <= rangeTo.Value))
             .ToList();
 
-        // ── Load all non-superseded credits for this payee ───────────────────
-        // No period filter here — attainment is computed against each quota's own period boundaries.
-        // TxAmount = gross transaction revenue (Sales Quota semantic, not commission).
-        var allCredits = await (
-            from c in db.Credits
-            join t in db.CompensationTransactions on c.TransactionId equals t.Id
-            where c.PayeeId == payeeId && c.SupersededAt == null
-            select new
-            {
-                c.PlanId,
-                TxAmount = t.Amount.Amount,
-                Currency = t.Amount.Currency,
-                t.TransactionDate
-            }
-        ).ToListAsync(cancellationToken);
-
         // ── Load plan names + currencies for quotas ───────────────────────────
         var planIds = quotas.Select(q => q.PlanId).Distinct().ToList();
         var planInfoById = planIds.Count > 0
@@ -81,21 +66,12 @@ public sealed class GetPayeeDashboardHandler(
             var planCurrency = planInfo.Currency;
             var isCurrencyValid = string.Equals(quota.Amount.Currency, planCurrency, StringComparison.OrdinalIgnoreCase);
 
-            decimal achieved;
-            if (quota.MeasurementType == QuotaMeasurementType.Units)
-            {
-                achieved = await ComputeUnitsAchievedAsync(payeeId, pId, start, end, cancellationToken);
-            }
-            else
-            {
-                var quotaCurrency = quota.Amount.Currency;
-                achieved = allCredits
-                    .Where(r => r.PlanId == pId &&
-                                r.Currency == quotaCurrency &&
-                                r.TransactionDate >= start &&
-                                r.TransactionDate <= end)
-                    .Sum(r => r.TxAmount);
-            }
+            // Deduped achieved via the shared QuotaAchievedQuery — the SAME number the motor computes, so
+            // the card can't drift back to the per-credit double count (the 671%-vs-336% bug). One EXISTS
+            // query per quota; a payee has few quotas, so no meaningful N+1.
+            var achieved = quota.MeasurementType == QuotaMeasurementType.Units
+                ? await QuotaAchievedQuery.UnitsAsync(db, payeeId, pId, start, end, cancellationToken)
+                : await QuotaAchievedQuery.RevenueAsync(db, payeeId, pId, start, end, quota.Amount.Currency, cancellationToken);
 
             var attainment = AttainmentPercentage.FromAchievedAndTarget(achieved, quota.Amount.Amount);
             attainmentItems.Add(new QuotaAttainmentDto(
@@ -116,17 +92,18 @@ public sealed class GetPayeeDashboardHandler(
         }
 
         // ── Card 2: Sales trend (last 12 months, not affected by period filter) ──
-        // Uses Transaction.Amount (gross sales) to match the Sales Quota semantic.
-        // Credit serves as the plan-routing oracle; bars represent sales generated, not commission earned.
+        // Uses Transaction.Amount (gross sales) to match the Sales Quota semantic. Bars represent sales
+        // generated, not commission earned. Same dedup as attainment: a sale credited by several rules is
+        // still ONE sale, so we query the distinct transactions (EXISTS over the payee's live credits)
+        // rather than joining Credits→Tx, which would double a multi-rule sale in the bars too.
         var trendCutoff = today.AddMonths(-12);
-        var allCreditsForTrend = await (
-            from c in db.Credits
-            join t in db.CompensationTransactions on c.TransactionId equals t.Id
-            where c.PayeeId == payeeId && c.SupersededAt == null && t.TransactionDate >= trendCutoff
-            select new { Amount = t.Amount.Amount, Currency = t.Amount.Currency, t.TransactionDate }
-        ).ToListAsync(cancellationToken);
+        var salesForTrend = await db.CompensationTransactions
+            .Where(t => t.TransactionDate >= trendCutoff &&
+                        db.Credits.Any(c => c.TransactionId == t.Id && c.PayeeId == payeeId && c.SupersededAt == null))
+            .Select(t => new { Amount = t.Amount.Amount, Currency = t.Amount.Currency, t.TransactionDate })
+            .ToListAsync(cancellationToken);
 
-        var trend = allCreditsForTrend
+        var trend = salesForTrend
             .GroupBy(r => new { r.TransactionDate.Year, r.TransactionDate.Month, r.Currency })
             .Select(g => new SalesTrendPointDto(
                 Year: g.Key.Year,
@@ -143,19 +120,5 @@ public sealed class GetPayeeDashboardHandler(
             trend,
             Array.Empty<QuotaSummaryDto>(),
             Array.Empty<PlanAssignmentSummaryDto>()));
-    }
-
-    private async Task<decimal> ComputeUnitsAchievedAsync(
-        Guid payeeId, Guid planId, DateOnly start, DateOnly end, CancellationToken ct)
-    {
-        var quantities = await (
-            from c in db.Credits
-            join t in db.CompensationTransactions on c.TransactionId equals t.Id
-            where c.PayeeId == payeeId && c.PlanId == planId
-               && c.SupersededAt == null
-               && t.TransactionDate >= start && t.TransactionDate <= end
-            select t.Quantity
-        ).ToListAsync(ct);
-        return quantities.Sum();
     }
 }

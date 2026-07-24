@@ -223,6 +223,49 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
         junePoint.Currency.Should().Be("EUR");
     }
 
+    // Dedup regression: the card endpoint must count a sale ONCE even when two rules of the plan each
+    // credit it (Step 3). Before this fix the dashboard summed credits and doubled the achieved/attainment.
+    [Fact]
+    public async Task GetDashboard_TwoRulesCreditingOneSale_AttainmentCountsSaleOnce()
+    {
+        var payeeId = await CreatePayeeAsync("EMP-DEDUP-001");
+        var planId = await CreateActivePlanWithTwoRulesAsync("EUR");     // two always-fire flat rules
+        await CreateAssignmentAsync(payeeId, planId);
+        await CreateAndActivateQuotaAsync(payeeId, planId);              // target €50,000 EUR, 2026 period
+
+        // One €10,000 sale.
+        (await _clientA.PostAsJsonAsync("/api/transactions", new
+        {
+            payeeId, referenceNumber = "DEDUP-REF-001",
+            amount = 10_000m, currency = "EUR", transactionDate = "2026-06-01", quantity = 1
+        })).EnsureSuccessStatusCode();
+
+        // Process pending → both rules credit the one sale → 2 live credits on the same transaction.
+        (await _clientA.PostAsJsonAsync("/api/transactions/process-pending", new { scope = 0, scopeId = planId }))
+            .EnsureSuccessStatusCode();
+
+        AttainmentItemResponse? item = null;
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(500);
+            var dash = await (await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=ytd"))
+                .Content.ReadFromJsonAsync<DashboardResponse>();
+            item = dash?.AttainmentItems.FirstOrDefault();
+            if (item is not null && item.AttainmentValue > 0m) break;
+        }
+
+        item.Should().NotBeNull("the sale was processed into credits");
+        // €10,000 counted ONCE / €50,000 = 0.2. The per-credit double count would give €20,000 → 0.4.
+        item!.AttainmentValue.Should().Be(0.2m);
+
+        // And the Sales Trend bar for that sale is €10,000 (once), not €20,000.
+        var dashFinal = await (await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=ytd"))
+            .Content.ReadFromJsonAsync<DashboardResponse>();
+        var junePoint = dashFinal!.SalesTrend.FirstOrDefault(p => p.Month == 6 && p.Year == 2026);
+        junePoint.Should().NotBeNull();
+        junePoint!.Amount.Should().BeApproximately(10_000m, 1m);
+    }
+
     [Fact]
     public async Task GetPayeeQuotas_WithPeriodYtd_IncludesPastAndCurrentPeriodQuotas()
     {
@@ -325,6 +368,40 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
             floor = (object?)null
         };
         await _clientA.PostAsJsonAsync($"/api/plans/{planId}/rules", ruleReq);
+        (await _clientA.PostAsync($"/api/plans/{planId}/activate", null)).EnsureSuccessStatusCode();
+        return planId;
+    }
+
+    // Plan with TWO always-fire flat rules → each transaction gets two credits (the Step-3 case).
+    private async Task<Guid> CreateActivePlanWithTwoRulesAsync(string currency = "EUR")
+    {
+        var planReq = new
+        {
+            name = $"Dedup Plan {Guid.NewGuid().ToString("N")[..6]}",
+            description = "",
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2026-12-31",
+            currency
+        };
+        var planResp = await _clientA.PostAsJsonAsync("/api/plans", planReq);
+        planResp.EnsureSuccessStatusCode();
+        var planId = (await planResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        foreach (var (name, sortOrder, rate) in new[] { ("Rule 1", 1, 0.05), ("Rule 2", 2, 0.03) })
+        {
+            var ruleReq = new
+            {
+                planId, name, sortOrder,
+                measurement = new { _schema = 1, type = 0, sourceField = "amount", aggregation = 0 },
+                rateTable = new { _schema = 1, type = 0, flatRate = rate },
+                trigger = (object?)null,
+                modifier = (object?)null,
+                cap = (object?)null,
+                floor = (object?)null
+            };
+            (await _clientA.PostAsJsonAsync($"/api/plans/{planId}/rules", ruleReq)).EnsureSuccessStatusCode();
+        }
+
         (await _clientA.PostAsync($"/api/plans/{planId}/activate", null)).EnsureSuccessStatusCode();
         return planId;
     }
