@@ -12,6 +12,17 @@ import {
 } from '../models/assignment.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 
+/** Flat filter params; `buildHttpParams` spreads these onto the query string. */
+function buildFilters(
+  status: AssignmentStatus | null,
+  payeeId: string | null,
+): Record<string, string> | undefined {
+  const filters: Record<string, string> = {};
+  if (status) filters['status'] = status;
+  if (payeeId) filters['payeeId'] = payeeId;
+  return Object.keys(filters).length > 0 ? filters : undefined;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AssignmentsStore {
   private readonly api = inject(AssignmentsApiService);
@@ -54,6 +65,12 @@ export class AssignmentsStore {
   readonly sortBy = signal('effectivestart');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly status = signal<AssignmentStatus | null>(null);
+  /**
+   * Exact payee filter, set by the "View all" deep-link from a payee's Assignments card. Kept separate
+   * from `search` on purpose: search is a substring match on name/code, so it could pull in a similar
+   * code, and it would also fight the user's own typing in the search box.
+   */
+  readonly payeeId = signal<string | null>(null);
 
   private readonly searchSubject$ = new Subject<string>();
   readonly search = toSignal(
@@ -88,7 +105,8 @@ export class AssignmentsStore {
       const so = this.sortOrder();
       const st = this.status();
       const srch = this.search();
-      void this._loadInternal(p, ps, sb, so, st, srch);
+      const pid = this.payeeId();
+      void this._loadInternal(p, ps, sb, so, st, srch, pid);
     });
   }
 
@@ -99,6 +117,7 @@ export class AssignmentsStore {
     sortOrder: 'asc' | 'desc',
     status: AssignmentStatus | null,
     search: string,
+    payeeId: string | null,
   ): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
@@ -109,7 +128,7 @@ export class AssignmentsStore {
         sortBy,
         sortOrder,
         search: search || undefined,
-        filters: status ? { status } : undefined,
+        filters: buildFilters(status, payeeId),
       };
       const data = await firstValueFrom(this.api.getAssignments(params));
       this.pagedResult.set(data);
@@ -128,8 +147,24 @@ export class AssignmentsStore {
   async loadAssignments(): Promise<void> {
     await this._loadInternal(
       this.page(), this.pageSize(), this.sortBy(), this.sortOrder(),
-      this.status(), this.search()
+      this.status(), this.search(), this.payeeId()
     );
+  }
+
+  /**
+   * Seeds filters from the URL on entry (deep-link from a payee's Assignments card). Sets the payee
+   * filter directly rather than through the debounced search path, so the very first request is
+   * already filtered — otherwise the user sees the full list flash before it narrows.
+   */
+  loadFromQueryParams(qp: Record<string, string>): void {
+    if (qp['payeeId']) this.payeeId.set(qp['payeeId']);
+    if (qp['status']) this.status.set(qp['status'] as AssignmentStatus);
+    this.page.set(1);
+  }
+
+  clearPayeeFilter(): void {
+    this.payeeId.set(null);
+    this.page.set(1);
   }
 
   async createAssignment(request: CreateAssignmentRequest): Promise<Assignment> {

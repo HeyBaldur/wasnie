@@ -1,4 +1,5 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
@@ -8,6 +9,7 @@ import {
   WsCardComponent,
   WsButtonComponent,
   WsBadgeComponent,
+  WsInputComponent,
   WsConfirmationModalComponent,
   type BadgeVariant,
 } from '../../shared/ui';
@@ -28,7 +30,9 @@ import { HubSpotConnectionStatus, HubSpotStatus } from './models/hubspot.model';
     WsCardComponent,
     WsButtonComponent,
     WsBadgeComponent,
+    WsInputComponent,
     WsConfirmationModalComponent,
+    FormsModule,
     DateFormatPipe,
     RelativeTimePipe,
   ],
@@ -59,6 +63,11 @@ export class IntegrationsComponent implements OnInit {
 
   // Phase 3 "Sync now" (on-demand trigger of the automatic incremental sync).
   readonly syncingNow = signal(false);
+
+  // WI-CRM-CATEGORY: the HubSpot property name that feeds Category. Bound to the config input;
+  // initialised from status on load. Empty = feature off (only the manual lookup table applies).
+  categoryPropValue = '';
+  readonly savingCategory = signal(false);
 
   readonly currentStatus = computed<HubSpotStatus>(() => this.status()?.status ?? 'NeverConnected');
   readonly isConnected = computed(() => this.currentStatus() === 'Connected');
@@ -95,8 +104,29 @@ export class IntegrationsComponent implements OnInit {
     this.testResult.set(null);
     this.syncResult.set(null);
     this.api.getStatus().subscribe({
-      next: s => { this.status.set(s); this.loading.set(false); },
+      next: s => {
+        this.status.set(s);
+        this.categoryPropValue = s.categoryPropertyName ?? '';
+        this.loading.set(false);
+      },
       error: () => { this.loading.set(false); this.loadError.set(true); },
+    });
+  }
+
+  /** WI-CRM-CATEGORY: persist the tenant's chosen HubSpot property (empty clears it → feature off). */
+  saveCategoryProperty(): void {
+    this.savingCategory.set(true);
+    const value = this.categoryPropValue.trim();
+    this.api.setCategoryProperty(value.length ? value : null).subscribe({
+      next: () => {
+        this.savingCategory.set(false);
+        this.toast.show('INTEGRATIONS.HUBSPOT.CATEGORY.SAVED', 'success');
+        this.load();
+      },
+      error: err => {
+        this.savingCategory.set(false);
+        this.toast.show(err?.error?.message ?? 'INTEGRATIONS.HUBSPOT.CATEGORY.SAVE_ERROR', 'error');
+      },
     });
   }
 

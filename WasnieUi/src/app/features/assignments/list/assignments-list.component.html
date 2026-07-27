@@ -17,6 +17,15 @@
         [placeholder]="'ASSIGNMENTS.SEARCH_PLACEHOLDER'"
         (valueChange)="onSearch($event)"
       />
+      @if (store.payeeId()) {
+        <button type="button" class="assignments-list__payee-chip" (click)="clearPayeeFilter()">
+          <span class="assignments-list__payee-chip-text">
+            {{ 'ASSIGNMENTS.FILTERED_BY_PAYEE' | translate }}
+            <strong>{{ payeeFilterLabel() ?? ('ASSIGNMENTS.FILTERED_BY_PAYEE_FALLBACK' | translate) }}</strong>
+          </span>
+          <app-icon name="x-circle" [size]="14" />
+        </button>
+      }
       <ws-segmented-control
         [options]="statusOptions"
         [(value)]="statusFilter"
@@ -48,7 +57,9 @@
       </div>
     }
 
-    @if (!store.loading() && store.pagedAssignments().length === 0 && !store.listParams().search && store.listParams().status === null) {
+    <!-- "You have no assignments yet" only when nothing is filtered — a payee filter that matches
+         nothing must fall through to the table's filtered-empty row, not claim the tenant is empty. -->
+    @if (!store.loading() && store.pagedAssignments().length === 0 && !store.listParams().search && store.listParams().status === null && store.payeeId() === null) {
       <ws-empty-state
         illustration="assignments-empty"
         titleKey="ASSIGNMENTS.EMPTY_TITLE"

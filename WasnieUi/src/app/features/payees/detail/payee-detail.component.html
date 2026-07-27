@@ -284,7 +284,7 @@
                   {{ 'DASHBOARD.ASSIGNMENTS_TITLE' | translate }}
                   <span class="bento-card__counter">· {{ assignmentsTotal() }} {{ periodCounterLabel() | translate }}</span>
                 </span>
-                <a class="bento-card__link" [routerLink]="['/assignments']" target="_blank" rel="noopener noreferrer">
+                <a class="bento-card__link" [routerLink]="['/assignments']" [queryParams]="{ payeeId: payee.id }" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
@@ -304,8 +304,8 @@
                       <span class="bento-list-row__sub">{{ a.effectiveStart | dateFormat }} – {{ a.effectiveEnd | dateFormat }}</span>
                     </div>
                     <div class="bento-list-row__end">
-                      <ws-badge [variant]="temporalVariant(a.effectiveStart, a.effectiveEnd)" size="sm">
-                        {{ temporalKey(a.effectiveStart, a.effectiveEnd) | translate }}
+                      <ws-badge [variant]="temporalVariant(a.effectiveStart, a.effectiveEnd, true, a.status)" size="sm">
+                        {{ temporalKey(a.effectiveStart, a.effectiveEnd, true, a.status) | translate }}
                       </ws-badge>
                     </div>
                   </a>

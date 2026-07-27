@@ -42,6 +42,9 @@ export class TxMappingStepComponent implements OnInit {
     payeeCodeColumn: [''],
     externalIdColumn: [''],
     descriptionColumn: [''],
+    productNameColumn: [''],
+    productSkuColumn: [''],
+    quantityColumn: [''],
   });
 
   readonly loading = signal(false);
@@ -92,6 +95,9 @@ export class TxMappingStepComponent implements OnInit {
       { label: 'Transaction Date', col: v.transactionDateColumn ?? '' },
       ...(v.externalIdColumn ? [{ label: 'External ID', col: v.externalIdColumn }] : []),
       ...(v.descriptionColumn ? [{ label: 'Description', col: v.descriptionColumn }] : []),
+      ...(v.productNameColumn ? [{ label: 'Product', col: v.productNameColumn }] : []),
+      ...(v.productSkuColumn ? [{ label: 'SKU', col: v.productSkuColumn }] : []),
+      ...(v.quantityColumn ? [{ label: 'Quantity', col: v.quantityColumn }] : []),
     ].filter(h => h.col.length > 0);
   }
 
@@ -117,6 +123,9 @@ export class TxMappingStepComponent implements OnInit {
         transactionDateColumn: restored.transactionDateColumn,
         externalIdColumn: restored.externalIdColumn ?? '',
         descriptionColumn: restored.descriptionColumn ?? '',
+        productNameColumn: restored.productNameColumn ?? '',
+        productSkuColumn: restored.productSkuColumn ?? '',
+        quantityColumn: restored.quantityColumn ?? '',
       });
       return;
     }
@@ -129,6 +138,9 @@ export class TxMappingStepComponent implements OnInit {
       transactionDateColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['transactionDateColumn']),
       externalIdColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['externalIdColumn']),
       descriptionColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['descriptionColumn']),
+      productNameColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['productNameColumn']),
+      productSkuColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['productSkuColumn']),
+      quantityColumn: detectField(headers, TRANSACTION_FIELD_PATTERNS['quantityColumn']),
     });
   }
 
@@ -142,6 +154,10 @@ export class TxMappingStepComponent implements OnInit {
       transactionDateColumn: v.transactionDateColumn ?? '',
       externalIdColumn: v.externalIdColumn || null,
       descriptionColumn: v.descriptionColumn || null,
+      productNameColumn: v.productNameColumn || null,
+      productSkuColumn: v.productSkuColumn || null,
+      // Unmapped → the backend leaves Quantity at its default of 1 (TransactionImportJobHandler).
+      quantityColumn: v.quantityColumn || null,
     };
   }
 

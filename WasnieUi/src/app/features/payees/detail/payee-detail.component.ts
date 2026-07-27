@@ -394,9 +394,16 @@ export class PayeeDetailComponent implements OnInit {
     }
   }
 
-  // Temporal chip: derives state from entity period vs today, not DB status.
+  // Temporal chip: derives state from entity period vs today.
   // If isCurrencyValid is false, returns the warning/invalid state regardless.
-  temporalVariant(start: string, end: string, isCurrencyValid = true): BadgeVariant {
+  //
+  // `status` takes precedence when supplied: a deactivated assignment is NOT "In Progress" no matter
+  // what its dates say. Without this the period alone decided the chip, so a deactivated assignment
+  // whose period covered today rendered green and current — the exact bug this fixes. Kept as a guard
+  // even though the list is now filtered server-side, so it cannot come back if these rows are ever
+  // shown again (e.g. a future "show all" toggle).
+  temporalVariant(start: string, end: string, isCurrencyValid = true, status?: string): BadgeVariant {
+    if (status === 'Deactivated') return 'neutral';
     if (!isCurrencyValid) return 'warning';
     const today = new Date(); today.setHours(0, 0, 0, 0);
     if (new Date(end) < today)   return 'neutral';  // Closed
@@ -404,7 +411,8 @@ export class PayeeDetailComponent implements OnInit {
     return 'success';                               // In Progress
   }
 
-  temporalKey(start: string, end: string, isCurrencyValid = true): string {
+  temporalKey(start: string, end: string, isCurrencyValid = true, status?: string): string {
+    if (status === 'Deactivated') return 'ASSIGNMENTS.STATUS_DEACTIVATED';
     if (!isCurrencyValid) return 'DASHBOARD.CHIP_INVALID';
     const today = new Date(); today.setHours(0, 0, 0, 0);
     if (new Date(end) < today)   return 'DASHBOARD.CHIP_CLOSED';

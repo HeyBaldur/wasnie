@@ -29,6 +29,12 @@ public sealed class ListAssignmentsHandler(IApplicationDbContext db, IAuthorizat
             Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
             query = query.Where(x => x.Status == status);
 
+        // Exact payee filter — used by the "View all" deep-link from a payee's Assignments card, so the
+        // user lands on that payee's assignments instead of the full list. Matches on Id rather than
+        // reusing Search (which is a substring match on name/code and could pull in a similar code).
+        if (p.PayeeId.HasValue)
+            query = query.Where(x => x.PayeeId == p.PayeeId.Value);
+
         // Join with plans for planName sorting
         var joined = query.Join(
             db.CompensationPlans,

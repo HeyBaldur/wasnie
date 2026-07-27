@@ -213,14 +213,41 @@
               <div class="conditions-list mt-3" formArrayName="conditions">
                 @for (cond of conditionsArray.controls; track $index; let i = $index) {
                   <div class="condition-row" [formGroupName]="i">
-                    <input class="form-input form-input--sm" type="text" formControlName="field"
-                      [placeholder]="'PLANS.COND_FIELD_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    <!-- Field is a picker fed by the engine's own catalog: a name typed by hand used
+                         to save fine and then never match. -->
+                    <ws-select
+                      formControlName="field"
+                      [options]="fieldOptions()"
+                    />
                     <ws-select
                       formControlName="operator"
-                      [options]="conditionOperatorOptions"
-                            />
-                    <input class="form-input form-input--sm" type="text" formControlName="valueRaw"
-                      [placeholder]="'PLANS.COND_VALUE_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                      [options]="operatorOptionsFor(i)"
+                    />
+                    <!-- Category value is CHOSEN from a dropdown fed by the tenant's real categories (a
+                         multi-select for In/NotIn) so a typo can't save a rule that silently never fires.
+                         It scales to any number of categories. Every other field keeps its input. -->
+                    @if (useCategoryPicker(i) && usesSet(i)) {
+                      <ws-select
+                        formControlName="valueSet"
+                        [multiple]="true"
+                        [searchable]="true"
+                        [options]="categoryOptions()"
+                        [placeholder]="'PLANS.COND_CATEGORY_MULTI_PLACEHOLDER' | translate"
+                      />
+                    } @else if (useCategoryPicker(i)) {
+                      <ws-select
+                        formControlName="valueRaw"
+                        [searchable]="true"
+                        [options]="categoryOptions()"
+                        [placeholder]="'PLANS.COND_CATEGORY_PLACEHOLDER' | translate"
+                      />
+                    } @else if (usesSet(i)) {
+                      <input class="condition-value-input" type="text" formControlName="valueSet"
+                        [placeholder]="'PLANS.COND_SET_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    } @else {
+                      <input class="condition-value-input" type="text" formControlName="valueRaw"
+                        [placeholder]="'PLANS.COND_VALUE_PLACEHOLDER' | translate" [readonly]="readOnly()" />
+                    }
                     @if (!readOnly()) {
                       <button type="button" class="tier-remove" (click)="removeCondition(i)">
                         <app-icon name="x" [size]="14" />
@@ -229,6 +256,37 @@
                       <span></span>
                     }
                   </div>
+                  <!-- Category extras live UNDER the value column (grid-column 3), left-aligned: the escape
+                       hatch (B), the empty-list fallback (D), and the unknown-value warning (C). -->
+                  @if (isCategoryField(i) && (!readOnly() || categoryValueUnknown(i))) {
+                    <div class="condition-extras">
+                      <div class="condition-extras__value">
+                        @if (!readOnly()) {
+                          @if (categoryListEmpty(i)) {
+                            <p class="condition-hint">{{ 'PLANS.COND_NO_CATEGORIES_YET' | translate }}</p>
+                          } @else if (categoryValues().length > 0) {
+                            <button type="button" class="condition-value-toggle" (click)="toggleCustomValue(i)">
+                              {{ (customValueAt(i)
+                                ? 'PLANS.COND_USE_CATEGORY_LIST'
+                                : 'PLANS.COND_USE_CUSTOM_VALUE') | translate }}
+                            </button>
+                          }
+                        }
+                        <!-- The typo made visible (C): a value matching no category can never fire. Shown,
+                             never rewritten or removed. -->
+                        @if (categoryValueUnknown(i)) {
+                          <p class="condition-warning">{{ 'PLANS.COND_UNKNOWN_CATEGORY' | translate }}</p>
+                        }
+                      </div>
+                    </div>
+                  }
+                  <!-- A condition saved before this field existed in the catalog. Left exactly as it
+                       is — never rewritten silently — but called out, because it cannot ever match. -->
+                  @if (isUnknownField(i)) {
+                    <p class="condition-warning">
+                      {{ 'PLANS.COND_UNKNOWN_FIELD' | translate: { field: fieldValueAt(i) } }}
+                    </p>
+                  }
                 }
               </div>
               @if (!readOnly()) {

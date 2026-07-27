@@ -1,6 +1,7 @@
 using System.Globalization;
 using Wasnie.Application.Common.Constants;
 using Wasnie.Application.Models.Imports;
+using Wasnie.Domain.Compensation.Transactions;
 
 namespace Wasnie.Application.Services.Imports;
 
@@ -90,6 +91,26 @@ public static class TransactionFieldValidators
             return MakeError("quantity",
                 $"Quantity '{parsed}' must be a positive integer (minimum 1).",
                 IssueCategory.Format);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Description is a free-text label with no money semantics, so nothing about it can make a row
+    /// invalid. The only observable effect is the domain truncating an over-long value
+    /// (<see cref="CompensationTransaction.MaxDescriptionLength"/>) — surfaced as a Warning so the
+    /// wizard tells the user before the fact instead of silently shortening their text.
+    /// </summary>
+    public static ValidationIssue? ValidateDescription(string descriptionStr)
+    {
+        if (descriptionStr.Trim().Length > CompensationTransaction.MaxDescriptionLength)
+            return new ValidationIssue
+            {
+                Field = "description",
+                Message = $"Description is longer than {CompensationTransaction.MaxDescriptionLength} characters and will be truncated.",
+                Severity = IssueSeverity.Warning,
+                Category = IssueCategory.Format,
+            };
 
         return null;
     }

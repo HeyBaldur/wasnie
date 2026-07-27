@@ -1,0 +1,141 @@
+<app-shell>
+  <ws-page-layout
+    icon="arrows-exchange"
+    [title]="'TRANSACTIONS.DETAIL.TITLE' | translate"
+    [subtitle]="transaction()?.referenceNumber ?? transactionId"
+  >
+    <ws-button slot="actions" variant="secondary" (click)="goBack()">
+      <app-icon name="arrow-left" [size]="14" />
+      {{ 'TRANSACTIONS.DETAIL.BACK' | translate }}
+    </ws-button>
+
+    @if (loading()) {
+      <p class="tx-detail__loading">{{ 'COMMON.LOADING' | translate }}</p>
+    } @else if (error()) {
+      <p class="tx-detail__error">{{ error()! | translate }}</p>
+    } @else if (transaction(); as t) {
+
+      <!-- Section A — Summary -->
+      <ws-card padding="md" class="tx-detail__section">
+        <h3 class="tx-detail__section-title">{{ 'TRANSACTIONS.DETAIL.SECTION_SUMMARY' | translate }}</h3>
+        <dl class="tx-detail__dl">
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.REFERENCE' | translate }}</dt>
+            <dd class="tx-detail__mono">{{ t.referenceNumber }}</dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.STATUS' | translate }}</dt>
+            <dd>
+              <ws-badge [variant]="statusVariant(t.status)">{{ statusKey(t.status) | translate }}</ws-badge>
+            </dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.PAYEE' | translate }}</dt>
+            <dd>
+              @if (t.payeeName) {
+                @if (t.payeeId) {
+                  <a [routerLink]="['/payees', t.payeeId]" target="_blank" rel="noopener noreferrer">{{ t.payeeName }}</a>
+                } @else { {{ t.payeeName }} }
+                @if (t.payeeEmployeeCode) { <span class="tx-detail__code">({{ t.payeeEmployeeCode }})</span> }
+              } @else {
+                <span class="tx-detail__muted">{{ 'TRANSACTIONS.UNASSIGNED' | translate }}</span>
+              }
+            </dd>
+          </div>
+          <div class="tx-detail__dl-row tx-detail__dl-row--highlight">
+            <dt>{{ 'TRANSACTIONS.DETAIL.AMOUNT' | translate }}</dt>
+            <dd class="tx-detail__amount-large">{{ t.amount | currencyFormat: t.currency }}</dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.QUANTITY' | translate }}</dt>
+            <dd>{{ t.quantity }}</dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.DATE' | translate }}</dt>
+            <dd>{{ t.transactionDate | dateFormat }}</dd>
+          </div>
+          @if (t.cancelledReason) {
+            <div class="tx-detail__dl-row">
+              <dt>{{ 'TRANSACTIONS.DETAIL.CANCELLED_REASON' | translate }}</dt>
+              <dd class="tx-detail__reason">{{ t.cancelledReason }}</dd>
+            </div>
+          }
+        </dl>
+      </ws-card>
+
+      <!-- Section B — Product -->
+      <ws-card padding="md" class="tx-detail__section">
+        <h3 class="tx-detail__section-title">{{ 'TRANSACTIONS.DETAIL.SECTION_PRODUCT' | translate }}</h3>
+        <dl class="tx-detail__dl">
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.DESCRIPTION' | translate }}</dt>
+            <dd>{{ t.description || '—' }}</dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.PRODUCT_NAME' | translate }}</dt>
+            <dd>{{ t.productName || '—' }}</dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.PRODUCT_SKU' | translate }}</dt>
+            <dd class="tx-detail__mono">{{ t.productSku || '—' }}</dd>
+          </div>
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.COL_CATEGORY' | translate }}</dt>
+            <dd>
+              @if (t.category) {
+                <span class="tx-detail__category">{{ t.category }}</span>
+              } @else {
+                <span class="tx-detail__muted">{{ 'TRANSACTIONS.DETAIL.UNCATEGORIZED' | translate }}</span>
+              }
+            </dd>
+          </div>
+        </dl>
+      </ws-card>
+
+      <!-- Section C — Origin -->
+      <ws-card padding="md" class="tx-detail__section">
+        <h3 class="tx-detail__section-title">{{ 'TRANSACTIONS.DETAIL.SECTION_ORIGIN' | translate }}</h3>
+        <dl class="tx-detail__dl">
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.SOURCE' | translate }}</dt>
+            <dd>{{ t.source }}</dd>
+          </div>
+          @if (t.externalId) {
+            <div class="tx-detail__dl-row">
+              <dt>{{ 'TRANSACTIONS.DETAIL.EXTERNAL_ID' | translate }}</dt>
+              <dd class="tx-detail__mono">{{ t.externalId }}</dd>
+            </div>
+          }
+          <div class="tx-detail__dl-row">
+            <dt>{{ 'TRANSACTIONS.DETAIL.INGESTED_AT' | translate }}</dt>
+            <dd>{{ t.ingestedAt | dateFormat }}</dd>
+          </div>
+        </dl>
+      </ws-card>
+
+      <!-- Section D — Generated credits -->
+      <ws-card padding="md" class="tx-detail__section">
+        <h3 class="tx-detail__section-title">{{ 'TRANSACTIONS.DETAIL.SECTION_CREDITS' | translate }}</h3>
+        @if (credits().length === 0) {
+          <p class="tx-detail__muted">{{ 'TRANSACTIONS.DETAIL.NO_CREDITS' | translate }}</p>
+        } @else {
+          <ul class="tx-detail__credits">
+            @for (c of credits(); track c.id) {
+              <li class="tx-detail__credit">
+                <a class="tx-detail__credit-link" [routerLink]="['/credits', c.id]">
+                  <span class="tx-detail__credit-plan">
+                    {{ c.planName }}
+                    <span class="tx-detail__credit-rule">{{ c.ruleName }}</span>
+                  </span>
+                  <span class="tx-detail__credit-amount">{{ c.creditedAmount | currencyFormat: c.creditedCurrency }}</span>
+                  <app-icon name="chevron-right" [size]="14" />
+                </a>
+              </li>
+            }
+          </ul>
+        }
+      </ws-card>
+
+    }
+  </ws-page-layout>
+</app-shell>

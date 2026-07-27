@@ -21,4 +21,10 @@ export const transactionsRoutes: Routes = [
     loadComponent: () =>
       import('../imports/transactions/transaction-import-wizard.component').then((m) => m.TransactionImportWizardComponent),
   },
+  {
+    path: ':id',
+    canActivate: [authGuard, hasPermissionGuard('Transactions.Read')],
+    loadComponent: () =>
+      import('./detail/transaction-detail.component').then((m) => m.TransactionDetailComponent),
+  },
 ];

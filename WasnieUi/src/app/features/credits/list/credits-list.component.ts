@@ -349,6 +349,9 @@ export class CreditsListComponent implements OnInit {
     this._setFilter({ payeeIds: [payeeId] });
   }
 
+  /** Row click opens the credit detail (the Reference/Plan/Rule links navigate elsewhere and stopPropagation). */
+  openCredit(id: string): void { void this.router.navigate(['/credits', id]); }
+
   goToPage(n: number): void { this.store.setPage(n); }
   goToPageSize(n: number): void { this.store.setPageSize(n); }
 

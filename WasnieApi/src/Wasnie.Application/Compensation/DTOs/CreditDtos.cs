@@ -10,6 +10,9 @@ public sealed record CreditListDto(
     string? PayeeCode,
     Guid PlanId,
     string PlanName,
+    // RuleId lets the UI deep-link to the specific rule (/plans/{planId}/rules/{ruleId}). Already
+    // persisted on Credit.RuleId — exposed read-only, no engine/attribution change.
+    Guid RuleId,
     string RuleName,
     decimal OriginalAmount,
     string OriginalCurrency,

@@ -63,6 +63,27 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
                 v => JsonSerializer.Deserialize<RuleSnapshot>(v, JsonOptions)!);
 
         builder.HasIndex(c => new { c.TenantId, c.TransactionId, c.PayeeId });
+
+        // ── Anti-double-pay, DECLARATIVE ──────────────────────────────────────────────────────
+        // One live Credit per (transaction, plan, rule). Until now the only thing preventing a
+        // duplicate credit was procedural — the batch guard in ProcessPendingTransactionsJobHandler
+        // that skips transactions which already have credits. Nothing in the database enforced it, so
+        // a wrong key in that guard would have produced duplicate credits SILENTLY, and they would
+        // have been paid. This index is the net underneath that guard.
+        //
+        // Filtered to non-superseded rows on purpose: RecalculateCredits supersedes a credit and
+        // creates its replacement with the SAME (transaction, plan, rule), so superseded rows must be
+        // exempt or every recalculation would fail. A CONSUMED (already paid) credit is still live for
+        // this purpose — that is precisely the row a duplicate must never be created against.
+        //
+        // PlanId is functionally implied by RuleId (Rule.cs:11 — a rule belongs to exactly one plan,
+        // verified in the data: no RuleId spans two plans). It is kept in the key so the constraint
+        // reads as the business rule it encodes, and so the plan dimension stays explicit as the
+        // engine moves toward crediting several plans per transaction.
+        builder.HasIndex(c => new { c.TenantId, c.TransactionId, c.PlanId, c.RuleId })
+            .IsUnique()
+            .HasFilter("[SupersededAt] IS NULL")
+            .HasDatabaseName("UX_Credits_Tenant_Transaction_Plan_Rule_Live");
         builder.HasIndex(c => new { c.TenantId, c.SupersededAt })
             .HasFilter("[SupersededAt] IS NULL");
         builder.HasIndex(c => new { c.TenantId, c.ConsumedAt })

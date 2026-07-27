@@ -16,7 +16,8 @@ public sealed class CrmDealReconciler(
     IGuidGenerator guid,
     ICrmOwnerResolver ownerResolver,
     ITransactionCreateGuard createGuard,
-    ICrmDriftPolicy driftPolicy)
+    ICrmDriftPolicy driftPolicy,
+    Wasnie.Application.Compensation.Enrichment.ITransactionEnrichmentService enrichmentService)
     : ICrmDealReconciler
 {
     // Tolerance (currency minor unit) for Σ(line item amounts) vs the deal amount. Above this the deal is
@@ -41,6 +42,9 @@ public sealed class CrmDealReconciler(
         var ownerEmailById = owners
             .GroupBy(o => o.Id, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Email, StringComparer.Ordinal);
+
+        // Enrichment: load the tenant's category lookup ONCE for the whole sync (no per-line-item query).
+        var categoryResolver = await enrichmentService.LoadResolverAsync(tenantId, cancellationToken);
 
         var dealsWithId = deals.Where(d => !string.IsNullOrWhiteSpace(d.Id)).ToList();
 
@@ -219,9 +223,20 @@ public sealed class CrmDealReconciler(
                         amount: lineAmount, transactionDate: transactionDate, source: TransactionSource.CrmSync,
                         ingestedBy: actor, id: guid.NewGuid(), now: now, eventId: guid.NewGuid(),
                         externalId: lineExt, quantity: qty,
-                        // Every line item of a deal carries the SAME deal name (product decision):
-                        // the rows are told apart by their per-line reference, not by the label.
-                        description: deal.Name);
+                        // Description stays the DEAL name — every line of a deal shares it, and it is
+                        // what identifies the sale. The line item's own name and SKU say WHAT was sold
+                        // and go in their own fields, so a deal mixing (say) machinery and its
+                        // installation course keeps one sale label and two distinct products.
+                        description: deal.Name,
+                        productName: li.Name,
+                        productSku: li.Sku,
+                        // WI-CRM-CATEGORY precedence: the category the CRM already carries WINS; only when it
+                        // is absent do we fall back to the manual lookup table (SKU→Name, resolved in-memory,
+                        // no DB call per line). CategoryResolver's own logic is untouched — the CRM value is
+                        // merely prepended. Ingest normalizes the final value (trim / blank → null).
+                        category: string.IsNullOrWhiteSpace(li.CategoryFromCrm)
+                            ? categoryResolver.Resolve(li.Sku, li.Name)
+                            : li.CategoryFromCrm);
                 }
                 catch (DomainException) { skippedInvalid++; continue; }
 

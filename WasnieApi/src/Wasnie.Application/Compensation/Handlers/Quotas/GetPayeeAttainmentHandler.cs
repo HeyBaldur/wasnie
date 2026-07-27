@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Quotas;
@@ -70,42 +71,13 @@ public sealed class GetPayeeAttainmentHandler(
         return Result<IReadOnlyList<QuotaAttainmentDto>>.Success(dtos);
     }
 
-    private async Task<decimal> ComputeAchievedAsync(
+    // Deduped achieved via the shared QuotaAchievedQuery — same source of truth as the motor, so this
+    // endpoint can't drift back to the per-credit double count.
+    private Task<decimal> ComputeAchievedAsync(
         Guid payeeId,
         Wasnie.Domain.Compensation.Quotas.Quota quota,
         CancellationToken ct)
-    {
-        var start = quota.Period.Start;
-        var end = quota.Period.End;
-        var planId = quota.PlanId;
-
-        if (quota.MeasurementType == QuotaMeasurementType.Units)
-        {
-            var quantities = await (
-                from c in db.Credits
-                join t in db.CompensationTransactions on c.TransactionId equals t.Id
-                where c.PayeeId == payeeId
-                   && c.PlanId == planId
-                   && c.SupersededAt == null
-                   && t.TransactionDate >= start
-                   && t.TransactionDate <= end
-                select t.Quantity
-            ).ToListAsync(ct);
-            return quantities.Sum();
-        }
-
-        var quotaCurrency = quota.Amount.Currency;
-        var amounts = await (
-            from c in db.Credits
-            join t in db.CompensationTransactions on c.TransactionId equals t.Id
-            where c.PayeeId == payeeId
-               && c.PlanId == planId
-               && c.SupersededAt == null
-               && t.Amount.Currency == quotaCurrency
-               && t.TransactionDate >= start
-               && t.TransactionDate <= end
-            select t.Amount.Amount
-        ).ToListAsync(ct);
-        return amounts.Sum();
-    }
+        => quota.MeasurementType == QuotaMeasurementType.Units
+            ? QuotaAchievedQuery.UnitsAsync(db, payeeId, quota.PlanId, quota.Period.Start, quota.Period.End, ct)
+            : QuotaAchievedQuery.RevenueAsync(db, payeeId, quota.PlanId, quota.Period.Start, quota.Period.End, quota.Amount.Currency, ct);
 }

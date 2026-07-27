@@ -168,6 +168,22 @@
     font-weight: 500;
     color: var(--color-text-primary);
   }
+
+  /* Table rows are clickable (open the credit detail); the Reference/Plan/Rule links stopPropagation. */
+  &__row--clickable {
+    cursor: pointer;
+
+    &:hover { background: var(--color-bg-surface-sunken); }
+  }
+
+  &__entity-link {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      color: var(--color-text-link);
+    }
+  }
 }
 
 .col-ref { font-family: var(--font-mono); font-size: var(--font-size-12); }

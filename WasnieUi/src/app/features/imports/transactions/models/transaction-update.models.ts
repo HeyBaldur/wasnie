@@ -5,6 +5,7 @@ export interface TransactionUpdateColumnMapping {
   transactionDateColumn?: string | null;
   payeeCodeColumn?: string | null;
   quantityColumn?: string | null;
+  descriptionColumn?: string | null;
 }
 
 export interface FieldDiff {

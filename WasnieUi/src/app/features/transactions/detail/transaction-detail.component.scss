@@ -1,0 +1,121 @@
+.tx-detail {
+  &__loading, &__error {
+    font-size: var(--font-size-13);
+    color: var(--color-text-secondary);
+    padding: var(--space-4);
+    text-align: center;
+  }
+
+  &__error { color: var(--color-danger); }
+
+  &__section {
+    margin-bottom: var(--space-4);
+  }
+
+  &__section-title {
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 var(--space-3);
+  }
+
+  &__dl {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: var(--space-2) var(--space-4);
+  }
+
+  &__dl-row {
+    display: contents;
+
+    dt {
+      font-size: var(--font-size-13);
+      color: var(--color-text-tertiary);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+    }
+
+    dd {
+      font-size: var(--font-size-13);
+      color: var(--color-text-primary);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+    }
+
+    &--highlight {
+      dt { color: var(--color-text-secondary); font-weight: 600; }
+    }
+  }
+
+  &__mono { font-family: ui-monospace, monospace; }
+  &__code { color: var(--color-text-tertiary); }
+  &__muted { color: var(--color-text-tertiary); }
+  &__reason { font-style: italic; color: var(--color-text-secondary); }
+
+  &__amount-large {
+    font-size: var(--font-size-18);
+    font-weight: 700;
+    color: var(--color-text-primary);
+  }
+
+  &__category {
+    display: inline-block;
+    padding: 1px var(--space-2);
+    font-size: var(--font-size-12);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-surface-sunken);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-full);
+  }
+
+  &__credits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  &__credit-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--color-text-primary);
+    transition: background 0.12s ease, border-color 0.12s ease;
+
+    &:hover {
+      background: var(--color-bg-surface-sunken);
+      border-color: var(--color-border-default);
+    }
+  }
+
+  &__credit-plan {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    font-size: var(--font-size-13);
+    font-weight: 500;
+  }
+
+  &__credit-rule {
+    font-size: var(--font-size-11);
+    font-weight: 400;
+    color: var(--color-text-tertiary);
+  }
+
+  &__credit-amount {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+}

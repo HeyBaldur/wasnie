@@ -190,6 +190,11 @@
   app-icon { flex-shrink: 0; }
 }
 .pending-plan-card__list { max-height: 180px; overflow-y: auto; }
+// The attention list holds two-line rows (label + explanation) and can carry several groups at once
+// (unprocessable reasons + ambiguous attribution + drift alerts), so 180px showed barely three of them.
+// Viewport-relative so it uses the space available without dominating a short screen; still scrolls
+// rather than growing unbounded, which would push the rest of the dashboard down.
+.pending-plan-card__list--tall { max-height: min(60vh, 520px); }
 .pending-plan-card__row {
   display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-1);
@@ -225,6 +230,29 @@
 }
 .drift-change { display: block; }
 .drift-action { display: block; color: var(--color-text-placeholder); }
+
+// Ambiguous-attribution sub-group: rows are payees, not transactions, so the group carries one
+// explanation of WHY those transactions are blocked instead of repeating it on every row.
+.attention-group-note {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+.attention-row__code {
+  margin-left: var(--space-1);
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+// Count text + one badge per competing plan on the same line, wrapping when a payee sits on several
+// plans or the viewport is narrow — plan names are user-defined and can be long.
+.ambiguous-row__desc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
 
 // ── KPI card — TailAdmin pattern ───────────────────────────────────────────────
 // Pattern: icon box alone at top → mt-5 gap → body pushed to bottom

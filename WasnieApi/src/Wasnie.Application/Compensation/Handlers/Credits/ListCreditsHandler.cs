@@ -157,6 +157,7 @@ public sealed class ListCreditsHandler(
                 PayeeCode: payee?.EmployeeCode,
                 PlanId: c.PlanId,
                 PlanName: plan?.Name ?? c.RuleSnapshot.PlanId.ToString("N")[..8],
+                RuleId: c.RuleId,
                 RuleName: c.RuleSnapshot.RuleName,
                 OriginalAmount: c.OriginalAmount.Amount,
                 OriginalCurrency: c.OriginalAmount.Currency,

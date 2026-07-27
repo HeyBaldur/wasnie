@@ -21,6 +21,7 @@ export interface CreditListItem {
   payeeCode: string | null;
   planId: string;
   planName: string;
+  ruleId: string;
   ruleName: string;
   originalAmount: number;
   originalCurrency: string;

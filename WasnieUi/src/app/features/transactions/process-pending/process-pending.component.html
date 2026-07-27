@@ -2,8 +2,9 @@
   <ws-card variant="flat" accent="warning" padding="sm">
     <div class="process-pending">
 
-      <!-- Count badge + label + show/hide toggle -->
-      @if (candidateCount() !== null && !isDone) {
+      <!-- Count badge + label + show/hide toggle. Shown whenever work is pending — including right
+           after a run finishes with transactions still pending, so the list reappears on its own. -->
+      @if ((candidateCount() ?? 0) > 0) {
         <div class="process-pending__count-row">
           <ws-badge variant="warning" size="sm">{{ candidateCount() }}</ws-badge>
           <span class="process-pending__count-label">
@@ -22,7 +23,7 @@
       }
 
       <!-- Eligible transactions table -->
-      @if (eligibleOpen() && !isDone) {
+      @if (eligibleOpen()) {
         <div class="process-pending__eligible-section">
 
           @if (eligibleLoading()) {
@@ -87,8 +88,15 @@
         <p class="process-pending__net-error">{{ 'TRANSACTIONS.PROCESS_PENDING.NET_ERROR' | translate }}</p>
       }
 
-      <!-- Main action button — shows loader while running/dispatching -->
-      @if (!isDone) {
+      <!-- The button's own spinner covers the normal in-progress state; this only surfaces the rare
+           case where the job is still running well past the expected time (never shown normally). -->
+      @if (slowRunning()) {
+        <p class="process-pending__slow">{{ 'TRANSACTIONS.PROCESS_PENDING.SLOW' | translate }}</p>
+      }
+
+      <!-- Main action button — shows loader while running/dispatching. Stays available after a run so a
+           partial result (e.g. 0 credits, still pending) can be retried without reloading the page. -->
+      @if ((candidateCount() ?? 0) > 0 || dispatching() || isRunning) {
         <div class="process-pending__actions">
           <ws-button
             variant="secondary"
@@ -124,26 +132,31 @@
       <!-- Terminal states -->
       @if (jobStatus()?.state === 'Succeeded') {
         <div class="process-pending__result">
-          <p class="process-pending__success">
+          <p
+            [class.process-pending__success]="resultTone === 'success'"
+            [class.process-pending__notice]="resultTone === 'notice'"
+          >
             @if (resultSummary; as s) {
               @if (s.processed === 0) {
                 {{ 'TRANSACTIONS.PROCESS_PENDING.NOTHING_TO_PROCESS' | translate }}
+              } @else if (s.creditsCreated === 0) {
+                {{
+                  'TRANSACTIONS.PROCESS_PENDING.NO_CREDITS'
+                    | translate: { processed: s.processed }
+                }}
               } @else if (s.skippedByValidation > 0) {
                 {{
                   'TRANSACTIONS.PROCESS_PENDING.DONE_WITH_SKIPS'
-                    | translate: { processed: s.processed, skipped: s.skippedByValidation }
+                    | translate: { processed: s.processed, credits: s.creditsCreated, skipped: s.skippedByValidation }
                 }}
               } @else {
                 {{
                   'TRANSACTIONS.PROCESS_PENDING.DONE'
-                    | translate: { processed: s.processed }
+                    | translate: { processed: s.processed, credits: s.creditsCreated }
                 }}
               }
             } @else {
-              {{
-                'TRANSACTIONS.PROCESS_PENDING.DONE'
-                  | translate: { processed: jobStatus()?.progressCurrent ?? 0 }
-              }}
+              {{ 'TRANSACTIONS.PROCESS_PENDING.COMPLETED' | translate }}
             }
           </p>
           @if (resultSummary && resultSummary.skippedByValidation > 0) {

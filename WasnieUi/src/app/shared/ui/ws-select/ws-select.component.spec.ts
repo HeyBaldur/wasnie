@@ -184,4 +184,106 @@ describe('WsSelectComponent', () => {
     expect(fixture.nativeElement.querySelector('.ws-select__loading')).toBeNull();
     expect(fixture.nativeElement.querySelector('.ws-select__empty')).toBeTruthy();
   }));
+
+  // --- Multi-select mode (value stays a comma-separated string) ---
+
+  it('multiple: select() toggles membership in the CSV value and keeps the dropdown open', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.componentRef.setInput('multiple', true);
+    fixture.detectChanges();
+    const changes: (string | number)[] = [];
+    comp.registerOnChange(v => changes.push(v));
+    comp.openDropdown();
+
+    comp.select(OPTIONS[0]); // a
+    comp.select(OPTIONS[1]); // b
+    expect(comp.value()).toBe('a, b');
+    expect(comp.selectedValues()).toEqual(['a', 'b']);
+    expect(comp.isOpen()).toBeTrue();          // stays open for further picks
+
+    comp.select(OPTIONS[0]); // toggle a off
+    expect(comp.value()).toBe('b');
+    expect(changes.at(-1)).toBe('b');
+  });
+
+  it('multiple: isOptionSelected reflects CSV membership (case-insensitive)', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.componentRef.setInput('multiple', true);
+    fixture.detectChanges();
+    comp.writeValue('A, b');
+    expect(comp.isOptionSelected(OPTIONS[0])).toBeTrue();  // 'a' matches 'A'
+    expect(comp.isOptionSelected(OPTIONS[1])).toBeTrue();
+    expect(comp.isOptionSelected(OPTIONS[2])).toBeFalse();
+  });
+
+  it('multiple: multiLabel joins the selected option labels', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.componentRef.setInput('multiple', true);
+    fixture.detectChanges();
+    comp.writeValue('a, b');
+    expect(comp.multiLabel()).toBe('Alpha, Beta');
+  });
+
+  it('single mode is unaffected: selectedValues is empty and select still closes', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.detectChanges();
+    comp.openDropdown();
+    expect(comp.selectedValues()).toEqual([]);
+    comp.select(OPTIONS[1]);
+    expect(comp.value()).toBe('b');
+    expect(comp.isOpen()).toBeFalse();
+  });
+
+  // --- Reposition (NOT close) on ancestor scroll / resize (bug: panel floated when an inner container
+  // scrolled). A normal dropdown stays open and follows its trigger while scrolling; only an outside
+  // click closes it. NOTE: headless has no real layout (getBoundingClientRect ≈ 0), so these verify the
+  // WIRING (reposition scheduled, panel stays open, internal scroll ignored) — the on-screen "follows the
+  // trigger" result can only be confirmed in a real browser.
+
+  it('schedules a reposition and STAYS OPEN when an ancestor scrolls', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.detectChanges();
+    const sched = spyOn(comp as unknown as { _scheduleReposition: () => void }, '_scheduleReposition');
+    comp.openDropdown();
+    expect(comp.isOpen()).toBeTrue();
+
+    // A scroll from OUTSIDE the panel (e.g. the app-shell overflow container) — caught in the capture
+    // phase on window even though it did not originate on window.
+    document.body.dispatchEvent(new Event('scroll'));
+    expect(sched).toHaveBeenCalled();     // reposition scheduled
+    expect(comp.isOpen()).toBeTrue();     // panel did NOT close
+  });
+
+  it('ignores a scroll that originates inside the panel (no reposition, stays open)', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.detectChanges();
+    comp.openDropdown();
+    const sched = spyOn(comp as unknown as { _scheduleReposition: () => void }, '_scheduleReposition');
+
+    // Scrolling the option list inside the panel must not reposition (the trigger didn't move).
+    fixture.nativeElement.dispatchEvent(new Event('scroll'));
+    expect(sched).not.toHaveBeenCalled();
+    expect(comp.isOpen()).toBeTrue();
+  });
+
+  it('schedules a reposition and stays open on window resize', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.detectChanges();
+    const sched = spyOn(comp as unknown as { _scheduleReposition: () => void }, '_scheduleReposition');
+    comp.openDropdown();
+
+    window.dispatchEvent(new Event('resize'));
+    expect(sched).toHaveBeenCalled();
+    expect(comp.isOpen()).toBeTrue();
+  });
+
+  it('removes the scroll/resize listeners when the panel closes (no leak)', () => {
+    fixture.componentRef.setInput('options', OPTIONS);
+    fixture.detectChanges();
+    const removeSpy = spyOn(window, 'removeEventListener').and.callThrough();
+    comp.openDropdown();
+    comp.closeDropdown();
+    expect(removeSpy).toHaveBeenCalledWith('scroll', jasmine.any(Function), jasmine.anything());
+    expect(removeSpy).toHaveBeenCalledWith('resize', jasmine.any(Function));
+  });
 });

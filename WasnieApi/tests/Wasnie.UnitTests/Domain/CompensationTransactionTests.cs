@@ -93,6 +93,94 @@ public sealed class CompensationTransactionTests
         tx.Description.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
     }
 
+    // ── UpdateDescription (Excel re-upload path) ─────────────────────────────────────────────
+
+    // The whole reason Description has its own method: relabelling must not invalidate money.
+    // A Calculated transaction stays Calculated, so its Credits are never superseded.
+    [Fact]
+    public void UpdateDescription_OnCalculatedTransaction_DoesNotChangeStatus()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, Money.Of(100m, "EUR"), "user@test.com", ValidNow, Guid.NewGuid());
+
+        tx.UpdateDescription("Renamed deal", "user@test.com", ValidNow);
+
+        tx.Status.Should().Be(CompensationTransactionStatus.Calculated);
+        tx.Description.Should().Be("Renamed deal");
+    }
+
+    // The existing Excel-update rule (Paid is untouchable) applies to Description too — it is not
+    // a loophole around the guard that protects already-paid money.
+    [Fact]
+    public void UpdateDescription_OnPaidTransaction_ThrowsDomainException()
+    {
+        var tx = IngestValid();
+        tx.MarkCalculated(1, Money.Of(100m, "EUR"), "user@test.com", ValidNow, Guid.NewGuid());
+        tx.MarkPaid("user@test.com", ValidNow, Guid.NewGuid());
+
+        var act = () => tx.UpdateDescription("Renamed deal", "user@test.com", ValidNow);
+
+        act.Should().Throw<DomainException>().WithMessage("*Paid*");
+    }
+
+    [Fact]
+    public void UpdateDescription_AppliesTheSameNormalizationAsIngest()
+    {
+        var tx = IngestValid();
+
+        tx.UpdateDescription("  " + new string('y', CompensationTransaction.MaxDescriptionLength + 20) + "  ",
+            "user@test.com", ValidNow);
+
+        tx.Description.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+    }
+
+    // ── Product fields (what was sold) ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Ingest_WithProductFields_TrimsAndStoresThem()
+    {
+        var tx = CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(),
+            productName: "  Industrial Press 3000  ", productSku: "  MCH-0042  ");
+
+        tx.ProductName.Should().Be("Industrial Press 3000");
+        tx.ProductSku.Should().Be("MCH-0042");
+    }
+
+    // Same rule as Description: a product label can never be why a real sale fails to ingest.
+    [Fact]
+    public void Ingest_OverlongProductFields_AreTruncatedNotRejected()
+    {
+        var tooLong = new string('x', CompensationTransaction.MaxDescriptionLength + 25);
+
+        var tx = CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(),
+            productName: tooLong, productSku: tooLong);
+
+        tx.ProductName.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+        tx.ProductSku.Should().HaveLength(CompensationTransaction.MaxDescriptionLength);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Ingest_BlankProductFields_AreStoredAsNull(string? value)
+    {
+        var tx = CompensationTransaction.Ingest(
+            ValidTenantId, "REF-001", ValidPayeeId, ValidAmount, ValidDate,
+            TransactionSource.Manual, "user@test.com",
+            Guid.NewGuid(), ValidNow, Guid.NewGuid(),
+            productName: value, productSku: value);
+
+        tx.ProductName.Should().BeNull();
+        tx.ProductSku.Should().BeNull();
+    }
+
     [Fact]
     public void Ingest_EmptyTenantId_ThrowsDomainException()
     {

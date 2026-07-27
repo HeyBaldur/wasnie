@@ -7,6 +7,7 @@ using Wasnie.Application.BackgroundJobs;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.Calculation;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Models.Calculation;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Enums;
@@ -70,22 +71,30 @@ public sealed class ProcessPendingTransactionsJobHandler(
                 "Processing with chunking.", context.JobId, candidateIds.Count);
         }
 
-        // Skipping rule (Decision #54 / Decision #61 Case B):
-        // Exclude transactions that already have non-superseded Credits (from any plan).
-        var idsWithExistingCredits = await db.Credits
-            .Where(c => c.SupersededAt == null && candidateIds.Contains(c.TransactionId))
-            .Select(c => c.TransactionId)
-            .Distinct()
-            .ToListAsync(ct);
+        // Anti-double-pay, fine-grained (Decision #54 / Decision #61 Case B, refined).
+        //
+        // This used to exclude any transaction that already had a live credit "from any plan". That was
+        // safe only because the resolver picks a single plan, and it blocks the model the engine is
+        // moving to: two DIFFERENT rules matching one transaction must each produce their own credit
+        // (a base plan and a stacked SPIFF), which is intentional concurrency, not double payment.
+        //
+        // The exclusion now happens per (transaction, plan, rule) at the point of allocation — the same
+        // key as UX_Credits_Tenant_Transaction_Plan_Rule_Live. Loaded once for the whole batch, so a
+        // re-run is still a no-op without any per-transaction query.
+        var alreadyCredited = await creditAllocationService.LoadLiveCreditKeysAsync(candidateIds, ct);
 
-        var idsToSkipSet = new HashSet<Guid>(idsWithExistingCredits);
-        var eligibleIds = candidateIds.Where(id => !idsToSkipSet.Contains(id)).ToList();
-        var skippedByOverlapRule = idsToSkipSet.Count;
+        // Transactions already carrying a live credit. Nothing is excluded on this basis any more —
+        // it only tells the attribution check below to stay quiet about work that is already done,
+        // and feeds the skip metric so the job report keeps meaning the same thing.
+        var txWithLiveCredits = alreadyCredited.Select(k => k.TransactionId).ToHashSet();
+
+        var eligibleIds = candidateIds;
+        var skippedByOverlapRule = 0;
 
         logger.LogInformation(
-            "ProcessPendingTransactionsJob {JobId}: {Total} candidates, {SkippedByOverlap} skipped " +
-            "(existing Credits). Processing {Eligible} transactions.",
-            context.JobId, candidateIds.Count, skippedByOverlapRule, eligibleIds.Count);
+            "ProcessPendingTransactionsJob {JobId}: {Total} candidates, {AlreadyCredited} with existing " +
+            "credits (re-checked per plan+rule). Processing {Eligible} transactions.",
+            context.JobId, candidateIds.Count, txWithLiveCredits.Count, eligibleIds.Count);
 
         // Pre-load payee name/code for skip log enrichment — two batched queries, not per-row.
         var txPayeeMap = await db.CompensationTransactions
@@ -158,6 +167,10 @@ public sealed class ProcessPendingTransactionsJobHandler(
                     .ToDictionaryAsync(p => p.Id, ct)
                 : new Dictionary<Guid, Wasnie.Domain.Compensation.Plans.Plan>();
 
+            // Plan currencies for the ambiguity check below — derived from the already-loaded plans,
+            // so no extra query and no N+1.
+            var planCurrencyById = plansInChunk.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+
             logger.LogDebug(
                 "ProcessPendingTransactionsJob {JobId}: chunk {ChunkSize} tx pre-loaded in {Ms}ms " +
                 "({Assignments} assignments, {Plans} plans).",
@@ -171,11 +184,31 @@ public sealed class ProcessPendingTransactionsJobHandler(
                 // Re-check status inside the transaction (state may have changed since ID was loaded).
                 if (transaction.Status != CompensationTransactionStatus.Pending) continue;
 
+                // NOTE — the ambiguous-attribution skip that used to sit here has been REMOVED.
+                //
+                // It refused to process a transaction whose payee had 2+ eligible plans, because the
+                // engine then picked one by tie-break and would have paid an arbitrary plan. That
+                // premise no longer holds: every eligible assignment now contributes its own rules and
+                // credits its own plan, so there is nothing left to guess. Leaving the check would have
+                // blocked precisely the transactions this change exists to process — the multi-plan
+                // payee is the normal case now, not an error.
+                //
+                // AmbiguousAttributionSpec and its dashboard card are intentionally left in place: the
+                // card counts PENDING transactions with 2+ candidates, so it drains on its own as those
+                // transactions get processed. Reworking that surface into whatever it should mean now
+                // ("no rule matched", "overlapping filters") is a separate piece of work.
+
                 try
                 {
                     // Batch path: no DB queries inside AllocateAsync — uses pre-loaded lookups.
                     var credits = await creditAllocationService.AllocateAsync(
-                        transaction, assignmentsByPayee, plansInChunk, ct);
+                        transaction, assignmentsByPayee, plansInChunk, alreadyCredited, ct);
+
+                    // Nothing new AND already credited → this is a re-run over settled work. Counted as
+                    // an overlap skip so the job report reads exactly as it did when such transactions
+                    // were filtered out of the batch entirely.
+                    if (credits.Count == 0 && txWithLiveCredits.Contains(transaction.Id))
+                        skippedByOverlapRule++;
 
                     foreach (var credit in credits)
                         db.Credits.Add(credit);

@@ -7,6 +7,8 @@ export interface TransactionImportColumnMapping {
   externalIdColumn?: string | null;
   quantityColumn?: string | null;
   descriptionColumn?: string | null;
+  productNameColumn?: string | null;
+  productSkuColumn?: string | null;
 }
 
 export interface ParseResponse {

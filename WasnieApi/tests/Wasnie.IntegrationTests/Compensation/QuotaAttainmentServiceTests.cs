@@ -453,4 +453,227 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             result.Value.Should().BeLessThan(0.5m); // still reasonable — not the full 100%+ territory
         }
     }
+
+    // ── Multi-rule dedup (Step-3 consequence): attainment counts DISTINCT sales per plan, not credits ──
+
+    private static Credit MakeCredit(Guid tenantId, Guid txId, Guid payeeId, Guid planId, Guid ruleId,
+        decimal amount, string currency, int sortOrder)
+    {
+        var snapshot = RuleSnapshot.Freeze(ruleId, planId, sortOrder, $"Rule {sortOrder}",
+            RateTable.Flat(0.05m), Trigger.Always(), Now);
+        return Credit.Allocate(tenantId, txId, payeeId, planId, ruleId,
+            snapshot, Money.Of(amount, currency), Money.Of(amount * 0.05m, currency),
+            Percentage.FromPercent(100), CreditRole.Primary,
+            "test", Guid.NewGuid(), Now, Guid.NewGuid());
+    }
+
+    // Seeds ONE sale (transaction) plus `creditCount` LIVE credits on it, all in `planId` with DISTINCT
+    // rule ids — the case where several rules of one plan each credit the same sale (Step 3). Returns the tx.
+    private async Task<CompensationTransaction> SeedSaleWithNCreditsAsync(
+        Wasnie.Infrastructure.Persistence.ApplicationDbContext db,
+        Guid tenantId, Guid payeeId, Guid planId,
+        decimal amount, DateOnly txDate, int creditCount, string currency = "EUR", int quantity = 1)
+    {
+        var tx = CompensationTransaction.Ingest(
+            tenantId, $"REF-{Guid.NewGuid():N}", payeeId,
+            Money.Of(amount, currency), txDate,
+            TransactionSource.Manual, "test", Guid.NewGuid(), Now, Guid.NewGuid(), quantity: quantity);
+        tx.MarkCalculated(creditCount, Money.Of(amount * 0.05m, currency), "test", Now, Guid.NewGuid());
+        db.CompensationTransactions.Add(tx);
+        await db.SaveChangesAsync();
+
+        for (var i = 0; i < creditCount; i++)
+            db.Credits.Add(MakeCredit(tenantId, tx.Id, payeeId, planId, Guid.NewGuid(), amount, currency, i + 1));
+        await db.SaveChangesAsync();
+        return tx;
+    }
+
+    // (b) Two rules crediting ONE sale → the sale counts ONCE (not twice).
+    [Fact]
+    public async Task ComputeAsync_Revenue_TwoRulesOnSameSale_CountsSaleOnce()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 10_000m, period));
+            await db.SaveChangesAsync();
+            await SeedSaleWithNCreditsAsync(db, tenantId, payeeId, planId, 6_000m, new DateOnly(2026, 5, 10), creditCount: 2);
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
+
+            // 6,000 counted ONCE / 10,000 = 0.6. The old (per-credit) code would double to 12,000 → 1.2.
+            result.Value.Should().Be(0.6m);
+        }
+    }
+
+    // (c) Two rules over MANY sales → achieved = sum of the N sales, not 2N.
+    [Fact]
+    public async Task ComputeAsync_Revenue_TwoRulesManySales_SumsEachSaleOnce()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 6_000m, period));
+            await db.SaveChangesAsync();
+            foreach (var amount in new[] { 1_000m, 2_000m, 3_000m })
+                await SeedSaleWithNCreditsAsync(db, tenantId, payeeId, planId, amount, new DateOnly(2026, 5, 10), creditCount: 2);
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
+
+            // Sum of the three sales = 6,000 / 6,000 = 1.0. Old code → 12,000 → 2.0.
+            result.Value.Should().Be(1.0m);
+        }
+    }
+
+    // (d) The SAME sale credited in TWO different plans counts for BOTH quotas — no cross-plan dedup.
+    [Fact]
+    public async Task ComputeAsync_Revenue_SameSaleInTwoPlans_CountsForBothQuotas()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planA = Guid.NewGuid();
+        var planB = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planA, 5_000m, period));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planB, 5_000m, period));
+            await db.SaveChangesAsync();
+
+            var tx = CompensationTransaction.Ingest(
+                tenantId, "REF-TWO-PLANS", payeeId, Money.Of(5_000m, Currency), new DateOnly(2026, 5, 10),
+                TransactionSource.Manual, "test", Guid.NewGuid(), Now, Guid.NewGuid());
+            tx.MarkCalculated(2, Money.Of(250m, Currency), "test", Now, Guid.NewGuid());
+            db.CompensationTransactions.Add(tx);
+            await db.SaveChangesAsync();
+
+            db.Credits.Add(MakeCredit(tenantId, tx.Id, payeeId, planA, Guid.NewGuid(), 5_000m, Currency, 1));
+            db.Credits.Add(MakeCredit(tenantId, tx.Id, payeeId, planB, Guid.NewGuid(), 5_000m, Currency, 1));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            (await svc.ComputeAsync(payeeId, planA, new DateOnly(2026, 5, 15))).Value.Should().Be(1.0m);
+            (await svc.ComputeAsync(payeeId, planB, new DateOnly(2026, 5, 15))).Value.Should().Be(1.0m);
+        }
+    }
+
+    // (e) Superseded credits stay excluded, even in the dedup path.
+    [Fact]
+    public async Task ComputeAsync_Revenue_SupersededCreditsExcluded_WithDedup()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 4_000m, period));
+            await db.SaveChangesAsync();
+
+            // Live sale with 2 credits (dedup → counts 4,000 once).
+            await SeedSaleWithNCreditsAsync(db, tenantId, payeeId, planId, 4_000m, new DateOnly(2026, 5, 10), creditCount: 2);
+
+            // A second sale whose only credit is superseded → must NOT be counted at all.
+            var deadTx = CompensationTransaction.Ingest(
+                tenantId, "REF-DEAD", payeeId, Money.Of(9_999m, Currency), new DateOnly(2026, 5, 12),
+                TransactionSource.Manual, "test", Guid.NewGuid(), Now, Guid.NewGuid());
+            deadTx.MarkCalculated(1, Money.Of(499.95m, Currency), "test", Now, Guid.NewGuid());
+            db.CompensationTransactions.Add(deadTx);
+            await db.SaveChangesAsync();
+
+            var dead = MakeCredit(tenantId, deadTx.Id, payeeId, planId, Guid.NewGuid(), 9_999m, Currency, 1);
+            dead.Supersede("test", Now, Guid.NewGuid());
+            db.Credits.Add(dead);
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
+
+            // Only the live sale counts, once: 4,000 / 4,000 = 1.0. The 9,999 superseded sale is excluded.
+            result.Value.Should().Be(1.0m);
+        }
+    }
+
+    // (f) Units also dedups: two rules on one sale count its Quantity once.
+    [Fact]
+    public async Task ComputeAsync_Units_TwoRulesOnSameSale_CountsQuantityOnce()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 40m, period, QuotaMeasurementType.Units));
+            await db.SaveChangesAsync();
+            await SeedSaleWithNCreditsAsync(db, tenantId, payeeId, planId, 8_000m, new DateOnly(2026, 5, 10), creditCount: 2, quantity: 40);
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
+
+            // Quantity 40 counted ONCE / 40 = 1.0. Old code → 80 → 2.0.
+            result.Value.Should().Be(1.0m);
+        }
+    }
+
+    // (g) The split-at-quota PriorCumulative (delegates to Revenue) also counts each sale once.
+    [Fact]
+    public async Task GetSplitContextAsync_TwoRulesOnSameSale_PriorCumulativeCountsOnce()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        var period = DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31));
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planId, 10_000m, period));
+            await db.SaveChangesAsync();
+            await SeedSaleWithNCreditsAsync(db, tenantId, payeeId, planId, 8_000m, new DateOnly(2026, 5, 10), creditCount: 2);
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var svc = new QuotaAttainmentService(db);
+            var ctx = await svc.GetSplitContextAsync(payeeId, planId, new DateOnly(2026, 5, 15));
+
+            ctx.Should().NotBeNull();
+            ctx!.PriorCumulative.Should().Be(8_000m); // counted once, not 16,000
+            ctx.QuotaTarget.Should().Be(10_000m);
+        }
+    }
 }

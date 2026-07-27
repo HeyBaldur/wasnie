@@ -47,6 +47,10 @@ export class WsSelectComponent implements ControlValueAccessor {
   readonly options = input<SelectOption[]>([]);
   readonly placeholder = input('');
   readonly searchable = input(false);
+
+  // Multi-select mode. The control value stays a COMMA-SEPARATED STRING (not an array) so the same
+  // reactive-forms binding and CSV consumers work unchanged; single-select behaviour is untouched.
+  readonly multiple = input(false);
   readonly label = input('');
   readonly error = input('');
   readonly noResultsLabel = input('COMMON.NO_RESULTS');
@@ -103,6 +107,33 @@ export class WsSelectComponent implements ControlValueAccessor {
     return this.options().find(o => o.value === v) ?? null;
   });
 
+  // ── Multi-select ─────────────────────────────────────────────────────────────────────────
+  // The selected values, parsed from the CSV control value. Comparison is case-insensitive so a stored
+  // value keeps matching its option regardless of casing.
+  readonly selectedValues = computed<string[]>(() =>
+    this.multiple()
+      ? String(this.value() ?? '').split(',').map(s => s.trim()).filter(s => s.length > 0)
+      : []
+  );
+
+  /** Trigger text in multi mode: each selected value shown by its option label (translated) or as-is. */
+  readonly multiLabel = computed(() => {
+    const opts = this.options();
+    return this.selectedValues()
+      .map(v => {
+        const o = opts.find(op => String(op.value).toLowerCase() === v.toLowerCase());
+        return o ? this._translate.instant(String(o.label)) : v;
+      })
+      .join(', ');
+  });
+
+  isOptionSelected(opt: SelectOption): boolean {
+    if (this.multiple()) {
+      return this.selectedValues().some(v => v.toLowerCase() === String(opt.value).toLowerCase());
+    }
+    return this.value() === opt.value;
+  }
+
   // In async mode, the server already filtered — return asyncOptions as-is (no client-side filter).
   // In client-side mode, filter against the TRANSLATED label, normalizing diacritics so "espana"
   // matches "España" and "pol" matches "Poland/Polonia/Polska" regardless of case or accent.
@@ -148,13 +179,42 @@ export class WsSelectComponent implements ControlValueAccessor {
       this.asyncOptions.set(options);
       this.asyncLoading.set(false);
     });
+
+    // Safety net: if the component is destroyed while the panel is open, the capture-phase scroll/resize
+    // listeners must not outlive it (a scroll listener that survives its panel is a leak).
+    this._destroyRef.onDestroy(() => this._detachViewportListeners());
   }
 
   openDropdown(): void {
     if (this.isDisabled()) return;
-    // Measure the trigger button specifically, not the host (which includes the label above).
+    this._positionDropdown();
+    this.isOpen.set(true);
+    this._attachViewportListeners();
+    this.searchQuery.set('');
+    this.activeIndex.set(
+      Math.max(0, this.filteredOptions().findIndex(o => o.value === this.value()))
+    );
+    setTimeout(() => this.searchInputRef?.nativeElement?.focus(), 10);
+
+    // In async mode trigger an initial load (empty query = first server page) so the
+    // dropdown is not blank before the user starts typing.
+    if (this.searchFn()) {
+      this._searchSubject$.next('');
+    }
+  }
+
+  // Measures the trigger and pins the position:fixed panel to it. Called on open AND on every scroll /
+  // resize so the panel FOLLOWS its trigger instead of being left behind (position:fixed is measured
+  // relative to the viewport, so an ancestor scroll changes where the trigger is). If the trigger has
+  // scrolled out of the viewport, the panel must not linger over unrelated content — close it.
+  private _positionDropdown(): void {
     const triggerEl = (this.triggerRef?.nativeElement ?? this.host.nativeElement) as HTMLElement;
     const triggerRect = triggerEl.getBoundingClientRect();
+
+    if (this.isOpen() && (triggerRect.bottom < 0 || triggerRect.top > window.innerHeight)) {
+      this.closeDropdown();
+      return;
+    }
 
     const containerBottom = window.innerHeight - 8;
     const containerTop = 8;
@@ -190,24 +250,12 @@ export class WsSelectComponent implements ControlValueAccessor {
       this.dropdownFixedTop.set(triggerRect.bottom + 4);
       this.dropdownFixedBottom.set(null);
     }
-
-    this.isOpen.set(true);
-    this.searchQuery.set('');
-    this.activeIndex.set(
-      Math.max(0, this.filteredOptions().findIndex(o => o.value === this.value()))
-    );
-    setTimeout(() => this.searchInputRef?.nativeElement?.focus(), 10);
-
-    // In async mode trigger an initial load (empty query = first server page) so the
-    // dropdown is not blank before the user starts typing.
-    if (this.searchFn()) {
-      this._searchSubject$.next('');
-    }
   }
 
   closeDropdown(): void {
     this.isOpen.set(false);
     this.dropdownFixed.set(false);
+    this._detachViewportListeners();
     this.onTouched();
   }
 
@@ -221,6 +269,19 @@ export class WsSelectComponent implements ControlValueAccessor {
 
   select(option: SelectOption): void {
     if (option.disabled) return;
+    if (this.multiple()) {
+      // Toggle membership and keep the dropdown open so several values can be picked in one go.
+      const val = String(option.value);
+      const current = this.selectedValues();
+      const exists = current.some(v => v.toLowerCase() === val.toLowerCase());
+      const next = exists
+        ? current.filter(v => v.toLowerCase() !== val.toLowerCase())
+        : [...current, val];
+      const csv = next.join(', ');
+      this.value.set(csv);
+      this.onChange(csv);
+      return;
+    }
     this.value.set(option.value);
     this.onChange(option.value);
     this.closeDropdown();
@@ -271,14 +332,40 @@ export class WsSelectComponent implements ControlValueAccessor {
     }
   }
 
-  @HostListener('window:scroll')
-  onWindowScroll(): void {
-    if (this.isOpen()) this.closeDropdown();
+  // The panel is position:fixed, measured relative to the viewport, so any ancestor scroll moves the
+  // trigger out from under it. The page scrolls inside app-shell's `overflow-y-auto` container (not
+  // `window`), so a `window:scroll` HostListener never fires — we listen on `window` in the CAPTURE
+  // phase, which sees scrolls from every nested container. Behaviour: REPOSITION so the panel follows
+  // its trigger (a normal dropdown stays open while scrolling; only an outside click closes it). A scroll
+  // INSIDE the panel's own option list is ignored (the trigger didn't move). Reposition is throttled to
+  // one rAF so rapid scroll doesn't thrash layout with getBoundingClientRect.
+  private _repositionScheduled = false;
+  private readonly _onViewportScroll = (e: Event): void => {
+    if (!this.isOpen()) return;
+    if (this.host.nativeElement.contains(e.target as Node)) return;
+    this._scheduleReposition();
+  };
+  private readonly _onViewportResize = (): void => {
+    if (this.isOpen()) this._scheduleReposition();
+  };
+
+  private _scheduleReposition(): void {
+    if (this._repositionScheduled) return;
+    this._repositionScheduled = true;
+    requestAnimationFrame(() => {
+      this._repositionScheduled = false;
+      if (this.isOpen()) this._positionDropdown();
+    });
   }
 
-  @HostListener('window:resize')
-  onWindowResize(): void {
-    if (this.isOpen()) this.closeDropdown();
+  private _attachViewportListeners(): void {
+    window.addEventListener('scroll', this._onViewportScroll, { capture: true, passive: true });
+    window.addEventListener('resize', this._onViewportResize, { passive: true });
+  }
+
+  private _detachViewportListeners(): void {
+    window.removeEventListener('scroll', this._onViewportScroll, { capture: true } as EventListenerOptions);
+    window.removeEventListener('resize', this._onViewportResize);
   }
 
   writeValue(val: string | number): void {

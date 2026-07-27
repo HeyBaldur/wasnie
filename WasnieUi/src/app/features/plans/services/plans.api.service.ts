@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Plan, PlanSummary, CreatePlanRequest } from '../models/plan.model';
-import { AddRuleRequest, Rule, UpdateRuleRequest } from '../models/rule.model';
+import { AddRuleRequest, Rule, TriggerField, UpdateRuleRequest } from '../models/rule.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
@@ -76,6 +76,16 @@ export class PlansApiService {
   getPlanAssignments(planId: string, params?: PaginationParams): Observable<PagedResult<import('../../assignments/models/assignment.model').Assignment>> {
     return this.http.get<PagedResult<import('../../assignments/models/assignment.model').Assignment>>(
       `/api/assignments/plan/${planId}`, { params: buildHttpParams(params) });
+  }
+
+  /** The engine's own trigger-field catalog — the rule builder must not keep its own copy. */
+  getTriggerFields(): Observable<TriggerField[]> {
+    return this.http.get<TriggerField[]>(`${this.base}/trigger-fields`);
+  }
+
+  /** Distinct category values that exist for the tenant — the choices for a condition on `category`. */
+  getCategoryValues(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/category-values`);
   }
 
   getMultiPlanPayees(planId: string): Observable<MultiPlanPayees> {

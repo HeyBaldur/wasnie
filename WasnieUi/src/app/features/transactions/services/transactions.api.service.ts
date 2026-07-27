@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest, VoidTransactionRequest } from '../models/transaction.model';
+import { Transaction, CreateTransactionRequest, AssignPayeeRequest, ReassignPayeeRequest, VoidTransactionRequest, PlanOptions } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 import { JobState } from '../../imports/transactions/models/transaction-import.models';
@@ -93,6 +93,16 @@ export class TransactionsApiService {
 
   create(request: CreateTransactionRequest): Observable<Transaction> {
     return this.http.post<Transaction>(this.base, request);
+  }
+
+  /**
+   * Plans this payee could be credited under on this date/currency. The server also says whether a
+   * choice is mandatory, so the form never re-derives the engine's eligibility rule itself.
+   */
+  getPlanOptions(payeeId: string, transactionDate: string, currency: string): Observable<PlanOptions> {
+    return this.http.get<PlanOptions>(`${this.base}/plan-options`, {
+      params: { payeeId, transactionDate, currency },
+    });
   }
 
   assignPayee(transactionId: string, request: AssignPayeeRequest): Observable<Transaction> {

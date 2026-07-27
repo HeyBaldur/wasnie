@@ -1,0 +1,129 @@
+<app-shell [refreshOnEnter]="store">
+  <ws-page-layout
+    icon="tag"
+    [title]="'CATEGORY_MAPPINGS.TITLE' | translate"
+    [subtitle]="'CATEGORY_MAPPINGS.SUBTITLE' | translate"
+  >
+    <ws-button
+      slot="actions"
+      *hasPermission="'CategoryMappings.Manage'"
+      variant="primary"
+      (click)="openCreate()"
+    >
+      {{ 'CATEGORY_MAPPINGS.ADD' | translate }}
+    </ws-button>
+
+    <div class="cm-toolbar">
+      <ws-input
+        type="search"
+        prefixIcon="search"
+        [placeholder]="'CATEGORY_MAPPINGS.SEARCH_PLACEHOLDER' | translate"
+        (valueChange)="onSearch($event)"
+      />
+    </div>
+
+    <ws-table>
+      <table>
+        <thead>
+          <tr>
+            <th>{{ 'CATEGORY_MAPPINGS.COL_INPUT_FIELD' | translate }}</th>
+            <th>{{ 'CATEGORY_MAPPINGS.COL_INPUT_VALUE' | translate }}</th>
+            <th>{{ 'CATEGORY_MAPPINGS.COL_CATEGORY' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (store.loading()) {
+            @for (row of skeletonRows; track row) {
+              <tr class="skeleton-row">
+                <td><span class="skeleton skeleton--text"></span></td>
+                <td><span class="skeleton skeleton--text-wide"></span></td>
+                <td><span class="skeleton skeleton--text"></span></td>
+              </tr>
+            }
+          } @else if (store.mappings().length === 0) {
+            <tr>
+              <td colspan="3">
+                <ws-table-empty messageKey="CATEGORY_MAPPINGS.EMPTY" />
+              </td>
+            </tr>
+          } @else {
+            @for (m of store.mappings(); track m.id) {
+              <tr class="cm-row" (click)="openEdit(m)">
+                <td>{{ m.inputField }}</td>
+                <td class="col-secondary">{{ m.inputValue }}</td>
+                <td>{{ m.category }}</td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </ws-table>
+
+    @if (!store.loading() && store.totalCount() > 0) {
+      <ws-pagination
+        [currentPage]="store.page()"
+        [totalPages]="store.totalPages()"
+        [totalCount]="store.totalCount()"
+        [pageSize]="store.pageSize()"
+        (pageChange)="goToPage($event)"
+        (pageSizeChange)="goToPageSize($event)"
+      />
+    }
+  </ws-page-layout>
+</app-shell>
+
+<ws-modal
+  [(isOpen)]="modalOpen"
+  size="md"
+  [title]="(isEdit() ? 'CATEGORY_MAPPINGS.EDIT_TITLE' : 'CATEGORY_MAPPINGS.ADD_TITLE') | translate"
+  [description]="'CATEGORY_MAPPINGS.MODAL_DESC' | translate"
+>
+  <form class="cm-form" [formGroup]="form" (ngSubmit)="onSubmit()">
+    <ws-select
+      formControlName="inputField"
+      [label]="'CATEGORY_MAPPINGS.FIELD_INPUT_FIELD' | translate"
+      [options]="fieldOptions"
+    />
+    <ws-input
+      formControlName="inputValue"
+      [label]="'CATEGORY_MAPPINGS.FIELD_INPUT_VALUE' | translate"
+      [placeholder]="'CATEGORY_MAPPINGS.INPUT_VALUE_PLACEHOLDER' | translate"
+      [error]="fieldError('inputValue')"
+    />
+    <ws-input
+      formControlName="category"
+      [label]="'CATEGORY_MAPPINGS.FIELD_CATEGORY' | translate"
+      [placeholder]="'CATEGORY_MAPPINGS.CATEGORY_PLACEHOLDER' | translate"
+      [error]="fieldError('category')"
+    />
+    <!-- Submit on Enter inside the modal -->
+    <button type="submit" hidden aria-hidden="true"></button>
+  </form>
+
+  <div slot="footer" class="cm-modal-footer">
+    @if (isEdit()) {
+      <ws-button variant="ghost" (click)="onDeleteRequest()">
+        {{ 'CATEGORY_MAPPINGS.ACTION_DELETE' | translate }}
+      </ws-button>
+    }
+    <span class="cm-modal-footer__spacer"></span>
+    <ws-button variant="ghost" (click)="modalOpen.set(false)">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button variant="primary" [loading]="saving()" (click)="onSubmit()">
+      {{ (isEdit() ? 'CATEGORY_MAPPINGS.ACTION_SAVE' : 'CATEGORY_MAPPINGS.ACTION_ADD') | translate }}
+    </ws-button>
+  </div>
+</ws-modal>
+
+<ws-confirmation-modal
+  [(isOpen)]="deleteOpen"
+  [title]="'CATEGORY_MAPPINGS.DELETE_TITLE' | translate"
+  [message]="'CATEGORY_MAPPINGS.DELETE_MSG' | translate"
+  [confirmLabel]="'CATEGORY_MAPPINGS.ACTION_DELETE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="deleting()"
+  (confirmed)="onConfirmDelete()"
+  (cancelled)="deleteOpen.set(false)"
+/>

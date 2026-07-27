@@ -7,7 +7,7 @@ import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DashboardStore } from './store/dashboard.store';
-import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem } from './models/dashboard.models';
+import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, AmbiguousAttributionPayee } from './models/dashboard.models';
 import {
   WsCardComponent,
   WsBadgeComponent,
@@ -256,14 +256,37 @@ export class DashboardComponent {
     return this.store.actionBand()?.driftAlerts ?? [];
   }
 
-  /** True when the card has anything to show (unprocessable reasons OR drift alerts). */
-  hasAttentionItems(): boolean {
-    return (this.store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0 || this.driftAlerts().length > 0;
+  // ── Ambiguous attribution (payee on 2+ eligible plans, no plan declared) ───────────────────────
+
+  /**
+   * Payees whose transactions are blocked because their plan can't be determined. One row per PAYEE,
+   * not per transaction: the overlapping assignments are the cause, so that's what the admin fixes.
+   */
+  ambiguousAttributionPayees(): AmbiguousAttributionPayee[] {
+    return this.store.actionBand()?.ambiguousAttributionPayees ?? [];
   }
 
-  /** Header badge total: pending transactions that can't be processed + each drift alert. */
+  /** Deep-link to the payee's assignments — where the overlap that caused the block can be resolved. */
+  ambiguousLinkParams(item: AmbiguousAttributionPayee): unknown[] {
+    return ['/payees', item.payeeId];
+  }
+
+  /** True when the card has anything to show (unprocessable reasons, drift alerts, or ambiguity). */
+  hasAttentionItems(): boolean {
+    return (this.store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0
+      || this.driftAlerts().length > 0
+      || this.ambiguousAttributionPayees().length > 0;
+  }
+
+  /**
+   * Header badge total: unprocessable transactions + each drift alert + each BLOCKED TRANSACTION from
+   * ambiguity (not each payee) — the badge counts things needing attention, and 43 blocked
+   * transactions are 43 stuck items even though they're one row and one fix.
+   */
   attentionBadgeTotal(): number {
-    return this.attentionTotalCount() + this.driftAlerts().length;
+    return this.attentionTotalCount()
+      + this.driftAlerts().length
+      + this.ambiguousAttributionPayees().reduce((s, x) => s + x.transactionCount, 0);
   }
 
   /** i18n key for the commission state of a drifted transaction (already calculated vs already paid). */

@@ -75,6 +75,24 @@
         </div>
         <ws-select formControlName="descriptionColumn" [options]="columnOptions()" />
       </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PRODUCT_NAME' | translate }}</span>
+        </div>
+        <ws-select formControlName="productNameColumn" [options]="columnOptions()" />
+      </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_PRODUCT_SKU' | translate }}</span>
+        </div>
+        <ws-select formControlName="productSkuColumn" [options]="columnOptions()" />
+      </div>
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.TRANSACTIONS.FIELD_QUANTITY' | translate }}</span>
+        </div>
+        <ws-select formControlName="quantityColumn" [options]="columnOptions()" />
+      </div>
     </div>
   </div>
 

@@ -193,6 +193,42 @@ describe('DashboardComponent helpers', () => {
     });
   });
 
+  // Transactions blocked because their plan can't be determined. Shown per PAYEE (the cause), but the
+  // badge counts blocked TRANSACTIONS, because that's how many things are actually stuck.
+  describe('ambiguous attribution', () => {
+    const rudolph = {
+      payeeId: 'payee-1',
+      payeeName: 'Rudolph',
+      employeeCode: 'CEO-001',
+      transactionCount: 43,
+      planNames: ['Plan A', 'Plan B'],
+    };
+
+    it('returns an empty list with no summary', () => {
+      expect(component.ambiguousAttributionPayees()).toEqual([]);
+    });
+
+    it('surfaces one row per payee, not per transaction', () => {
+      component.store.summary.set(buildMockSummary({ ambiguousAttributionPayees: [rudolph] }));
+      expect(component.ambiguousAttributionPayees().length).toBe(1);
+      expect(component.ambiguousAttributionPayees()[0].transactionCount).toBe(43);
+    });
+
+    it('makes the attention card non-empty on its own', () => {
+      component.store.summary.set(buildMockSummary({ ambiguousAttributionPayees: [rudolph] }));
+      expect(component.hasAttentionItems()).toBeTrue();
+    });
+
+    it('counts blocked transactions (not payees) in the badge total', () => {
+      component.store.summary.set(buildMockSummary({ ambiguousAttributionPayees: [rudolph] }));
+      expect(component.attentionBadgeTotal()).toBe(43);
+    });
+
+    it('deep-links to the payee, where the overlapping assignments can be fixed', () => {
+      expect(component.ambiguousLinkParams(rudolph)).toEqual(['/payees', 'payee-1']);
+    });
+  });
+
   describe('pendingByPlanTotalCount', () => {
     it('returns 0 with no summary', () => {
       expect(component.pendingByPlanTotalCount()).toBe(0);
@@ -420,6 +456,7 @@ function buildMockSummary(
       pendingByPlanItems: [],
       unprocessablePendingItems: [],
       driftAlerts: [],
+      ambiguousAttributionPayees: [],
       ...actionOverride,
     },
     periodBand: {

@@ -18,7 +18,22 @@ public sealed record DashboardActionBandDto(
     IReadOnlyList<CurrencyTotalDto> PayoutsApprovedUnpaidByCurrency,
     IReadOnlyList<PlanPendingCountDto> PendingByPlanItems,
     IReadOnlyList<UnprocessablePendingDto> UnprocessablePendingItems,
-    IReadOnlyList<DriftAlertDto> DriftAlerts);
+    IReadOnlyList<DriftAlertDto> DriftAlerts,
+    IReadOnlyList<AmbiguousAttributionPayeeDto> AmbiguousAttributionPayees);
+
+// Transactions blocked because their plan cannot be determined: the payee has 2+ eligible plans and
+// nobody said which one applies, so the engine refuses to guess.
+//
+// Grouped BY PAYEE, not per transaction, because the cause is the payee's overlapping assignments —
+// one payee with 43 blocked transactions is ONE problem to fix, not 43. Fixing the cause (usually
+// deactivating the assignment that should not apply) unblocks all of them at once, which is why the
+// deep-link points at the payee's assignments.
+public sealed record AmbiguousAttributionPayeeDto(
+    Guid PayeeId,
+    string PayeeName,
+    string? EmployeeCode,
+    int TransactionCount,
+    IReadOnlyList<string> PlanNames);
 
 // A CRM drift alert (WI-HubSpot-Drift-Policy): a deal changed in HubSpot (amount and/or close date) AFTER
 // its transaction was already Calculated or Paid — so it was NOT auto-corrected (Rule 10, immutable), only

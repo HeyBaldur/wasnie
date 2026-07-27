@@ -30,7 +30,31 @@ public sealed class CompensationTransaction : AggregateRoot
     public DateOnly TransactionDate { get; private set; }
     public TransactionSource Source { get; private set; }
     public CompensationTransactionStatus Status { get; private set; } = CompensationTransactionStatus.Pending;
+    // ── What was sold ─────────────────────────────────────────────────────────────────────────
+    // Description (above) says WHICH SALE this is; these say WHAT product. Both are needed to audit a
+    // commission: "Contrato Acme 2026" plus "Industrial Press 3000 / SKU MCH-0042".
+    //
+    // ProductName is for humans. ProductSku is the discrete, comparable one — it is what rule triggers
+    // will filter on once they can, which is why it is kept as its own field instead of being parsed
+    // out of a label. Both are DESCRIPTIVE today: nothing reads them for calculation, attribution or
+    // idempotency yet. Null wherever the origin supplies nothing (deal-level rows, older data, an
+    // uncatalogued line item).
+    public string? ProductName { get; private set; }
+    public string? ProductSku { get; private set; }
+    // Enrichment output (WI-ENRICHMENT): a stable, discrete category resolved at ingest from a
+    // tenant-maintained lookup table (ProductSku first, ProductName as fallback). Rule triggers filter
+    // on THIS instead of on the raw origin field, so the discriminating value being in the "wrong"
+    // column (LAP-12 in ProductName) no longer means a rule silently never fires. Null when no mapping
+    // matched — the transaction still processes normally for rules that don't filter on category.
+    public string? Category { get; private set; }
     public string? ExternalId { get; private set; }
+    // The admin's EXPLICIT attribution decision, captured at manual ingest when the payee belongs to
+    // more than one applicable plan. It is a declaration of intent, NOT a computed result: the engine
+    // must credit THIS assignment instead of applying its tie-break. Null for every other origin
+    // (Excel, HubSpot, pre-existing rows) and for payees with a single unambiguous plan — those keep
+    // resolving exactly as before. Cleared whenever the payee changes, since the decision was made
+    // about a different person's plans and cannot meaningfully survive that.
+    public Guid? SelectedPlanAssignmentId { get; private set; }
     public DateTimeOffset IngestedAt { get; private set; }
     public string IngestedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -54,7 +78,11 @@ public sealed class CompensationTransaction : AggregateRoot
         Guid eventId,
         string? externalId = null,
         int quantity = 1,
-        string? description = null)
+        string? description = null,
+        Guid? selectedPlanAssignmentId = null,
+        string? productName = null,
+        string? productSku = null,
+        string? category = null)
     {
         if (tenantId == Guid.Empty)
             throw new DomainException("TenantId must not be empty.");
@@ -68,6 +96,10 @@ public sealed class CompensationTransaction : AggregateRoot
             throw new DomainException("IngestedBy is required.");
         if (quantity < 1)
             throw new DomainException("Quantity must be at least 1.");
+        if (selectedPlanAssignmentId.HasValue && selectedPlanAssignmentId.Value == Guid.Empty)
+            throw new DomainException("SelectedPlanAssignmentId must not be empty when provided.");
+        if (selectedPlanAssignmentId.HasValue && !payeeId.HasValue)
+            throw new DomainException("A plan assignment cannot be selected for a transaction with no payee.");
 
         var tx = new CompensationTransaction
         {
@@ -78,10 +110,18 @@ public sealed class CompensationTransaction : AggregateRoot
             Amount = amount,
             Quantity = quantity,
             Description = NormalizeDescription(description),
+            // Same normalization as Description: trimmed, blank → null, truncated rather than rejected.
+            // A product label must never be the reason a real sale fails to ingest.
+            ProductName = NormalizeDescription(productName),
+            ProductSku = NormalizeDescription(productSku),
+            // Same normalization as the other descriptive fields: trimmed, blank → null, truncated
+            // rather than rejected. Enrichment must never be the reason a real sale fails to ingest.
+            Category = NormalizeDescription(category),
             TransactionDate = transactionDate,
             Source = source,
             Status = CompensationTransactionStatus.Pending,
             ExternalId = externalId,
+            SelectedPlanAssignmentId = selectedPlanAssignmentId,
             IngestedAt = now,
             IngestedBy = ingestedBy,
             UpdatedAt = now
@@ -95,7 +135,9 @@ public sealed class CompensationTransaction : AggregateRoot
 
     // Blank → null; trimmed; truncated rather than rejected. A label that is too long must never
     // block ingesting a real sale — this field is descriptive only and carries no money semantics.
-    private static string? NormalizeDescription(string? description)
+    // Public so the import/update preview can show exactly the value that will be stored instead of
+    // re-implementing the rule (the two drifting apart is how a preview starts lying).
+    public static string? NormalizeDescription(string? description)
     {
         if (string.IsNullOrWhiteSpace(description))
             return null;
@@ -183,6 +225,9 @@ public sealed class CompensationTransaction : AggregateRoot
             throw new DomainException("PayeeId must not be empty.");
 
         PayeeId = payeeId;
+        // The selection (if any) named an assignment of a DIFFERENT payee — it cannot carry over.
+        // Clearing returns this transaction to normal resolution rather than inventing an attribution.
+        SelectedPlanAssignmentId = null;
         RevertToPendingIfNeeded(updatedBy, now);
         UpdatedAt = now;
 
@@ -204,6 +249,8 @@ public sealed class CompensationTransaction : AggregateRoot
 
         var oldPayeeId = PayeeId.Value;
         PayeeId = newPayeeId;
+        // Same reasoning as Assign: the selected assignment belongs to the previous payee.
+        SelectedPlanAssignmentId = null;
         RevertToPendingIfNeeded(updatedBy, now);
         UpdatedAt = now;
 
@@ -251,13 +298,32 @@ public sealed class CompensationTransaction : AggregateRoot
             TransactionDate = newDate.Value;
         }
 
-        if (newPayeeId.HasValue)
+        if (newPayeeId.HasValue && newPayeeId.Value != PayeeId)
+        {
             PayeeId = newPayeeId.Value;
+            // Invariant: a plan selection dies with the payee it was made for (see Assign/Reassign).
+            SelectedPlanAssignmentId = null;
+        }
 
         // Any value change on a Calculated transaction reverts it to Pending.
         if (Status == CompensationTransactionStatus.Calculated)
             Status = CompensationTransactionStatus.Pending;
 
+        UpdatedAt = now;
+    }
+
+    // Description is deliberately NOT part of ApplyExcelUpdate. That method reverts a Calculated
+    // transaction to Pending (and its caller supersedes the Credits first) because every field it
+    // touches feeds the calculation. Description feeds nothing — it is a label. Routing it through
+    // ApplyExcelUpdate would mean that fixing a typo in a deal name invalidates already-calculated
+    // commissions, i.e. exactly the "descriptive field must never drive money logic" rule the field
+    // was introduced under. So it gets its own method: same Paid guard, no status transition.
+    public void UpdateDescription(string? newDescription, string updatedBy, DateTimeOffset now)
+    {
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException("Cannot update a Paid transaction via Excel re-upload.");
+
+        Description = NormalizeDescription(newDescription);
         UpdatedAt = now;
     }
 

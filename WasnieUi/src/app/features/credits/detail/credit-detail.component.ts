@@ -74,14 +74,20 @@ export class CreditDetailComponent implements OnInit {
   openTransaction(): void {
     const c = this.credit();
     if (!c) return;
-    const url = `/transactions?refs=${encodeURIComponent(c.referenceNumber)}`;
-    window.open(url, '_blank', 'noopener');
+    // Deep-link to the transaction detail (WI-UI-TRACE) rather than the filtered list.
+    window.open(`/transactions/${c.transactionId}`, '_blank', 'noopener');
   }
 
   openPlan(): void {
     const c = this.credit();
     if (!c) return;
     window.open(`/plans/${c.planId}`, '_blank', 'noopener');
+  }
+
+  openRule(): void {
+    const c = this.credit();
+    if (!c) return;
+    window.open(`/plans/${c.planId}/rules/${c.ruleId}`, '_blank', 'noopener');
   }
 
   statusBadge(isSuperseded: boolean): BadgeVariant {

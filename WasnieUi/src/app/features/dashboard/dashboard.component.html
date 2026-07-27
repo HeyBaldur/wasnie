@@ -260,7 +260,7 @@
           {{ 'DASHBOARD.ATTENTION_EMPTY' | translate }}
         </div>
       } @else {
-        <div class="pending-plan-card__list ws-scroll-thin">
+        <div class="pending-plan-card__list pending-plan-card__list--tall ws-scroll-thin">
           @for (item of (store.actionBand()?.unprocessablePendingItems ?? []); track item.reason) {
             <a [routerLink]="['/transactions']"
                [queryParams]="attentionLinkParams(item)"
@@ -274,6 +274,36 @@
               </span>
               <ws-badge variant="warning" size="sm">{{ item.count }}</ws-badge>
             </a>
+          }
+
+          <!-- Ambiguous attribution: payee on 2+ eligible plans, so the plan can't be determined.
+               One row per PAYEE (the cause), linking to their assignments (where the fix is). -->
+          @if (ambiguousAttributionPayees().length > 0) {
+            <div class="attention-group-label">{{ 'DASHBOARD.AMBIGUOUS_GROUP_TITLE' | translate }}</div>
+            <p class="attention-group-note">{{ 'DASHBOARD.AMBIGUOUS_EXPLAIN' | translate }}</p>
+            @for (item of ambiguousAttributionPayees(); track item.payeeId) {
+              <a [routerLink]="ambiguousLinkParams(item)"
+                 class="pending-plan-card__row attention-row">
+                <span class="attention-row__icon">
+                  <app-icon name="alert-triangle" [size]="16" />
+                </span>
+                <span class="attention-row__text">
+                  <span class="attention-row__label">
+                    {{ item.payeeName }}
+                    @if (item.employeeCode) {
+                      <span class="attention-row__code">({{ item.employeeCode }})</span>
+                    }
+                  </span>
+                  <span class="attention-row__desc ambiguous-row__desc">
+                    <span>{{ 'DASHBOARD.AMBIGUOUS_ROW_COUNT' | translate: { count: item.transactionCount } }}</span>
+                    @for (plan of item.planNames; track plan) {
+                      <ws-badge variant="neutral" size="sm">{{ plan }}</ws-badge>
+                    }
+                  </span>
+                </span>
+                <ws-badge variant="warning" size="sm">{{ item.transactionCount }}</ws-badge>
+              </a>
+            }
           }
 
           <!-- Drift alerts: a deal changed in HubSpot AFTER its commission was calculated/paid -->

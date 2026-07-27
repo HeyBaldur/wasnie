@@ -27,6 +27,16 @@ export const TRANSACTION_FIELD_PATTERNS: Record<string, string[]> = {
     'quantity', 'qty', 'units', 'count', 'items',
     'cantidad', 'unidades', 'ilość', 'sztuki',
   ],
+  productNameColumn: [
+    'product', 'product name', 'item', 'item name', 'article', 'line item',
+    'producto', 'nombre del producto', 'articulo', 'artículo',
+    'produkt', 'nazwa produktu', 'towar',
+  ],
+  productSkuColumn: [
+    'sku', 'product sku', 'product code', 'item code', 'article number', 'part number',
+    'codigo de producto', 'código de producto', 'referencia de producto',
+    'kod produktu', 'numer katalogowy',
+  ],
   descriptionColumn: [
     'description', 'deal name', 'dealname', 'deal', 'name', 'concept', 'detail',
     'descripcion', 'descripción', 'concepto', 'nombre', 'nombre del negocio', 'detalle',

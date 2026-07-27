@@ -232,6 +232,41 @@ describe('TransactionsListComponent', () => {
     }).not.toThrow();
   });
 
+  it('renders the category tag when present and the reference links to the detail', () => {
+    const tx = {
+      id: 'tx-cat-1', tenantId: 't', referenceNumber: 'REF-CAT',
+      payeeId: 'p1', amount: 1000, currency: 'EUR', quantity: 1,
+      transactionDate: '2026-07-01', ingestedAt: '2026-07-01T00:00:00Z',
+      source: TransactionSource.Manual, status: TransactionStatus.Calculated,
+      payeeName: 'Anna', payeeEmployeeCode: 'E1', category: 'Laptops',
+    };
+    TestBed.overrideProvider(TransactionsStore, { useValue: makeStoreMock({ transactions: signal([tx]) }) });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Laptops');
+    const refLink: HTMLAnchorElement | null =
+      fixture.nativeElement.querySelector('a[href*="/transactions/tx-cat-1"]');
+    expect(refLink).withContext('reference should link to the transaction detail').not.toBeNull();
+    expect(refLink?.textContent).toContain('REF-CAT');
+  });
+
+  it('does not break and shows no category tag when category is null', () => {
+    const tx = {
+      id: 'tx-nocat', tenantId: 't', referenceNumber: 'REF-NOCAT',
+      payeeId: 'p1', amount: 100, currency: 'EUR', quantity: 1,
+      transactionDate: '2026-07-01', ingestedAt: '2026-07-01T00:00:00Z',
+      source: TransactionSource.Manual, status: TransactionStatus.Pending,
+      payeeName: 'Bob', payeeEmployeeCode: null, category: null,
+    };
+    TestBed.overrideProvider(TransactionsStore, { useValue: makeStoreMock({ transactions: signal([tx]) }) });
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.col-ref__category')).toBeNull();
+    expect(fixture.nativeElement.innerHTML).not.toContain('null');
+  });
+
   describe('canVoid()', () => {
     let component: TransactionsListComponent;
 

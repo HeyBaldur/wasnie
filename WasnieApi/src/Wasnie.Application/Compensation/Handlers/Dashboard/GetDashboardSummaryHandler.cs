@@ -41,11 +41,13 @@ public sealed class GetDashboardSummaryHandler(
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
         var unprocessablePending = await BuildUnprocessablePendingAsync(cancellationToken);
         var driftAlerts = await BuildDriftAlertsAsync(cancellationToken);
+        var ambiguousAttribution = await BuildAmbiguousAttributionAsync(cancellationToken);
         actionBand = actionBand with
         {
             PendingByPlanItems = pendingByPlan,
             UnprocessablePendingItems = unprocessablePending,
             DriftAlerts = driftAlerts,
+            AmbiguousAttributionPayees = ambiguousAttribution,
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
@@ -104,7 +106,106 @@ public sealed class GetDashboardSummaryHandler(
             PayoutsApprovedUnpaidByCurrency: approvedUnpaidByCurrency,
             PendingByPlanItems: [],
             UnprocessablePendingItems: [],
-            DriftAlerts: []);
+            DriftAlerts: [],
+            AmbiguousAttributionPayees: []);
+    }
+
+    // ── Pending transactions whose plan cannot be determined, grouped BY PAYEE ────────────────
+    // A payee on 2+ eligible plans with no declared choice: the engine refuses to guess (see
+    // AmbiguousAttributionSpec), so these sit Pending until someone resolves the overlap. Grouped by
+    // payee because that is the unit of the FIX — one payee's overlapping assignments cause all of
+    // their blocked transactions, and deactivating the surplus assignment unblocks them together.
+    //
+    // Anti-Cartesian, no N+1: three bounded queries (pending transactions → their payees' assignments
+    // → those plans) and all matching in memory through the engine's own Candidates rule.
+    private async Task<IReadOnlyList<AmbiguousAttributionPayeeDto>> BuildAmbiguousAttributionAsync(
+        CancellationToken ct)
+    {
+        // Only rows that could possibly be ambiguous: Pending, with a payee, without a declared plan.
+        // Projected to the three fields the rule needs — a tenant can have tens of thousands of Pending
+        // rows and the dashboard must not materialise them as entities.
+        var pending = await db.CompensationTransactions
+            .Where(t => t.Status == CompensationTransactionStatus.Pending
+                     && t.PayeeId != null
+                     && t.SelectedPlanAssignmentId == null)
+            .Select(t => new
+            {
+                PayeeId = t.PayeeId!.Value,
+                t.TransactionDate,
+                Currency = t.Amount.Currency,
+            })
+            .ToListAsync(ct);
+
+        if (pending.Count == 0) return [];
+
+        var payeeIds = pending.Select(t => t.PayeeId).Distinct().ToList();
+
+        // ALL assignments for those payees (any status) — Candidates applies the status/period filter.
+        var assignments = await db.PlanAssignments
+            .Where(a => payeeIds.Contains(a.PayeeId))
+            .ToListAsync(ct);
+
+        if (assignments.Count == 0) return [];
+
+        var assignmentsByPayee = assignments
+            .GroupBy(a => a.PayeeId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<PlanAssignment>)g.ToList());
+
+        var planIds = assignments.Select(a => a.PlanId).Distinct().ToList();
+        var plans = await db.CompensationPlans
+            .Where(p => planIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, p.Currency })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        var planCurrencyById = plans.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+
+        // Count per payee, and collect the DISTINCT plans that made each one ambiguous — that list is
+        // what tells the admin which overlap to look at.
+        var countByPayee = new Dictionary<Guid, int>();
+        var planNamesByPayee = new Dictionary<Guid, HashSet<string>>();
+
+        foreach (var tx in pending)
+        {
+            if (!assignmentsByPayee.TryGetValue(tx.PayeeId, out var payeeAssignments)) continue;
+
+            // The projection already excluded rows with a declared plan, hence the null selection.
+            var candidates = AmbiguousAttributionSpec.AmbiguousCandidates(
+                selectedPlanAssignmentId: null, tx.TransactionDate, tx.Currency,
+                payeeAssignments, planCurrencyById);
+            if (candidates.Count == 0) continue;
+
+            var payeeId = tx.PayeeId;
+            countByPayee.TryGetValue(payeeId, out var existing);
+            countByPayee[payeeId] = existing + 1;
+
+            if (!planNamesByPayee.TryGetValue(payeeId, out var names))
+                planNamesByPayee[payeeId] = names = [];
+            foreach (var c in candidates)
+                if (plans.TryGetValue(c.PlanId, out var plan))
+                    names.Add(plan.Name);
+        }
+
+        if (countByPayee.Count == 0) return [];
+
+        var affectedPayeeIds = countByPayee.Keys.ToList();
+        var payees = await db.Payees
+            .Where(p => affectedPayeeIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.FullName, p.EmployeeCode })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        return countByPayee
+            .OrderByDescending(kvp => kvp.Value)
+            .Select(kvp =>
+            {
+                var payee = payees.GetValueOrDefault(kvp.Key);
+                return new AmbiguousAttributionPayeeDto(
+                    PayeeId: kvp.Key,
+                    PayeeName: payee?.FullName ?? string.Empty,
+                    EmployeeCode: payee?.EmployeeCode,
+                    TransactionCount: kvp.Value,
+                    PlanNames: planNamesByPayee[kvp.Key].OrderBy(n => n).ToList());
+            })
+            .ToList();
     }
 
     // ── CRM drift alerts (WI-HubSpot-Drift-Policy, PASO 3) ─────────────────────
@@ -387,10 +488,12 @@ public sealed class GetDashboardSummaryHandler(
         return raw.Select(p => (p.Amount, p.Currency)).ToList();
     }
 
-    // ── Avg quota attainment — anti-Cartesian ─────────────────────────────────
-    // Doc 15 invariant: credits joined to transactions is 1:1 (Credit.TransactionId FK).
-    // We load quotas and all relevant credits in two separate queries; matching is in-memory.
-    // This avoids any join that could multiply rows across the quota-credit relationship.
+    // ── Avg quota attainment ──────────────────────────────────────────────────
+    // Achieved is the same DISTINCT-sale definition as QuotaAchievedQuery (the shared source of truth):
+    // Step 3 lets several rules credit one sale, so summing credits double-counts. That canonical query is
+    // per-(payee,plan) and would be an N+1 here — this handler iterates EVERY active quota in the tenant —
+    // so we keep the single bulk load and dedup in-memory by transaction id (GroupBy TxId → count each sale
+    // once). If the dedup rule ever changes, change QuotaAchievedQuery AND this block together.
     private async Task<decimal?> ComputeAvgAttainmentAsync(
         DateOnly? from, DateOnly? to, CancellationToken ct)
     {
@@ -413,8 +516,8 @@ public sealed class GetDashboardSummaryHandler(
 
         if (quotas.Count == 0) return null;
 
-        // Load all non-superseded credits with their transaction dates and amounts in one query.
-        // No quota join here — matching is done in-memory below (no Cartesian risk).
+        // Load all non-superseded credits with their transaction id/date/amount in one query. TxId lets us
+        // dedup below so a multi-rule sale counts once. No quota join here (matching is in-memory).
         var allCredits = await (
             from c in db.Credits
             join t in db.CompensationTransactions on c.TransactionId equals t.Id
@@ -423,6 +526,7 @@ public sealed class GetDashboardSummaryHandler(
             {
                 c.PayeeId,
                 c.PlanId,
+                TxId = t.Id,
                 TxAmount = t.Amount.Amount,
                 Currency = t.Amount.Currency,
                 Quantity = t.Quantity,
@@ -439,7 +543,8 @@ public sealed class GetDashboardSummaryHandler(
                 achieved = allCredits
                     .Where(c => c.PayeeId == q.PayeeId && c.PlanId == q.PlanId
                                 && c.TransactionDate >= q.Start && c.TransactionDate <= q.End)
-                    .Sum(c => (decimal)c.Quantity);
+                    .GroupBy(c => c.TxId)
+                    .Sum(g => (decimal)g.First().Quantity);
             }
             else
             {
@@ -447,7 +552,8 @@ public sealed class GetDashboardSummaryHandler(
                     .Where(c => c.PayeeId == q.PayeeId && c.PlanId == q.PlanId
                                 && c.Currency == q.Currency
                                 && c.TransactionDate >= q.Start && c.TransactionDate <= q.End)
-                    .Sum(c => c.TxAmount);
+                    .GroupBy(c => c.TxId)
+                    .Sum(g => g.First().TxAmount);
             }
 
             if (q.Target > 0m)

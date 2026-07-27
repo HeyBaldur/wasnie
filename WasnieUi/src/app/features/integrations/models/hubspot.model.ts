@@ -14,6 +14,8 @@ export interface HubSpotConnectionStatus {
   disconnectedAt: string | null;
   /** When the automatic polling sync last ran successfully (Phase 3). Null = never auto-synced yet. */
   lastSyncedAt: string | null;
+  /** WI-CRM-CATEGORY: the HubSpot property the tenant declared feeds Category. Null = not configured. */
+  categoryPropertyName: string | null;
 }
 
 export interface HubSpotConnectResult {

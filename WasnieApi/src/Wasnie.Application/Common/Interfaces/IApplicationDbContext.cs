@@ -37,6 +37,7 @@ public interface IApplicationDbContext
     DbSet<Quota> Quotas { get; }
     DbSet<PlanAssignment> PlanAssignments { get; }
     DbSet<CompensationTransaction> CompensationTransactions { get; }
+    DbSet<Wasnie.Domain.Compensation.Enrichment.CategoryMapping> CategoryMappings { get; }
     DbSet<Credit> Credits { get; }
     DbSet<CompensationPayout> CompensationPayouts { get; }
     DbSet<PayRun> PayRuns { get; }

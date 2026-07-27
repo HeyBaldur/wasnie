@@ -48,6 +48,15 @@ public sealed class HubSpotConnection : Entity
     /// </summary>
     public DateTimeOffset? LastSyncedAt { get; private set; }
 
+    /// <summary>
+    /// The internal name of the HubSpot line-item/product property that feeds a transaction's Category
+    /// (WI-CRM-CATEGORY). The tenant DECLARES which of THEIR properties holds the category — Wasnie never
+    /// imposes a name. Null/empty = feature off: enrichment falls back to the manual lookup table exactly
+    /// as before. It is CONFIG, not a credential: it survives reconnect/disconnect (it describes the
+    /// tenant's own CRM schema, which a token change does not alter).
+    /// </summary>
+    public string? CategoryPropertyName { get; private set; }
+
     public DateTimeOffset UpdatedAt { get; private set; }
 
     /// <summary>Optimistic-concurrency token (SQL Server rowversion).</summary>
@@ -134,6 +143,17 @@ public sealed class HubSpotConnection : Entity
         TokenExpiresAt = tokenExpiresAt;
         Status = HubSpotConnectionStatus.Connected;
         StatusReason = null;
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Sets the HubSpot property that feeds Category (WI-CRM-CATEGORY). Trimmed; blank → null (feature off).
+    /// Deliberately independent of the token lifecycle, so reconnect/disconnect never wipe the admin's
+    /// mapping choice.
+    /// </summary>
+    public void SetCategoryPropertyName(string? propertyName, DateTimeOffset now)
+    {
+        CategoryPropertyName = string.IsNullOrWhiteSpace(propertyName) ? null : propertyName.Trim();
         UpdatedAt = now;
     }
 

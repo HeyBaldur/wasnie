@@ -17,6 +17,7 @@ import { TranslateModule, TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { PlansStore } from '../state/plans.store';
+import { PlansApiService } from '../services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { getPlanPermissions } from '../services/plan-permissions';
 import {
@@ -29,7 +30,7 @@ import {
   ModifierType,
   RateTableType,
 } from '../models/rule.model';
-import { AddRuleRequest, UpdateRuleRequest } from '../models/rule.model';
+import { AddRuleRequest, TriggerField, UpdateRuleRequest } from '../models/rule.model';
 import {
   WsPageHeaderComponent,
   WsButtonComponent,
@@ -66,6 +67,7 @@ export class RuleFormComponent implements OnInit {
   private readonly router = inject(Router);
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
+  private readonly plansApi = inject(PlansApiService);
 
   private readonly destroyRef = inject(DestroyRef);
 
@@ -117,9 +119,166 @@ export class RuleFormComponent implements OnInit {
     { label: 'PLANS.CAP_SCOPE_PERTRANSACTION', value: CapScope.PerTransaction },
   ];
 
-  readonly conditionOperatorOptions: SelectOption[] = Object.entries(ConditionOperator)
-    .filter(([, v]) => typeof v === 'number')
-    .map(([k, v]) => ({ label: `PLANS.COND_OP_${k.toUpperCase()}`, value: v as number }));
+  // ── Trigger fields ────────────────────────────────────────────────────────────────────────
+  // Fetched from the engine's catalog rather than declared here. A second copy in the browser is
+  // exactly how the form came to offer field names the engine had never heard of, producing rules
+  // that saved cleanly and then silently never fired.
+  readonly triggerFields = signal<TriggerField[]>([]);
+
+  // ── Category values ───────────────────────────────────────────────────────────────────────
+  // A condition on `category` picks its value from the tenant's real categories rather than free text,
+  // so a typo ("Laptps") can no longer save a rule that silently never fires. The list is short and
+  // stable by design (one per business line), which is exactly why a picker is viable.
+  readonly CATEGORY_FIELD = 'category';
+  readonly categoryValues = signal<string[]>([]);
+  readonly categoryValuesLoaded = signal(false);
+
+  /** The tenant's categories as select options (value === label — category names aren't i18n keys). */
+  readonly categoryOptions = computed<SelectOption[]>(() =>
+    this.categoryValues().map(c => ({ value: c, label: c }))
+  );
+
+  readonly fieldOptions = computed<SelectOption[]>(() =>
+    this.triggerFields().map(f => ({
+      // Labels stay translatable; the LIST is the backend's.
+      label: `PLANS.TRIGGER_FIELD_${f.field.toUpperCase()}`,
+      value: f.field,
+    }))
+  );
+
+  /** Operators this field's evaluator genuinely implements — never the full enum. */
+  operatorOptionsFor(index: number): SelectOption[] {
+    const definition = this._definitionAt(index);
+    if (!definition) return [];
+    return definition.operators.map(op => ({
+      label: `PLANS.COND_OP_${op.operator.toUpperCase()}`,
+      value: ConditionOperator[op.operator as keyof typeof ConditionOperator] as number,
+    }));
+  }
+
+  /** True when the selected operator reads a LIST (In/NotIn) instead of a single value. */
+  usesSet(index: number): boolean {
+    const definition = this._definitionAt(index);
+    const operator = Number(this.conditionsArray.at(index).get('operator')?.value);
+    return definition?.operators.some(
+      op => op.usesSet && ConditionOperator[op.operator as keyof typeof ConditionOperator] === operator
+    ) ?? false;
+  }
+
+  /** A stored condition whose field is not in the catalog — it can never match. */
+  isUnknownField(index: number): boolean {
+    const field = this.fieldValueAt(index);
+    if (!field || this.triggerFields().length === 0) return false;
+    return !this.triggerFields().some(f => f.field.toLowerCase() === field.toLowerCase());
+  }
+
+  fieldValueAt(index: number): string {
+    return this.conditionsArray.at(index).get('field')?.value ?? '';
+  }
+
+  private _definitionAt(index: number): TriggerField | undefined {
+    const field = this.fieldValueAt(index);
+    return this.triggerFields().find(f => f.field.toLowerCase() === field.toLowerCase());
+  }
+
+  // ── Category value picker ─────────────────────────────────────────────────────────────────
+  // Only the `category` field is affected; every other field keeps its existing value input.
+
+  isCategoryField(index: number): boolean {
+    return this.fieldValueAt(index).toLowerCase() === this.CATEGORY_FIELD;
+  }
+
+  customValueAt(index: number): boolean {
+    return !!this.conditionsArray.at(index).get('customValue')?.value;
+  }
+
+  valueRawAt(index: number): string {
+    return this.conditionsArray.at(index).get('valueRaw')?.value ?? '';
+  }
+
+  valueSetAt(index: number): string {
+    return this.conditionsArray.at(index).get('valueSet')?.value ?? '';
+  }
+
+  private _parseSet(csv: string): string[] {
+    return String(csv ?? '').split(',').map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  /** True when the value is edited by picking from the category list rather than typing. */
+  useCategoryPicker(index: number): boolean {
+    return this.isCategoryField(index)
+      && !this.customValueAt(index)
+      && this.categoryValues().length > 0;
+  }
+
+  /** Escape hatch (B): flip a category condition between the picker and free text, explicitly. */
+  toggleCustomValue(index: number): void {
+    const ctrl = this.conditionsArray.at(index).get('customValue');
+    ctrl?.setValue(!ctrl.value);
+  }
+
+  /**
+   * A category condition whose value is not among the tenant's categories — it can never match, exactly
+   * the silent typo this WI exists to surface. Only judged once the list has loaded and is non-empty.
+   */
+  categoryValueUnknown(index: number): boolean {
+    if (!this.isCategoryField(index) || this.categoryValues().length === 0) return false;
+    const known = new Set(this.categoryValues().map(c => c.toLowerCase()));
+    if (this.usesSet(index)) {
+      const set = this._parseSet(this.valueSetAt(index));
+      return set.length > 0 && set.some(s => !known.has(s.toLowerCase()));
+    }
+    const raw = this.valueRawAt(index).trim();
+    return raw.length > 0 && !known.has(raw.toLowerCase());
+  }
+
+  /** No categories exist yet (new/un-synced tenant): the admin still writes the rule via free text. */
+  categoryListEmpty(index: number): boolean {
+    return this.isCategoryField(index) && this.categoryValuesLoaded() && this.categoryValues().length === 0;
+  }
+
+  /**
+   * Once the category list is known, force free-text mode for any stored condition whose value does not
+   * match — so the value stays VISIBLE (never hidden behind an empty picker) alongside its warning, and
+   * is never rewritten. Safe to run whenever either the list or the rule finishes loading.
+   */
+  private _reconcileCategoryModes(): void {
+    if (this.categoryValues().length === 0) return;
+    this.conditionsArray.controls.forEach((_, i) => {
+      if (this.isCategoryField(i) && this.categoryValueUnknown(i)) {
+        this.conditionsArray.at(i).get('customValue')?.setValue(true, { emitEvent: false });
+      }
+    });
+  }
+
+  /** Keeps valueType aligned with the picked field, so numeric/date comparisons use the right
+   *  evaluator. Previously every condition was saved as String, which is why ordering operators
+   *  never matched. */
+  onFieldChange(index: number): void {
+    const group = this.conditionsArray.at(index);
+    const definition = this._definitionAt(index);
+    if (!definition) return;
+
+    group.get('valueType')?.setValue(
+      ConditionValueType[definition.valueType as keyof typeof ConditionValueType] as number
+    );
+
+    // Drop an operator the new field does not support rather than submitting a dead filter.
+    const allowed = definition.operators.map(
+      op => ConditionOperator[op.operator as keyof typeof ConditionOperator] as number
+    );
+    if (!allowed.includes(Number(group.get('operator')?.value))) {
+      group.get('operator')?.setValue(allowed[0]);
+    }
+
+    // Switching TO category starts the value fresh in picker mode: a leftover value from the previous
+    // field (e.g. a product SKU) would otherwise be an unknown category and silently never match.
+    if (this.fieldValueAt(index).toLowerCase() === this.CATEGORY_FIELD) {
+      group.get('valueRaw')?.setValue('');
+      group.get('valueSet')?.setValue('');
+      group.get('customValue')?.setValue(false);
+    }
+  }
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
@@ -186,6 +345,26 @@ export class RuleFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // The field catalog drives the picker, the operator lists and the value-type. Without it the
+    // form has nothing valid to offer, so failures leave the list empty rather than falling back to
+    // a hardcoded copy that could drift from the engine.
+    this.plansApi.getTriggerFields().subscribe({
+      next: fields => this.triggerFields.set(fields),
+      error: () => this.triggerFields.set([]),
+    });
+
+    // The category picker's choices. Arrives independently of the rule load, so reconcile once it lands
+    // (the rule may already be on screen). A failure leaves the list empty → free-text fallback, so the
+    // admin is never blocked.
+    this.plansApi.getCategoryValues().subscribe({
+      next: values => {
+        this.categoryValues.set(values);
+        this.categoryValuesLoaded.set(true);
+        this._reconcileCategoryModes();
+      },
+      error: () => this.categoryValuesLoaded.set(true),
+    });
+
     // When the user switches to Units mode, force rate table to Flat (only supported combination).
     // Also ensure hidden fields stay at their defaults.
     this.form.controls.measurement.controls.type.valueChanges.pipe(
@@ -279,9 +458,16 @@ export class RuleFormComponent implements OnInit {
             operator: [this._enumToNumber(ConditionOperator, c.operator)],
             valueType: [this._enumToNumber(ConditionValueType, c.value.type)],
             valueRaw: [c.value.raw],
+            // Stored as a list; edited as comma-separated text.
+            valueSet: [(c.value.set ?? []).join(', ')],
+            customValue: [false],
           })
         );
+        this._wireFieldChange(this.conditionsArray.length - 1);
       });
+      // If the category list already loaded, drop unknown-valued category conditions to free text so
+      // their value stays visible next to the warning (and is never rewritten).
+      this._reconcileCategoryModes();
     }
 
     if (rule.modifier) {
@@ -330,8 +516,19 @@ export class RuleFormComponent implements OnInit {
         operator: [ConditionOperator.Equal],
         valueType: [ConditionValueType.String],
         valueRaw: [''],
+        valueSet: [''],
+        // Category only: false = pick from the list, true = the explicit "use another value" escape hatch.
+        customValue: [false],
       })
     );
+    this._wireFieldChange(this.conditionsArray.length - 1);
+  }
+
+  /** Re-aligns valueType and the operator list whenever the picked field changes. */
+  private _wireFieldChange(index: number): void {
+    this.conditionsArray.at(index).get('field')?.valueChanges
+      .pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.onFieldChange(index));
   }
 
   removeCondition(i: number): void { this.conditionsArray.removeAt(i); }
@@ -439,11 +636,25 @@ export class RuleFormComponent implements OnInit {
     return {
       _schema: 1 as const,
       logicalOperator: v.trigger.logicalOperator,
-      conditions: v.trigger.conditions.map((c) => ({
-        field: c['field'],
-        operator: Number(c['operator']),
-        value: { type: Number(c['valueType']), raw: c['valueRaw'], set: null },
-      })),
+      conditions: v.trigger.conditions.map((c) => {
+        const operator = Number(c['operator']);
+        // In/NotIn are read from `set`; everything else from `raw`. The form used to send set: null
+        // unconditionally, which made those two operators unreachable however they were configured.
+        const isSetOperator =
+          operator === ConditionOperator.In || operator === ConditionOperator.NotIn;
+        const set = isSetOperator
+          ? String(c['valueSet'] ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+          : null;
+        return {
+          field: c['field'],
+          operator,
+          value: {
+            type: Number(c['valueType']),
+            raw: isSetOperator ? '' : c['valueRaw'],
+            set,
+          },
+        };
+      }),
     };
   }
 

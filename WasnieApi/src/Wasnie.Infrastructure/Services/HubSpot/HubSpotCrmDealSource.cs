@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Interfaces;
@@ -27,10 +28,26 @@ public sealed class HubSpotCrmDealSource(
     IHubSpotTokenProvider tokenProvider,
     IHubSpotOAuthClient oauthClient,
     IOptions<HubSpotOptions> options,
+    IApplicationDbContext db,
     ILogger<HubSpotCrmDealSource> logger)
     : ICrmDealSource
 {
     private readonly HubSpotOptions _opts = options.Value;
+
+    /// <summary>
+    /// WI-CRM-CATEGORY: the tenant-declared HubSpot property whose value feeds Category, or null when the
+    /// tenant has not configured one (feature off). Tenant-explicit (IgnoreQueryFilters) so it resolves the
+    /// same under the background sync job and an authenticated request, exactly like the token lookup.
+    /// </summary>
+    private async Task<string?> GetConfiguredCategoryPropertyAsync(Guid tenantId, CancellationToken ct)
+    {
+        var name = await db.HubSpotConnections
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId)
+            .Select(c => c.CategoryPropertyName)
+            .FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
 
     public string SourceName => "HubSpot";
 
@@ -67,6 +84,9 @@ public sealed class HubSpotCrmDealSource(
     {
         var accessToken = await tokenProvider.GetValidAccessTokenAsync(tenantId, cancellationToken)
             ?? throw new CrmNotConnectedException(SourceName);
+
+        // WI-CRM-CATEGORY: load the tenant's configured category property once per read (null = feature off).
+        var categoryProp = await GetConfiguredCategoryPropertyAsync(tenantId, cancellationToken);
 
         var url = $"{_opts.ApiBaseUrl.TrimEnd('/')}{_opts.DealsSearchPath}";
         var deals = new List<CrmDeal>();
@@ -115,7 +135,7 @@ public sealed class HubSpotCrmDealSource(
         }
         while (after is not null);
 
-        var dealsWithLines = await AttachLineItemsAsync(deals, accessToken, cancellationToken);
+        var dealsWithLines = await AttachLineItemsAsync(deals, accessToken, categoryProp, cancellationToken);
 
         logger.LogInformation(
             "HubSpot closed-won deal read ({Mode}) returned {Count} deals across {Pages} page(s).",
@@ -123,7 +143,22 @@ public sealed class HubSpotCrmDealSource(
         return dealsWithLines;
     }
 
-    private static readonly string[] LineItemProperties = ["quantity", "price", "amount", "name"];
+    // hs_sku is a DEFAULT line item property and travels in the batch-read below — no extra API call
+    // and nothing for the customer to configure. "Product type" (Inventory/Non-Inventory/Service) is
+    // deliberately NOT requested: HubSpot's API reference does not publish its internal name, and
+    // asking for a property that does not exist is ignored silently, which would look like a tenant
+    // with no data rather than a wrong request.
+    private static readonly string[] LineItemProperties = ["quantity", "price", "amount", "name", "hs_sku"];
+
+    /// <summary>
+    /// WI-CRM-CATEGORY: the line-item properties to request — the defaults, PLUS the tenant's configured
+    /// category property but ONLY when one is configured. Extracted so the "added only when configured"
+    /// rule is unit-testable without the HTTP boundary.
+    /// </summary>
+    internal static IReadOnlyList<string> BuildLineItemProperties(string? categoryProp) =>
+        string.IsNullOrWhiteSpace(categoryProp)
+            ? LineItemProperties
+            : [.. LineItemProperties, categoryProp.Trim()];
 
     /// <summary>
     /// For each deal, fetch its line items (v4 associations batch-read → line items batch-read) and attach
@@ -131,9 +166,14 @@ public sealed class HubSpotCrmDealSource(
     /// returned unchanged (empty <see cref="CrmDeal.Lines"/>). Requires the crm.objects.line_items.read scope.
     /// </summary>
     private async Task<IReadOnlyList<CrmDeal>> AttachLineItemsAsync(
-        List<CrmDeal> deals, string accessToken, CancellationToken cancellationToken)
+        List<CrmDeal> deals, string accessToken, string? categoryProp, CancellationToken cancellationToken)
     {
         if (deals.Count == 0) return deals;
+
+        // WI-CRM-CATEGORY: request the tenant's configured category property alongside the defaults, ONLY
+        // when configured. If it is not a real HubSpot property, HubSpot silently omits it (no error) — the
+        // value just comes back empty, which we detect below.
+        var lineItemProps = BuildLineItemProperties(categoryProp);
 
         // 1) deal id → line item ids (v4 associations batch read).
         var lineItemIdsByDeal = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -178,7 +218,7 @@ public sealed class HubSpotCrmDealSource(
         foreach (var chunk in allLineItemIds.Chunk(100))
         {
             using var doc = await SendWithRetryAsync(
-                () => PostJson(liUrl, BuildLineItemsReadBody(chunk), accessToken), "line_items.read", cancellationToken);
+                () => PostJson(liUrl, BuildLineItemsReadBody(chunk, lineItemProps), accessToken), "line_items.read", cancellationToken);
 
             if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
             {
@@ -192,11 +232,29 @@ public sealed class HubSpotCrmDealSource(
                         Name: NullIfBlank(GetString(props, "name")),
                         Quantity: ParseDecimal(GetString(props, "quantity")),
                         Price: ParseDecimal(GetString(props, "price")),
-                        Amount: ParseDecimal(GetString(props, "amount")));
+                        Amount: ParseDecimal(GetString(props, "amount")),
+                        Sku: NullIfBlank(GetString(props, "hs_sku")),
+                        CategoryFromCrm: categoryProp is null ? null : NullIfBlank(GetString(props, categoryProp)));
                 }
             }
 
             if (_opts.SearchThrottleMs > 0) await Task.Delay(_opts.SearchThrottleMs, cancellationToken);
+        }
+
+        // WI-CRM-CATEGORY — HubSpot's silence trap: if the tenant configured a category property that does
+        // NOT exist in their CRM (typo / never created), HubSpot omits it with no error and every value
+        // arrives blank, so categories would look mysteriously empty. Surface it as a visible warning
+        // instead. NEVER fails the sync — the deals still import and enrichment falls back to the lookup
+        // table; this only tells the admin to fix the property name.
+        if (categoryProp is not null && lineItemById.Count > 0 &&
+            lineItemById.Values.All(li => li.CategoryFromCrm is null))
+        {
+            logger.LogWarning(
+                "HubSpot category property '{Property}' came back empty on ALL {Count} line item(s) in this " +
+                "sync. Either it is not a real property in HubSpot (check the exact internal name in " +
+                "Settings → Properties) or no products have a value set. Transactions fall back to the manual " +
+                "category table until this is fixed.",
+                categoryProp, lineItemById.Count);
         }
 
         // 3) attach line items to their deals (deals without associations are returned unchanged).
@@ -250,14 +308,14 @@ public sealed class HubSpotCrmDealSource(
     }
 
     // {"properties":[...],"inputs":[{"id":"..."}, ...]}
-    private static string BuildLineItemsReadBody(IEnumerable<string> ids)
+    private static string BuildLineItemsReadBody(IEnumerable<string> ids, IReadOnlyList<string> properties)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
             writer.WriteStartArray("properties");
-            foreach (var p in LineItemProperties)
+            foreach (var p in properties)
                 writer.WriteStringValue(p);
             writer.WriteEndArray();
             writer.WriteStartArray("inputs");

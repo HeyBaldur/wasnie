@@ -7,6 +7,7 @@ import { TransactionsStore } from '../state/transactions.store';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SettingsApiService } from '../../admin/services/settings.api.service';
+import { TransactionsApiService } from '../services/transactions.api.service';
 import { Transaction, TransactionStatus, TransactionSource } from '../models/transaction.model';
 
 describe('TransactionFormComponent', () => {
@@ -14,6 +15,7 @@ describe('TransactionFormComponent', () => {
   let payeesApiSpy: jasmine.SpyObj<PayeesApiService>;
   let toastSpy: jasmine.SpyObj<ToastService>;
   let settingsApiSpy: jasmine.SpyObj<SettingsApiService>;
+  let transactionsApiSpy: jasmine.SpyObj<TransactionsApiService>;
 
   const mockTx: Transaction = {
     id: 'tx-1',
@@ -45,6 +47,13 @@ describe('TransactionFormComponent', () => {
     settingsApiSpy = jasmine.createSpyObj('SettingsApiService', ['getFieldRequirements']);
     settingsApiSpy.getFieldRequirements.and.returnValue(of([]));
 
+    // Default: the payee is on a single plan, so no attribution choice is required. Specs that
+    // exercise the multi-plan gate override this.
+    transactionsApiSpy = jasmine.createSpyObj('TransactionsApiService', ['getPlanOptions']);
+    transactionsApiSpy.getPlanOptions.and.returnValue(
+      of({ options: [], selectionRequired: false })
+    );
+
     await TestBed.configureTestingModule({
       imports: [TransactionFormComponent, TranslateModule.forRoot()],
       providers: [
@@ -53,6 +62,7 @@ describe('TransactionFormComponent', () => {
         { provide: PayeesApiService, useValue: payeesApiSpy },
         { provide: ToastService, useValue: toastSpy },
         { provide: SettingsApiService, useValue: settingsApiSpy },
+        { provide: TransactionsApiService, useValue: transactionsApiSpy },
       ],
     }).compileComponents();
   });
@@ -193,10 +203,14 @@ describe('TransactionFormComponent', () => {
       referenceNumber: 'REF-001',
       // Left blank on the form → sent as null, not an empty string.
       description: null,
+      productName: null,
+      productSku: null,
       transactionDate: '2024-01-15',
       amount: 500,
       currency: 'USD',
       quantity: 1,
+      // Single-plan payee → no attribution choice was required, so none is sent.
+      selectedPlanAssignmentId: null,
       processImmediately: true,
     });
   }));
@@ -222,6 +236,118 @@ describe('TransactionFormComponent', () => {
       jasmine.objectContaining({ description: 'Acme Contract 2026' }),
     );
   }));
+
+  // The bug this guards: a payee on several plans had the plan chosen by an engine tie-break, which
+  // silently decided the commission. The form must stop and make the admin state it.
+  describe('plan attribution when the payee is on several plans', () => {
+    const twoPlans = {
+      options: [
+        {
+          planAssignmentId: 'asg-revenue', planId: 'plan-revenue', planName: 'Revenue Plan',
+          planCurrency: 'USD', effectiveStart: '2024-01-01', effectiveEnd: '2024-12-31',
+        },
+        {
+          planAssignmentId: 'asg-units', planId: 'plan-units', planName: 'Units Plan',
+          planCurrency: 'USD', effectiveStart: '2024-01-01', effectiveEnd: '2024-12-31',
+        },
+      ],
+      selectionRequired: true,
+    };
+
+    const fillValidExceptPlan = (component: TransactionFormComponent) =>
+      component.form.patchValue({
+        payeeId: 'payee-1',
+        referenceNumber: 'REF-001',
+        transactionDate: '2024-01-15',
+        amount: 500,
+        currency: 'USD',
+      });
+
+    it('blocks submission until a plan is chosen', fakeAsync(async () => {
+      transactionsApiSpy.getPlanOptions.and.returnValue(of(twoPlans));
+      const fixture = TestBed.createComponent(TransactionFormComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      fillValidExceptPlan(component);
+      tick();
+
+      expect(component.planSelectionRequired()).toBeTrue();
+      expect(component.form.valid).toBeFalse();
+
+      await component.onSubmit();
+      tick();
+
+      expect(storeSpy.createTransaction).not.toHaveBeenCalled();
+    }));
+
+    it('sends the chosen plan assignment once one is selected', fakeAsync(async () => {
+      transactionsApiSpy.getPlanOptions.and.returnValue(of(twoPlans));
+      const fixture = TestBed.createComponent(TransactionFormComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      fillValidExceptPlan(component);
+      tick();
+      component.form.patchValue({ selectedPlanAssignmentId: 'asg-units' });
+
+      await component.onSubmit();
+      tick();
+
+      expect(storeSpy.createTransaction).toHaveBeenCalledWith(
+        jasmine.objectContaining({ selectedPlanAssignmentId: 'asg-units' }),
+      );
+    }));
+
+    it('offers exactly the plans the server returned', fakeAsync(() => {
+      transactionsApiSpy.getPlanOptions.and.returnValue(of(twoPlans));
+      const fixture = TestBed.createComponent(TransactionFormComponent);
+      fixture.detectChanges();
+
+      fillValidExceptPlan(fixture.componentInstance);
+      tick();
+
+      expect(fixture.componentInstance.planSelectOptions().map(o => o.value))
+        .toEqual(['asg-revenue', 'asg-units']);
+    }));
+
+    // A stale choice must not survive a change that alters which plans apply.
+    it('clears a chosen plan that is no longer a candidate after the date changes', fakeAsync(() => {
+      transactionsApiSpy.getPlanOptions.and.returnValue(of(twoPlans));
+      const fixture = TestBed.createComponent(TransactionFormComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      fillValidExceptPlan(component);
+      tick();
+      component.form.patchValue({ selectedPlanAssignmentId: 'asg-units' });
+
+      transactionsApiSpy.getPlanOptions.and.returnValue(
+        of({ options: [twoPlans.options[0]], selectionRequired: false })
+      );
+      component.form.patchValue({ transactionDate: '2025-03-01' });
+      tick();
+
+      expect(component.form.controls.selectedPlanAssignmentId.value).toBe('');
+      expect(component.planSelectionRequired()).toBeFalse();
+    }));
+
+    // One plan (or none) means no ambiguity — the form must not add friction.
+    it('does not require a plan when the payee has a single applicable plan', fakeAsync(() => {
+      transactionsApiSpy.getPlanOptions.and.returnValue(
+        of({ options: [twoPlans.options[0]], selectionRequired: false })
+      );
+      const fixture = TestBed.createComponent(TransactionFormComponent);
+      fixture.detectChanges();
+      const component = fixture.componentInstance;
+
+      fillValidExceptPlan(component);
+      tick();
+
+      expect(component.planSelectionRequired()).toBeFalse();
+      expect(component.form.valid).toBeTrue();
+    }));
+  });
 
   it('processImmediately defaults to true (checkbox checked)', () => {
     const fixture = TestBed.createComponent(TransactionFormComponent);

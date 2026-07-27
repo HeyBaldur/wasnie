@@ -66,7 +66,8 @@ public sealed class HubSpotDriftPolicyTests
         var createGuard = new Wasnie.Application.Compensation.Common.TransactionCreateGuard(db);
         var driftPolicy = new CrmDriftPolicy(db, guid);
         var reconciler = new Wasnie.Application.Integrations.Crm.CrmDealReconciler(
-            db, guid, resolver, createGuard, driftPolicy);
+            db, guid, resolver, createGuard, driftPolicy,
+            new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService());
 
         var handler = new ImportHubSpotDealsHandler(
             tenantCtx, currentUser, clock, authz, dealSource, reconciler);

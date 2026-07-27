@@ -75,33 +75,16 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
         return AttainmentPercentage.FromAchievedAndTarget(achieved, target);
     }
 
-    // Revenue (Sales Quota): sum Transaction.Amount of non-superseded Credits whose source
-    // transaction date falls within the quota period AND whose currency matches the quota's currency.
-    // Uses Transaction.Amount (gross sales) NOT CreditedAmount (commission). Industry-standard:
-    // "Anna should sell €25k this month" → Achieved = sum of transaction revenues.
-    // Credit serves as the plan-routing oracle; we sum t.Amount (the sale) not c.CreditedAmount (the commission).
-    private async Task<decimal> ComputeRevenueAchievedAsync(
+    // Revenue (Sales Quota): distinct-sale sum via the shared QuotaAchievedQuery — the ONE definition of
+    // "achieved" that the motor and every card share, so they cannot drift apart again.
+    private Task<decimal> ComputeRevenueAchievedAsync(
         Guid payeeId,
         Guid planId,
         DateOnly periodStart,
         DateOnly periodEnd,
         string quotaCurrency,
         CancellationToken ct)
-    {
-        var amounts = await (
-            from c in _db.Credits
-            join t in _db.CompensationTransactions on c.TransactionId equals t.Id
-            where c.PayeeId == payeeId
-               && c.PlanId == planId
-               && c.SupersededAt == null
-               && t.Amount.Currency == quotaCurrency
-               && t.TransactionDate >= periodStart
-               && t.TransactionDate <= periodEnd
-            select t.Amount.Amount
-        ).ToListAsync(ct);
-
-        return amounts.Sum();
-    }
+        => QuotaAchievedQuery.RevenueAsync(_db, payeeId, planId, periodStart, periodEnd, quotaCurrency, ct);
 
     public async Task<AttainmentSplitContext?> GetSplitContextAsync(
         Guid payeeId,
@@ -139,25 +122,12 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
         return new AttainmentSplitContext(prior, target);
     }
 
-    // Units: sum Quantity from source transactions of non-superseded Credits.
-    private async Task<decimal> ComputeUnitsAchievedAsync(
+    // Units: distinct-sale quantity sum via the shared QuotaAchievedQuery (same source of truth).
+    private Task<decimal> ComputeUnitsAchievedAsync(
         Guid payeeId,
         Guid planId,
         DateOnly periodStart,
         DateOnly periodEnd,
         CancellationToken ct)
-    {
-        var quantities = await (
-            from c in _db.Credits
-            join t in _db.CompensationTransactions on c.TransactionId equals t.Id
-            where c.PayeeId == payeeId
-               && c.PlanId == planId
-               && c.SupersededAt == null
-               && t.TransactionDate >= periodStart
-               && t.TransactionDate <= periodEnd
-            select t.Quantity
-        ).ToListAsync(ct);
-
-        return quantities.Sum();
-    }
+        => QuotaAchievedQuery.UnitsAsync(_db, payeeId, planId, periodStart, periodEnd, ct);
 }

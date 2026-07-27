@@ -49,6 +49,20 @@
         <ws-select formControlName="payeeCodeColumn" [options]="optionalColumnOptions()" />
       </div>
 
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_QUANTITY' | translate }}</span>
+        </div>
+        <ws-select formControlName="quantityColumn" [options]="optionalColumnOptions()" />
+      </div>
+
+      <div class="mapping-row">
+        <div class="mapping-row__field">
+          <span class="mapping-row__label">{{ 'IMPORTS.UPDATE.COL_DESCRIPTION' | translate }}</span>
+        </div>
+        <ws-select formControlName="descriptionColumn" [options]="optionalColumnOptions()" />
+      </div>
+
     </div>
   </div>
 

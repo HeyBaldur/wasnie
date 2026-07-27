@@ -28,6 +28,8 @@ public sealed class HubSpotConnectionConfiguration : IEntityTypeConfiguration<Hu
         builder.Property(c => c.DisconnectedAt);
         builder.Property(c => c.DisconnectedBy).HasMaxLength(450);
         builder.Property(c => c.LastSyncedAt);
+        // WI-CRM-CATEGORY: tenant-declared HubSpot property name feeding Category. Nullable = feature off.
+        builder.Property(c => c.CategoryPropertyName).HasMaxLength(200);
         builder.Property(c => c.UpdatedAt).IsRequired();
 
         builder.Property(c => c.RowVersion).IsRowVersion();

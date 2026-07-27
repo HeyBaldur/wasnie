@@ -113,6 +113,29 @@
               </div>
             }
 
+            <!-- WI-CRM-CATEGORY: declare which HubSpot property feeds the transaction Category -->
+            @if (isConnected()) {
+              <div class="int-card__category">
+                <span class="int-card__sync-label">{{ 'INTEGRATIONS.HUBSPOT.CATEGORY.TITLE' | translate }}</span>
+                <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.CATEGORY.HELP' | translate }}</p>
+                <div class="int-card__category-row">
+                  <ws-input
+                    class="int-card__category-input"
+                    [(ngModel)]="categoryPropValue"
+                    [placeholder]="'INTEGRATIONS.HUBSPOT.CATEGORY.PLACEHOLDER' | translate"
+                  />
+                  <ws-button
+                    variant="secondary"
+                    [loading]="savingCategory()"
+                    [disabled]="savingCategory()"
+                    (click)="saveCategoryProperty()"
+                  >
+                    {{ 'INTEGRATIONS.HUBSPOT.CATEGORY.SAVE' | translate }}
+                  </ws-button>
+                </div>
+              </div>
+            }
+
             <!-- Inline test-connection result -->
             @if (testResult(); as tr) {
               <div
