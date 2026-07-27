@@ -60,8 +60,27 @@ public sealed class DealLostReconciler(
             .Where(t => wonById.TryGetValue(DealIdOf(t.ExternalId!), out var won) && !won)
             .ToList();
 
+        // Recovery cleanup (lost→won on a STILL-live tx): an active Calculated/Paid tx whose deal returned to
+        // won — resolve any stale open deal-lost alert. Nothing to re-create (the tx was never cancelled; its
+        // commission is valid again). The Cancelled→re-create path is handled by the forward reconciler.
+        var wonTxIds = atRisk
+            .Where(t => wonById.TryGetValue(DealIdOf(t.ExternalId!), out var won) && won)
+            .Select(t => t.Id)
+            .ToList();
+        var resolvedStale = 0;
+        if (wonTxIds.Count > 0)
+        {
+            var stale = await db.DealLostAlerts
+                .Where(a => a.ResolvedAt == null && wonTxIds.Contains(a.TransactionId))
+                .ToListAsync(cancellationToken);
+            foreach (var a in stale) { a.Resolve(actor, now); resolvedStale++; }
+        }
+
         if (lostTxs.Count == 0)
+        {
+            if (resolvedStale > 0) await db.SaveChangesAsync(cancellationToken);
             return 0;
+        }
 
         var lostTxIds = lostTxs.Select(t => t.Id).ToList();
 

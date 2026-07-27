@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Integrations.Crm.Drift;
+using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -85,6 +87,9 @@ public sealed class CrmDealReconciler(
 
         int created = 0, assigned = 0, unassigned = 0, skippedExisting = 0, skippedInvalid = 0, newMappings = 0, skippedBlocked = 0;
         var driftCandidates = new List<CrmDriftCandidate>();
+        // Deals that came back from Lost → re-created here (RecreateAfterDealLost). Their stale deal-lost
+        // alert is resolved and the recovery audited after the loop.
+        var recoveredDealIds = new HashSet<string>(StringComparer.Ordinal);
         var missingAmount = 0;
         var missingCurrency = 0;
         var missingCloseDate = 0;
@@ -137,6 +142,9 @@ public sealed class CrmDealReconciler(
                 skippedBlocked++;
                 continue;
             }
+            // Deal came back from Lost → re-create (falls through to the create paths below).
+            if (dealDecision == TransactionCreateDecision.RecreateAfterDealLost)
+                recoveredDealIds.Add(deal.Id);
 
             // ── New deal WITHOUT line items → one transaction (unchanged legacy behaviour) ──
             if (deal.Lines.Count == 0)
@@ -204,6 +212,8 @@ public sealed class CrmDealReconciler(
                     continue;
                 }
                 if (lineDecision == TransactionCreateDecision.BlockedVoidHadCredits) { skippedBlocked++; continue; }
+                // Deal came back from Lost → re-create this line (falls through to the create path below).
+                if (lineDecision == TransactionCreateDecision.RecreateAfterDealLost) recoveredDealIds.Add(deal.Id);
 
                 if (li.Amount is null) { skippedInvalid++; continue; }
 
@@ -244,6 +254,32 @@ public sealed class CrmDealReconciler(
                 created++;
                 if (payeeId.HasValue) assigned++; else unassigned++;
             }
+        }
+
+        // ── Recovery (lost→won) transparency ────────────────────────────────────────
+        // For each deal we just re-created after a deal-lost cancellation: resolve its stale (still-open)
+        // deal-lost alert and write ONE recovery audit. Idempotent by construction — next sync the re-created
+        // row is ACTIVE, so the guard returns SkipActiveDuplicate and this never fires again for that deal.
+        if (recoveredDealIds.Count > 0)
+        {
+            var staleAlerts = await db.DealLostAlerts
+                .Where(a => a.ResolvedAt == null && recoveredDealIds.Contains(a.ExternalDealId))
+                .ToListAsync(cancellationToken);
+            foreach (var a in staleAlerts)
+                a.Resolve(actor, now);
+
+            foreach (var dealId in recoveredDealIds)
+                db.AuditLogs.Add(AuditLog.Create(
+                    tenantId: tenantId,
+                    timestampUtc: now.UtcDateTime,
+                    actorUserId: actor,
+                    actorEmail: actorEmail,
+                    action: AuditActions.CrmDealRecovered,
+                    resourceType: ResourceTypes.Transaction,
+                    resourceId: DealRef(dealId),
+                    resourceDisplayName: DealRef(dealId),
+                    beforeJson: null,
+                    afterJson: JsonSerializer.Serialize(new { externalDealId = dealId, recreated = true })));
         }
 
         await db.SaveChangesAsync(cancellationToken);

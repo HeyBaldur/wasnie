@@ -4,6 +4,22 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-27 — WI-DEAL-RECOVERED: lost→won re-acredita (arregla el "Cancelled para siempre") COMPLETO (money)
+
+Bug (Rodolfo, runtime): deal ganado→calculado→Closed Lost→Wasnie canceló la tx→**Closed Won de nuevo→la tx quedó Cancelled para siempre, comisión válida destruida**. Causa: el sync forward intenta re-importar el deal recuperado pero `TransactionCreateGuard:105-110` bloquea la re-importación de una tx cancelada con créditos. **Decisiones de Rodolfo:** re-acreditación AUTOMÁTICA; **RE-CREAR, no revivir** (tx nueva, recalc desde cero; la cancelada queda como histórico).
+
+**Paso 0 (money, verificado en DB).** E2E-A (`0C08F2CA…`, deal 512147967174) = Cancelled, reason "Deal lost in CRM…", crédito **superseded+unconsumed** (nunca pagado). **El caso de doble-pago NO es alcanzable:** `SELECT ... Status='Paid' AND CancelledReason LIKE 'Deal lost in CRM%'` = **0** — una tx Paid perdida NO se cancela (RevertForLostDeal rechaza Paid; el reconciler solo alerta), así que queda Paid+activa y el forward guard ya la SkipActiveDuplicate (nunca re-crea). El set "cancelada-por-deal-lost" NUNCA contiene Paid. Además el reconciler crea **Pending** y NUNCA calcula (invariante del sync, `HubSpotTenantSyncJob.cs:19`) → un deal recuperado re-entra Pending como cualquier closed-won, se calcula en el ProcessPending normal.
+
+**Fix (guard, money-critical).** Constante compartida `CompensationTransaction.DealLostCancellationReasonPrefix = "Deal lost in CRM"` (el handler de reversión la usa para armar el motivo). `TransactionCreateGuard`: nueva decisión **`RecreateAfterDealLost`**. Set "recoverable" = **source==CrmSync** + Cancelled + reason empieza con el prefijo + tiene créditos + **NINGÚN crédito consumido** (guard anti-doble-pago: un crédito pagado queda BLOCKED, nunca se re-acredita). El "blocked" excluye a los recoverable. `Decide`: active→Skip (idempotencia: tras re-crear, el nuevo activo gana) → recoverable→RecreateAfterDealLost → blocked→Blocked → Create. Manual/Excel NO abren recovery (solo CrmSync).
+
+**Reconciler.** `CrmDealReconciler`: `RecreateAfterDealLost` cae naturalmente a la rama de creación (no lo atrapan los `if Skip/Blocked`) → re-crea la tx Pending; se juntan los dealIds recuperados y, tras el loop, se **resuelve la DealLostAlert stale** de ese deal + se escribe audit **`CRM_DEAL_RECOVERED`** (idempotente: la próxima sync el activo gana→Skip). `DealLostReconciler` (caso B): una tx Calculated/Paid ACTIVA cuyo deal volvió a won → resuelve su alerta stale (no re-crea; nunca se canceló). No tocó el flujo won→lost existente.
+
+**Sin migración** (no hay schema nuevo — decisión de guard + constante + acciones de audit string). **Sin frontend** (la alerta desaparece sola al resolverse, la tx re-creada aparece en la lista, el audit sale en el feed vía `formatActivityAction` genérico). El caso Paid-recuperado: **no alcanzable** (documentado); si el modelo cambiara para hacerlo alcanzable, el guard de crédito-consumido lo mantiene BLOCKED (no doble-pago), sin alerta dedicada (caso imposible hoy).
+
+**Tests.** Backend **870→877** (+7): `TransactionCreateGuardRecoveryTests` (recoverable unpaid; otro motivo→blocked; **crédito PAID→blocked**; source no-CRM→blocked; activo→Skip idempotente) + 2 e2e en `HubSpotDriftPolicyTests` (deal-lost-cancelled que vuelve a won → tx nueva Pending re-creada + cancelada como histórico + alerta resuelta + audit; idempotencia: 2ª sync no re-crea). Front **499** sin cambios (WI backend). Build test project limpio (solución completa bloqueada por el Api en ejecución — no es error de compilación).
+
+**Verificación Rodolfo:** el E2E-A ya está en HubSpot como Won de nuevo → "Sync now" → debería aparecer una tx NUEVA Pending para el deal 512147967174 (la `0C08F2CA` Cancelled queda de histórico) → procesar pending → se re-acredita → entra al pay run.
+
 ## 2026-07-27 — WI-DEAL-LOST: detección won→lost + alerta honesta + reversión de Calculated (money) COMPLETO
 
 Implementa la Opción 1 del diagnóstico previo. **Decisiones de Rodolfo (Paso 0):** tx revertida → **Cancelled**; alerta = **entidad nueva `DealLostAlert`** (no reusar CrmDriftAlert, que exige monto/fecha); detección **dentro del sync** (auto + "Sync now"). **NO** se construyó clawback de Paid (solo se detecta e informa).

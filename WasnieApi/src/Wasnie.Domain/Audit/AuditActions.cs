@@ -137,4 +137,7 @@ public static class AuditActions
     public const string DealLostDetected = "DEAL_LOST_DETECTED";
     // The admin reverted a Calculated commission because its deal was lost (credit superseded, tx cancelled).
     public const string DealLostCommissionReverted = "DEAL_LOST_COMMISSION_REVERTED";
+    // A previously deal-lost-cancelled deal returned to closed-won → a fresh transaction was re-created and
+    // the stale deal-lost alert resolved (lost→won recovery). The cancelled row stays as history.
+    public const string CrmDealRecovered = "CRM_DEAL_RECOVERED";
 }

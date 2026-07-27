@@ -10,6 +10,7 @@ using Wasnie.Domain.Audit;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Exceptions;
 
 namespace Wasnie.Application.Compensation.Handlers.Transactions;
@@ -80,7 +81,7 @@ public sealed class RevertCommissionForLostDealHandler(
 
         var now = clock.UtcNowOffset;
         var actor = currentUser.UserId ?? "system";
-        var reason = $"Deal lost in CRM (deal {alert.ExternalDealId}).";
+        var reason = $"{CompensationTransaction.DealLostCancellationReasonPrefix} (deal {alert.ExternalDealId}).";
 
         try
         {

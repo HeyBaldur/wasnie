@@ -18,6 +18,14 @@ public enum TransactionCreateDecision
     /// open a double-pay path. Anti-double-pay is sacred (Rule 10): block and explain, never create.
     /// </summary>
     BlockedVoidHadCredits,
+
+    /// <summary>
+    /// The only blocking row was a CRM transaction cancelled BECAUSE its deal was lost, whose commission was
+    /// NEVER paid (superseded, unconsumed). The deal has now returned, so re-creating is CORRECT (the sale is
+    /// real again) and safe from double-pay (nothing was ever paid on it). The caller creates a fresh
+    /// transaction and treats it as a deal RECOVERY (audit + resolve the stale deal-lost alert).
+    /// </summary>
+    RecreateAfterDealLost,
 }
 
 /// <summary>
@@ -31,24 +39,37 @@ public sealed class TransactionCreateClassification
     private readonly IReadOnlySet<string> _activeExternalIds;
     private readonly IReadOnlySet<string> _blockedReferences;
     private readonly IReadOnlySet<string> _blockedExternalIds;
+    private readonly IReadOnlySet<string> _recoverableReferences;
+    private readonly IReadOnlySet<string> _recoverableExternalIds;
 
     internal TransactionCreateClassification(
         IReadOnlySet<string> activeReferences,
         IReadOnlySet<string> activeExternalIds,
         IReadOnlySet<string> blockedReferences,
-        IReadOnlySet<string> blockedExternalIds)
+        IReadOnlySet<string> blockedExternalIds,
+        IReadOnlySet<string> recoverableReferences,
+        IReadOnlySet<string> recoverableExternalIds)
     {
         _activeReferences = activeReferences;
         _activeExternalIds = activeExternalIds;
         _blockedReferences = blockedReferences;
         _blockedExternalIds = blockedExternalIds;
+        _recoverableReferences = recoverableReferences;
+        _recoverableExternalIds = recoverableExternalIds;
     }
 
     public TransactionCreateDecision Decide(string referenceNumber, string? externalId)
     {
+        // Order matters: an ACTIVE row wins (idempotent skip — this is what makes recovery idempotent, since
+        // once re-created the new active row is found here on the next sync).
         if (_activeReferences.Contains(referenceNumber)
             || (externalId is not null && _activeExternalIds.Contains(externalId)))
             return TransactionCreateDecision.SkipActiveDuplicate;
+
+        // A deal-lost cancellation whose commission was never paid → re-create (the deal came back).
+        if (_recoverableReferences.Contains(referenceNumber)
+            || (externalId is not null && _recoverableExternalIds.Contains(externalId)))
+            return TransactionCreateDecision.RecreateAfterDealLost;
 
         if (_blockedReferences.Contains(referenceNumber)
             || (externalId is not null && _blockedExternalIds.Contains(externalId)))
@@ -117,6 +138,43 @@ public sealed class TransactionCreateGuard(IApplicationDbContext db) : ITransact
             .Select(t => t.ExternalId!)
             .ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
 
-        return new TransactionCreateClassification(activeRefs, activeExts, blockedRefs, blockedExts);
+        // Recovery (lost→won): a blocked row that was cancelled BECAUSE its deal was lost, and whose
+        // commission was NEVER paid (no consumed credit — deal-lost credits are superseded + unconsumed),
+        // may be re-created. Only for CRM sync (deal-lost cancellations are CrmSync); manual/Excel keep the
+        // strict block. The consumed-credit exclusion is the anti-double-pay guard (Rule 10): if any credit
+        // was ever paid, it stays blocked and is never silently re-credited.
+        var recoverableRefs = Empty;
+        var recoverableExts = Empty;
+        if (source == TransactionSource.CrmSync)
+        {
+            var prefix = Domain.Compensation.Transactions.CompensationTransaction.DealLostCancellationReasonPrefix;
+
+            if (blockedRefs.Count > 0)
+                recoverableRefs = (await db.CompensationTransactions
+                    .Where(t => t.Status == CompensationTransactionStatus.Cancelled
+                             && blockedRefs.Contains(t.ReferenceNumber)
+                             && t.CancelledReason != null && t.CancelledReason.StartsWith(prefix)
+                             && !db.Credits.Any(c => c.TransactionId == t.Id && c.ConsumedAt != null))
+                    .Select(t => t.ReferenceNumber)
+                    .ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
+
+            if (blockedExts.Count > 0)
+                recoverableExts = (await db.CompensationTransactions
+                    .Where(t => t.Status == CompensationTransactionStatus.Cancelled && t.Source == source
+                             && t.ExternalId != null && blockedExts.Contains(t.ExternalId)
+                             && t.CancelledReason != null && t.CancelledReason.StartsWith(prefix)
+                             && !db.Credits.Any(c => c.TransactionId == t.Id && c.ConsumedAt != null))
+                    .Select(t => t.ExternalId!)
+                    .ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
+
+            // A recoverable key must NOT also be reported as blocked.
+            if (recoverableRefs.Count > 0)
+                blockedRefs = blockedRefs.Where(r => !recoverableRefs.Contains(r)).ToHashSet(StringComparer.Ordinal);
+            if (recoverableExts.Count > 0)
+                blockedExts = blockedExts.Where(e => !recoverableExts.Contains(e)).ToHashSet(StringComparer.Ordinal);
+        }
+
+        return new TransactionCreateClassification(
+            activeRefs, activeExts, blockedRefs, blockedExts, recoverableRefs, recoverableExts);
     }
 }

@@ -350,6 +350,11 @@ public sealed class CompensationTransaction : AggregateRoot
         RaiseDomainEvent(new TransactionCancelledEvent(eventId, now, Id, TenantId, reason.Trim()));
     }
 
+    // Marker prefix on CancelledReason for a transaction cancelled BECAUSE its CRM deal was lost. The CRM
+    // create-guard keys off this to allow re-import if the deal later returns to closed-won (lost→won),
+    // WITHOUT opening re-import for transactions cancelled for any other reason (manual voids, etc.).
+    public const string DealLostCancellationReasonPrefix = "Deal lost in CRM";
+
     // Calculated → Cancelled, specifically because the CRM deal was LOST after the commission was
     // calculated. This is the ONLY path that cancels a Calculated transaction, and it is deliberately
     // narrow: the caller MUST have superseded the transaction's live credits first (so nothing is paid),
