@@ -758,7 +758,16 @@
     "DRIFT_STATE_PAID": "Już zapłacona",
     "DRIFT_AMOUNT": "Kwota {{old}} → {{new}}",
     "DRIFT_DATE": "Data zamknięcia {{old}} → {{new}}",
-    "DRIFT_ACTION": "Ta prowizja już została rozliczona — sprawdź i popraw ręcznie."
+    "DRIFT_ACTION_CALCULATED": "Już obliczona. Transakcja zmieniła się w HubSpot po tej prowizji — sprawdź i uzgodnij ręcznie.",
+    "DRIFT_ACTION_PAID": "Już wypłacona. Transakcja zmieniła się po wypłacie — korekty są obsługiwane poza aplikacją na razie.",
+    "DEAL_LOST_GROUP_TITLE": "Transakcja utracona po prowizji",
+    "DEAL_LOST_COMMISSION": "Prowizja {{amount}}",
+    "DEAL_LOST_ACTION_CALCULATED": "Ta transakcja nie jest już wygrana — możesz cofnąć tę prowizję (nie została wypłacona).",
+    "DEAL_LOST_ACTION_PAID": "Ta transakcja nie jest już wygrana, ale prowizja została już wypłacona — clawback jest obsługiwany poza aplikacją na razie.",
+    "DEAL_LOST_REVERT": "Cofnij prowizję",
+    "DEAL_LOST_CONFIRM_TITLE": "Cofnąć tę prowizję?",
+    "DEAL_LOST_CONFIRM_MSG": "Transakcja {{ref}} została utracona w CRM. Spowoduje to zastąpienie jej kredytu ({{amount}}) i anulowanie transakcji, usuwając ją z przyszłych wypłat. Nie można tego cofnąć jednym kliknięciem.",
+    "DEAL_LOST_REVERTED": "Prowizja cofnięta."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",

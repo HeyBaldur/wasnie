@@ -59,9 +59,10 @@ public sealed class HubSpotTenantSyncJobTests
         var driftPolicy = new CrmDriftPolicy(db, guid);
         var reconciler = new CrmDealReconciler(db, guid, resolver, createGuard, driftPolicy,
             new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService());
+        var dealLostReconciler = new Wasnie.Application.Integrations.Crm.DealLostReconciler(db, dealSource, guid);
 
         var job = new HubSpotTenantSyncJob(
-            tenantCtx, db, dealSource, reconciler, clock, NullLogger<HubSpotTenantSyncJob>.Instance);
+            tenantCtx, db, dealSource, reconciler, dealLostReconciler, clock, NullLogger<HubSpotTenantSyncJob>.Instance);
 
         return new Harness { Db = db, Job = job, DealSource = dealSource, TenantId = tenantId };
     }

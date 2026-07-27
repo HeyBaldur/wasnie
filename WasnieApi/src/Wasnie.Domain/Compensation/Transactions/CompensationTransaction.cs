@@ -349,4 +349,31 @@ public sealed class CompensationTransaction : AggregateRoot
 
         RaiseDomainEvent(new TransactionCancelledEvent(eventId, now, Id, TenantId, reason.Trim()));
     }
+
+    // Calculated → Cancelled, specifically because the CRM deal was LOST after the commission was
+    // calculated. This is the ONLY path that cancels a Calculated transaction, and it is deliberately
+    // narrow: the caller MUST have superseded the transaction's live credits first (so nothing is paid),
+    // and MUST have verified the credit is not committed to an Approved/Paid payout. Paid is NEVER reverted
+    // here — clawback of paid money is a separate, out-of-scope concern (guarded below AND at the handler).
+    public void RevertForLostDeal(string reason, string cancelledBy, DateTimeOffset now, Guid eventId)
+    {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 3)
+            throw new DomainException("Reversal reason is required and must be at least 3 characters.");
+
+        if (Status == CompensationTransactionStatus.Paid)
+            throw new DomainException(
+                "This commission was already paid; reverting a paid commission (clawback) is not supported here.");
+
+        if (Status != CompensationTransactionStatus.Calculated)
+            throw new DomainException(
+                $"Only a Calculated commission can be reverted for a lost deal. Current status: {Status}.");
+
+        Status = CompensationTransactionStatus.Cancelled;
+        CancelledBy = cancelledBy;
+        CancelledAt = now;
+        CancelledReason = reason.Trim();
+        UpdatedAt = now;
+
+        RaiseDomainEvent(new TransactionCancelledEvent(eventId, now, Id, TenantId, reason.Trim()));
+    }
 }

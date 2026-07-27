@@ -758,7 +758,16 @@
     "DRIFT_STATE_PAID": "Already paid",
     "DRIFT_AMOUNT": "Amount {{old}} → {{new}}",
     "DRIFT_DATE": "Close date {{old}} → {{new}}",
-    "DRIFT_ACTION": "This commission already moved — review and adjust manually."
+    "DRIFT_ACTION_CALCULATED": "Already calculated. The deal changed in HubSpot after this commission — review and reconcile it manually.",
+    "DRIFT_ACTION_PAID": "Already paid. The deal changed after payout — corrections are handled outside the app for now.",
+    "DEAL_LOST_GROUP_TITLE": "Deal lost after commission",
+    "DEAL_LOST_COMMISSION": "Commission {{amount}}",
+    "DEAL_LOST_ACTION_CALCULATED": "This deal is no longer won — you can revert this commission (it has not been paid).",
+    "DEAL_LOST_ACTION_PAID": "This deal is no longer won, but the commission was already paid — clawback is handled outside the app for now.",
+    "DEAL_LOST_REVERT": "Revert commission",
+    "DEAL_LOST_CONFIRM_TITLE": "Revert this commission?",
+    "DEAL_LOST_CONFIRM_MSG": "The deal for {{ref}} was lost in the CRM. This supersedes its credit ({{amount}}) and cancels the transaction, removing it from any future pay run. It cannot be undone with one click.",
+    "DEAL_LOST_REVERTED": "Commission reverted."
   },
   "IMPORTS": {
     "STEPS": {

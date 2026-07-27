@@ -70,6 +70,12 @@ public sealed class HubSpotOptions
     /// <summary>Path of the line items batch-read endpoint (reads quantity/price/amount per line item id).</summary>
     public string LineItemsBatchReadPath { get; init; } = "/crm/v3/objects/line_items/batch/read";
 
+    /// <summary>
+    /// Path of the deals batch-read endpoint (reads specific deals BY ID, no stage filter). Used by the
+    /// reverse reconciliation to check whether an already-credited deal is still closed-won.
+    /// </summary>
+    public string DealsBatchReadPath { get; init; } = "/crm/v3/objects/deals/batch/read";
+
     /// <summary>Page size for deal/owner reads (HubSpot caps the search API at 100 per page).</summary>
     public int ReadPageSize { get; init; } = 100;
 

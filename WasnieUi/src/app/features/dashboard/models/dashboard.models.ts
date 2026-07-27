@@ -53,6 +53,22 @@ export interface DriftAlertItem {
   detectedAt: string;
 }
 
+/**
+ * A deal-lost alert: a HubSpot deal Wasnie already commissioned is NO LONGER closed-won (moved to Lost or
+ * an open stage) after its transaction was Calculated/Paid. Distinct from `DriftAlertItem` (amount/date
+ * change on a STILL-won deal). Calculated → the UI offers "Revert commission"; Paid → informational only
+ * (clawback of paid money is handled outside for now). `commissionAmount` is what a revert takes back.
+ */
+export interface DealLostAlertItem {
+  transactionId: string;
+  referenceNumber: string;
+  externalDealId: string;
+  transactionStatus: 'Calculated' | 'Paid';
+  commissionAmount: number;
+  commissionCurrency: string;
+  detectedAt: string;
+}
+
 export interface DashboardActionBand {
   draftPayRunsCount: number;
   payoutsPendingApprovalCount: number;
@@ -61,6 +77,7 @@ export interface DashboardActionBand {
   pendingByPlanItems: PlanPendingItem[];
   unprocessablePendingItems: UnprocessablePendingItem[];
   driftAlerts: DriftAlertItem[];
+  dealLostAlerts: DealLostAlertItem[];
   ambiguousAttributionPayees: AmbiguousAttributionPayee[];
 }
 

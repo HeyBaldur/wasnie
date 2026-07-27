@@ -41,12 +41,14 @@ public sealed class GetDashboardSummaryHandler(
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
         var unprocessablePending = await BuildUnprocessablePendingAsync(cancellationToken);
         var driftAlerts = await BuildDriftAlertsAsync(cancellationToken);
+        var dealLostAlerts = await BuildDealLostAlertsAsync(cancellationToken);
         var ambiguousAttribution = await BuildAmbiguousAttributionAsync(cancellationToken);
         actionBand = actionBand with
         {
             PendingByPlanItems = pendingByPlan,
             UnprocessablePendingItems = unprocessablePending,
             DriftAlerts = driftAlerts,
+            DealLostAlerts = dealLostAlerts,
             AmbiguousAttributionPayees = ambiguousAttribution,
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
@@ -107,6 +109,7 @@ public sealed class GetDashboardSummaryHandler(
             PendingByPlanItems: [],
             UnprocessablePendingItems: [],
             DriftAlerts: [],
+            DealLostAlerts: [],
             AmbiguousAttributionPayees: []);
     }
 
@@ -235,6 +238,28 @@ public sealed class GetDashboardSummaryHandler(
             DateChanged: a.DateChanged,
             OldCloseDate: a.OldCloseDate,
             NewCloseDate: a.NewCloseDate,
+            DetectedAt: a.DetectedAt)).ToList();
+    }
+
+    // ── Deal-lost alerts (reverse reconciliation) ──────────────────────────────
+    // Unresolved alerts for deals that left closed-won AFTER their transaction was Calculated/Paid. Read-only
+    // surfacing; the revert action lives on its own endpoint. Tenant-scoped via the global filter (Rule 9).
+    private async Task<IReadOnlyList<DealLostAlertDto>> BuildDealLostAlertsAsync(CancellationToken ct)
+    {
+        const int cap = 20;
+        var rows = await db.DealLostAlerts
+            .Where(a => a.ResolvedAt == null)
+            .OrderByDescending(a => a.DetectedAt)
+            .Take(cap)
+            .ToListAsync(ct);
+
+        return rows.Select(a => new DealLostAlertDto(
+            TransactionId: a.TransactionId,
+            ReferenceNumber: a.ReferenceNumber,
+            ExternalDealId: a.ExternalDealId,
+            TransactionStatus: a.TransactionStatus.ToString(),
+            CommissionAmount: a.CommissionAmount,
+            CommissionCurrency: a.CommissionCurrency,
             DetectedAt: a.DetectedAt)).ToList();
     }
 

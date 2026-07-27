@@ -43,6 +43,14 @@ public sealed record CrmLineItem(
     string? CategoryFromCrm = null);
 
 /// <summary>
+/// The CURRENT won-status of a CRM deal, read by deal id regardless of stage (reverse reconciliation).
+/// Used to detect a deal that was closed-won when Wasnie credited it but is no longer won (moved to Lost
+/// or back to an open stage). A deal id that the CRM does not return (deleted / archived / no access) is
+/// simply absent from the result — the caller treats "absent" conservatively, NOT as "lost".
+/// </summary>
+public sealed record CrmDealStatus(string Id, bool IsClosedWon);
+
+/// <summary>
 /// A CRM owner (the user who owns a deal) mapped to a neutral shape. <see cref="Email"/> may be null
 /// (e.g. archived owners) which means it cannot be auto-matched to a payee by email.
 /// </summary>

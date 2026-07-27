@@ -34,6 +34,16 @@ public interface ICrmDealSource
         Guid tenantId, DateTimeOffset modifiedSince, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// REVERSE reconciliation (deal-lost detection): reads the CURRENT won-status of specific deals BY ID,
+    /// WITHOUT the closed-won search filter — so it can see a deal that dropped out of closed-won (moved to
+    /// Lost or an open stage). Batched internally. A requested id the CRM does not return (deleted/archived/
+    /// no access) is omitted from the result, never invented — the caller must treat absence conservatively.
+    /// Pure read; creates nothing.
+    /// </summary>
+    Task<IReadOnlyList<CrmDealStatus>> GetDealStatusesByIdsAsync(
+        Guid tenantId, IReadOnlyCollection<string> dealIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the CRM owners for the tenant (used to resolve a deal's owner to a Wasnie payee by email).
     /// Includes archived owners where the CRM exposes them.
     /// </summary>

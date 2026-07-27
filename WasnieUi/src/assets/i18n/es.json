@@ -758,7 +758,16 @@
     "DRIFT_STATE_PAID": "Ya pagada",
     "DRIFT_AMOUNT": "Monto {{old}} → {{new}}",
     "DRIFT_DATE": "Fecha de cierre {{old}} → {{new}}",
-    "DRIFT_ACTION": "Esta comisión ya se movió — revisar y ajustar manualmente."
+    "DRIFT_ACTION_CALCULATED": "Ya calculada. El deal cambió en HubSpot después de esta comisión — revisala y reconciliala manualmente.",
+    "DRIFT_ACTION_PAID": "Ya pagada. El deal cambió después del pago — las correcciones se manejan por fuera por ahora.",
+    "DEAL_LOST_GROUP_TITLE": "Deal perdido después de la comisión",
+    "DEAL_LOST_COMMISSION": "Comisión {{amount}}",
+    "DEAL_LOST_ACTION_CALCULATED": "Este deal ya no está ganado — podés revertir esta comisión (todavía no se pagó).",
+    "DEAL_LOST_ACTION_PAID": "Este deal ya no está ganado, pero la comisión ya se pagó — el clawback se maneja por fuera por ahora.",
+    "DEAL_LOST_REVERT": "Revertir comisión",
+    "DEAL_LOST_CONFIRM_TITLE": "¿Revertir esta comisión?",
+    "DEAL_LOST_CONFIRM_MSG": "El deal de {{ref}} se perdió en el CRM. Esto hace supersede de su crédito ({{amount}}) y cancela la transacción, sacándola de cualquier pay run futuro. No se puede deshacer con un clic.",
+    "DEAL_LOST_REVERTED": "Comisión revertida."
   },
   "QUOTAS": {
     "TITLE": "Cuotas",

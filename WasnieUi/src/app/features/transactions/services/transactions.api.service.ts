@@ -153,6 +153,11 @@ export class TransactionsApiService {
     return this.http.post(`${this.base}/export`, filter, { responseType: 'blob' });
   }
 
+  /** Revert a Calculated commission whose CRM deal was lost (supersede credits + cancel the transaction). */
+  revertLostDeal(transactionId: string): Observable<Transaction> {
+    return this.http.post<Transaction>(`${this.base}/${transactionId}/revert-lost-deal`, {});
+  }
+
   getExportCount(filter: PaginationParams): Observable<{ count: number }> {
     // Re-uses the list endpoint with page=1/pageSize=1 to get totalCount without fetching data.
     // The totalCount in the response is the filtered count.

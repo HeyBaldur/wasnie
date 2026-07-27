@@ -338,6 +338,69 @@ public sealed class HubSpotCrmDealSource(
         _ => null,
     };
 
+    public async Task<IReadOnlyList<CrmDealStatus>> GetDealStatusesByIdsAsync(
+        Guid tenantId, IReadOnlyCollection<string> dealIds, CancellationToken cancellationToken = default)
+    {
+        var ids = dealIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToList();
+        if (ids.Count == 0) return [];
+
+        var accessToken = await tokenProvider.GetValidAccessTokenAsync(tenantId, cancellationToken)
+            ?? throw new CrmNotConnectedException(SourceName);
+
+        var url = $"{_opts.ApiBaseUrl.TrimEnd('/')}{_opts.DealsBatchReadPath}";
+        var statuses = new List<CrmDealStatus>(ids.Count);
+
+        // Batch-read by id (≤100 per call). The batch-read endpoint returns ONLY the ids it finds — a lost
+        // deal is still returned (with hs_is_closed_won=false); a deleted/archived/no-access id is omitted,
+        // and the reverse reconciler treats that absence conservatively (never as "lost").
+        foreach (var chunk in ids.Chunk(100))
+        {
+            using var doc = await SendWithRetryAsync(
+                () => PostJson(url, BuildDealsBatchReadBody(chunk), accessToken), "deals.batch_read", cancellationToken);
+
+            if (doc.RootElement.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in results.EnumerateArray())
+                {
+                    var id = GetString(el, "id");
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+                    var props = el.TryGetProperty("properties", out var p) ? p : default;
+                    // HubSpot returns the calculated boolean as the string "true"/"false".
+                    var isWon = string.Equals(GetString(props, "hs_is_closed_won"), "true", StringComparison.OrdinalIgnoreCase);
+                    statuses.Add(new CrmDealStatus(id!, isWon));
+                }
+            }
+
+            if (_opts.SearchThrottleMs > 0) await Task.Delay(_opts.SearchThrottleMs, cancellationToken);
+        }
+
+        return statuses;
+    }
+
+    // {"properties":["hs_is_closed_won"],"inputs":[{"id":"..."}, ...]}
+    private static string BuildDealsBatchReadBody(IEnumerable<string> ids)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteStartArray("properties");
+            writer.WriteStringValue("hs_is_closed_won");
+            writer.WriteStringValue("dealstage");
+            writer.WriteEndArray();
+            writer.WriteStartArray("inputs");
+            foreach (var id in ids)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("id", id);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
     public async Task<IReadOnlyList<CrmOwner>> GetOwnersAsync(
         Guid tenantId, CancellationToken cancellationToken = default)
     {
