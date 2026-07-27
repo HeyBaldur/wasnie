@@ -7,9 +7,10 @@ numbers and what appears on screen at each step.
 - **Operators / owner** — a reference for how the system actually behaves.
 - **New customers** — a first-use guide, in the order you'd really do it.
 
-**Verified against the code on 2026-07-22.** Every statement about Wasnie's behaviour in this
+**Verified against the code on 2026-07-27.** Every statement about Wasnie's behaviour in this
 document was checked by reading the source, not from memory, and cites `file:line` so you can
-re-check it. **If the calculation engine changes, this document must be re-verified** — a guide that
+re-check it. (This pass reconciled the trigger, plan-attribution, transaction-lifecycle and
+deal-lost/recovery sections against the post-2026-07-22 changes.) **If the calculation engine changes, this document must be re-verified** — a guide that
 misdescribes the engine is worse than no guide. The highest-risk sections are
 [Rate tables](#5-rate-tables), [SplitAtQuota](#6-splitatquota--the-accelerator-question) and
 [Attainment](#7-attainment).
@@ -30,7 +31,7 @@ Two kinds of content appear here, and they are never mixed:
 > 📚 **Industry concept — NOT implemented in Wasnie.** Context only. Do not present as a feature.
 
 Everything is ✅ unless explicitly marked 📚. A consolidated list of the 📚 items is in
-[section 12](#12-industry-concepts-not-implemented).
+[section 13](#13-industry-concepts-not-implemented).
 
 ---
 
@@ -116,24 +117,27 @@ transaction that matches three rules produces three credits.
 
 Either **all transactions**, or a set of conditions combined with **And** / **Or**.
 
-> ⚠️ **Important limitation.** The condition **Field** is a free-text input in the UI, but the
-> engine resolves exactly three names (`CommissionCalculator.cs:46-52`):
+> ✅ **The condition Field is a dropdown fed by the engine's own catalog** — not free text. The list
+> comes from `GET /api/plans/trigger-fields` (`TriggerFieldCatalog.cs:39-66`), so the UI can only offer
+> a field the engine actually reads; a name the engine never heard of can no longer be typed. The eight
+> fields are: `transactionamount`, `transactiondate`, `quantity`, `source`, `currency`, `productsku`,
+> `productname`, and `category`.
 >
-> - `transactionAmount`
-> - `transactionDate`
-> - `source`
+> ✅ **Operators are derived from the field's value type**, so the UI never offers one the engine
+> ignores (`TriggerFieldCatalog.cs:80-97`):
+> - **String** fields (`source`, `currency`, `productsku`, `productname`, `category`) →
+>   `Equal` / `NotEqual` / **`In`** / **`NotIn`** (`In` / `NotIn` read a value *set*, e.g.
+>   `productsku In {LAP-12, DELL-01}`).
+> - **Number** / **Date** fields (`transactionamount`, `quantity`, `transactiondate`) →
+>   `Equal` / `NotEqual` / `>` / `>=` / `<` / `<=`.
 >
-> Any other field name logs a server-side warning and the condition evaluates to **false** — the
-> rule silently never fires. There is no dropdown and no validation preventing this. Use only those
-> three names.
+> ✅ **The trigger is validated server-side at save** — a rule with an unknown field, an operator the
+> field does not support, or an `In` with no set is rejected, not saved silently. Legacy conditions
+> that no longer match a real field are shown with a warning rather than hidden.
 >
-> Also, **only `Equal` / `NotEqual` are reliable through the UI.** Every condition value is sent as
-> a **string** (`rule-form.component.ts:331`), so the engine routes all comparisons through the
-> string path (`CommissionCalculator.cs:62-69`), which handles only `Equal` / `NotEqual` / `In` /
-> `NotIn`. The **ordering operators `>`, `>=`, `<`, `<=` fall through to `false`** and the rule never
-> fires (`CommissionCalculator.cs:112-126`) — they only work if the value type is Number/Date, which
-> the UI never sends. And `In` / `NotIn` can never match either, because the UI always sends an empty
-> value set (`rule-form.component.ts:445`). In practice: use only `Equal` or `NotEqual`.
+> ✅ **For `category`, the value is also a picker** built from the tenant's real categories, with an
+> explicit "use another value" escape hatch — so a typo can no longer save a rule that never fires
+> (see 9, category enrichment).
 
 ### 4.2 Measurement — what is being measured
 
@@ -189,14 +193,18 @@ collapsible Modifier / Cap / Floor sections.
 to Deactivated in the same operation (`ArchivePlanHandler.cs:43-49`), so an archived plan drops out
 of processing and out of the "pending eligible" lists — a payee is no longer resolved against it.
 
-> ⚠️ **A payee can be assigned to several active plans at once**, and that is valid configuration
-> (e.g. a base plan plus another). When a transaction for that payee is processed it is credited to
-> **one plan only**, chosen by an internal priority rule: the resolver takes the assignment with the
-> **shortest effective period, breaking ties by smallest Id** (`PlanAssignmentResolver.cs:60-63`).
-> **The admin does not choose which plan today** — processing "from" a plan's screen does *not*
-> direct the credit there (the plan id only selects candidate transactions, not the crediting plan).
-> The plan screen shows an informational banner when some of its payees are also in another active
-> plan, so the situation is at least visible.
+> ✅ **A payee can be assigned to several active plans at once** (e.g. a base plan plus another).
+> When a transaction for that payee is processed it is **credited to EVERY applicable plan**, not one:
+> the allocator iterates all eligible assignments (`CreditAllocationService.cs:183` `ResolveAssignments`,
+> which returns a list) and writes one credit per plan. The old "one plan by shortest-period tie-break"
+> rule was removed — it silently decided how much commission was paid, which was a real bug.
+>
+> ✅ **When there is genuine ambiguity — a payee on 2+ eligible plans and no plan stated — the admin
+> chooses.** Manual entry requires picking the plan (`SelectedPlanAssignmentId`, re-validated server-side;
+> `CreditAllocationService.cs:190-192` `ResolveSelected`). Excel and HubSpot, where no human is present at
+> load time, **fail loud** instead of guessing: the transaction is left Pending and uncredited and appears
+> on the dashboard's "needs attention" card under **ambiguous attribution**, grouped by payee — the fix is
+> to deactivate the assignment that should not apply.
 
 ---
 
@@ -376,9 +384,9 @@ they tile the period without gaps.
 ## 9. Transactions
 
 **What they represent.** Closed-won sales. HubSpot enforces this — the sync filters on HubSpot's
-calculated `hs_is_closed_won` property (`HubSpotCrmDealSource.cs:18,48,188`). **Excel import and
-manual entry do not filter**: whatever you provide is accepted. The UI states this as an
-expectation, not a rule.
+calculated `hs_is_closed_won` property (`HubSpotCrmDealSource.cs:19` class doc, `:479` search filter).
+**Excel import and manual entry do not filter**: whatever you provide is accepted. The UI states this as
+an expectation, not a rule.
 
 **Three sources:**
 
@@ -402,10 +410,23 @@ way when *Require payee on new transactions* is Optional. These appear in the da
 | Pending → Calculated | credits allocated |
 | Calculated → Paid | the payout containing it is marked paid |
 | Calculated → Pending | credits recalculated, or the payee is (re)assigned |
-| Pending → Cancelled | voided (requires a reason; only from Pending) |
+| Pending → Cancelled | voided (requires a reason) |
+| Calculated → Cancelled | its CRM deal was **lost** and the admin reverted the commission (deal-lost only; credits superseded, not deleted) |
 
-A **Paid** transaction cannot be reverted to Pending — *"it has already been paid out. Use the
-accounting correction workflow."*
+A **Paid** transaction cannot be reverted to Pending. Its error message says *"Use the accounting
+correction workflow"*, but ⚠️ **that workflow does not exist yet** — correcting an already-paid
+commission (clawback) is an unbuilt future subsystem (see 13). Only a **Calculated** (never-paid)
+commission can be reverted today.
+
+**CRM deal lifecycle (won → lost → won).** Because HubSpot is the source of truth for the sale:
+- A credited deal that turns **Closed Lost** is detected on the next sync (reverse reconciliation,
+  `DealLostReconciler`). If its commission is only **Calculated**, the dashboard offers **Revert
+  commission** (supersedes the credit, cancels the transaction). If it was already **Paid**, it is shown
+  for information only — no automatic action (clawback is out of scope).
+- A deal that comes **back to Closed Won** after being deal-lost-cancelled is **re-credited
+  automatically**: a fresh transaction is created (`TransactionCreateGuard` recognises the deal-lost
+  cancellation and re-opens it), the old cancelled row stays as history. This never re-credits a Paid
+  commission — a deal-lost cancellation was never paid by construction (anti-double-pay guard).
 
 ---
 
@@ -548,7 +569,8 @@ accidentally presents them as features.
 | **Windfall / materiality thresholds** | Not implemented. No outsized-deal detection or capping by threshold. |
 | **Named frequency** (monthly/quarterly as a formal concept) | Not implemented. `PlanPeriodType` exists but is inert metadata. |
 | **Weighted averages** | Not implemented anywhere. |
-| **Second KPI unlocking a rate** (e.g. margin gate on a revenue rate) | Not implemented. One measurement per rule; conditions resolve only three transaction fields. |
+| **Second KPI unlocking a rate** (e.g. margin gate on a revenue rate) | Not implemented. One measurement per rule (a rule's Trigger can filter on eight fields, but that gates whether the rule fires — it does not blend a second KPI into the rate). |
+| **Clawback of a *paid* commission** | Not implemented. A *Calculated* commission can be reverted (deal-lost); once **Paid**, there is no way to recover or deduct it — no adjustment / negative-balance / deferred-deduction model exists. The "accounting correction workflow" named in some error messages is not built. Future subsystem. |
 | **Period-scoped caps** | Not offered in the UI and rejected by the API — only per-transaction caps apply (the backend enum keeps *Per period* / *Total* for future use). See 4.4. |
 | **Tier accumulation across a period (Tiered tables)** | Tiered restarts per transaction. Period accumulation exists only via attainment + SplitAtQuota. |
 
@@ -559,7 +581,7 @@ accidentally presents them as features.
 Collected from the verification passes — real behaviours, not bugs to work around silently.
 
 1. **Caps are always per-transaction** — the only scope offered; other scopes are rejected by the API.
-2. **A condition silently never fires** if its field is outside the three supported names, or if it uses an ordering operator (`>`, `>=`, `<`, `<=`) or `In` / `NotIn` — only `Equal` / `NotEqual` work through the UI.
+2. **Trigger conditions use a field dropdown from the engine's catalog** (eight fields) with operators derived from each field's type — `In` / `NotIn` for string fields, ordering operators for number/date — and are validated server-side at save. (This replaced the earlier free-text/`Equal`-only limitation.)
 3. **`Measurement` aggregation and source field are inert.**
 4. **Tiered tables do not accumulate across transactions.**
 5. **Attainment sums the whole quota period**, so backdated or out-of-order ingestion shifts figures for already-processed transactions.
@@ -571,7 +593,7 @@ Collected from the verification passes — real behaviours, not bugs to work aro
 11. **€0 payouts are correct**, not errors — assigned payees with no sales in the period.
 12. **Changing a rule does not retroactively change existing credits.** Use *Recalculate credits* on a Draft run.
 13. **Archiving a plan deactivates its assignments** — it drops out of processing and the pending-eligible lists.
-14. **A payee can be in several active plans**; each transaction credits exactly one, chosen by internal priority (shortest assignment period, then smallest Id) — the admin does not pick which.
+14. **A payee can be in several active plans**; each transaction credits **every** applicable plan (one credit per plan). When 2+ plans are eligible and none is stated, manual entry makes the admin pick and Excel/HubSpot fail loud (left uncredited, flagged) rather than guessing.
 
 ---
 
