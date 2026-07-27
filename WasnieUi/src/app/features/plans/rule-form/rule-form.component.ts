@@ -36,6 +36,7 @@ import {
   WsButtonComponent,
   WsInputComponent,
   WsSelectComponent,
+  WsCategoryPickerComponent,
   type SelectOption,
 } from '../../../shared/ui';
 import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.directive';
@@ -56,6 +57,7 @@ import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.dir
     WsButtonComponent,
     WsInputComponent,
     WsSelectComponent,
+    WsCategoryPickerComponent,
     WsTooltipDirective,
   ],
   templateUrl: './rule-form.component.html',
@@ -325,6 +327,20 @@ export class RuleFormComponent implements OnInit {
   readonly rateTableType = computed(() => {
     const v = this.formValue();
     return Number(v.rateTable?.type ?? RateTableType.Flat) as RateTableType;
+  });
+
+  /**
+   * i18n key for the always-visible help text under the Table Type selector — replaces the old hover
+   * tooltip that ambiguously described Tiered. Each type gets an explanation of ITS calculation, so the
+   * user sees the right one for what they picked (Tiered = progressive per-amount, Attainment = cumulative
+   * vs quota).
+   */
+  readonly rateTableHintKey = computed(() => {
+    switch (this.rateTableType()) {
+      case RateTableType.Tiered: return 'PLANS.RATE_TABLE_HINT_TIERED';
+      case RateTableType.AttainmentBased: return 'PLANS.RATE_TABLE_HINT_ATTAINMENT';
+      default: return 'PLANS.RATE_TABLE_HINT_FLAT';
+    }
   });
 
   readonly hasTrigger = computed(() => !!this.formValue()?.hasTrigger);

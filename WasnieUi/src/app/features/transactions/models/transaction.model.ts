@@ -64,6 +64,8 @@ export interface CreateTransactionRequest {
   description?: string | null;
   productName?: string | null;
   productSku?: string | null;
+  /** Optional. An explicitly chosen category wins over the SKU/name resolver on the server. */
+  category?: string | null;
   payeeId: string | null;
   amount: number;
   currency: string;

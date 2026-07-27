@@ -56,8 +56,6 @@
             <div class="form-field-group">
               <div class="field-help-label">
                 <span class="form-field-label">{{ 'PLANS.FIELD_RATE_TABLE_TYPE' | translate }}</span>
-                <app-icon name="info" [size]="13" class="help-icon"
-                  [wsTooltip]="'PLANS.TOOLTIP_RATE_TABLE_TYPE' | translate" />
               </div>
               <div class="type-selector">
                 @for (t of rateTableTypes; track t.value) {
@@ -69,8 +67,11 @@
                   </button>
                 }
               </div>
+              <!-- Always-visible help for the SELECTED type (replaces the old hover tooltip, which
+                   ambiguously described Tiered). Changes with the selection. -->
+              <p class="form-hint mt-2">{{ rateTableHintKey() | translate }}</p>
               @if (isUnitsMode()) {
-                <p class="form-hint mt-2">{{ 'PLANS.UNITS_RATE_TABLE_NOTE' | translate }}</p>
+                <p class="form-hint mt-1">{{ 'PLANS.UNITS_RATE_TABLE_NOTE' | translate }}</p>
               }
             </div>
 
@@ -226,20 +227,23 @@
                     <!-- Category value is CHOSEN from a dropdown fed by the tenant's real categories (a
                          multi-select for In/NotIn) so a typo can't save a rule that silently never fires.
                          It scales to any number of categories. Every other field keeps its input. -->
-                    @if (useCategoryPicker(i) && usesSet(i)) {
+                    @if (isCategoryField(i) && !usesSet(i)) {
+                      <!-- Single-value (Equal/NotEqual) category: the shared picker owns the list, the
+                           free-text escape hatch and the empty-list fallback. Shared with the manual
+                           transaction form so the behaviour lives in one place. -->
+                      <ws-category-picker
+                        formControlName="valueRaw"
+                        [options]="categoryValues()"
+                        [placeholder]="'PLANS.COND_CATEGORY_PLACEHOLDER'"
+                        [customPlaceholder]="'PLANS.COND_VALUE_PLACEHOLDER'"
+                      />
+                    } @else if (useCategoryPicker(i) && usesSet(i)) {
                       <ws-select
                         formControlName="valueSet"
                         [multiple]="true"
                         [searchable]="true"
                         [options]="categoryOptions()"
                         [placeholder]="'PLANS.COND_CATEGORY_MULTI_PLACEHOLDER' | translate"
-                      />
-                    } @else if (useCategoryPicker(i)) {
-                      <ws-select
-                        formControlName="valueRaw"
-                        [searchable]="true"
-                        [options]="categoryOptions()"
-                        [placeholder]="'PLANS.COND_CATEGORY_PLACEHOLDER' | translate"
                       />
                     } @else if (usesSet(i)) {
                       <input class="condition-value-input" type="text" formControlName="valueSet"
@@ -261,7 +265,9 @@
                   @if (isCategoryField(i) && (!readOnly() || categoryValueUnknown(i))) {
                     <div class="condition-extras">
                       <div class="condition-extras__value">
-                        @if (!readOnly()) {
+                        <!-- Single-value category conditions carry their own toggle/empty-fallback inside
+                             ws-category-picker; here we only drive the In/NotIn (set) case. -->
+                        @if (!readOnly() && usesSet(i)) {
                           @if (categoryListEmpty(i)) {
                             <p class="condition-hint">{{ 'PLANS.COND_NO_CATEGORIES_YET' | translate }}</p>
                           } @else if (categoryValues().length > 0) {

@@ -1,4 +1,9 @@
 {
+  "CATEGORY_PICKER": {
+    "USE_CUSTOM": "Use another value…",
+    "USE_LIST": "Choose from the list",
+    "NO_CATEGORIES_YET": "No categories yet — type the value; it will match once transactions with that category arrive."
+  },
   "APP": {
     "NAME": "Wasnie",
     "TAGLINE": "Sales Performance Management"
@@ -551,6 +556,9 @@
     "RATE_TABLE_FLAT": "Flat",
     "RATE_TABLE_TIERED": "Tiered",
     "RATE_TABLE_ATTAINMENTBASED": "Attainment",
+    "RATE_TABLE_HINT_FLAT": "One fixed rate applies to the entire measured amount.",
+    "RATE_TABLE_HINT_TIERED": "Tiers are progressive: each portion of the amount is paid at its own tier's rate, like income-tax brackets. A sale that spans several tiers blends the rates — a single rate is never applied to the whole amount.",
+    "RATE_TABLE_HINT_ATTAINMENT": "The rate depends on the payee's cumulative attainment for the period, not on a single transaction's amount. As the cumulative total rises, it moves into higher-rate tiers.",
     "MODIFIER_ACCELERATOR": "Accelerator",
     "MODIFIER_MULTIPLIER": "Multiplier",
     "MODIFIER_SPIFF": "Spiff",
@@ -569,7 +577,6 @@
     "TOOLTIP_MEASUREMENT_TYPE": "What gets measured from each transaction: Revenue (monetary amount), Units (quantity sold), Margin (profit), Attainment (% of quota reached), or Custom.",
     "TOOLTIP_SOURCE_FIELD": "The exact field name from the transaction data used for this measurement. For example: \"amount\" for the sale value, \"units\" for quantity.",
     "TOOLTIP_AGGREGATION": "How multiple transactions are combined: Sum adds all values together, Average takes the mean, Max uses the highest value, Min uses the lowest, Count totals the number of transactions.",
-    "TOOLTIP_RATE_TABLE_TYPE": "Flat: one fixed rate applies to the whole amount. Tiered: different rates apply to different amount ranges. Attainment: rates are determined by the % of quota achieved.",
     "TOOLTIP_FLAT_RATE": "Enter as a decimal. Example: 0.05 = 5%, 0.10 = 10%, 0.025 = 2.5%.",
     "TOOLTIP_FLAT_RATE_UNITS": "The amount earned per unit sold. Example: 2.00 means €2.00 commission for each unit in the transaction.",
     "TOOLTIP_TRIGGER": "If enabled, this rule only applies when the conditions are met. Without a trigger, the rule always runs on every matching transaction.",
@@ -1008,6 +1015,8 @@
     "FIELD_PRODUCT_NAME_PLACEHOLDER": "e.g. Dell XPS 15 Laptop",
     "FIELD_PRODUCT_SKU": "Product SKU",
     "FIELD_PRODUCT_SKU_PLACEHOLDER": "e.g. LAP-12",
+    "FIELD_CATEGORY": "Category (optional)",
+    "FIELD_CATEGORY_PLACEHOLDER": "e.g. Laptops",
     "FIELD_PLAN": "Plan",
     "FIELD_PLAN_HINT": "This payee is on more than one active plan. Choose which plan this transaction is credited to — it determines how the commission is calculated.",
     "FIELD_DATE": "Transaction date",

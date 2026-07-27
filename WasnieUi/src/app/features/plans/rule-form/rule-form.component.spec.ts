@@ -575,3 +575,61 @@ describe('RuleFormComponent — category value picker', () => {
     expect(comp.valueRawAt(0)).toBe('Laptops');
   }));
 });
+
+// The always-visible help under Table Type replaces the old hover tooltip that only really described
+// Flat. Each type must surface its OWN explanation so the user sees the right one for what they picked.
+describe('RuleFormComponent — rate table type help text', () => {
+  let httpMock: HttpTestingController;
+
+  function setup(): RuleFormComponent {
+    const planSignal = signal<Plan | null>(makePlan(makeApiRule()));
+    TestBed.configureTestingModule({
+      imports: [RuleFormComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: PlansStore,
+          useValue: {
+            selectedPlan: planSignal as unknown as PlansStore['selectedPlan'],
+            loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()),
+          },
+        },
+        { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: { get: (k: string) => (k === 'planId' ? PLAN_ID : null) } } },
+        },
+      ],
+    });
+    TestBed.overrideComponent(RuleFormComponent, {
+      set: { imports: [ReactiveFormsModule, TranslateModule], template: `<form [formGroup]="form"></form>` },
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    const comp = TestBed.createComponent(RuleFormComponent).componentInstance;
+    comp.ngOnInit();
+    httpMock.expectOne('/api/plans/trigger-fields').flush([]);
+    httpMock.expectOne('/api/plans/category-values').flush([]);
+    return comp;
+  }
+
+  afterEach(() => {
+    httpMock.verify();
+    TestBed.resetTestingModule();
+  });
+
+  it('surfaces the help key matching the selected rate table type', fakeAsync(() => {
+    const comp = setup();
+    tick();
+
+    comp.form.get('rateTable.type')!.setValue(RateTableType.Flat);
+    expect(comp.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_FLAT');
+
+    comp.form.get('rateTable.type')!.setValue(RateTableType.Tiered);
+    expect(comp.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_TIERED');
+
+    comp.form.get('rateTable.type')!.setValue(RateTableType.AttainmentBased);
+    expect(comp.rateTableHintKey()).toBe('PLANS.RATE_TABLE_HINT_ATTAINMENT');
+  }));
+});

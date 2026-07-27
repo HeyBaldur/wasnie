@@ -220,8 +220,16 @@
 }
 
 .condition-row {
-  @apply grid items-center gap-2;
+  // Top-align: every field is a single control of the same height EXCEPT the single-value category
+  // cell, which is ws-category-picker (select + its "use another value" toggle stacked). Centering
+  // would drop the field/operator to the middle of that taller cell and float the category select
+  // above them; top-alignment keeps all three controls on the same line, toggle hanging below.
+  @apply grid items-start gap-2;
   grid-template-columns: 1fr 1fr 1fr 28px;
+
+  // Keep the remove button vertically centered against the row (unchanged from the previous
+  // items-center behaviour) rather than pinned to the top by items-start.
+  .tier-remove { align-self: center; }
 }
 
 .form-actions {
