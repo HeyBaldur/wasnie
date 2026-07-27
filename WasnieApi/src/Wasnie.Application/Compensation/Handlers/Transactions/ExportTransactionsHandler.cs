@@ -149,7 +149,9 @@ public sealed class ExportTransactionsHandler(
                 TransactionDate: t.TransactionDate,
                 Source: t.Source.ToString(),
                 Status: t.Status.ToString(),
-                CreatedAt: t.IngestedAt);
+                CreatedAt: t.IngestedAt,
+                CancelledReason: t.CancelledReason,
+                CancelledAt: t.CancelledAt);
         }).ToList();
 
         // Resolve tenant slug for the filename from the tenant record.

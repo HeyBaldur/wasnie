@@ -20,6 +20,8 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
         "Source",
         "Status [read-only]",
         "CreatedAt [read-only]",
+        "Cancellation reason",
+        "Cancelled at",
     ];
 
     public byte[] GenerateExcel(IReadOnlyList<TransactionExportRow> rows, string tenantSlug)
@@ -59,6 +61,12 @@ public sealed class TransactionExcelExportService : ITransactionExcelExportServi
             ws.Cell(excelRow, 10).Value = row.Source;
             ws.Cell(excelRow, 11).Value = row.Status;
             ws.Cell(excelRow, 12).Value = row.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            // Cancellation columns: populated only for cancelled transactions; blank otherwise
+            // (nullable → empty cell, never the string "null" or a dash).
+            ws.Cell(excelRow, 13).Value = row.CancelledReason ?? string.Empty;
+            ws.Cell(excelRow, 14).Value = row.CancelledAt.HasValue
+                ? row.CancelledAt.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                : string.Empty;
         }
 
         // Auto-fit columns

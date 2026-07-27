@@ -16,4 +16,6 @@ public sealed record TransactionExportRow(
     DateOnly TransactionDate,
     string Source,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? CancelledReason,
+    DateTimeOffset? CancelledAt);
