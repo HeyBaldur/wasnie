@@ -603,10 +603,23 @@
               <ul class="feed__list">
                 @for (item of store.activityFeed(); track item.timestampUtc) {
                   <li class="feed__item">
-                    <div class="feed__avatar">{{ item.actorInitials }}</div>
+                    <div class="feed__avatar"
+                         [class.feed__avatar--system]="isSystemActor(item.actorEmail)">
+                      @if (isSystemActor(item.actorEmail)) {
+                        <app-icon name="settings" [size]="13" />
+                      } @else {
+                        {{ item.actorInitials }}
+                      }
+                    </div>
                     <div class="feed__content">
                       <div class="feed__top-row">
-                        <span class="feed__actor">{{ actorShortName(item.actorEmail) }}</span>
+                        <span class="feed__actor">
+                          @if (isSystemActor(item.actorEmail)) {
+                            {{ 'DASHBOARD.ACTIVITY_SYSTEM_ACTOR' | translate }}
+                          } @else {
+                            {{ actorShortName(item.actorEmail) }}
+                          }
+                        </span>
                         <span class="feed__time">{{ relativeTime(item.timestampUtc) }}</span>
                       </div>
                       <div class="feed__desc">
@@ -645,7 +658,7 @@
               <div class="trend-card__head">
                 <div class="min-w-0 flex-1">
                   <span class="trend-card__label">
-                    {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
+                    {{ 'DASHBOARD.TREND_METRIC' | translate }} · {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
                   </span>
                   <div class="trend-card__value">
                     {{ fmtCompact(point.currentAmount, point.currency) }}

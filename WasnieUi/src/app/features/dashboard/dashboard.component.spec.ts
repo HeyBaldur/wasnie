@@ -130,6 +130,18 @@ describe('DashboardComponent helpers', () => {
 
   // ── Activity feed helpers ───────────────────────────────────────────────────
 
+  describe('isSystemActor', () => {
+    it('is true for background entries with no actor email (HUBSPOT_TOKEN_REFRESHED)', () => {
+      expect(component.isSystemActor('')).toBe(true);
+      expect(component.isSystemActor('   ')).toBe(true);
+      expect(component.isSystemActor(null)).toBe(true);
+    });
+
+    it('is false for a real user', () => {
+      expect(component.isSystemActor('admin@domain.com')).toBe(false);
+    });
+  });
+
   describe('actorShortName', () => {
     it('returns only the part before @', () => {
       expect(component.actorShortName('admin@domain.com')).toBe('admin');

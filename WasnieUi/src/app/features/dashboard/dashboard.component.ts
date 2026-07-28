@@ -210,6 +210,15 @@ export class DashboardComponent {
     ];
   }
 
+  /**
+   * True when the audit entry was written by a background process, not a user
+   * (e.g. HUBSPOT_TOKEN_REFRESHED). Those rows carry an empty ActorEmail, which
+   * left the feed with a blank avatar and a blank actor name.
+   */
+  isSystemActor(email: string | null | undefined): boolean {
+    return !email || email.trim().length === 0;
+  }
+
   /** "admin@domain.com" → "admin" (max 18 chars, then ellipsis). */
   actorShortName(email: string): string {
     const at = email.indexOf('@');
