@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Compensation.DTOs;
+﻿namespace Wasnie.Application.Compensation.DTOs;
 
 public sealed record PlanDto(
     Guid Id,
@@ -12,4 +12,7 @@ public sealed record PlanDto(
     string Currency,
     DateTimeOffset CreatedAt,
     string CreatedBy,
-    IList<RuleDto> Rules);
+    IList<RuleDto> Rules,
+    // Clawback policy. Null/null means this plan claws nothing back — the state every plan starts in.
+    int? ClawbackMaturationDays = null,
+    decimal? ClawbackCapPercent = null);

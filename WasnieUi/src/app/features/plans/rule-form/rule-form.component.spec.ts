@@ -68,6 +68,9 @@ function makePlan(rule: Rule): Plan {
     createdAt: '2024-01-01T00:00:00Z',
     createdBy: 'user-1',
     rules: [rule],
+    // Opted out of clawbacks, like every plan until someone configures a maturation window.
+    clawbackMaturationDays: null,
+    clawbackCapPercent: null,
   };
 }
 

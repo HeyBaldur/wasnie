@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+﻿import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -39,8 +39,9 @@ import {
   type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
+import { PayeeLedgerPanelComponent } from '../../ledger/panel/payee-ledger-panel.component';
 
-type Tab = 'overview' | 'profile' | 'activity';
+type Tab = 'overview' | 'profile' | 'activity' | 'ledger';
 type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 
 @Component({
@@ -71,6 +72,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     WsBarChartComponent,
     WsSegmentedControlComponent,
     WsTooltipDirective,
+    PayeeLedgerPanelComponent,
   ],
   templateUrl: './payee-detail.component.html',
   styleUrl: './payee-detail.component.scss',

@@ -1,0 +1,51 @@
+<ws-card variant="default" padding="lg">
+  <div class="cb__head">
+    <span class="cb__title">{{ 'PLANS.CLAWBACK_SECTION' | translate }}</span>
+    <span class="cb__state" [class.cb__state--on]="isActive()">
+      <app-icon [name]="isActive() ? 'check-circle' : 'circle'" [size]="14" />
+      {{ (isActive() ? 'PLANS.CLAWBACK_ON' : 'PLANS.CLAWBACK_OFF') | translate }}
+    </span>
+  </div>
+
+  <p class="cb__hint">{{ 'PLANS.CLAWBACK_HINT' | translate }}</p>
+
+  <form [formGroup]="form" (ngSubmit)="save()" class="cb__form">
+    <div class="ws-form-grid">
+      <div class="cb__field">
+        <ws-input
+          formControlName="maturationDays"
+          type="number"
+          [label]="'PLANS.MATURATION_DAYS' | translate"
+          [error]="form.controls.maturationDays.touched && form.controls.maturationDays.invalid
+                    ? ('PLANS.MATURATION_DAYS_INVALID' | translate) : ''" />
+        <p class="cb__field-hint">{{ 'PLANS.MATURATION_DAYS_HINT' | translate }}</p>
+      </div>
+
+      <div class="cb__field">
+        <ws-input
+          formControlName="capPercent"
+          type="number"
+          [label]="'PLANS.CAP_PERCENT' | translate"
+          suffixText="%"
+          [error]="form.controls.capPercent.touched && form.controls.capPercent.invalid
+                    ? ('PLANS.CAP_PERCENT_INVALID' | translate) : ''" />
+        <p class="cb__field-hint">{{ 'PLANS.CAP_PERCENT_HINT' | translate }}</p>
+      </div>
+    </div>
+
+    @if (error(); as err) {
+      <p class="cb__error">{{ err | translate }}</p>
+    }
+    @if (savedOk()) {
+      <p class="cb__ok">{{ 'PLANS.CLAWBACK_SAVED' | translate }}</p>
+    }
+
+    @if (canEdit()) {
+      <div class="cb__actions">
+        <ws-button variant="primary" type="submit" [loading]="saving()">
+          {{ 'COMMON.SAVE' | translate }}
+        </ws-button>
+      </div>
+    }
+  </form>
+</ws-card>

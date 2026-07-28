@@ -516,6 +516,154 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("CategoryMappings", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Ledger.PayRunSettlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AppliedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("AppliedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<Guid?>("LedgerEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PayRunId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PayeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PayeeId", "AppliedAt")
+                        .HasDatabaseName("IX_PayRunSettlements_Tenant_Payee_AppliedAt");
+
+                    b.HasIndex("TenantId", "PayRunId", "PayeeId", "Currency")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PayRunSettlements_Run_Payee_Currency");
+
+                    b.ToTable("PayRunSettlements", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Ledger.PayeeBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<Guid>("PayeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PayeeId", "Currency")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PayeeBalances_Tenant_Payee_Currency");
+
+                    b.ToTable("PayeeBalances", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Ledger.PayeeLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("DaysActive")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("MaturationDays")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("PayeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("SourceCommissionAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("SourceExternalDealId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("SourcePayRunId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("SourceTransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SourceType")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceTransactionId")
+                        .HasDatabaseName("IX_PayeeLedgerEntries_SourceTransaction")
+                        .HasFilter("[SourceTransactionId] IS NOT NULL");
+
+                    b.HasIndex("TenantId", "PayeeId", "CreatedAt")
+                        .HasDatabaseName("IX_PayeeLedgerEntries_Tenant_Payee_CreatedAt");
+
+                    b.ToTable("PayeeLedgerEntries", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Compensation.Payees.Payee", b =>
                 {
                     b.Property<Guid>("Id")
@@ -758,6 +906,12 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("ClawbackCapPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int?>("ClawbackMaturationDays")
+                        .HasColumnType("int");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -2062,6 +2216,171 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("SplitPercentage")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Ledger.PayRunSettlement", b =>
+                {
+                    b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.Money", "CarryoverRemaining", b1 =>
+                        {
+                            b1.Property<Guid>("PayRunSettlementId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(18,4)")
+                                .HasColumnName("CarryoverRemaining");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("nvarchar(3)")
+                                .HasColumnName("CarryoverCurrency");
+
+                            b1.HasKey("PayRunSettlementId");
+
+                            b1.ToTable("PayRunSettlements");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PayRunSettlementId");
+                        });
+
+                    b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.Money", "ClawbackWithheld", b1 =>
+                        {
+                            b1.Property<Guid>("PayRunSettlementId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(18,4)")
+                                .HasColumnName("ClawbackWithheld");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("nvarchar(3)")
+                                .HasColumnName("WithheldCurrency");
+
+                            b1.HasKey("PayRunSettlementId");
+
+                            b1.ToTable("PayRunSettlements");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PayRunSettlementId");
+                        });
+
+                    b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.Money", "GrossCommission", b1 =>
+                        {
+                            b1.Property<Guid>("PayRunSettlementId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(18,4)")
+                                .HasColumnName("GrossCommission");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("nvarchar(3)")
+                                .HasColumnName("GrossCurrency");
+
+                            b1.HasKey("PayRunSettlementId");
+
+                            b1.ToTable("PayRunSettlements");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PayRunSettlementId");
+                        });
+
+                    b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.Money", "NetPaid", b1 =>
+                        {
+                            b1.Property<Guid>("PayRunSettlementId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(18,4)")
+                                .HasColumnName("NetPaid");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("nvarchar(3)")
+                                .HasColumnName("NetCurrency");
+
+                            b1.HasKey("PayRunSettlementId");
+
+                            b1.ToTable("PayRunSettlements");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PayRunSettlementId");
+                        });
+
+                    b.Navigation("CarryoverRemaining")
+                        .IsRequired();
+
+                    b.Navigation("ClawbackWithheld")
+                        .IsRequired();
+
+                    b.Navigation("GrossCommission")
+                        .IsRequired();
+
+                    b.Navigation("NetPaid")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Ledger.PayeeBalance", b =>
+                {
+                    b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.Money", "Balance", b1 =>
+                        {
+                            b1.Property<Guid>("PayeeBalanceId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(18,4)")
+                                .HasColumnName("Balance");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("nvarchar(3)")
+                                .HasColumnName("BalanceCurrency");
+
+                            b1.HasKey("PayeeBalanceId");
+
+                            b1.ToTable("PayeeBalances");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PayeeBalanceId");
+                        });
+
+                    b.Navigation("Balance")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Ledger.PayeeLedgerEntry", b =>
+                {
+                    b.OwnsOne("Wasnie.Domain.Compensation.ValueObjects.Money", "Amount", b1 =>
+                        {
+                            b1.Property<Guid>("PayeeLedgerEntryId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(18,4)")
+                                .HasColumnName("Amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .HasColumnType("nvarchar(3)")
+                                .HasColumnName("Currency");
+
+                            b1.HasKey("PayeeLedgerEntryId");
+
+                            b1.ToTable("PayeeLedgerEntries");
+
+                            b1.WithOwner()
+                                .HasForeignKey("PayeeLedgerEntryId");
+                        });
+
+                    b.Navigation("Amount")
                         .IsRequired();
                 });
 

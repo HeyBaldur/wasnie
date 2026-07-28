@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -13,8 +13,10 @@ public sealed record PayRunFilterQuery
     public string SortOrder { get; init; } = "desc";
 
     public string? Status { get; init; }          // Draft|Approved|Paid
-    public DateOnly? PeriodFrom { get; init; }    // runs where CreatedAt.Date >= this
-    public DateOnly? PeriodTo { get; init; }      // runs where CreatedAt.Date <= this
+    // COMPENSATION period, not the creation timestamp: a run matches when its own period
+    // INTERSECTS [PeriodFrom, PeriodTo]. Same semantics as ListPayoutsQuery and the rest of the domain.
+    public DateOnly? PeriodFrom { get; init; }    // runs whose PeriodEnd >= this
+    public DateOnly? PeriodTo { get; init; }      // runs whose PeriodStart <= this
 }
 
 public sealed record ListPayRunsQuery(PayRunFilterQuery Filter)

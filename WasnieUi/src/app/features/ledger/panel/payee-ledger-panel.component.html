@@ -1,0 +1,197 @@
+@if (store.loading()) {
+  <ws-card variant="default" padding="md">
+    <div class="ledger-loading">{{ 'COMMON.LOADING' | translate }}</div>
+  </ws-card>
+} @else if (!store.hasLedger()) {
+  <ws-card variant="default" padding="md">
+    <ws-table-empty icon="check-circle" messageKey="LEDGER.EMPTY" />
+  </ws-card>
+} @else {
+
+  <!-- ── Statement header: two equations, each balancing on its own ─────────── -->
+  @if (store.activeStatement(); as st) {
+    <ws-card variant="default" padding="lg">
+      <div class="stmt__head">
+        <span class="stmt__title">{{ 'LEDGER.STATEMENT_TITLE' | translate }}</span>
+        @if (store.currencies().length > 1) {
+          <ws-segmented-control
+            [options]="currencyOptions()"
+            [value]="st.currency"
+            (valueChange)="store.selectCurrency($event)" />
+        } @else {
+          <span class="stmt__currency">{{ st.currency }}</span>
+        }
+      </div>
+
+      <!-- Cash flow — the primary equation. Absolute values; the operator carries the sign. -->
+      <div class="eq eq--cash">
+        <div class="eq__term">
+          <span class="eq__label">{{ 'LEDGER.COMMISSIONS' | translate }}</span>
+          <span class="eq__value">{{ fmtAbs(st.commissionsThisPeriod, st.currency) }}</span>
+        </div>
+        <span class="eq__op" aria-hidden="true">−</span>
+        <div class="eq__term">
+          <span class="eq__label">{{ 'LEDGER.RETENTION' | translate }}</span>
+          <span class="eq__value eq__value--retention">{{ fmtAbs(st.retentionApplied, st.currency) }}</span>
+        </div>
+        <span class="eq__op" aria-hidden="true">=</span>
+        <div class="eq__term eq__term--anchor">
+          <span class="eq__label">{{ 'LEDGER.NET_PAYABLE' | translate }}</span>
+          <span class="eq__value eq__value--anchor">{{ fmtAbs(st.netPayable, st.currency) }}</span>
+        </div>
+      </div>
+
+      <!-- Balance movement — subordinate equation. Explicit signs teach the double nature. -->
+      <div class="eq eq--balance">
+        <div class="eq__term">
+          <span class="eq__label">{{ 'LEDGER.PREVIOUS_DEBT' | translate }}</span>
+          <span class="eq__value eq__value--debt">{{ fmtSigned(st.previousDebt, st.currency) }}</span>
+        </div>
+        <span class="eq__op" aria-hidden="true">+</span>
+        <div class="eq__term">
+          <span class="eq__label">{{ 'LEDGER.AMORTIZATION' | translate }}</span>
+          <span class="eq__value eq__value--credit">{{ fmtSigned(st.amortization, st.currency) }}</span>
+        </div>
+        <span class="eq__op" aria-hidden="true">=</span>
+        <div class="eq__term">
+          <span class="eq__label">{{ 'LEDGER.NEW_CARRYOVER' | translate }}</span>
+          <span class="eq__value eq__value--debt">{{ fmtSigned(st.newCarryover, st.currency) }}</span>
+        </div>
+      </div>
+
+      <p class="stmt__caption">
+        {{ 'LEDGER.CAPTION_AMORTIZES' | translate: {
+             amount: fmtAbs(st.retentionApplied, st.currency)
+           } }}
+        @if (st.capLimited) {
+          @if (st.capPercentApplied !== null) {
+            {{ 'LEDGER.CAPTION_CAP_LIMITED' | translate: {
+                 cap: st.capPercentApplied,
+                 carryover: fmtAbs(st.newCarryover, st.currency)
+               } }}
+          } @else {
+            {{ 'LEDGER.CAPTION_CAP_LIMITED_MIXED' | translate: {
+                 carryover: fmtAbs(st.newCarryover, st.currency)
+               } }}
+          }
+        }
+      </p>
+    </ws-card>
+  }
+
+  <!-- ── Adjustment form ────────────────────────────────────────────────────── -->
+  @if ('Ledger.Adjust' | hasPermission) {
+    <div class="ledger__actions">
+      <ws-button variant="secondary" (click)="toggleForm()">
+        <app-icon name="plus" [size]="14" />
+        {{ 'LEDGER.ADD_ADJUSTMENT' | translate }}
+      </ws-button>
+    </div>
+
+    @if (showAdjustmentForm()) {
+      <ws-card variant="default" padding="lg">
+        <form [formGroup]="form" (ngSubmit)="submit()" class="adj-form">
+          <h3 class="adj-form__title">{{ 'LEDGER.ADJUSTMENT_TITLE' | translate }}</h3>
+
+          <div class="ws-form-grid">
+            <ws-select
+              formControlName="transactionType"
+              [label]="'LEDGER.ADJUSTMENT_TYPE' | translate"
+              [options]="adjustmentTypes" />
+
+            <ws-input
+              formControlName="amount"
+              type="number"
+              [label]="'LEDGER.ADJUSTMENT_AMOUNT' | translate"
+              [suffixText]="store.activeStatement()?.currency ?? ''"
+              [error]="form.controls.amount.touched && form.controls.amount.invalid
+                        ? ('LEDGER.AMOUNT_REQUIRED' | translate) : ''" />
+          </div>
+
+          <ws-input
+            formControlName="justification"
+            [label]="'LEDGER.ADJUSTMENT_JUSTIFICATION' | translate"
+            [placeholder]="'LEDGER.JUSTIFICATION_PLACEHOLDER' | translate"
+            [error]="form.controls.justification.touched && form.controls.justification.invalid
+                      ? ('LEDGER.JUSTIFICATION_REQUIRED' | translate) : ''" />
+
+          <p class="adj-form__hint">{{ 'LEDGER.APPEND_ONLY_HINT' | translate }}</p>
+
+          @if (store.error(); as err) {
+            <p class="adj-form__error">{{ err | translate }}</p>
+          }
+
+          <div class="adj-form__actions">
+            <ws-button variant="ghost" type="button" (click)="toggleForm()">
+              {{ 'COMMON.CANCEL' | translate }}
+            </ws-button>
+            <ws-button variant="primary" type="submit" [loading]="store.saving()">
+              {{ 'COMMON.SAVE' | translate }}
+            </ws-button>
+          </div>
+        </form>
+      </ws-card>
+    }
+  }
+
+  <!-- ── Ledger table: System vs Human readable without a click ─────────────── -->
+  <ws-card variant="default" padding="none">
+    <div class="ledger-table__head">
+      <span class="ledger-table__title">{{ 'LEDGER.ENTRIES_TITLE' | translate }}</span>
+    </div>
+
+    @if (store.entries().length === 0) {
+      <ws-table-empty icon="file-text" messageKey="LEDGER.NO_ENTRIES" />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col" class="col-origin">{{ 'LEDGER.COL_ORIGIN' | translate }}</th>
+              <th scope="col">{{ 'LEDGER.COL_DATE' | translate }}</th>
+              <th scope="col">{{ 'LEDGER.COL_TYPE' | translate }}</th>
+              <th scope="col">{{ 'LEDGER.COL_DETAIL' | translate }}</th>
+              <th scope="col" class="col-amount">{{ 'LEDGER.COL_AMOUNT' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (entry of store.entries(); track entry.id) {
+              <tr class="ledger-row"
+                  [class.ledger-row--system]="isSystem(entry.origin)"
+                  [class.ledger-row--human]="!isSystem(entry.origin)">
+                <!-- Signal 1 of 3: icon. Colour alone is not a distinction a colour-blind CFO can use. -->
+                <td class="col-origin">
+                  <span class="origin-chip"
+                        [attr.title]="(isSystem(entry.origin)
+                          ? 'LEDGER.ORIGIN_SYSTEM' : 'LEDGER.ORIGIN_HUMAN') | translate">
+                    <app-icon [name]="isSystem(entry.origin) ? 'settings' : 'edit'" [size]="14" />
+                    <span class="origin-chip__text">
+                      {{ (isSystem(entry.origin) ? 'LEDGER.ORIGIN_SYSTEM' : 'LEDGER.ORIGIN_HUMAN')
+                         | translate }}
+                    </span>
+                  </span>
+                </td>
+                <td>{{ entry.createdAt | date: 'mediumDate' }}</td>
+                <td>{{ typeLabelKey(entry.transactionType) | translate }}</td>
+                <td class="col-detail">
+                  <span class="entry__justification">{{ entry.justification }}</span>
+                  @if (!isSystem(entry.origin)) {
+                    <span class="entry__author">{{ entry.createdBy }}</span>
+                  }
+                </td>
+                <!-- Signal 3 of 3: sign + colour on the amount. -->
+                <td class="col-amount">
+                  <span class="entry__amount"
+                        [class.entry__amount--credit]="isCredit(entry.amount)"
+                        [class.entry__amount--debit]="!isCredit(entry.amount)">
+                    {{ fmtSigned(entry.amount, entry.currency) }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </ws-table>
+    }
+  </ws-card>
+}

@@ -1,4 +1,4 @@
-<app-shell>
+﻿<app-shell>
   @if (store.loading() && !store.selectedPlan()) {
     <div class="plan-detail plan-detail--loading">
       <div class="skeleton-header">
@@ -110,9 +110,24 @@
           <app-icon name="user-check" [size]="15" />
           {{ 'PLANS.TAB_ASSIGNMENTS' | translate }}
         </button>
+        <button
+          class="tab-btn"
+          [class.tab-btn--active]="activeTab() === 'clawback'"
+          (click)="setTab('clawback')"
+        >
+          <app-icon name="refresh" [size]="15" />
+          {{ 'PLANS.TAB_CLAWBACK' | translate }}
+        </button>
       </div>
 
       <div class="plan-detail__tab-content">
+        @if (activeTab() === 'clawback') {
+          <app-plan-clawback-policy
+            [plan]="plan"
+            [canEdit]="permissions().canAddRule"
+            (saved)="reloadPlan()" />
+        }
+
         @if (activeTab() === 'rules') {
           @if (sortedRules().length === 0) {
             <div class="rules-empty">

@@ -1,4 +1,4 @@
-<app-shell>
+﻿<app-shell>
   @if (store.loading() && !store.selectedPayee()) {
     <div class="pd-loading">
       <span class="skeleton skeleton--title"></span>
@@ -97,6 +97,10 @@
       </button>
       <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'activity'" (click)="setTab('activity')">
         {{ 'PAYEES.DETAIL_TAB_ACTIVITY' | translate }}
+      </button>
+      <button *hasPermission="'Ledger.Read'" class="tab-btn"
+              [class.tab-btn--active]="activeTab() === 'ledger'" (click)="setTab('ledger')">
+        {{ 'LEDGER.TAB' | translate }}
       </button>
     </div>
 
@@ -441,6 +445,11 @@
           <app-icon name="activity" [size]="32" />
           <p>{{ 'COMMON.COMING_SOON' | translate }}</p>
         </div>
+      }
+
+      <!-- ────────── CLAWBACK LEDGER TAB ────────────────────────────────── -->
+      @if (activeTab() === 'ledger') {
+        <app-payee-ledger-panel [payeeId]="payeeId" />
       }
 
     </div>

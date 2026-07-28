@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { extractApiError } from '../../../shared/utils/api-error';
@@ -18,6 +18,7 @@ import {
   RateTableType,
 } from '../models/rule.model';
 import { getPlanPermissions } from '../services/plan-permissions';
+import { PlanClawbackPolicyComponent } from '../clawback/plan-clawback-policy.component';
 import { Assignment } from '../../assignments/models/assignment.model';
 import { PagedResult } from '../../../shared/models/pagination.models';
 import { ProcessPendingComponent } from '../../transactions/process-pending/process-pending.component';
@@ -34,7 +35,7 @@ import {
   type BadgeVariant,
 } from '../../../shared/ui';
 
-type Tab = 'rules' | 'versions' | 'assignments';
+type Tab = 'rules' | 'versions' | 'assignments' | 'clawback';
 
 @Component({
   selector: 'app-plan-detail',
@@ -42,6 +43,7 @@ type Tab = 'rules' | 'versions' | 'assignments';
   imports: [
     AppShellComponent,
     IconComponent,
+    PlanClawbackPolicyComponent,
     RouterLink,
     TranslateModule,
     DateFormatPipe,
@@ -99,6 +101,11 @@ export class PlanDetailComponent implements OnInit {
   readonly pendingRule = signal<Rule | null>(null);
 
   readonly permissions = computed(() => getPlanPermissions(this.store.selectedPlan()?.status));
+
+  /** Re-reads the plan after the clawback policy is saved, so the tab shows the stored state. */
+  reloadPlan(): void {
+    void this.store.loadPlan(this.planId);
+  }
 
   readonly sortedRules = computed(() => {
     const plan = this.store.selectedPlan();

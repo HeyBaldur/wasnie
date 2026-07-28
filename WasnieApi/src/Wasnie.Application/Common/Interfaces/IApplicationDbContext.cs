@@ -1,9 +1,10 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.BackgroundJobs;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
+using Wasnie.Domain.Compensation.Ledger;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Quotas;
@@ -41,6 +42,9 @@ public interface IApplicationDbContext
     DbSet<Credit> Credits { get; }
     DbSet<CompensationPayout> CompensationPayouts { get; }
     DbSet<PayRun> PayRuns { get; }
+    DbSet<PayeeLedgerEntry> PayeeLedgerEntries { get; }
+    DbSet<PayeeBalance> PayeeBalances { get; }
+    DbSet<PayRunSettlement> PayRunSettlements { get; }
     DbSet<UserSubscription> UserSubscriptions { get; }
     DbSet<ProcessedStripeEvent> ProcessedStripeEvents { get; }
 

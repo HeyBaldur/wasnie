@@ -119,16 +119,28 @@ public sealed class ListPayoutsHandler(
                 query = query.Where(p => curs.Contains(p.TotalCommission.Currency));
         }
 
+        // Period = the COMPENSATION period the payout covers, not the instant it was calculated.
+        //
+        // It used to filter on CalculatedAt, which produced a false negative with real money behind
+        // it: a January payout consolidated on 1 February fell outside a January filter — in this
+        // list AND in the export that feeds payroll, so the payee simply did not appear. Payroll
+        // cares which fiscal month the money belongs to, not when a background job happened to
+        // consolidate it.
+        //
+        // Intersection, not containment, and in that exact form — the same predicate the rest of the
+        // domain uses for a period against a range (GetDashboardSummaryHandler.PayoutsInPeriodRawAsync,
+        // CalculatePayoutsForPeriodHandler's assignment overlap). A payout spanning a quarter must
+        // show up when someone filters for one month inside it.
         if (f.PeriodFrom.HasValue)
         {
-            var from = new DateTimeOffset(f.PeriodFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            query = query.Where(p => p.CalculatedAt >= from);
+            var from = f.PeriodFrom.Value;
+            query = query.Where(p => p.Period.End >= from);
         }
 
         if (f.PeriodTo.HasValue)
         {
-            var to = new DateTimeOffset(f.PeriodTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            query = query.Where(p => p.CalculatedAt < to);
+            var to = f.PeriodTo.Value;
+            query = query.Where(p => p.Period.Start <= to);
         }
 
         if (f.AmountMin.HasValue)

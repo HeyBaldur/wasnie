@@ -21,6 +21,24 @@ public sealed class Plan : AggregateRoot
     public DateTimeOffset UpdatedAt { get; private set; }
     public string UpdatedBy { get; private set; } = string.Empty;
 
+    // ── Clawback policy (opt-in per plan) ────────────────────────────────────
+    // Both null on every existing plan, which is what keeps the clawback subsystem inert until a
+    // tenant deliberately configures it: no maturation window means no proportional clawback.
+
+    /// <summary>
+    /// Days a deal must stay won before its commission is fully earned. A deal lost inside the
+    /// window is clawed back proportionally: paid × (1 − DaysActive / MaturationDays).
+    /// Null = this plan does not claw back churned deals.
+    /// </summary>
+    public int? ClawbackMaturationDays { get; private set; }
+
+    /// <summary>
+    /// Ceiling on how much of a period's commissions this plan lets a clawback withhold, in percent
+    /// (0–100). The payee always takes home at least (100 − cap)% of what they earned, and the rest
+    /// of the debt carries over. Null = no ceiling (the full payout may be withheld).
+    /// </summary>
+    public decimal? ClawbackCapPercent { get; private set; }
+
     private readonly List<Rule> _rules = [];
     public IReadOnlyList<Rule> Rules => _rules.AsReadOnly();
 
@@ -116,6 +134,32 @@ public sealed class Plan : AggregateRoot
             ?? throw new DomainException($"Rule {ruleId} not found in this plan.");
 
         rule.Update(name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
+    }
+
+    /// <summary>
+    /// Sets (or clears, with both nulls) the clawback policy.
+    ///
+    /// Allowed on Draft and Active plans on purpose — unlike rules, this is not part of the frozen
+    /// calculation: every ledger entry stores the MaturationDays it was computed with, so changing
+    /// the policy moves future clawbacks only and cannot rewrite a number already charged to a person.
+    /// Archived plans are refused: nothing about a retired plan should still be tunable.
+    /// </summary>
+    public void SetClawbackPolicy(
+        int? maturationDays, decimal? capPercent, string updatedBy, DateTimeOffset now)
+    {
+        if (Status == PlanStatus.Archived)
+            throw new DomainException("Cannot change the clawback policy of an archived plan.");
+        if (maturationDays is <= 0)
+            throw new DomainException("Maturation days must be greater than zero.");
+        if (capPercent is < 0m or > 100m)
+            throw new DomainException("The clawback cap must be a percentage between 0 and 100.");
+        if (string.IsNullOrWhiteSpace(updatedBy))
+            throw new DomainException("UpdatedBy is required.");
+
+        ClawbackMaturationDays = maturationDays;
+        ClawbackCapPercent = capPercent;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
     }
 
     public void Activate(string updatedBy, DateTimeOffset now, Guid eventId)
