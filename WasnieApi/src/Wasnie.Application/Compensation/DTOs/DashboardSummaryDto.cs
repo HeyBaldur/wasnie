@@ -19,6 +19,7 @@ public sealed record DashboardActionBandDto(
     IReadOnlyList<PlanPendingCountDto> PendingByPlanItems,
     IReadOnlyList<UnprocessablePendingDto> UnprocessablePendingItems,
     IReadOnlyList<DriftAlertDto> DriftAlerts,
+    IReadOnlyList<DealLostAlertDto> DealLostAlerts,
     IReadOnlyList<AmbiguousAttributionPayeeDto> AmbiguousAttributionPayees);
 
 // Transactions blocked because their plan cannot be determined: the payee has 2+ eligible plans and
@@ -53,6 +54,19 @@ public sealed record DriftAlertDto(
     bool DateChanged,
     DateOnly OldCloseDate,
     DateOnly NewCloseDate,
+    DateTimeOffset DetectedAt);
+
+// A deal-lost alert: a CRM deal Wasnie already turned into a commission is NO LONGER closed-won (moved to
+// Lost or an open stage) after its transaction was Calculated or Paid. Separate from DriftAlertDto (which is
+// an amount/date change on a STILL-won deal). Calculated → the UI offers "Revert commission"; Paid →
+// informational only (clawback of paid money is out of scope). CommissionAmount is what a revert takes back.
+public sealed record DealLostAlertDto(
+    Guid TransactionId,
+    string ReferenceNumber,
+    string ExternalDealId,
+    string TransactionStatus,   // "Calculated" | "Paid"
+    decimal CommissionAmount,
+    string CommissionCurrency,
     DateTimeOffset DetectedAt);
 
 // Plans that have Pending transactions eligible for ProcessPending (ByPlan scope)

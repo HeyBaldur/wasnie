@@ -16,7 +16,7 @@ public sealed class ListPlansHandler(IApplicationDbContext db, IAuthorizationSer
     : IRequestHandler<ListPlansQuery, Result<PagedResult<PlanSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
-        new(StringComparer.OrdinalIgnoreCase) { "name", "version", "effectivestart", "effectiveend" };
+        new(StringComparer.OrdinalIgnoreCase) { "name", "version", "effectivestart", "effectiveend", "createdat" };
 
     public async Task<Result<PagedResult<PlanSummaryDto>>> Handle(ListPlansQuery request, CancellationToken cancellationToken)
     {
@@ -60,6 +60,10 @@ public sealed class ListPlansHandler(IApplicationDbContext db, IAuthorizationSer
             "version" => desc ? query.OrderByDescending(x => x.Version) : query.OrderBy(x => x.Version),
             "effectivestart" => desc ? query.OrderByDescending(x => x.EffectivePeriod.Start) : query.OrderBy(x => x.EffectivePeriod.Start),
             "effectiveend" => desc ? query.OrderByDescending(x => x.EffectivePeriod.End) : query.OrderBy(x => x.EffectivePeriod.End),
+            // Id is a stable tiebreak so pagination stays deterministic when two plans share a timestamp.
+            "createdat" => desc
+                ? query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
             _ => desc ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name),
         };
 

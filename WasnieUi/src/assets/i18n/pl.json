@@ -1,4 +1,9 @@
 {
+  "CATEGORY_PICKER": {
+    "USE_CUSTOM": "Użyj innej wartości…",
+    "USE_LIST": "Wybierz z listy",
+    "NO_CATEGORIES_YET": "Brak kategorii — wpisz wartość; dopasuje się, gdy pojawią się transakcje z tą kategorią."
+  },
   "APP": {
     "NAME": "Wasnie",
     "TAGLINE": "Zarządzanie Wynikami Sprzedaży"
@@ -551,6 +556,9 @@
     "RATE_TABLE_FLAT": "Stała",
     "RATE_TABLE_TIERED": "Progowa",
     "RATE_TABLE_ATTAINMENTBASED": "Wg realizacji",
+    "RATE_TABLE_HINT_FLAT": "Jedna stała stawka stosowana do całej mierzonej kwoty.",
+    "RATE_TABLE_HINT_TIERED": "Progi są progresywne: każda część kwoty jest opłacana według stawki swojego progu, jak progi podatkowe. Sprzedaż obejmująca kilka progów łączy stawki — pojedyncza stawka nigdy nie jest stosowana do całej kwoty.",
+    "RATE_TABLE_HINT_ATTAINMENT": "Stawka zależy od skumulowanej realizacji celu przez payee w okresie, a nie od kwoty pojedynczej transakcji. W miarę wzrostu skumulowanej sumy przechodzi do progów o wyższej stawce.",
     "MODIFIER_ACCELERATOR": "Akcelerator",
     "MODIFIER_MULTIPLIER": "Mnożnik",
     "MODIFIER_SPIFF": "Spiff",
@@ -569,7 +577,6 @@
     "TOOLTIP_MEASUREMENT_TYPE": "Co jest mierzone w każdej transakcji: Przychód (kwota pieniężna), Jednostki (sprzedana ilość), Marża (zysk), Realizacja (% osiągniętego celu) lub Własny.",
     "TOOLTIP_SOURCE_FIELD": "Dokładna nazwa pola w danych transakcji używanego do tego pomiaru. Na przykład: \"amount\" dla wartości sprzedaży, \"units\" dla ilości.",
     "TOOLTIP_AGGREGATION": "Jak łączone są wielokrotne transakcje: Suma dodaje wszystkie wartości, Średnia oblicza wartość przeciętną, Maksimum używa najwyższej wartości, Minimum używa najniższej, Liczba sumuje liczbę transakcji.",
-    "TOOLTIP_RATE_TABLE_TYPE": "Stała: jedna stała stawka stosowana do całej kwoty. Progowa: różne stawki dla różnych zakresów kwot. Wg realizacji: stawki określane na podstawie % osiągniętego celu.",
     "TOOLTIP_FLAT_RATE": "Podaj jako ułamek dziesiętny. Przykład: 0,05 = 5%, 0,10 = 10%, 0,025 = 2,5%.",
     "TOOLTIP_FLAT_RATE_UNITS": "Kwota zarabiana za sprzedaną jednostkę. Przykład: 2,00 oznacza prowizję €2,00 za każdą jednostkę w transakcji.",
     "TOOLTIP_TRIGGER": "Jeśli włączony, ta reguła ma zastosowanie tylko gdy spełnione są warunki. Bez warunku reguła zawsze działa na każdej pasującej transakcji.",
@@ -725,9 +732,11 @@
     "PAYEES_ACTIVE": "Beneficjenci",
     "PAYEES_INACTIVE_LABEL": "nieaktywnych",
     "TREND_VS": "vs",
+    "TREND_METRIC": "Łączne wypłaty prowizji",
     "TREND_PRIOR": "Poprzedni",
     "TREND_NO_BASE": "Nowy",
     "ACTIVITY_FEED": "Ostatnia aktywność",
+    "ACTIVITY_SYSTEM_ACTOR": "System",
     "ACTIVITY_EMPTY": "Brak ostatniej aktywności.",
     "PENDING_BY_PLAN": "Oczekujące do przetworzenia według planu",
     "PENDING_BY_PLAN_DESC": "Plany z transakcjami gotowymi do obliczenia.",
@@ -751,7 +760,16 @@
     "DRIFT_STATE_PAID": "Już zapłacona",
     "DRIFT_AMOUNT": "Kwota {{old}} → {{new}}",
     "DRIFT_DATE": "Data zamknięcia {{old}} → {{new}}",
-    "DRIFT_ACTION": "Ta prowizja już została rozliczona — sprawdź i popraw ręcznie."
+    "DRIFT_ACTION_CALCULATED": "Już obliczona. Transakcja zmieniła się w HubSpot po tej prowizji — sprawdź i uzgodnij ręcznie.",
+    "DRIFT_ACTION_PAID": "Już wypłacona. Transakcja zmieniła się po wypłacie — korekty są obsługiwane poza aplikacją na razie.",
+    "DEAL_LOST_GROUP_TITLE": "Transakcja utracona po prowizji",
+    "DEAL_LOST_COMMISSION": "Prowizja {{amount}}",
+    "DEAL_LOST_ACTION_CALCULATED": "Ta transakcja nie jest już wygrana — możesz cofnąć tę prowizję (nie została wypłacona).",
+    "DEAL_LOST_ACTION_PAID": "Ta transakcja nie jest już wygrana, ale prowizja została już wypłacona — clawback jest obsługiwany poza aplikacją na razie.",
+    "DEAL_LOST_REVERT": "Cofnij prowizję",
+    "DEAL_LOST_CONFIRM_TITLE": "Cofnąć tę prowizję?",
+    "DEAL_LOST_CONFIRM_MSG": "Transakcja {{ref}} została utracona w CRM. Spowoduje to zastąpienie jej kredytu ({{amount}}) i anulowanie transakcji, usuwając ją z przyszłych wypłat. Nie można tego cofnąć jednym kliknięciem.",
+    "DEAL_LOST_REVERTED": "Prowizja cofnięta."
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -838,6 +856,8 @@
     "FIELD_PRODUCT_NAME_PLACEHOLDER": "np. Laptop Dell XPS 15",
     "FIELD_PRODUCT_SKU": "SKU produktu",
     "FIELD_PRODUCT_SKU_PLACEHOLDER": "np. LAP-12",
+    "FIELD_CATEGORY": "Kategoria (opcjonalnie)",
+    "FIELD_CATEGORY_PLACEHOLDER": "np. Laptops",
     "FIELD_PLAN": "Plan",
     "FIELD_PLAN_HINT": "Ten odbiorca jest w więcej niż jednym aktywnym planie. Wybierz, do którego planu zaliczana jest ta transakcja — decyduje to o sposobie naliczenia prowizji.",
     "FIELD_DATE": "Data transakcji",

@@ -7,6 +7,7 @@ import { catchError, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { TransactionsStore } from '../state/transactions.store';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { TransactionsApiService } from '../services/transactions.api.service';
+import { PlansApiService } from '../../plans/services/plans.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { Transaction, PlanOption, PlanOptions } from '../models/transaction.model';
@@ -15,6 +16,7 @@ import {
   WsButtonComponent,
   WsInputComponent,
   WsSelectComponent,
+  WsCategoryPickerComponent,
   WsDatePickerComponent,
   type SelectOption,
 } from '../../../shared/ui';
@@ -32,6 +34,7 @@ const CURRENCIES: SelectOption[] = [
     WsButtonComponent,
     WsInputComponent,
     WsSelectComponent,
+    WsCategoryPickerComponent,
     WsDatePickerComponent,
   ],
   templateUrl: './transaction-form.component.html',
@@ -42,6 +45,7 @@ export class TransactionFormComponent implements OnInit {
   private readonly store = inject(TransactionsStore);
   private readonly payeesApi = inject(PayeesApiService);
   private readonly transactionsApi = inject(TransactionsApiService);
+  private readonly plansApi = inject(PlansApiService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly toast = inject(ToastService);
   private readonly settingsApi = inject(SettingsApiService);
@@ -53,6 +57,10 @@ export class TransactionFormComponent implements OnInit {
   readonly isEditMode = computed(() => this.transaction() !== null);
   readonly saving = signal(false);
   readonly currencies = CURRENCIES;
+
+  // The tenant's known categories, feeding the shared category picker. A failed/empty load leaves the
+  // picker in free-text mode, so an explicit category is always POSSIBLE, never forced.
+  readonly categoryValues = signal<string[]>([]);
 
   readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
@@ -79,6 +87,9 @@ export class TransactionFormComponent implements OnInit {
     // What was sold. Optional — description says which sale, these say which product.
     productName: ['', [Validators.maxLength(500)]],
     productSku: ['', [Validators.maxLength(500)]],
+    // Optional category. An explicit value wins over the SKU/name resolver on the server; blank → null
+    // and the resolver still runs. Never required — a tenant without category rules can leave it empty.
+    category: [''],
     transactionDate: ['', Validators.required],
     amount: [0 as number, [Validators.required, Validators.min(0.01)]],
     currency: ['USD', Validators.required],
@@ -117,6 +128,13 @@ export class TransactionFormComponent implements OnInit {
     this.settingsApi.getFieldRequirements().subscribe({
       next: reqs => this.fieldRequirements.set(reqs),
       error: () => { /* keep the safe default (optional), matching the backend fallback */ },
+    });
+
+    // Known categories for the picker (same source as the rule builder). A failure leaves the list
+    // empty → the picker falls back to free text, so the admin is never blocked.
+    this.plansApi.getCategoryValues().subscribe({
+      next: values => this.categoryValues.set(values),
+      error: () => this.categoryValues.set([]),
     });
 
     // Reload the candidate plans whenever an input that changes eligibility changes.
@@ -188,6 +206,7 @@ export class TransactionFormComponent implements OnInit {
         description: v.description.trim() || null,
         productName: v.productName.trim() || null,
         productSku: v.productSku.trim() || null,
+        category: v.category?.trim() || null,
         transactionDate: v.transactionDate,
         amount: v.amount,
         currency: v.currency,

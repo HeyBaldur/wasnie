@@ -1,4 +1,9 @@
 {
+  "CATEGORY_PICKER": {
+    "USE_CUSTOM": "Usar otro valor…",
+    "USE_LIST": "Elegir de la lista",
+    "NO_CATEGORIES_YET": "Todavía no hay categorías — escribí el valor; coincidirá cuando lleguen transacciones con esa categoría."
+  },
   "APP": {
     "NAME": "Wasnie",
     "TAGLINE": "Gestión del Rendimiento de Ventas"
@@ -551,6 +556,9 @@
     "RATE_TABLE_FLAT": "Fija",
     "RATE_TABLE_TIERED": "Por tramos",
     "RATE_TABLE_ATTAINMENTBASED": "Por cumplimiento",
+    "RATE_TABLE_HINT_FLAT": "Una tasa única se aplica a todo el importe medido.",
+    "RATE_TABLE_HINT_TIERED": "Los tramos son progresivos: cada porción del importe se paga a la tasa de su propio tramo, como los tramos de un impuesto. Una venta que cruza varios tramos combina las tasas; nunca se aplica una sola tasa a todo el importe.",
+    "RATE_TABLE_HINT_ATTAINMENT": "La tasa depende del cumplimiento acumulado del payee en el período, no del importe de una transacción suelta. A medida que el acumulado sube, entra en tramos de tasa más alta.",
     "MODIFIER_ACCELERATOR": "Acelerador",
     "MODIFIER_MULTIPLIER": "Multiplicador",
     "MODIFIER_SPIFF": "Spiff",
@@ -569,7 +577,6 @@
     "TOOLTIP_MEASUREMENT_TYPE": "Qué se mide en cada transacción: Ingresos (importe monetario), Unidades (cantidad vendida), Margen (beneficio), Cumplimiento (% de cuota alcanzado) o Personalizado.",
     "TOOLTIP_SOURCE_FIELD": "El nombre exacto del campo en los datos de transacción usado para esta medición. Por ejemplo: \"amount\" para el valor de la venta, \"units\" para la cantidad.",
     "TOOLTIP_AGGREGATION": "Cómo se combinan varias transacciones: Suma agrega todos los valores, Media calcula el promedio, Máximo usa el valor más alto, Mínimo usa el más bajo, Recuento totaliza el número de transacciones.",
-    "TOOLTIP_RATE_TABLE_TYPE": "Fija: una tasa única se aplica a todo el importe. Por tramos: tasas diferentes para distintos rangos de importe. Por cumplimiento: las tasas se determinan según el % de cuota alcanzado.",
     "TOOLTIP_FLAT_RATE": "Introduce como decimal. Ejemplo: 0.05 = 5%, 0.10 = 10%, 0.025 = 2,5%.",
     "TOOLTIP_FLAT_RATE_UNITS": "El importe ganado por unidad vendida. Ejemplo: 2.00 significa €2,00 de comisión por cada unidad en la transacción.",
     "TOOLTIP_TRIGGER": "Si está activada, esta regla solo se aplica cuando se cumplen las condiciones. Sin condición, la regla siempre se ejecuta en cada transacción coincidente.",
@@ -725,9 +732,11 @@
     "PAYEES_ACTIVE": "Beneficiarios",
     "PAYEES_INACTIVE_LABEL": "inactivos",
     "TREND_VS": "vs",
+    "TREND_METRIC": "Total de pagos de comisiones",
     "TREND_PRIOR": "Anterior",
     "TREND_NO_BASE": "Nuevo",
     "ACTIVITY_FEED": "Actividad reciente",
+    "ACTIVITY_SYSTEM_ACTOR": "Sistema",
     "ACTIVITY_EMPTY": "Sin actividad reciente.",
     "PENDING_BY_PLAN": "Pendientes de procesar por plan",
     "PENDING_BY_PLAN_DESC": "Planes con transacciones listas para calcular.",
@@ -751,7 +760,16 @@
     "DRIFT_STATE_PAID": "Ya pagada",
     "DRIFT_AMOUNT": "Monto {{old}} → {{new}}",
     "DRIFT_DATE": "Fecha de cierre {{old}} → {{new}}",
-    "DRIFT_ACTION": "Esta comisión ya se movió — revisar y ajustar manualmente."
+    "DRIFT_ACTION_CALCULATED": "Ya calculada. El deal cambió en HubSpot después de esta comisión — revisala y reconciliala manualmente.",
+    "DRIFT_ACTION_PAID": "Ya pagada. El deal cambió después del pago — las correcciones se manejan por fuera por ahora.",
+    "DEAL_LOST_GROUP_TITLE": "Deal perdido después de la comisión",
+    "DEAL_LOST_COMMISSION": "Comisión {{amount}}",
+    "DEAL_LOST_ACTION_CALCULATED": "Este deal ya no está ganado — podés revertir esta comisión (todavía no se pagó).",
+    "DEAL_LOST_ACTION_PAID": "Este deal ya no está ganado, pero la comisión ya se pagó — el clawback se maneja por fuera por ahora.",
+    "DEAL_LOST_REVERT": "Revertir comisión",
+    "DEAL_LOST_CONFIRM_TITLE": "¿Revertir esta comisión?",
+    "DEAL_LOST_CONFIRM_MSG": "El deal de {{ref}} se perdió en el CRM. Esto hace supersede de su crédito ({{amount}}) y cancela la transacción, sacándola de cualquier pay run futuro. No se puede deshacer con un clic.",
+    "DEAL_LOST_REVERTED": "Comisión revertida."
   },
   "QUOTAS": {
     "TITLE": "Cuotas",
@@ -838,6 +856,8 @@
     "FIELD_PRODUCT_NAME_PLACEHOLDER": "ej. Laptop Dell XPS 15",
     "FIELD_PRODUCT_SKU": "SKU del producto",
     "FIELD_PRODUCT_SKU_PLACEHOLDER": "ej. LAP-12",
+    "FIELD_CATEGORY": "Categoría (opcional)",
+    "FIELD_CATEGORY_PLACEHOLDER": "ej. Laptops",
     "FIELD_PLAN": "Plan",
     "FIELD_PLAN_HINT": "Este payee está en más de un plan activo. Elegí a qué plan se acredita esta transacción — determina cómo se calcula la comisión.",
     "FIELD_DATE": "Fecha de transacción",

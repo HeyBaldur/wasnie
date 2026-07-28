@@ -27,6 +27,7 @@ public sealed class HubSpotTenantSyncJob(
     IApplicationDbContext db,
     ICrmDealSource dealSource,
     ICrmDealReconciler reconciler,
+    IDealLostReconciler dealLostReconciler,
     IClock clock,
     ILogger<HubSpotTenantSyncJob> logger)
 {
@@ -79,6 +80,22 @@ public sealed class HubSpotTenantSyncJob(
             tenantId, dealSource.SourceName, deals, owners, defaultCurrency,
             SystemActor, SystemActor, now, cancellationToken);
 
+        // Reverse reconciliation: detect already-credited deals that are NO LONGER closed-won (won→lost).
+        // The forward pass above cannot see these (they drop out of the closed-won search). Read + alert only.
+        // A CRM read failure here must NOT fail the whole sync or roll back the forward work — log and skip.
+        var dealLostCount = 0;
+        try
+        {
+            dealLostCount = await dealLostReconciler.ReconcileAsync(
+                tenantId, dealSource.SourceName, SystemActor, SystemActor, now, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "HubSpot auto-sync: deal-lost reconciliation failed for tenant {TenantId}; forward sync kept, will retry next run.",
+                tenantId);
+        }
+
         // Success → advance the checkpoint to the run START instant (never backwards).
         connection.AdvanceSyncCheckpoint(runStartedAt, now);
 
@@ -99,6 +116,7 @@ public sealed class HubSpotTenantSyncJob(
                 created = result.Created,
                 driftAutoResolved = result.DriftAutoResolved,
                 driftAlertsRaised = result.DriftAlertsRaised,
+                dealLostAlerts = dealLostCount,
                 newOwnerMappings = result.NewOwnerMappings,
                 checkpoint = runStartedAt,
             })));

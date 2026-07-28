@@ -1,0 +1,27 @@
+<div class="ws-category-picker">
+  @if (useCustom()) {
+    <ws-input
+      [formControl]="inner"
+      [label]="label()"
+      [placeholder]="customPlaceholder() || placeholder()"
+    />
+  } @else {
+    <ws-select
+      [formControl]="inner"
+      [options]="selectOptions()"
+      [searchable]="true"
+      [label]="label()"
+      [placeholder]="placeholder()"
+    />
+  }
+
+  @if (!isDisabled()) {
+    @if (listEmpty()) {
+      <p class="ws-category-picker__hint">{{ 'CATEGORY_PICKER.NO_CATEGORIES_YET' | translate }}</p>
+    } @else {
+      <button type="button" class="ws-category-picker__toggle" (click)="toggleCustom()">
+        {{ (useCustom() ? 'CATEGORY_PICKER.USE_LIST' : 'CATEGORY_PICKER.USE_CUSTOM') | translate }}
+      </button>
+    }
+  }
+</div>

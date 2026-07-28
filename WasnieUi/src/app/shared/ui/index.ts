@@ -1,6 +1,7 @@
 export { WsButtonComponent } from './ws-button/ws-button.component';
 export { WsInputComponent } from './ws-input/ws-input.component';
 export { WsSelectComponent, type SelectOption } from './ws-select/ws-select.component';
+export { WsCategoryPickerComponent } from './ws-category-picker/ws-category-picker.component';
 export { WsDatePickerComponent } from './ws-date-picker/ws-date-picker.component';
 export { WsDateRangePickerComponent, type DateRange } from './ws-date-range-picker/ws-date-range-picker.component';
 export { WsCardComponent, type CardVariant, type CardPadding, type CardAccent } from './ws-card/ws-card.component';

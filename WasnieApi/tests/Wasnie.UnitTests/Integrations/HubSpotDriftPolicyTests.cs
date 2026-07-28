@@ -5,8 +5,11 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Integrations.Crm;
 using Wasnie.Application.Integrations.Crm.Drift;
 using Wasnie.Application.Integrations.HubSpot;
+using Wasnie.Domain.Audit;
+using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
+using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Integrations.Crm;
@@ -345,5 +348,81 @@ public sealed class HubSpotDriftPolicyTests
         (await a.Db.CompensationTransactions.SingleAsync()).Status.Should().Be(CompensationTransactionStatus.Calculated);
         (await a.Db.CrmDriftAlerts.AnyAsync()).Should().BeFalse();
         (await b.Db.CrmDriftAlerts.AnyAsync()).Should().BeFalse();   // B's was Pending → no alert
+    }
+
+    // ── Recovery (lost→won): a deal-lost-cancelled deal that returns must re-credit ────────────────
+
+    /// <summary>Seeds a CrmSync deal-level tx that reached Calculated, then was cancelled for "deal lost"
+    /// with its credit superseded — the exact state after a lost-deal revert.</summary>
+    private static Guid SeedDealLostCancelled(ApplicationDbContext db, Guid tenantId, Payee payee, string dealId)
+    {
+        var planId = Guid.NewGuid();
+        var ruleId = Guid.NewGuid();
+        var tx = CompensationTransaction.Ingest(
+            tenantId: tenantId, referenceNumber: $"HUBSPOT-{dealId}", payeeId: payee.Id,
+            amount: Money.Of(5000m, "USD"), transactionDate: new DateOnly(2026, 6, 1),
+            source: TransactionSource.CrmSync, ingestedBy: "sync", id: Guid.NewGuid(),
+            now: new DateTimeOffset(Now), eventId: Guid.NewGuid(), externalId: dealId);
+        var snapshot = RuleSnapshot.Freeze(ruleId, planId, 1, "Commission", RateTable.Flat(0.10m), Trigger.Always(), new DateTimeOffset(Now));
+        var credit = Credit.Allocate(tenantId, tx.Id, payee.Id, planId, ruleId, snapshot,
+            Money.Of(5000m, "USD"), Money.Of(500m, "USD"), Percentage.FromPercent(100), CreditRole.Primary,
+            "sync", Guid.NewGuid(), new DateTimeOffset(Now), Guid.NewGuid());
+        tx.MarkCalculated(1, Money.Of(500m, "USD"), "sync", new DateTimeOffset(Now), Guid.NewGuid());
+        credit.Supersede("deal lost", new DateTimeOffset(Now), Guid.NewGuid());
+        tx.RevertForLostDeal($"{CompensationTransaction.DealLostCancellationReasonPrefix} (deal {dealId}).",
+            "admin", new DateTimeOffset(Now), Guid.NewGuid());
+
+        // An open deal-lost alert, as if the revert hadn't resolved it yet — recovery must resolve it.
+        var alert = DealLostAlert.Create(Guid.NewGuid(), tenantId, Source, dealId, tx.Id, tx.ReferenceNumber,
+            CompensationTransactionStatus.Calculated, 500m, "USD", new DateTimeOffset(Now), "sync");
+
+        db.CompensationTransactions.Add(tx);
+        db.Credits.Add(credit);
+        db.DealLostAlerts.Add(alert);
+        db.SaveChanges();
+        return tx.Id;
+    }
+
+    [Fact]
+    public async Task A_deal_lost_cancelled_deal_that_returns_to_won_is_re_created_and_the_alert_resolved()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(A_deal_lost_cancelled_deal_that_returns_to_won_is_re_created_and_the_alert_resolved), tenantId);
+        var payee = SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+        var oldTxId = SeedDealLostCancelled(h.Db, tenantId, payee, "101");
+
+        // The deal came back to closed-won → it now appears in the forward sync again.
+        SetupSource(h.DealSource, tenantId, new[] { Deal("101", 5000m, "USD", new DateOnly(2026, 6, 1)) }, OwnerAlice);
+        var result = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        result.Value!.Created.Should().Be(1);
+
+        var all = await h.Db.CompensationTransactions.Where(t => t.ExternalId == "101").ToListAsync();
+        all.Should().HaveCount(2); // the cancelled history row + the fresh re-created one
+        all.Single(t => t.Id == oldTxId).Status.Should().Be(CompensationTransactionStatus.Cancelled);
+        var fresh = all.Single(t => t.Id != oldTxId);
+        fresh.Status.Should().Be(CompensationTransactionStatus.Pending); // re-enters like any closed-won deal
+        fresh.ReferenceNumber.Should().Be("HUBSPOT-101");
+
+        // Transparency: stale alert resolved + a recovery audit written.
+        (await h.Db.DealLostAlerts.SingleAsync()).ResolvedAt.Should().NotBeNull();
+        (await h.Db.AuditLogs.AnyAsync(a => a.Action == AuditActions.CrmDealRecovered)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Recovery_is_idempotent_a_second_sync_does_not_re_create_again()
+    {
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(Recovery_is_idempotent_a_second_sync_does_not_re_create_again), tenantId);
+        var payee = SeedPayee(h.Db, tenantId, "E1", "alice@example.com");
+        SeedDealLostCancelled(h.Db, tenantId, payee, "101");
+
+        SetupSource(h.DealSource, tenantId, new[] { Deal("101", 5000m, "USD", new DateOnly(2026, 6, 1)) }, OwnerAlice);
+        await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+        var second = await h.Handler.Handle(new ImportHubSpotDealsCommand(), default);
+
+        second.Value!.Created.Should().Be(0);
+        second.Value.SkippedAlreadyImported.Should().Be(1); // the fresh active row is now found first
+        (await h.Db.CompensationTransactions.CountAsync(t => t.ExternalId == "101")).Should().Be(2);
     }
 }

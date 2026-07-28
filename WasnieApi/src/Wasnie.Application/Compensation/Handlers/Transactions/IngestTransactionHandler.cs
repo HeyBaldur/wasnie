@@ -90,11 +90,14 @@ public sealed class IngestTransactionHandler(
         var txId = guid.NewGuid();
         var now = clock.UtcNowOffset;
 
-        // Enrichment phase: derive a discrete Category from the tenant lookup table (SKU first, name
-        // fallback). Descriptive-only for calculation, but a rule trigger can filter on it. No match →
-        // null, and the transaction still ingests and processes normally.
-        var resolver = await enrichmentService.LoadResolverAsync(tenantContext.TenantId, cancellationToken);
-        var category = resolver.Resolve(request.ProductSku, request.ProductName);
+        // Enrichment phase: derive a discrete Category. Precedence mirrors the CRM path
+        // (CrmDealReconciler): an EXPLICIT category chosen in the form WINS; only when none was given do
+        // we fall back to the tenant lookup table (SKU first, name fallback). No match → null, and the
+        // transaction still ingests and processes normally. Ingest normalizes the final value.
+        var category = !string.IsNullOrWhiteSpace(request.Category)
+            ? request.Category
+            : (await enrichmentService.LoadResolverAsync(tenantContext.TenantId, cancellationToken))
+                .Resolve(request.ProductSku, request.ProductName);
 
         var tx = CompensationTransaction.Ingest(
             tenantId: tenantContext.TenantId,

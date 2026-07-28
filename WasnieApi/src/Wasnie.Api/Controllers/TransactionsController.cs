@@ -124,6 +124,26 @@ public sealed class TransactionsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// Revert a Calculated commission whose CRM deal was lost (supersede credits + cancel the transaction).
+    /// Only valid for a transaction with an open lost-deal alert; Paid is rejected (clawback out of scope).
+    /// </summary>
+    [HttpPost("{id:guid}/revert-lost-deal")]
+    public async Task<IActionResult> RevertLostDeal(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new RevertCommissionForLostDealCommand(id), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            var isDomainBlock = result.Error?.Contains("already paid", StringComparison.OrdinalIgnoreCase) == true
+                                || result.Error?.Contains("approved or paid payout", StringComparison.OrdinalIgnoreCase) == true
+                                || result.Error?.Contains("Only a Calculated", StringComparison.OrdinalIgnoreCase) == true;
+            return isDomainBlock
+                ? Conflict(new { message = result.Error })
+                : BadRequest(new { message = result.Error });
+        }
+        return Ok(result.Value);
+    }
+
     [HttpPost("process-pending")]
     public async Task<IActionResult> ProcessPending([FromBody] ProcessPendingTransactionsCommand command, CancellationToken cancellationToken)
     {

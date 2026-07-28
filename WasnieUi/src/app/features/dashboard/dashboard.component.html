@@ -325,11 +325,39 @@
                     @if (alert.dateChanged) {
                       <span class="drift-change">{{ 'DASHBOARD.DRIFT_DATE' | translate: { old: alert.oldCloseDate, new: alert.newCloseDate } }}</span>
                     }
-                    <span class="drift-action">{{ 'DASHBOARD.DRIFT_ACTION' | translate }}</span>
+                    <span class="drift-action">{{ (alert.transactionStatus === 'Paid' ? 'DASHBOARD.DRIFT_ACTION_PAID' : 'DASHBOARD.DRIFT_ACTION_CALCULATED') | translate }}</span>
                   </span>
                 </span>
                 <ws-badge variant="warning" size="sm">{{ driftStatusKey(alert.transactionStatus) | translate }}</ws-badge>
               </a>
+            }
+          }
+
+          <!-- Deal-lost alerts: a deal is NO LONGER closed-won after its commission was calculated/paid.
+               Calculated → the admin can revert (supersede + cancel). Paid → informational only. -->
+          @if (dealLostAlerts().length > 0) {
+            <div class="attention-group-label">{{ 'DASHBOARD.DEAL_LOST_GROUP_TITLE' | translate }}</div>
+            @for (alert of dealLostAlerts(); track alert.transactionId) {
+              <div class="pending-plan-card__row attention-row">
+                <span class="attention-row__icon">
+                  <app-icon name="alert-triangle" [size]="16" />
+                </span>
+                <span class="attention-row__text">
+                  <a class="attention-row__label attention-row__label--link"
+                     [routerLink]="['/transactions']" [queryParams]="driftLinkParams(alert)">{{ alert.referenceNumber }}</a>
+                  <span class="attention-row__desc">
+                    <span class="drift-change">{{ 'DASHBOARD.DEAL_LOST_COMMISSION' | translate: { amount: (alert.commissionAmount | currencyFormat: alert.commissionCurrency) } }}</span>
+                    <span class="drift-action">{{ (canRevert(alert) ? 'DASHBOARD.DEAL_LOST_ACTION_CALCULATED' : 'DASHBOARD.DEAL_LOST_ACTION_PAID') | translate }}</span>
+                  </span>
+                </span>
+                @if (canRevert(alert)) {
+                  <ws-button variant="danger" size="sm" (click)="askRevert(alert)">
+                    {{ 'DASHBOARD.DEAL_LOST_REVERT' | translate }}
+                  </ws-button>
+                } @else {
+                  <ws-badge variant="neutral" size="sm">{{ dealLostStatusKey(alert.transactionStatus) | translate }}</ws-badge>
+                }
+              </div>
             }
           }
         </div>
@@ -575,10 +603,23 @@
               <ul class="feed__list">
                 @for (item of store.activityFeed(); track item.timestampUtc) {
                   <li class="feed__item">
-                    <div class="feed__avatar">{{ item.actorInitials }}</div>
+                    <div class="feed__avatar"
+                         [class.feed__avatar--system]="isSystemActor(item.actorEmail)">
+                      @if (isSystemActor(item.actorEmail)) {
+                        <app-icon name="settings" [size]="13" />
+                      } @else {
+                        {{ item.actorInitials }}
+                      }
+                    </div>
                     <div class="feed__content">
                       <div class="feed__top-row">
-                        <span class="feed__actor">{{ actorShortName(item.actorEmail) }}</span>
+                        <span class="feed__actor">
+                          @if (isSystemActor(item.actorEmail)) {
+                            {{ 'DASHBOARD.ACTIVITY_SYSTEM_ACTOR' | translate }}
+                          } @else {
+                            {{ actorShortName(item.actorEmail) }}
+                          }
+                        </span>
                         <span class="feed__time">{{ relativeTime(item.timestampUtc) }}</span>
                       </div>
                       <div class="feed__desc">
@@ -617,7 +658,7 @@
               <div class="trend-card__head">
                 <div class="min-w-0 flex-1">
                   <span class="trend-card__label">
-                    {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
+                    {{ 'DASHBOARD.TREND_METRIC' | translate }} · {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
                   </span>
                   <div class="trend-card__value">
                     {{ fmtCompact(point.currentAmount, point.currency) }}
@@ -660,4 +701,19 @@
     }
 
   </ws-page-layout>
+
+  <!-- Revert-commission confirmation (money): shows exactly which commission and how much before acting. -->
+  @if (revertTarget(); as target) {
+    <ws-confirmation-modal
+      [isOpen]="true"
+      [title]="'DASHBOARD.DEAL_LOST_CONFIRM_TITLE' | translate"
+      [message]="'DASHBOARD.DEAL_LOST_CONFIRM_MSG' | translate: { ref: target.referenceNumber, amount: (target.commissionAmount | currencyFormat: target.commissionCurrency) }"
+      [confirmLabel]="'DASHBOARD.DEAL_LOST_REVERT' | translate"
+      [cancelLabel]="'COMMON.CANCEL' | translate"
+      variant="danger"
+      [loading]="reverting()"
+      (confirmed)="confirmRevert()"
+      (cancelled)="cancelRevert()"
+    />
+  }
 </app-shell>

@@ -130,6 +130,18 @@ describe('DashboardComponent helpers', () => {
 
   // ── Activity feed helpers ───────────────────────────────────────────────────
 
+  describe('isSystemActor', () => {
+    it('is true for background entries with no actor email (HUBSPOT_TOKEN_REFRESHED)', () => {
+      expect(component.isSystemActor('')).toBe(true);
+      expect(component.isSystemActor('   ')).toBe(true);
+      expect(component.isSystemActor(null)).toBe(true);
+    });
+
+    it('is false for a real user', () => {
+      expect(component.isSystemActor('admin@domain.com')).toBe(false);
+    });
+  });
+
   describe('actorShortName', () => {
     it('returns only the part before @', () => {
       expect(component.actorShortName('admin@domain.com')).toBe('admin');
@@ -397,6 +409,56 @@ describe('Action band payout card routing', () => {
   });
 });
 
+// ── Deal-lost alerts (revert only for Calculated; Paid is informational) ──────
+describe('Dashboard deal-lost alerts', () => {
+  let fixture: ComponentFixture<DashboardComponent>;
+  let component: DashboardComponent;
+  let store: DashboardStore;
+
+  const alert = (status: 'Calculated' | 'Paid', ref: string) => ({
+    transactionId: `tx-${ref}`, referenceNumber: ref, externalDealId: '5000',
+    transactionStatus: status, commissionAmount: 100, commissionCurrency: 'EUR',
+    detectedAt: '2026-07-27T00:00:00Z',
+  });
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent, TranslateModule.forRoot()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    fixture = TestBed.createComponent(DashboardComponent);
+    component = fixture.componentInstance;
+    store = TestBed.inject(DashboardStore);
+  });
+
+  it('canRevert() is true only for a Calculated commission', () => {
+    expect(component.canRevert(alert('Calculated', 'A') as never)).toBeTrue();
+    expect(component.canRevert(alert('Paid', 'B') as never)).toBeFalse();
+  });
+
+  it('shows a revert button for a Calculated alert but not for a Paid one', () => {
+    store.summary.set(buildMockSummary({
+      dealLostAlerts: [alert('Calculated', 'HUBSPOT-1'), alert('Paid', 'HUBSPOT-2')] as never,
+    }));
+    store.loading.set(false); // the attention card is gated on !loading; the init load never resolves here
+    fixture.detectChanges();
+
+    const buttons = fixture.debugElement
+      .queryAll(By.css('ws-button button'))
+      .map(b => (b.nativeElement as HTMLElement).textContent ?? '');
+    // Exactly one revert button — for the Calculated alert; the Paid one shows a badge, no button.
+    expect(buttons.filter(t => t.includes('DEAL_LOST_REVERT')).length).toBe(1);
+  });
+
+  it('askRevert sets the confirmation target; cancelRevert clears it', () => {
+    const a = alert('Calculated', 'HUBSPOT-1') as never;
+    component.askRevert(a);
+    expect(component.revertTarget()).toBe(a);
+    component.cancelRevert();
+    expect(component.revertTarget()).toBeNull();
+  });
+});
+
 // ── DashboardStore signal tests ───────────────────────────────────────────────
 
 describe('DashboardStore', () => {
@@ -456,6 +518,7 @@ function buildMockSummary(
       pendingByPlanItems: [],
       unprocessablePendingItems: [],
       driftAlerts: [],
+      dealLostAlerts: [],
       ambiguousAttributionPayees: [],
       ...actionOverride,
     },

@@ -624,6 +624,11 @@
   font-weight: 700;
 }
 
+.feed__avatar--system {
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
 .feed__content { flex: 1; min-width: 0; }
 
 .feed__top-row {

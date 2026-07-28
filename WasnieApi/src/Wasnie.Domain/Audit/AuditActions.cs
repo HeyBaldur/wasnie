@@ -132,4 +132,12 @@ public static class AuditActions
     public const string CrmDriftAutoResolved = "CRM_DRIFT_AUTO_RESOLVED";
     // Detected: the transaction was already Calculated/Paid (immutable) — recorded as an alert, untouched.
     public const string CrmDriftDetected = "CRM_DRIFT_DETECTED";
+
+    // Integrations — deal-lost detection (reverse reconciliation). A credited deal is no longer closed-won.
+    public const string DealLostDetected = "DEAL_LOST_DETECTED";
+    // The admin reverted a Calculated commission because its deal was lost (credit superseded, tx cancelled).
+    public const string DealLostCommissionReverted = "DEAL_LOST_COMMISSION_REVERTED";
+    // A previously deal-lost-cancelled deal returned to closed-won → a fresh transaction was re-created and
+    // the stale deal-lost alert resolved (lost→won recovery). The cancelled row stays as history.
+    public const string CrmDealRecovered = "CRM_DEAL_RECOVERED";
 }

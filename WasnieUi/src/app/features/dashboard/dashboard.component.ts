@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -7,7 +7,10 @@ import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DashboardStore } from './store/dashboard.store';
-import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, AmbiguousAttributionPayee } from './models/dashboard.models';
+import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee } from './models/dashboard.models';
+import { TransactionsApiService } from '../transactions/services/transactions.api.service';
+import { ToastService } from '../../shared/services/toast.service';
+import { extractApiError } from '../../shared/utils/api-error';
 import {
   WsCardComponent,
   WsBadgeComponent,
@@ -18,6 +21,8 @@ import {
   WsBarChartComponent,
   WsSparklineChartComponent,
   WsHBarChartComponent,
+  WsButtonComponent,
+  WsConfirmationModalComponent,
   type SegOption,
   type CardAccent,
   type BarChartPoint,
@@ -44,12 +49,21 @@ import {
     WsBarChartComponent,
     WsSparklineChartComponent,
     WsHBarChartComponent,
+    WsButtonComponent,
+    WsConfirmationModalComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent {
   readonly store = inject(DashboardStore);
+  private readonly transactionsApi = inject(TransactionsApiService);
+  private readonly toast = inject(ToastService);
+
+  // The deal-lost alert the admin is confirming a revert for (drives the confirmation modal), and whether
+  // the revert call is in flight.
+  readonly revertTarget = signal<DealLostAlertItem | null>(null);
+  readonly reverting = signal(false);
 
   /**
    * Sparkline values — period total distributed across 7 proportional points.
@@ -196,6 +210,15 @@ export class DashboardComponent {
     ];
   }
 
+  /**
+   * True when the audit entry was written by a background process, not a user
+   * (e.g. HUBSPOT_TOKEN_REFRESHED). Those rows carry an empty ActorEmail, which
+   * left the feed with a blank avatar and a blank actor name.
+   */
+  isSystemActor(email: string | null | undefined): boolean {
+    return !email || email.trim().length === 0;
+  }
+
   /** "admin@domain.com" → "admin" (max 18 chars, then ellipsis). */
   actorShortName(email: string): string {
     const at = email.indexOf('@');
@@ -256,6 +279,46 @@ export class DashboardComponent {
     return this.store.actionBand()?.driftAlerts ?? [];
   }
 
+  // ── Deal-lost alerts (a deal left closed-won AFTER its commission was calculated/paid) ─────────────
+
+  /** Unresolved deal-lost alerts to surface. Calculated ones are actionable (revert); Paid are informative. */
+  dealLostAlerts(): DealLostAlertItem[] {
+    return this.store.actionBand()?.dealLostAlerts ?? [];
+  }
+
+  /** Only a Calculated commission can be reverted here; Paid is shown but has no action (clawback is separate). */
+  canRevert(alert: DealLostAlertItem): boolean {
+    return alert.transactionStatus === 'Calculated';
+  }
+
+  /** Open the confirmation modal for reverting this alert's commission. */
+  askRevert(alert: DealLostAlertItem): void {
+    this.revertTarget.set(alert);
+  }
+
+  cancelRevert(): void {
+    this.revertTarget.set(null);
+  }
+
+  /** Confirmed: revert the commission, then reload the dashboard so the alert clears. */
+  confirmRevert(): void {
+    const target = this.revertTarget();
+    if (!target || this.reverting()) return;
+    this.reverting.set(true);
+    this.transactionsApi.revertLostDeal(target.transactionId).subscribe({
+      next: async () => {
+        this.toast.show('DASHBOARD.DEAL_LOST_REVERTED', 'success');
+        this.revertTarget.set(null);
+        this.reverting.set(false);
+        await this.store.reload();
+      },
+      error: (err) => {
+        this.toast.show(extractApiError(err), 'error');
+        this.reverting.set(false);
+      },
+    });
+  }
+
   // ── Ambiguous attribution (payee on 2+ eligible plans, no plan declared) ───────────────────────
 
   /**
@@ -271,10 +334,11 @@ export class DashboardComponent {
     return ['/payees', item.payeeId];
   }
 
-  /** True when the card has anything to show (unprocessable reasons, drift alerts, or ambiguity). */
+  /** True when the card has anything to show (unprocessable reasons, drift/deal-lost alerts, or ambiguity). */
   hasAttentionItems(): boolean {
     return (this.store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0
       || this.driftAlerts().length > 0
+      || this.dealLostAlerts().length > 0
       || this.ambiguousAttributionPayees().length > 0;
   }
 
@@ -286,7 +350,13 @@ export class DashboardComponent {
   attentionBadgeTotal(): number {
     return this.attentionTotalCount()
       + this.driftAlerts().length
+      + this.dealLostAlerts().length
       + this.ambiguousAttributionPayees().reduce((s, x) => s + x.transactionCount, 0);
+  }
+
+  /** i18n key for the commission state of a lost-deal transaction (calculated vs paid). */
+  dealLostStatusKey(status: string): string {
+    return status === 'Paid' ? 'DASHBOARD.DRIFT_STATE_PAID' : 'DASHBOARD.DRIFT_STATE_CALCULATED';
   }
 
   /** i18n key for the commission state of a drifted transaction (already calculated vs already paid). */
@@ -294,8 +364,8 @@ export class DashboardComponent {
     return status === 'Paid' ? 'DASHBOARD.DRIFT_STATE_PAID' : 'DASHBOARD.DRIFT_STATE_CALCULATED';
   }
 
-  /** Deep-link to the affected transaction via its reference (no per-tx detail route exists). */
-  driftLinkParams(alert: DriftAlertItem): Record<string, string> {
+  /** Deep-link to the affected transaction via its reference (shared by drift + deal-lost rows). */
+  driftLinkParams(alert: { referenceNumber: string }): Record<string, string> {
     return { ref: alert.referenceNumber };
   }
 

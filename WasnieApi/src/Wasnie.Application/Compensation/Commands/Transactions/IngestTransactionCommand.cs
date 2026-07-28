@@ -23,7 +23,10 @@ public sealed record IngestTransactionCommand(
     Guid? SelectedPlanAssignmentId = null,
     // What was sold. Optional and descriptive — Description says which sale, these say which product.
     string? ProductName = null,
-    string? ProductSku = null) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand
+    string? ProductSku = null,
+    // Optional explicit category. When present it WINS over the SKU/name resolver (the admin was
+    // explicit); blank/null → the resolver still runs. Never required.
+    string? Category = null) : IRequest<Result<TransactionDto>>, IMoneyCriticalCommand
 {
     public string AuditAction => AuditActions.TransactionIngested;
     public string AuditResourceType => ResourceTypes.Transaction;

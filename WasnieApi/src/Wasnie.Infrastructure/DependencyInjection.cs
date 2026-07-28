@@ -133,6 +133,10 @@ public static class DependencyInjection
         // Phase-3 polling job both call this — the logic is written once, only invoked.
         services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmDealReconciler,
             Wasnie.Application.Integrations.Crm.CrmDealReconciler>();
+        // Reverse reconciliation (deal-lost detection): checks already-credited deals' current won-status
+        // and raises DealLostAlerts. Runs at the end of each sync; read + alert only, never touches money.
+        services.AddScoped<Wasnie.Application.Integrations.Crm.IDealLostReconciler,
+            Wasnie.Application.Integrations.Crm.DealLostReconciler>();
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();

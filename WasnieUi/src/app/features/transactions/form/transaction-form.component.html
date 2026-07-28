@@ -38,6 +38,16 @@
       [error]="hasError('productSku', 'maxlength') ? 'VALIDATION.INVALID' : ''"
     />
 
+    <!-- Optional category. Choose a known one or type your own; leaving it blank is fine (the server
+         still tries the SKU/name resolver). Shared picker — same behaviour as the rule builder. -->
+    <ws-category-picker
+      class="ws-form-grid__full"
+      formControlName="category"
+      label="TRANSACTIONS.FIELD_CATEGORY"
+      [options]="categoryValues()"
+      placeholder="TRANSACTIONS.FIELD_CATEGORY_PLACEHOLDER"
+    />
+
     <ws-date-picker
       [label]="'TRANSACTIONS.FIELD_DATE'"
       formControlName="transactionDate"

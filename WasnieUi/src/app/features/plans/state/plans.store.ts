@@ -18,8 +18,9 @@ export class PlansStore {
 
   readonly page = signal(1);
   readonly pageSize = signal(10);
-  readonly sortBy = signal('name');
-  readonly sortOrder = signal<'asc' | 'desc'>('asc');
+  // Default the list to creation order, newest first — the most recently created plan on top.
+  readonly sortBy = signal('createdat');
+  readonly sortOrder = signal<'asc' | 'desc'>('desc');
   readonly status = signal<PlanStatus | null>(null);
 
   private readonly searchSubject$ = new Subject<string>();

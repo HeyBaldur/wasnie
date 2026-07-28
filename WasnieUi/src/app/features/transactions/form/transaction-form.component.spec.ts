@@ -8,6 +8,7 @@ import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SettingsApiService } from '../../admin/services/settings.api.service';
 import { TransactionsApiService } from '../services/transactions.api.service';
+import { PlansApiService } from '../../plans/services/plans.api.service';
 import { Transaction, TransactionStatus, TransactionSource } from '../models/transaction.model';
 
 describe('TransactionFormComponent', () => {
@@ -16,6 +17,7 @@ describe('TransactionFormComponent', () => {
   let toastSpy: jasmine.SpyObj<ToastService>;
   let settingsApiSpy: jasmine.SpyObj<SettingsApiService>;
   let transactionsApiSpy: jasmine.SpyObj<TransactionsApiService>;
+  let plansApiSpy: jasmine.SpyObj<PlansApiService>;
 
   const mockTx: Transaction = {
     id: 'tx-1',
@@ -54,6 +56,10 @@ describe('TransactionFormComponent', () => {
       of({ options: [], selectionRequired: false })
     );
 
+    // The category picker loads the tenant's known categories on init.
+    plansApiSpy = jasmine.createSpyObj('PlansApiService', ['getCategoryValues']);
+    plansApiSpy.getCategoryValues.and.returnValue(of(['Laptops', 'Servers']));
+
     await TestBed.configureTestingModule({
       imports: [TransactionFormComponent, TranslateModule.forRoot()],
       providers: [
@@ -63,6 +69,7 @@ describe('TransactionFormComponent', () => {
         { provide: ToastService, useValue: toastSpy },
         { provide: SettingsApiService, useValue: settingsApiSpy },
         { provide: TransactionsApiService, useValue: transactionsApiSpy },
+        { provide: PlansApiService, useValue: plansApiSpy },
       ],
     }).compileComponents();
   });
@@ -205,6 +212,8 @@ describe('TransactionFormComponent', () => {
       description: null,
       productName: null,
       productSku: null,
+      // Left blank → sent as null; the server still runs the SKU/name resolver.
+      category: null,
       transactionDate: '2024-01-15',
       amount: 500,
       currency: 'USD',
@@ -213,6 +222,50 @@ describe('TransactionFormComponent', () => {
       selectedPlanAssignmentId: null,
       processImmediately: true,
     });
+  }));
+
+  it('onSubmit() sends an explicitly chosen category', fakeAsync(async () => {
+    const fixture = TestBed.createComponent(TransactionFormComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.form.patchValue({
+      payeeId: 'payee-1',
+      referenceNumber: 'REF-001',
+      transactionDate: '2024-01-15',
+      amount: 500,
+      currency: 'USD',
+      category: 'Laptops',
+    });
+
+    await component.onSubmit();
+    tick();
+
+    expect(storeSpy.createTransaction).toHaveBeenCalledWith(
+      jasmine.objectContaining({ category: 'Laptops' }),
+    );
+  }));
+
+  it('can be saved without a category (stays optional)', fakeAsync(async () => {
+    const fixture = TestBed.createComponent(TransactionFormComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    component.form.patchValue({
+      payeeId: 'payee-1',
+      referenceNumber: 'REF-001',
+      transactionDate: '2024-01-15',
+      amount: 500,
+      currency: 'USD',
+    });
+
+    expect(component.form.valid).toBeTrue();
+    await component.onSubmit();
+    tick();
+
+    expect(storeSpy.createTransaction).toHaveBeenCalledWith(
+      jasmine.objectContaining({ category: null }),
+    );
   }));
 
   it('onSubmit() sends the trimmed description when one is typed', fakeAsync(async () => {
