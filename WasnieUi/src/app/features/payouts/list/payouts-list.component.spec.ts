@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 
 import { PayoutsListComponent } from './payouts-list.component';
 import { PayoutsApiService } from '../services/payouts.api.service';
@@ -80,7 +80,7 @@ describe('PayoutsListComponent — onBulkMarkPaid', () => {
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
         { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
-        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} } } },
+        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} }, queryParams: of({}) } },
         { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
       ],
     });
@@ -214,7 +214,7 @@ describe('PayoutsListComponent — ngOnInit reload', () => {
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
         { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
-        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} } } },
+        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} }, queryParams: of({}) } },
         { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
       ],
     });
@@ -253,7 +253,7 @@ describe('PayoutsListComponent — onExport', () => {
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
         { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
-        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} } } },
+        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} }, queryParams: of({}) } },
         { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
       ],
     });
@@ -338,5 +338,59 @@ describe('PayoutsStore — bulkMarkPaidSummary', () => {
     ]);
     expect(summary.totalsByCurrency.get('EUR')).toBe(500);
     expect(summary.totalsByCurrency.get('USD')).toBe(200);
+  });
+});
+
+// ── The filter has to follow the URL, not just the first render ──────────────
+// Angular reuses this component when only the query params change, so a snapshot read in ngOnInit
+// goes stale: arriving from the dashboard card kept the old filter until a manual reload, and
+// leaving via the sidebar left the old filter applied under a URL that no longer mentioned it.
+describe('PayoutsListComponent — query params after the first render', () => {
+  let storeMock: jasmine.SpyObj<PayoutsStore>;
+  let queryParams: BehaviorSubject<Record<string, string>>;
+
+  beforeEach(() => {
+    const apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
+      'list', 'calculate', 'getJobStatus', 'bulkApprove', 'bulkMarkPaid', 'approve', 'markPaid',
+      'exportPdf', 'exportToExcel',
+    ]);
+    apiSpy.list.and.returnValue(of(EMPTY_PAGE));
+    storeMock = makeStoreMock();
+    queryParams = new BehaviorSubject<Record<string, string>>({ status: 'Approved' });
+
+    TestBed.configureTestingModule({
+      imports: [PayoutsListComponent],
+      providers: [
+        { provide: PayoutsApiService, useValue: apiSpy },
+        { provide: PayoutsStore,      useValue: storeMock },
+        { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
+        { provide: PlansApiService,   useValue: jasmine.createSpyObj('PlansApiService', ['getPlans', 'getPlan']) },
+        { provide: ActivatedRoute,    useValue: { snapshot: { queryParams: {} }, queryParams } },
+        { provide: Router,            useValue: jasmine.createSpyObj('Router', ['navigate']) },
+      ],
+    });
+    TestBed.overrideComponent(PayoutsListComponent, { set: { template: '<div></div>', imports: [] } });
+    TestBed.createComponent(PayoutsListComponent).detectChanges();
+  });
+
+  it('applies the filter the URL carried on arrival', () => {
+    expect(storeMock.loadFromQueryParams).toHaveBeenCalledWith({ status: 'Approved' });
+  });
+
+  it('re-applies when the URL changes without the component being recreated', () => {
+    storeMock.loadFromQueryParams.calls.reset();
+
+    queryParams.next({ status: 'Paid' });
+
+    expect(storeMock.loadFromQueryParams).toHaveBeenCalledWith({ status: 'Paid' });
+  });
+
+  it('clears the filter when the URL loses its params', () => {
+    // Leaving via the sidebar's Payouts link: no params means the default view, not the leftover one.
+    storeMock.clearFilters.calls.reset();
+
+    queryParams.next({});
+
+    expect(storeMock.clearFilters).toHaveBeenCalled();
   });
 });
