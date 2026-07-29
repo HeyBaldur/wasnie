@@ -64,6 +64,18 @@ public enum LedgerTransactionType
     /// never blended with a settlement that actually recovered cash.
     /// </summary>
     WriteOffCredit = 6,
+
+    /// <summary>
+    /// The credit half of <see cref="DataCorrectionDebit"/>: a human neutralising an entry that a
+    /// TECHNICAL fault produced — a deal synced with a wrong date, a test artefact, an import that
+    /// double-counted.
+    ///
+    /// Deliberately NOT <see cref="ClawbackForgivenessCredit"/>, which is a BUSINESS decision: someone
+    /// with authority chose to let a real debt go. Using forgiveness to erase a data error would tell
+    /// the CFO the company forgave money it never actually charged, and no amount of free-text
+    /// justification recovers that distinction once the totals are added up.
+    /// </summary>
+    DataCorrectionCredit = 7,
 }
 
 /// <summary>What triggered a System entry — kept so a clawback can be traced back to its cause.</summary>
@@ -97,6 +109,7 @@ public static class LedgerTransactionTypeExtensions
         // one because the company absorbed it. Either way the payee owes that much less.
         LedgerTransactionType.ExternalSettlementCredit => false,
         LedgerTransactionType.WriteOffCredit => false,
+        LedgerTransactionType.DataCorrectionCredit => false,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown ledger transaction type."),
     };
 
@@ -114,6 +127,7 @@ public static class LedgerTransactionTypeExtensions
         // and the manual path is what forces an actor and a justification onto the entry.
         LedgerTransactionType.ExternalSettlementCredit => true,
         LedgerTransactionType.WriteOffCredit => true,
+        LedgerTransactionType.DataCorrectionCredit => true,
         _ => false,
     };
 }

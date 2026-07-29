@@ -331,4 +331,60 @@ public sealed class PayeeLedgerTests
         // Append-only: closing the account did not erase the debit that created the debt.
         debt.Amount.Amount.Should().Be(-500m);
     }
+
+    // ── Technical correction vs business forgiveness ─────────────────────────────
+    // Both are credits that move the balance the same way, and that is exactly why they must stay
+    // different types. Neutralising a bad import with "forgiveness" would tell the CFO the company
+    // chose to let a debt go, when in fact it never charged one.
+
+    [Fact]
+    public void A_data_correction_credit_is_a_human_written_credit()
+    {
+        var entry = PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), LedgerTransactionType.DataCorrectionCredit,
+            Money.Of(333.3333m, "EUR"),
+            "Technical correction — test artefact with an invalid date.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        entry.Amount.Amount.Should().Be(333.3333m);
+        LedgerTransactionType.DataCorrectionCredit.IsDebit().Should().BeFalse();
+        LedgerTransactionType.DataCorrectionCredit.IsManuallyCreatable().Should().BeTrue();
+        entry.Origin.Should().Be(LedgerEntryOrigin.Human);
+    }
+
+    [Fact]
+    public void A_technical_correction_is_countable_apart_from_a_business_forgiveness()
+    {
+        // The reporting property that justifies two types: same effect on the balance, different
+        // meaning, and each one totals on its own without anybody reading a justification.
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+
+        var correction = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.DataCorrectionCredit, Money.Of(1000m, "EUR"),
+            "Technical correction — the deal synced with today's date.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        var forgiveness = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.ClawbackForgivenessCredit, Money.Of(1000m, "EUR"),
+            "Agreed with the rep — the churn was not their doing.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        correction.Amount.Amount.Should().Be(forgiveness.Amount.Amount, "the money moves identically");
+        correction.TransactionType.Should().NotBe(forgiveness.TransactionType,
+            "…and the reason must remain distinguishable in a report");
+    }
+
+    [Fact]
+    public void The_engine_cannot_write_a_data_correction()
+    {
+        // Correcting data is a judgement about what went wrong. No automation gets to make it.
+        LedgerTransactionType.DataCorrectionCredit.IsManuallyCreatable().Should().BeTrue();
+
+        var act = () => PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), LedgerTransactionType.DataCorrectionCredit,
+            Money.Of(100m, "EUR"), "No actor.", "", Guid.NewGuid(), Now, Guid.NewGuid());
+
+        act.Should().Throw<DomainException>("an entry nobody signed is not a correction");
+    }
 }
