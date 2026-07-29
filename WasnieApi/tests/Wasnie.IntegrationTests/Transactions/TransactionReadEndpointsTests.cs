@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Wasnie.IntegrationTests.Infrastructure;
@@ -176,17 +176,40 @@ public sealed class TransactionReadEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task List_InvalidSortField_FallsBackToDefaultTransactionDateSort_No500()
+    public async Task List_InvalidSortField_Returns400_NamingTheAllowedValues()
     {
-        await CreateTransactionAsync(_clientA, _payeeAId, "TXN-BADSORT-Z", 100m, "2025-03-15");
-        await CreateTransactionAsync(_clientA, _payeeAId, "TXN-BADSORT-A", 100m, "2025-01-15");
-
+        // Fail fast: an unknown sort field used to be normalised away silently, so a caller who
+        // misspelled a column got a differently-ordered page and no way to notice.
         var response = await _clientA.GetAsync("/api/transactions?sortBy=nonexistentfield");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("nonexistentfield");
+        body.Should().Contain("transactiondate", "the error must name what IS allowed");
+    }
+
+    [Fact]
+    public async Task List_WithoutSortField_DefaultsToTransactionDateDescending()
+    {
+        await CreateTransactionAsync(_clientA, _payeeAId, "TXN-DEFSORT-Z", 100m, "2025-03-15");
+        await CreateTransactionAsync(_clientA, _payeeAId, "TXN-DEFSORT-A", 100m, "2025-01-15");
+
+        var response = await _clientA.GetAsync("/api/transactions");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<PagedResponse<TransactionResponse>>();
-        // Default sort is transactionDate asc — January should come first
-        body!.Items[0].TransactionDate.Should().Be("2025-01-15");
+        // Newest business event first — not newest ingestion.
+        body!.Items[0].TransactionDate.Should().Be("2025-03-15");
+    }
+
+    [Fact]
+    public async Task List_ValidSortField_StillSorts()
+    {
+        var response = await _clientA.GetAsync("/api/transactions?sortBy=amount&sortOrder=asc");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<PagedResponse<TransactionResponse>>();
+        body!.Items.Select(i => i.Amount).Should().BeInAscendingOrder();
     }
 
     // ── Filters ───────────────────────────────────────────────────────────────

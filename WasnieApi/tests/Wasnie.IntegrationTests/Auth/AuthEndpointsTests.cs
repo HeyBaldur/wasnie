@@ -1,6 +1,9 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Infrastructure.Persistence;
 using Wasnie.Application.Features.Auth.DTOs;
 using Wasnie.IntegrationTests.Infrastructure;
 
@@ -40,6 +43,16 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         return (await response.Content.ReadFromJsonAsync<AuthResultDto>())!;
     }
 
+    /// <summary>Marks the account confirmed directly — the confirmation email flow is not what this
+    /// test is about, and there is no endpoint to confirm without the emailed token.</summary>
+    private async Task ConfirmEmailAsync(string email)
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.Database.ExecuteSqlAsync(
+            $"UPDATE AspNetUsers SET EmailConfirmed = 1 WHERE NormalizedEmail = {email.ToUpperInvariant()}");
+    }
+
     private async Task<AuthResultDto> LoginAsync(string email, string password = "TestPassword!1")
     {
         var response = await _client.PostAsJsonAsync("/api/auth/login", new { Email = email, Password = password });
@@ -70,6 +83,10 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
     public async Task Logout_RevokesAllActiveRefreshTokensForUser()
     {
         var auth1 = await RegisterAsync();
+        // Logging in requires a confirmed email since WI-EMAIL-ACTIVATION (2026-06-15); a freshly
+        // registered admin has not confirmed one, so without this the second login 401s and the test
+        // dies in its own setup, never reaching the logout it exists to verify.
+        await ConfirmEmailAsync(auth1.Email);
         // Second login produces a second refresh token for the same user
         var auth2 = await LoginAsync(auth1.Email);
 

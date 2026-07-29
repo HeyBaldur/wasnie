@@ -51,6 +51,25 @@ public sealed class PayeeLedgerEntry : AggregateRoot
     public Guid? SourcePayRunId { get; private set; }
     public string? SourceExternalDealId { get; private set; }
 
+    /// <summary>
+    /// The plan whose policy produced this entry (churn clawback). Kept because MaturationDays is a PLAN
+    /// setting: without it a multi-plan transaction leaves two debits nobody can attribute. Null for
+    /// entries no plan produced (settlements, manual adjustments).
+    /// </summary>
+    public Guid? SourcePlanId { get; private set; }
+
+    /// <summary>
+    /// WHEN THE EVENT HAPPENED in the real world (the CRM's loss date), as opposed to
+    /// <see cref="CreatedAt"/>, which is when Wasnie booked it.
+    ///
+    /// These are deliberately two different fields because a CRM lets someone record TODAY that a deal
+    /// was lost in MARCH. The formula must use March (that is how long the deal really lived), but the
+    /// money must be booked in the CURRENTLY OPEN period — booking it into March would alter a balance
+    /// that was already reconciled and paid. So: EventDate feeds the arithmetic and the audit trail;
+    /// CreatedAt is the accounting date. Never the other way round.
+    /// </summary>
+    public DateOnly? EventDate { get; private set; }
+
     // ── Clawback formula inputs, so the number is reproducible from the row ───
     // Only populated for a proportional (churn) clawback. A money figure nobody can recompute is a
     // figure nobody can defend in front of the person whose pay it reduced.
@@ -84,7 +103,9 @@ public sealed class PayeeLedgerEntry : AggregateRoot
         string? sourceExternalDealId = null,
         decimal? sourceCommissionAmount = null,
         int? daysActive = null,
-        int? maturationDays = null)
+        int? maturationDays = null,
+        Guid? sourcePlanId = null,
+        DateOnly? eventDate = null)
     {
         var entry = new PayeeLedgerEntry(
             tenantId, payeeId, LedgerEntryOrigin.System, transactionType, magnitude,
@@ -97,6 +118,8 @@ public sealed class PayeeLedgerEntry : AggregateRoot
             SourceCommissionAmount = sourceCommissionAmount,
             DaysActive = daysActive,
             MaturationDays = maturationDays,
+            SourcePlanId = sourcePlanId,
+            EventDate = eventDate,
         };
 
         entry.RaiseDomainEvent(new PayeeLedgerEntryCreatedEvent(

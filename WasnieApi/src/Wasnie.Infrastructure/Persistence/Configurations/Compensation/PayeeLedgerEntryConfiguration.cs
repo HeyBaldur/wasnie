@@ -36,6 +36,8 @@ public sealed class PayeeLedgerEntryConfiguration : IEntityTypeConfiguration<Pay
         builder.Property(e => e.SourceCommissionAmount).HasColumnType("decimal(18,4)").IsRequired(false);
         builder.Property(e => e.DaysActive).IsRequired(false);
         builder.Property(e => e.MaturationDays).IsRequired(false);
+        builder.Property(e => e.SourcePlanId).IsRequired(false);
+        builder.Property(e => e.EventDate).IsRequired(false);
 
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedBy).IsRequired().HasMaxLength(450);
@@ -48,5 +50,14 @@ public sealed class PayeeLedgerEntryConfiguration : IEntityTypeConfiguration<Pay
         builder.HasIndex(e => e.SourceTransactionId)
             .HasFilter("[SourceTransactionId] IS NOT NULL")
             .HasDatabaseName("IX_PayeeLedgerEntries_SourceTransaction");
+
+        // ONE churn debit per (transaction, plan). The trigger also checks in code before writing, but a
+        // read-then-write check cannot survive two syncs racing — this index can. It is scoped to DealChurn
+        // so it constrains nothing else in the ledger, and to the plan because a transaction credited under
+        // two plans legitimately produces two debits with two different maturation windows.
+        builder.HasIndex(e => new { e.SourceTransactionId, e.SourcePlanId })
+            .IsUnique()
+            .HasFilter("[SourceType] = 'DealChurn' AND [SourceTransactionId] IS NOT NULL AND [SourcePlanId] IS NOT NULL")
+            .HasDatabaseName("UX_PayeeLedgerEntries_ChurnPerTransactionPlan");
     }
 }

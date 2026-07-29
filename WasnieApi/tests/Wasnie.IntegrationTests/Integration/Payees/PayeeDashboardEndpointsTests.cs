@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
@@ -104,11 +104,14 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task GetDashboard_WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded()
     {
-        // Quota period Jan-Feb 2024 will NOT intersect "last-month" (May 2026)
+        // The quota must NOT intersect "last-month", and — since WI-PLAN-PERIOD-ALIGNMENT
+        // (2026-06-22) — must still sit INSIDE the plan period, which is 2025-01-01..2026-12-31.
+        // Jan-Feb 2025 satisfies both; the old Jan-Feb 2024 was rejected by the containment rule
+        // at seed time, so this test never reached the assertion it exists to make.
         var payeeId = await CreatePayeeAsync("EMP-DASH-005");
         var planId = await CreateActivePlanAsync();
         await CreateAssignmentAsync(payeeId, planId);
-        await CreateAndActivateQuotaAsync(payeeId, planId, "2024-01-01", "2024-02-28");
+        await CreateAndActivateQuotaAsync(payeeId, planId, "2025-01-01", "2025-02-28");
 
         var response = await _clientA.GetAsync($"/api/payees/{payeeId}/dashboard?period=last-month");
 
@@ -304,9 +307,12 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
     public async Task GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments()
     {
         // Regression guard: assignments endpoint must respect period param.
+        // An assignment must match its plan's effective period EXACTLY (WI-PLAN-PERIOD-ALIGNMENT,
+        // 2026-06-22), so each window gets a plan cut to it. Before, both assignments were posted
+        // against 2025-2026 plans and rejected at seed time — the YTD assertion never ran.
         var payeeId = await CreatePayeeAsync("EMP-DASH-011");
-        var eurPlanId = await CreateActivePlanAsync("EUR");
-        var plnPlanId = await CreateActivePlanAsync("PLN");
+        var eurPlanId = await CreateActivePlanAsync("EUR", "2026-01-01", "2026-01-31");
+        var plnPlanId = await CreateActivePlanAsync("PLN", "2026-06-01", "2026-12-31");
         // Jan-only assignment
         (await _clientA.PostAsJsonAsync("/api/assignments",
             new { planId = eurPlanId, payeeId, effectiveStart = "2026-01-01", effectiveEnd = "2026-01-31" }))
@@ -340,14 +346,17 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
         return body.GetProperty("id").GetGuid();
     }
 
-    private async Task<Guid> CreateActivePlanAsync(string currency = "EUR")
+    private async Task<Guid> CreateActivePlanAsync(
+        string currency = "EUR",
+        string effectiveStart = "2025-01-01",
+        string effectiveEnd = "2026-12-31")
     {
         var planReq = new
         {
             name = $"Dash Plan {Guid.NewGuid().ToString("N")[..6]}",
             description = "",
-            effectiveStart = "2025-01-01",
-            effectiveEnd = "2026-12-31",
+            effectiveStart,
+            effectiveEnd,
             currency
         };
         var planResp = await _clientA.PostAsJsonAsync("/api/plans", planReq);

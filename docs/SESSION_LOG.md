@@ -4,6 +4,155 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-29 — ★ TRIGGER CHURN VIVO: deal perdido con comisión PAGADA → ClawbackDebit prorrateado (System)
+
+El clawback deja de ser inerte. Un deal que muere dentro de su ventana de maduración con la comisión ya pagada genera **deuda real**, en el período abierto, que el próximo pay run netea y el statement muestra.
+
+**PASO 1 — la fecha real de pérdida del CRM (read-only, confirmado antes de tocar).** El campo es **`closedate`**, no `hs_lastmodifieddate` ni `DetectedAt`: HubSpot lo reescribe cuando el deal entra a una etapa cerrada, así que en un deal `closed-lost` `closedate` **es la fecha de la pérdida**, mientras la fecha del cierre GANADO ya está congelada en `CompensationTransaction.TransactionDate` desde el ingest. `hs_lastmodifieddate` mide cualquier edición (un cambio de nombre movería la deuda) y `DetectedAt` mide latencia del sync (un deal perdido el 20 y sincronizado el 27 pagaría menos clawback). El batch-read SÍ se podía extender: `HubSpotCrmDealSource.BuildDealsBatchReadBody` ya pedía `hs_is_closed_won` + `dealstage` en la MISMA llamada — agregar `closedate` no cuesta un round trip. `CrmDealStatus` gana `DateOnly? CloseDate` (`CrmModels.cs:51`), parseado con el mismo `ParseDate` del sync directo.
+
+**PASO 2 — el comando nuevo.** `RegisterDealChurnClawbackCommand` (`Commands/Ledger/RegisterDealChurnClawbackCommand.cs`) + `RegisterDealChurnClawbackHandler` (`Handlers/Ledger/RegisterDealChurnClawbackHandler.cs`), **separado del revert** y sin endpoint humano: lo dispara `DealLostReconciler` (`:153-175`) después de commitear las alertas, **solo para tx Paid** y solo si el CRM devolvió `closedate`. Sin fecha del CRM **no se genera deuda**: la alerta queda abierta y la resuelve una persona — inventar la fecha sería cobrarle al vendedor nuestra latencia. Comisión = créditos **consumidos** (`ConsumedAt != null`), no acreditados: lo que no salió de la empresa no vuelve. Un asiento **por (plan, moneda)**, porque `MaturationDays` es del plan. Plan sin ventana → `NoPolicy`, inerte, no error.
+
+**BLINDAJE 1 — inmutabilidad contable, CUMPLIDO.** `PayeeLedgerEntry` gana **`EventDate`** (fecha real del CRM) y **`SourcePlanId`**; el `CreatedAt` sigue siendo `clock.UtcNowOffset`. Un deal marcado hoy como perdido "el 15 de marzo" produce un asiento con `EventDate = 2026-03-15` y fecha contable **de hoy**: la fórmula usa marzo, el dinero se asienta en el período abierto. El ledger no tiene columna de período — la liquidación lee el **balance vivo** al pagar (`PayRunSettlementService`), así que un asiento nuevo es estructuralmente incapaz de entrar en un run ya pagado. Test contra SQL real: el run de ene–mar está PAGADO, llega una pérdida fechada el 1 de marzo → el asiento queda con `CreatedAt` de julio y **el run cerrado no recibe ninguna liquidación retroactiva**. Migración **B21_ClawbackChurnMetadata** aplicada y verificada.
+
+**BLINDAJE 2 — la carrera, CUMPLIDA, y encontró un bug real.** El handler no inventó barrera: usa el `RowVersion` del `PayeeBalance` y, ante conflicto, re-lee, re-aplica y reintenta (3 intentos). **El bug:** `Balance` es un **owned type**, y `EntityEntry.ReloadAsync()` del dueño refresca sus escalares y el RowVersion **pero NO el Money owned**. La primera versión reintentaba sobre la cifra vieja y **duplicaba la deuda en silencio** (−1433.3334 donde correspondía −666.6667). Lo cazó el test de carrera contra SQL real, no la revisión: sin ese test el error habría sido invisible y habría cobrado el doble. Arreglo: **dos reloads**, dueño y entrada owned (`RegisterDealChurnClawbackHandler:300-310`). Test: la liquidación del pay run y el débito del churn escriben el mismo balance con el trigger leyendo primero → resultado consistente, **un solo** débito, la liquidación del otro escritor sobrevive, y `balance == suma de asientos`.
+
+**BLINDAJE 3 — saldo negativo, DISCIPLINA DE EVIDENCIA CUMPLIDA: el dominio YA lo soporta, no hizo falta migración ni freno.** Verificado antes de escribir: no hay check-constraint en `PayeeBalances.Balance` (`B19_ClawbackLedger`, columna `decimal(18,4)` a secas), `PayeeBalance.Apply` es una suma sin piso, y `OutstandingDebt()` está escrito asumiendo negativos. Queda **documentado por test contra SQL**: balance +100, clawback 988.8889 → **−888.8889** persistido, arrastrado y neteado por el run siguiente (retiene 500 de 500 y arrastra −166.6667). Opción 1 de Rodolfo, sin tocar la invariante.
+
+**Idempotencia — donde se puede hacer cumplir.** El reconciler re-ve el deal perdido en CADA sync. El handler chequea antes de escribir, y además hay **índice único filtrado** `UX_PayeeLedgerEntries_ChurnPerTransactionPlan` sobre (SourceTransactionId, SourcePlanId) `WHERE SourceType='DealChurn'`: un check read-then-write no sobrevive dos syncs en carrera, el índice sí. Test: el segundo débito lo rechaza la base.
+
+**REGRESIÓN — el revert sigue cerrado.** `RevertCommissionForLostDealHandler` **no se tocó**: sigue rechazando Paid ("This commission was already paid…") y sus 5 tests siguen verdes, incluido `Paid_commission_is_refused_and_nothing_changes`. El clawback abrió una puerta NUEVA; no ensanchó la vieja. El churn tampoco toca la tx ni los créditos (test explícito: tx sigue Paid, crédito sin superseder y consumido).
+
+**PASO 4 — verificación empírica, en dos mitades honestas.** (a) **Pipeline real de la app:** `ChurnClawbackEndToEndTests` levanta el host (WebApplicationFactory + SQL real), dispara el comando por el `ISender` **del contenedor de la app** y lee por HTTP: `GET /ledger/entries` devuelve el débito `System`/`ClawbackDebit` de −666.6667 con `daysActive=30`, `maturationDays=90`, deal `9100` y la justificación con la fecha del CRM; `GET /ledger/statement` devuelve `newCarryover=-666.6667`; y un **Rep** ve su propia deuda (transparencia). (b) **App levantada de verdad** en `localhost:5199` contra la DB de desarrollo, con JWT firmado: arranca con B21 aplicada, y un asiento de churn con `EventDate`/`SourcePlanId` insertado en la DB real se lee correcto por los dos endpoints (`amount:-95.5510`, `newCarryover:-95.5510`). **Lo que NO se pudo hacer:** disparar el trigger desde la app viva por HTTP — no tiene endpoint (lo dispara el sync del CRM) y no hay conexión HubSpot en este entorno; por eso la mitad (a) usa el pipeline real en proceso. Las filas de verificación se borraron de la DB de desarrollo y la API quedó detenida.
+
+**Números.** Unit **983 → 999** (+16: 13 del handler de churn, 3 del cableado del reconciler). Integración **707 → 717**, **todos verdes, 0 rojos, 2 skipped, exit code 0** (+10: 8 del trigger contra SQL + 2 end-to-end HTTP). Suite completa corrida entera después del cambio.
+
+**Pendiente / fuera de alcance (explícito).** Origin-error 100% y default/non-payment son otros triggers; la política de payee TERMINADO en rojo es proceso aguas abajo; la primitiva de aprobación sigue deferida. **Deuda menor detectada, no hecha:** `PayeeLedgerEntryDto` no expone `eventDate` ni `sourcePlanId`, así que la UI del ledger muestra la fecha de pérdida solo dentro del texto de la justificación — agregar los campos es backend + front y merece ir con su cambio de UI. No se ejecutó git.
+
+## 2026-07-28 — ★ SUITE DE INTEGRACIÓN EN VERDE: 707 tests, 705 pasan, 0 rojos, exit code 0
+
+Erradicación final: 3 arreglos de test + el refactor fail-fast de TransactionRead.
+
+**A1/A2 — Dashboard pending-by-plan (solo test).** El helper de siembra posteaba sin `processImmediately`, y el default `true` de `IngestTransactionCommand` calculaba la tx en el acto, así que nunca quedaba Pending. El helper gana un parámetro opcional (default `true`, para no alterar los otros tests de la clase) y los dos tests de pendientes lo pasan en `false`. Intención preservada: uno sigue probando aislamiento de tenant, el otro que no hay multiplicación cartesiana.
+
+**A3 — Auth logout (solo test).** El segundo `LoginAsync` daba 401 porque `LoginCommandHandler:32-35` exige email confirmado desde WI-EMAIL-ACTIVATION (jun-2026). Nuevo helper `ConfirmEmailAsync` que marca la cuenta confirmada por SQL (no hay endpoint para confirmar sin el token del mail, y el flujo de confirmación no es lo que este test prueba). Con eso el test llega al logout y **recupera la cobertura de revocación multi-sesión**, que era el hueco real: hasta ahora solo había test verde de sesión única.
+
+**B — TransactionRead: fail-fast (PRODUCCIÓN, decisión de Rodolfo).**
+- **B0 auditoría de contrato:** la UI de transacciones manda `sortBy` fijo `'ingestedat'` (`transactions.store.ts:62`), sin ningún control que lo cambie — está en el whitelist, así que el 400 **no rompe ninguna pantalla** y no hubo que ajustar el cliente.
+- **B1 refactor** (`ListTransactionsHandler.cs`): validación fail-fast al entrar — `sortBy` fuera del whitelist → `Result.Failure` → **400** con el mensaje `Invalid sort field 'x'. Allowed values are: amount, ingestedat, referencenumber, status, transactiondate.`. Sin `sortBy` → **TransactionDate descendente** (el default de negocio: el auditor asume orden del evento, no de la ingesta). Eliminada la normalización silenciosa a `ingestedat` y ya no queda el brazo `_ =>` como falso default: todo valor que llega al switch está en el whitelist. La whitelist sigue, así que no hay injection ni 500.
+- **B2 test:** `List_InvalidSortField_...` reescrito para afirmar **400** + que el mensaje nombre lo permitido; agregados `List_WithoutSortField_DefaultsToTransactionDateDescending` y `List_ValidSortField_StillSorts`.
+- **B3 verificación empírica** (API en localhost:5199 contra la DB de desarrollo): `?sortBy=nonexistentfield` → **400** con el mensaje exacto; `?pageSize=3` sin sort → 200 con las tres del 2026-07-27 primero (descendente por fecha de transacción); `?sortBy=amount&sortOrder=asc` → 200 con 50, 120, 150 en orden ascendente.
+
+**Estado: integración 707 (705 verdes, 0 rojos, 2 skipped), exit code 0, estable en 3 corridas. Unit 983.** Con esto **se destraba el trigger churn**, que es su propio WI. La API quedó detenida. No se ejecutó git.
+
+## 2026-07-28 — Los 2 últimos rojos diagnosticados (TransactionRead sort + Auth logout): NO hay brecha de seguridad
+
+**Auth logout ★ SEGURIDAD — no hay brecha; el test muere en la SIEMBRA.** El mensaje del fallo ("esperaba 200, encontró 401") no corresponde a ninguna aserción del cuerpo del test —que espera 204 y luego dos 401— sino a los helpers `RegisterAsync`/`LoginAsync`, que afirman `Should().Be(OK)`. `RegisterAsync` funciona (otros tests de la clase que lo usan pasan), así que el 401 es del **segundo login** de la línea 74. Mecanismo: `LoginCommandHandler.cs:32-35` consulta `IsEmailConfirmedAsync` y devuelve `Failure("EMAIL_NOT_CONFIRMED")` → 401. Un tenant recién registrado tiene el email SIN confirmar, así que loguearse inmediatamente después de registrarse ya no se puede — la puerta la agregó WI-EMAIL-ACTIVATION (2026-06-15) y el test la precede.
+
+**La revocación SÍ funciona, y lo prueba un test VERDE.** `Logout_WithValidToken_RevokesRefreshToken_SubsequentRefreshReturns401` (líneas 47-67) hace exactamente lo que importa: logout → 204, y refresh con el token original → **401**. Está en verde. Y el alcance es el correcto: `LogoutCommandHandler.cs:19` llama `tokenService.RevokeUserRefreshTokensAsync(request.UserId)` — revoca **todos** los refresh tokens del usuario, no solo el presentado. **Clasificación: TEST desactualizado. Sin brecha.** Salvedad honesta: la revocación multi-sesión está probada por lectura de código (revoca por usuario) más el test conductual de sesión única; **no hay ningún test verde que cubra dos sesiones concurrentes**, justamente porque el que lo haría es este. Al arreglarlo se recupera esa cobertura.
+
+**TransactionRead sort — degradación con gracia OK, pero hay DOS defaults contradictorios en producción.** Hay whitelist: `AllowedSortFields = {transactiondate, amount, status, ingestedat, referencenumber}` (`ListTransactionsHandler.cs:20-24`, OrdinalIgnoreCase). Ningún string crudo llega al `OrderBy` → **sin riesgo de injection y sin 500**; la mitad "No500" del contrato del test se cumple. Pero `:156` normaliza cualquier campo inválido a **`"ingestedat"`**, mientras el brazo `_ =>` del switch (`:165`) cae a **TransactionDate** — y ese brazo es **inalcanzable**, porque `:156` ya convirtió todo lo inválido en un valor del whitelist. Código muerto que contradice al default vivo.
+
+Mecanismo del fallo, confirmado hasta el detalle: sin `sortOrder`, `PaginationQuery.SortOrder` vale `"asc"` → `desc = false` → ordena por **IngestedAt ascendente** → sale primero la tx insertada primero (`TXN-BADSORT-Z`, 2025-03-15), que es exactamente lo que el test recibió esperando 2025-01-15.
+
+**Clasificación: FRENO.** El comportamiento es seguro, pero *cuál* debe ser el default ante un sort inválido es una decisión de producto, y el propio código está en desacuerdo consigo mismo (`:156` dice ingestedat, `:165` dice transactiondate y está muerto). No lo resuelvo unilateralmente: si el default correcto es TransactionDate (como dicen el nombre del test y el brazo muerto), el arreglo es de PRODUCCIÓN; si es IngestedAt, el arreglo es del test y conviene borrar el brazo muerto. **Decisión de Rodolfo.**
+
+Read-only: no se tocó nada. Suite **705: 699 verdes, 4 rojos**, ahora **los 4 con causa raíz probada**. No se ejecutó git.
+
+## 2026-07-28 — Traza forense de los 2 rojos de Dashboard: causa raíz probada, NO hay fractura de tenant ni conteo inflado
+
+**Paso 0 — es MEMORIA, no SQL** (la lección de Assignments aplica igual acá, pero había que comprobarla). `GetDashboardSummaryHandler.BuildPendingByPlanAsync:270-333` hace **tres consultas separadas** (assignments Active, planes, transacciones Pending), cada una sobre su DbSet con su Global Query Filter de tenant, y después **empareja, deduplica y cuenta en memoria**. **No hay un solo JOIN en SQL en este camino**, así que no montamos el interceptor: no había SQL que contrastar.
+
+**Consecuencia inmediata para el Test B.** El nombre `_TwoPlans_CountsAreNotCartesianMultiplied` describe un riesgo que el código **no puede tener**: sin join no hay producto cartesiano, y además el conteo usa un `HashSet<Guid>` por plan (`:305-322`) que impide contar dos veces la misma transacción aunque un payee tenga varias asignaciones solapadas al mismo plan. La protección ya está y es estructural.
+
+**Causa raíz — la misma en los DOS tests: la transacción sembrada nunca queda Pending.** `IngestTransactionCommand.cs:16` declara **`bool ProcessImmediately = true`** como valor por defecto del record, y el controlador no lo sobrescribe. El helper `CreateTransactionAsync` de los tests postea `/api/transactions` **sin** el flag → se aplica el default `true` → `IngestTransactionHandler.cs:123-134` asigna créditos y llama `tx.MarkCalculated(...)` en el acto. `BuildPendingByPlanAsync` solo cuenta `t.Status == Pending` (`:288`), así que la transacción queda fuera y `PendingByPlanItems` sale **vacío**. De ahí los dos "expected N, found 0".
+
+**Veredicto de tenant (Test A) — NO hay fractura, y el propio test lo demuestra.** La aserción que falla es `bodyA` (**tenant A no ve lo suyo**: esperaba 1, encontró 0); la aserción `bodyB.Should().BeEmpty()` —tenant B no ve nada ajeno— **pasa**. El modo de fallo es sub-conteo, no fuga. Estructuralmente además: las tres consultas van sobre `db.PlanAssignments`, `db.CompensationPlans` y `db.CompensationTransactions`, los tres con `HasQueryFilter(e => e.TenantId == CurrentTenantId)` registrado en `ApplicationDbContext:114-116`, y no hay ninguna tabla en un join que pudiera quedarse sin predicado de tenant porque **no hay join**.
+
+**Veredicto de conteo inflado (Test B) — NO existe.** El dashboard real no infla nada; el conteo está deduplicado por HashSet.
+
+**Clasificación: los DOS son TESTS desactualizados**, por un cambio deliberado de producto (el ingest procesa de inmediato por defecto — el "Calculate-toggle"). Producción está bien: una transacción que ya se calculó **no** está pendiente, y el dashboard tiene razón en no contarla. **Arreglo (paso siguiente, no hecho acá):** que el helper de siembra postee `processImmediately: false`, o que los tests afirmen sobre transacciones que realmente queden Pending.
+
+Read-only: no se tocó ni un test ni una línea de producción. Suite sigue en **705: 699 verdes, 4 rojos**, ahora con 2 de esos 4 diagnosticados. No se ejecutó git.
+
+## 2026-07-28 — Dos tests desactualizados arreglados (ProcessPendingJob + QuotaAttainment): rojo 6 → 4
+
+**ProcessPendingJob — diagnóstico confirmado antes de tocar.** `CreditAllocationService.LoadLiveCreditKeysAsync` devuelve las tuplas **(TransactionId, PlanId, RuleId)**: la deduplicación es por (tx, plan, regla), **no por transacción**. O sea una tx con crédito vivo en plan2 SÍ debe recibir crédito de plan1 — el skip por atribución ambigua se eliminó a propósito en la migración multi-plan (2026-07-23). El test afirmaba lo contrario. Arreglado el TEST: renombrado a `HandleAsync_CreditsATransactionThatAlreadyHasACreditFromAnotherPlan` (el nombre viejo decía "Skips…", que ya era mentira) y las aserciones ahora verifican el comportamiento real y siguen probando algo: tx2 recibe **su** crédito de plan1, el crédito preexistente de plan2 queda **intacto** (ni duplicado ni superseded) y la tx pasa a Calculated. Producción sin tocar.
+
+**QuotaAttainment — el bug del DateRange compartido.** El test pasaba la MISMA instancia de `DateRange` a dos `Quota` del mismo DbContext; EF trataba el owned type como ya adjunto y escribía la segunda fila con `PeriodStart` NULL (misma trampa que `CompensationPayout.Calculate` advierte para `Money`). Arreglado dándole a cada Quota su propia instancia. Producción sin tocar.
+
+`ProcessPendingJobTests` + `QuotaAttainmentServiceTests`: **19/19**. Suite completa **705: 699 verdes, 4 rojos, 2 skipped** (antes 697/6). Los 4 que quedan: `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_IsTenantScoped`, `..._TwoPlans_CountsAreNotCartesianMultiplied`, `TransactionReadEndpointsTests.List_InvalidSortField…` y `AuthEndpointsTests.Logout…` (401 donde espera 200).
+
+**Nota de flakiness (ya conocida):** una corrida intermedia mostró 8 fallos extra con duración de 1 ms cada uno (MoneyAudit ×3, TransactionRead ×5) que **no se repiten** en la corrida siguiente — es el arranque en frío con varios contenedores SQL en paralelo ya diagnosticado, no un rojo nuevo.
+
+No se ejecutó git.
+
+## 2026-07-28 — ListAssignmentsByPayee reescrito: contrato explícito + filtro en SQL COMPLETO
+
+**Contrato nuevo (decisión de Rodolfo: sin default mágico).** `status` = `Active` (default) | `Deactivated` | `all` — es un filtro de ESTADO, no de fecha, y por eso el default es seguro: no puede ocultar una asignación vigente, solo las desactivadas, y verlas hay que pedirlas. `dateFrom`/`dateTo` = rango explícito por intersección. `period` = la convención de rangos nombrados, honrada **solo si el cliente la manda**. **Sin ninguno de los tres → NINGÚN filtro de fecha: se devuelve el histórico completo.** Eso es el cambio: antes un `period` ausente se resolvía a `"this-month"` y abrir el perfil de un vendedor descartaba en silencio todo lo vencido. `PeriodHelper` es compartido con otros endpoints y quedó **intacto**: el default mágico se eliminó en el handler, no en el helper.
+
+**El antipatrón de memoria, eliminado.** Antes: `.ToListAsync()` (:37) y después `.AsEnumerable().Where(...)` (:50) — traía todas las asignaciones del payee y descartaba en memoria, con el `TotalCount` calculado sobre una lista que la base ya había enviado. Ahora todo compone sobre UN `IQueryable` que se materializa una sola vez, ya filtrado, ordenado y paginado.
+
+**La traducción del owned type SÍ funciona — el comentario original estaba equivocado.** SQL real capturado (`LogTo` acoplado a las opciones del DbContext de ese test; canal no global):
+
+```
+WHERE [p].[TenantId] = @__ef_filter__CurrentTenantId_0
+  AND [p].[PayeeId]  = @__request_PayeeId_0
+  AND [p].[Status]   = N'Active'
+  AND [p].[EffectiveEnd]   >= @__fromValue_1
+  AND [p].[EffectiveStart] <= @__toValue_2
+ORDER BY [p].[EffectiveStart]
+OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
+```
+
+**Cierra la comprobación de tenant de Assignments:** el Global Query Filter aparece en el SQL sobre **las dos** tablas del join (`[p].[TenantId]` y `[c].[TenantId]`, ambas contra `@__ef_filter__CurrentTenantId_0`). **No hay fractura de tenant en este endpoint.** Confirmado además por conducta: el mismo handler bajo otro tenant devuelve 0, y en la prueba HTTP con un JWT del tenant equivocado las cinco variantes dieron 0.
+
+**Tests.** 4 nuevos (`ListAssignmentsByPayeeSqlTests`) que prueban el SQL y el contrato. `AssignmentsEndpointsTests` **16/17 → 17/17**: `ListAssignmentsByPayee` pasó a verde **sin tocar el test** — el contrato explícito lo arregló, que es la señal de que el test siempre había estado bien y el default mágico era el problema.
+
+**Verificación empírica (API levantada en localhost:5199 contra la DB de desarrollo).** Payee `D2C39331…` del tenant `56F7E67B…`, con 7 asignaciones Active **todas vencidas el 2026-06-30** (hoy 2026-07-28) — el caso exacto que el default viejo ocultaba:
+
+| Petición | totalCount |
+|---|---|
+| sin parámetros | **7** (antes habría sido 0) |
+| `status=all` | 7 |
+| `dateFrom=2026-01-01&dateTo=2026-06-30` | 7 |
+| `dateFrom=2026-07-01&dateTo=2026-07-31` | 0 |
+| `period=this-month` | 0 (el comportamiento viejo sigue disponible si se pide) |
+
+**Suite: 705 tests, 697 verdes, 6 rojos, 2 skipped** (antes 701/692/7). Unit **983**. La API se detuvo al terminar. No se ejecutó git.
+
+## 2026-07-28 — WI-2 v2: Fase 0 (mecanismo) y Fase 1 (2 rojos erradicados) COMPLETAS; Fase 2 (SQL aislado) NO EJECUTADA
+
+**Fase 0 — mecanismo decidido, con la guarda aplicada.** `ListAssignmentsByPayeeHandler.cs:37` construye y materializa la consulta en la misma expresión (`… ).ToListAsync(cancellationToken)`): el `IQueryable` **nunca se expone**. Sacarlo para `ToQueryString()` exigiría refactorizar un handler de producción solo para observarlo → **la guarda de no-alteración aplica y esa ruta queda ABORTADA**. Mecanismo elegido: el **fallback obligatorio, un `DbCommandInterceptor` con ciclo de vida scoped inyectado en la instancia de DbContext de ESE test**. La garantía de aislamiento es mecánica, no de disciplina: el interceptor se registra en las `DbContextOptions` de ese contexto, así que el canal de captura no es global — solo pueden pasar por él los comandos que ese DbContext emite, y ninguna otra colección corriendo en paralelo comparte esa instancia. (Diseño validado; **no implementado**, ver Fase 2.)
+
+**Fase 1 — los 2 rojos de PayeeDashboard, erradicados sin tocar producción.** Se corrigieron solo los DATOS DE SIEMBRA, preservando la intención de cada test:
+- `GetDashboard_WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded`: la quota pasa de **2024-01-01..2024-02-28** a **2025-01-01..2025-02-28** — sigue sin intersectar "last-month" (que es lo que el test verifica) y ahora queda **dentro** del período del plan (2025-01-01..2026-12-31), como exige la regla de containment de WI-PLAN-PERIOD-ALIGNMENT. Antes el 400 ocurría al sembrar, así que el test nunca llegaba a su propia aserción.
+- `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments`: como la asignación debe calzar **exacto** con su plan, cada ventana recibe su propio plan (`CreateActivePlanAsync` gana parámetros opcionales de período — helper de test, producción intacta): plan EUR 2026-01-01..2026-01-31 y plan PLN 2026-06-01..2026-12-31. La intención no cambia: dos asignaciones que intersectan YTD, `TotalCount = 2`.
+
+`PayeeDashboardEndpointsTests` **12/14 → 14/14**, estable en 3 corridas. **Cero líneas de producción tocadas** — el backend rechazaba correctamente; los tests estaban mal.
+
+**Fase 2 — NO ejecutada.** Se acabó el margen de la sesión. Los 3 de array vacío siguen **sin SQL extraído y sin causa raíz probada**; no se escribe conjetura en su lugar. El diseño del interceptor de la Fase 0 queda listo para arrancar directo.
+
+**Suite completa: 701 tests, 692 verdes, 7 rojos, 2 skipped** (antes 687/674/11). Los 7: los **3 de array vacío** pendientes de Fase 2 (Assignments ×1, Dashboard ×2), `ProcessPendingJobTests...SkipsTransactionsWithExistingNonSupersededCredits` (ya diagnosticado: test viejo del skip por atribución ambigua eliminado a propósito), `TransactionReadEndpointsTests.List_InvalidSortField…`, `AuthEndpointsTests.Logout…` y el conocido de QuotaAttainment. **La suite NO está 100% verde**, así que el trigger churn sigue bloqueado por el propio criterio del WI. No se ejecutó git.
+
+## 2026-07-28 — WI-2 TRAZABILIDAD FORENSE: Bloque B (los dos 400) CERRADO con prueba; Bloque A (los 3 de array vacío) SIN TRAZAR
+
+**BLOQUE B — los dos 400 de PayeeDashboard: causa raíz probada, y NO es lo que el título del test sugiere. El 400 no viene del parámetro `period`.**
+
+Primero el descarte: `PeriodHelper.cs:18,22` soporta explícitamente `"last-month"` e `"ytd"`. El parámetro llega al controlador como `string period = "this-month"` (`PayeesController.cs:93`), así que el model binding de ASP.NET no puede rechazarlo. Ninguno de los dos 400 tiene que ver con el período.
+
+En AMBOS tests la excepción sale de una llamada de **SIEMBRA**, no de la consulta bajo prueba — se ve en que el fallo es `HttpRequestException` (que solo puede venir de un `EnsureSuccessStatusCode()`) y no un mensaje de FluentAssertions:
+
+1. `GetDashboard_WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded` — siembra una quota de período **2024-01-01..2024-02-28** (línea 111) contra un plan cuyo período efectivo es **2025-01-01..2026-12-31** (`CreateActivePlanAsync`, líneas 349-350). La regla de **WI-PLAN-PERIOD-ALIGNMENT (2026-06-22)** exige que la quota esté CONTENIDA en el período del plan; `CreateQuotaHandler` devuelve `Result.Failure` → **400**. El dashboard nunca llega a consultarse.
+2. `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments` — postea una asignación **2026-01-01..2026-01-31** (línea 312) contra el mismo plan 2025..2026. La misma WI fijó **Assignment = match EXACTO del período del plan**; `AssignPlanToPayeeHandler` devuelve `Result.Failure` → **400** en el `EnsureSuccessStatusCode()` de la línea 313.
+
+**Capa del rechazo:** validación de negocio en el handler → `Result.Failure` → el controlador responde 400. NO es model binding ni una DomainException sin capturar.
+
+**Veredicto B: los dos son TESTS DESACTUALIZADOS por una regla de negocio deliberada de junio-2026. NO hay pantalla caída** — los endpoints aceptan `last-month` e `ytd` sin problema; lo que el backend rechaza (con razón) es sembrar una quota fuera del plan y una asignación que no calza exacto.
+
+**BLOQUE A — no trazado.** Se acabó el margen de la sesión antes de extraer el SQL real de los tres de array vacío (`AssignmentsEndpointsTests.ListAssignmentsByPayee_ReturnsOnlyThatPayeesAssignments`, `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_IsTenantScoped` y `..._TwoPlans_CountsAreNotCartesianMultiplied`). Lo único que quedó establecido con evidencia, y sirve para el próximo intento: en el de Assignments la siembra **SÍ funciona** — el helper crea plan y asignación con períodos **idénticos** (2025-01-01..2025-12-31, líneas 342-343 y 378-379), o sea calza la regla de match exacto y los `EnsureSuccessStatusCode()` pasan; además el fallo es una aserción de colección vacía, no `HttpRequestException`. Eso **descarta la hipótesis (c) seed-que-no-siembra** para ese test y deja abiertas (a) fractura de query filter, (b) filtro de vigencia por fecha y (d). **La pregunta multi-tenant sigue SIN RESPUESTA y requiere el SQL**, tal como exige el parámetro innegociable #1: no se afirma nada sobre tenant sin la DB.
+
+Read-only estricto: no se tocó ni un test ni una línea de producción. No se ejecutó git.
+
 ## 2026-07-28 — WI-2 PAY RUNS: `periodFrom/periodTo` de la lista de pay runs pasa a período de compensación (gemelo del fix de Payouts) COMPLETO
 
 **Paso 0 — nombres verificados, no asumidos.** `PayRun` expone el período como **`DateOnly PeriodStart` / `DateOnly PeriodEnd` planos** (`PayRun.cs:11-12`), NO como value object — distinto de `CompensationPayout.Period.Start/End`. El predicado usa esos nombres.
