@@ -129,8 +129,11 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
             .RootElement.EnumerateArray().ToList();
 
         var statement = statements.Single(s => s.GetProperty("currency").GetString() == Eur);
-        statement.GetProperty("newCarryover").GetDecimal().Should().Be(-666.6667m,
+        // currentBalance, not newCarryover: no pay run has settled against this debt, so there is no
+        // carryover to speak of — the live balance is the whole story.
+        statement.GetProperty("currentBalance").GetDecimal().Should().Be(-666.6667m,
             "the debt is what the payee carries into the next run");
+        statement.GetProperty("newCarryover").ValueKind.Should().Be(JsonValueKind.Null);
 
         // ── The structured fields (WI-UI-CLEANUP) ────────────────────────────
         // The loss date and the originating plan travel as TYPED fields, so the table renders them in
@@ -172,6 +175,6 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var statement = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
             .RootElement.EnumerateArray().Single(s => s.GetProperty("currency").GetString() == Eur);
-        statement.GetProperty("newCarryover").GetDecimal().Should().Be(-500m); // 1000 × 45 / 90
+        statement.GetProperty("currentBalance").GetDecimal().Should().Be(-500m); // 1000 × 45 / 90
     }
 }

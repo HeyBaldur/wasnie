@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { LedgerStore } from '../state/ledger.store';
-import { ManualAdjustmentType } from '../models/ledger.model';
+import { ManualAdjustmentType, PayeeStatement } from '../models/ledger.model';
 import { WsCardComponent } from '../../../shared/ui/ws-card/ws-card.component';
 import { WsTableComponent } from '../../../shared/ui/ws-table/ws-table.component';
 import { WsTableEmptyComponent } from '../../../shared/ui/ws-table/ws-table-empty.component';
@@ -85,19 +85,39 @@ export class PayeeLedgerPanelComponent {
     });
   }
 
-  /** Absolute display for the cash-flow row, where the minus sign lives in the operator. */
-  fmtAbs(amount: number, currency: string): string {
+  /** Absolute display for the cash-flow row, where the minus sign lives in the operator.
+   *  Null means "there is no settled run to describe" — an em dash, never a fabricated 0. */
+  fmtAbs(amount: number | null, currency: string): string {
+    if (amount === null) return '—';
     return this.fmt(Math.abs(amount), currency);
   }
 
   /** Explicit sign for the balance row, where the contrast is the lesson. */
-  fmtSigned(amount: number, currency: string): string {
+  fmtSigned(amount: number | null, currency: string): string {
+    if (amount === null) return '—';
     const formatted = this.fmt(Math.abs(amount), currency);
     return amount < 0 ? `−${formatted}` : `+${formatted}`;
   }
 
   typeLabelKey(transactionType: string): string {
     return `LEDGER.TYPE_${this.toScreamingSnake(transactionType)}`;
+  }
+
+  /**
+   * How much the balance moved AFTER the run in the snapshot. The two figures on screen — the live
+   * balance and the run's carryover — legitimately differ whenever an entry landed later, and a
+   * reader with no explanation for the gap concludes one of them is wrong.
+   *
+   * Not money arithmetic: both operands arrive finished from the server and this only subtracts them
+   * to describe the difference the reader is already looking at.
+   */
+  movementsAfterRun(st: PayeeStatement): number {
+    if (st.newCarryover === null) return 0;
+    return st.currentBalance - st.newCarryover;
+  }
+
+  hasMovementsAfterRun(st: PayeeStatement): boolean {
+    return this.movementsAfterRun(st) !== 0;
   }
 
   isSystem(origin: string): boolean {

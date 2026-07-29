@@ -14,6 +14,7 @@ function statement(overrides: Partial<PayeeStatement> = {}): PayeeStatement {
     payeeId: PAYEE_ID,
     payeeName: 'Ana Sales',
     currency: 'EUR',
+    currentBalance: -1650,
     commissionsThisPeriod: 1000,
     retentionApplied: 500,
     netPayable: 500,
@@ -190,5 +191,45 @@ describe('PayeeLedgerPanelComponent', () => {
   it('shows a dash when the entry came from no CRM event', () => {
     const cells = render([entry({ eventDate: null })]);
     expect(cells.some(t => t === '—')).toBeTrue();
+  });
+
+  // ── The live balance vs the photograph of a run ─────────────────────────────
+  // The confusion this fixes: the header showed the run's carryover (−500) while the ledger summed
+  // to −833.33, and nothing on screen said the two described different moments.
+
+  it('reports how much the balance moved after the settled run', () => {
+    const st = statement({ currentBalance: -833.33, newCarryover: -500 });
+
+    expect(component.hasMovementsAfterRun(st)).toBeTrue();
+    expect(component.movementsAfterRun(st)).toBeCloseTo(-333.33, 2);
+  });
+
+  it('says nothing about drift when the run still describes the present', () => {
+    const st = statement({ currentBalance: -1650, newCarryover: -1650 });
+
+    expect(component.hasMovementsAfterRun(st)).toBeFalse();
+  });
+
+  it('treats a statement with no settled run as having no drift to explain', () => {
+    const st = statement({ currentBalance: -800, newCarryover: null, settledAt: null });
+
+    expect(component.hasMovementsAfterRun(st)).toBeFalse();
+  });
+
+  it('renders an em dash instead of inventing a zero for a run that does not exist', () => {
+    expect(component.fmtAbs(null, 'EUR')).toBe('—');
+    expect(component.fmtSigned(null, 'EUR')).toBe('—');
+  });
+
+  it('leads with the live balance', () => {
+    store.statements.set([statement({ currentBalance: -833.33, newCarryover: -500 })]);
+    store.selectCurrency('EUR');
+    fixture.detectChanges();
+    httpMock.match(() => true).forEach(r => r.flush([]));
+    store.loading.set(false);
+    fixture.detectChanges();
+
+    const live = fixture.debugElement.query(By.css('.stmt__live-value'));
+    expect((live.nativeElement as HTMLElement).textContent).toContain('833.33');
   });
 });

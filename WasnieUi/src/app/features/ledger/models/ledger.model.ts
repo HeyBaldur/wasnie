@@ -11,15 +11,25 @@ export interface PayeeStatement {
   payeeName: string;
   currency: string;
 
-  /** Cash-flow equation: commissions − retention = net payable. Absolute values. */
-  commissionsThisPeriod: number;
-  retentionApplied: number;
-  netPayable: number;
+  /**
+   * What the payee owes RIGHT NOW: the sum of their whole ledger. Always present, and the number the
+   * screen leads with — everything below it describes one past payment, not today.
+   */
+  currentBalance: number;
 
-  /** Balance equation: previous debt + amortization = new carryover. Signed. */
-  previousDebt: number;
-  amortization: number;
-  newCarryover: number;
+  /**
+   * The settled pay run: a photograph that never changes. All null when no run has closed against
+   * this balance yet — null means "there is no run to describe", which is not the same claim as zero.
+   *
+   * Cash-flow equation: commissions − retention = net payable (absolute).
+   * Balance equation:   previous debt + amortization = new carryover (signed).
+   */
+  commissionsThisPeriod: number | null;
+  retentionApplied: number | null;
+  netPayable: number | null;
+  previousDebt: number | null;
+  amortization: number | null;
+  newCarryover: number | null;
 
   /** Null when the payee's plans in that run used different caps — no single number to name. */
   capPercentApplied: number | null;

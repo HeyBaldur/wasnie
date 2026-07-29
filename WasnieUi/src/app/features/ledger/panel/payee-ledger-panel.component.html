@@ -8,7 +8,10 @@
   </ws-card>
 } @else {
 
-  <!-- ── Statement header: two equations, each balancing on its own ─────────── -->
+  <!-- ── Statement header ───────────────────────────────────────────────────
+       The live balance leads; the settled run is a photograph shown underneath and stamped with
+       its date. They were once the same block, which is how "NEW BALANCE −500" got read as
+       today's debt while the ledger below it summed to −833.33. -->
   @if (store.activeStatement(); as st) {
     <ws-card variant="default" padding="lg">
       <div class="stmt__head">
@@ -23,59 +26,94 @@
         }
       </div>
 
-      <!-- Cash flow — the primary equation. Absolute values; the operator carries the sign. -->
-      <div class="eq eq--cash">
-        <div class="eq__term">
-          <span class="eq__label">{{ 'LEDGER.COMMISSIONS' | translate }}</span>
-          <span class="eq__value">{{ fmtAbs(st.commissionsThisPeriod, st.currency) }}</span>
-        </div>
-        <span class="eq__op" aria-hidden="true">−</span>
-        <div class="eq__term">
-          <span class="eq__label">{{ 'LEDGER.RETENTION' | translate }}</span>
-          <span class="eq__value eq__value--retention">{{ fmtAbs(st.retentionApplied, st.currency) }}</span>
-        </div>
-        <span class="eq__op" aria-hidden="true">=</span>
-        <div class="eq__term eq__term--anchor">
-          <span class="eq__label">{{ 'LEDGER.NET_PAYABLE' | translate }}</span>
-          <span class="eq__value eq__value--anchor">{{ fmtAbs(st.netPayable, st.currency) }}</span>
-        </div>
+      <!-- The one figure that answers "what do they owe today". -->
+      <div class="stmt__live">
+        <span class="stmt__live-label">{{ 'LEDGER.CURRENT_BALANCE' | translate }}</span>
+        <span class="stmt__live-value"
+              [class.stmt__live-value--debt]="st.currentBalance < 0"
+              [class.stmt__live-value--credit]="st.currentBalance > 0">
+          {{ fmtSigned(st.currentBalance, st.currency) }}
+        </span>
+        <span class="stmt__live-hint">{{ 'LEDGER.CURRENT_BALANCE_HINT' | translate }}</span>
       </div>
 
-      <!-- Balance movement — subordinate equation. Explicit signs teach the double nature. -->
-      <div class="eq eq--balance">
-        <div class="eq__term">
-          <span class="eq__label">{{ 'LEDGER.PREVIOUS_DEBT' | translate }}</span>
-          <span class="eq__value eq__value--debt">{{ fmtSigned(st.previousDebt, st.currency) }}</span>
-        </div>
-        <span class="eq__op" aria-hidden="true">+</span>
-        <div class="eq__term">
-          <span class="eq__label">{{ 'LEDGER.AMORTIZATION' | translate }}</span>
-          <span class="eq__value eq__value--credit">{{ fmtSigned(st.amortization, st.currency) }}</span>
-        </div>
-        <span class="eq__op" aria-hidden="true">=</span>
-        <div class="eq__term">
-          <span class="eq__label">{{ 'LEDGER.NEW_CARRYOVER' | translate }}</span>
-          <span class="eq__value eq__value--debt">{{ fmtSigned(st.newCarryover, st.currency) }}</span>
-        </div>
-      </div>
+      @if (st.settledAt) {
+        <div class="stmt__snapshot">
+          <div class="stmt__snapshot-head">
+            <app-icon name="clock" [size]="14" />
+            <span>{{ 'LEDGER.SNAPSHOT_AT_RUN' | translate: { date: (st.settledAt | date: 'mediumDate') } }}</span>
+          </div>
 
-      <p class="stmt__caption">
-        {{ 'LEDGER.CAPTION_AMORTIZES' | translate: {
-             amount: fmtAbs(st.retentionApplied, st.currency)
-           } }}
-        @if (st.capLimited) {
-          @if (st.capPercentApplied !== null) {
-            {{ 'LEDGER.CAPTION_CAP_LIMITED' | translate: {
-                 cap: st.capPercentApplied,
-                 carryover: fmtAbs(st.newCarryover, st.currency)
+          <!-- Cash flow — absolute values; the operator carries the sign. -->
+          <div class="eq eq--cash">
+            <div class="eq__term">
+              <span class="eq__label">{{ 'LEDGER.COMMISSIONS' | translate }}</span>
+              <span class="eq__value">{{ fmtAbs(st.commissionsThisPeriod, st.currency) }}</span>
+            </div>
+            <span class="eq__op" aria-hidden="true">−</span>
+            <div class="eq__term">
+              <span class="eq__label">{{ 'LEDGER.RETENTION' | translate }}</span>
+              <span class="eq__value eq__value--retention">{{ fmtAbs(st.retentionApplied, st.currency) }}</span>
+            </div>
+            <span class="eq__op" aria-hidden="true">=</span>
+            <div class="eq__term eq__term--anchor">
+              <span class="eq__label">{{ 'LEDGER.NET_PAYABLE' | translate }}</span>
+              <span class="eq__value eq__value--anchor">{{ fmtAbs(st.netPayable, st.currency) }}</span>
+            </div>
+          </div>
+
+          <!-- Balance movement — explicit signs teach the double nature. -->
+          <div class="eq eq--balance">
+            <div class="eq__term">
+              <span class="eq__label">{{ 'LEDGER.PREVIOUS_DEBT' | translate }}</span>
+              <span class="eq__value eq__value--debt">{{ fmtSigned(st.previousDebt, st.currency) }}</span>
+            </div>
+            <span class="eq__op" aria-hidden="true">+</span>
+            <div class="eq__term">
+              <span class="eq__label">{{ 'LEDGER.AMORTIZATION' | translate }}</span>
+              <span class="eq__value eq__value--credit">{{ fmtSigned(st.amortization, st.currency) }}</span>
+            </div>
+            <span class="eq__op" aria-hidden="true">=</span>
+            <div class="eq__term">
+              <span class="eq__label">{{ 'LEDGER.CARRYOVER_AT_RUN' | translate }}</span>
+              <span class="eq__value eq__value--debt">{{ fmtSigned(st.newCarryover, st.currency) }}</span>
+            </div>
+          </div>
+
+          <p class="stmt__caption">
+            {{ 'LEDGER.CAPTION_AMORTIZES' | translate: {
+                 amount: fmtAbs(st.retentionApplied, st.currency)
                } }}
-          } @else {
-            {{ 'LEDGER.CAPTION_CAP_LIMITED_MIXED' | translate: {
-                 carryover: fmtAbs(st.newCarryover, st.currency)
-               } }}
+            @if (st.capLimited) {
+              @if (st.capPercentApplied !== null) {
+                {{ 'LEDGER.CAPTION_CAP_LIMITED' | translate: {
+                     cap: st.capPercentApplied,
+                     carryover: fmtAbs(st.newCarryover, st.currency)
+                   } }}
+              } @else {
+                {{ 'LEDGER.CAPTION_CAP_LIMITED_MIXED' | translate: {
+                     carryover: fmtAbs(st.newCarryover, st.currency)
+                   } }}
+              }
+            }
+          </p>
+
+          <!-- The signal that closes the gap: movements landed AFTER this run, which is why the
+               photograph above and the live figure at the top disagree. Without this line the two
+               numbers just look wrong. -->
+          @if (hasMovementsAfterRun(st)) {
+            <p class="stmt__drift">
+              <app-icon name="alert-triangle" [size]="14" />
+              {{ 'LEDGER.MOVEMENTS_AFTER_RUN' | translate: {
+                   delta: fmtSigned(movementsAfterRun(st), st.currency),
+                   balance: fmtSigned(st.currentBalance, st.currency)
+                 } }}
+            </p>
           }
-        }
-      </p>
+        </div>
+      } @else {
+        <p class="stmt__caption">{{ 'LEDGER.NO_SETTLED_RUN' | translate }}</p>
+      }
     </ws-card>
   }
 

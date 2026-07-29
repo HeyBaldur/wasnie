@@ -1858,6 +1858,12 @@
   },
   "LEDGER": {
     "STATEMENT_TITLE": "Konto clawbacku",
+    "CURRENT_BALANCE": "Bieżące saldo",
+    "CURRENT_BALANCE_HINT": "Ile ten odbiorca jest winien teraz, ze wszystkich wpisów w jego księdze.",
+    "SNAPSHOT_AT_RUN": "Na wypłatę z {{date}}",
+    "CARRYOVER_AT_RUN": "Przeniesienie w tej wypłacie",
+    "MOVEMENTS_AFTER_RUN": "Po tej wypłacie wystąpiły ruchy ({{delta}}), dlatego bieżące saldo wynosi {{balance}}.",
+    "NO_SETTLED_RUN": "Żadna wypłata nie została jeszcze rozliczona względem tego salda.",
     "COMMISSIONS": "Prowizje",
     "RETENTION": "Potrącono",
     "NET_PAYABLE": "Do wypłaty w tym miesiącu",

@@ -18,15 +18,36 @@ public sealed record PayeeStatementDto(
     string PayeeName,
     string Currency,
 
-    // ── Cash flow (absolute values; the minus sign lives in the operator on screen) ──
-    decimal CommissionsThisPeriod,
-    decimal RetentionApplied,
-    decimal NetPayable,
+    // ── Cash flow of the settled run (absolute values; the minus sign lives in the operator) ──
+    // Null when no run has settled yet. They used to be zeros, which reads as "this person earned
+    // nothing and took nothing home" when the truth is "no pay run has closed against this balance".
+    decimal? CommissionsThisPeriod,
+    decimal? RetentionApplied,
+    decimal? NetPayable,
 
-    // ── Balance movement (signed: debt is negative, amortization positive) ──
-    decimal PreviousDebt,
-    decimal Amortization,
-    decimal NewCarryover,
+    /// <summary>
+    /// The payee's balance RIGHT NOW, straight from <c>PayeeBalance</c>: the sum of every entry in
+    /// their ledger. Always populated, settlement or not — this is the one figure that answers "what
+    /// do they owe today", and the screen leads with it.
+    ///
+    /// It is deliberately NOT derived from the settlement below. The settlement is a photograph of one
+    /// payment; entries added after it (a churn debit that synced an hour later, a manual adjustment)
+    /// move this number and must not move that one.
+    /// </summary>
+    decimal CurrentBalance,
+
+    // ── The settled pay run: a PHOTOGRAPH, not the present ────────────────────────────────────
+    // All three describe the run named by PayRunId/SettledAt and never change afterwards — rewriting
+    // the history of a payment that already happened is exactly what must not occur. They are null
+    // when no run has settled against this balance yet.
+    decimal? PreviousDebt,
+    decimal? Amortization,
+    /// <summary>
+    /// The debt left over AT THE CLOSE OF THAT RUN. It used to double as the live balance whenever no
+    /// settlement existed, so the same field meant two different things and no client could tell which
+    /// one it had received. It now means one thing; the live figure is <see cref="CurrentBalance"/>.
+    /// </summary>
+    decimal? NewCarryover,
 
     /// <summary>
     /// The cap that was in force, when it is unambiguous. Null when the payee's payouts in this run

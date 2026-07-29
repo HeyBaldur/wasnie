@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Ledger;
 using Wasnie.Domain.Compensation.Payees;
+using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
@@ -227,8 +228,13 @@ public sealed class LedgerEndpointsTests(TestDatabaseFixture fixture)
         statement.GetProperty("capPercentApplied").ValueKind.Should().Be(JsonValueKind.Null);
         statement.GetProperty("capLimited").GetBoolean().Should().BeFalse();
         statement.GetProperty("currency").GetString().Should().Be("EUR");
-        statement.GetProperty("previousDebt").GetDecimal().Should().Be(-800m);
-        statement.GetProperty("newCarryover").GetDecimal().Should().Be(-800m);
+        // The live balance is the field that answers "what do they owe" — always populated.
+        statement.GetProperty("currentBalance").GetDecimal().Should().Be(-800m);
+        // The run's figures are null because there IS no run. This assertion used to expect −800 in
+        // previousDebt/newCarryover: those fields doubled as the live balance, which is precisely the
+        // overloading that made a screen read a run's carryover as today's debt.
+        statement.GetProperty("previousDebt").ValueKind.Should().Be(JsonValueKind.Null);
+        statement.GetProperty("newCarryover").ValueKind.Should().Be(JsonValueKind.Null);
         statement.GetProperty("payRunId").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
@@ -277,5 +283,84 @@ public sealed class LedgerEndpointsTests(TestDatabaseFixture fixture)
             new { maturationDays = 90, capPercent = 50m });
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // ══ The statement contract: live balance vs the photograph of a run ══════
+    // The bug this pins: `newCarryover` used to mean the live balance when no run had settled and
+    // the run's carryover when one had, so no client could tell which number it had been handed.
+    // A screen reading it as "today's debt" showed −500 while the ledger below summed to −833.33.
+
+    [Fact]
+    public async Task A_statement_without_a_settled_run_reports_the_live_balance_and_no_snapshot()
+    {
+        var payeeId = await SeedPayeeAsync("STMT-NORUN");
+        await SeedBalanceAsync(payeeId, 800m);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        var response = await client.GetAsync($"/api/payees/{payeeId}/ledger/statement");
+        var st = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray().Single();
+
+        st.GetProperty("currentBalance").GetDecimal().Should().Be(-800m, "the live balance is always there");
+        st.GetProperty("newCarryover").ValueKind.Should().Be(JsonValueKind.Null,
+            "there is no run to carry anything over from");
+        st.GetProperty("previousDebt").ValueKind.Should().Be(JsonValueKind.Null);
+        st.GetProperty("commissionsThisPeriod").ValueKind.Should().Be(JsonValueKind.Null,
+            "zero would claim the payee earned nothing; the truth is no run has closed");
+        st.GetProperty("settledAt").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task After_a_settled_run_the_statement_carries_BOTH_the_snapshot_and_the_live_balance()
+    {
+        // Rudolph's case, reproduced: a run settles, a debit lands afterwards, and the two figures
+        // legitimately disagree. Both must be present so the screen can explain the gap.
+        var payeeId = await SeedPayeeAsync("STMT-DRIFT");
+        await SeedBalanceAsync(payeeId, 1500m);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var balance = await db.PayeeBalances.IgnoreQueryFilters().SingleAsync(b => b.PayeeId == payeeId);
+
+            // The run withholds 1000 and carries 500 over.
+            var applied = PayeeLedgerEntry.CreateSystemEntry(
+                TestConstants.TenantA, payeeId, LedgerTransactionType.ClawbackAppliedCredit,
+                Money.Of(1000m, "EUR"), "Withheld from pay run.", LedgerSourceType.PayRunSettlement,
+                "system", Guid.NewGuid(), Now, Guid.NewGuid());
+            balance.Apply(applied, Now);
+            db.PayeeLedgerEntries.Add(applied);
+
+            var runId = Guid.NewGuid();
+            db.PayRuns.Add(PayRun.Open(TestConstants.TenantA, new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 7, 31), "test", runId, Now, 0));
+            db.PayRunSettlements.Add(PayRunSettlement.Record(
+                TestConstants.TenantA, runId, payeeId,
+                Money.Of(1000m, "EUR"), Money.Of(1000m, "EUR"), Money.Of(500m, "EUR"),
+                applied.Id, "test", Guid.NewGuid(), Now));
+
+            // …and THEN a churn debit lands, which the settled run knows nothing about.
+            var late = PayeeLedgerEntry.CreateSystemEntry(
+                TestConstants.TenantA, payeeId, LedgerTransactionType.ClawbackDebit,
+                Money.Of(333.3333m, "EUR"), "A deal that synced later.", LedgerSourceType.DealChurn,
+                "system", Guid.NewGuid(), Now.AddHours(1), Guid.NewGuid());
+            balance.Apply(late, Now.AddHours(1));
+            db.PayeeLedgerEntries.Add(late);
+
+            await db.SaveChangesAsync();
+        }
+
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+        var response = await client.GetAsync($"/api/payees/{payeeId}/ledger/statement");
+        var st = JsonDocument.Parse(await response.Content.ReadAsStringAsync())
+            .RootElement.EnumerateArray().Single();
+
+        st.GetProperty("newCarryover").GetDecimal().Should().Be(-500m, "the run closed at −500 and that never changes");
+        st.GetProperty("currentBalance").GetDecimal().Should().Be(-833.3333m, "the live balance moved after the run");
+        st.GetProperty("settledAt").ValueKind.Should().NotBe(JsonValueKind.Null, "the photograph is dated");
+
+        // The two figures differing IS the point — the screen turns this into a visible sentence.
+        st.GetProperty("currentBalance").GetDecimal()
+            .Should().NotBe(st.GetProperty("newCarryover").GetDecimal());
     }
 }

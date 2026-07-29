@@ -1858,6 +1858,12 @@
   },
   "LEDGER": {
     "STATEMENT_TITLE": "Cuenta de clawback",
+    "CURRENT_BALANCE": "Balance actual",
+    "CURRENT_BALANCE_HINT": "Lo que este payee debe ahora mismo, sumando todas las entradas de su ledger.",
+    "SNAPSHOT_AT_RUN": "Al pay run del {{date}}",
+    "CARRYOVER_AT_RUN": "Arrastre en ese run",
+    "MOVEMENTS_AFTER_RUN": "Hubo movimientos posteriores a este pay run ({{delta}}), por eso el balance actual es {{balance}}.",
+    "NO_SETTLED_RUN": "Todavía no hubo ningún pay run liquidado contra este balance.",
     "COMMISSIONS": "Comisiones",
     "RETENTION": "Retenido",
     "NET_PAYABLE": "Cobra este mes",

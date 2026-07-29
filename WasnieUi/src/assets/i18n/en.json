@@ -1858,6 +1858,12 @@
   },
   "LEDGER": {
     "STATEMENT_TITLE": "Clawback account",
+    "CURRENT_BALANCE": "Current balance",
+    "CURRENT_BALANCE_HINT": "What this payee owes right now, across every entry in their ledger.",
+    "SNAPSHOT_AT_RUN": "At the pay run of {{date}}",
+    "CARRYOVER_AT_RUN": "Carryover at that run",
+    "MOVEMENTS_AFTER_RUN": "There have been movements after this pay run ({{delta}}), which is why the current balance is {{balance}}.",
+    "NO_SETTLED_RUN": "No pay run has settled against this balance yet.",
     "COMMISSIONS": "Commissions",
     "RETENTION": "Withheld",
     "NET_PAYABLE": "Takes home this month",

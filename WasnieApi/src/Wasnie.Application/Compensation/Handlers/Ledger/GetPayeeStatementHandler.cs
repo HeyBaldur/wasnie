@@ -60,14 +60,17 @@ public sealed class GetPayeeStatementHandler(
 
             if (latest is null)
             {
-                // Debt exists but no run has settled against it yet: the cash-flow half is all zeros
-                // and the balance half shows the standing debt on both sides.
+                // Debt exists but no run has settled against it yet. Everything about "the run" is
+                // null — there is no run to describe — and the live balance carries the whole story.
+                // Filling those fields with zeros would state that the payee earned and took home
+                // nothing, which is a different claim from "no pay run has closed yet".
                 statements.Add(new PayeeStatementDto(
                     payee.Id, payee.FullName, balance.Currency,
-                    CommissionsThisPeriod: 0m, RetentionApplied: 0m, NetPayable: 0m,
-                    PreviousDebt: balance.Balance.Amount,
-                    Amortization: 0m,
-                    NewCarryover: balance.Balance.Amount,
+                    CommissionsThisPeriod: null, RetentionApplied: null, NetPayable: null,
+                    CurrentBalance: balance.Balance.Amount,
+                    PreviousDebt: null,
+                    Amortization: null,
+                    NewCarryover: null,
                     CapPercentApplied: null, CapLimited: false,
                     PayRunId: null, SettledAt: null));
                 continue;
@@ -85,6 +88,10 @@ public sealed class GetPayeeStatementHandler(
                 CommissionsThisPeriod: latest.GrossCommission.Amount,
                 RetentionApplied: latest.ClawbackWithheld.Amount,
                 NetPayable: latest.NetPaid.Amount,
+                // The live balance travels ALONGSIDE the photograph, never instead of it. When entries
+                // landed after the run — a churn debit that synced later, a manual adjustment — these
+                // two figures legitimately disagree, and the screen has to be able to say so.
+                CurrentBalance: balance.Balance.Amount,
                 PreviousDebt: previousDebt,
                 Amortization: latest.ClawbackWithheld.Amount,
                 NewCarryover: -latest.CarryoverRemaining.Amount,
