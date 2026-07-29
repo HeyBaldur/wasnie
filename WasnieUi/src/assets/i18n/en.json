@@ -196,6 +196,7 @@
     "TRANSACTIONS": "Transactions",
     "CREDITS": "Credits",
     "PAYOUTS": "Payouts",
+    "TERMINATED_ACCOUNTS": "Terminated accounts",
     "PAY_RUNS": "Pay Runs",
     "PAY_GROUP": "Financials",
     "ADMIN": "Settings",
@@ -354,6 +355,7 @@
     "COL_TOTAL": "Total"
   },
   "COMMON": {
+    "REFRESH": "Refresh",
     "LOADING": "Loading...",
     "UNASSIGNED": "Unassigned",
     "SAVE": "Save",
@@ -1858,6 +1860,15 @@
   },
   "LEDGER": {
     "STATEMENT_TITLE": "Clawback account",
+    "TERMINATED_TITLE": "Terminated with balance",
+    "TERMINATED_SUBTITLE": "Payees who have left with an account still open.",
+    "TERMINATED_INTRO": "These accounts are frozen: no pay run processes them any more. Each one has to be closed deliberately — settled externally, or written off.",
+    "TERMINATED_EMPTY": "Every terminated payee has a settled account.",
+    "TERMINATED_COL_PAYEE": "Payee",
+    "TERMINATED_COL_CODE": "Code",
+    "TERMINATED_COL_TERMINATED_ON": "Terminated on",
+    "TERMINATED_COL_BALANCE": "Balance",
+    "TERMINATED_SETTLE": "Close account",
     "CURRENT_BALANCE": "Current balance",
     "CURRENT_BALANCE_HINT": "What this payee owes right now, across every entry in their ledger.",
     "SNAPSHOT_AT_RUN": "At the pay run of {{date}}",

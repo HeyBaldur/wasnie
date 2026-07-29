@@ -170,7 +170,12 @@ export class PayeeDetailComponent implements OnInit {
   /// Mirrors the original init sequence (loadPayee + loadOverview, which loads the list cards in
   /// its finally) and additionally clears the previous payee's data so nothing bleeds across.
   private initForCurrentPayee(): void {
-    this.activeTab.set('overview');
+    // Honour ?tab= when it names a real tab — the same convention plan-detail already uses. It is
+    // what lets a deep link land where it promised: the terminated-accounts queue sends finance
+    // straight to the clawback tab to close an account, not to a page they must navigate again.
+    const requested = this.route.snapshot.queryParamMap.get('tab') as Tab | null;
+    const tabs: Tab[] = ['overview', 'profile', 'activity', 'ledger'];
+    this.activeTab.set(requested && tabs.includes(requested) ? requested : 'overview');
     this.dashboard.set(null);
     this.assignments.set([]); this.assignmentsPage.set(1); this.assignmentsTotal.set(0);
     this.quotas.set([]); this.quotasPage.set(1); this.quotasTotal.set(0);

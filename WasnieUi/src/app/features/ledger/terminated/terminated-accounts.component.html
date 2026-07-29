@@ -1,0 +1,76 @@
+<app-shell>
+  <ws-page-layout
+    icon="users"
+    [title]="'LEDGER.TERMINATED_TITLE' | translate"
+    [subtitle]="'LEDGER.TERMINATED_SUBTITLE' | translate"
+  >
+    <ws-button slot="actions" variant="secondary" (click)="load()" [loading]="loading()">
+      <app-icon name="refresh" [size]="14" />
+      {{ 'COMMON.REFRESH' | translate }}
+    </ws-button>
+
+    @if (loading()) {
+      <div class="terminated__loading">{{ 'COMMON.LOADING' | translate }}</div>
+    } @else if (error()) {
+      <div class="terminated__error">{{ error()! | translate }}</div>
+    } @else if (count() === 0) {
+      <!-- The good state: everyone who left has a settled account. -->
+      <ws-table-empty icon="check-circle" messageKey="LEDGER.TERMINATED_EMPTY" />
+    } @else {
+      <p class="terminated__intro">{{ 'LEDGER.TERMINATED_INTRO' | translate }}</p>
+
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{{ 'LEDGER.TERMINATED_COL_PAYEE' | translate }}</th>
+              <th scope="col">{{ 'LEDGER.TERMINATED_COL_CODE' | translate }}</th>
+              <th scope="col">{{ 'LEDGER.TERMINATED_COL_TERMINATED_ON' | translate }}</th>
+              <th scope="col" class="col-amount">{{ 'LEDGER.TERMINATED_COL_BALANCE' | translate }}</th>
+              <th scope="col" class="col-action"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Deepest debt first — the server orders it; the screen does not re-sort money. -->
+            @for (row of rows(); track row.payeeId + row.currency) {
+              <tr>
+                <td>
+                  <a class="terminated__name" [routerLink]="['/payees', row.payeeId]">{{ row.payeeName }}</a>
+                </td>
+                <td class="terminated__code">{{ row.employeeCode }}</td>
+                <td>
+                  @if (row.terminationDate) {
+                    {{ row.terminationDate | date: 'mediumDate' }}
+                  } @else {
+                    —
+                  }
+                </td>
+                <td class="col-amount">
+                  <span class="terminated__balance"
+                        [class.terminated__balance--debt]="isDebt(row.balance)"
+                        [class.terminated__balance--credit]="!isDebt(row.balance)">
+                    {{ fmtSigned(row.balance, row.currency) }}
+                  </span>
+                </td>
+                <td class="col-action">
+                  <!-- Closing an account is a finance action: Ledger.Adjust, hidden otherwise. The
+                       closing entry itself is written on the payee's ledger, through the adjustment
+                       flow that already exists — there is deliberately no second write path. -->
+                  @if ('Ledger.Adjust' | hasPermission) {
+                    <ws-button
+                      variant="secondary"
+                      size="sm"
+                      [routerLink]="['/payees', row.payeeId]"
+                      [queryParams]="{ tab: 'ledger' }">
+                      {{ 'LEDGER.TERMINATED_SETTLE' | translate }}
+                    </ws-button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </ws-table>
+    }
+  </ws-page-layout>
+</app-shell>

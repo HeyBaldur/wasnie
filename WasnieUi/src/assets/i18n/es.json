@@ -196,6 +196,7 @@
     "TRANSACTIONS": "Transacciones",
     "CREDITS": "Créditos",
     "PAYOUTS": "Pagos",
+    "TERMINATED_ACCOUNTS": "Cuentas terminadas",
     "PAY_RUNS": "Ciclos de pago",
     "PAY_GROUP": "Finanzas",
     "ADMIN": "Configuración",
@@ -354,6 +355,7 @@
     "COL_TOTAL": "Total"
   },
   "COMMON": {
+    "REFRESH": "Actualizar",
     "LOADING": "Cargando...",
     "UNASSIGNED": "Sin asignar",
     "SAVE": "Guardar",
@@ -1858,6 +1860,15 @@
   },
   "LEDGER": {
     "STATEMENT_TITLE": "Cuenta de clawback",
+    "TERMINATED_TITLE": "Terminados con saldo",
+    "TERMINATED_SUBTITLE": "Payees que se fueron con la cuenta todavía abierta.",
+    "TERMINATED_INTRO": "Estas cuentas están congeladas: ningún pay run las procesa. Cada una hay que cerrarla deliberadamente — saldada por fuera, o dada de baja como incobrable.",
+    "TERMINATED_EMPTY": "Todos los payees terminados tienen su cuenta saldada.",
+    "TERMINATED_COL_PAYEE": "Payee",
+    "TERMINATED_COL_CODE": "Código",
+    "TERMINATED_COL_TERMINATED_ON": "Terminado el",
+    "TERMINATED_COL_BALANCE": "Balance",
+    "TERMINATED_SETTLE": "Cerrar cuenta",
     "CURRENT_BALANCE": "Balance actual",
     "CURRENT_BALANCE_HINT": "Lo que este payee debe ahora mismo, sumando todas las entradas de su ledger.",
     "SNAPSHOT_AT_RUN": "Al pay run del {{date}}",

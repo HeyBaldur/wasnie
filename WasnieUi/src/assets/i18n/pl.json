@@ -196,6 +196,7 @@
     "TRANSACTIONS": "Transakcje",
     "CREDITS": "Kredyty",
     "PAYOUTS": "Wypłaty",
+    "TERMINATED_ACCOUNTS": "Konta zakończone",
     "PAY_RUNS": "Cykle wypłat",
     "PAY_GROUP": "Finanse",
     "ADMIN": "Ustawienia",
@@ -354,6 +355,7 @@
     "COL_TOTAL": "Suma"
   },
   "COMMON": {
+    "REFRESH": "Odśwież",
     "LOADING": "Ładowanie...",
     "UNASSIGNED": "Nieprzypisane",
     "SAVE": "Zapisz",
@@ -1858,6 +1860,15 @@
   },
   "LEDGER": {
     "STATEMENT_TITLE": "Konto clawbacku",
+    "TERMINATED_TITLE": "Zakończeni z saldem",
+    "TERMINATED_SUBTITLE": "Odbiorcy, którzy odeszli z wciąż otwartym kontem.",
+    "TERMINATED_INTRO": "Te konta są zamrożone: żadna wypłata ich już nie przetwarza. Każde trzeba zamknąć świadomie — rozliczyć zewnętrznie albo odpisać w straty.",
+    "TERMINATED_EMPTY": "Każdy zakończony odbiorca ma rozliczone konto.",
+    "TERMINATED_COL_PAYEE": "Odbiorca",
+    "TERMINATED_COL_CODE": "Kod",
+    "TERMINATED_COL_TERMINATED_ON": "Zakończono",
+    "TERMINATED_COL_BALANCE": "Saldo",
+    "TERMINATED_SETTLE": "Zamknij konto",
     "CURRENT_BALANCE": "Bieżące saldo",
     "CURRENT_BALANCE_HINT": "Ile ten odbiorca jest winien teraz, ze wszystkich wpisów w jego księdze.",
     "SNAPSHOT_AT_RUN": "Na wypłatę z {{date}}",

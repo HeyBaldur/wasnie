@@ -90,3 +90,17 @@ export interface CreateAdjustmentRequest {
   currency: string;
   justification: string;
 }
+
+/**
+ * One departed payee whose account is still open. `balance` is signed exactly as the server stored
+ * it — negative means they owe it, positive means Wasnie still owes them.
+ */
+export interface TerminatedPayeeBalance {
+  payeeId: string;
+  payeeName: string;
+  employeeCode: string;
+  terminationDate: string | null;
+  balance: number;
+  currency: string;
+  balanceUpdatedAt: string;
+}

@@ -5,6 +5,7 @@ import {
   CreateAdjustmentRequest,
   PayeeLedgerEntry,
   PayeeStatement,
+  TerminatedPayeeBalance,
 } from '../models/ledger.model';
 
 @Injectable({ providedIn: 'root' })
@@ -19,6 +20,11 @@ export class LedgerApiService {
 
   getEntries(payeeId: string): Observable<PayeeLedgerEntry[]> {
     return this.http.get<PayeeLedgerEntry[]>(`${this.base}/${payeeId}/ledger/entries`);
+  }
+
+  /** Payees who have left with an account still open — the work queue finance closes. */
+  getTerminatedWithBalance(): Observable<TerminatedPayeeBalance[]> {
+    return this.http.get<TerminatedPayeeBalance[]>(`${this.base}/ledger/terminated-with-balance`);
   }
 
   createAdjustment(
