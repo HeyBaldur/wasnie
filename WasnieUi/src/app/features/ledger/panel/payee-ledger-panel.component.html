@@ -149,6 +149,9 @@
             <tr>
               <th scope="col" class="col-origin">{{ 'LEDGER.COL_ORIGIN' | translate }}</th>
               <th scope="col">{{ 'LEDGER.COL_DATE' | translate }}</th>
+              <!-- The date the deal actually died, next to (not merged with) the date we booked it.
+                   Two different facts about one entry; the reader must be able to tell them apart. -->
+              <th scope="col">{{ 'LEDGER.COL_EVENT_DATE' | translate }}</th>
               <th scope="col">{{ 'LEDGER.COL_TYPE' | translate }}</th>
               <th scope="col">{{ 'LEDGER.COL_DETAIL' | translate }}</th>
               <th scope="col" class="col-amount">{{ 'LEDGER.COL_AMOUNT' | translate }}</th>
@@ -172,6 +175,13 @@
                   </span>
                 </td>
                 <td>{{ entry.createdAt | date: 'mediumDate' }}</td>
+                <td class="col-event-date">
+                  @if (entry.eventDate) {
+                    {{ entry.eventDate | date: 'mediumDate' }}
+                  } @else {
+                    <span class="entry__empty" [attr.title]="'LEDGER.EVENT_DATE_NONE' | translate">—</span>
+                  }
+                </td>
                 <td>{{ typeLabelKey(entry.transactionType) | translate }}</td>
                 <td class="col-detail">
                   <span class="entry__justification">{{ entry.justification }}</span>

@@ -112,4 +112,50 @@ public sealed class PlanClawbackPolicyTests
 
         act.Should().NotThrow();
     }
+
+    // ── The policy survives a new version ────────────────────────────────────
+    // A renewal clones the plan. When the clone dropped the policy, the new version looked identical
+    // to the one it replaced, was activated as routine housekeeping, and quietly stopped recovering
+    // unearned commission — no screen and no audit entry said so. These pin it shut.
+
+    [Fact]
+    public void A_new_version_inherits_the_clawback_policy_of_the_one_it_replaces()
+    {
+        var v1 = ActivePlan();
+        v1.SetClawbackPolicy(180, 50m, "admin", Now);
+
+        var v2 = v1.CloneAsNewVersion("admin", Now, Guid.NewGuid);
+
+        v2.Version.Should().Be(v1.Version + 1);
+        v2.ClawbackMaturationDays.Should().Be(180);
+        v2.ClawbackCapPercent.Should().Be(50m);
+    }
+
+    [Fact]
+    public void A_new_version_of_a_plan_without_a_policy_does_not_invent_one()
+    {
+        // The mirror image, and just as important: inheriting must not mean creating. A plan that
+        // clawed nothing back keeps clawing nothing back.
+        var v1 = ActivePlan();
+
+        var v2 = v1.CloneAsNewVersion("admin", Now, Guid.NewGuid);
+
+        v2.ClawbackMaturationDays.Should().BeNull();
+        v2.ClawbackCapPercent.Should().BeNull();
+    }
+
+    [Fact]
+    public void Turning_the_clawback_off_on_a_new_version_stays_a_deliberate_act()
+    {
+        // Inheritance is a default, not a lock: the new Draft can still switch it off explicitly,
+        // and doing so leaves the ORIGINAL version untouched.
+        var v1 = ActivePlan();
+        v1.SetClawbackPolicy(180, 50m, "admin", Now);
+        var v2 = v1.CloneAsNewVersion("admin", Now, Guid.NewGuid);
+
+        v2.SetClawbackPolicy(null, null, "admin", Now);
+
+        v2.ClawbackMaturationDays.Should().BeNull();
+        v1.ClawbackMaturationDays.Should().Be(180, "a version already in force is never edited by its successor");
+    }
 }

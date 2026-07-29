@@ -54,6 +54,11 @@ export interface PayeeLedgerEntry {
   daysActive: number | null;
   maturationDays: number | null;
   sourceCommissionAmount: number | null;
+  /** When the deal was actually lost in the CRM (ISO date). Typed, so the table renders it in its own
+   *  column instead of reading it out of the justification sentence. Null when no CRM event caused it. */
+  eventDate: string | null;
+  /** The plan whose clawback policy produced this entry. Null for entries no plan produced. */
+  sourcePlanId: string | null;
 }
 
 /** Only the three types a human is allowed to write — the engine owns the other two. */

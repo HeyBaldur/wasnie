@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TranslateModule } from '@ngx-translate/core';
@@ -42,6 +43,8 @@ function entry(overrides: Partial<PayeeLedgerEntry> = {}): PayeeLedgerEntry {
     daysActive: 30,
     maturationDays: 90,
     sourceCommissionAmount: 1200,
+    eventDate: '2026-05-02',
+    sourcePlanId: 'plan-1',
     ...overrides,
   };
 }
@@ -158,5 +161,34 @@ describe('PayeeLedgerPanelComponent', () => {
     expect(store.currencies()).toEqual(['EUR', 'USD']);
     expect(store.activeStatement()!.currency).toBe('USD');
     expect(store.activeStatement()!.netPayable).toBe(300);
+  });
+
+  // ── The loss date is a column, not a sentence ────────────────────────────────
+  // It used to live only inside the justification text, so reading "when did this deal actually die?"
+  // meant parsing English prose. It is a typed field now and the table renders it on its own.
+
+  /** Renders the panel and settles the two loads it fires on init, so the DOM can be inspected. */
+  function render(entries: PayeeLedgerEntry[]): string[] {
+    fixture.detectChanges();
+    httpMock.match(() => true).forEach(r => r.flush([]));
+    store.entries.set(entries);
+    store.loading.set(false);
+    fixture.detectChanges();
+
+    return fixture.debugElement.queryAll(By.css('tbody td'))
+      .map(c => (c.nativeElement as HTMLElement).textContent?.trim() ?? '');
+  }
+
+  it('renders the CRM loss date in its own cell, separate from the booking date', () => {
+    const cells = render([entry({ createdAt: '2026-07-29T00:00:00Z', eventDate: '2026-05-02' })]);
+
+    // Two different dates, both visible: booked in July, the deal died in May.
+    expect(cells.some(t => t.includes('Jul') && t.includes('2026'))).toBeTrue();
+    expect(cells.some(t => t.includes('May') && t.includes('2026'))).toBeTrue();
+  });
+
+  it('shows a dash when the entry came from no CRM event', () => {
+    const cells = render([entry({ eventDate: null })]);
+    expect(cells.some(t => t === '—')).toBeTrue();
   });
 });

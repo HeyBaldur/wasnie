@@ -222,6 +222,13 @@ public sealed class Plan : AggregateRoot
             PeriodType = PeriodType,
             Version = Version + 1,
             Status = PlanStatus.Draft,
+            // The clawback policy travels with the version. Dropping it here turned a renewal into a
+            // silent switch-off: the new version looked identical to its predecessor, was activated as
+            // a routine renewal, and stopped recovering a single cent of unearned commission — with
+            // nothing on screen or in the audit trail saying so. A new version inherits the previous
+            // policy; turning the clawback off stays a deliberate act through SetClawbackPolicy.
+            ClawbackMaturationDays = ClawbackMaturationDays,
+            ClawbackCapPercent = ClawbackCapPercent,
             CreatedAt = now,
             CreatedBy = createdBy,
             UpdatedAt = now,

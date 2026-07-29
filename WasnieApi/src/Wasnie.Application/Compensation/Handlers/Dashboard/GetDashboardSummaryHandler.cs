@@ -247,9 +247,32 @@ public sealed class GetDashboardSummaryHandler(
     private async Task<IReadOnlyList<DealLostAlertDto>> BuildDealLostAlertsAsync(CancellationToken ct)
     {
         const int cap = 20;
-        var rows = await db.DealLostAlerts
-            .Where(a => a.ResolvedAt == null)
-            .OrderByDescending(a => a.DetectedAt)
+
+        // JOIN to the transaction, deliberately. The alert stores the status it saw at detection, and a
+        // commission paid AFTERWARDS left that snapshot claiming "not paid" — the screen then offered to
+        // revert money that had already gone out. The snapshot stays (it is history); the decision moves
+        // to the live row. One join, no extra round trip.
+        var rows = await (
+            from a in db.DealLostAlerts
+            join t in db.CompensationTransactions on a.TransactionId equals t.Id
+            where a.ResolvedAt == null
+            orderby a.DetectedAt descending
+            select new
+            {
+                a.TransactionId,
+                a.ReferenceNumber,
+                a.ExternalDealId,
+                StatusAtDetection = a.TransactionStatus,
+                LiveStatus = t.Status,
+                a.CommissionAmount,
+                a.CommissionCurrency,
+                a.DetectedAt,
+                // Has the churn trigger already booked the debt for this transaction? Answered from the
+                // ledger, which is where the debt actually lives — not inferred from the alert.
+                ClawbackApplied = db.PayeeLedgerEntries.Any(
+                    e => e.SourceTransactionId == a.TransactionId
+                      && e.SourceType == LedgerSourceType.DealChurn),
+            })
             .Take(cap)
             .ToListAsync(ct);
 
@@ -257,7 +280,14 @@ public sealed class GetDashboardSummaryHandler(
             TransactionId: a.TransactionId,
             ReferenceNumber: a.ReferenceNumber,
             ExternalDealId: a.ExternalDealId,
-            TransactionStatus: a.TransactionStatus.ToString(),
+            TransactionStatus: a.LiveStatus.ToString(),
+            StatusAtDetection: a.StatusAtDetection.ToString(),
+            // Only a PAID commission can be clawed back; an unpaid one is reverted instead. Any other
+            // status (a commission cancelled or returned to Pending while its alert stayed open) claims
+            // nothing at all — the screen shows the live status and offers no action.
+            ClawbackState: a.LiveStatus != CompensationTransactionStatus.Paid
+                ? ClawbackStates.NotApplicable
+                : a.ClawbackApplied ? ClawbackStates.Applied : ClawbackStates.Pending,
             CommissionAmount: a.CommissionAmount,
             CommissionCurrency: a.CommissionCurrency,
             DetectedAt: a.DetectedAt)).ToList();

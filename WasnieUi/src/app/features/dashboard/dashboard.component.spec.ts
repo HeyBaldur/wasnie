@@ -415,9 +415,15 @@ describe('Dashboard deal-lost alerts', () => {
   let component: DashboardComponent;
   let store: DashboardStore;
 
-  const alert = (status: 'Calculated' | 'Paid', ref: string) => ({
+  const alert = (
+    status: 'Calculated' | 'Paid',
+    ref: string,
+    clawbackState: 'NotApplicable' | 'Applied' | 'Pending' = 'NotApplicable',
+  ) => ({
     transactionId: `tx-${ref}`, referenceNumber: ref, externalDealId: '5000',
-    transactionStatus: status, commissionAmount: 100, commissionCurrency: 'EUR',
+    // transactionStatus is the LIVE status from the server; statusAtDetection is the old snapshot.
+    transactionStatus: status, statusAtDetection: 'Calculated', clawbackState,
+    commissionAmount: 100, commissionCurrency: 'EUR',
     detectedAt: '2026-07-27T00:00:00Z',
   });
 
@@ -448,6 +454,31 @@ describe('Dashboard deal-lost alerts', () => {
       .map(b => (b.nativeElement as HTMLElement).textContent ?? '');
     // Exactly one revert button — for the Calculated alert; the Paid one shows a badge, no button.
     expect(buttons.filter(t => t.includes('DEAL_LOST_REVERT')).length).toBe(1);
+  });
+
+  // ── The sentence has to track the button ───────────────────────────────────
+  // A row that offers no revert must not keep saying "you can revert (it has not been paid)". These
+  // pin the exact text keys, because the defect was never the button — it was the claim next to it.
+
+  it('an unpaid commission still reads as revertible', () => {
+    expect(component.dealLostActionKey(alert('Calculated', 'A') as never))
+      .toBe('DASHBOARD.DEAL_LOST_ACTION_CALCULATED');
+  });
+
+  it('a PAID commission whose clawback already ran says so — never "not paid"', () => {
+    expect(component.dealLostActionKey(alert('Paid', 'B', 'Applied') as never))
+      .toBe('DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_APPLIED');
+  });
+
+  it('a PAID commission whose clawback has not run yet reads as pending', () => {
+    expect(component.dealLostActionKey(alert('Paid', 'C', 'Pending') as never))
+      .toBe('DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_PENDING');
+  });
+
+  it('a commission in any other state claims nothing and offers nothing', () => {
+    const cancelled = { ...alert('Paid', 'D'), transactionStatus: 'Cancelled' } as never;
+    expect(component.canRevert(cancelled)).toBeFalse();
+    expect(component.dealLostActionKey(cancelled)).toBe('DASHBOARD.DEAL_LOST_ACTION_OTHER');
   });
 
   it('askRevert sets the confirmation target; cancelRevert clears it', () => {

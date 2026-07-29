@@ -132,6 +132,13 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
         statement.GetProperty("newCarryover").GetDecimal().Should().Be(-666.6667m,
             "the debt is what the payee carries into the next run");
 
+        // ── The structured fields (WI-UI-CLEANUP) ────────────────────────────
+        // The loss date and the originating plan travel as TYPED fields, so the table renders them in
+        // their own column and in the reader's locale instead of parsing them out of the sentence.
+        row.GetProperty("eventDate").GetString().Should().Be("2026-02-09",
+            "the CRM loss date is a field, not a phrase inside the justification");
+        row.GetProperty("sourcePlanId").GetGuid().Should().Be(seed.PlanId);
+
         // The booking date is TODAY's, not the CRM event date — the separation, visible in the payload.
         var createdAt = row.GetProperty("createdAt").GetDateTimeOffset();
         createdAt.UtcDateTime.Date.Should().BeAfter(lostOn.ToDateTime(TimeOnly.MinValue));

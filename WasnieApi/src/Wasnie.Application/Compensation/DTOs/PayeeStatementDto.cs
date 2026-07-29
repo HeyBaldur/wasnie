@@ -59,4 +59,14 @@ public sealed record PayeeLedgerEntryDto(
     Guid? SourceTransactionId,
     int? DaysActive,
     int? MaturationDays,
-    decimal? SourceCommissionAmount);
+    decimal? SourceCommissionAmount,
+    /// <summary>
+    /// The date the deal was actually lost in the CRM (null for entries no CRM event produced). It is a
+    /// TYPED field, not a phrase inside <c>Justification</c>: the screen shows it in its own column and
+    /// formats it in the reader's locale instead of parsing a sentence. Distinct from
+    /// <c>CreatedAt</c>, which is when Wasnie booked the entry.
+    /// </summary>
+    DateOnly? EventDate,
+    /// <summary>The plan whose clawback policy produced this entry (null when no plan did). Typed for
+    /// the same reason: attributing a debit is a lookup, not a text search.</summary>
+    Guid? SourcePlanId);

@@ -104,7 +104,8 @@ public sealed class CreateManualLedgerAdjustmentHandler(
                 entry.Id, entry.CreatedAt, entry.Origin.ToString(), entry.TransactionType.ToString(),
                 entry.Amount.Amount, entry.Amount.Currency, entry.Justification, entry.CreatedBy,
                 entry.SourceExternalDealId, entry.SourceTransactionId,
-                entry.DaysActive, entry.MaturationDays, entry.SourceCommissionAmount));
+                entry.DaysActive, entry.MaturationDays, entry.SourceCommissionAmount,
+                entry.EventDate, entry.SourcePlanId));
         }
         catch (DomainException ex)
         {

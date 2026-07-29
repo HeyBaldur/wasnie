@@ -63,7 +63,13 @@ export interface DealLostAlertItem {
   transactionId: string;
   referenceNumber: string;
   externalDealId: string;
-  transactionStatus: 'Calculated' | 'Paid';
+  /** The commission's status RIGHT NOW (joined from the transaction), not the one recorded when the
+   *  loss was detected. This is what decides whether a revert may be offered. */
+  transactionStatus: string;
+  /** The status when the loss was detected — history, never an action. */
+  statusAtDetection: string;
+  /** For a paid commission: has the churn clawback already booked the debt? */
+  clawbackState: 'NotApplicable' | 'Applied' | 'Pending';
   commissionAmount: number;
   commissionCurrency: string;
   detectedAt: string;

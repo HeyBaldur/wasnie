@@ -38,7 +38,9 @@ public sealed class ListPayeeLedgerEntriesHandler(
                 e.SourceTransactionId,
                 e.DaysActive,
                 e.MaturationDays,
-                e.SourceCommissionAmount))
+                e.SourceCommissionAmount,
+                e.EventDate,
+                e.SourcePlanId))
             .ToListAsync(cancellationToken);
 
         return Result<IReadOnlyList<PayeeLedgerEntryDto>>.Success(entries);

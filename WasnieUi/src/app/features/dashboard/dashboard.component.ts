@@ -288,7 +288,21 @@ export class DashboardComponent {
 
   /** Only a Calculated commission can be reverted here; Paid is shown but has no action (clawback is separate). */
   canRevert(alert: DealLostAlertItem): boolean {
+    // transactionStatus is the LIVE status now (the server joins the transaction), so a commission paid
+    // after the alert was raised no longer offers a revert the backend would refuse anyway.
     return alert.transactionStatus === 'Calculated';
+  }
+
+  /**
+   * What the row SAYS, which has to track what the row OFFERS. An unpaid commission can be reverted; a
+   * paid one cannot, and the honest sentence then depends on whether the clawback already ran.
+   */
+  dealLostActionKey(alert: DealLostAlertItem): string {
+    if (alert.transactionStatus === 'Calculated') return 'DASHBOARD.DEAL_LOST_ACTION_CALCULATED';
+    if (alert.transactionStatus !== 'Paid') return 'DASHBOARD.DEAL_LOST_ACTION_OTHER';
+    return alert.clawbackState === 'Applied'
+      ? 'DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_APPLIED'
+      : 'DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_PENDING';
   }
 
   /** Open the confirmation modal for reverting this alert's commission. */

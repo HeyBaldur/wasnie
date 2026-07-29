@@ -4,6 +4,51 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-29 — UI del clawback: la pantalla pasa a leer el estado VIVO (+ los dos fixes de la política de plan)
+
+Dos WIs del mismo día, ambos de LECTURA/PRESENTACIÓN: ninguno toca el cálculo, el dinero ni las guardas del revert.
+
+### A — Los dos bugs de la política de clawback del plan (arreglados)
+
+**Bug 1 — la UI mentía: "saved" y los campos vacíos.** El PUT guardaba bien (204, DB en 180/50) y el GET devolvía null. Causa: `CompensationMapper.ToPlanDto` construía el DTO **posicionalmente y cortaba en `Rules`**, y `PlanDto` declaraba `ClawbackMaturationDays`/`ClawbackCapPercent` como **opcionales con default null** — compilaba limpio y estampaba null para todos los planes del sistema. Cura estructural: **se eliminó el default** (siguen siendo `int?`/`decimal?`; lo que se fue es el valor por defecto del parámetro, así que el mismo olvido ahora es error de compilación) + el mapper pasa los dos valores (`CompensationMapper.cs:23-25`). **Radio real: UN solo constructor** — el compilador no encontró más. 4 tests HTTP nuevos que afirman el JSON **del wire** (un deserializador con los mismos defaults reproduciría el bug y pasaría igual); **prueba de mutación**: revirtiendo el mapper a `null, null` los 2 positivos fallan y los 2 controles siguen verdes.
+
+**Bug 2 — la clonación apagaba el clawback en silencio.** `Plan.CloneAsNewVersion` no copiaba la política: una renovación producía una v2 idéntica a la vista, se activaba como trámite, y el plan dejaba de recuperar un solo céntimo sin que nada lo dijera. Arreglado (`Plan.cs:225-231`) + 3 tests de dominio: la v2 hereda 180/50 exactos; un plan sin política **no** inventa una; y apagarla en la v2 sigue siendo un acto deliberado que **no toca la v1** ya en vigor.
+
+**Verificación empírica:** la pestaña Clawback del plan real (Test SKU Laptops v2) muestra 180/50 y "Active for this plan"; guardar 120/40 ya no vacía los campos; tras recargar siguen ahí. Se restauraron los 180/50 originales.
+
+### B — La UI del clawback deja de leer fotos (este WI)
+
+**El estado VIVO, no el snapshot.** `GetDashboardSummaryHandler.BuildDealLostAlertsAsync` hacía `select` sobre `DealLostAlert.TransactionStatus` — una foto estampada en la detección. Una comisión pagada DESPUÉS dejaba la pantalla ofreciendo "revert (it has not been paid)" sobre dinero ya salido (el backend lo rechazaba; la frase era falsa igual). Ahora la query **hace JOIN a la transacción** y calcula el estado del clawback desde el **ledger**. SQL real capturado de los DMV de SQL Server:
+
+```
+SELECT TOP(@__p_0) [d].[TransactionId], ... [d].[TransactionStatus] AS [StatusAtDetection],
+       [t].[Status] AS [LiveStatus], ...
+       CASE WHEN EXISTS (SELECT 1 FROM [PayeeLedgerEntries] AS [p]
+                         WHERE [p].[TenantId] = @__ef_filter__CurrentTenantId_0
+                           AND [p].[SourceTransactionId] = [d].[TransactionId]
+                           AND [p].[SourceType] = N'DealChurn') THEN 1 ELSE 0 END AS [ClawbackApplied]
+FROM [DealLostAlerts] AS [d]
+INNER JOIN (SELECT [c].[Id], [c].[Status] FROM [CompensationTransactions] AS [c]
+            WHERE [c].[TenantId] = @__ef_filter__CurrentTenantId_0) AS [t] ON [d].[TransactionId] = [t].[Id]
+WHERE [d].[TenantId] = @__ef_filter__CurrentTenantId_0 AND [d].[ResolvedAt] IS NULL
+```
+
+El filtro de tenant aparece en **las tres** tablas. El DTO gana `StatusAtDetection` (la foto, como historia) y `ClawbackState` (`NotApplicable` | `Applied` | `Pending`), y `TransactionStatus` pasa a significar el estado vivo — con lo cual `canRevert` del front quedó correcto **por construcción**.
+
+**El mensaje muta con el estado, no solo el botón.** Calculated → "you can revert". Paid + débito ya asentado → "the clawback has been applied to this payee's balance". Paid sin débito todavía → "the clawback is pending". Cualquier otro estado → no afirma nada y no ofrece nada (caso defensivo: una comisión cancelada con su alerta abierta; **no se inventó comportamiento**).
+
+**Textos falsos erradicados (EN/ES/PL).** `DEAL_LOST_ACTION_PAID` ("clawback is handled outside the app for now") **borrado** — hoy el clawback vive dentro de la app. Aparecieron dos hermanos con la misma mentira y se corrigieron en la misma pasada: `DRIFT_ACTION_PAID` y `REASSIGN_PAID_TOOLTIP` ("use the accounting correction workflow"), ambos ahora apuntan al ajuste de balance en el ledger, que **sí existe**. El phantom copy del dominio (`CompensationTransaction.cs:195/:221/:242`) ya estaba corregido en el WI de la UI del ledger. Paridad de claves EN/ES/PL verificada por script: 1772 = 1772 = 1772, diff vacío.
+
+**Campos tipados en vez de prosa.** `PayeeLedgerEntryDto` expone `EventDate` y `SourcePlanId` como propiedades tipadas (sin default, misma lección que `PlanDto`); la tabla del ledger gana la columna **"Deal lost on"** que muestra la fecha real de pérdida junto a —no mezclada con— la fecha contable, y un guión cuando el asiento no vino de un evento del CRM. La justificación legible queda como estaba.
+
+**Tests.** Backend integración **721 → 725** (+4: la foto vieja no manda, Paid+débito → Applied, Paid sin débito → Pending, Calculated → NotApplicable) + las aserciones de `eventDate`/`sourcePlanId` sobre el JSON del end-to-end. Front **511 → 517** (+4 del mensaje por estado, incluido el caso "otro estado", +2 de la columna de fecha). Suites: unit **1002**, integración **725 (723 verdes, 2 skipped), exit 0**; `ng test` 517/517; `ng build --configuration production` limpio.
+
+**Verificación empírica.** Se reprodujo el escenario exacto del bug en la DB de desarrollo (snapshot de la alerta forzado a `Calculated` con la transacción en `Paid`) y el endpoint respondió `transactionStatus: "Paid"`, `statusAtDetection: "Calculated"`, `clawbackState: "Applied"`. En pantalla, el deal HUBSPOT-513634799845 muestra el badge **"Already paid"**, el texto "...the clawback has been applied to this payee's balance" y **ningún botón de revertir** (antes: "you can revert this commission (it has not been paid)" + botón). El snapshot se restauró a su valor previo. En el ledger, la columna "Deal lost on" muestra May 2, 2026 contra la fecha contable Jul 29, 2026.
+
+**Regresión intacta:** las guardas del revert no se tocaron y siguen rechazando un Paid (5/5 verdes).
+
+**Sin commitear:** ni estos cambios ni los de la política — decisión de Rodolfo (WI-A y WI-B juntos o por separado). No se ejecutó git.
+
 ## 2026-07-29 — ★ TRIGGER CHURN VIVO: deal perdido con comisión PAGADA → ClawbackDebit prorrateado (System)
 
 El clawback deja de ser inerte. Un deal que muere dentro de su ventana de maduración con la comisión ya pagada genera **deuda real**, en el período abierto, que el próximo pay run netea y el statement muestra.

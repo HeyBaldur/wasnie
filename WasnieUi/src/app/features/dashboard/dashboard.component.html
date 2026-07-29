@@ -334,7 +334,9 @@
           }
 
           <!-- Deal-lost alerts: a deal is NO LONGER closed-won after its commission was calculated/paid.
-               Calculated → the admin can revert (supersede + cancel). Paid → informational only. -->
+               The status here is the LIVE one, joined from the transaction — not the one recorded when the
+               loss was detected. Calculated → the admin can revert (supersede + cancel). Paid → no revert:
+               the money is gone and the churn clawback is what recovers it. -->
           @if (dealLostAlerts().length > 0) {
             <div class="attention-group-label">{{ 'DASHBOARD.DEAL_LOST_GROUP_TITLE' | translate }}</div>
             @for (alert of dealLostAlerts(); track alert.transactionId) {
@@ -347,7 +349,7 @@
                      [routerLink]="['/transactions']" [queryParams]="driftLinkParams(alert)">{{ alert.referenceNumber }}</a>
                   <span class="attention-row__desc">
                     <span class="drift-change">{{ 'DASHBOARD.DEAL_LOST_COMMISSION' | translate: { amount: (alert.commissionAmount | currencyFormat: alert.commissionCurrency) } }}</span>
-                    <span class="drift-action">{{ (canRevert(alert) ? 'DASHBOARD.DEAL_LOST_ACTION_CALCULATED' : 'DASHBOARD.DEAL_LOST_ACTION_PAID') | translate }}</span>
+                    <span class="drift-action">{{ dealLostActionKey(alert) | translate }}</span>
                   </span>
                 </span>
                 @if (canRevert(alert)) {
