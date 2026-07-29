@@ -34,7 +34,7 @@
               [class.stmt__live-value--credit]="st.currentBalance > 0">
           {{ fmtSigned(st.currentBalance, st.currency) }}
         </span>
-        <span class="stmt__live-hint">{{ 'LEDGER.CURRENT_BALANCE_HINT' | translate }}</span>
+        <span class="stmt__live-hint">{{ balanceHintKey(st.currentBalance) | translate }}</span>
       </div>
 
       @if (st.settledAt) {

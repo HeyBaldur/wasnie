@@ -2,10 +2,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { PayeeLedgerPanelComponent } from './payee-ledger-panel.component';
 import { LedgerStore } from '../state/ledger.store';
 import { PayeeLedgerEntry, PayeeStatement } from '../models/ledger.model';
+// The REAL locale file: a test with a hand-written stub would keep passing while the shipped
+// translation is missing, which is the failure mode this test exists to catch.
+import enTranslations from '../../../../assets/i18n/en.json';
 
 const PAYEE_ID = 'aaaaaaaa-1111-2222-3333-444444444444';
 
@@ -231,5 +234,40 @@ describe('PayeeLedgerPanelComponent', () => {
 
     const live = fixture.debugElement.query(By.css('.stmt__live-value'));
     expect((live.nativeElement as HTMLElement).textContent).toContain('833.33');
+  });
+
+  // ── The sentence under the balance follows its sign ─────────────────────────
+  // It was one static line claiming the payee "owes" the figure, which is false the moment the
+  // balance is positive — that happens whenever a pay run withheld more than the debt.
+
+  it('says "owes" only when the payee actually owes', () => {
+    expect(component.balanceHintKey(-833.33)).toBe('LEDGER.CURRENT_BALANCE_HINT_DEBT');
+  });
+
+  it('says the money is owed TO the payee when the balance is positive', () => {
+    expect(component.balanceHintKey(500)).toBe('LEDGER.CURRENT_BALANCE_HINT_CREDIT');
+  });
+
+  it('says the account is settled at zero', () => {
+    expect(component.balanceHintKey(0)).toBe('LEDGER.CURRENT_BALANCE_HINT_SETTLED');
+  });
+
+  it('has a label for every ledger transaction type it can be handed', () => {
+    // The key is derived from the type name at runtime, so a type added without its translation
+    // leaks the raw key onto the screen — which is exactly what DataCorrectionCredit did.
+    const types = [
+      'ClawbackDebit', 'ClawbackForgivenessCredit', 'ManualBonusCredit', 'DataCorrectionDebit',
+      'ClawbackAppliedCredit', 'ExternalSettlementCredit', 'WriteOffCredit', 'DataCorrectionCredit',
+    ];
+    const translate = TestBed.inject(TranslateService);
+    translate.setTranslation('en', enTranslations, true);
+    translate.use('en');
+
+    for (const t of types) {
+      const key = component.typeLabelKey(t);
+      expect(translate.instant(key))
+        .withContext(`${t} has no translation: ${key}`)
+        .not.toBe(key);
+    }
   });
 });

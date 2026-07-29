@@ -104,6 +104,17 @@ export class PayeeLedgerPanelComponent {
   }
 
   /**
+   * The sentence under the big number has to agree with the number's SIGN. It used to be one static
+   * line — "what this payee owes" — which is simply false on a positive balance: nobody owes
+   * anything, the company owes THEM (usually because a pay run withheld more than the debt).
+   */
+  balanceHintKey(balance: number): string {
+    if (balance < 0) return 'LEDGER.CURRENT_BALANCE_HINT_DEBT';
+    if (balance > 0) return 'LEDGER.CURRENT_BALANCE_HINT_CREDIT';
+    return 'LEDGER.CURRENT_BALANCE_HINT_SETTLED';
+  }
+
+  /**
    * How much the balance moved AFTER the run in the snapshot. The two figures on screen — the live
    * balance and the run's carryover — legitimately differ whenever an entry landed later, and a
    * reader with no explanation for the gap concludes one of them is wrong.
