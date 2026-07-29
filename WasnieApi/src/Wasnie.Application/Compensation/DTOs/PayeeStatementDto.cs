@@ -70,3 +70,17 @@ public sealed record PayeeLedgerEntryDto(
     /// <summary>The plan whose clawback policy produced this entry (null when no plan did). Typed for
     /// the same reason: attributing a debit is a lookup, not a text search.</summary>
     Guid? SourcePlanId);
+
+/// <summary>
+/// One departed payee whose account is still open. <see cref="Balance"/> is signed exactly as stored —
+/// negative means they owe it. A positive balance appears here too: money Wasnie still owes someone who
+/// has left is just as unfinished as money they owe, and hiding it would be the same mistake.
+/// </summary>
+public sealed record TerminatedPayeeBalanceDto(
+    Guid PayeeId,
+    string PayeeName,
+    string EmployeeCode,
+    DateOnly? TerminationDate,
+    decimal Balance,
+    string Currency,
+    DateTimeOffset BalanceUpdatedAt);

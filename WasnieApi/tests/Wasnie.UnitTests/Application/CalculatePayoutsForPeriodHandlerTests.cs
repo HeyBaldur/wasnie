@@ -8,6 +8,8 @@ using Wasnie.Application.Compensation.Handlers.Payouts;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Payees;
+using Wasnie.Domain.Compensation.Ledger;
 using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
@@ -155,6 +157,19 @@ public sealed class CalculatePayoutsForPeriodHandlerTests
         SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
         var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, 15), 1000m);
         return (payeeId, plan, tx);
+    }
+
+    /// <summary>A real Payee row (the other tests only need an id). Terminated when asked.</summary>
+    private static Guid SeedPayee(Harness h, bool terminated, string code = "E1")
+    {
+        var payee = Payee.Create(
+            h.TenantId, $"Payee {code}", code, $"{code}-{Guid.NewGuid():N}@test.com",
+            new DateOnly(2020, 1, 1), "admin", Guid.NewGuid(), Now);
+        if (terminated)
+            payee.MarkAsTerminated(new DateOnly(2026, 5, 31), "admin", Now);
+        h.Db.Payees.Add(payee);
+        h.Db.SaveChanges();
+        return payee.Id;
     }
 
     private static CalculatePayoutsForPeriodCommand June(Guid? payeeFilter = null) =>
@@ -665,5 +680,93 @@ public sealed class CalculatePayoutsForPeriodHandlerTests
 
         h.Db.CompensationPayouts.Add(payout);
         h.Db.SaveChanges();
+    }
+
+    // ══ 5. The circuit breaker: payees who have left ════════════════════════════
+    // A terminated payee earns nothing further. Generating payouts for them creates a ghost the engine
+    // re-processes every run, and makes an outstanding clawback look collectable against commissions
+    // that will never exist. The freeze is an EXCLUSION here — nothing is written to the ledger.
+
+    [Fact]
+    public async Task A_terminated_payee_is_excluded_from_the_pay_run()
+    {
+        var h = Build(nameof(A_terminated_payee_is_excluded_from_the_pay_run));
+        var payeeId = SeedPayee(h, terminated: true);
+        var plan = SeedPlan(h);
+        SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.PayoutsCreated.Should().Be(0, "someone who has left gets no new payout");
+        (await h.Db.CompensationPayouts.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Excluding_a_terminated_payee_writes_nothing_to_their_ledger()
+    {
+        // The freeze must be invisible to the ledger: no flag, no entry, no erasure. The debt stays
+        // exactly as it was, waiting for a person to close it.
+        var h = Build(nameof(Excluding_a_terminated_payee_writes_nothing_to_their_ledger));
+        var payeeId = SeedPayee(h, terminated: true);
+        var plan = SeedPlan(h);
+        SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+
+        var debt = PayeeLedgerEntry.CreateSystemEntry(
+            h.TenantId, payeeId, LedgerTransactionType.ClawbackDebit, Money.Of(500m, Eur),
+            "Churned deal.", LedgerSourceType.DealChurn, "system", Guid.NewGuid(), Now, Guid.NewGuid());
+        var balance = PayeeBalance.Open(h.TenantId, payeeId, Eur, Guid.NewGuid(), Now);
+        balance.Apply(debt, Now);
+        h.Db.PayeeLedgerEntries.Add(debt);
+        h.Db.PayeeBalances.Add(balance);
+        await h.Db.SaveChangesAsync();
+
+        await h.Handler.Handle(June(), default);
+
+        (await h.Db.PayeeLedgerEntries.CountAsync(e => e.PayeeId == payeeId)).Should().Be(1);
+        (await h.Db.PayeeBalances.SingleAsync(b => b.PayeeId == payeeId))
+            .Balance.Amount.Should().Be(-500m, "the debt is frozen, not forgiven and not moved");
+    }
+
+    [Fact]
+    public async Task An_active_payee_with_debt_still_enters_the_pay_run()
+    {
+        // The control that keeps the live case working: debt is netted from people who still earn.
+        var h = Build(nameof(An_active_payee_with_debt_still_enters_the_pay_run));
+        var payeeId = SeedPayee(h, terminated: false);
+        var plan = SeedPlan(h);
+        SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.PayoutsCreated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Terminating_one_payee_does_not_disturb_the_others_in_the_same_run()
+    {
+        var h = Build(nameof(Terminating_one_payee_does_not_disturb_the_others_in_the_same_run));
+        var plan = SeedPlan(h);
+
+        var leaver = SeedPayee(h, terminated: true, code: "GONE");
+        SeedAssignment(h, leaver, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var leaverTx = SeedTransaction(h, leaver, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, leaverTx.Id, leaver, plan.Id, 100m);
+
+        var stayer = SeedPayee(h, terminated: false, code: "HERE");
+        SeedAssignment(h, stayer, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var stayerTx = SeedTransaction(h, stayer, new DateOnly(2026, 6, 15), 2000m);
+        SeedCredit(h, stayerTx.Id, stayer, plan.Id, 250m);
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.PayoutsCreated.Should().Be(1);
+        var payout = await h.Db.CompensationPayouts.SingleAsync();
+        payout.PayeeId.Should().Be(stayer);
+        payout.TotalCommission.Amount.Should().Be(250m);
     }
 }

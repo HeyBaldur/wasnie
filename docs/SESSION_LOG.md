@@ -4,6 +4,37 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-29 — POLÍTICA DE TERMINACIÓN: la cuenta de quien se va se CONGELA, se VE y la cierra una persona
+
+Cierra el ciclo de vida del clawback. Nada de esto toca el cálculo ni el núcleo: es una exclusión, dos tipos de cierre y una cola de trabajo.
+
+**PASO 1 — el motor NO excluía a los terminados. Hubo que agregarlo.** Estado real encontrado: `CalculatePayoutsForPeriodHandler` selecciona por `PlanAssignments` con `Status == Active` (`:38-42`) **sin mirar al Payee**, y `Payee.MarkAsTerminated` (`Payee.cs:143`) solo cambia el estado laboral — **no desactiva assignments**. O sea un payee terminado con assignment vigente seguía entrando a todos los pay runs. La exclusión se agregó en `CalculatePayoutsForPeriodHandler.cs:61-96`: se cargan los payees terminados de las assignments candidatas y sus assignments se descartan antes del bucle.
+
+**Por qué ahí y no en el ledger.** Un ledger registra eventos financieros, no estados laborales. Un flag mutable `IsFrozen` habría roto el append-only sobre el que se apoya todo el subsistema. El interruptor vive en el agregado `Payee` y la exclusión en el servicio del pay run; **el ledger no se toca**: la deuda queda exactamente donde estaba, visible en `PayeeBalance` y en la cola de finanzas.
+
+**★ El borde del neteo, decidido y documentado en el código:** terminar a alguien **no cancela un payout ya calculado** por trabajo que hizo. El filtro solo impide generar payouts NUEVOS. Un payout residual existente se paga y **sigue neteando contra su deuda en la liquidación** — que es la última oportunidad real de recuperarla. Verificado empíricamente: el payout de septiembre (creado estando activo) sobrevivió intacto a la terminación.
+
+**PASO 2 — dos tipos, no uno.** `ExternalSettlementCredit` (recuperado por fuera, típicamente descontado del finiquito) y `WriteOffCredit` (la empresa asumió la pérdida) en `LedgerEnums.cs:44-66`. Separados a propósito: "cuánto recuperamos vía RRHH" y "cuánto perdimos por incobrable" son hechos distintos del negocio, y un único "crédito de cierre" obligaría al CFO a minar texto libre para distinguirlos. Ambos **créditos** (`IsDebit => false`, el signo se sigue derivando del tipo) y ambos **human-only** (`IsManuallyCreatable => true`), así que solo nacen por la fábrica sellada `CreateManualAdjustment`, con actor y justificación como invariantes. **Sin migración:** el tipo se persiste como string (`HasConversion<string>`, maxLength 40) y no hay check-constraint — verificado antes de asumirlo.
+
+**PASO 3 — la cola de finanzas.** `ListTerminatedPayeesWithBalanceHandler` + `GET /api/payees/ledger/terminated-with-balance` (permiso `Ledger.Read`): los payees terminados con balance ≠ 0, ordenados por deuda más profunda primero. Es la contraparte obligatoria del congelamiento: sin ella, apagar el motor volvería la deuda invisible, que es exactamente como la deuda se evapora. Un balance POSITIVO también aparece — plata que Wasnie le debe a alguien que se fue está igual de sin cerrar.
+
+**PASO 4 — el cierre.** Reutiliza el endpoint de ajuste manual que ya existía; al sumar los dos tipos a `IsManuallyCreatable` quedaron aceptados sin tocar el handler. El front los expone en el selector del ledger ("Settled externally" / "Written off", EN/ES/PL, paridad verificada).
+
+**★ El límite de dominio, explícito en el código:** Wasnie **congela y registra**; no cobra. Descontar del finiquito, mandar a cobranza o perseguir legalmente pasa en RRHH/legal/finanzas con datos que Wasnie no tiene. La app solo hace imposible pasar por alto la cuenta abierta y guarda la decisión que finanzas toma.
+
+**Tests.** Unit **1002 → 1013**: dominio (los dos tipos son crédito, exigen actor y justificación, el cierre lleva el balance a 0 **sin borrar** el débito original) y motor (terminado excluido; excluirlo **no escribe nada** en su ledger; activo con deuda sigue entrando; terminar a uno no altera al resto del run). Integración **725 → 733** (+8 HTTP): la cola lista solo terminados con saldo, no al saldado ni al activo con deuda, 401 sin token, el cierre por API con los dos tipos deja balance 0 y saca al payee de la cola conservando los dos asientos, los dos tipos se totalizan por separado, y un Rep no puede cerrar una cuenta (403). Front **517/517** sin cambios de conteo, `ng build` prod limpio.
+
+**Verificación empírica (ciclo completo, app viva).** Payee `TERM-CC-01` creado por API, asignado al plan de clawback, con transacciones de septiembre y octubre:
+1. **Control (activo):** pay run de septiembre → **16 payouts**, uno de ellos suyo por €500.
+2. Deuda de €400 (ajuste manual) → balance −400. Terminado el 2026-09-30.
+3. **Congelado:** pay run de octubre → **15 payouts**, ninguno suyo; sigue teniendo **1 solo payout** (el de septiembre, de cuando estaba activo) y su ledger quedó en **1 asiento, −400**: el congelamiento no escribió nada.
+4. **Visible:** `GET terminated-with-balance` lo devuelve con `balance: -400`, moneda EUR y `terminationDate: 2026-09-30`.
+5. **Cerrado desde la pantalla:** tipo "Written off" por €400 con justificación → balance **+€0.00**, el ledger muestra los DOS asientos (−400 Data correction, +400 Written off) con el actor real, y la cola vuelve **vacía**.
+
+**Datos de laboratorio que quedaron en la DB de desarrollo** (no los borré: borrar filas de un ledger append-only contradice el principio del subsistema, aunque sean de prueba): el payee `TERM-CC-01` con sus 2 asientos saldados, 2 transacciones, 1 payout de septiembre, y **dos pay runs nuevos** (2026-09 y 2026-10) que calcularon payouts **Calculated** para el resto de los payees — ninguno aprobado ni pagado, así que no hubo movimiento de dinero. Decime si querés que los limpie.
+
+**No se ejecutó git.**
+
 ## 2026-07-29 — UI del clawback: la pantalla pasa a leer el estado VIVO (+ los dos fixes de la política de plan)
 
 Dos WIs del mismo día, ambos de LECTURA/PRESENTACIÓN: ninguno toca el cálculo, el dinero ni las guardas del revert.

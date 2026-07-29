@@ -32,6 +32,16 @@ public sealed class LedgerController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    // GET /api/payees/ledger/terminated-with-balance — the work queue for finance: people who have
+    // left with an account still open. Deliberately not under a payee id: it IS the list of which
+    // payees to look at. Read permission, like the rest of the ledger reads.
+    [HttpGet("/api/payees/ledger/terminated-with-balance")]
+    public async Task<IActionResult> ListTerminatedWithBalance(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ListTerminatedPayeesWithBalanceQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     // POST /api/payees/{payeeId}/ledger/adjustments
     [HttpPost("adjustments")]
     public async Task<IActionResult> CreateAdjustment(

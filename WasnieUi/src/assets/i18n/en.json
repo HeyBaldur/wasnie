@@ -1883,6 +1883,8 @@
     "TYPE_CLAWBACK_FORGIVENESS_CREDIT": "Forgiveness",
     "TYPE_MANUAL_BONUS_CREDIT": "Manual bonus",
     "TYPE_DATA_CORRECTION_DEBIT": "Data correction",
+    "TYPE_EXTERNAL_SETTLEMENT_CREDIT": "Settled externally",
+    "TYPE_WRITE_OFF_CREDIT": "Written off",
     "TYPE_CLAWBACK_APPLIED_CREDIT": "Withheld from pay run",
     "ADD_ADJUSTMENT": "Add adjustment",
     "ADJUSTMENT_TITLE": "Manual balance adjustment",

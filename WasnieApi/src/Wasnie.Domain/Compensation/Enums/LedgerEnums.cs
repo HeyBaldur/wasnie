@@ -40,6 +40,30 @@ public enum LedgerTransactionType
     /// pay-run settlement, in the same SaveChanges that consumes the credits.
     /// </summary>
     ClawbackAppliedCredit = 4,
+
+    // ── Closing the account of someone who has left ───────────────────────────────────────────
+    // A terminated payee's debt is frozen, not forgiven and not left circulating. These two types are
+    // the ONLY ways it leaves the books, and they are deliberately separate: "we recovered it through
+    // HR" and "we ate the loss" are different facts about the business. A CFO must be able to total
+    // each without mining free text, which is exactly what one generic "closing credit" would force.
+    //
+    // Wasnie records the decision; it does not make it and does not collect. Whether the money is
+    // taken from a final paycheck, sent to collections, or written off happens in HR/finance/legal,
+    // with data Wasnie does not hold.
+
+    /// <summary>
+    /// The debt was recovered OUTSIDE Wasnie — typically deducted from the final paycheck by payroll.
+    /// Positive: the money came back, so the balance moves toward zero. Human-only: no engine can know
+    /// that a settlement happened somewhere else.
+    /// </summary>
+    ExternalSettlementCredit = 5,
+
+    /// <summary>
+    /// The company absorbed the loss: the debt is uncollectable and is being written off. Positive for
+    /// the payee's balance, and a real cost for the business — which is why it is its own type and
+    /// never blended with a settlement that actually recovered cash.
+    /// </summary>
+    WriteOffCredit = 6,
 }
 
 /// <summary>What triggered a System entry — kept so a clawback can be traced back to its cause.</summary>
@@ -69,6 +93,10 @@ public static class LedgerTransactionTypeExtensions
         LedgerTransactionType.ClawbackForgivenessCredit => false,
         LedgerTransactionType.ManualBonusCredit => false,
         LedgerTransactionType.ClawbackAppliedCredit => false,
+        // Both closing types return money to the balance: one because it was recovered elsewhere,
+        // one because the company absorbed it. Either way the payee owes that much less.
+        LedgerTransactionType.ExternalSettlementCredit => false,
+        LedgerTransactionType.WriteOffCredit => false,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown ledger transaction type."),
     };
 
@@ -82,6 +110,10 @@ public static class LedgerTransactionTypeExtensions
         LedgerTransactionType.ClawbackForgivenessCredit => true,
         LedgerTransactionType.ManualBonusCredit => true,
         LedgerTransactionType.DataCorrectionDebit => true,
+        // Closing a departed payee's account is a finance DECISION, so only a person may write it —
+        // and the manual path is what forces an actor and a justification onto the entry.
+        LedgerTransactionType.ExternalSettlementCredit => true,
+        LedgerTransactionType.WriteOffCredit => true,
         _ => false,
     };
 }

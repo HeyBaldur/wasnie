@@ -37,7 +37,9 @@ export type LedgerTransactionType =
   | 'ClawbackForgivenessCredit'
   | 'ManualBonusCredit'
   | 'DataCorrectionDebit'
-  | 'ClawbackAppliedCredit';
+  | 'ClawbackAppliedCredit'
+  | 'ExternalSettlementCredit'
+  | 'WriteOffCredit';
 
 export interface PayeeLedgerEntry {
   id: string;
@@ -65,7 +67,11 @@ export interface PayeeLedgerEntry {
 export type ManualAdjustmentType =
   | 'ClawbackForgivenessCredit'
   | 'ManualBonusCredit'
-  | 'DataCorrectionDebit';
+  | 'DataCorrectionDebit'
+  // Closing the account of a payee who has left. Two types, not one, because "recovered through
+  // payroll" and "the company absorbed it" are different facts finance has to report separately.
+  | 'ExternalSettlementCredit'
+  | 'WriteOffCredit';
 
 export interface CreateAdjustmentRequest {
   /** Always a POSITIVE magnitude — the sign comes from the type, server-side. */

@@ -1883,6 +1883,8 @@
     "TYPE_CLAWBACK_FORGIVENESS_CREDIT": "Perdón",
     "TYPE_MANUAL_BONUS_CREDIT": "Bono manual",
     "TYPE_DATA_CORRECTION_DEBIT": "Corrección de datos",
+    "TYPE_EXTERNAL_SETTLEMENT_CREDIT": "Saldado por fuera",
+    "TYPE_WRITE_OFF_CREDIT": "Incobrable (baja)",
     "TYPE_CLAWBACK_APPLIED_CREDIT": "Retenido en el pay run",
     "ADD_ADJUSTMENT": "Agregar ajuste",
     "ADJUSTMENT_TITLE": "Ajuste manual de saldo",

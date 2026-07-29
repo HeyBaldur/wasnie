@@ -63,6 +63,9 @@ export class PayeeLedgerPanelComponent {
     { value: 'ClawbackForgivenessCredit', label: 'LEDGER.TYPE_CLAWBACK_FORGIVENESS_CREDIT' },
     { value: 'ManualBonusCredit', label: 'LEDGER.TYPE_MANUAL_BONUS_CREDIT' },
     { value: 'DataCorrectionDebit', label: 'LEDGER.TYPE_DATA_CORRECTION_DEBIT' },
+    // For a payee who has left: the debt is recovered elsewhere, or absorbed as a loss.
+    { value: 'ExternalSettlementCredit', label: 'LEDGER.TYPE_EXTERNAL_SETTLEMENT_CREDIT' },
+    { value: 'WriteOffCredit', label: 'LEDGER.TYPE_WRITE_OFF_CREDIT' },
   ];
 
   constructor() {

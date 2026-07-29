@@ -1883,6 +1883,8 @@
     "TYPE_CLAWBACK_FORGIVENESS_CREDIT": "Umorzenie",
     "TYPE_MANUAL_BONUS_CREDIT": "Premia ręczna",
     "TYPE_DATA_CORRECTION_DEBIT": "Korekta danych",
+    "TYPE_EXTERNAL_SETTLEMENT_CREDIT": "Rozliczone zewnętrznie",
+    "TYPE_WRITE_OFF_CREDIT": "Odpisane w straty",
     "TYPE_CLAWBACK_APPLIED_CREDIT": "Potrącone w wypłacie",
     "ADD_ADJUSTMENT": "Dodaj korektę",
     "ADJUSTMENT_TITLE": "Ręczna korekta salda",

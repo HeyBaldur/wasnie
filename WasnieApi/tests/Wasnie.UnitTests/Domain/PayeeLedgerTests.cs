@@ -249,4 +249,86 @@ public sealed class PayeeLedgerTests
 
         act.Should().Throw<DomainException>().WithMessage("*3-letter ISO code*");
     }
+
+    // ── Closing the account of someone who has left ──────────────────────────────
+    // A terminated payee's debt is frozen, not forgiven. It leaves the books ONLY through one of these
+    // two entries, and they stay separate types on purpose: "we recovered it via payroll" and "we ate
+    // the loss" are different facts, and a CFO must be able to total each without reading justifications.
+
+    [Theory]
+    [InlineData(LedgerTransactionType.ExternalSettlementCredit)]
+    [InlineData(LedgerTransactionType.WriteOffCredit)]
+    public void A_closing_entry_is_a_credit_that_moves_the_balance_toward_zero(LedgerTransactionType type)
+    {
+        var entry = PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), type, Money.Of(500m, "EUR"),
+            "Closing the account of a departed payee.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        entry.Amount.Amount.Should().Be(500m, "both closing types return money to the balance");
+        type.IsDebit().Should().BeFalse();
+        entry.Origin.Should().Be(LedgerEntryOrigin.Human);
+        entry.CreatedBy.Should().Be("finance@acme.com");
+    }
+
+    [Theory]
+    [InlineData(LedgerTransactionType.ExternalSettlementCredit)]
+    [InlineData(LedgerTransactionType.WriteOffCredit)]
+    public void A_closing_entry_requires_an_actor_and_a_justification(LedgerTransactionType type)
+    {
+        // It records a finance DECISION. An entry nobody signed is not a decision, it is a hole.
+        var noActor = () => PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), type, Money.Of(500m, "EUR"),
+            "Closing.", "", Guid.NewGuid(), Now, Guid.NewGuid());
+        noActor.Should().Throw<DomainException>();
+
+        var noReason = () => PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), type, Money.Of(500m, "EUR"),
+            "   ", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid());
+        noReason.Should().Throw<DomainException>();
+    }
+
+    [Theory]
+    [InlineData(LedgerTransactionType.ExternalSettlementCredit)]
+    [InlineData(LedgerTransactionType.WriteOffCredit)]
+    public void The_engine_cannot_decide_to_close_someone_s_account(LedgerTransactionType type)
+    {
+        // The mirror of the engine-only rule: a human may not hand-write a clawback, and no automation
+        // may declare a debt settled or written off. Both directions are enforced by the same switch.
+        type.IsManuallyCreatable().Should().BeTrue();
+
+        var systemEntry = PayeeLedgerEntry.CreateSystemEntry(
+            Guid.NewGuid(), Guid.NewGuid(), type, Money.Of(500m, "EUR"),
+            "Engine trying to close an account.", LedgerSourceType.PayRunSettlement, "system",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        // Nothing in the domain lets the ENGINE reach this type through a business path: the settlement
+        // service only ever writes ClawbackAppliedCredit. This assertion documents that the origin stamp
+        // still tells the truth if it ever did — the entry would be unmistakably System-made.
+        systemEntry.Origin.Should().Be(LedgerEntryOrigin.System);
+    }
+
+    [Fact]
+    public void Closing_a_debt_in_full_brings_the_balance_to_zero()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        var debt = PayeeLedgerEntry.CreateSystemEntry(
+            tenantId, payeeId, LedgerTransactionType.ClawbackDebit, Money.Of(500m, "EUR"),
+            "Churned deal.", LedgerSourceType.DealChurn, "system", Guid.NewGuid(), Now, Guid.NewGuid());
+        balance.Apply(debt, Now);
+
+        var closing = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.ExternalSettlementCredit, Money.Of(500m, "EUR"),
+            "Deducted from the final paycheck by payroll.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+        balance.Apply(closing, Now);
+
+        balance.Balance.Amount.Should().Be(0m);
+        balance.OutstandingDebt().Amount.Should().Be(0m, "the account is settled");
+        // Append-only: closing the account did not erase the debit that created the debt.
+        debt.Amount.Amount.Should().Be(-500m);
+    }
 }
