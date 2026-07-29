@@ -6,7 +6,9 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "verify:icons": "node scripts/verify-icons.mjs",
+    "verify": "npm run verify:icons && ng test --no-watch --browsers=ChromeHeadless && ng build --configuration production"
   },
   "prettier": {
     "printWidth": 100,
