@@ -241,6 +241,68 @@ describe('DashboardComponent helpers', () => {
     });
   });
 
+  // Departed payees whose account never closed. The engine stops processing them — correct — which
+  // is also why nothing else on any screen would ever mention the money still sitting there.
+  describe('terminated accounts pending settlement', () => {
+    const row = (payeeId: string, balance: number) => ({
+      payeeId,
+      payeeName: `Payee ${payeeId}`,
+      employeeCode: payeeId.toUpperCase(),
+      terminationDate: '2026-06-30',
+      balance,
+      currency: 'EUR',
+      balanceUpdatedAt: '2026-07-29T00:00:00Z',
+    });
+
+    it('shows nothing to do when no departed payee has an open account', () => {
+      component.terminated.rows.set([]);
+
+      expect(component.terminated.count()).toBe(0);
+      expect(component.terminated.owedToPayeesCount()).toBe(0);
+      expect(component.terminated.owedByPayeesCount()).toBe(0);
+    });
+
+    it('counts exactly the rows the server returned, both signs', () => {
+      // The endpoint decides what is "still open"; the card only counts what came back.
+      component.terminated.rows.set([row('a', -400), row('b', 500)]);
+
+      expect(component.terminated.count()).toBe(2);
+    });
+
+    it('keeps money owed TO a payee apart from money owed BY one', () => {
+      component.terminated.rows.set([row('a', -400), row('b', 500), row('c', -250)]);
+
+      expect(component.terminated.owedToPayeesCount())
+        .withContext('a liability: treasury still has to pay them').toBe(1);
+      expect(component.terminated.owedByPayeesCount())
+        .withContext('debt to recover or write off').toBe(2);
+    });
+
+    it('adds open accounts to the band badge so the header does not claim all-clear', () => {
+      component.store.summary.set(buildMockSummary({
+        draftPayRunsCount: 0,
+        payoutsPendingApprovalCount: 0,
+        payoutsApprovedUnpaidByCurrency: [],
+        pendingByPlanItems: [],
+      }));
+      component.terminated.rows.set([row('a', -400)]);
+
+      expect(component.pendingActionCount()).toBe(1);
+    });
+
+    it('does not inflate the badge when every account is settled', () => {
+      component.store.summary.set(buildMockSummary({
+        draftPayRunsCount: 2,
+        payoutsPendingApprovalCount: 0,
+        payoutsApprovedUnpaidByCurrency: [],
+        pendingByPlanItems: [],
+      }));
+      component.terminated.rows.set([]);
+
+      expect(component.pendingActionCount()).toBe(2);
+    });
+  });
+
   describe('pendingByPlanTotalCount', () => {
     it('returns 0 with no summary', () => {
       expect(component.pendingByPlanTotalCount()).toBe(0);

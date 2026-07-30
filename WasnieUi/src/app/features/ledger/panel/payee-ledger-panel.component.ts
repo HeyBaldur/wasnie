@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -90,11 +91,80 @@ export class PayeeLedgerPanelComponent {
     return [...PayeeLedgerPanelComponent.GENERAL_TYPES, ...closing];
   });
 
+  /**
+   * The type currently selected in the form, as a signal so the amount rules below can react to it.
+   * (The control is the source of truth; this only mirrors it.)
+   */
+  private readonly selectedType = signal<ManualAdjustmentType>('ClawbackForgivenessCredit');
+
+  /**
+   * A FinalSettlementDebit must equal the live balance EXACTLY — the domain rejects anything else
+   * (`PayeeBalance.Apply`: a closing is total, or it is not a closing). Leaving the field free would
+   * make finance discover that rule by crashing into 400s, so the amount is filled in and locked.
+   *
+   * This is convenience, NOT the guarantee: the domain still decides. Nothing here validates money.
+   */
+  readonly amountIsLocked = computed(
+    () =>
+      this.selectedType() === 'FinalSettlementDebit' &&
+      (this.store.activeStatement()?.currentBalance ?? 0) > 0,
+  );
+
+  /**
+   * The debt-closing types are pre-filled with the outstanding debt but stay EDITABLE: recovering or
+   * writing off PART of a debt is legitimate and the domain allows it. Saying so on screen stops the
+   * suggested figure from reading as a requirement.
+   */
+  readonly amountIsPrefilled = computed(
+    () =>
+      (this.selectedType() === 'ExternalSettlementCredit' ||
+        this.selectedType() === 'WriteOffCredit') &&
+      (this.store.activeStatement()?.currentBalance ?? 0) < 0,
+  );
+
   constructor() {
     effect(() => {
       const id = this.payeeId();
       if (id) void this.store.load(id);
     });
+
+    this.form.controls.transactionType.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((type) => this.applyAmountRuleFor(type));
+  }
+
+  /**
+   * What the amount field does when the type changes. The three closing types do NOT behave alike,
+   * because the domain does not treat them alike:
+   *
+   *   FinalSettlementDebit  → must EQUAL the positive balance. Pre-filled and LOCKED.
+   *   ExternalSettlementCredit / WriteOffCredit → a partial recovery or a partial write-off is
+   *       legitimate (the domain places no cap on them), so the debt is offered as a starting point
+   *       and stays EDITABLE. Pre-filling without locking is the honest shape of "usually all of it".
+   *
+   * Any other type: the operator is on their own, as before.
+   */
+  private applyAmountRuleFor(type: ManualAdjustmentType): void {
+    this.selectedType.set(type);
+
+    const amount = this.form.controls.amount;
+    const balance = this.store.activeStatement()?.currentBalance ?? 0;
+
+    if (type === 'FinalSettlementDebit' && balance > 0) {
+      amount.setValue(balance);
+      amount.disable();
+      return;
+    }
+
+    // Coming back from a locked state, or moving to a type that is typed by hand.
+    if (amount.disabled) amount.enable();
+
+    if ((type === 'ExternalSettlementCredit' || type === 'WriteOffCredit') && balance < 0) {
+      amount.setValue(Math.abs(balance));
+      return;
+    }
+
+    amount.setValue(null);
   }
 
   /** Formatting only — never a calculation. */
@@ -167,11 +237,17 @@ export class PayeeLedgerPanelComponent {
 
   toggleForm(): void {
     this.showAdjustmentForm.update((v) => !v);
-    if (!this.showAdjustmentForm()) this.form.reset({
-      transactionType: 'ClawbackForgivenessCredit',
-      amount: null,
-      justification: '',
-    });
+    if (!this.showAdjustmentForm()) {
+      // Re-enable first: a control left disabled by a final settlement would come back locked with a
+      // stale amount the next time the form is opened, on a balance that has since moved.
+      this.form.controls.amount.enable();
+      this.selectedType.set('ClawbackForgivenessCredit');
+      this.form.reset({
+        transactionType: 'ClawbackForgivenessCredit',
+        amount: null,
+        justification: '',
+      });
+    }
   }
 
   async submit(): Promise<void> {

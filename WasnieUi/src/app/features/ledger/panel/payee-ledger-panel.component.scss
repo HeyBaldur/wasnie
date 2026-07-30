@@ -127,6 +127,14 @@
   color: var(--color-text-tertiary);
 }
 
+/* The amount is fixed by a domain rule, not by a preference — say so a shade louder than a hint. */
+.adj-form__hint--locked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
 .adj-form__error {
   margin: 0;
   font-size: var(--font-size-13);

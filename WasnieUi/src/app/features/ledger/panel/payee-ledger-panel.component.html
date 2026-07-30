@@ -137,6 +137,8 @@
               [label]="'LEDGER.ADJUSTMENT_TYPE' | translate"
               [options]="adjustmentTypes()" />
 
+            <!-- Locked for a final settlement: the domain requires it to equal the balance exactly,
+                 so the operator is shown the figure instead of guessing it against a 400. -->
             <ws-input
               formControlName="amount"
               type="number"
@@ -145,6 +147,15 @@
               [error]="form.controls.amount.touched && form.controls.amount.invalid
                         ? ('LEDGER.AMOUNT_REQUIRED' | translate) : ''" />
           </div>
+
+          @if (amountIsLocked()) {
+            <p class="adj-form__hint adj-form__hint--locked">
+              <app-icon name="lock" [size]="14" />
+              {{ 'LEDGER.AMOUNT_LOCKED_FINAL_SETTLEMENT' | translate }}
+            </p>
+          } @else if (amountIsPrefilled()) {
+            <p class="adj-form__hint">{{ 'LEDGER.AMOUNT_PREFILLED_PARTIAL_ALLOWED' | translate }}</p>
+          }
 
           <ws-input
             formControlName="justification"

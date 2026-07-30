@@ -86,15 +86,18 @@ export interface PayeeLedgerEntry {
   sourcePlanId: string | null;
 }
 
-/** Only the three types a human is allowed to write — the engine owns the other two. */
+/** The types a human is allowed to write — the engine owns ClawbackDebit and ClawbackAppliedCredit. */
 export type ManualAdjustmentType =
   | 'ClawbackForgivenessCredit'
   | 'ManualBonusCredit'
   | 'DataCorrectionDebit'
-  // Closing the account of a payee who has left. Two types, not one, because "recovered through
-  // payroll" and "the company absorbed it" are different facts finance has to report separately.
+  | 'DataCorrectionCredit'
+  // Closing the account of a payee who has left. Three types, not one, because "recovered through
+  // payroll", "the company absorbed it" and "we paid them what we owed" are different facts finance
+  // has to report separately.
   | 'ExternalSettlementCredit'
-  | 'WriteOffCredit';
+  | 'WriteOffCredit'
+  | 'FinalSettlementDebit';
 
 export interface CreateAdjustmentRequest {
   /** Always a POSITIVE magnitude — the sign comes from the type, server-side. */

@@ -1,10 +1,8 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
-import { firstValueFrom } from 'rxjs';
-import { LedgerApiService } from '../services/ledger.api.service';
-import { TerminatedPayeeBalance } from '../models/ledger.model';
+import { TerminatedAccountsStore } from '../state/terminated-accounts.store';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { WsPageLayoutComponent } from '../../../shared/ui/ws-page-layout/ws-page-layout.component';
 import { WsTableComponent } from '../../../shared/ui/ws-table/ws-table.component';
@@ -43,28 +41,20 @@ import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
   styleUrl: './terminated-accounts.component.scss',
 })
 export class TerminatedAccountsComponent {
-  private readonly api = inject(LedgerApiService);
+  /** Shared with the dashboard card that counts the same queue — one fetch, one definition. */
+  private readonly store = inject(TerminatedAccountsStore);
 
-  readonly rows = signal<TerminatedPayeeBalance[]>([]);
-  readonly loading = signal(false);
-  readonly error = signal<string | null>(null);
-
-  readonly count = computed(() => this.rows().length);
+  readonly rows = this.store.rows;
+  readonly loading = this.store.loading;
+  readonly error = this.store.error;
+  readonly count = this.store.count;
 
   constructor() {
     void this.load();
   }
 
-  async load(): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
-    try {
-      this.rows.set(await firstValueFrom(this.api.getTerminatedWithBalance()));
-    } catch {
-      this.error.set('ERRORS.GENERIC');
-    } finally {
-      this.loading.set(false);
-    }
+  load(): Promise<void> {
+    return this.store.load();
   }
 
   /** Signed display, formatting only — the number itself is the server's. */

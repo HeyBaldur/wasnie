@@ -4,6 +4,56 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Cerrar el flujo de huérfanas de cara al usuario: monto del cierre read-only + alerta en el dashboard
+
+Solo presentación. No se tocó dominio, cálculo ni la invariante; no se creó ningún endpoint.
+
+**FRENTE 1 — el monto del cierre deja de ser adivinanza, y los tres tipos NO se comportan igual.**
+La regla la fija el dominio y la verifiqué antes de decidir la UX (`PayeeBalance.Apply`):
+
+| Tipo de cierre | Regla del dominio | Qué hace el campo |
+|---|---|---|
+| `FinalSettlementDebit` | balance > 0 **e igualdad estricta** — el cierre es total | pre-poblado con `currentBalance` y **bloqueado** |
+| `ExternalSettlementCredit` | **ninguna guarda** — parcial legítimo | pre-poblado con la deuda, **editable** |
+| `WriteOffCredit` | **ninguna guarda** — parcial legítimo | pre-poblado con la deuda, **editable** |
+
+El bloqueo es `amount.disable()` sobre el control reactivo, que `WsInput` ya soporta vía
+`setDisabledState` → `[disabled]` en el nativo: **no hubo que agregar nada al design system**.
+`getRawValue()` incluye los controles deshabilitados, así que el monto igual viaja en el POST — hay
+un test que lo prueba, porque un campo bloqueado que además no envía nada es un bug silencioso. El
+monto sale de `currentBalance` (la verdad viva), NUNCA de la foto del settlement. Dos hints nuevos
+explican cuál de los dos regímenes está activo; el pre-poblado editable dice explícitamente que se
+puede saldar una parte, para que la cifra sugerida no se lea como obligatoria. **★ Sigue siendo
+conveniencia: la verdad la impone el dominio, que es quien devuelve el 400.**
+
+**FRENTE 2 — la cola de huérfanas aparece sola en "Requires action".** Tarjeta nueva en la banda de
+acción del dashboard, alimentada por el endpoint que ya existía
+(`GET /ledger/terminated-with-balance`). **Presentación elegida: un conteo grande + desglose por
+signo** ("To pay" = pasivo que tesorería debe pagar / "To recover" = deuda a recuperar o dar de
+baja), porque un solo número escondería **qué clase de trabajo** está esperando — pagarle a alguien
+y cobrarle a alguien no son la misma tarea. Enlaza a `/terminated-accounts`, y el conteo entra en el
+badge de la banda: dejarlo afuera pondría la tarjeta bajo un encabezado que afirma que no hay nada
+que hacer. Gateada con `Ledger.Read` (oculta, no deshabilitada). Estado nuevo compartido
+(`TerminatedAccountsStore`) que la pantalla de huérfanas ahora también consume — **una sola
+definición y un solo fetch**, en vez de dos componentes contando lo mismo por su cuenta.
+
+**Regla de dinero respetada:** el store hace `length` y `filter` sobre las filas que el server eligió
+y por el signo que el server guardó. No suma, no escala, no compara contra un umbral.
+
+**Tests: front 533 → 546 (+13), todos verdes.** Panel (+8): el bloqueo con el balance exacto, el
+input realmente deshabilitado en el DOM, el POST que igual lleva el monto, write-off y external
+pre-poblados **pero editables**, una corrección común que queda vacía, el desbloqueo al cambiar de
+tipo, y que cerrar el formulario no lo deja bloqueado con una cifra vieja. Dashboard (+5): sin
+huérfanas no hay conteo ni falso positivo, el conteo es el de las filas del endpoint, los dos signos
+se cuentan por separado, y el badge de la banda las incluye sin inflarse cuando no hay ninguna.
+**Hallazgo del propio test:** el formulario de ajuste **nunca se había renderizado en un test** —
+`Ledger.Adjust` es falso por defecto en TestBed, así que cualquier aserción sobre el DOM del
+formulario habría pasado por no encontrar nada. Se agregó un stub de `CurrentUserService` (y
+`provideRouter`, que el `WsButton` del formulario necesita) para que el DOM que se afirma exista de
+verdad. `ng build --configuration production` limpio (el warning de presupuesto del SCSS del
+dashboard es preexistente: ese archivo no se tocó), `verify-i18n` y `verify-icons` en verde, EN/ES/PL
+con paridad exacta.
+
 ## 2026-07-30 — Invariante de dominio: un `FinalSettlementDebit` cierra la cuenta EN SU TOTALIDAD (igualdad estricta)
 
 Una cláusula de guarda y sus tests. Cierra el hueco del `FinalSettlementDebit` recién construido: es

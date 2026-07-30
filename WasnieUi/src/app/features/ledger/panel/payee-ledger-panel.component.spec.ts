@@ -2,10 +2,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { PayeeLedgerPanelComponent } from './payee-ledger-panel.component';
 import { LedgerStore } from '../state/ledger.store';
 import { LEDGER_TRANSACTION_TYPES, PayeeLedgerEntry, PayeeStatement } from '../models/ledger.model';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 // The REAL locale file: a test with a hand-written stub would keep passing while the shipped
 // translation is missing, which is the failure mode this test exists to catch.
 import enTranslations from '../../../../assets/i18n/en.json';
@@ -62,7 +64,15 @@ describe('PayeeLedgerPanelComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [PayeeLedgerPanelComponent, TranslateModule.forRoot()],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        // WsButton inside the form binds routerLink, so the rendered form needs a router.
+        provideRouter([]),
+        // The adjustment form is hidden without Ledger.Adjust, so without this the DOM tests below
+        // would assert against a form that was never rendered — and pass by finding nothing.
+        { provide: CurrentUserService, useValue: { hasPermission: () => true } },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PayeeLedgerPanelComponent);
@@ -309,5 +319,105 @@ describe('PayeeLedgerPanelComponent', () => {
       expect(types).withContext(`balance ${balance}`).toContain('DataCorrectionDebit');
       expect(types).withContext(`balance ${balance}`).toContain('DataCorrectionCredit');
     }
+  });
+
+  // ── The amount field follows the rule of the type chosen ────────────────────
+  // The three closing types are NOT alike, and the form has to say so. A final settlement must equal
+  // the balance exactly (the domain rejects anything else), while a write-off or an external
+  // settlement may legitimately cover only part of a debt.
+
+  /** Selects a type on a statement with the given live balance and settles the panel's initial loads. */
+  function chooseTypeOn(balance: number, type: string): void {
+    store.statements.set([statement({ currentBalance: balance })]);
+    store.selectCurrency('EUR');
+    fixture.detectChanges();
+    httpMock.match(() => true).forEach(r => r.flush([]));
+    store.loading.set(false);
+    component.form.controls.transactionType.setValue(type as never);
+    fixture.detectChanges();
+  }
+
+  it('locks the amount to the exact live balance for a final settlement', () => {
+    chooseTypeOn(500, 'FinalSettlementDebit');
+
+    expect(component.amountIsLocked()).toBeTrue();
+    expect(component.form.controls.amount.disabled).toBeTrue();
+    // The exact figure, from the LIVE balance — not a snapshot of any pay run.
+    expect(component.form.getRawValue().amount).toBe(500);
+  });
+
+  it('renders the locked amount as a non-editable input carrying the balance', () => {
+    chooseTypeOn(500, 'FinalSettlementDebit');
+    component.showAdjustmentForm.set(true);
+    fixture.detectChanges();
+
+    const inputs = fixture.debugElement.queryAll(By.css('input[type="number"]'));
+    const amount = inputs[0].nativeElement as HTMLInputElement;
+    expect(amount.disabled).toBeTrue();
+    expect(amount.value).toBe('500');
+  });
+
+  it('still submits the locked amount even though the control is disabled', async () => {
+    chooseTypeOn(500, 'FinalSettlementDebit');
+    component.form.controls.justification.setValue('Treasury transferred the balance.');
+
+    const submitted = component.submit();
+    const req = httpMock.expectOne(`/api/payees/${PAYEE_ID}/ledger/adjustments`);
+    expect(req.request.body.amount).toBe(500);
+    expect(req.request.body.transactionType).toBe('FinalSettlementDebit');
+    req.flush({});
+
+    // The store re-reads the ledger after saving; those GETs only exist once the POST has resolved.
+    await new Promise(resolve => setTimeout(resolve));
+    httpMock.match(() => true).forEach(r => r.flush([]));
+    await submitted;
+  });
+
+  it('pre-fills but does NOT lock a write-off — closing part of a debt is legitimate', () => {
+    chooseTypeOn(-500, 'WriteOffCredit');
+
+    expect(component.amountIsLocked()).toBeFalse();
+    expect(component.amountIsPrefilled()).toBeTrue();
+    expect(component.form.controls.amount.enabled).toBeTrue();
+    // The debt as a positive magnitude — the sign comes from the type, server-side.
+    expect(component.form.getRawValue().amount).toBe(500);
+  });
+
+  it('pre-fills but does NOT lock an external settlement either', () => {
+    chooseTypeOn(-500, 'ExternalSettlementCredit');
+
+    expect(component.amountIsLocked()).toBeFalse();
+    expect(component.form.controls.amount.enabled).toBeTrue();
+    expect(component.form.getRawValue().amount).toBe(500);
+  });
+
+  it('leaves the amount empty and editable for an ordinary correction', () => {
+    chooseTypeOn(-500, 'ManualBonusCredit');
+
+    expect(component.amountIsLocked()).toBeFalse();
+    expect(component.amountIsPrefilled()).toBeFalse();
+    expect(component.form.controls.amount.enabled).toBeTrue();
+    expect(component.form.getRawValue().amount).toBeNull();
+  });
+
+  it('releases the lock when the operator switches away from a final settlement', () => {
+    chooseTypeOn(500, 'FinalSettlementDebit');
+    expect(component.form.controls.amount.disabled).toBeTrue();
+
+    component.form.controls.transactionType.setValue('ManualBonusCredit');
+
+    expect(component.amountIsLocked()).toBeFalse();
+    expect(component.form.controls.amount.enabled).toBeTrue();
+    expect(component.form.getRawValue().amount).toBeNull();
+  });
+
+  it('does not leave the form locked with a stale amount after it is closed', () => {
+    chooseTypeOn(500, 'FinalSettlementDebit');
+    component.showAdjustmentForm.set(true);
+
+    component.toggleForm();
+
+    expect(component.form.controls.amount.enabled).toBeTrue();
+    expect(component.amountIsLocked()).toBeFalse();
   });
 });
