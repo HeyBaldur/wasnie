@@ -272,7 +272,9 @@ Inputs: `variant` (neutral | brand | success | warning | danger | info) · `size
 Two-way: `[(isOpen)]`. Slots: body (default) · `[slot=footer]`  
 Inputs: `title` (required for proper heading styling) · `description` · `size` (sm | md | lg | xl) · `closable` · `closeOnBackdrop`  
 Outputs: `closed`  
-Focus trap + body-scroll lock built-in.
+Focus trap + body-scroll lock built-in. Height is capped to the viewport and the body scrolls, so the
+footer is always reachable — see [Height and scroll](#height-and-scroll-locked). There is no
+`scrollable` input and none is needed.
 
 **Always use `[title]` input — never `slot="header"`**. The `title` input renders with `.ws-modal__title` class (18px weight-600). Content projected via `slot="header"` bypasses this class and produces incorrect styling.
 
@@ -452,7 +454,8 @@ Every modal in Wasnie follows the same visual anatomy. Inconsistency between mod
 - `lg` — 720px — standard forms (5–10 fields), **default for Create/Edit modals**
 - `xl` — 960px — wizards, complex layouts
 
-A modal that needs internal scroll at the chosen size is using the wrong size. Bump up.
+Size is a **width** choice. It does nothing for vertical overflow, so "bump the size up" is not a
+remedy for a modal that is too tall — see [Height and scroll](#height-and-scroll-locked) below.
 
 ### Visual specifications (locked)
 
@@ -467,21 +470,49 @@ A modal that needs internal scroll at the chosen size is using the wrong size. B
 - Backdrop: `var(--color-bg-overlay)`
 - Panel isolation: `isolation: isolate`
 
-### Scrollbar inside body
+### Height and scroll (locked)
 
-The `--scrollable` modifier enables a custom scrollbar — never native browser chrome:
+**Three zones, always.** `WsModal` is a flex column with a hard ceiling of `100dvh − 64px`
+(`100vh` fallback):
 
-- Width: 6px
-- Thumb: `var(--color-border-strong)` with hover `var(--color-text-tertiary)`
-- Track: transparent
+| Zone | Behaviour |
+|---|---|
+| Header | `flex-shrink: 0` — pinned |
+| Body | `flex: 1 1 auto` + **`min-height: 0`** + `overflow-y: auto` — the only zone that gives |
+| Footer | `flex-shrink: 0` — pinned, so Save/Cancel are **always** reachable |
 
-Default body overflow is `visible` — positioned children (date pickers, selects) can extend beyond the body height without being clipped by a scroll container. Add `.ws-modal__body--scrollable` only for modals with genuinely long list content.
+`min-height: 0` is load-bearing and must not be removed. A flex item defaults to
+`min-height: auto` and refuses to shrink below its content, so without it a long body pushes the
+footer past the dialog's `overflow: hidden` edge: **the buttons are clipped away and nothing
+scrolls to them.** That shipped once (bulk-approve on Payouts, 2026-07-30) and left users unable to
+either confirm or cancel. `ws-modal.component.spec.ts` asserts the geometry, not the declarations.
+
+`overflow-y: auto` scrolls only when it must, so short modals are visually unchanged and show no
+scrollbar. `overscroll-behavior: contain` stops the page behind the modal scrolling at the end of
+the body.
+
+**Scrollbar styling** comes from the shared `ws-scroll-thin` class on the body — never native
+browser chrome: width 6px, thumb `var(--color-border-strong)` (hover `var(--color-text-tertiary)`),
+transparent track.
+
+*(Superseded 2026-07-30: the body used to be `overflow: visible` with an opt-in
+`--scrollable` modifier. The modifier was never wired to an input — it was unreachable dead CSS —
+and the visible default is what caused the trap above. The reason for `visible` was that positioned
+children would be clipped, which no longer applies: see the next section.)*
 
 ### Dropdowns and date pickers inside modals
 
 `WsSelect` and `WsDatePicker` detect available viewport space on open and flip upward automatically when there is insufficient space below. No special configuration required.
 
-For modals that contain a date picker and need the calendar to open within the panel: ensure the form wrapper has sufficient `min-height` so the body expands and the calendar stays within the dialog's clipping region. The `terminate-field-wrap` class in payee-detail is the canonical example.
+**Both always render their popover with `position: fixed`**, measured from the trigger's
+`getBoundingClientRect()` (`ws-select.component.ts:241-251`, `ws-date-picker.component.ts:284-290`).
+That is what lets them escape ANY overflow-constrained ancestor — the modal body, a filter panel, a
+card, a page scroll container — and it is why the modal body may now be a scroll container without
+clipping them. Both also attach `scroll` listeners in the **capture** phase, so they reposition (or
+close) when a nested scroller such as the modal body moves underneath them.
+
+Consequently a form wrapper no longer needs padding `min-height` to keep a calendar inside the
+panel; the popover is not inside the panel's clipping region at all.
 
 ### Form-inside-modal pattern
 
@@ -685,21 +716,32 @@ if (spaceBelow >= estimatedHeight) {
 ```scss
 .ws-modal__dialog {
   isolation: isolate;
-  overflow: hidden;   // clips popovers that escape panel boundary
+  overflow: hidden;         // the panel never spills; the body scrolls instead
+  max-height: calc(100dvh - 64px);
 }
 
 .ws-modal__body {
-  overflow: visible;  // does NOT form a scroll container — allows positioned children to extend freely
+  flex: 1 1 auto;
+  min-height: 0;            // REQUIRED — without it the footer is pushed out and clipped away
+  overflow-y: auto;         // scrolls only when the content exceeds the panel
 }
 ```
+
+Popovers are unaffected by the body being a scroll container: they are `position: fixed` and are not
+laid out inside it. See [Height and scroll](#height-and-scroll-locked).
 
 `overflow: visible` on the body is load-bearing. Changing it to `auto` recreates the clipping problem — the body becomes a scroll container that clips absolutely-positioned children at the body's rendered height, even when no scroll is visible.
 
 ### Forbidden
 
-- `position: fixed` dropdowns inside modals (they escape the modal stack)
-- Computing available space against `window.innerHeight` alone when inside a modal
-- Setting `overflow: auto` on `.ws-modal__body` without an opt-in `--scrollable` modifier
+- Removing `min-height: 0` from `.ws-modal__body`, or giving the header/footer a shrink factor — either one puts Save/Cancel off screen again
+- Giving `.ws-modal__dialog` a height that is not bounded by the viewport
+- Per-screen height/scroll patches on an individual modal instead of fixing `WsModal`
+
+*(No longer forbidden, and now the required behaviour: `position: fixed` popovers inside modals.
+They were banned when they were expected to detach from the modal stack; `WsSelect` and
+`WsDatePicker` both position against the trigger rect, track scroll in the capture phase and sit at
+`z-index: 1100`, above the dialog. This is what makes a scrollable modal body possible.)*
 
 ---
 

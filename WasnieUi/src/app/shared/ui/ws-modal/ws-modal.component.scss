@@ -26,7 +26,11 @@
   box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
+  // Never taller than the screen. `dvh` overrides on browsers that support it: on mobile, 100vh is
+  // the viewport WITHOUT the collapsible browser chrome, so a 100vh dialog hangs off the bottom of
+  // what is actually visible — taking the footer with it.
   max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
   width: 100%;
   animation: ws-modal-scale-in var(--transition-slow) ease;
   overflow: hidden;
@@ -107,11 +111,21 @@
 }
 
 .ws-modal__body {
-  flex: 1;
-  // overflow: visible allows absolutely-positioned children (datepicker calendars,
-  // select dropdowns) to render past the body's content height without being clipped.
-  // The dialog's overflow: hidden still clips at the panel boundary.
-  overflow: visible;
+  // THE THREE ZONES: header and footer are flex-shrink: 0, and this is the only zone that gives.
+  //
+  // `min-height: 0` is the load-bearing line. A flex item defaults to `min-height: auto`, which
+  // refuses to shrink below its content — so a long body pushed the footer past the dialog's
+  // `overflow: hidden` edge and Save/Cancel were CLIPPED AWAY, with no way to scroll to them. The
+  // user could neither confirm nor cancel. Without this line the overflow below never engages.
+  flex: 1 1 auto;
+  min-height: 0;
+
+  // Scrolls only when it has to; a short modal is unchanged and shows no scrollbar.
+  overflow-y: auto;
+  overflow-x: hidden;
+  // Reaching the end of this scroller must not start scrolling the page behind the modal.
+  overscroll-behavior: contain;
+
   padding: var(--space-5) var(--space-6);
   font-size: var(--font-size-14);
   color: var(--color-text-secondary);
@@ -119,12 +133,6 @@
 
   &--titled {
     padding-top: var(--space-4);
-  }
-
-  // Opt-in scrolling for modals with genuinely long content
-  &--scrollable {
-    overflow-y: auto;
-    max-height: calc(90vh - 140px);
   }
 }
 

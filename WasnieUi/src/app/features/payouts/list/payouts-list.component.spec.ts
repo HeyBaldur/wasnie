@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 
@@ -348,6 +348,7 @@ describe('PayoutsStore — bulkMarkPaidSummary', () => {
 describe('PayoutsListComponent — query params after the first render', () => {
   let storeMock: jasmine.SpyObj<PayoutsStore>;
   let queryParams: BehaviorSubject<Record<string, string>>;
+  let fixture: ComponentFixture<PayoutsListComponent>;
 
   beforeEach(() => {
     const apiSpy = jasmine.createSpyObj<PayoutsApiService>('PayoutsApiService', [
@@ -370,7 +371,8 @@ describe('PayoutsListComponent — query params after the first render', () => {
       ],
     });
     TestBed.overrideComponent(PayoutsListComponent, { set: { template: '<div></div>', imports: [] } });
-    TestBed.createComponent(PayoutsListComponent).detectChanges();
+    fixture = TestBed.createComponent(PayoutsListComponent);
+    fixture.detectChanges();
   });
 
   it('applies the filter the URL carried on arrival', () => {
@@ -392,5 +394,17 @@ describe('PayoutsListComponent — query params after the first render', () => {
     queryParams.next({});
 
     expect(storeMock.clearFilters).toHaveBeenCalled();
+  });
+
+  it('stops listening once the component is destroyed', () => {
+    // A subscription that outlives the component would keep writing into a store the user has
+    // navigated away from — and would pile up one more listener per visit.
+    fixture.destroy();
+    storeMock.loadFromQueryParams.calls.reset();
+
+    queryParams.next({ status: 'Calculated' });
+
+    expect(storeMock.loadFromQueryParams).not.toHaveBeenCalled();
+    expect(queryParams.observed).withContext('no listener left behind').toBeFalse();
   });
 });

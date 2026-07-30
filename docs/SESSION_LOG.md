@@ -4,6 +4,149 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Filtro de payouts al navegar desde el dashboard: YA ESTABA ARREGLADO (commit de ayer). No se rehízo
+
+**Hallazgo: el arreglo que pedía el WI ya está en HEAD.** El commit **`4659367` "Update queryParams
+handling in payouts list component"** (Rudy Jaubert, **2026-07-29 17:14**) reemplazó exactamente el
+`snapshot` por la suscripción:
+
+```
+-    const qp = this.route.snapshot.queryParams as Record<string, string>;
++    this.route.queryParams
++      .pipe(takeUntilDestroyed(this.destroyRef))
++      .subscribe(params => this._applyQueryParams(params as Record<string, string>));
+```
+
+`payouts-list.component.ts:140-154` hoy, con `_applyQueryParams` (`:156-189`) extraído para que corra
+en la entrada **y** en cada cambio posterior. La cadena de recarga cierra sola: `loadFromQueryParams`
+hace `filter.set(...)` (`payouts.store.ts:243`) y el `effect` del constructor del store (`:121-125`)
+dispara `_loadList` con el filtro nuevo — no hace falta un `reload()` ad-hoc.
+
+**El link del dashboard está bien:** `dashboard.component.html:120` es
+`[routerLink]="['/payouts']" [queryParams]="{ status: 'Approved' }"` — mismo componente, solo cambian
+los query params, que es justo el caso en que Angular lo reutiliza y el snapshot quedaba viejo.
+
+**El commit también trajo tests** (3 de los 4 del WI): aplica el filtro que traía la URL al llegar,
+lo re-aplica cuando la URL cambia sin recrear el componente, y **limpia el filtro cuando la URL pierde
+los params** — este último cubre el bug hermano que el mismo commit arregló: salir por el link de
+Payouts del sidebar dejaba el filtro Approved aplicado bajo una URL que ya no lo mencionaba.
+
+**Lo único que agregué (el hueco real):** el **test 4 del WI, la limpieza de la suscripción**, que no
+estaba. Afirma que después de `fixture.destroy()` una emisión nueva no toca el store y que el
+`BehaviorSubject` no queda con observers. Front **552 → 553**, suite en verde, `ng build` prod limpio.
+Cero cambios de producción: no se toca código que ya funciona y ya está probado (CLAUDE.md §3).
+
+**Por qué Rodolfo lo vio entonces:** lo más probable es que estuviera usando un build anterior a las
+17:14 de ayer. Si lo reproduce con el build actual, hay que reabrirlo — pero sería otra causa, porque
+la que describe el WI (snapshot vs suscripción) está cerrada y con test que lo demuestra.
+
+**★ El patrón SÍ está vivo en otras 8 pantallas** (reportado, NO tocado, como pedía el WI): usan
+`route.snapshot.queryParams` en `ngOnInit` y por lo tanto ignoran un cambio de query param sin
+recrear el componente — `assignments-list:114`, `pay-runs-list:138`, `payees-list:120`,
+`credits-list:139`, `transactions-list:114`, `quotas-list:89`, `plans-list:123`, y
+`payee-detail:159,176` (`period` y `tab`). Dos importan más que el resto porque el **dashboard
+enlaza a ellas con query params**: `pay-runs?status=Draft` (tarjeta "Draft Pay Runs") y
+`transactions?statuses=Pending&attention=…` (tarjeta de transacciones con problemas) — ahí el mismo
+síntoma es reproducible hoy. Los formularios de auth/confirmación (login, reset-password,
+confirm-email, integrations) usan snapshot legítimamente: son pantallas de un solo uso a las que no
+se re-navega con otros params.
+
+## 2026-07-30 — BUG DE UI: los modales largos escondían Save/Cancel y atrapaban al usuario (arreglo en el componente base)
+
+**Diagnóstico: es el MODAL BASE, no la pantalla de payouts.** `ws-modal.component.scss` tenía las
+tres zonas casi bien — `__dialog` con `max-height: calc(100vh - 64px)` + `overflow: hidden`, header y
+footer con `flex-shrink: 0` — pero el cuerpo era `flex: 1` **sin `min-height: 0`** y con
+`overflow: visible` (`:109-129` antes del cambio). Un ítem flex tiene `min-height: auto` por defecto
+y **se niega a achicarse por debajo de su contenido**: el cuerpo empujaba al footer fuera de la caja
+del diálogo, que lo **recortaba** por su `overflow: hidden`. Save/Cancel no quedaban "abajo del
+scroll": quedaban **inexistentes en pantalla**, y no había scroll con el que llegar. Callejón sin
+salida, exactamente como lo describió Rodolfo. Afectaba a **todos** los modales de la app —
+confirmación, void, assign/reassign, tier-limit, category mappings, HubSpot owner-mapping — y el
+bulk-approve de payouts fue simplemente el primero con contenido suficiente para destaparlo.
+
+**★ Había un modificador `--scrollable` que era CÓDIGO MUERTO.** El SCSS definía
+`.ws-modal__body--scrollable { overflow-y: auto; max-height: calc(90vh - 140px) }`, pero **ningún
+input ni binding lo aplicaba nunca** (`ws-modal.component.ts` no tiene `scrollable`, y el template
+tampoco lo liga). Un "opt-in" al que era imposible optar. Se borró.
+
+**Arreglo, en el componente base y en una sola definición:** `min-height: 0` (la línea que sostiene
+todo), `flex: 1 1 auto`, `overflow-y: auto` + `overflow-x: hidden` y `overscroll-behavior: contain`
+en el cuerpo; y el techo del diálogo pasa a `calc(100dvh - 64px)` con `100vh` de fallback — en mobile
+`100vh` NO descuenta la barra del navegador, así que un diálogo de 100vh cuelga por debajo de lo
+visible y se lleva el footer con él. Cero parches por pantalla.
+
+**★ El `overflow: visible` estaba protegiendo un problema que ya no existe.** El comentario decía que
+era para que los dropdowns/calendarios no quedaran recortados — pero `WsSelect` y `WsDatePicker`
+**siempre** usan `position: fixed` hoy (`ws-select.component.ts:241-243`,
+`ws-date-picker.component.ts:284`), midiendo contra el rect del trigger, y además escuchan `scroll`
+en fase de **captura**, así que se reposicionan cuando el cuerpo del modal scrollea debajo de ellos.
+Verificado antes de tocar nada: si no fuera así, el arreglo habría cambiado un bug por otro.
+
+**Tests: 546 → 552 (+6), todos verdes**, en un `ws-modal.component.spec.ts` nuevo (no existía). Son
+aserciones de **geometría real**, no de declaraciones CSS: afirmar `overflow-y: auto` seguiría pasando
+el día que alguien borre `min-height: 0`, porque lo que rompe es la AUSENCIA de una línea. Cubren:
+diálogo dentro del viewport con contenido de 5000px, footer y botón Save dentro del rect del diálogo,
+el scroll viviendo en el cuerpo (`scrollHeight > clientHeight` y `scrollTop` efectivo), header
+pinneado, **modal corto sin scrollbar ni footer despegado** (regresión), y un **viewport chico**
+(techo forzado a 320px) que es el caso que atrapó al usuario. **Prueba de que los tests sirven:
+revertí temporalmente el CSS y 3 de los 6 fallaron; restaurado, 552 en verde.**
+
+**DESIGN_SYSTEM.md actualizado en el mismo cambio**, porque documentaba el contrato viejo y ahora
+habría prohibido el arreglo: la sección "Scrollbar inside body" pasó a **"Height and scroll (locked)"**
+con la tabla de las tres zonas y `min-height: 0` marcado como load-bearing; se corrigió *"A modal that
+needs internal scroll is using the wrong size. Bump up"* (el size es **ancho**: no hace nada contra el
+desborde vertical, y ese consejo es parte de por qué el bug existía); y en "Forbidden" se sacó
+*"`position: fixed` dropdowns inside modals"* — hoy es el comportamiento requerido — reemplazándolo
+por "no quitar `min-height: 0`" y "no parchear una pantalla en vez de arreglar `WsModal`". Todo lo
+superseded quedó marcado como tal, no borrado.
+
+`ng build --configuration production` limpio, `verify-i18n` en verde (no hubo strings nuevos: el
+arreglo es CSS). **NO commiteado:** el WI autorizaba commitear, pero la regla permanente (CLAUDE.md §0
++ la instrucción de Rodolfo de que solo él commitea, "aunque un WI diga lo contrario") gana, y es la
+tercera vez en esta sesión que un WI lo pide; se reportó el conflicto en vez de resolverlo solo. La
+verificación visual (bulk-approve con lista larga en pantalla chica) la hace Rodolfo.
+
+## 2026-07-30 — `Wasnie_Configuration_Guide.md`: pasada 1 de la documentación de casos de uso (clawback, terminación, ledger, permisos)
+
+Solo documentación; no se tocó una línea de código. El WI está diseñado para hacerse en varias
+pasadas, así que lo primero que se agregó es el mecanismo que lo hace reanudable: un **checklist de
+cobertura** al principio del doc, con `[x]` / `[~]` / `[ ]` por área y, en las `[~]`, **qué falta
+exactamente** — un área marcada como hecha en silencio es peor que una marcada pendiente.
+
+**Se documentaron 4 áreas completas, elegidas por ser las que el doc afirmaba mal.** Secciones nuevas
+**15 Clawback**, **16 Terminación y cuentas huérfanas**, **17 Ledger y statement**, **18 Permisos y
+roles**, todas en el formato del WI (qué es → configuración → casos de uso con números reales →
+validaciones y errores → permisos) y verificadas leyendo el código, con `file:line`.
+
+**★ Las contradicciones corregidas — el doc decía que el clawback NO existía.** Estaba "verified
+2026-07-27", o sea *antes* de que el subsistema se construyera (07-28/29):
+1. §9 afirmaba que el *accounting correction workflow* **"does not exist yet"** y que corregir una
+   comisión pagada era *"an unbuilt future subsystem"*. Ahora explica que una comisión **Paid** se
+   corrige por el ledger de clawback, y que *revertir* (Calculated) y *clawback* (Paid) son
+   operaciones distintas a propósito. Se dejó una nota de "superseded" en vez de borrar la frase.
+2. §9, deal-lost: *"no automatic action (clawback is out of scope)"* → ahora describe el trigger de
+   churn y que la alerta muestra el estado vivo (aplicado / pendiente) leído del ledger.
+3. §13 (conceptos NO implementados) listaba **"Clawback of a paid commission — Not implemented"**.
+   La fila quedó tachada y marcada `✅ NOW IMPLEMENTED` con enlace a §15, en vez de desaparecer: quien
+   circuló el PDF viejo tiene que poder ver que ese punto cambió.
+4. §17.2 documenta el split `CurrentBalance` vs `Carryover at that run`, corrigiendo la semántica
+   sobrecargada anterior (la que hacía leer −€500 mientras el ledger sumaba −€833,33).
+5. §14 ganó 7 comportamientos nuevos (15–21) para que el resumen no quede atrasado respecto de las
+   secciones nuevas.
+
+**Numeración: se APENDIZA (15–18), no se inserta.** Renumerar habría roto los anchors internos y las
+referencias de página de cualquier PDF ya circulado; hay una nota que le dice al lector de corrido
+que lea 15–17 después de 11.
+
+**Ejemplos con números reales, como pedía el WI:** maduración 180 días y comisión €1.000 perdida a
+los 89 días → €505,5556; el cap del 50% sobre un payout de €2.000; deuda €900 con cap 50% → se retiene
+€500 y **carryover €400**; +€500 cerrados con €500 (0.0000), con €600 (400) y con €300 (400 también,
+por igualdad estricta); −€250 dados de baja con €150 → quedan −€100.
+
+**Quedó pendiente (primera `[ ]` de la próxima pasada):** Dashboard, Integración CRM (HubSpot),
+Imports, Settings, Subscription; y tres `[~]` con nota: estados del Payee, el contrato de listado de
+Assignments, y `ProcessImmediately` + el sort con whitelist en Transactions.
+
 ## 2026-07-30 — Cerrar el flujo de huérfanas de cara al usuario: monto del cierre read-only + alerta en el dashboard
 
 Solo presentación. No se tocó dominio, cálculo ni la invariante; no se creó ningún endpoint.

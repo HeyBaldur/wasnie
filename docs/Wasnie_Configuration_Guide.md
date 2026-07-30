@@ -7,18 +7,56 @@ numbers and what appears on screen at each step.
 - **Operators / owner** — a reference for how the system actually behaves.
 - **New customers** — a first-use guide, in the order you'd really do it.
 
-**Verified against the code on 2026-07-27.** Every statement about Wasnie's behaviour in this
+**Verified against the code on 2026-07-30.** Every statement about Wasnie's behaviour in this
 document was checked by reading the source, not from memory, and cites `file:line` so you can
-re-check it. (This pass reconciled the trigger, plan-attribution, transaction-lifecycle and
-deal-lost/recovery sections against the post-2026-07-22 changes.) **If the calculation engine changes, this document must be re-verified** — a guide that
-misdescribes the engine is worse than no guide. The highest-risk sections are
-[Rate tables](#5-rate-tables), [SplitAtQuota](#6-splitatquota--the-accelerator-question) and
-[Attainment](#7-attainment).
+re-check it. (The 2026-07-27 pass reconciled the trigger, plan-attribution, transaction-lifecycle and
+deal-lost/recovery sections. The 2026-07-30 pass documented the **clawback subsystem, termination /
+orphaned accounts, the ledger & statement, and permissions** — all four shipped after the previous
+pass and are new sections [15](#15-clawback)–[18](#18-permissions-and-roles).) **If the calculation
+engine changes, this document must be re-verified** — a guide that misdescribes the engine is worse
+than no guide. The highest-risk sections are [Rate tables](#5-rate-tables),
+[SplitAtQuota](#6-splitatquota--the-accelerator-question), [Attainment](#7-attainment) and
+[Clawback](#15-clawback).
 
 **Related docs:** `Pay_Run_Model.md` (why pay runs exist — design rationale),
 `Wasnie_Product_Master_Specification.md` (product scope), `ARCHITECTURE.md` (engineering rules).
 This guide describes **as-built behaviour**; where it disagrees with the spec, this document
 reflects what the code does and says so explicitly.
+
+---
+
+## Coverage checklist (this document is written in passes)
+
+Documenting every area of Wasnie against the real code is more than one sitting. This checklist is
+the resume point: each pass takes the next unticked area, documents it **completely** — what it is,
+how to configure it, use cases (happy path + edges) with concrete numbers, validations/errors, and
+permissions — and ticks it here. Areas already covered by the older narrative sections are marked
+with the section that covers them.
+
+| Area | Status | Where |
+|---|---|---|
+| Plans (create, version/clone, activate, period, currency) | [x] | [4](#4-plan-and-rules), [4.5](#45-plan-lifecycle-and-assignments) |
+| Plan clawback policy (maturation + cap %) | [x] | [15.1](#151-configuration-the-policy-is-opt-in-per-plan) |
+| Rules (trigger, measurement, rate tables, modifier/cap/floor) | [x] | [4](#4-plan-and-rules), [5](#5-rate-tables), [6](#6-splitatquota--the-accelerator-question) |
+| Quotas | [x] | [8](#8-quotas) |
+| Payees (creation, required fields) | [~] | [3](#3-payees) — **states and the Terminated lifecycle still to document** |
+| Assignments (exact-period match, explicit status/date contract) | [~] | [1](#1-the-model-on-one-page), [4.5](#45-plan-lifecycle-and-assignments) — **the list contract (`status`, `dateFrom`/`dateTo`, no magic default) not yet written up** |
+| Transactions (ingest, lifecycle, deal-lost / recovery) | [~] | [9](#9-transactions) — **`ProcessImmediately`, the sort whitelist + 400, and the compensation-period filters not yet written up** |
+| Pay runs and payouts | [~] | [11](#11-pay-runs-and-payouts) — **terminated exclusion and the residual payout are in [16](#16-termination-and-orphaned-accounts); the period-filter fix not yet written up** |
+| **Clawback (the whole subsystem)** | [x] | [15](#15-clawback) |
+| **Termination and orphaned accounts** | [x] | [16](#16-termination-and-orphaned-accounts) |
+| **Ledger / statement** | [x] | [17](#17-ledger-and-statement) |
+| **Permissions and roles** | [x] | [18](#18-permissions-and-roles) |
+| Dashboard (Requires action, alerts, metrics) | [ ] | — |
+| CRM integration (HubSpot OAuth, sync, mapping, deal-lost → churn) | [ ] | `HUBSPOT_INTEGRATION_DESIGN.md` covers the design; the **operator-facing** use cases are not written |
+| Imports (Excel wizards, field requirements, consent) | [ ] | — |
+| Settings (field requirements, category mappings) | [ ] | — |
+| Subscription / billing (tiers, limits, portal) | [ ] | — |
+
+**Numbering note.** Sections added in later passes are appended (15, 16, …) rather than inserted in
+narrative order, so existing links and any circulated PDF page references stay valid. Read
+[15](#15-clawback)–[17](#17-ledger-and-statement) directly after [11](#11-pay-runs-and-payouts) if you
+are reading front to back.
 
 ---
 
@@ -413,16 +451,25 @@ way when *Require payee on new transactions* is Optional. These appear in the da
 | Pending → Cancelled | voided (requires a reason) |
 | Calculated → Cancelled | its CRM deal was **lost** and the admin reverted the commission (deal-lost only; credits superseded, not deleted) |
 
-A **Paid** transaction cannot be reverted to Pending. Its error message says *"Use the accounting
-correction workflow"*, but ⚠️ **that workflow does not exist yet** — correcting an already-paid
-commission (clawback) is an unbuilt future subsystem (see 13). Only a **Calculated** (never-paid)
-commission can be reverted today.
+A **Paid** transaction cannot be reverted to Pending, and that has not changed. What changed is what
+happens instead: ✅ **an already-paid commission is now corrected by the clawback ledger** — a debt is
+recorded against the payee and collected from future pay runs. The transaction and its credits are
+never rewritten. See [section 15](#15-clawback). Only a **Calculated** (never-paid) commission can be
+*reverted*; a **Paid** one is *clawed back*, and those are deliberately different operations run by
+different commands.
+
+*(Superseded: earlier versions of this guide said the correction workflow "does not exist yet". It
+exists as of 2026-07-29 and is verified end to end.)*
 
 **CRM deal lifecycle (won → lost → won).** Because HubSpot is the source of truth for the sale:
 - A credited deal that turns **Closed Lost** is detected on the next sync (reverse reconciliation,
   `DealLostReconciler`). If its commission is only **Calculated**, the dashboard offers **Revert
   commission** (supersedes the credit, cancels the transaction). If it was already **Paid**, it is shown
-  for information only — no automatic action (clawback is out of scope).
+  for information only *on that card* — there is no revert button, because reverting a payment that
+  already left the company would be a lie. ✅ Instead the **churn clawback trigger** fires
+  automatically for Paid commissions and records the proportional debt
+  ([section 15](#15-clawback)); the alert row then says whether the clawback has been applied or is
+  still pending, read from the ledger.
 - A deal that comes **back to Closed Won** after being deal-lost-cancelled is **re-credited
   automatically**: a fresh transaction is created (`TransactionCreateGuard` recognises the deal-lost
   cancellation and re-opens it), the old cancelled row stays as history. This never re-credits a Paid
@@ -570,7 +617,7 @@ accidentally presents them as features.
 | **Named frequency** (monthly/quarterly as a formal concept) | Not implemented. `PlanPeriodType` exists but is inert metadata. |
 | **Weighted averages** | Not implemented anywhere. |
 | **Second KPI unlocking a rate** (e.g. margin gate on a revenue rate) | Not implemented. One measurement per rule (a rule's Trigger can filter on eight fields, but that gates whether the rule fires — it does not blend a second KPI into the rate). |
-| **Clawback of a *paid* commission** | Not implemented. A *Calculated* commission can be reverted (deal-lost); once **Paid**, there is no way to recover or deduct it — no adjustment / negative-balance / deferred-deduction model exists. The "accounting correction workflow" named in some error messages is not built. Future subsystem. |
+| ~~**Clawback of a *paid* commission**~~ | ✅ **NOW IMPLEMENTED** (2026-07-28/29) — moved out of this table. Proportional churn clawback, an append-only payee ledger with a negative-balance model, and deduction from future pay runs bounded by a per-plan cap. See [section 15](#15-clawback). |
 | **Period-scoped caps** | Not offered in the UI and rejected by the API — only per-transaction caps apply (the backend enum keeps *Per period* / *Total* for future use). See 4.4. |
 | **Tier accumulation across a period (Tiered tables)** | Tiered restarts per transaction. Period accumulation exists only via attainment + SplitAtQuota. |
 
@@ -594,12 +641,451 @@ Collected from the verification passes — real behaviours, not bugs to work aro
 12. **Changing a rule does not retroactively change existing credits.** Use *Recalculate credits* on a Draft run.
 13. **Archiving a plan deactivates its assignments** — it drops out of processing and the pending-eligible lists.
 14. **A payee can be in several active plans**; each transaction credits **every** applicable plan (one credit per plan). When 2+ plans are eligible and none is stated, manual entry makes the admin pick and Excel/HubSpot fail loud (left uncredited, flagged) rather than guessing.
+15. **The clawback is opt-in per plan and born inert** — no maturation window, no clawback. Setting one is a deliberate act; a cloned plan version inherits it. (15.1)
+16. **A clawback never edits the payment it corrects.** It writes a debt, collected from future runs; the transaction, its credits and the payout stay untouched. (15)
+17. **A payee balance can go negative without limit**, and the cap only limits how much a single run may withhold — the rest carries over. (15.3)
+18. **Terminating a payee freezes the account but does not cancel a payout already calculated** — it is paid and still nets against the debt. (16.2)
+19. **A final settlement must equal the balance exactly** — over *or* under is rejected. Write-offs and external settlements may be partial. (16.3)
+20. **The live balance and the pay run's carryover are different numbers** and legitimately differ; the screen explains the gap instead of hiding it. (17.2)
+21. **A Rep can read their own ledger**, by design. Nobody but TenantAdmin/CompManager can write one. (18)
+
+---
+
+## 15. Clawback
+
+**What it is.** The way Wasnie corrects a commission that has **already been paid**. It never edits
+the original payment: it records a **debt** against the payee and collects that debt from future
+pay runs. Everything is append-only — the transaction, its credits and the payout that paid it are
+left exactly as they were, because rewriting the history of a payment that really happened is the
+one thing a ledger must not do.
+
+The pieces:
+
+```
+Deal lost in the CRM, commission already Paid
+        │
+        ▼
+ClawbackDebit  (Origin = System)  ──►  PayeeLedgerEntry (append-only)
+        │                                      │
+        │                                      ▼
+        │                               PayeeBalance   (one per payee + currency)
+        ▼                                      │
+next pay run marked Paid  ──►  withholds up to each plan's cap  ──►  ClawbackAppliedCredit
+```
+
+### 15.1 Configuration: the policy is opt-in per plan
+
+*Plans → open a plan → **Clawback** tab.* Two fields, both nullable (`Plan.cs:33,40`):
+
+| Field | Meaning | Empty means |
+|---|---|---|
+| **Maturation days** | How long a deal must stay won before the commission is fully earned | This plan **never** claws back churned deals |
+| **Cap %** (0–100) | Most of a period's commissions this plan lets a clawback withhold | No ceiling — the whole payout may be withheld |
+
+> ✅ **The subsystem is born inert.** Both fields are null on every pre-existing plan, so nothing
+> changes for anyone until a tenant deliberately sets a maturation window
+> (`RegisterDealChurnClawbackHandler.cs:131-137`: a credit whose plan has no window is skipped and
+> the outcome is reported as *no policy*, which is a configuration state, not a failure).
+
+> ✅ **A renewed plan inherits the policy.** `CloneAsNewVersion` copies both fields — a new version
+> silently dropping the clawback would have turned a renewal into an amnesty.
+
+**Validations:** maturation days must be > 0; cap must be between 0 and 100; an **archived** plan
+rejects the change outright (`Plan.cs:150-157`).
+
+### 15.2 The formula
+
+```
+clawback = commissionPaid × (maturationDays − daysActive) ÷ maturationDays      floored at 0
+```
+
+`ClawbackCalculator.cs:28-45`. Two properties are deliberate and worth stating to a customer:
+
+- **One multiplication, then one division.** Computing the ratio first (`1 − 30/90 = 0.6666…`)
+  rounds before it multiplies and loses cents on large commissions. This form keeps
+  `900 × 60 ÷ 90` at exactly `600.00`.
+- **Floored at zero.** A deal that outlived its window gives back **nothing** — a clawback can never
+  turn into a bonus (`:41-42`).
+
+`daysActive` runs from the transaction (close-won) date to the CRM loss date, floored at 0: a loss
+dated *before* the close is bad CRM data, not a negative lifetime, and is treated as 0 days active
+— i.e. the full clawback (`ClawbackCalculator.cs:66-70`).
+
+**Origin error** (the contract was never real) uses `Full` — 100%, not proportional
+(`ClawbackCalculator.cs:51-59`). There is no time earned on a sale that never existed.
+
+> ⚠️ Today only the **churn** trigger is wired to a live event (deal lost in HubSpot). The
+> origin-error method exists and is tested but has no automatic trigger; the equivalent correction is
+> made by hand as a `DataCorrectionDebit` ([17.4](#174-manual-adjustments)).
+
+### 15.3 Use cases
+
+**Happy path — a deal churns inside the window.**
+Plan with **maturation 180 days**, cap 50%. A deal closed on 1 Feb paid a commission of **€1,000**.
+HubSpot reports it lost on **1 May** → 89 days active.
+
+```
+1,000 × (180 − 89) ÷ 180 = 505.5556  →  ClawbackDebit −€505.5556, balance −€505.5556
+```
+
+The payee's next pay run pays €2,000 of commission with a 50% cap:
+
+```
+ceiling  = 2,000 × 50%  = 1,000.00
+withheld = min(505.5556, 1,000.00) = 505.5556
+net paid = 2,000 − 505.5556 = €1,494.4444        balance → 0, carryover 0
+```
+
+**Edge — the deal outlived its window.** Same plan, deal lost after **200** days: `180 − 200 < 0`
+→ nothing is written at all, and the outcome is reported as *matured*
+(`RegisterDealChurnClawbackHandler.cs:156-157,195-197`). No zero-value entry pollutes the ledger.
+
+**Edge — the cap does not let the debt be collected in full.** Debt **€900**, payout **€1,000**,
+plan cap **50%**: the ceiling is €500, so €500 is withheld and **€400 carries over** as debt
+(`PayeeSettlementCalculator.cs:62-77`). The payee always takes home at least (100 − cap)% of what
+they earned. The statement says so explicitly ([17.1](#171-the-two-equations)).
+
+**Edge — the payee owes more than they will ever earn.** The balance simply goes further negative;
+there is **no floor at zero** (`RegisterDealChurnClawbackHandler.cs:37-40`). A balance of +€100 hit
+by a clawback of €988.8889 becomes **−€888.8889**, which carries over and nets against later
+commissions. A floor would reward timing a churn against an empty account.
+
+**Edge — one transaction credited under two plans.** One entry is written **per (plan, currency)**
+(`:150`), because maturation is a plan setting: two plans mean two different windows, and collapsing
+them would produce a row nobody can explain. Both debits land on the **same** balance — the debt is
+global per (payee, currency), only the *cap* is per plan.
+
+**Edge — the same lost deal is seen on every sync.** Idempotent: a transaction that already has a
+churn debit is a no-op (`:88-98`), backed by a unique filtered index on
+(`SourceTransactionId`, `SourcePlanId`) so the guard holds even against a race a read-then-write
+check cannot see.
+
+**Edge — the deal was lost in March but nobody synced until July.** The **event date** drives the
+formula; the entry is **booked in the currently open period** (`:173`). A closed, already-paid run is
+never reopened to receive a retroactive debit.
+
+**Edge — the sync fires while finance is closing a pay run.** `PayeeBalance.RowVersion` is a real SQL
+rowversion. On conflict the handler re-reads the balance and re-applies its entries on top of the
+other writer's figure, up to 3 attempts (`:282-316`). The outcome is always *"the debit made it into
+the run"* or *"the debit waits for the next run"* — never lost, never doubled.
+
+**Edge — the commission was calculated but never paid.** No debt is created: the handler only counts
+credits that are **consumed by a paid payout** (`:103-119`), and it refuses outright if the
+transaction is not `Paid` (`:79-82`). Money that never left the company is corrected by *reverting*
+the commission, not by inventing a debt.
+
+**Edge — the CRM gave no loss date.** Nothing is generated; the deal-lost alert stays open for a
+human. Inventing a date would charge the salesperson for Wasnie's own sync latency.
+
+### 15.4 Netting inside a pay run
+
+Settlement runs at **Mark as paid**, not at calculation (`PayRunSettlementService.cs:30-41`), for two
+reasons that both cost money if ignored: calculation deletes and rebuilds Calculated payouts on every
+re-run (a ledger write there would duplicate), and a payout that is calculated but never paid must
+not reduce anyone's debt.
+
+- The debt is **global per (payee, currency)**; the **cap is per plan**. A payee with two plans has
+  their single debt collected from both payouts, each limited by its own plan's ceiling
+  (`PayeeSettlementCalculator.cs:7-13`).
+- Withholding order is deterministic — by plan id, then payout id (`:62`) — so two runs over the same
+  data always withhold from the same payouts in the same sequence.
+- Cross-currency is refused, not converted: Wasnie holds no exchange rates (`:46-49`).
+- Everything the settlement writes lands in the **same `SaveChanges`** as `Credit.Consume()`. That
+  atomicity is what stops a credit being consumed while its settlement is lost, or the reverse.
+
+### 15.5 Validations and errors
+
+| Situation | What the system does |
+|---|---|
+| Transaction is not `Paid` | Refused: *"a churn clawback applies to a PAID commission… an unpaid commission is corrected by reverting it"* |
+| Transaction has no payee | Refused: there is no ledger to charge |
+| Plan has no maturation window | No entry; outcome *no policy* (inert, not an error) |
+| Deal outlived the window | No entry; outcome *matured* |
+| Nothing was actually paid | No entry; outcome *nothing paid* |
+| Already clawed back | No-op; outcome *already posted* |
+| Maturation ≤ 0 / cap outside 0–100 | Rejected at the plan, before any calculation |
+| Entry currency ≠ balance currency | `DomainException` — balances are per currency |
+
+### 15.6 Permissions
+
+The churn trigger is **System**: no human can invoke it over HTTP — there is no endpoint, it fires
+from the CRM sync. Reading the resulting ledger needs `Ledger.Read`; writing a manual entry needs
+`Ledger.Adjust` ([section 18](#18-permissions-and-roles)).
+
+---
+
+## 16. Termination and orphaned accounts
+
+**What it is.** What happens to money when a payee **leaves**. Terminating someone freezes their
+account: they earn nothing more, and their balance stops moving on its own. That is correct — and on
+its own it would also make a debt invisible, which is how debt quietly disappears. So the freeze
+ships with a work queue and three explicit ways to close the account.
+
+### 16.1 Configuration
+
+*Payees → open a payee → Terminate*, with a termination date. Nothing else to configure: the
+behaviour below is automatic.
+
+### 16.2 Use cases
+
+**Happy path — a terminated payee leaves the engine.** From the next calculation on, every
+assignment belonging to a terminated payee is dropped before the payout loop
+(`CalculatePayoutsForPeriodHandler.cs:76-96`), with a log line naming how many were skipped. If that
+leaves nothing, the run returns zero payouts rather than failing.
+
+> ✅ **The switch lives on the `Payee` aggregate, not on the ledger.** A mutable "frozen" flag on the
+> ledger would have broken the append-only model the whole subsystem rests on. The debt stays exactly
+> where it was, visible in `PayeeBalance` and in the queue below.
+
+**★ Edge — a payout already calculated is NOT cancelled.** Terminating someone does not destroy pay
+they earned while working. The filter only stops **new** payouts being generated; an existing
+residual payout is still paid and **still nets against their debt** at settlement — which is the last
+real chance to recover it.
+
+**Happy path — the queue.** *Financials → Terminated accounts* (`/terminated-accounts`), backed by
+`GET /api/payees/ledger/terminated-with-balance`. It lists every terminated payee whose balance is
+**≠ 0**, deepest debt first (`ListTerminatedPayeesWithBalanceHandler.cs:37-50`).
+
+> ✅ **A positive balance appears too.** Money Wasnie still owes someone who has left is exactly as
+> unfinished as money they owe. Hiding it would be the same mistake in the other direction.
+
+> ✅ **One row per (payee, currency).** Someone owing EUR and owed USD legitimately appears twice —
+> Wasnie holds no exchange rates and must never show a single blended figure.
+
+**Edge — the dashboard says so first.** The count also appears in *Requires action* on the dashboard,
+split into **To pay** (positive balances) and **To recover** (negative), linking to the same screen.
+A single number would hide which kind of work is waiting: paying someone and collecting from someone
+are not the same task.
+
+### 16.3 Closing an account — three types, and they are not interchangeable
+
+All three are written through the ordinary manual-adjustment flow on the payee's ledger; there is
+deliberately no second write path. The UI offers only the ones that make sense for the sign of the
+balance (`payee-ledger-panel.component.ts:78-91`) — offering both directions would let someone "write
+off" money the company **owes**, which is not a write-off, it is not paying somebody.
+
+| Balance | Type | Meaning | Amount rule |
+|---|---|---|---|
+| Negative (they owe) | **ExternalSettlementCredit** | Recovered outside Wasnie — typically deducted from the final paycheck by payroll | **Partial allowed** |
+| Negative (they owe) | **WriteOffCredit** | The company absorbed the loss; the debt is uncollectable | **Partial allowed** |
+| Positive (we owe) | **FinalSettlementDebit** | Treasury paid the departed payee what they were owed, outside Wasnie | **Must equal the balance exactly** |
+
+Two credits and not one generic "closing credit", because *"how much we recovered through HR"* and
+*"how much we ate"* are different facts about the business, and a CFO must be able to total each
+without mining free text.
+
+> ★ **`FinalSettlementDebit` requires strict equality** (`PayeeBalance.cs:84-113`). It exists to
+> **extinguish** the account so it leaves the queue, so:
+> - the balance must be **positive** — against zero there is nothing to settle, and against a
+>   negative one the entry would sink the debt deeper under a label claiming the account closed
+>   (`FinalSettlementRequiresPositiveBalance`);
+> - the amount must **equal** the balance — a partial payment leaves a positive remainder, the
+>   account is still orphaned, and the entry has not done the one job its name claims
+>   (`FinalSettlementMustEqualBalance`).
+>
+> Wasnie does not orchestrate instalments; that is an ERP's accounts payable. **A closing is total, or
+> it is not a closing.** Because the amount is typed by a person, the form fills it in from the live
+> balance and **locks the field** — but the guarantee is the domain rule, not the read-only input: the
+> API rejects a wrong amount with **400** whatever the browser did.
+
+**Worked example.** A departed payee ends **+€500** (a pay run withheld more than they actually
+owed, later corrected):
+
+- €500 `FinalSettlementDebit` → balance **0.0000**, the row leaves the queue. ✅
+- €600 → **400**, `FinalSettlementMustEqualBalance`, nothing written, balance still +€500. A typo
+  would otherwise have flipped the balance to −€100 and invented a debt against someone who has
+  already left — which then reappears in this very queue asking for a write-off to "fix" it.
+- €300 → **400**, same code: partial closings are refused.
+
+And a departed payee at **−€250**: a €250 `WriteOffCredit` (or `ExternalSettlementCredit`) takes them
+to zero; **€150 is also accepted**, leaving −€100 still owed. The form pre-fills the debt but leaves
+the field editable, and says so.
+
+### 16.4 Validations and errors
+
+| Situation | Result |
+|---|---|
+| `FinalSettlementDebit` against balance ≤ 0 | 400 — `FinalSettlementRequiresPositiveBalance` |
+| `FinalSettlementDebit` ≠ balance (over **or** under) | 400 — `FinalSettlementMustEqualBalance` |
+| Closing entry with no justification or no actor | 400 — an entry nobody signed is not a decision |
+| A Rep tries to close an account | **403** — hidden in the UI and refused by the API |
+| Closing type that contradicts the sign of the balance | Not offered in the UI; the domain still governs the outcome |
+
+**Nothing is ever deleted.** A closing entry sits *next to* the debit that created the debt; both
+stay visible and the ledger sums to zero.
+
+### 16.5 Where Wasnie stops
+
+Wasnie **freezes and records**; it does not collect. Deducting from a final paycheck, sending to
+collections or pursuing legally happens in HR / finance / legal with data Wasnie does not hold. The
+app's job is to make the open account impossible to overlook and to store the decision finance made.
+
+### 16.6 Permissions
+
+Seeing the queue: `Ledger.Read`. Closing an account: `Ledger.Adjust`. The **Close account** button is
+**hidden** — not disabled — from anyone without it.
+
+---
+
+## 17. Ledger and statement
+
+**What it is.** The payee-facing face of the clawback subsystem: *Payees → open a payee →
+**Clawback** tab*. Two equations, the live balance, and every entry that ever moved it.
+
+### 17.1 The two equations
+
+**Cash flow of the settled run** (absolute values; the sign lives in the operator):
+
+```
+Commissions − Withheld = Takes home this month
+```
+
+**Balance movement** (explicit signs, because the contrast is the lesson):
+
+```
+Previous balance + Paid down = Carryover at that run
+```
+
+Both describe **one past payment**. Every figure is computed server-side from `PayRunSettlement` and
+nothing is recalculated in the browser — if the settlement says €500 was withheld, €500 is what left.
+
+> ⚠️ **`Cap %` may be blank on purpose.** When the plans that paid the payee in that run have
+> **different** caps there is no single percentage to name, so the field is null and the caption
+> switches to a wording that does not quote one. Inventing a number in a sentence that explains
+> someone's salary would be a lie.
+
+### 17.2 Live balance vs the photograph — the distinction that caused a real bug
+
+| Figure | What it is | When it changes |
+|---|---|---|
+| **Current balance** | The sum of the payee's **whole ledger**, right now (`PayeeBalance`) | Every entry, including ones added after the last run |
+| **Carryover at that run** | What was left **at the close of that payment** | Never — it is history |
+
+They are separate fields in the DTO (`PayeeStatementDto.cs:37,43-46`) and the screen leads with the
+live one. **When they differ the screen says why**: *"There have been movements after this pay run
+(−€333.33), which is why the current balance is −€833.33."*
+
+> ⚠️ Everything belonging to the settled run is **nullable and shown as an em dash when absent** —
+> never as `0`. A zero would claim "this person earned nothing and took nothing home" when the truth
+> is "no pay run has closed against this balance yet".
+
+*(Corrected in this document: earlier versions predate this split, when one overloaded field meant
+both things — which is exactly how a screen came to show −€500 while the ledger below summed to
+−€833.33.)*
+
+### 17.3 The ledger table
+
+Append-only, newest first, with **three redundant signals** for System vs Human (icon, colour band,
+and the sign/colour of the amount — colour alone is not a distinction a colour-blind CFO can use).
+
+| Column | Notes |
+|---|---|
+| Source | **System** (the engine wrote it) or **Manual** (a person did, with actor and justification) |
+| Date | When Wasnie **booked** the entry |
+| Deal lost on | When the deal actually died in the CRM — a **typed** field, not a phrase inside the justification; em dash when no CRM event caused the entry |
+| Type | See the table below |
+| Detail | The justification, plus the author for manual entries |
+| Amount | Signed: negative reduces what the payee is owed |
+
+**The nine types** (`LedgerEnums.cs`). The **sign is derived from the type**, so a debit stored as a
+positive amount is unrepresentable:
+
+| Type | Sign | Who may write it |
+|---|---|---|
+| `ClawbackDebit` | − | **Engine only** — a person must never hand-write a clawback |
+| `ClawbackAppliedCredit` | + | **Engine only** — written by the pay run that actually withheld |
+| `ClawbackForgivenessCredit` | + | Human — a **business** decision to let a real debt go |
+| `ManualBonusCredit` | + | Human |
+| `DataCorrectionDebit` | − | Human — bad data inflated a payment |
+| `DataCorrectionCredit` | + | Human — neutralising an entry a **technical** fault produced |
+| `ExternalSettlementCredit` | + | Human — debt recovered outside Wasnie |
+| `WriteOffCredit` | + | Human — the company absorbed the loss |
+| `FinalSettlementDebit` | − | Human — cash paid to a departed payee |
+
+> ✅ **`DataCorrectionCredit` is not `ClawbackForgivenessCredit`, and the difference is not
+> cosmetic.** Forgiveness is a business decision: someone with authority let a **real** debt go.
+> Using it to erase a bad import would tell the CFO the company forgave money it never charged, and
+> no amount of free-text justification recovers that distinction once the totals are added up.
+
+### 17.4 Manual adjustments
+
+*Add adjustment* on the ledger tab → type, amount, justification. The type list follows the sign of
+the balance for the closing types ([16.3](#163-closing-an-account--three-types-and-they-are-not-interchangeable));
+the four general corrections are always available.
+
+- The **actor** comes from the authenticated user, never from the request body — an adjustment whose
+  owner the caller can choose is not an audit trail.
+- The **payee** comes from the URL, not the body — the entry lands on the resource the caller was
+  authorised against.
+- **Justification is mandatory** and enforced in the domain, not just the form.
+- The engine-only types (`ClawbackDebit`, `ClawbackAppliedCredit`) are **rejected** over HTTP.
+- Everything is **append-only**: an adjustment adds an entry, it never edits or deletes one. A
+  mistake is corrected by a counter-entry, and both rows stay.
+- After saving, the screen **re-reads from the server** instead of patching the balance locally — the
+  balance moved server-side and re-reading is the only way the screen and the ledger cannot disagree.
+
+### 17.5 Validations and errors
+
+| Situation | Result |
+|---|---|
+| Empty justification | 400, nothing written |
+| Engine-only type | 400 |
+| Amount ≤ 0 | Rejected — the magnitude is always positive; the **type** carries the sign |
+| Unknown type name | 400, *"Unknown adjustment type"* |
+| Anonymous request | 401 |
+| Rep or Manager posting an adjustment | 403 |
+| Entry currency ≠ balance currency | 400 — balances are per currency, no FX |
+| Adjustment landing while a pay run settles | The pay run's write fails on the rowversion instead of overwriting a stale balance |
+
+### 17.6 Permissions
+
+`Ledger.Read` to see the statement and the entries — **including the Rep, for their own account**:
+seeing *why* a payment shrank is the point of the feature. `Ledger.Adjust` to write.
+
+---
+
+## 18. Permissions and roles
+
+Four roles, mapped to explicit permissions (`RolePermissions.cs`). The UI follows one rule
+throughout: **forbidden actions are hidden, never shown-and-disabled** — the screen shows what you
+can do, and the API enforces it regardless of what the browser rendered.
+
+| Role | Scope |
+|---|---|
+| **TenantAdmin** | Everything, plus subscription, settings and integrations |
+| **CompManager** | Everything operational: payees, plans, quotas, assignments, transactions, credits, payouts, ledger, imports, reports — no subscription/settings/integrations |
+| **Manager** | Read-only: payees, quotas, assignments, **and the ledger** |
+| **Rep** | Read-only: payees, assignments, quotas, **and the ledger** |
+
+**The two ledger permissions:**
+
+| Permission | Who has it | What it opens |
+|---|---|---|
+| `Ledger.Read` | TenantAdmin, CompManager, **Manager**, **Rep** | The clawback tab (statement + entries) and the terminated-accounts queue |
+| `Ledger.Adjust` | TenantAdmin, CompManager | The **Add adjustment** form and every closing entry |
+
+> ✅ **Why a Rep can read the ledger.** Transparency is the differentiator: the rep sees their own
+> balance and why it moved. A deduction the person cannot examine is how trust in a comp system dies.
+> **Why a Manager can.** They have to be able to explain a reduced payment to their rep
+> (`RolePermissions.cs:56-57,66-67`).
+
+> ⚠️ **`Ledger.Read` is not row-scoped.** Anyone holding it can read any payee's ledger in their
+> tenant; there is no "own records only" filter today. Tenant isolation is enforced (global query
+> filters), payee-level scoping is not.
+
+**Verified behaviours:** a Rep gets **403** on `POST /ledger/adjustments` and **200** on
+`GET /ledger/statement`; a Manager gets 403 on the adjustment; an anonymous request gets **401**
+(`LedgerEndpointsTests.cs`).
 
 ---
 
 ## Maintenance
 
-When the calculation engine, rate tables, quota/payout lifecycles, or the pay-run aggregation change,
-**re-verify this document against the code and update the verification date at the top.** The
-sections most likely to drift are 5, 6, 7 and 11. Prefer deleting a claim over leaving one that may
-have become false.
+When the calculation engine, rate tables, quota/payout lifecycles, the pay-run aggregation or the
+clawback ledger change, **re-verify this document against the code and update the verification date
+at the top.** The sections most likely to drift are 5, 6, 7, 11 and 15. Prefer deleting a claim over
+leaving one that may have become false.
+
+**This guide is written in passes.** Update the [coverage checklist](#coverage-checklist-this-document-is-written-in-passes)
+in the same commit as the section you add, and leave partially covered areas marked `[~]` with a note
+saying what is still missing — an area silently marked done is worse than one openly marked pending.
