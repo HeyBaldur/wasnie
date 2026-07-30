@@ -513,6 +513,7 @@
     "COND_FIELD_PLACEHOLDER": "field",
     "COND_SET_PLACEHOLDER": "Values, comma-separated",
     "COND_UNKNOWN_FIELD": "\"{{field}}\" is not a field this engine can read, so this condition never matches. Pick a field from the list.",
+    "WARN_FLOOR_ABOVE_CAP": "The floor is higher than the cap. The floor is applied after the cap, so every commission ends at the floor and the cap never limits anything.",
     "COND_UNKNOWN_CATEGORY": "This value matches none of your transactions' categories — the rule will never fire. Pick one from the list, or fix the value.",
     "COND_CATEGORY_PLACEHOLDER": "Select a category…",
     "COND_CATEGORY_MULTI_PLACEHOLDER": "Select categories…",

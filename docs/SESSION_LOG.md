@@ -4,6 +4,132 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Plan archivado: cerradas LAS DOS CAPAS (guard en la creación + filtro en el allocator)
+
+Arreglo de dinero autorizado por Rodolfo tras el diagnóstico. Defensa en profundidad: una capa impide
+CREAR la anomalía, la otra impide que COBRE si aparece por cualquier otro camino.
+
+**CAPA 1 — la asignación (`AssignPlanToPayeeHandler.cs:49-59`).** Si `plan.Status == Archived` se
+rechaza antes de tocar nada: *"Plan 'X' is archived and cannot be assigned to a payee. Assign an
+active plan, or create a new version of this one."* **Draft sigue permitido a propósito** y hay un
+test que lo fija: un plan se asigna mientras se prepara y se activa después — ése es el orden normal
+de setup, y estrecharlo también habría roto el camino feliz. Las validaciones de período/moneda no se
+tocaron.
+
+**CAPA 2 — la elegibilidad (`PlanAssignmentResolver.Candidates`).** El filtro nuevo excluye las
+asignaciones cuyo PLAN esté archivado, **antes** que el estado de la asignación, la fecha y la moneda.
+`ResolveSelected` gana además un rechazo explícito que **nombra la causa real** ("has been archived")
+en vez de dejar caer el caso al chequeo de moneda con un mensaje engañoso.
+
+**★ Decisión de diseño: el parámetro `archivedPlanIds` es OBLIGATORIO, sin valor por defecto.** Un
+default es exactamente cómo un llamador se saltea una guarda de dinero en silencio — que es cómo
+nació este hueco. Al no tenerlo, **el compilador obligó a revisar los 4 llamadores** y ahí se ve que
+un solo punto NO alcanzaba: `Candidates` lo usan el allocator (camino unitario y camino batch),
+`PayeePlanCandidates` (el selector de plan del admin **y** la validación server-side de su elección) y
+`AmbiguousAttributionSpec` (la tarjeta de atribución ambigua del dashboard). Los cuatro quedaron
+cubiertos por el mismo filtro; el batch **no** necesitó filtro aparte porque pasa por el resolver — el
+allocator arma el set desde los planes que el job ya precargó (`plansById`), sin una query extra.
+Efecto lateral correcto: un plan archivado deja de contar como "segunda opción elegible", así que ya
+no infla la alerta de ambigüedad del dashboard con una alternativa que el motor nunca habría honrado.
+
+**Tests que MUERDEN — probado, no afirmado.** Unit **1026 → 1032 (+6)**: una asignación Active de un
+plan archivado no es candidata; si es la única, cero candidatos (la transacción queda Pending y **no
+se escribe crédito**); `Resolve` nunca elige un plan archivado **aunque el tie-break lo prefiera** (el
+archivado tiene el período más corto, así que el test también prueba que la exclusión ocurre ANTES
+del tie-break); `ResolveSelected` lo rechaza nombrando "archived"; un plan activo no se ve afectado
+por la guarda; y un plan archivado ya no genera ambigüedad. Integración **739 → 741 (+2)**: POST a un
+plan archivado → **400** con "archived" y **cero filas** persistidas; plan Draft → **200**, sin cambio.
+**Prueba de mordida:** revertí las dos guardas y corrieron en rojo **4 unit + 1 de integración**;
+restauradas, todo verde.
+
+Suites: unit **1032**, integración **741 (739 verdes, 2 skipped), exit 0**, solución compilando sin
+errores. Para correr integración se detuvo otra vez el API de dev (autorizado); **quedó detenida**.
+Sin datos que limpiar: hoy no hay ninguna fila anómala.
+
+## 2026-07-30 — Diagnóstico: plan archivado con asignación activa · doble asignación al mismo plan · aviso Floor>Cap
+
+Tres investigaciones separadas. Las dos de dinero se diagnosticaron con código **y base** (sqlcmd
+contra `HEYBALDUR/WasnieDb`); ninguna se arregló. La tercera, cosmética, se arregló.
+
+### PUNTO 1 — Plan archivado con asignación Active → **CAUSA (B), YA ARREGLADA el 22-jul; pero queda vivo el hueco (A)**
+
+**No es reproducible hoy:** cero filas para `PlanStatus='Archived' AND AsgStatus='Active'` en toda la
+base. Los 7 planes archivados tienen sus asignaciones desactivadas.
+
+**Qué pasó realmente, con timestamps:** "Claude Code Test Plan" v1 se archivó el **2026-07-22
+09:46:45**. Su única asignación (`1421CA1A`) se creó **09:44:59** — *antes* del archivado — y su
+`UpdatedAt` es **2026-07-23 13:25:07**, o sea que se desactivó **al día siguiente**, no al archivar.
+Causa **(B)**: en ese momento `ArchivePlanHandler` **no desactivaba las asignaciones**. El commit que
+agregó ese barrido es **`0eae3d5` "Bugs and UI errors", 2026-07-22 16:14** — seis horas y media
+DESPUÉS del archivado. Rodolfo está viendo el residuo de esa ventana.
+
+**★ Y en esa ventana SÍ se generaron créditos contra el plan archivado — evidencia, no hipótesis:**
+3 créditos de **€8.520 cada uno (€25.560)** allocados el **22-jul 11:08:56** por
+`AllocatedBy = 'hubspot-auto-sync'`, es decir **1h22m después de archivar el plan**. Están todos
+`SupersededAt` con el motivo *"Plan archived - retroactive cleanup of mis-attributed credit"* y
+**`ConsumedAt` NULL en los tres**: alguien ya los limpió y **no se pagó un centavo**.
+
+**El hueco que SIGUE ABIERTO es (A), y es el que importa:** `AssignPlanToPayeeHandler` valida payee,
+plan y que el período coincida exacto — **pero nunca mira `plan.Status`** (`:34-46`). Se puede crear
+hoy una asignación Active contra un plan Archived (o Draft). Y el motor no tiene red debajo: la
+palabra `Archived` **no aparece ni una vez** en `CreditAllocationService`;
+`PlanAssignmentResolver.Candidates` (`:31-47`) filtra por estado de la ASIGNACIÓN + fecha + moneda, y
+el job batch carga los planes **sin filtro de estado** (`ProcessPendingTransactionsJobHandler:163-167`).
+Lo dice el propio comentario del archive handler: *"the resolver only checks assignment status, not
+plan status"*. **La desactivación al archivar es la ÚNICA protección** — y sólo cubre las que ya
+existen, no las que se creen después.
+
+**Atenuante:** el selector de plan de la UI pide `filters: { status: 'Active' }`
+(`assignment-create.component.ts:61`), así que (A) **no se alcanza haciendo clic** — sólo por API
+directa. Es un guard de presentación, no de dominio.
+
+**VEREDICTO DE DINERO: SÍ genera créditos** (probado empíricamente, €25.560 allocados post-archivado).
+**FRENADO — no se arregló.** Decisión de Rodolfo: ¿guard de estado en la creación de asignaciones?
+¿filtro por estado de plan en el resolver/allocator (red de seguridad real)? ¿ambos? Mi recomendación
+es **ambos**: el guard evita crear la anomalía, el filtro evita que la anomalía cobre.
+
+### PUNTO 2 — 3 payees con 2+ asignaciones Active al mismo plan → **NO hay doble pago**
+
+**Confirmado en la base:** 3 payees con múltiples asignaciones Active al mismo plan
+(`Plan Test Flat 5%`): dos con **3** y uno con **2**. Y **cero duplicados de crédito** en toda la
+base: `GROUP BY TransactionId, PlanId, RuleId HAVING COUNT(*)>1` sobre créditos vivos → **0 filas**;
+por payee/transacción/regla en ese plan, siempre **1**.
+
+**Por qué no se duplica:** `BuildCreditsForAllAsync` (`CreditAllocationService.cs:213-242`) arrastra
+el set `covered` de claves (transacción, plan, regla) **entre asignaciones**, no sólo desde la
+precarga del batch — y su comentario nombra este caso exacto: *"a payee can hold two active
+assignments to the SAME plan (3 payees do today)"*. La segunda asignación evalúa las mismas reglas,
+encuentra la clave ya cubierta y no escribe. El índice único
+`UX_Credits_Tenant_Transaction_Plan_Rule_Live` es la última línea, no el mecanismo.
+
+**Por qué existen:** las asignaciones **no se solapan** — son períodos distintos (ene, abr, may, jun
+2026) que quedaron Active porque el estado **no se deriva de las fechas**: una asignación vencida
+sigue Active hasta que alguien la desactive. O sea no son duplicados: son asignaciones históricas de
+períodos cerrados. Y no hay guard de unicidad (payee, plan, período) en el handler.
+
+**VEREDICTO DE DINERO: no hay doble pago.** Es higiene de datos / UX (la pantalla muestra "2
+asignaciones activas" y alarma sin motivo). Sin arreglar; si Rodolfo quiere, el WI sería "derivar el
+estado de las fechas o mostrar Vencida", que es un cambio de producto, no un bug.
+
+### PUNTO 3 — Aviso Floor > Cap: **no existía. Agregado.**
+
+Verificado: no había nada. `rule-form.component.html` pinta Cap y Floor en secciones independientes
+sin ninguna comparación entre ellas, y el `.ts` no tenía ningún computed que las cruzara.
+
+**Por qué importa:** el motor aplica **modifier → cap → floor** (`CommissionCalculator.cs:255-283`),
+así que el **floor corre ÚLTIMO** y levanta la comisión por encima del techo recién aplicado. Con cap
+200 y floor 500, **toda** comisión termina en 500 y el cap no cambia ningún resultado: no es
+"raro", es un tope muerto.
+
+**Agregado:** computed `floorExceedsCap` + aviso no bloqueante bajo la sección Floor, reutilizando la
+clase `.condition-warning` que ya existía en ese formulario. **No bloquea el guardado a propósito**:
+el dominio acepta la combinación, y una pantalla que la prohíba estaría inventando una regla que el
+backend no tiene. Sin aviso cuando cap y floor son iguales (está fijado, no contradictorio), cuando
+alguna sección está apagada, o cuando el cap todavía vale 0 (el campo arranca en 0 al encender la
+sección: avisar ahí saltaría antes de que el usuario escriba nada). i18n EN/ES/PL.
+
+**Tests: 553 → 558 (+5)**, suite verde, `verify-i18n` verde, `ng build` prod limpio.
+
 ## 2026-07-30 — Filtro de payouts al navegar desde el dashboard: YA ESTABA ARREGLADO (commit de ayer). No se rehízo
 
 **Hallazgo: el arreglo que pedía el WI ya está en HEAD.** El commit **`4659367` "Update queryParams

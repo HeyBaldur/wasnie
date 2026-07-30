@@ -513,6 +513,7 @@
     "COND_FIELD_PLACEHOLDER": "campo",
     "COND_SET_PLACEHOLDER": "Valores, separados por coma",
     "COND_UNKNOWN_FIELD": "\"{{field}}\" no es un campo que el motor pueda leer, así que esta condición nunca se cumple. Elegí un campo de la lista.",
+    "WARN_FLOOR_ABOVE_CAP": "El piso es mayor que el tope. El piso se aplica después del tope, así que toda comisión termina en el piso y el tope no limita nada.",
     "COND_UNKNOWN_CATEGORY": "Este valor no coincide con ninguna categoría de tus transacciones — la regla nunca se cumplirá. Elegí una de la lista, o corregí el valor.",
     "COND_CATEGORY_PLACEHOLDER": "Elegí una categoría…",
     "COND_CATEGORY_MULTI_PLACEHOLDER": "Elegí categorías…",

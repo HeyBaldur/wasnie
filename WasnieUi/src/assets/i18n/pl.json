@@ -513,6 +513,7 @@
     "COND_FIELD_PLACEHOLDER": "pole",
     "COND_SET_PLACEHOLDER": "Wartości oddzielone przecinkami",
     "COND_UNKNOWN_FIELD": "\"{{field}}\" nie jest polem, które silnik potrafi odczytać, więc ten warunek nigdy się nie spełni. Wybierz pole z listy.",
+    "WARN_FLOOR_ABOVE_CAP": "Próg minimalny jest wyższy niż limit. Próg stosuje się po limicie, więc każda prowizja kończy na progu, a limit niczego nie ogranicza.",
     "COND_UNKNOWN_CATEGORY": "Ta wartość nie pasuje do żadnej kategorii Twoich transakcji — reguła nigdy się nie uruchomi. Wybierz jedną z listy lub popraw wartość.",
     "COND_CATEGORY_PLACEHOLDER": "Wybierz kategorię…",
     "COND_CATEGORY_MULTI_PLACEHOLDER": "Wybierz kategorie…",

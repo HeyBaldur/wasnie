@@ -157,10 +157,15 @@ public sealed class GetDashboardSummaryHandler(
         var planIds = assignments.Select(a => a.PlanId).Distinct().ToList();
         var plans = await db.CompensationPlans
             .Where(p => planIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name, p.Currency })
+            .Select(p => new { p.Id, p.Name, p.Currency, p.Status })
             .ToDictionaryAsync(p => p.Id, ct);
 
         var planCurrencyById = plans.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+        // An archived plan is not an eligible alternative, so it cannot make an attribution ambiguous.
+        var archivedPlanIds = plans
+            .Where(kv => kv.Value.Status == PlanStatus.Archived)
+            .Select(kv => kv.Key)
+            .ToHashSet();
 
         // Count per payee, and collect the DISTINCT plans that made each one ambiguous — that list is
         // what tells the admin which overlap to look at.
@@ -174,7 +179,7 @@ public sealed class GetDashboardSummaryHandler(
             // The projection already excluded rows with a declared plan, hence the null selection.
             var candidates = AmbiguousAttributionSpec.AmbiguousCandidates(
                 selectedPlanAssignmentId: null, tx.TransactionDate, tx.Currency,
-                payeeAssignments, planCurrencyById);
+                payeeAssignments, planCurrencyById, archivedPlanIds);
             if (candidates.Count == 0) continue;
 
             var payeeId = tx.PayeeId;

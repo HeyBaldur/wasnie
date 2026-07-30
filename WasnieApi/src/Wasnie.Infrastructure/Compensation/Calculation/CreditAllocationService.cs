@@ -11,6 +11,7 @@ using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
+using PlanStatus = Wasnie.Domain.Compensation.Plans.PlanStatus;
 
 namespace Wasnie.Infrastructure.Compensation.Calculation;
 
@@ -68,18 +69,26 @@ public sealed class CreditAllocationService : ICreditAllocationService
 
         // Pattern B: load plan currencies so the resolver can match by currency.
         var assignmentPlanIds = allPayeeAssignments.Select(a => a.PlanId).Distinct().ToList();
-        var planCurrencyById = assignmentPlanIds.Count > 0
-            ? (await _db.CompensationPlans
+        // Status travels with the currency: eligibility needs both, and loading one without the other
+        // is what let a retired plan keep paying.
+        var planFacts = assignmentPlanIds.Count > 0
+            ? await _db.CompensationPlans
                 .IgnoreQueryFilters()
                 .Where(p => p.TenantId == tenantId && assignmentPlanIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Currency })
-                .ToListAsync(ct))
-                .ToDictionary(p => p.Id, p => p.Currency)
-            : new Dictionary<Guid, string>();
+                .Select(p => new { p.Id, p.Currency, p.Status })
+                .ToListAsync(ct)
+            : [];
+
+        var planCurrencyById = planFacts.ToDictionary(p => p.Id, p => p.Currency);
+        var archivedPlanIds = planFacts
+            .Where(p => p.Status == PlanStatus.Archived)
+            .Select(p => p.Id)
+            .ToHashSet();
 
         // Every eligible assignment contributes its rules — an explicit selection restricts to one.
         var assignments = ResolveAssignments(
-            transaction, allPayeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
+            transaction, allPayeeAssignments, txDate, transaction.Amount.Currency,
+            planCurrencyById, archivedPlanIds);
 
         if (assignments.Count == 0) return Array.Empty<Credit>();
 
@@ -147,12 +156,20 @@ public sealed class CreditAllocationService : ICreditAllocationService
         if (!assignmentsByPayee.TryGetValue(payeeIdVal, out var payeeAssignments))
             return Array.Empty<Credit>();
 
-        // Pattern B: build planCurrencyById from the pre-loaded plans dictionary (no DB query).
+        // Pattern B: build both eligibility lookups from the pre-loaded plans dictionary (no DB query).
+        // The batch caller hands over whole Plan entities, so the archived set costs nothing extra —
+        // and the batch path is the one the CRM sync runs on, which is where the mis-attribution of
+        // 2026-07-22 actually happened.
         var planCurrencyById = plansById.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+        var archivedPlanIds = plansById
+            .Where(kv => kv.Value.Status == PlanStatus.Archived)
+            .Select(kv => kv.Key)
+            .ToHashSet();
 
         // Every eligible assignment contributes its rules — an explicit selection restricts to one.
         var assignments = ResolveAssignments(
-            transaction, payeeAssignments, txDate, transaction.Amount.Currency, planCurrencyById);
+            transaction, payeeAssignments, txDate, transaction.Amount.Currency,
+            planCurrencyById, archivedPlanIds);
 
         // Plans come from the caller-supplied dictionary — no DB query per assignment (no N+1).
         return await BuildCreditsForAllAsync(
@@ -185,12 +202,13 @@ public sealed class CreditAllocationService : ICreditAllocationService
         IEnumerable<PlanAssignment> payeeAssignments,
         DateOnly txDate,
         string txCurrency,
-        IReadOnlyDictionary<Guid, string> planCurrencyById)
+        IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds)
     {
         if (transaction.SelectedPlanAssignmentId is { } selectedId)
         {
             var resolution = PlanAssignmentResolver.ResolveSelected(
-                payeeAssignments, txDate, txCurrency, planCurrencyById, selectedId);
+                payeeAssignments, txDate, txCurrency, planCurrencyById, archivedPlanIds, selectedId);
 
             if (!resolution.IsAccepted)
                 throw new DomainException(resolution.RejectionReason!);
@@ -201,7 +219,7 @@ public sealed class CreditAllocationService : ICreditAllocationService
         // Candidates already applies the three eligibility filters (Active + period covers the date +
         // plan currency matches). Its full list is now used instead of being narrowed to one.
         return PlanAssignmentResolver
-            .Candidates(payeeAssignments, txDate, txCurrency, planCurrencyById)
+            .Candidates(payeeAssignments, txDate, txCurrency, planCurrencyById, archivedPlanIds)
             .OrderBy(a => a.EffectivePeriod!.End.DayNumber - a.EffectivePeriod.Start.DayNumber)
             .ThenBy(a => a.Id)
             .ToList();

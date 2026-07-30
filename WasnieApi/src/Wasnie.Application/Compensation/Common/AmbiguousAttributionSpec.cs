@@ -41,14 +41,17 @@ public static class AmbiguousAttributionSpec
         DateOnly txDate,
         string txCurrency,
         IEnumerable<PlanAssignment> payeeAssignments,
-        IReadOnlyDictionary<Guid, string> planCurrencyById)
+        IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds)
     {
         // An explicit choice removes the ambiguity by definition — the admin already stated the plan.
         if (selectedPlanAssignmentId.HasValue)
             return [];
 
+        // Archived plans are excluded by Candidates, so a retired plan no longer counts as one of the
+        // "two eligible plans" that make a transaction ambiguous. It never was a real alternative.
         var candidates = PlanAssignmentResolver.Candidates(
-            payeeAssignments, txDate, txCurrency, planCurrencyById);
+            payeeAssignments, txDate, txCurrency, planCurrencyById, archivedPlanIds);
 
         // 0 candidates → already surfaced as NoActiveAssignment / CurrencyMismatch.
         // 1 candidate  → unambiguous; resolves exactly as it always has.
@@ -58,14 +61,16 @@ public static class AmbiguousAttributionSpec
     public static IReadOnlyList<PlanAssignment> AmbiguousCandidates(
         CompensationTransaction transaction,
         IEnumerable<PlanAssignment> payeeAssignments,
-        IReadOnlyDictionary<Guid, string> planCurrencyById) =>
+        IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds) =>
         AmbiguousCandidates(
             transaction.SelectedPlanAssignmentId, transaction.TransactionDate,
-            transaction.Amount.Currency, payeeAssignments, planCurrencyById);
+            transaction.Amount.Currency, payeeAssignments, planCurrencyById, archivedPlanIds);
 
     public static bool IsAmbiguous(
         CompensationTransaction transaction,
         IEnumerable<PlanAssignment> payeeAssignments,
-        IReadOnlyDictionary<Guid, string> planCurrencyById) =>
-        AmbiguousCandidates(transaction, payeeAssignments, planCurrencyById).Count > 0;
+        IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds) =>
+        AmbiguousCandidates(transaction, payeeAssignments, planCurrencyById, archivedPlanIds).Count > 0;
 }
