@@ -12,7 +12,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
-import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe, QuotaPeriodExpiredPipe } from '../../../shared/pipes/quota-status.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
 import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
 import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
@@ -58,6 +58,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     CurrencyFormatPipe,
     QuotaStatusVariantPipe,
     QuotaStatusLabelPipe,
+    QuotaPeriodExpiredPipe,
     PayeeFormComponent,
     HasPermissionDirective,
     WsLoadMoreDirective,

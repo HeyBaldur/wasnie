@@ -14,8 +14,13 @@
     } @else if (error()) {
       <div class="terminated__error">{{ error()! | translate }}</div>
     } @else if (count() === 0) {
-      <!-- The good state: everyone who left has a settled account. -->
-      <ws-table-empty icon="check-circle" messageKey="LEDGER.TERMINATED_EMPTY" />
+      <!-- The good state: everyone who left has a settled account. Same full-page empty state the
+           Plans list uses, so an empty screen reads as an answer instead of a screen that failed to
+           load — which is exactly how it was being read. -->
+      <ws-empty-state
+        illustration="terminated-empty"
+        titleKey="LEDGER.TERMINATED_EMPTY_TITLE"
+        descKey="LEDGER.TERMINATED_EMPTY" />
     } @else {
       <p class="terminated__intro">{{ 'LEDGER.TERMINATED_INTRO' | translate }}</p>
 

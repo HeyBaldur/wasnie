@@ -8,7 +8,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
-import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe, QuotaPeriodExpiredPipe } from '../../../shared/pipes/quota-status.pipe';
 import {
   WsPageHeaderComponent,
   WsBadgeComponent,
@@ -32,6 +32,7 @@ import {
     WsConfirmationModalComponent,
     QuotaStatusVariantPipe,
     QuotaStatusLabelPipe,
+    QuotaPeriodExpiredPipe,
   ],
   templateUrl: './quota-detail.component.html',
   styleUrl: './quota-detail.component.scss',

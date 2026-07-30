@@ -6,7 +6,7 @@ import { TerminatedAccountsStore } from '../state/terminated-accounts.store';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { WsPageLayoutComponent } from '../../../shared/ui/ws-page-layout/ws-page-layout.component';
 import { WsTableComponent } from '../../../shared/ui/ws-table/ws-table.component';
-import { WsTableEmptyComponent } from '../../../shared/ui/ws-table/ws-table-empty.component';
+import { WsEmptyStateComponent } from '../../../shared/ui/ws-empty-state/ws-empty-state.component';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
@@ -32,7 +32,7 @@ import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
     AppShellComponent,
     WsPageLayoutComponent,
     WsTableComponent,
-    WsTableEmptyComponent,
+    WsEmptyStateComponent,
     WsButtonComponent,
     IconComponent,
     HasPermissionPipe,

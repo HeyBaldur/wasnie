@@ -4,6 +4,67 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Badge "Período caducado" en quotas Active cuyo rango ya pasó
+
+Señal visual, 100% presentacional. **No se tocó el dominio ni el estado**: una quota vencida sigue
+Active hasta que alguien la cierra, y eso es deliberado (Draft → Active → Closed sólo por acción
+explícita). Lo que faltaba era decirle al lector que el período ya no aplica: una fila que dice
+"Active" a secas se lee como un objetivo todavía vigente.
+
+**Dónde vive la condición:** `shared/pipes/quota-status.pipe.ts`, el archivo que ya era **fuente única
+de verdad** de cómo se muestra el estado de una quota. Función `isQuotaPeriodExpired(status,
+periodEnd)` + `QuotaPeriodExpiredPipe`. Ponerlo ahí y no en cada componente es lo que impide que las
+pantallas vuelvan a divergir — el propio archivo documenta ese antecedente (el perfil del payee
+derivaba una fase temporal de las fechas en vez de leer el estado real). La nota de ese archivo
+("esto es el STATUS, no una fase temporal") se amplió para explicar que ahora conviven las dos cosas:
+el badge **complementa** al de estado, nunca lo reemplaza.
+
+**★ La comparación es por FECHA, no por datetime.** Los períodos llegan como `DateOnly`
+("2026-06-30"), así que se comparan como strings `YYYY-MM-DD` — orden cronológico, sin hora, sin
+zona horaria, sin conversión. Construir un `Date` desde ese string lo parsea como **medianoche UTC** y
+al leerlo en local, al oeste de Greenwich, cae en el día anterior: el último día del período
+parpadearía el badge parte del día. La comparación es **estricta**: una quota que termina HOY todavía
+está vigente. Hay un test dedicado a ese borde, que se sostiene con cualquier offset de la máquina.
+
+**Tres superficies, no dos.** Además de la lista y el detalle (que muestra el período en dos lugares:
+el chip de la cabecera y el campo Period), el **panel de quotas del perfil del payee** muestra las
+mismas fechas con el mismo badge de estado — quedaba raro que ahí faltara la señal. Las tres usan el
+mismo pipe. `ws-badge variant="warning" size="sm"`, patrón existente, visualmente distinto del badge
+de estado (Active = success/verde).
+
+i18n EN/ES/PL: `QUOTAS.PERIOD_EXPIRED` ("Period ended" / "Período caducado" / "Okres zakończony").
+
+**Tests: 558 → 566 (+8)**, cubriendo los 4 casos de estado (Active-vencida sí; Active-hoy,
+Active-futura, Draft-vencida, Closed no), fecha ausente o ilegible → no dice nada, el borde de zona
+horaria, y el orden de argumentos del pipe. Front **566/566**, `verify-i18n` verde, `ng build` prod
+limpio.
+
+## 2026-07-30 — La pantalla de cuentas huérfanas vacía ahora se lee como una respuesta, no como un error
+
+Rodolfo reportó que `/terminated-accounts` "no despliega nada" habiendo payees terminados. **La lista
+estaba bien:** hay 5 payees Terminated y **ninguno tiene cuenta abierta** — cuatro sin fila de
+`PayeeBalance` (nunca tuvieron un movimiento de ledger) y uno con balance **0.0000**, ya saldado. Las
+únicas dos filas con saldo ≠ 0 de toda la base (Rudolph **+€500**, Vendedor Prueba **−€1.000**)
+pertenecen a payees **Activos**, así que no son huérfanas. La cola es "terminados con saldo ≠ 0", no
+"todos los terminados".
+
+**El problema real era de presentación:** el estado vacío usaba `<ws-table-empty>`, una línea de
+texto pensada para el interior de una tabla, en una pantalla que en ese momento no dibuja tabla
+ninguna. Una sola frase suelta en una página en blanco se lee como "esto no cargó" — y así se leyó.
+
+**Arreglo, replicando el patrón de Planes:** `<ws-empty-state>` con ilustración, título y
+descripción, igual que `plans-list`. Ilustración nueva **`terminated-empty`** agregada al mismo
+diccionario `ILLUSTRATIONS` de `ws-empty-state.component.ts` (misma familia Tabler, viewBox 24,
+`stroke-width` 2, `currentColor`): una persona con un tilde — el vacío acá es un **buen** estado
+("todos los que se fueron quedaron saldados"), no el "todavía no hay nada" del resto de las
+pantallas, y por eso tampoco lleva botón de acción: no hay nada que crear. i18n:
+`LEDGER.TERMINATED_EMPTY_TITLE` nuevo + `TERMINATED_EMPTY` reaprovechado como descripción (sin dejar
+claves huérfanas), EN/ES/PL.
+
+Front **558/558**, `verify-i18n` y `verify-icons` en verde, `ng build` prod limpio. Aparte, aviso
+anotado: la API de dev quedó detenida desde el WI anterior, así que `localhost:4200/api/...` no
+responde hasta que se levante.
+
 ## 2026-07-30 — Plan archivado: cerradas LAS DOS CAPAS (guard en la creación + filtro en el allocator)
 
 Arreglo de dinero autorizado por Rodolfo tras el diagnóstico. Defensa en profundidad: una capa impide
