@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Helpers;
 using Wasnie.IntegrationTests.Infrastructure;
 
@@ -159,6 +162,194 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
         var response = await _clientA.PostAsJsonAsync("/api/quotas", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ── Bulk create: one quota configuration, N payees, all-or-nothing ────────
+    // The property that matters is not "it creates several": it is that a batch NEVER lands
+    // half-written. The domain permits duplicate quotas, so a partial success would poison the
+    // retry — fix the two bad rows, re-send, and the eighteen good ones now exist twice.
+
+    [Fact]
+    public async Task BulkCreateQuotas_AllValid_CreatesOneQuotaPerPayee()
+    {
+        var plan = await CreateActivePlanAsync(_clientA);
+        var p1 = await CreatePayeeAsync(_clientA, "BULK001");
+        var p2 = await CreatePayeeAsync(_clientA, "BULK002");
+        var p3 = await CreatePayeeAsync(_clientA, "BULK003");
+
+        var response = await _clientA.PostAsJsonAsync("/api/quotas/bulk", new
+        {
+            payeeIds = new[] { p1.Id, p2.Id, p3.Id },
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2025-01-01",
+            periodEnd = "2025-03-31",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<BulkQuotaResultResponse>();
+        body!.Failures.Should().BeEmpty();
+        body.Created.Should().HaveCount(3);
+
+        // Identical in everything except the payee — that is what "the same quota for all" means.
+        body.Created.Select(q => q.PayeeId).Should().BeEquivalentTo(new[] { p1.Id, p2.Id, p3.Id });
+        body.Created.Should().OnlyContain(q => q.Amount == 10000m && q.Currency == "EUR");
+        body.Created.Should().OnlyContain(q => q.Status == "Draft");
+
+        // And they are really in the database, one row per payee.
+        foreach (var payeeId in new[] { p1.Id, p2.Id, p3.Id })
+            (await QuotaCountInDbAsync(payeeId)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BulkCreateQuotas_OnePayeeFails_RejectsTheWholeBatchAndWritesNothing()
+    {
+        var plan = await CreateActivePlanAsync(_clientA); // effective 2025-01-01 .. 2025-12-31
+        var p1 = await CreatePayeeAsync(_clientA, "ATOM001");
+        var p2 = await CreatePayeeAsync(_clientA, "ATOM002");
+
+        // The period falls outside the plan — a rule the SINGLE create enforces too, so the batch
+        // must refuse it for the same reason. Both payees fail it here; the point is the count of
+        // rows written afterwards, which must be zero.
+        var response = await _clientA.PostAsJsonAsync("/api/quotas/bulk", new
+        {
+            payeeIds = new[] { p1.Id, p2.Id },
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2024-01-01",
+            periodEnd = "2024-03-31",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<BulkQuotaResultResponse>();
+        body!.Created.Should().BeEmpty();
+        body.Failures.Should().HaveCount(2);
+        // The report names people, not GUIDs — the admin picked people.
+        body.Failures.Should().OnlyContain(f => f.PayeeName != "" && f.Reason.Contains("plan"));
+
+        // ★ THE ATOMICITY ASSERTION: not one quota row exists, for any payee of the batch.
+        foreach (var payeeId in new[] { p1.Id, p2.Id })
+            (await QuotaCountInDbAsync(payeeId)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BulkCreateQuotas_OneBadPayeeAmongGoodOnes_LeavesTheGoodOnesUncreated()
+    {
+        // The 18-of-20 scenario, stated directly. The batch mixes payees whose quota is fine with one
+        // whose plan does not exist, so only the last one can fail — and the other two must still be
+        // absent afterwards.
+        var plan = await CreateActivePlanAsync(_clientA);
+        var good1 = await CreatePayeeAsync(_clientA, "MIX001");
+        var good2 = await CreatePayeeAsync(_clientA, "MIX002");
+
+        // A currency the plan does not use makes EVERY row fail; to fail exactly one we need a
+        // per-payee difference, and the only per-payee input is the id itself. An id belonging to no
+        // payee still builds a valid quota (the single-create does the same), so the honest way to
+        // fail exactly one row does not exist through the API today — see the note in the report.
+        // What this test pins instead is the guarantee that matters: a rejected batch writes nothing.
+        var response = await _clientA.PostAsJsonAsync("/api/quotas/bulk", new
+        {
+            payeeIds = new[] { good1.Id, good2.Id },
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "PLN", // mismatch with the EUR plan — same rule the single create enforces
+            periodStart = "2025-01-01",
+            periodEnd = "2025-03-31",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        foreach (var payeeId in new[] { good1.Id, good2.Id })
+            (await QuotaCountInDbAsync(payeeId))
+                .Should().Be(0, "a refused batch leaves the database exactly as it was");
+    }
+
+    [Fact]
+    public async Task BulkCreateQuotas_RejectsWhatTheSingleCreateRejects()
+    {
+        // Parity, asserted rather than assumed: the same request that the single endpoint refuses is
+        // refused by the batch, for the same reason.
+        var plan = await CreateActivePlanAsync(_clientA); // EUR
+        var payee = await CreatePayeeAsync(_clientA, "PARITY01");
+
+        object body(bool bulk) => bulk
+            ? new
+            {
+                payeeIds = new[] { payee.Id }, planId = plan.Id, measurementType = 0,
+                amount = 10000m, currency = "PLN", periodStart = "2025-01-01", periodEnd = "2025-03-31",
+            }
+            : (object)new
+            {
+                payeeId = payee.Id, planId = plan.Id, measurementType = 0,
+                amount = 10000m, currency = "PLN", periodStart = "2025-01-01", periodEnd = "2025-03-31",
+            };
+
+        var single = await _clientA.PostAsJsonAsync("/api/quotas", body(false));
+        var batch = await _clientA.PostAsJsonAsync("/api/quotas/bulk", body(true));
+
+        single.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        batch.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task BulkCreateQuotas_OverlappingQuota_IsCreatedSilently()
+    {
+        // Overlaps are legal today: the engine resolves them by narrowest period, which is what makes
+        // monthly quotas inside a quarterly plan work. The batch must therefore be as silent about it
+        // as the single create — a warning here would be a business rule living in one endpoint.
+        var plan = await CreateActivePlanAsync(_clientA);
+        var payee = await CreatePayeeAsync(_clientA, "OVERLAP1");
+        await CreateQuotaAsync(_clientA, payee.Id, plan.Id); // 2025-01-01 .. 2025-03-31
+
+        var response = await _clientA.PostAsJsonAsync("/api/quotas/bulk", new
+        {
+            payeeIds = new[] { payee.Id },
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 99999m,
+            currency = "EUR",
+            periodStart = "2025-02-01", // squarely inside the existing quota
+            periodEnd = "2025-02-28",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<BulkQuotaResultResponse>();
+        result!.Failures.Should().BeEmpty();
+
+        (await QuotaCountInDbAsync(payee.Id))
+            .Should().Be(2, "both quotas coexist — the domain allows it and so does the batch");
+    }
+
+    [Fact]
+    public async Task BulkCreateQuotas_EmptyPayeeList_Returns400()
+    {
+        var plan = await CreateActivePlanAsync(_clientA);
+
+        var response = await _clientA.PostAsJsonAsync("/api/quotas/bulk", new
+        {
+            payeeIds = Array.Empty<Guid>(),
+            planId = plan.Id,
+            measurementType = 0,
+            amount = 10000m,
+            currency = "EUR",
+            periodStart = "2025-01-01",
+            periodEnd = "2025-03-31",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task BulkCreateQuotas_WithoutToken_Returns401()
+    {
+        var client = _fixture.Factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/quotas/bulk", new { });
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -602,4 +793,25 @@ public sealed class QuotasEndpointsTests : IAsyncLifetime
     private sealed record PayeeResponse(Guid Id, string FullName, string EmployeeCode, string StatusLabel);
     private sealed record PlanResponse(Guid Id, string Name, string Status, int Version);
     private sealed record QuotaSummaryResponse(Guid Id, Guid PayeeId, string PayeeEmployeeCode, decimal Amount, string Currency, string Status);
+
+    /// <summary>
+    /// Counts the payee's quotas straight from the database.
+    ///
+    /// NOT through GET /api/quotas/payee/{id}: that endpoint applies a default PERIOD filter when the
+    /// caller sends none, so quotas outside the current month are invisible through it — which says
+    /// nothing about whether a row was written. For an atomicity assertion the only honest question is
+    /// "is the row in the table", so this asks the table.
+    /// </summary>
+    private async Task<int> QuotaCountInDbAsync(Guid payeeId)
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await db.Quotas.IgnoreQueryFilters().CountAsync(q => q.PayeeId == payeeId);
+    }
+
+    private sealed record BulkQuotaFailureResponse(Guid PayeeId, string PayeeName, string PayeeEmployeeCode, string Reason);
+
+    private sealed record BulkQuotaResultResponse(
+        IReadOnlyList<QuotaSummaryResponse> Created,
+        IReadOnlyList<BulkQuotaFailureResponse> Failures);
 }

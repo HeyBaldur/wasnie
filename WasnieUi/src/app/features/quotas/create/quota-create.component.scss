@@ -122,3 +122,99 @@
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-subtle);
 }
+
+/* ── Selected payees: one quota configuration, N people ─────────────────────── */
+/* Mirrors the chip pattern of the payouts filter (payouts-list.component.scss) rather than
+   introducing a second visual language for "several things are selected". */
+.payee-chips {
+  @apply flex flex-wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.payee-chip {
+  @apply inline-flex items-center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.payee-chip__remove {
+  @apply inline-flex items-center justify-center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  border-radius: var(--radius-full);
+
+  &:hover { color: var(--color-text-primary); }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.payee-chips__count {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+/* ── A refused batch: nothing was created, here is every reason ─────────────── */
+.batch-failures {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger-border, var(--color-border-default));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+}
+
+.batch-failures__title {
+  @apply flex items-center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.batch-failures__sub {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.batch-failures__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.batch-failures__item {
+  @apply flex flex-wrap items-baseline;
+  gap: var(--space-2);
+  font-size: var(--font-size-12);
+}
+
+.batch-failures__payee {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.batch-failures__code {
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+}
+
+.batch-failures__reason {
+  color: var(--color-text-secondary);
+}

@@ -4,6 +4,69 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Creación masiva de quotas: N payees, una configuración, todo-o-nada (Camino A)
+
+`POST /api/quotas/bulk` + selección múltiple en el formulario. Los tres parámetros innegociables del
+WI, y cómo se cumple cada uno:
+
+**1. PARIDAD, hecha estructura y no promesa.** Se extrajo `QuotaBuilder.Build` — guarda de período
+dentro del plan, moneda del plan (dentro de `Quota.Create`) y largo de notas — y **tanto
+`CreateQuotaHandler` como `BulkCreateQuotasHandler` pasan por ahí**. No se escribió ni una regla
+nueva: se movieron las que ya existían. Si las dos rutas tuvieran su propia copia, una regla agregada
+a una no aplicaría a la otra, y un endpoint masivo una regla más laxo que el formulario que
+reemplaza es una vía para inyectar datos que el formulario habría rechazado.
+
+**2. ATOMICIDAD.** Todo el lote se valida **antes** de escribir, y las escrituras van en **un solo
+`SaveChangesAsync`**, que EF ejecuta dentro de una transacción. No existe un camino de código que
+escriba una parte. Y no es cortesía: como el dominio permite quotas duplicadas, un éxito parcial
+envenena el reintento — el admin corrige las dos filas malas, reenvía, y las dieciocho buenas quedan
+duplicadas. Todo-o-nada es lo que hace seguro "corregí y mandalo de nuevo".
+
+**3. SILENCIO ANTE EL SOLAPAMIENTO.** Ni una advertencia. El motor resuelve quotas solapadas por
+período más angosto (lo que hace funcionar quotas mensuales dentro de un plan trimestral), así que el
+lote crea la quota solapada sin decir nada, igual que la creación individual. Hay test que lo fija.
+
+**★ HONESTIDAD SOBRE LOS TESTS — el "18 de 20" es HOY INALCANZABLE, y lo reporto en vez de fingir que
+lo probé.** Toda regla que decide si una quota puede existir lee entradas que son **iguales para todo
+el lote** (plan, monto, moneda, período); el único dato por payee es el id, y ninguna regla lo lee.
+Por HTTP, entonces, un lote falla entero o entra entero. Un test de integración que dijera "no crea
+18 de 20" pasaría igual de contento contra un handler que escribe primero y valida después: sería
+teatro. **Lo verifiqué:** revertí el orden a escribir-antes-de-validar y los 7 tests de integración
+siguieron en verde. Lo que SÍ es falsable es el ORDEN, y ahí puse la prueba: un unit test con un
+**interceptor de EF que cuenta `SaveChanges`** afirma que un lote rechazado **no llama a SaveChanges
+ni una vez**, y que un lote válido lo llama **exactamente una** (un handler que guardara por payee
+pasaría todo lo demás y dejaría 18-de-20 en el primer error). **Con ese test la reversión SÍ da
+rojo.** Es la propiedad que mantiene viva la garantía el día que aparezca una regla por payee.
+
+**Bug real encontrado y arreglado en el camino:** la primera versión funcionaba con un payee y moría
+con tres — `Cannot insert the value NULL into column 'QuotaAmount'`. Causa: `Money` y `DateRange` son
+**owned types** de EF, y compartir UNA instancia entre N quotas hace que el change tracker vea una
+entidad owned con varios dueños; todo insert después del primero escribe NULL. `QuotaBuilder` hace
+ahora una copia defensiva por quota — el mismo patrón (y el mismo comentario) que ya tenía
+`CreditAllocationService`. Hay un unit test que compara **identidad de referencia**, no de valor.
+
+**Frontend:** el selector de un payee pasó a chips + buscador — el patrón que el filtro de payouts ya
+usa para elegir varios, en vez de inventar un `ws-multi-select`. Un 400 pinta la **lista de motivos
+por payee** con nombre y código (el admin eligió personas, no GUIDs), diciendo explícitamente que no
+se creó nada; los chips sobreviven para reenviar el mismo lote corregido. El aviso de "sin assignment
+activo" se recalculó para el lote con **una sola** llamada (`getAssignmentsByPlan` + intersección
+local): veinte payees no pueden ser veinte round trips. i18n EN/ES/PL.
+
+**Decisiones que reporto por si Rodolfo las quiere distintas:** (a) tope de **200 payees por lote** en
+el validador — límite de forma de request, no regla de negocio, para que una lista sin cota no
+sostenga la transacción abierta; (b) un payee repetido en la selección se ignora en la UI (elegir dos
+veces a alguien significa "incluilo", no "dos veces"); (c) **no** se agregó validación de existencia
+del payee, porque la creación individual tampoco la tiene — un id inexistente crea la quota y vuelve
+con el nombre vacío en el reporte. Agregarla habría sido una regla que sólo vive en el lote.
+
+**Deuda ajena detectada (no tocada):** `GET /api/quotas/payee/{id}` aplica un **filtro de período por
+defecto** cuando no se le manda ninguno, así que oculta quotas fuera del mes actual — la misma familia
+del bug que ya tuvo su WI en Assignments. Me obligó a verificar la persistencia contra la base en vez
+de por ese endpoint, que es más honesto igual.
+
+Suites: unit **1032 → 1038**, integración **741 → 748 (746 verdes, 2 skipped, exit 0)**, front
+**566 → 574**, `ng build` prod limpio, i18n e icons en verde.
+
 ## 2026-07-30 — Badge "Período caducado" en quotas Active cuyo rango ya pasó
 
 Señal visual, 100% presentacional. **No se tocó el dominio ni el estado**: una quota vencida sigue
