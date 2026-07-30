@@ -1,4 +1,4 @@
-import { Rule } from './rule.model';
+﻿import { Rule } from './rule.model';
 
 export type PlanStatus = 'Draft' | 'Active' | 'Archived';
 
@@ -28,6 +28,9 @@ export interface Plan {
   createdAt: string;
   createdBy: string;
   rules: Rule[];
+  /** Clawback policy. Null means this plan claws nothing back — the state every plan starts in. */
+  clawbackMaturationDays: number | null;
+  clawbackCapPercent: number | null;
 }
 
 export interface CreatePlanRequest {

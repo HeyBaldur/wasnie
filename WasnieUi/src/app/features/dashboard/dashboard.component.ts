@@ -6,9 +6,11 @@ import { AppShellComponent } from '../../shared/components/app-shell/app-shell.c
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
+import { HasPermissionPipe } from '../../shared/pipes/has-permission.pipe';
 import { DashboardStore } from './store/dashboard.store';
 import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee } from './models/dashboard.models';
 import { TransactionsApiService } from '../transactions/services/transactions.api.service';
+import { TerminatedAccountsStore } from '../ledger/state/terminated-accounts.store';
 import { ToastService } from '../../shared/services/toast.service';
 import { extractApiError } from '../../shared/utils/api-error';
 import {
@@ -40,6 +42,7 @@ import {
     RefreshOnEnterDirective,
     IconComponent,
     CurrencyFormatPipe,
+    HasPermissionPipe,
     WsCardComponent,
     WsBadgeComponent,
     WsPageLayoutComponent,
@@ -59,6 +62,21 @@ export class DashboardComponent {
   readonly store = inject(DashboardStore);
   private readonly transactionsApi = inject(TransactionsApiService);
   private readonly toast = inject(ToastService);
+
+  /**
+   * Departed payees whose account is still open. It rides on its own endpoint rather than the
+   * dashboard summary because that endpoint — and the definition of "still open" — already exists;
+   * the card counts the rows the server returned and splits them by the sign it stored.
+   *
+   * Why it belongs in "Requires action": the engine excludes terminated payees from every pay run,
+   * which is correct and also means nothing will ever surface these accounts on its own. Money owed
+   * in either direction would sit there indefinitely with no screen ever mentioning it.
+   */
+  readonly terminated = inject(TerminatedAccountsStore);
+
+  constructor() {
+    void this.terminated.load();
+  }
 
   // The deal-lost alert the admin is confirming a revert for (drives the confirmation modal), and whether
   // the revert call is in flight.
@@ -288,7 +306,21 @@ export class DashboardComponent {
 
   /** Only a Calculated commission can be reverted here; Paid is shown but has no action (clawback is separate). */
   canRevert(alert: DealLostAlertItem): boolean {
+    // transactionStatus is the LIVE status now (the server joins the transaction), so a commission paid
+    // after the alert was raised no longer offers a revert the backend would refuse anyway.
     return alert.transactionStatus === 'Calculated';
+  }
+
+  /**
+   * What the row SAYS, which has to track what the row OFFERS. An unpaid commission can be reverted; a
+   * paid one cannot, and the honest sentence then depends on whether the clawback already ran.
+   */
+  dealLostActionKey(alert: DealLostAlertItem): string {
+    if (alert.transactionStatus === 'Calculated') return 'DASHBOARD.DEAL_LOST_ACTION_CALCULATED';
+    if (alert.transactionStatus !== 'Paid') return 'DASHBOARD.DEAL_LOST_ACTION_OTHER';
+    return alert.clawbackState === 'Applied'
+      ? 'DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_APPLIED'
+      : 'DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_PENDING';
   }
 
   /** Open the confirmation modal for reverting this alert's commission. */
@@ -369,15 +401,20 @@ export class DashboardComponent {
     return { ref: alert.referenceNumber };
   }
 
-  /** Total count of action items needing attention (for band header badge). */
+  /**
+   * Total count of action items needing attention (for band header badge). Orphaned accounts count
+   * too: leaving them out of the badge would put the card in a band whose header claims there is
+   * nothing to do.
+   */
   pendingActionCount(): number {
     const b = this.store.actionBand();
-    if (!b) return 0;
+    if (!b) return this.terminated.count();
     return (
       b.draftPayRunsCount +
       b.payoutsPendingApprovalCount +
       (b.payoutsApprovedUnpaidByCurrency.length > 0 ? 1 : 0) +
-      b.pendingByPlanItems.reduce((s, x) => s + x.pendingCount, 0)
+      b.pendingByPlanItems.reduce((s, x) => s + x.pendingCount, 0) +
+      this.terminated.count()
     );
   }
 

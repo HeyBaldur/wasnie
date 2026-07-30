@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Common.Models;
@@ -81,6 +81,24 @@ public sealed class PlansController(IMediator mediator) : ControllerBase
             ? CreatedAtAction(nameof(Get), new { planId = result.Value!.Id }, result.Value)
             : BadRequest(new { message = result.Error });
     }
+
+    /// <summary>
+    /// Turns the clawback on for this plan. Sending both fields null turns it off again — a plan
+    /// with no maturation window claws nothing back, which is where every plan starts.
+    /// </summary>
+    [HttpPut("{planId:guid}/clawback-policy")]
+    public async Task<IActionResult> SetClawbackPolicy(
+        Guid planId,
+        [FromBody] SetClawbackPolicyRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new SetPlanClawbackPolicyCommand(planId, body.MaturationDays, body.CapPercent),
+            cancellationToken);
+        return result.IsSuccess ? NoContent() : UnprocessableEntity(new { message = result.Error });
+    }
+
+    public sealed record SetClawbackPolicyRequest(int? MaturationDays, decimal? CapPercent);
 
     [HttpPost("{planId:guid}/activate")]
     public async Task<IActionResult> Activate(Guid planId, CancellationToken cancellationToken)

@@ -1,4 +1,4 @@
-namespace Wasnie.Domain.Audit;
+﻿namespace Wasnie.Domain.Audit;
 
 public static class AuditActions
 {
@@ -109,6 +109,16 @@ public static class AuditActions
 
     // Authorization denials (Rule 5.1.4)
     public const string PermissionDenied = "PERMISSION_DENIED";
+
+    // Clawback ledger. Only the HUMAN write is audited here: System entries carry their own
+    // traceability (source deal / pay run) on the entry itself.
+    public const string LedgerAdjustmentCreated = "LEDGER_ADJUSTMENT_CREATED";
+    public const string PlanClawbackPolicyChanged = "PLAN_CLAWBACK_POLICY_CHANGED";
+
+    // The one automatic debt-creating event: a churned deal turning into a proportional ClawbackDebit.
+    // Audited despite being a System entry because it reduces a real person's pay without anyone
+    // approving it, and the audit row is where the two dates (CRM event vs booking) appear side by side.
+    public const string DealChurnClawbackPosted = "DEAL_CHURN_CLAWBACK_POSTED";
     public const string TierLimitExceeded = "TIER_LIMIT_EXCEEDED";
 
     // Integrations — HubSpot OAuth (Phase 1). Token values are NEVER included in audit metadata.

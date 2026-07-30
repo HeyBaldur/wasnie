@@ -65,16 +65,28 @@ public sealed class ListPayRunsHandler(
             Enum.TryParse<PayRunStatus>(f.Status, out var status))
             query = query.Where(r => r.Status == status);
 
+        // Period = the COMPENSATION period the run covers, not when the row was created.
+        //
+        // Same fracture as the payouts list had: a January run opened on 1 February fell outside a
+        // January filter, so Finance looking for "January" simply did not see the run that holds
+        // January's money. Creation time is infrastructure time; the filter asks a fiscal question.
+        //
+        // Intersection, not containment — identical to ListPayoutsHandler and to
+        // GetDashboardSummaryHandler.PayoutsInPeriodRawAsync: a run spanning a quarter must appear
+        // when someone filters for one month inside it.
+        //
+        // PayRun exposes the period as flat DateOnly columns (PayRun.cs:11-12), unlike
+        // CompensationPayout which wraps it in a Period value object.
         if (f.PeriodFrom.HasValue)
         {
-            var from = new DateTimeOffset(f.PeriodFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            query = query.Where(r => r.CreatedAt >= from);
+            var from = f.PeriodFrom.Value;
+            query = query.Where(r => r.PeriodEnd >= from);
         }
 
         if (f.PeriodTo.HasValue)
         {
-            var to = new DateTimeOffset(f.PeriodTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            query = query.Where(r => r.CreatedAt < to);
+            var to = f.PeriodTo.Value;
+            query = query.Where(r => r.PeriodStart <= to);
         }
 
         return query;

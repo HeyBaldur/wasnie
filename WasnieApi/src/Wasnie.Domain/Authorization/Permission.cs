@@ -1,4 +1,4 @@
-namespace Wasnie.Domain.Authorization;
+﻿namespace Wasnie.Domain.Authorization;
 
 public static class Permission
 {
@@ -43,6 +43,11 @@ public static class Permission
     public const string PayoutsReopen = "Payouts.Reopen";
     public const string PayoutsExport = "Payouts.Export";
     public const string PayoutsDeleteDraft = "Payouts.DeleteDraft";
+
+    // Clawback ledger. Read is deliberately broad — a rep seeing why their pay was reduced is the
+    // point of the ledger, not a leak. Adjust writes a Human entry and is finance-only.
+    public const string LedgerRead = "Ledger.Read";
+    public const string LedgerAdjust = "Ledger.Adjust";
 
     // Enrichment lookup table (product → category). Routes money by deciding a rule's category filter,
     // so managed by the same roles that edit plans.

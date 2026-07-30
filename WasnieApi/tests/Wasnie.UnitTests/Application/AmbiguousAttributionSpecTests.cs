@@ -30,6 +30,9 @@ public sealed class AmbiguousAttributionSpecTests
         return assignment;
     }
 
+    /// <summary>No plan is retired — the ordinary case these tests describe.</summary>
+    private static readonly IReadOnlySet<Guid> NoneArchived = new HashSet<Guid>();
+
     private static CompensationTransaction Transaction(Guid? selected = null) =>
         CompensationTransaction.Ingest(
             TenantId, "REF-1", PayeeId, Money.Of(50m, "EUR"), TxDate,
@@ -43,9 +46,24 @@ public sealed class AmbiguousAttributionSpecTests
         var b = Assignment(Guid.NewGuid());
         var currencies = new Dictionary<Guid, string> { [a.PlanId] = "EUR", [b.PlanId] = "EUR" };
 
-        var candidates = AmbiguousAttributionSpec.AmbiguousCandidates(Transaction(), [a, b], currencies);
+        var candidates = AmbiguousAttributionSpec.AmbiguousCandidates(Transaction(), [a, b], currencies, NoneArchived);
 
         candidates.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void An_archived_plan_is_not_one_of_the_two_that_make_it_ambiguous()
+    {
+        // A retired plan was never a real alternative, so it cannot be half of an "ambiguous"
+        // attribution. Before the guard it counted, and the dashboard reported an ambiguity whose
+        // second option the engine would never have honoured.
+        var live = Assignment(Guid.NewGuid());
+        var retired = Assignment(Guid.NewGuid());
+        var currencies = new Dictionary<Guid, string> { [live.PlanId] = "EUR", [retired.PlanId] = "EUR" };
+
+        AmbiguousAttributionSpec
+            .IsAmbiguous(Transaction(), [live, retired], currencies, new HashSet<Guid> { retired.PlanId })
+            .Should().BeFalse();
     }
 
     [Fact]
@@ -54,14 +72,14 @@ public sealed class AmbiguousAttributionSpecTests
         var a = Assignment(Guid.NewGuid());
         var currencies = new Dictionary<Guid, string> { [a.PlanId] = "EUR" };
 
-        AmbiguousAttributionSpec.IsAmbiguous(Transaction(), [a], currencies).Should().BeFalse();
+        AmbiguousAttributionSpec.IsAmbiguous(Transaction(), [a], currencies, NoneArchived).Should().BeFalse();
     }
 
     [Fact]
     public void No_eligible_plan_is_not_ambiguous()
     {
         AmbiguousAttributionSpec
-            .IsAmbiguous(Transaction(), [], new Dictionary<Guid, string>())
+            .IsAmbiguous(Transaction(), [], new Dictionary<Guid, string>(), NoneArchived)
             .Should().BeFalse();
     }
 
@@ -74,7 +92,7 @@ public sealed class AmbiguousAttributionSpecTests
         var currencies = new Dictionary<Guid, string> { [a.PlanId] = "EUR", [b.PlanId] = "EUR" };
 
         AmbiguousAttributionSpec
-            .IsAmbiguous(Transaction(selected: a.Id), [a, b], currencies)
+            .IsAmbiguous(Transaction(selected: a.Id), [a, b], currencies, NoneArchived)
             .Should().BeFalse();
     }
 
@@ -92,7 +110,7 @@ public sealed class AmbiguousAttributionSpecTests
         };
 
         AmbiguousAttributionSpec
-            .IsAmbiguous(Transaction(), [active, deactivated], currencies)
+            .IsAmbiguous(Transaction(), [active, deactivated], currencies, NoneArchived)
             .Should().BeFalse();
     }
 
@@ -104,7 +122,7 @@ public sealed class AmbiguousAttributionSpecTests
         var currencies = new Dictionary<Guid, string> { [eur.PlanId] = "EUR", [usd.PlanId] = "USD" };
 
         AmbiguousAttributionSpec
-            .IsAmbiguous(Transaction(), [eur, usd], currencies)
+            .IsAmbiguous(Transaction(), [eur, usd], currencies, NoneArchived)
             .Should().BeFalse();
     }
 
@@ -120,7 +138,7 @@ public sealed class AmbiguousAttributionSpecTests
         };
 
         AmbiguousAttributionSpec
-            .IsAmbiguous(Transaction(), [covering, otherYear], currencies)
+            .IsAmbiguous(Transaction(), [covering, otherYear], currencies, NoneArchived)
             .Should().BeFalse();
     }
 

@@ -1,4 +1,4 @@
-#pragma warning disable CS8602
+﻿#pragma warning disable CS8602
 
 using FluentAssertions;
 using MediatR;
@@ -149,7 +149,7 @@ public sealed class ProcessPendingJobTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task HandleAsync_SkipsTransactionsWithExistingNonSupersededCredits()
+    public async Task HandleAsync_CreditsATransactionThatAlreadyHasACreditFromAnotherPlan()
     {
         var tenantId = Guid.NewGuid();
         var planId = Guid.NewGuid();
@@ -166,7 +166,8 @@ public sealed class ProcessPendingJobTests : IAsyncLifetime
 
         // Transaction 1: Pending, will be processed.
         var tx1 = MakePendingTx(tenantId, actualPayeeId, "REF-SKIP-001", new DateOnly(2026, 3, 1));
-        // Transaction 2: Pending but already has a non-superseded Credit (from plan2Id).
+        // Transaction 2: Pending and already carries a live Credit from plan2Id. Under multi-plan
+        // attribution it must STILL be credited by plan1 — dedup is per (tx, plan, rule), not per tx.
         var tx2 = MakePendingTx(tenantId, actualPayeeId, "REF-SKIP-002", new DateOnly(2026, 3, 1));
 
         db.Payees.Add(payee);
@@ -195,15 +196,29 @@ public sealed class ProcessPendingJobTests : IAsyncLifetime
         var handler = CreateHandler(db);
         await handler.HandleAsync(payload, NoOpJobContext(), CancellationToken.None);
 
-        // tx1 should be processed; tx2 skipped (existing credit from another plan).
+        // Both transactions are processed. The ambiguous-attribution skip that used to leave tx2
+        // Pending was REMOVED on purpose in the multi-plan migration (2026-07-23): every eligible
+        // assignment now credits its own plan, so a credit under plan2 says nothing about plan1.
         var newCreditsForTx1 = await db.Credits
             .Where(c => c.TransactionId == tx1.Id && c.PlanId == planId)
             .ToListAsync();
         newCreditsForTx1.Should().HaveCount(1);
 
-        // tx2 should still be Pending (skipped by overlap rule).
+        // The point of this test: tx2 gets its plan1 credit despite the pre-existing plan2 one.
+        var newCreditsForTx2 = await db.Credits
+            .Where(c => c.TransactionId == tx2.Id && c.PlanId == planId)
+            .ToListAsync();
+        newCreditsForTx2.Should().HaveCount(1, "dedup is per (transaction, plan, rule), not per transaction");
+
+        // And the pre-existing credit from the other plan is untouched — not duplicated, not superseded.
+        var plan2Credits = await db.Credits
+            .Where(c => c.TransactionId == tx2.Id && c.PlanId == plan2Id)
+            .ToListAsync();
+        plan2Credits.Should().ContainSingle();
+        plan2Credits[0].SupersededAt.Should().BeNull();
+
         var tx2State = await db.CompensationTransactions.FindAsync(tx2.Id);
-        tx2State!.Status.Should().Be(CompensationTransactionStatus.Pending);
+        tx2State!.Status.Should().Be(CompensationTransactionStatus.Calculated);
     }
 
     [Fact]

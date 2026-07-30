@@ -60,14 +60,41 @@ public sealed record DriftAlertDto(
 // Lost or an open stage) after its transaction was Calculated or Paid. Separate from DriftAlertDto (which is
 // an amount/date change on a STILL-won deal). Calculated → the UI offers "Revert commission"; Paid →
 // informational only (clawback of paid money is out of scope). CommissionAmount is what a revert takes back.
+/// <param name="TransactionStatus">
+/// The commission's status RIGHT NOW, read from the transaction itself — this is what the screen
+/// decides on. It used to be the status recorded when the alert was raised, and a commission paid
+/// after detection kept the screen offering "revert (it has not been paid)" over money that had
+/// already left the company. The backend refused the revert, but the sentence was false.
+/// </param>
+/// <param name="StatusAtDetection">
+/// The status when the loss was first detected. Kept as history — it explains why the alert exists —
+/// but it never drives an action.
+/// </param>
+/// <param name="ClawbackState">
+/// For a PAID commission: whether the churn clawback already produced a debit
+/// (<see cref="ClawbackStates.Applied"/>) or is still to come (<see cref="ClawbackStates.Pending"/>).
+/// <see cref="ClawbackStates.NotApplicable"/> whenever the commission is not paid — there is nothing
+/// to claw back from an unpaid commission; that case is a revert.
+/// </param>
 public sealed record DealLostAlertDto(
     Guid TransactionId,
     string ReferenceNumber,
     string ExternalDealId,
-    string TransactionStatus,   // "Calculated" | "Paid"
+    string TransactionStatus,
+    string StatusAtDetection,
+    string ClawbackState,
     decimal CommissionAmount,
     string CommissionCurrency,
     DateTimeOffset DetectedAt);
+
+/// <summary>The vocabulary of <see cref="DealLostAlertDto.ClawbackState"/>. Shared with the client so
+/// the screen never re-derives it from an amount or a status.</summary>
+public static class ClawbackStates
+{
+    public const string NotApplicable = "NotApplicable";
+    public const string Applied = "Applied";
+    public const string Pending = "Pending";
+}
 
 // Plans that have Pending transactions eligible for ProcessPending (ByPlan scope)
 public sealed record PlanPendingCountDto(

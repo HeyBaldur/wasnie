@@ -1,0 +1,38 @@
+.terminated__intro {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.terminated__loading,
+.terminated__error {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.terminated__error { color: var(--color-danger); }
+
+.terminated__name {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.terminated__name:hover { text-decoration: underline; }
+
+.terminated__code {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.col-amount { text-align: right; }
+.col-action { text-align: right; width: 1%; white-space: nowrap; }
+
+.terminated__balance {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.terminated__balance--debt { color: var(--color-danger); }
+.terminated__balance--credit { color: var(--color-success); }

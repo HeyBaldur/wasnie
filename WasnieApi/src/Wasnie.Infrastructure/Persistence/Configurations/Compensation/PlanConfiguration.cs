@@ -24,6 +24,10 @@ public sealed class CompensationPlanConfiguration : IEntityTypeConfiguration<Pla
         builder.Property(p => p.UpdatedAt).IsRequired();
         builder.Property(p => p.UpdatedBy).IsRequired().HasMaxLength(450);
 
+        // Clawback policy — nullable, so every pre-existing plan stays opted out.
+        builder.Property(p => p.ClawbackMaturationDays).IsRequired(false);
+        builder.Property(p => p.ClawbackCapPercent).HasColumnType("decimal(5,2)").IsRequired(false);
+
         builder.OwnsOne(p => p.EffectivePeriod, dr =>
         {
             dr.Property(d => d.Start).HasColumnName("EffectiveStart").IsRequired();

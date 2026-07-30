@@ -367,7 +367,10 @@ public sealed class HubSpotCrmDealSource(
                     var props = el.TryGetProperty("properties", out var p) ? p : default;
                     // HubSpot returns the calculated boolean as the string "true"/"false".
                     var isWon = string.Equals(GetString(props, "hs_is_closed_won"), "true", StringComparison.OrdinalIgnoreCase);
-                    statuses.Add(new CrmDealStatus(id!, isWon));
+                    // closedate travels with the status because a LOST deal's close date is the churn
+                    // date the clawback prorates against. Parsed with the same ParseDate as the forward
+                    // sync, so both directions read one date format.
+                    statuses.Add(new CrmDealStatus(id!, isWon, ParseDate(GetString(props, "closedate"))));
                 }
             }
 
@@ -377,7 +380,7 @@ public sealed class HubSpotCrmDealSource(
         return statuses;
     }
 
-    // {"properties":["hs_is_closed_won"],"inputs":[{"id":"..."}, ...]}
+    // {"properties":["hs_is_closed_won","dealstage","closedate"],"inputs":[{"id":"..."}, ...]}
     private static string BuildDealsBatchReadBody(IEnumerable<string> ids)
     {
         using var stream = new MemoryStream();
@@ -387,6 +390,9 @@ public sealed class HubSpotCrmDealSource(
             writer.WriteStartArray("properties");
             writer.WriteStringValue("hs_is_closed_won");
             writer.WriteStringValue("dealstage");
+            // The churn date. Free to request (same batch call, no extra round trip) and it is the only
+            // date in the payload that describes the EVENT rather than the sync.
+            writer.WriteStringValue("closedate");
             writer.WriteEndArray();
             writer.WriteStartArray("inputs");
             foreach (var id in ids)

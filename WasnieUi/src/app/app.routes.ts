@@ -74,6 +74,15 @@ export const routes: Routes = [
       import('./features/payouts/payouts.routes').then((m) => m.payoutsRoutes),
   },
   {
+    // Finance's work queue: people who left with an account still open. Ledger.Read to see it;
+    // closing an account needs Ledger.Adjust and happens on the payee's own ledger.
+    path: 'terminated-accounts',
+    title: 'LEDGER.TERMINATED_TITLE',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Ledger.Read')],
+    loadChildren: () =>
+      import('./features/ledger/ledger.routes').then((m) => m.ledgerRoutes),
+  },
+  {
     path: 'quotas',
     title: 'NAV.QUOTAS',
     canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Quotas.Read')],

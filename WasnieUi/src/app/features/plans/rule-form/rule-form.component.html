@@ -399,6 +399,12 @@
                 <ws-input formControlName="amount" type="number" />
               </div>
             </div>
+            <!-- The floor runs AFTER the cap, so a floor above it lifts the commission back over the
+                 ceiling and the cap stops changing any outcome. Shown, never blocked: the domain
+                 accepts the combination and the screen must not invent a rule the backend lacks. -->
+            @if (floorExceedsCap()) {
+              <p class="condition-warning">{{ 'PLANS.WARN_FLOOR_ABOVE_CAP' | translate }}</p>
+            }
           }
         </div>
 

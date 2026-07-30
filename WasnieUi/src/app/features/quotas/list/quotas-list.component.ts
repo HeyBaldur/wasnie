@@ -11,7 +11,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
-import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe, QuotaPeriodExpiredPipe } from '../../../shared/pipes/quota-status.pipe';
 import { QuotaStatus } from '../models/quota.model';
 import {
   WsButtonComponent,
@@ -41,6 +41,7 @@ import {
     DateFormatPipe,
     QuotaStatusVariantPipe,
     QuotaStatusLabelPipe,
+    QuotaPeriodExpiredPipe,
     HasPermissionDirective,
     HasPermissionPipe,
     WsButtonComponent,

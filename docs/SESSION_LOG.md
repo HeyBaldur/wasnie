@@ -4,6 +4,809 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Badge "Período caducado" en quotas Active cuyo rango ya pasó
+
+Señal visual, 100% presentacional. **No se tocó el dominio ni el estado**: una quota vencida sigue
+Active hasta que alguien la cierra, y eso es deliberado (Draft → Active → Closed sólo por acción
+explícita). Lo que faltaba era decirle al lector que el período ya no aplica: una fila que dice
+"Active" a secas se lee como un objetivo todavía vigente.
+
+**Dónde vive la condición:** `shared/pipes/quota-status.pipe.ts`, el archivo que ya era **fuente única
+de verdad** de cómo se muestra el estado de una quota. Función `isQuotaPeriodExpired(status,
+periodEnd)` + `QuotaPeriodExpiredPipe`. Ponerlo ahí y no en cada componente es lo que impide que las
+pantallas vuelvan a divergir — el propio archivo documenta ese antecedente (el perfil del payee
+derivaba una fase temporal de las fechas en vez de leer el estado real). La nota de ese archivo
+("esto es el STATUS, no una fase temporal") se amplió para explicar que ahora conviven las dos cosas:
+el badge **complementa** al de estado, nunca lo reemplaza.
+
+**★ La comparación es por FECHA, no por datetime.** Los períodos llegan como `DateOnly`
+("2026-06-30"), así que se comparan como strings `YYYY-MM-DD` — orden cronológico, sin hora, sin
+zona horaria, sin conversión. Construir un `Date` desde ese string lo parsea como **medianoche UTC** y
+al leerlo en local, al oeste de Greenwich, cae en el día anterior: el último día del período
+parpadearía el badge parte del día. La comparación es **estricta**: una quota que termina HOY todavía
+está vigente. Hay un test dedicado a ese borde, que se sostiene con cualquier offset de la máquina.
+
+**Tres superficies, no dos.** Además de la lista y el detalle (que muestra el período en dos lugares:
+el chip de la cabecera y el campo Period), el **panel de quotas del perfil del payee** muestra las
+mismas fechas con el mismo badge de estado — quedaba raro que ahí faltara la señal. Las tres usan el
+mismo pipe. `ws-badge variant="warning" size="sm"`, patrón existente, visualmente distinto del badge
+de estado (Active = success/verde).
+
+i18n EN/ES/PL: `QUOTAS.PERIOD_EXPIRED` ("Period ended" / "Período caducado" / "Okres zakończony").
+
+**Tests: 558 → 566 (+8)**, cubriendo los 4 casos de estado (Active-vencida sí; Active-hoy,
+Active-futura, Draft-vencida, Closed no), fecha ausente o ilegible → no dice nada, el borde de zona
+horaria, y el orden de argumentos del pipe. Front **566/566**, `verify-i18n` verde, `ng build` prod
+limpio.
+
+## 2026-07-30 — La pantalla de cuentas huérfanas vacía ahora se lee como una respuesta, no como un error
+
+Rodolfo reportó que `/terminated-accounts` "no despliega nada" habiendo payees terminados. **La lista
+estaba bien:** hay 5 payees Terminated y **ninguno tiene cuenta abierta** — cuatro sin fila de
+`PayeeBalance` (nunca tuvieron un movimiento de ledger) y uno con balance **0.0000**, ya saldado. Las
+únicas dos filas con saldo ≠ 0 de toda la base (Rudolph **+€500**, Vendedor Prueba **−€1.000**)
+pertenecen a payees **Activos**, así que no son huérfanas. La cola es "terminados con saldo ≠ 0", no
+"todos los terminados".
+
+**El problema real era de presentación:** el estado vacío usaba `<ws-table-empty>`, una línea de
+texto pensada para el interior de una tabla, en una pantalla que en ese momento no dibuja tabla
+ninguna. Una sola frase suelta en una página en blanco se lee como "esto no cargó" — y así se leyó.
+
+**Arreglo, replicando el patrón de Planes:** `<ws-empty-state>` con ilustración, título y
+descripción, igual que `plans-list`. Ilustración nueva **`terminated-empty`** agregada al mismo
+diccionario `ILLUSTRATIONS` de `ws-empty-state.component.ts` (misma familia Tabler, viewBox 24,
+`stroke-width` 2, `currentColor`): una persona con un tilde — el vacío acá es un **buen** estado
+("todos los que se fueron quedaron saldados"), no el "todavía no hay nada" del resto de las
+pantallas, y por eso tampoco lleva botón de acción: no hay nada que crear. i18n:
+`LEDGER.TERMINATED_EMPTY_TITLE` nuevo + `TERMINATED_EMPTY` reaprovechado como descripción (sin dejar
+claves huérfanas), EN/ES/PL.
+
+Front **558/558**, `verify-i18n` y `verify-icons` en verde, `ng build` prod limpio. Aparte, aviso
+anotado: la API de dev quedó detenida desde el WI anterior, así que `localhost:4200/api/...` no
+responde hasta que se levante.
+
+## 2026-07-30 — Plan archivado: cerradas LAS DOS CAPAS (guard en la creación + filtro en el allocator)
+
+Arreglo de dinero autorizado por Rodolfo tras el diagnóstico. Defensa en profundidad: una capa impide
+CREAR la anomalía, la otra impide que COBRE si aparece por cualquier otro camino.
+
+**CAPA 1 — la asignación (`AssignPlanToPayeeHandler.cs:49-59`).** Si `plan.Status == Archived` se
+rechaza antes de tocar nada: *"Plan 'X' is archived and cannot be assigned to a payee. Assign an
+active plan, or create a new version of this one."* **Draft sigue permitido a propósito** y hay un
+test que lo fija: un plan se asigna mientras se prepara y se activa después — ése es el orden normal
+de setup, y estrecharlo también habría roto el camino feliz. Las validaciones de período/moneda no se
+tocaron.
+
+**CAPA 2 — la elegibilidad (`PlanAssignmentResolver.Candidates`).** El filtro nuevo excluye las
+asignaciones cuyo PLAN esté archivado, **antes** que el estado de la asignación, la fecha y la moneda.
+`ResolveSelected` gana además un rechazo explícito que **nombra la causa real** ("has been archived")
+en vez de dejar caer el caso al chequeo de moneda con un mensaje engañoso.
+
+**★ Decisión de diseño: el parámetro `archivedPlanIds` es OBLIGATORIO, sin valor por defecto.** Un
+default es exactamente cómo un llamador se saltea una guarda de dinero en silencio — que es cómo
+nació este hueco. Al no tenerlo, **el compilador obligó a revisar los 4 llamadores** y ahí se ve que
+un solo punto NO alcanzaba: `Candidates` lo usan el allocator (camino unitario y camino batch),
+`PayeePlanCandidates` (el selector de plan del admin **y** la validación server-side de su elección) y
+`AmbiguousAttributionSpec` (la tarjeta de atribución ambigua del dashboard). Los cuatro quedaron
+cubiertos por el mismo filtro; el batch **no** necesitó filtro aparte porque pasa por el resolver — el
+allocator arma el set desde los planes que el job ya precargó (`plansById`), sin una query extra.
+Efecto lateral correcto: un plan archivado deja de contar como "segunda opción elegible", así que ya
+no infla la alerta de ambigüedad del dashboard con una alternativa que el motor nunca habría honrado.
+
+**Tests que MUERDEN — probado, no afirmado.** Unit **1026 → 1032 (+6)**: una asignación Active de un
+plan archivado no es candidata; si es la única, cero candidatos (la transacción queda Pending y **no
+se escribe crédito**); `Resolve` nunca elige un plan archivado **aunque el tie-break lo prefiera** (el
+archivado tiene el período más corto, así que el test también prueba que la exclusión ocurre ANTES
+del tie-break); `ResolveSelected` lo rechaza nombrando "archived"; un plan activo no se ve afectado
+por la guarda; y un plan archivado ya no genera ambigüedad. Integración **739 → 741 (+2)**: POST a un
+plan archivado → **400** con "archived" y **cero filas** persistidas; plan Draft → **200**, sin cambio.
+**Prueba de mordida:** revertí las dos guardas y corrieron en rojo **4 unit + 1 de integración**;
+restauradas, todo verde.
+
+Suites: unit **1032**, integración **741 (739 verdes, 2 skipped), exit 0**, solución compilando sin
+errores. Para correr integración se detuvo otra vez el API de dev (autorizado); **quedó detenida**.
+Sin datos que limpiar: hoy no hay ninguna fila anómala.
+
+## 2026-07-30 — Diagnóstico: plan archivado con asignación activa · doble asignación al mismo plan · aviso Floor>Cap
+
+Tres investigaciones separadas. Las dos de dinero se diagnosticaron con código **y base** (sqlcmd
+contra `HEYBALDUR/WasnieDb`); ninguna se arregló. La tercera, cosmética, se arregló.
+
+### PUNTO 1 — Plan archivado con asignación Active → **CAUSA (B), YA ARREGLADA el 22-jul; pero queda vivo el hueco (A)**
+
+**No es reproducible hoy:** cero filas para `PlanStatus='Archived' AND AsgStatus='Active'` en toda la
+base. Los 7 planes archivados tienen sus asignaciones desactivadas.
+
+**Qué pasó realmente, con timestamps:** "Claude Code Test Plan" v1 se archivó el **2026-07-22
+09:46:45**. Su única asignación (`1421CA1A`) se creó **09:44:59** — *antes* del archivado — y su
+`UpdatedAt` es **2026-07-23 13:25:07**, o sea que se desactivó **al día siguiente**, no al archivar.
+Causa **(B)**: en ese momento `ArchivePlanHandler` **no desactivaba las asignaciones**. El commit que
+agregó ese barrido es **`0eae3d5` "Bugs and UI errors", 2026-07-22 16:14** — seis horas y media
+DESPUÉS del archivado. Rodolfo está viendo el residuo de esa ventana.
+
+**★ Y en esa ventana SÍ se generaron créditos contra el plan archivado — evidencia, no hipótesis:**
+3 créditos de **€8.520 cada uno (€25.560)** allocados el **22-jul 11:08:56** por
+`AllocatedBy = 'hubspot-auto-sync'`, es decir **1h22m después de archivar el plan**. Están todos
+`SupersededAt` con el motivo *"Plan archived - retroactive cleanup of mis-attributed credit"* y
+**`ConsumedAt` NULL en los tres**: alguien ya los limpió y **no se pagó un centavo**.
+
+**El hueco que SIGUE ABIERTO es (A), y es el que importa:** `AssignPlanToPayeeHandler` valida payee,
+plan y que el período coincida exacto — **pero nunca mira `plan.Status`** (`:34-46`). Se puede crear
+hoy una asignación Active contra un plan Archived (o Draft). Y el motor no tiene red debajo: la
+palabra `Archived` **no aparece ni una vez** en `CreditAllocationService`;
+`PlanAssignmentResolver.Candidates` (`:31-47`) filtra por estado de la ASIGNACIÓN + fecha + moneda, y
+el job batch carga los planes **sin filtro de estado** (`ProcessPendingTransactionsJobHandler:163-167`).
+Lo dice el propio comentario del archive handler: *"the resolver only checks assignment status, not
+plan status"*. **La desactivación al archivar es la ÚNICA protección** — y sólo cubre las que ya
+existen, no las que se creen después.
+
+**Atenuante:** el selector de plan de la UI pide `filters: { status: 'Active' }`
+(`assignment-create.component.ts:61`), así que (A) **no se alcanza haciendo clic** — sólo por API
+directa. Es un guard de presentación, no de dominio.
+
+**VEREDICTO DE DINERO: SÍ genera créditos** (probado empíricamente, €25.560 allocados post-archivado).
+**FRENADO — no se arregló.** Decisión de Rodolfo: ¿guard de estado en la creación de asignaciones?
+¿filtro por estado de plan en el resolver/allocator (red de seguridad real)? ¿ambos? Mi recomendación
+es **ambos**: el guard evita crear la anomalía, el filtro evita que la anomalía cobre.
+
+### PUNTO 2 — 3 payees con 2+ asignaciones Active al mismo plan → **NO hay doble pago**
+
+**Confirmado en la base:** 3 payees con múltiples asignaciones Active al mismo plan
+(`Plan Test Flat 5%`): dos con **3** y uno con **2**. Y **cero duplicados de crédito** en toda la
+base: `GROUP BY TransactionId, PlanId, RuleId HAVING COUNT(*)>1` sobre créditos vivos → **0 filas**;
+por payee/transacción/regla en ese plan, siempre **1**.
+
+**Por qué no se duplica:** `BuildCreditsForAllAsync` (`CreditAllocationService.cs:213-242`) arrastra
+el set `covered` de claves (transacción, plan, regla) **entre asignaciones**, no sólo desde la
+precarga del batch — y su comentario nombra este caso exacto: *"a payee can hold two active
+assignments to the SAME plan (3 payees do today)"*. La segunda asignación evalúa las mismas reglas,
+encuentra la clave ya cubierta y no escribe. El índice único
+`UX_Credits_Tenant_Transaction_Plan_Rule_Live` es la última línea, no el mecanismo.
+
+**Por qué existen:** las asignaciones **no se solapan** — son períodos distintos (ene, abr, may, jun
+2026) que quedaron Active porque el estado **no se deriva de las fechas**: una asignación vencida
+sigue Active hasta que alguien la desactive. O sea no son duplicados: son asignaciones históricas de
+períodos cerrados. Y no hay guard de unicidad (payee, plan, período) en el handler.
+
+**VEREDICTO DE DINERO: no hay doble pago.** Es higiene de datos / UX (la pantalla muestra "2
+asignaciones activas" y alarma sin motivo). Sin arreglar; si Rodolfo quiere, el WI sería "derivar el
+estado de las fechas o mostrar Vencida", que es un cambio de producto, no un bug.
+
+### PUNTO 3 — Aviso Floor > Cap: **no existía. Agregado.**
+
+Verificado: no había nada. `rule-form.component.html` pinta Cap y Floor en secciones independientes
+sin ninguna comparación entre ellas, y el `.ts` no tenía ningún computed que las cruzara.
+
+**Por qué importa:** el motor aplica **modifier → cap → floor** (`CommissionCalculator.cs:255-283`),
+así que el **floor corre ÚLTIMO** y levanta la comisión por encima del techo recién aplicado. Con cap
+200 y floor 500, **toda** comisión termina en 500 y el cap no cambia ningún resultado: no es
+"raro", es un tope muerto.
+
+**Agregado:** computed `floorExceedsCap` + aviso no bloqueante bajo la sección Floor, reutilizando la
+clase `.condition-warning` que ya existía en ese formulario. **No bloquea el guardado a propósito**:
+el dominio acepta la combinación, y una pantalla que la prohíba estaría inventando una regla que el
+backend no tiene. Sin aviso cuando cap y floor son iguales (está fijado, no contradictorio), cuando
+alguna sección está apagada, o cuando el cap todavía vale 0 (el campo arranca en 0 al encender la
+sección: avisar ahí saltaría antes de que el usuario escriba nada). i18n EN/ES/PL.
+
+**Tests: 553 → 558 (+5)**, suite verde, `verify-i18n` verde, `ng build` prod limpio.
+
+## 2026-07-30 — Filtro de payouts al navegar desde el dashboard: YA ESTABA ARREGLADO (commit de ayer). No se rehízo
+
+**Hallazgo: el arreglo que pedía el WI ya está en HEAD.** El commit **`4659367` "Update queryParams
+handling in payouts list component"** (Rudy Jaubert, **2026-07-29 17:14**) reemplazó exactamente el
+`snapshot` por la suscripción:
+
+```
+-    const qp = this.route.snapshot.queryParams as Record<string, string>;
++    this.route.queryParams
++      .pipe(takeUntilDestroyed(this.destroyRef))
++      .subscribe(params => this._applyQueryParams(params as Record<string, string>));
+```
+
+`payouts-list.component.ts:140-154` hoy, con `_applyQueryParams` (`:156-189`) extraído para que corra
+en la entrada **y** en cada cambio posterior. La cadena de recarga cierra sola: `loadFromQueryParams`
+hace `filter.set(...)` (`payouts.store.ts:243`) y el `effect` del constructor del store (`:121-125`)
+dispara `_loadList` con el filtro nuevo — no hace falta un `reload()` ad-hoc.
+
+**El link del dashboard está bien:** `dashboard.component.html:120` es
+`[routerLink]="['/payouts']" [queryParams]="{ status: 'Approved' }"` — mismo componente, solo cambian
+los query params, que es justo el caso en que Angular lo reutiliza y el snapshot quedaba viejo.
+
+**El commit también trajo tests** (3 de los 4 del WI): aplica el filtro que traía la URL al llegar,
+lo re-aplica cuando la URL cambia sin recrear el componente, y **limpia el filtro cuando la URL pierde
+los params** — este último cubre el bug hermano que el mismo commit arregló: salir por el link de
+Payouts del sidebar dejaba el filtro Approved aplicado bajo una URL que ya no lo mencionaba.
+
+**Lo único que agregué (el hueco real):** el **test 4 del WI, la limpieza de la suscripción**, que no
+estaba. Afirma que después de `fixture.destroy()` una emisión nueva no toca el store y que el
+`BehaviorSubject` no queda con observers. Front **552 → 553**, suite en verde, `ng build` prod limpio.
+Cero cambios de producción: no se toca código que ya funciona y ya está probado (CLAUDE.md §3).
+
+**Por qué Rodolfo lo vio entonces:** lo más probable es que estuviera usando un build anterior a las
+17:14 de ayer. Si lo reproduce con el build actual, hay que reabrirlo — pero sería otra causa, porque
+la que describe el WI (snapshot vs suscripción) está cerrada y con test que lo demuestra.
+
+**★ El patrón SÍ está vivo en otras 8 pantallas** (reportado, NO tocado, como pedía el WI): usan
+`route.snapshot.queryParams` en `ngOnInit` y por lo tanto ignoran un cambio de query param sin
+recrear el componente — `assignments-list:114`, `pay-runs-list:138`, `payees-list:120`,
+`credits-list:139`, `transactions-list:114`, `quotas-list:89`, `plans-list:123`, y
+`payee-detail:159,176` (`period` y `tab`). Dos importan más que el resto porque el **dashboard
+enlaza a ellas con query params**: `pay-runs?status=Draft` (tarjeta "Draft Pay Runs") y
+`transactions?statuses=Pending&attention=…` (tarjeta de transacciones con problemas) — ahí el mismo
+síntoma es reproducible hoy. Los formularios de auth/confirmación (login, reset-password,
+confirm-email, integrations) usan snapshot legítimamente: son pantallas de un solo uso a las que no
+se re-navega con otros params.
+
+## 2026-07-30 — BUG DE UI: los modales largos escondían Save/Cancel y atrapaban al usuario (arreglo en el componente base)
+
+**Diagnóstico: es el MODAL BASE, no la pantalla de payouts.** `ws-modal.component.scss` tenía las
+tres zonas casi bien — `__dialog` con `max-height: calc(100vh - 64px)` + `overflow: hidden`, header y
+footer con `flex-shrink: 0` — pero el cuerpo era `flex: 1` **sin `min-height: 0`** y con
+`overflow: visible` (`:109-129` antes del cambio). Un ítem flex tiene `min-height: auto` por defecto
+y **se niega a achicarse por debajo de su contenido**: el cuerpo empujaba al footer fuera de la caja
+del diálogo, que lo **recortaba** por su `overflow: hidden`. Save/Cancel no quedaban "abajo del
+scroll": quedaban **inexistentes en pantalla**, y no había scroll con el que llegar. Callejón sin
+salida, exactamente como lo describió Rodolfo. Afectaba a **todos** los modales de la app —
+confirmación, void, assign/reassign, tier-limit, category mappings, HubSpot owner-mapping — y el
+bulk-approve de payouts fue simplemente el primero con contenido suficiente para destaparlo.
+
+**★ Había un modificador `--scrollable` que era CÓDIGO MUERTO.** El SCSS definía
+`.ws-modal__body--scrollable { overflow-y: auto; max-height: calc(90vh - 140px) }`, pero **ningún
+input ni binding lo aplicaba nunca** (`ws-modal.component.ts` no tiene `scrollable`, y el template
+tampoco lo liga). Un "opt-in" al que era imposible optar. Se borró.
+
+**Arreglo, en el componente base y en una sola definición:** `min-height: 0` (la línea que sostiene
+todo), `flex: 1 1 auto`, `overflow-y: auto` + `overflow-x: hidden` y `overscroll-behavior: contain`
+en el cuerpo; y el techo del diálogo pasa a `calc(100dvh - 64px)` con `100vh` de fallback — en mobile
+`100vh` NO descuenta la barra del navegador, así que un diálogo de 100vh cuelga por debajo de lo
+visible y se lleva el footer con él. Cero parches por pantalla.
+
+**★ El `overflow: visible` estaba protegiendo un problema que ya no existe.** El comentario decía que
+era para que los dropdowns/calendarios no quedaran recortados — pero `WsSelect` y `WsDatePicker`
+**siempre** usan `position: fixed` hoy (`ws-select.component.ts:241-243`,
+`ws-date-picker.component.ts:284`), midiendo contra el rect del trigger, y además escuchan `scroll`
+en fase de **captura**, así que se reposicionan cuando el cuerpo del modal scrollea debajo de ellos.
+Verificado antes de tocar nada: si no fuera así, el arreglo habría cambiado un bug por otro.
+
+**Tests: 546 → 552 (+6), todos verdes**, en un `ws-modal.component.spec.ts` nuevo (no existía). Son
+aserciones de **geometría real**, no de declaraciones CSS: afirmar `overflow-y: auto` seguiría pasando
+el día que alguien borre `min-height: 0`, porque lo que rompe es la AUSENCIA de una línea. Cubren:
+diálogo dentro del viewport con contenido de 5000px, footer y botón Save dentro del rect del diálogo,
+el scroll viviendo en el cuerpo (`scrollHeight > clientHeight` y `scrollTop` efectivo), header
+pinneado, **modal corto sin scrollbar ni footer despegado** (regresión), y un **viewport chico**
+(techo forzado a 320px) que es el caso que atrapó al usuario. **Prueba de que los tests sirven:
+revertí temporalmente el CSS y 3 de los 6 fallaron; restaurado, 552 en verde.**
+
+**DESIGN_SYSTEM.md actualizado en el mismo cambio**, porque documentaba el contrato viejo y ahora
+habría prohibido el arreglo: la sección "Scrollbar inside body" pasó a **"Height and scroll (locked)"**
+con la tabla de las tres zonas y `min-height: 0` marcado como load-bearing; se corrigió *"A modal that
+needs internal scroll is using the wrong size. Bump up"* (el size es **ancho**: no hace nada contra el
+desborde vertical, y ese consejo es parte de por qué el bug existía); y en "Forbidden" se sacó
+*"`position: fixed` dropdowns inside modals"* — hoy es el comportamiento requerido — reemplazándolo
+por "no quitar `min-height: 0`" y "no parchear una pantalla en vez de arreglar `WsModal`". Todo lo
+superseded quedó marcado como tal, no borrado.
+
+`ng build --configuration production` limpio, `verify-i18n` en verde (no hubo strings nuevos: el
+arreglo es CSS). **NO commiteado:** el WI autorizaba commitear, pero la regla permanente (CLAUDE.md §0
++ la instrucción de Rodolfo de que solo él commitea, "aunque un WI diga lo contrario") gana, y es la
+tercera vez en esta sesión que un WI lo pide; se reportó el conflicto en vez de resolverlo solo. La
+verificación visual (bulk-approve con lista larga en pantalla chica) la hace Rodolfo.
+
+## 2026-07-30 — `Wasnie_Configuration_Guide.md`: pasada 1 de la documentación de casos de uso (clawback, terminación, ledger, permisos)
+
+Solo documentación; no se tocó una línea de código. El WI está diseñado para hacerse en varias
+pasadas, así que lo primero que se agregó es el mecanismo que lo hace reanudable: un **checklist de
+cobertura** al principio del doc, con `[x]` / `[~]` / `[ ]` por área y, en las `[~]`, **qué falta
+exactamente** — un área marcada como hecha en silencio es peor que una marcada pendiente.
+
+**Se documentaron 4 áreas completas, elegidas por ser las que el doc afirmaba mal.** Secciones nuevas
+**15 Clawback**, **16 Terminación y cuentas huérfanas**, **17 Ledger y statement**, **18 Permisos y
+roles**, todas en el formato del WI (qué es → configuración → casos de uso con números reales →
+validaciones y errores → permisos) y verificadas leyendo el código, con `file:line`.
+
+**★ Las contradicciones corregidas — el doc decía que el clawback NO existía.** Estaba "verified
+2026-07-27", o sea *antes* de que el subsistema se construyera (07-28/29):
+1. §9 afirmaba que el *accounting correction workflow* **"does not exist yet"** y que corregir una
+   comisión pagada era *"an unbuilt future subsystem"*. Ahora explica que una comisión **Paid** se
+   corrige por el ledger de clawback, y que *revertir* (Calculated) y *clawback* (Paid) son
+   operaciones distintas a propósito. Se dejó una nota de "superseded" en vez de borrar la frase.
+2. §9, deal-lost: *"no automatic action (clawback is out of scope)"* → ahora describe el trigger de
+   churn y que la alerta muestra el estado vivo (aplicado / pendiente) leído del ledger.
+3. §13 (conceptos NO implementados) listaba **"Clawback of a paid commission — Not implemented"**.
+   La fila quedó tachada y marcada `✅ NOW IMPLEMENTED` con enlace a §15, en vez de desaparecer: quien
+   circuló el PDF viejo tiene que poder ver que ese punto cambió.
+4. §17.2 documenta el split `CurrentBalance` vs `Carryover at that run`, corrigiendo la semántica
+   sobrecargada anterior (la que hacía leer −€500 mientras el ledger sumaba −€833,33).
+5. §14 ganó 7 comportamientos nuevos (15–21) para que el resumen no quede atrasado respecto de las
+   secciones nuevas.
+
+**Numeración: se APENDIZA (15–18), no se inserta.** Renumerar habría roto los anchors internos y las
+referencias de página de cualquier PDF ya circulado; hay una nota que le dice al lector de corrido
+que lea 15–17 después de 11.
+
+**Ejemplos con números reales, como pedía el WI:** maduración 180 días y comisión €1.000 perdida a
+los 89 días → €505,5556; el cap del 50% sobre un payout de €2.000; deuda €900 con cap 50% → se retiene
+€500 y **carryover €400**; +€500 cerrados con €500 (0.0000), con €600 (400) y con €300 (400 también,
+por igualdad estricta); −€250 dados de baja con €150 → quedan −€100.
+
+**Quedó pendiente (primera `[ ]` de la próxima pasada):** Dashboard, Integración CRM (HubSpot),
+Imports, Settings, Subscription; y tres `[~]` con nota: estados del Payee, el contrato de listado de
+Assignments, y `ProcessImmediately` + el sort con whitelist en Transactions.
+
+## 2026-07-30 — Cerrar el flujo de huérfanas de cara al usuario: monto del cierre read-only + alerta en el dashboard
+
+Solo presentación. No se tocó dominio, cálculo ni la invariante; no se creó ningún endpoint.
+
+**FRENTE 1 — el monto del cierre deja de ser adivinanza, y los tres tipos NO se comportan igual.**
+La regla la fija el dominio y la verifiqué antes de decidir la UX (`PayeeBalance.Apply`):
+
+| Tipo de cierre | Regla del dominio | Qué hace el campo |
+|---|---|---|
+| `FinalSettlementDebit` | balance > 0 **e igualdad estricta** — el cierre es total | pre-poblado con `currentBalance` y **bloqueado** |
+| `ExternalSettlementCredit` | **ninguna guarda** — parcial legítimo | pre-poblado con la deuda, **editable** |
+| `WriteOffCredit` | **ninguna guarda** — parcial legítimo | pre-poblado con la deuda, **editable** |
+
+El bloqueo es `amount.disable()` sobre el control reactivo, que `WsInput` ya soporta vía
+`setDisabledState` → `[disabled]` en el nativo: **no hubo que agregar nada al design system**.
+`getRawValue()` incluye los controles deshabilitados, así que el monto igual viaja en el POST — hay
+un test que lo prueba, porque un campo bloqueado que además no envía nada es un bug silencioso. El
+monto sale de `currentBalance` (la verdad viva), NUNCA de la foto del settlement. Dos hints nuevos
+explican cuál de los dos regímenes está activo; el pre-poblado editable dice explícitamente que se
+puede saldar una parte, para que la cifra sugerida no se lea como obligatoria. **★ Sigue siendo
+conveniencia: la verdad la impone el dominio, que es quien devuelve el 400.**
+
+**FRENTE 2 — la cola de huérfanas aparece sola en "Requires action".** Tarjeta nueva en la banda de
+acción del dashboard, alimentada por el endpoint que ya existía
+(`GET /ledger/terminated-with-balance`). **Presentación elegida: un conteo grande + desglose por
+signo** ("To pay" = pasivo que tesorería debe pagar / "To recover" = deuda a recuperar o dar de
+baja), porque un solo número escondería **qué clase de trabajo** está esperando — pagarle a alguien
+y cobrarle a alguien no son la misma tarea. Enlaza a `/terminated-accounts`, y el conteo entra en el
+badge de la banda: dejarlo afuera pondría la tarjeta bajo un encabezado que afirma que no hay nada
+que hacer. Gateada con `Ledger.Read` (oculta, no deshabilitada). Estado nuevo compartido
+(`TerminatedAccountsStore`) que la pantalla de huérfanas ahora también consume — **una sola
+definición y un solo fetch**, en vez de dos componentes contando lo mismo por su cuenta.
+
+**Regla de dinero respetada:** el store hace `length` y `filter` sobre las filas que el server eligió
+y por el signo que el server guardó. No suma, no escala, no compara contra un umbral.
+
+**Tests: front 533 → 546 (+13), todos verdes.** Panel (+8): el bloqueo con el balance exacto, el
+input realmente deshabilitado en el DOM, el POST que igual lleva el monto, write-off y external
+pre-poblados **pero editables**, una corrección común que queda vacía, el desbloqueo al cambiar de
+tipo, y que cerrar el formulario no lo deja bloqueado con una cifra vieja. Dashboard (+5): sin
+huérfanas no hay conteo ni falso positivo, el conteo es el de las filas del endpoint, los dos signos
+se cuentan por separado, y el badge de la banda las incluye sin inflarse cuando no hay ninguna.
+**Hallazgo del propio test:** el formulario de ajuste **nunca se había renderizado en un test** —
+`Ledger.Adjust` es falso por defecto en TestBed, así que cualquier aserción sobre el DOM del
+formulario habría pasado por no encontrar nada. Se agregó un stub de `CurrentUserService` (y
+`provideRouter`, que el `WsButton` del formulario necesita) para que el DOM que se afirma exista de
+verdad. `ng build --configuration production` limpio (el warning de presupuesto del SCSS del
+dashboard es preexistente: ese archivo no se tocó), `verify-i18n` y `verify-icons` en verde, EN/ES/PL
+con paridad exacta.
+
+## 2026-07-30 — Invariante de dominio: un `FinalSettlementDebit` cierra la cuenta EN SU TOTALIDAD (igualdad estricta)
+
+Una cláusula de guarda y sus tests. Cierra el hueco del `FinalSettlementDebit` recién construido: es
+`Origin=Human`, o sea que el monto lo **tipea** un operador de finanzas, y sin invariante un error
+tipográfico (€600 contra un saldo de +€500) hacía que el motor procesara el débito a ciegas y el
+balance pasara a **−€100**. Un asiento diseñado para EXTINGUIR un saldo a favor terminaba ABRIENDO
+una deuda ficticia contra alguien que ya se fue — y esa deuda falsa reaparecía en la cola de cuentas
+huérfanas ofreciendo un `WriteOffCredit` para "arreglar" el desastre.
+
+**La guarda vive en el DOMINIO, no en la UI:** `PayeeBalance.Apply` (`PayeeBalance.cs:84-108`), el
+único camino por el que un asiento mueve un balance. Se ejecuta **antes** de `SaveChanges` — el
+handler (`CreateManualLedgerAdjustmentHandler.cs:81`) llama a `Apply` antes de `db.SaveChangesAsync`,
+así que la `DomainException` se traduce a `Result.Failure` → **400 y cero escritura**. La UI ya
+prevenía la mitad del caso (`payee-ledger-panel.component.ts:78-91` solo ofrece el tipo cuando
+`balance > 0`), pero eso es UX: por API se saltea, y la verdad la impone el dominio.
+
+**La invariante es más fuerte que "amount > balance".** Dos cosas, ambas de dominio: (1) el balance
+debe ser **positivo** — contra 0 no hay nada que liquidar y contra un negativo el asiento hundiría la
+deuda bajo una etiqueta que afirma que la cuenta se cerró; (2) el monto debe **igualar** el balance.
+Regla final: rechazar `Balance <= 0 || |amount| != Balance`. El cierre lleva a CERO exacto.
+
+**★ DECISIÓN DE RODOLFO — IGUALDAD ESTRICTA: el cierre parcial se RECHAZA.** Propuse permitirlo
+(tesorería puede pagar en partes) y el asesor lo rechazó, con razón: el `FinalSettlementDebit` existe
+para **extinguir** la cuenta y sacarla de la cola de huérfanas, y un parcial deja un remanente
+positivo → la cuenta **sigue huérfana** → el asiento no hizo lo único que su nombre promete. Wasnie
+no orquesta pagos en cuotas (eso es Cuentas por Pagar de un ERP, no un motor de comisiones). Un
+cierre es TOTAL o no es un cierre. La condición pasó de límite superior (`>`) a **igualdad estricta**
+(`!=`), con **dos mensajes distintos** para que la causa sea legible: balance ≤ 0 →
+`FinalSettlementRequiresPositiveBalance`; monto ≠ balance → `FinalSettlementMustEqualBalance`.
+Efecto lateral bueno: ahora **cualquier** monto que no sea el balance es un error, se pase o se
+quede corto — el typo de €300 ya no pasa silenciosamente por "parcial legítimo".
+
+**Tests — 6 unit + 1 de integración.** Unit (`PayeeLedgerTests.cs`): €500 contra +€500 → 0.0000 (el
+caso feliz); €600 contra +€500 → rechazado y el balance queda intacto en +€500 sin deuda ficticia;
+**€300 contra +€500 → RECHAZADO** (el test que antes afirmaba el cierre parcial ahora afirma la
+excepción); contra −€100 y contra 0 → rechazados por falta de saldo a favor; y **regresión**:
+`WriteOffCredit` y `ExternalSettlementCredit` pueden pasar de deuda a positivo, y
+`ClawbackDebit`/`DataCorrectionDebit` pueden cruzar a negativo — la guarda toca **solo** a
+`FinalSettlementDebit`. Integración (`TerminatedPayeeSettlementTests.cs`): el mismo typo por HTTP →
+**400**, balance sin tocar y **cero asientos** `FinalSettlementDebit` persistidos.
+
+**Deuda de UI anotada (no tocada, es el "cap variable" fuera de alcance):** el panel del ledger ya
+solo ofrece el tipo con `balance > 0`, pero el campo de monto es libre — con igualdad estricta,
+cualquier cifra que no sea el balance exacto ahora da 400. Prefijar el monto (o mostrarlo fijo) es
+mejor UX y es la prueba funcional que Rodolfo se reservó.
+
+Unit **1020 → 1026**, integración **738 → 739 (737 verdes, 2 skipped), exit 0**, solución completa
+compilando. Para correr integración hubo que detener el API de dev que tenía los DLL bloqueados
+(autorizado por Rodolfo) y levantar Docker; **la API quedó detenida**. Sin commitear: el WI pedía
+commit, pero la regla permanente (CLAUDE.md §0) manda que solo Rodolfo commitee.
+
+## 2026-07-29 — PRESENTACIÓN del clawback: DTO desambiguado, balance vivo primario, cola de huérfanas con pantalla, y DataCorrectionCredit
+
+Deuda de presentación/semántica. Ni el cálculo ni el núcleo se tocan.
+
+**FRENTE 1 — el contrato sobrecargado, desambiguado.** `PayeeStatementDto` tenía `NewCarryover` significando **dos cosas**: el balance vivo cuando no había settlement, y el arrastre del run cuando lo había — ningún cliente podía saber cuál le tocó, y de ahí que la pantalla mostrara −€500 (arrastre del run) mientras el ledger sumaba −€833,33 (vivo). Ahora: **`CurrentBalance`** siempre poblado desde `PayeeBalance` (la verdad viva) y **todo lo del run es nullable** — `NewCarryover`, `PreviousDebt`, `Amortization` y también los tres de cash-flow, que antes viajaban en 0 y afirmaban "esta persona no ganó ni cobró nada" cuando la verdad era "no cerró ningún pay run". `SettledAt` ya existía y ahora la UI lo usa para fechar la foto.
+
+**FRENTE 2 — la pantalla dice de qué es cada número.** El balance VIVO es el número principal ("Current balance −€833.33" con su hint); la foto del run queda subordinada bajo **"At the pay run of Jul 29, 2026"**, con el término renombrado a **"Carryover at that run"**. Y la **señal de asincronía**, obligatoria: cuando el vivo y el arrastre difieren, aparece una línea de advertencia — *"There have been movements after this pay run (−€333.33), which is why the current balance is −€833.33."* Es exactamente el gap que desconcertó a Rodolfo, ahora explicado en la pantalla. Sin settlement, el bloque de la foto no se dibuja y se lee "No pay run has settled against this balance yet"; los importes ausentes se pintan con guión, nunca con un 0 inventado.
+
+**FRENTE 3 — la cola de huérfanas tiene pantalla.** `/terminated-accounts` (nav bajo Financials, `Ledger.Read`) consume el endpoint ya existente: terminados con saldo ≠ 0, deuda más profunda primero, y por fila un **"Close account"** (solo con `Ledger.Adjust`) que hace deep-link al ledger del payee. **Dos defectos encontrados y corregidos en la verificación**, no por lectura: (a) la ruta hija repetía el segmento (`/terminated-accounts/terminated-accounts`), así que la pantalla renderizaba **en blanco** — el `path` del hijo pasó a `''`; (b) faltaba la clave `COMMON.REFRESH` (el botón mostraba el literal) y el icono `user-x` no existe en el set. También: `payee-detail` **ignoraba `?tab=`** (siempre abría Overview), así que el deep-link caía en la pestaña equivocada; ahora respeta el query param como ya hacía `plan-detail`.
+
+**FRENTE 4 — `DataCorrectionCredit`, y por qué no alcanzaba con "perdón".** Tipo nuevo (crédito, human-only, sin migración: el enum se persiste como string). Neutralizar un artefacto técnico con `ClawbackForgivenessCredit` le diría al CFO que la empresa **perdonó** €1.333 a un empleado, cuando en realidad nunca hubo deuda: un evento de negocio usado para tapar un error de datos. Los errores técnicos se neutralizan con contra-asientos técnicos, y ambos totalizan por separado sin leer una sola justificación.
+
+**★ La limpieza de Rudolph NO da −€500, da +€500 — y el +500 es lo correcto.** Los dos contra-asientos (+1.000 por el deal con DaysActive=0, +333,3333 por el deal con fecha Jan-2) se inyectaron append-only, sin borrar nada. El resultado es **+500,0000**, no el −500 que el WI anticipaba, y la diferencia no es un error: **el pay run ya había retenido €1.000 de comisión real contra esa deuda, y la mayor parte de esa deuda era basura**. Si los deals malos nunca hubieran existido, la deuda habría sido solo −500, el run habría retenido 500 y pagado 500. Como retuvo 1.000, se le retuvieron **500 de más**, y un balance de +500 (Wasnie le debe) es precisamente esa verdad. Llegar a −500 exigiría negar una retención que ocurrió de verdad. **Decisión de Rodolfo:** ese +500 se le paga solo en el próximo pay run (el motor lo trata como saldo a favor), o se ajusta a mano si preferís otra cosa.
+
+**Error propio, corregido con el mismo mecanismo que este WI defiende:** usé el endpoint de ajuste como "sonda" para ver el formato de la respuesta y escribí un asiento real de €100. Lo neutralicé con un `DataCorrectionDebit` de 100 y su justificación lo dice. No se borró: quedan las dos filas, que es como debe verse un error en un ledger append-only.
+
+**Tests.** Unit **1013 → 1016** (+3 de `DataCorrectionCredit`: es crédito humano, se cuenta aparte de una condonación, y sin actor no existe). Integración **733 → 735** (+2 del contrato: sin run → `currentBalance` poblado y el resto null; con run → conviven la foto (−500) y el vivo (−833,3333) y se prueba que difieren). Front **517 → 522** (+5: el delta post-run, el caso sin drift, el caso sin run, el guión en vez de 0, y que la pantalla encabeza con el vivo). **Tres tests preexistentes actualizados** porque afirmaban la semántica sobrecargada (uno del statement sin run, dos end-to-end del churn que leían `newCarryover` como balance vivo) — documentado en el propio test. Suites: unit **1016**, integración **735 (733 verdes, 2 skipped), exit 0**, front **522/522**, `ng build` prod limpio, i18n EN/ES/PL con paridad exacta.
+
+**Verificación empírica.** Pantalla de Rudolph: balance vivo −€833.33 arriba, foto fechada del run debajo con arrastre −€500, y la advertencia del delta. Cola de huérfanas: fila real (−€250), botón que cae en la pestaña correcta, y la lista vuelve vacía al cerrar la cuenta. La API que levanté quedó detenida.
+
+## 2026-07-29 — POLÍTICA DE TERMINACIÓN: la cuenta de quien se va se CONGELA, se VE y la cierra una persona
+
+Cierra el ciclo de vida del clawback. Nada de esto toca el cálculo ni el núcleo: es una exclusión, dos tipos de cierre y una cola de trabajo.
+
+**PASO 1 — el motor NO excluía a los terminados. Hubo que agregarlo.** Estado real encontrado: `CalculatePayoutsForPeriodHandler` selecciona por `PlanAssignments` con `Status == Active` (`:38-42`) **sin mirar al Payee**, y `Payee.MarkAsTerminated` (`Payee.cs:143`) solo cambia el estado laboral — **no desactiva assignments**. O sea un payee terminado con assignment vigente seguía entrando a todos los pay runs. La exclusión se agregó en `CalculatePayoutsForPeriodHandler.cs:61-96`: se cargan los payees terminados de las assignments candidatas y sus assignments se descartan antes del bucle.
+
+**Por qué ahí y no en el ledger.** Un ledger registra eventos financieros, no estados laborales. Un flag mutable `IsFrozen` habría roto el append-only sobre el que se apoya todo el subsistema. El interruptor vive en el agregado `Payee` y la exclusión en el servicio del pay run; **el ledger no se toca**: la deuda queda exactamente donde estaba, visible en `PayeeBalance` y en la cola de finanzas.
+
+**★ El borde del neteo, decidido y documentado en el código:** terminar a alguien **no cancela un payout ya calculado** por trabajo que hizo. El filtro solo impide generar payouts NUEVOS. Un payout residual existente se paga y **sigue neteando contra su deuda en la liquidación** — que es la última oportunidad real de recuperarla. Verificado empíricamente: el payout de septiembre (creado estando activo) sobrevivió intacto a la terminación.
+
+**PASO 2 — dos tipos, no uno.** `ExternalSettlementCredit` (recuperado por fuera, típicamente descontado del finiquito) y `WriteOffCredit` (la empresa asumió la pérdida) en `LedgerEnums.cs:44-66`. Separados a propósito: "cuánto recuperamos vía RRHH" y "cuánto perdimos por incobrable" son hechos distintos del negocio, y un único "crédito de cierre" obligaría al CFO a minar texto libre para distinguirlos. Ambos **créditos** (`IsDebit => false`, el signo se sigue derivando del tipo) y ambos **human-only** (`IsManuallyCreatable => true`), así que solo nacen por la fábrica sellada `CreateManualAdjustment`, con actor y justificación como invariantes. **Sin migración:** el tipo se persiste como string (`HasConversion<string>`, maxLength 40) y no hay check-constraint — verificado antes de asumirlo.
+
+**PASO 3 — la cola de finanzas.** `ListTerminatedPayeesWithBalanceHandler` + `GET /api/payees/ledger/terminated-with-balance` (permiso `Ledger.Read`): los payees terminados con balance ≠ 0, ordenados por deuda más profunda primero. Es la contraparte obligatoria del congelamiento: sin ella, apagar el motor volvería la deuda invisible, que es exactamente como la deuda se evapora. Un balance POSITIVO también aparece — plata que Wasnie le debe a alguien que se fue está igual de sin cerrar.
+
+**PASO 4 — el cierre.** Reutiliza el endpoint de ajuste manual que ya existía; al sumar los dos tipos a `IsManuallyCreatable` quedaron aceptados sin tocar el handler. El front los expone en el selector del ledger ("Settled externally" / "Written off", EN/ES/PL, paridad verificada).
+
+**★ El límite de dominio, explícito en el código:** Wasnie **congela y registra**; no cobra. Descontar del finiquito, mandar a cobranza o perseguir legalmente pasa en RRHH/legal/finanzas con datos que Wasnie no tiene. La app solo hace imposible pasar por alto la cuenta abierta y guarda la decisión que finanzas toma.
+
+**Tests.** Unit **1002 → 1013**: dominio (los dos tipos son crédito, exigen actor y justificación, el cierre lleva el balance a 0 **sin borrar** el débito original) y motor (terminado excluido; excluirlo **no escribe nada** en su ledger; activo con deuda sigue entrando; terminar a uno no altera al resto del run). Integración **725 → 733** (+8 HTTP): la cola lista solo terminados con saldo, no al saldado ni al activo con deuda, 401 sin token, el cierre por API con los dos tipos deja balance 0 y saca al payee de la cola conservando los dos asientos, los dos tipos se totalizan por separado, y un Rep no puede cerrar una cuenta (403). Front **517/517** sin cambios de conteo, `ng build` prod limpio.
+
+**Verificación empírica (ciclo completo, app viva).** Payee `TERM-CC-01` creado por API, asignado al plan de clawback, con transacciones de septiembre y octubre:
+1. **Control (activo):** pay run de septiembre → **16 payouts**, uno de ellos suyo por €500.
+2. Deuda de €400 (ajuste manual) → balance −400. Terminado el 2026-09-30.
+3. **Congelado:** pay run de octubre → **15 payouts**, ninguno suyo; sigue teniendo **1 solo payout** (el de septiembre, de cuando estaba activo) y su ledger quedó en **1 asiento, −400**: el congelamiento no escribió nada.
+4. **Visible:** `GET terminated-with-balance` lo devuelve con `balance: -400`, moneda EUR y `terminationDate: 2026-09-30`.
+5. **Cerrado desde la pantalla:** tipo "Written off" por €400 con justificación → balance **+€0.00**, el ledger muestra los DOS asientos (−400 Data correction, +400 Written off) con el actor real, y la cola vuelve **vacía**.
+
+**Datos de laboratorio que quedaron en la DB de desarrollo** (no los borré: borrar filas de un ledger append-only contradice el principio del subsistema, aunque sean de prueba): el payee `TERM-CC-01` con sus 2 asientos saldados, 2 transacciones, 1 payout de septiembre, y **dos pay runs nuevos** (2026-09 y 2026-10) que calcularon payouts **Calculated** para el resto de los payees — ninguno aprobado ni pagado, así que no hubo movimiento de dinero. Decime si querés que los limpie.
+
+**No se ejecutó git.**
+
+## 2026-07-29 — UI del clawback: la pantalla pasa a leer el estado VIVO (+ los dos fixes de la política de plan)
+
+Dos WIs del mismo día, ambos de LECTURA/PRESENTACIÓN: ninguno toca el cálculo, el dinero ni las guardas del revert.
+
+### A — Los dos bugs de la política de clawback del plan (arreglados)
+
+**Bug 1 — la UI mentía: "saved" y los campos vacíos.** El PUT guardaba bien (204, DB en 180/50) y el GET devolvía null. Causa: `CompensationMapper.ToPlanDto` construía el DTO **posicionalmente y cortaba en `Rules`**, y `PlanDto` declaraba `ClawbackMaturationDays`/`ClawbackCapPercent` como **opcionales con default null** — compilaba limpio y estampaba null para todos los planes del sistema. Cura estructural: **se eliminó el default** (siguen siendo `int?`/`decimal?`; lo que se fue es el valor por defecto del parámetro, así que el mismo olvido ahora es error de compilación) + el mapper pasa los dos valores (`CompensationMapper.cs:23-25`). **Radio real: UN solo constructor** — el compilador no encontró más. 4 tests HTTP nuevos que afirman el JSON **del wire** (un deserializador con los mismos defaults reproduciría el bug y pasaría igual); **prueba de mutación**: revirtiendo el mapper a `null, null` los 2 positivos fallan y los 2 controles siguen verdes.
+
+**Bug 2 — la clonación apagaba el clawback en silencio.** `Plan.CloneAsNewVersion` no copiaba la política: una renovación producía una v2 idéntica a la vista, se activaba como trámite, y el plan dejaba de recuperar un solo céntimo sin que nada lo dijera. Arreglado (`Plan.cs:225-231`) + 3 tests de dominio: la v2 hereda 180/50 exactos; un plan sin política **no** inventa una; y apagarla en la v2 sigue siendo un acto deliberado que **no toca la v1** ya en vigor.
+
+**Verificación empírica:** la pestaña Clawback del plan real (Test SKU Laptops v2) muestra 180/50 y "Active for this plan"; guardar 120/40 ya no vacía los campos; tras recargar siguen ahí. Se restauraron los 180/50 originales.
+
+### B — La UI del clawback deja de leer fotos (este WI)
+
+**El estado VIVO, no el snapshot.** `GetDashboardSummaryHandler.BuildDealLostAlertsAsync` hacía `select` sobre `DealLostAlert.TransactionStatus` — una foto estampada en la detección. Una comisión pagada DESPUÉS dejaba la pantalla ofreciendo "revert (it has not been paid)" sobre dinero ya salido (el backend lo rechazaba; la frase era falsa igual). Ahora la query **hace JOIN a la transacción** y calcula el estado del clawback desde el **ledger**. SQL real capturado de los DMV de SQL Server:
+
+```
+SELECT TOP(@__p_0) [d].[TransactionId], ... [d].[TransactionStatus] AS [StatusAtDetection],
+       [t].[Status] AS [LiveStatus], ...
+       CASE WHEN EXISTS (SELECT 1 FROM [PayeeLedgerEntries] AS [p]
+                         WHERE [p].[TenantId] = @__ef_filter__CurrentTenantId_0
+                           AND [p].[SourceTransactionId] = [d].[TransactionId]
+                           AND [p].[SourceType] = N'DealChurn') THEN 1 ELSE 0 END AS [ClawbackApplied]
+FROM [DealLostAlerts] AS [d]
+INNER JOIN (SELECT [c].[Id], [c].[Status] FROM [CompensationTransactions] AS [c]
+            WHERE [c].[TenantId] = @__ef_filter__CurrentTenantId_0) AS [t] ON [d].[TransactionId] = [t].[Id]
+WHERE [d].[TenantId] = @__ef_filter__CurrentTenantId_0 AND [d].[ResolvedAt] IS NULL
+```
+
+El filtro de tenant aparece en **las tres** tablas. El DTO gana `StatusAtDetection` (la foto, como historia) y `ClawbackState` (`NotApplicable` | `Applied` | `Pending`), y `TransactionStatus` pasa a significar el estado vivo — con lo cual `canRevert` del front quedó correcto **por construcción**.
+
+**El mensaje muta con el estado, no solo el botón.** Calculated → "you can revert". Paid + débito ya asentado → "the clawback has been applied to this payee's balance". Paid sin débito todavía → "the clawback is pending". Cualquier otro estado → no afirma nada y no ofrece nada (caso defensivo: una comisión cancelada con su alerta abierta; **no se inventó comportamiento**).
+
+**Textos falsos erradicados (EN/ES/PL).** `DEAL_LOST_ACTION_PAID` ("clawback is handled outside the app for now") **borrado** — hoy el clawback vive dentro de la app. Aparecieron dos hermanos con la misma mentira y se corrigieron en la misma pasada: `DRIFT_ACTION_PAID` y `REASSIGN_PAID_TOOLTIP` ("use the accounting correction workflow"), ambos ahora apuntan al ajuste de balance en el ledger, que **sí existe**. El phantom copy del dominio (`CompensationTransaction.cs:195/:221/:242`) ya estaba corregido en el WI de la UI del ledger. Paridad de claves EN/ES/PL verificada por script: 1772 = 1772 = 1772, diff vacío.
+
+**Campos tipados en vez de prosa.** `PayeeLedgerEntryDto` expone `EventDate` y `SourcePlanId` como propiedades tipadas (sin default, misma lección que `PlanDto`); la tabla del ledger gana la columna **"Deal lost on"** que muestra la fecha real de pérdida junto a —no mezclada con— la fecha contable, y un guión cuando el asiento no vino de un evento del CRM. La justificación legible queda como estaba.
+
+**Tests.** Backend integración **721 → 725** (+4: la foto vieja no manda, Paid+débito → Applied, Paid sin débito → Pending, Calculated → NotApplicable) + las aserciones de `eventDate`/`sourcePlanId` sobre el JSON del end-to-end. Front **511 → 517** (+4 del mensaje por estado, incluido el caso "otro estado", +2 de la columna de fecha). Suites: unit **1002**, integración **725 (723 verdes, 2 skipped), exit 0**; `ng test` 517/517; `ng build --configuration production` limpio.
+
+**Verificación empírica.** Se reprodujo el escenario exacto del bug en la DB de desarrollo (snapshot de la alerta forzado a `Calculated` con la transacción en `Paid`) y el endpoint respondió `transactionStatus: "Paid"`, `statusAtDetection: "Calculated"`, `clawbackState: "Applied"`. En pantalla, el deal HUBSPOT-513634799845 muestra el badge **"Already paid"**, el texto "...the clawback has been applied to this payee's balance" y **ningún botón de revertir** (antes: "you can revert this commission (it has not been paid)" + botón). El snapshot se restauró a su valor previo. En el ledger, la columna "Deal lost on" muestra May 2, 2026 contra la fecha contable Jul 29, 2026.
+
+**Regresión intacta:** las guardas del revert no se tocaron y siguen rechazando un Paid (5/5 verdes).
+
+**Sin commitear:** ni estos cambios ni los de la política — decisión de Rodolfo (WI-A y WI-B juntos o por separado). No se ejecutó git.
+
+## 2026-07-29 — ★ TRIGGER CHURN VIVO: deal perdido con comisión PAGADA → ClawbackDebit prorrateado (System)
+
+El clawback deja de ser inerte. Un deal que muere dentro de su ventana de maduración con la comisión ya pagada genera **deuda real**, en el período abierto, que el próximo pay run netea y el statement muestra.
+
+**PASO 1 — la fecha real de pérdida del CRM (read-only, confirmado antes de tocar).** El campo es **`closedate`**, no `hs_lastmodifieddate` ni `DetectedAt`: HubSpot lo reescribe cuando el deal entra a una etapa cerrada, así que en un deal `closed-lost` `closedate` **es la fecha de la pérdida**, mientras la fecha del cierre GANADO ya está congelada en `CompensationTransaction.TransactionDate` desde el ingest. `hs_lastmodifieddate` mide cualquier edición (un cambio de nombre movería la deuda) y `DetectedAt` mide latencia del sync (un deal perdido el 20 y sincronizado el 27 pagaría menos clawback). El batch-read SÍ se podía extender: `HubSpotCrmDealSource.BuildDealsBatchReadBody` ya pedía `hs_is_closed_won` + `dealstage` en la MISMA llamada — agregar `closedate` no cuesta un round trip. `CrmDealStatus` gana `DateOnly? CloseDate` (`CrmModels.cs:51`), parseado con el mismo `ParseDate` del sync directo.
+
+**PASO 2 — el comando nuevo.** `RegisterDealChurnClawbackCommand` (`Commands/Ledger/RegisterDealChurnClawbackCommand.cs`) + `RegisterDealChurnClawbackHandler` (`Handlers/Ledger/RegisterDealChurnClawbackHandler.cs`), **separado del revert** y sin endpoint humano: lo dispara `DealLostReconciler` (`:153-175`) después de commitear las alertas, **solo para tx Paid** y solo si el CRM devolvió `closedate`. Sin fecha del CRM **no se genera deuda**: la alerta queda abierta y la resuelve una persona — inventar la fecha sería cobrarle al vendedor nuestra latencia. Comisión = créditos **consumidos** (`ConsumedAt != null`), no acreditados: lo que no salió de la empresa no vuelve. Un asiento **por (plan, moneda)**, porque `MaturationDays` es del plan. Plan sin ventana → `NoPolicy`, inerte, no error.
+
+**BLINDAJE 1 — inmutabilidad contable, CUMPLIDO.** `PayeeLedgerEntry` gana **`EventDate`** (fecha real del CRM) y **`SourcePlanId`**; el `CreatedAt` sigue siendo `clock.UtcNowOffset`. Un deal marcado hoy como perdido "el 15 de marzo" produce un asiento con `EventDate = 2026-03-15` y fecha contable **de hoy**: la fórmula usa marzo, el dinero se asienta en el período abierto. El ledger no tiene columna de período — la liquidación lee el **balance vivo** al pagar (`PayRunSettlementService`), así que un asiento nuevo es estructuralmente incapaz de entrar en un run ya pagado. Test contra SQL real: el run de ene–mar está PAGADO, llega una pérdida fechada el 1 de marzo → el asiento queda con `CreatedAt` de julio y **el run cerrado no recibe ninguna liquidación retroactiva**. Migración **B21_ClawbackChurnMetadata** aplicada y verificada.
+
+**BLINDAJE 2 — la carrera, CUMPLIDA, y encontró un bug real.** El handler no inventó barrera: usa el `RowVersion` del `PayeeBalance` y, ante conflicto, re-lee, re-aplica y reintenta (3 intentos). **El bug:** `Balance` es un **owned type**, y `EntityEntry.ReloadAsync()` del dueño refresca sus escalares y el RowVersion **pero NO el Money owned**. La primera versión reintentaba sobre la cifra vieja y **duplicaba la deuda en silencio** (−1433.3334 donde correspondía −666.6667). Lo cazó el test de carrera contra SQL real, no la revisión: sin ese test el error habría sido invisible y habría cobrado el doble. Arreglo: **dos reloads**, dueño y entrada owned (`RegisterDealChurnClawbackHandler:300-310`). Test: la liquidación del pay run y el débito del churn escriben el mismo balance con el trigger leyendo primero → resultado consistente, **un solo** débito, la liquidación del otro escritor sobrevive, y `balance == suma de asientos`.
+
+**BLINDAJE 3 — saldo negativo, DISCIPLINA DE EVIDENCIA CUMPLIDA: el dominio YA lo soporta, no hizo falta migración ni freno.** Verificado antes de escribir: no hay check-constraint en `PayeeBalances.Balance` (`B19_ClawbackLedger`, columna `decimal(18,4)` a secas), `PayeeBalance.Apply` es una suma sin piso, y `OutstandingDebt()` está escrito asumiendo negativos. Queda **documentado por test contra SQL**: balance +100, clawback 988.8889 → **−888.8889** persistido, arrastrado y neteado por el run siguiente (retiene 500 de 500 y arrastra −166.6667). Opción 1 de Rodolfo, sin tocar la invariante.
+
+**Idempotencia — donde se puede hacer cumplir.** El reconciler re-ve el deal perdido en CADA sync. El handler chequea antes de escribir, y además hay **índice único filtrado** `UX_PayeeLedgerEntries_ChurnPerTransactionPlan` sobre (SourceTransactionId, SourcePlanId) `WHERE SourceType='DealChurn'`: un check read-then-write no sobrevive dos syncs en carrera, el índice sí. Test: el segundo débito lo rechaza la base.
+
+**REGRESIÓN — el revert sigue cerrado.** `RevertCommissionForLostDealHandler` **no se tocó**: sigue rechazando Paid ("This commission was already paid…") y sus 5 tests siguen verdes, incluido `Paid_commission_is_refused_and_nothing_changes`. El clawback abrió una puerta NUEVA; no ensanchó la vieja. El churn tampoco toca la tx ni los créditos (test explícito: tx sigue Paid, crédito sin superseder y consumido).
+
+**PASO 4 — verificación empírica, en dos mitades honestas.** (a) **Pipeline real de la app:** `ChurnClawbackEndToEndTests` levanta el host (WebApplicationFactory + SQL real), dispara el comando por el `ISender` **del contenedor de la app** y lee por HTTP: `GET /ledger/entries` devuelve el débito `System`/`ClawbackDebit` de −666.6667 con `daysActive=30`, `maturationDays=90`, deal `9100` y la justificación con la fecha del CRM; `GET /ledger/statement` devuelve `newCarryover=-666.6667`; y un **Rep** ve su propia deuda (transparencia). (b) **App levantada de verdad** en `localhost:5199` contra la DB de desarrollo, con JWT firmado: arranca con B21 aplicada, y un asiento de churn con `EventDate`/`SourcePlanId` insertado en la DB real se lee correcto por los dos endpoints (`amount:-95.5510`, `newCarryover:-95.5510`). **Lo que NO se pudo hacer:** disparar el trigger desde la app viva por HTTP — no tiene endpoint (lo dispara el sync del CRM) y no hay conexión HubSpot en este entorno; por eso la mitad (a) usa el pipeline real en proceso. Las filas de verificación se borraron de la DB de desarrollo y la API quedó detenida.
+
+**Números.** Unit **983 → 999** (+16: 13 del handler de churn, 3 del cableado del reconciler). Integración **707 → 717**, **todos verdes, 0 rojos, 2 skipped, exit code 0** (+10: 8 del trigger contra SQL + 2 end-to-end HTTP). Suite completa corrida entera después del cambio.
+
+**Pendiente / fuera de alcance (explícito).** Origin-error 100% y default/non-payment son otros triggers; la política de payee TERMINADO en rojo es proceso aguas abajo; la primitiva de aprobación sigue deferida. **Deuda menor detectada, no hecha:** `PayeeLedgerEntryDto` no expone `eventDate` ni `sourcePlanId`, así que la UI del ledger muestra la fecha de pérdida solo dentro del texto de la justificación — agregar los campos es backend + front y merece ir con su cambio de UI. No se ejecutó git.
+
+## 2026-07-28 — ★ SUITE DE INTEGRACIÓN EN VERDE: 707 tests, 705 pasan, 0 rojos, exit code 0
+
+Erradicación final: 3 arreglos de test + el refactor fail-fast de TransactionRead.
+
+**A1/A2 — Dashboard pending-by-plan (solo test).** El helper de siembra posteaba sin `processImmediately`, y el default `true` de `IngestTransactionCommand` calculaba la tx en el acto, así que nunca quedaba Pending. El helper gana un parámetro opcional (default `true`, para no alterar los otros tests de la clase) y los dos tests de pendientes lo pasan en `false`. Intención preservada: uno sigue probando aislamiento de tenant, el otro que no hay multiplicación cartesiana.
+
+**A3 — Auth logout (solo test).** El segundo `LoginAsync` daba 401 porque `LoginCommandHandler:32-35` exige email confirmado desde WI-EMAIL-ACTIVATION (jun-2026). Nuevo helper `ConfirmEmailAsync` que marca la cuenta confirmada por SQL (no hay endpoint para confirmar sin el token del mail, y el flujo de confirmación no es lo que este test prueba). Con eso el test llega al logout y **recupera la cobertura de revocación multi-sesión**, que era el hueco real: hasta ahora solo había test verde de sesión única.
+
+**B — TransactionRead: fail-fast (PRODUCCIÓN, decisión de Rodolfo).**
+- **B0 auditoría de contrato:** la UI de transacciones manda `sortBy` fijo `'ingestedat'` (`transactions.store.ts:62`), sin ningún control que lo cambie — está en el whitelist, así que el 400 **no rompe ninguna pantalla** y no hubo que ajustar el cliente.
+- **B1 refactor** (`ListTransactionsHandler.cs`): validación fail-fast al entrar — `sortBy` fuera del whitelist → `Result.Failure` → **400** con el mensaje `Invalid sort field 'x'. Allowed values are: amount, ingestedat, referencenumber, status, transactiondate.`. Sin `sortBy` → **TransactionDate descendente** (el default de negocio: el auditor asume orden del evento, no de la ingesta). Eliminada la normalización silenciosa a `ingestedat` y ya no queda el brazo `_ =>` como falso default: todo valor que llega al switch está en el whitelist. La whitelist sigue, así que no hay injection ni 500.
+- **B2 test:** `List_InvalidSortField_...` reescrito para afirmar **400** + que el mensaje nombre lo permitido; agregados `List_WithoutSortField_DefaultsToTransactionDateDescending` y `List_ValidSortField_StillSorts`.
+- **B3 verificación empírica** (API en localhost:5199 contra la DB de desarrollo): `?sortBy=nonexistentfield` → **400** con el mensaje exacto; `?pageSize=3` sin sort → 200 con las tres del 2026-07-27 primero (descendente por fecha de transacción); `?sortBy=amount&sortOrder=asc` → 200 con 50, 120, 150 en orden ascendente.
+
+**Estado: integración 707 (705 verdes, 0 rojos, 2 skipped), exit code 0, estable en 3 corridas. Unit 983.** Con esto **se destraba el trigger churn**, que es su propio WI. La API quedó detenida. No se ejecutó git.
+
+## 2026-07-28 — Los 2 últimos rojos diagnosticados (TransactionRead sort + Auth logout): NO hay brecha de seguridad
+
+**Auth logout ★ SEGURIDAD — no hay brecha; el test muere en la SIEMBRA.** El mensaje del fallo ("esperaba 200, encontró 401") no corresponde a ninguna aserción del cuerpo del test —que espera 204 y luego dos 401— sino a los helpers `RegisterAsync`/`LoginAsync`, que afirman `Should().Be(OK)`. `RegisterAsync` funciona (otros tests de la clase que lo usan pasan), así que el 401 es del **segundo login** de la línea 74. Mecanismo: `LoginCommandHandler.cs:32-35` consulta `IsEmailConfirmedAsync` y devuelve `Failure("EMAIL_NOT_CONFIRMED")` → 401. Un tenant recién registrado tiene el email SIN confirmar, así que loguearse inmediatamente después de registrarse ya no se puede — la puerta la agregó WI-EMAIL-ACTIVATION (2026-06-15) y el test la precede.
+
+**La revocación SÍ funciona, y lo prueba un test VERDE.** `Logout_WithValidToken_RevokesRefreshToken_SubsequentRefreshReturns401` (líneas 47-67) hace exactamente lo que importa: logout → 204, y refresh con el token original → **401**. Está en verde. Y el alcance es el correcto: `LogoutCommandHandler.cs:19` llama `tokenService.RevokeUserRefreshTokensAsync(request.UserId)` — revoca **todos** los refresh tokens del usuario, no solo el presentado. **Clasificación: TEST desactualizado. Sin brecha.** Salvedad honesta: la revocación multi-sesión está probada por lectura de código (revoca por usuario) más el test conductual de sesión única; **no hay ningún test verde que cubra dos sesiones concurrentes**, justamente porque el que lo haría es este. Al arreglarlo se recupera esa cobertura.
+
+**TransactionRead sort — degradación con gracia OK, pero hay DOS defaults contradictorios en producción.** Hay whitelist: `AllowedSortFields = {transactiondate, amount, status, ingestedat, referencenumber}` (`ListTransactionsHandler.cs:20-24`, OrdinalIgnoreCase). Ningún string crudo llega al `OrderBy` → **sin riesgo de injection y sin 500**; la mitad "No500" del contrato del test se cumple. Pero `:156` normaliza cualquier campo inválido a **`"ingestedat"`**, mientras el brazo `_ =>` del switch (`:165`) cae a **TransactionDate** — y ese brazo es **inalcanzable**, porque `:156` ya convirtió todo lo inválido en un valor del whitelist. Código muerto que contradice al default vivo.
+
+Mecanismo del fallo, confirmado hasta el detalle: sin `sortOrder`, `PaginationQuery.SortOrder` vale `"asc"` → `desc = false` → ordena por **IngestedAt ascendente** → sale primero la tx insertada primero (`TXN-BADSORT-Z`, 2025-03-15), que es exactamente lo que el test recibió esperando 2025-01-15.
+
+**Clasificación: FRENO.** El comportamiento es seguro, pero *cuál* debe ser el default ante un sort inválido es una decisión de producto, y el propio código está en desacuerdo consigo mismo (`:156` dice ingestedat, `:165` dice transactiondate y está muerto). No lo resuelvo unilateralmente: si el default correcto es TransactionDate (como dicen el nombre del test y el brazo muerto), el arreglo es de PRODUCCIÓN; si es IngestedAt, el arreglo es del test y conviene borrar el brazo muerto. **Decisión de Rodolfo.**
+
+Read-only: no se tocó nada. Suite **705: 699 verdes, 4 rojos**, ahora **los 4 con causa raíz probada**. No se ejecutó git.
+
+## 2026-07-28 — Traza forense de los 2 rojos de Dashboard: causa raíz probada, NO hay fractura de tenant ni conteo inflado
+
+**Paso 0 — es MEMORIA, no SQL** (la lección de Assignments aplica igual acá, pero había que comprobarla). `GetDashboardSummaryHandler.BuildPendingByPlanAsync:270-333` hace **tres consultas separadas** (assignments Active, planes, transacciones Pending), cada una sobre su DbSet con su Global Query Filter de tenant, y después **empareja, deduplica y cuenta en memoria**. **No hay un solo JOIN en SQL en este camino**, así que no montamos el interceptor: no había SQL que contrastar.
+
+**Consecuencia inmediata para el Test B.** El nombre `_TwoPlans_CountsAreNotCartesianMultiplied` describe un riesgo que el código **no puede tener**: sin join no hay producto cartesiano, y además el conteo usa un `HashSet<Guid>` por plan (`:305-322`) que impide contar dos veces la misma transacción aunque un payee tenga varias asignaciones solapadas al mismo plan. La protección ya está y es estructural.
+
+**Causa raíz — la misma en los DOS tests: la transacción sembrada nunca queda Pending.** `IngestTransactionCommand.cs:16` declara **`bool ProcessImmediately = true`** como valor por defecto del record, y el controlador no lo sobrescribe. El helper `CreateTransactionAsync` de los tests postea `/api/transactions` **sin** el flag → se aplica el default `true` → `IngestTransactionHandler.cs:123-134` asigna créditos y llama `tx.MarkCalculated(...)` en el acto. `BuildPendingByPlanAsync` solo cuenta `t.Status == Pending` (`:288`), así que la transacción queda fuera y `PendingByPlanItems` sale **vacío**. De ahí los dos "expected N, found 0".
+
+**Veredicto de tenant (Test A) — NO hay fractura, y el propio test lo demuestra.** La aserción que falla es `bodyA` (**tenant A no ve lo suyo**: esperaba 1, encontró 0); la aserción `bodyB.Should().BeEmpty()` —tenant B no ve nada ajeno— **pasa**. El modo de fallo es sub-conteo, no fuga. Estructuralmente además: las tres consultas van sobre `db.PlanAssignments`, `db.CompensationPlans` y `db.CompensationTransactions`, los tres con `HasQueryFilter(e => e.TenantId == CurrentTenantId)` registrado en `ApplicationDbContext:114-116`, y no hay ninguna tabla en un join que pudiera quedarse sin predicado de tenant porque **no hay join**.
+
+**Veredicto de conteo inflado (Test B) — NO existe.** El dashboard real no infla nada; el conteo está deduplicado por HashSet.
+
+**Clasificación: los DOS son TESTS desactualizados**, por un cambio deliberado de producto (el ingest procesa de inmediato por defecto — el "Calculate-toggle"). Producción está bien: una transacción que ya se calculó **no** está pendiente, y el dashboard tiene razón en no contarla. **Arreglo (paso siguiente, no hecho acá):** que el helper de siembra postee `processImmediately: false`, o que los tests afirmen sobre transacciones que realmente queden Pending.
+
+Read-only: no se tocó ni un test ni una línea de producción. Suite sigue en **705: 699 verdes, 4 rojos**, ahora con 2 de esos 4 diagnosticados. No se ejecutó git.
+
+## 2026-07-28 — Dos tests desactualizados arreglados (ProcessPendingJob + QuotaAttainment): rojo 6 → 4
+
+**ProcessPendingJob — diagnóstico confirmado antes de tocar.** `CreditAllocationService.LoadLiveCreditKeysAsync` devuelve las tuplas **(TransactionId, PlanId, RuleId)**: la deduplicación es por (tx, plan, regla), **no por transacción**. O sea una tx con crédito vivo en plan2 SÍ debe recibir crédito de plan1 — el skip por atribución ambigua se eliminó a propósito en la migración multi-plan (2026-07-23). El test afirmaba lo contrario. Arreglado el TEST: renombrado a `HandleAsync_CreditsATransactionThatAlreadyHasACreditFromAnotherPlan` (el nombre viejo decía "Skips…", que ya era mentira) y las aserciones ahora verifican el comportamiento real y siguen probando algo: tx2 recibe **su** crédito de plan1, el crédito preexistente de plan2 queda **intacto** (ni duplicado ni superseded) y la tx pasa a Calculated. Producción sin tocar.
+
+**QuotaAttainment — el bug del DateRange compartido.** El test pasaba la MISMA instancia de `DateRange` a dos `Quota` del mismo DbContext; EF trataba el owned type como ya adjunto y escribía la segunda fila con `PeriodStart` NULL (misma trampa que `CompensationPayout.Calculate` advierte para `Money`). Arreglado dándole a cada Quota su propia instancia. Producción sin tocar.
+
+`ProcessPendingJobTests` + `QuotaAttainmentServiceTests`: **19/19**. Suite completa **705: 699 verdes, 4 rojos, 2 skipped** (antes 697/6). Los 4 que quedan: `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_IsTenantScoped`, `..._TwoPlans_CountsAreNotCartesianMultiplied`, `TransactionReadEndpointsTests.List_InvalidSortField…` y `AuthEndpointsTests.Logout…` (401 donde espera 200).
+
+**Nota de flakiness (ya conocida):** una corrida intermedia mostró 8 fallos extra con duración de 1 ms cada uno (MoneyAudit ×3, TransactionRead ×5) que **no se repiten** en la corrida siguiente — es el arranque en frío con varios contenedores SQL en paralelo ya diagnosticado, no un rojo nuevo.
+
+No se ejecutó git.
+
+## 2026-07-28 — ListAssignmentsByPayee reescrito: contrato explícito + filtro en SQL COMPLETO
+
+**Contrato nuevo (decisión de Rodolfo: sin default mágico).** `status` = `Active` (default) | `Deactivated` | `all` — es un filtro de ESTADO, no de fecha, y por eso el default es seguro: no puede ocultar una asignación vigente, solo las desactivadas, y verlas hay que pedirlas. `dateFrom`/`dateTo` = rango explícito por intersección. `period` = la convención de rangos nombrados, honrada **solo si el cliente la manda**. **Sin ninguno de los tres → NINGÚN filtro de fecha: se devuelve el histórico completo.** Eso es el cambio: antes un `period` ausente se resolvía a `"this-month"` y abrir el perfil de un vendedor descartaba en silencio todo lo vencido. `PeriodHelper` es compartido con otros endpoints y quedó **intacto**: el default mágico se eliminó en el handler, no en el helper.
+
+**El antipatrón de memoria, eliminado.** Antes: `.ToListAsync()` (:37) y después `.AsEnumerable().Where(...)` (:50) — traía todas las asignaciones del payee y descartaba en memoria, con el `TotalCount` calculado sobre una lista que la base ya había enviado. Ahora todo compone sobre UN `IQueryable` que se materializa una sola vez, ya filtrado, ordenado y paginado.
+
+**La traducción del owned type SÍ funciona — el comentario original estaba equivocado.** SQL real capturado (`LogTo` acoplado a las opciones del DbContext de ese test; canal no global):
+
+```
+WHERE [p].[TenantId] = @__ef_filter__CurrentTenantId_0
+  AND [p].[PayeeId]  = @__request_PayeeId_0
+  AND [p].[Status]   = N'Active'
+  AND [p].[EffectiveEnd]   >= @__fromValue_1
+  AND [p].[EffectiveStart] <= @__toValue_2
+ORDER BY [p].[EffectiveStart]
+OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
+```
+
+**Cierra la comprobación de tenant de Assignments:** el Global Query Filter aparece en el SQL sobre **las dos** tablas del join (`[p].[TenantId]` y `[c].[TenantId]`, ambas contra `@__ef_filter__CurrentTenantId_0`). **No hay fractura de tenant en este endpoint.** Confirmado además por conducta: el mismo handler bajo otro tenant devuelve 0, y en la prueba HTTP con un JWT del tenant equivocado las cinco variantes dieron 0.
+
+**Tests.** 4 nuevos (`ListAssignmentsByPayeeSqlTests`) que prueban el SQL y el contrato. `AssignmentsEndpointsTests` **16/17 → 17/17**: `ListAssignmentsByPayee` pasó a verde **sin tocar el test** — el contrato explícito lo arregló, que es la señal de que el test siempre había estado bien y el default mágico era el problema.
+
+**Verificación empírica (API levantada en localhost:5199 contra la DB de desarrollo).** Payee `D2C39331…` del tenant `56F7E67B…`, con 7 asignaciones Active **todas vencidas el 2026-06-30** (hoy 2026-07-28) — el caso exacto que el default viejo ocultaba:
+
+| Petición | totalCount |
+|---|---|
+| sin parámetros | **7** (antes habría sido 0) |
+| `status=all` | 7 |
+| `dateFrom=2026-01-01&dateTo=2026-06-30` | 7 |
+| `dateFrom=2026-07-01&dateTo=2026-07-31` | 0 |
+| `period=this-month` | 0 (el comportamiento viejo sigue disponible si se pide) |
+
+**Suite: 705 tests, 697 verdes, 6 rojos, 2 skipped** (antes 701/692/7). Unit **983**. La API se detuvo al terminar. No se ejecutó git.
+
+## 2026-07-28 — WI-2 v2: Fase 0 (mecanismo) y Fase 1 (2 rojos erradicados) COMPLETAS; Fase 2 (SQL aislado) NO EJECUTADA
+
+**Fase 0 — mecanismo decidido, con la guarda aplicada.** `ListAssignmentsByPayeeHandler.cs:37` construye y materializa la consulta en la misma expresión (`… ).ToListAsync(cancellationToken)`): el `IQueryable` **nunca se expone**. Sacarlo para `ToQueryString()` exigiría refactorizar un handler de producción solo para observarlo → **la guarda de no-alteración aplica y esa ruta queda ABORTADA**. Mecanismo elegido: el **fallback obligatorio, un `DbCommandInterceptor` con ciclo de vida scoped inyectado en la instancia de DbContext de ESE test**. La garantía de aislamiento es mecánica, no de disciplina: el interceptor se registra en las `DbContextOptions` de ese contexto, así que el canal de captura no es global — solo pueden pasar por él los comandos que ese DbContext emite, y ninguna otra colección corriendo en paralelo comparte esa instancia. (Diseño validado; **no implementado**, ver Fase 2.)
+
+**Fase 1 — los 2 rojos de PayeeDashboard, erradicados sin tocar producción.** Se corrigieron solo los DATOS DE SIEMBRA, preservando la intención de cada test:
+- `GetDashboard_WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded`: la quota pasa de **2024-01-01..2024-02-28** a **2025-01-01..2025-02-28** — sigue sin intersectar "last-month" (que es lo que el test verifica) y ahora queda **dentro** del período del plan (2025-01-01..2026-12-31), como exige la regla de containment de WI-PLAN-PERIOD-ALIGNMENT. Antes el 400 ocurría al sembrar, así que el test nunca llegaba a su propia aserción.
+- `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments`: como la asignación debe calzar **exacto** con su plan, cada ventana recibe su propio plan (`CreateActivePlanAsync` gana parámetros opcionales de período — helper de test, producción intacta): plan EUR 2026-01-01..2026-01-31 y plan PLN 2026-06-01..2026-12-31. La intención no cambia: dos asignaciones que intersectan YTD, `TotalCount = 2`.
+
+`PayeeDashboardEndpointsTests` **12/14 → 14/14**, estable en 3 corridas. **Cero líneas de producción tocadas** — el backend rechazaba correctamente; los tests estaban mal.
+
+**Fase 2 — NO ejecutada.** Se acabó el margen de la sesión. Los 3 de array vacío siguen **sin SQL extraído y sin causa raíz probada**; no se escribe conjetura en su lugar. El diseño del interceptor de la Fase 0 queda listo para arrancar directo.
+
+**Suite completa: 701 tests, 692 verdes, 7 rojos, 2 skipped** (antes 687/674/11). Los 7: los **3 de array vacío** pendientes de Fase 2 (Assignments ×1, Dashboard ×2), `ProcessPendingJobTests...SkipsTransactionsWithExistingNonSupersededCredits` (ya diagnosticado: test viejo del skip por atribución ambigua eliminado a propósito), `TransactionReadEndpointsTests.List_InvalidSortField…`, `AuthEndpointsTests.Logout…` y el conocido de QuotaAttainment. **La suite NO está 100% verde**, así que el trigger churn sigue bloqueado por el propio criterio del WI. No se ejecutó git.
+
+## 2026-07-28 — WI-2 TRAZABILIDAD FORENSE: Bloque B (los dos 400) CERRADO con prueba; Bloque A (los 3 de array vacío) SIN TRAZAR
+
+**BLOQUE B — los dos 400 de PayeeDashboard: causa raíz probada, y NO es lo que el título del test sugiere. El 400 no viene del parámetro `period`.**
+
+Primero el descarte: `PeriodHelper.cs:18,22` soporta explícitamente `"last-month"` e `"ytd"`. El parámetro llega al controlador como `string period = "this-month"` (`PayeesController.cs:93`), así que el model binding de ASP.NET no puede rechazarlo. Ninguno de los dos 400 tiene que ver con el período.
+
+En AMBOS tests la excepción sale de una llamada de **SIEMBRA**, no de la consulta bajo prueba — se ve en que el fallo es `HttpRequestException` (que solo puede venir de un `EnsureSuccessStatusCode()`) y no un mensaje de FluentAssertions:
+
+1. `GetDashboard_WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded` — siembra una quota de período **2024-01-01..2024-02-28** (línea 111) contra un plan cuyo período efectivo es **2025-01-01..2026-12-31** (`CreateActivePlanAsync`, líneas 349-350). La regla de **WI-PLAN-PERIOD-ALIGNMENT (2026-06-22)** exige que la quota esté CONTENIDA en el período del plan; `CreateQuotaHandler` devuelve `Result.Failure` → **400**. El dashboard nunca llega a consultarse.
+2. `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments` — postea una asignación **2026-01-01..2026-01-31** (línea 312) contra el mismo plan 2025..2026. La misma WI fijó **Assignment = match EXACTO del período del plan**; `AssignPlanToPayeeHandler` devuelve `Result.Failure` → **400** en el `EnsureSuccessStatusCode()` de la línea 313.
+
+**Capa del rechazo:** validación de negocio en el handler → `Result.Failure` → el controlador responde 400. NO es model binding ni una DomainException sin capturar.
+
+**Veredicto B: los dos son TESTS DESACTUALIZADOS por una regla de negocio deliberada de junio-2026. NO hay pantalla caída** — los endpoints aceptan `last-month` e `ytd` sin problema; lo que el backend rechaza (con razón) es sembrar una quota fuera del plan y una asignación que no calza exacto.
+
+**BLOQUE A — no trazado.** Se acabó el margen de la sesión antes de extraer el SQL real de los tres de array vacío (`AssignmentsEndpointsTests.ListAssignmentsByPayee_ReturnsOnlyThatPayeesAssignments`, `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_IsTenantScoped` y `..._TwoPlans_CountsAreNotCartesianMultiplied`). Lo único que quedó establecido con evidencia, y sirve para el próximo intento: en el de Assignments la siembra **SÍ funciona** — el helper crea plan y asignación con períodos **idénticos** (2025-01-01..2025-12-31, líneas 342-343 y 378-379), o sea calza la regla de match exacto y los `EnsureSuccessStatusCode()` pasan; además el fallo es una aserción de colección vacía, no `HttpRequestException`. Eso **descarta la hipótesis (c) seed-que-no-siembra** para ese test y deja abiertas (a) fractura de query filter, (b) filtro de vigencia por fecha y (d). **La pregunta multi-tenant sigue SIN RESPUESTA y requiere el SQL**, tal como exige el parámetro innegociable #1: no se afirma nada sobre tenant sin la DB.
+
+Read-only estricto: no se tocó ni un test ni una línea de producción. No se ejecutó git.
+
+## 2026-07-28 — WI-2 PAY RUNS: `periodFrom/periodTo` de la lista de pay runs pasa a período de compensación (gemelo del fix de Payouts) COMPLETO
+
+**Paso 0 — nombres verificados, no asumidos.** `PayRun` expone el período como **`DateOnly PeriodStart` / `DateOnly PeriodEnd` planos** (`PayRun.cs:11-12`), NO como value object — distinto de `CompensationPayout.Period.Start/End`. El predicado usa esos nombres.
+
+**El cambio** (`ListPayRunsHandler.cs:68-88`): antes `r.CreatedAt >= from` / `< to`; ahora **`r.PeriodEnd >= from`** y **`r.PeriodStart <= to`** — intersección, idéntica a la de `ListPayoutsHandler` y `GetDashboardSummaryHandler:506-507`. `PayRunQueries.cs:16-19` documenta la semántica nueva (antes decía "runs where CreatedAt.Date >= this").
+
+**Tests.** No existía NINGÚN test del filtro de período de pay runs (solo uno de permisos), así que el bug no tenía red. Agregué dos: `ListPayRuns_FilterByPeriod_FindsARunCreatedOutsideItsOwnPeriod` (run de enero **creado el 1 de febrero** + un run de marzo creado el mismo día → filtrando enero aparece solo el de enero: cubre exactamente el caso que el bug rompía y también el falso positivo) y `ListPayRuns_FilterByOneMonth_FindsARunSpanningAWholeQuarter` (intersección, no contención). PayRunEngine + PayRunExport + PayoutsEndpoints: **62/62 estable en 3 corridas** (60 antes, +2 nuevos). Unit **983** sin cambios.
+
+**Verificación EMPÍRICA (Paso 3, hecha por CC, no delegada).** Levanté `Wasnie.Api` en `localhost:5199` contra la DB de desarrollo, firmé un JWT HS256 con el secreto de `appsettings.Development.json` y ejecuté la petición real de la pantalla:
+
+- `GET /api/pay-runs?periodFrom=2026-09-01&periodTo=2026-09-30&pageSize=50` → **200, totalCount = 1**, y el run devuelto es **período 2026-07-01..2026-09-30, createdAt 2026-07-27**. Ese es el caso exacto del bug: creado en JULIO, encontrado filtrando SEPTIEMBRE. Con el código viejo (`CreatedAt >= 2026-09-01`) habría devuelto **0**.
+- Caso negativo: `periodFrom=2026-11-01&periodTo=2026-11-30` → **200, totalCount = 0** (no ensancha de más).
+- Sin filtro: `?pageSize=5` → 200, 6 runs con el orden por defecto intacto (más recientes primero por CreatedAt), o sea el cambio del predicado no tocó el ordenamiento.
+
+La API se detuvo al terminar la comprobación.
+
+**Brecha cerrada y familia saneada.** Con Payouts (WI anterior) y PayRuns (este), la familia "filtro por fecha de creación en vez de período de compensación" queda cerrada en la cadena de listados de dinero. **No se ejecutó git.**
+
+## 2026-07-28 — WI-1 PAYOUTS: `periodFrom/periodTo` pasa a significar período de compensación (fix de dinero) COMPLETO
+
+**Decisión de Rodolfo: Opción 1.** El filtro del listado de payouts significa el período de COMPENSACIÓN, no el instante de cálculo.
+
+**El cambio** (`ListPayoutsHandler.cs:122-143`): antes `p.CalculatedAt >= from` / `< to`; ahora **`p.Period.End >= from`** y **`p.Period.Start <= to`** — intersección, no contención, y en esa forma exacta porque es el predicado que ya usa el resto del dominio (`GetDashboardSummaryHandler.PayoutsInPeriodRawAsync:506-507`, el solape de assignments en `CalculatePayoutsForPeriodHandler:51-53`). Intersección importa: un payout que cubre un trimestre debe aparecer cuando alguien filtra un mes de adentro. `ListPayoutsQuery.cs:20-23` documenta la semántica nueva.
+
+**Brecha de dinero cerrada:** un payout de enero consolidado el 1 de febrero ya entra en un filtro de enero — en la lista y en el **export que alimenta nómina**, que era donde el falso negativo hacía que el vendedor no apareciera y no cobrara.
+
+**Auditoría del contrato HTTP (Paso 3), hecha por routing y etiqueta, no por suposición:**
+- **`pay-run-detail`** manda `periodFrom` → `GetPayRunByIdHandler:39` → el filtro de payouts. Su etiqueta i18n ya decía **"Payout period from" / "Payout period to"** (`PAY_RUNS.DETAIL.FILTER.PERIOD_FROM`). O sea la pantalla **ya prometía la semántica NUEVA** mientras el backend entregaba la vieja: el fix la vuelve honesta. **Nada que ajustar en el cliente.**
+- **`pay-runs-list`** manda `periodFrom` a **otro** endpoint (`ListPayRunsHandler`, que filtra PayRuns por `CreatedAt`), **no tocado**. La lista de pay runs no se ve afectada por este cambio.
+
+**Hallazgo colateral, FUERA DE ALCANCE, no tocado:** `ListPayRunsHandler.cs:68-72` filtra los PayRuns por **`CreatedAt`** (documentado así en `PayRunQueries.cs:16`) — el mismo patrón de bug que acabamos de corregir en payouts, un nivel más arriba. Un pay run de enero creado en febrero queda fuera de un filtro de enero en la lista de pay runs. No lo toqué porque el WI acota estrictamente a Payouts; merece su propia decisión.
+
+**Tests.** Los dos rojos de dinero (`ListPayouts_FilterByPeriod_ReturnsOnlyMatchingPayouts`, `ExportPayouts_RowCountMatchesListTotalCount_ForSameFilter`) están **verdes**: `PayoutsEndpointsTests` **25/27 → 27/27**. Estabilidad confirmada en 3 corridas de Payouts+PayRun engine+export+PayoutEngine = **68/68** las tres veces. Suite de dinero ampliada **160/161** (el único rojo sigue siendo el bug de test conocido de QuotaAttainment). Backend unit **983** sin cambios. Los tests estaban bien escritos desde el principio; el código era el equivocado.
+
+**No se ejecutó git.**
+
+## 2026-07-28 — WI-DEPURACIÓN: mecanismo exacto de los rojos de Payouts (read-only; NO se arregló, hay decisión de producto pendiente)
+
+**Veredicto primero: NO hay fractura de Global Query Filter ni de multi-tenant.** La prueba negativa es directa: en la misma clase, `ListPayouts_ReturnsSeededPayout` (que lista SIN filtro de período) **pasa** — o sea la siembra escribe, el filtro de tenant deja ver, y el endpoint devuelve. Si los query filters estuvieran rotos, ese test sería el primero en caer. Los dos rojos son exclusivamente de los tests que agregan `periodFrom`/`periodTo`.
+
+**Mecanismo probado (categoría (b), en PRODUCCIÓN).** `ListPayoutsHandler.cs:122-131` filtra `periodFrom`/`periodTo` sobre **`p.CalculatedAt`** — el instante en que el payout se calculó — y NO sobre `p.Period.Start` / `p.Period.End`, que es el período de compensación. `ListPayoutsQuery.cs:20-21` lo documenta explícitamente ("payouts where CalculatedAt.Date >= this"), así que es deliberado en el código. Los tests siembran payouts cuyo `Period` es enero-2026 (o abr–jun) pero cuyo `CalculatedAt` es el reloj de la siembra (hoy); filtrar `periodFrom=2026-01-01&periodTo=2026-01-31` no matchea nada → **0 filas**, que es exactamente el mensaje de los dos fallos ("expected 4, found 0" y "expected 1 item, found 0").
+
+**Por qué NO lo arreglé.** El código y los tests no discrepan por descuido: discrepan sobre qué significa "período" en este endpoint, y eso es una decisión de producto con consecuencia de dinero. En todo el resto del dominio "período" es el período de compensación (`PayRun.PeriodStart/End`, `CompensationPayout.Period`, `PayRunSettlement`). Si el filtro debe significar eso, **hoy hay un falso negativo real**: un payout de enero calculado en febrero queda FUERA de un filtro de enero, tanto en la lista como en el **export** que alimenta nómina — el vendedor no aparece y no cobra. Si en cambio el filtro debe significar "calculado entre", el código está bien y los dos tests están mal escritos. Cambiarlo altera lo que la UI de pay-runs (`pay-run-detail`/`pay-runs-list`, que envían `periodFrom`) devuelve hoy. **Freno y decisión de Rodolfo**, según la regla del WI.
+
+**Sin trazar (se acabó el margen de la sesión):** `AssignmentsEndpointsTests.ListAssignmentsByPayee_ReturnsOnlyThatPayeesAssignments` (crea 2 asignaciones por API y `/api/assignments/payee/{id}` devuelve vacío; hipótesis NO probada: un default de vigencia por fecha en el listado, misma familia que Payouts) y los 4 de Dashboard/PayeeDashboard (2 dan **400** con `period=last-month`/`ytd`; 2 devuelven 0 en "pendientes por plan"). Quedan para el WI siguiente con el mismo estándar de traza.
+
+**Estado de la suite: sin cambios** — no se tocó ni producción ni tests. No se ejecutó git.
+
+## 2026-07-28 — WI-TRIAGE: clasificación de los 11 rojos de la suite completa (read-only, sin arreglar nada)
+
+**Hallazgo que cambia el marco: los 11 fallan TAMBIÉN en aislamiento** (cada clase corrida sola: Payouts 2/27, Dashboard **4/27**, PayeeDashboard 2/14, Assignments 1/17, TransactionRead 1/31, ProcessPendingJob 1/3, Auth 1/6). Ninguno es interferencia entre colecciones ni arranque en frío — son fallos genuinos preexistentes. Nota: Dashboard falla **4 en aislamiento** y solo 2 aparecieron en la suite completa, así que el conteo de 11 subestima la deuda.
+
+**De los 11, uno es el bug ya diagnosticado de QuotaAttainment (DateRange reusado) → fuera de este triage. Quedan 10.**
+
+**Riesgo DINERO (3).** `ProcessPendingJobTests.HandleAsync_SkipsTransactionsWithExistingNonSupersededCredits`: el test pre-asigna un crédito de plan2 a tx2 y espera que el job SALTE la tx (quede Pending); hoy queda Calculated. Es **el test el que está desactualizado**, no la funcionalidad: el skip por atribución ambigua fue **eliminado a propósito** en la migración a multi-plan del 2026-07-23 (el comentario que lo explica está en `ProcessPendingTransactionsJobHandler` alrededor de :190). Con multi-plan, una tx con crédito en plan2 SÍ debe recibir crédito de plan1 y pasar a Calculated. `PayoutsEndpointsTests.ListPayouts_FilterByPeriod_ReturnsOnlyMatchingPayouts` y `ExportPayouts_RowCountMatchesListTotalCount_ForSameFilter`: ambos esperan payouts sembrados y encuentran **0** — mecanismo NO determinado (siembra silenciosamente fallida vs filtro de período roto); requiere una sesión propia.
+
+**Riesgo MULTI-TENANT (2).** `DashboardEndpointsTests.GetDashboard_PendingByPlanItems_IsTenantScoped` y `..._TwoPlans_CountsAreNotCartesianMultiplied`: la tarjeta "pendientes por plan" devuelve **0** donde se esperaban 1 y 2. Es sub-conteo, **no** fuga de datos de otro tenant — el modo de fallo es "no veo lo mío", no "veo lo ajeno". Sospecha fuerte (no confirmada) de que la consulta quedó desalineada tras el cambio de atribución multi-plan, igual que el de ProcessPending. `AssignmentsEndpointsTests.ListAssignmentsByPayee_ReturnsOnlyThatPayeesAssignments`: filtrado por payee devuelve vacío — mismo patrón "sembré y no aparece".
+
+**Riesgo FECHA/PERÍODO (3).** `PayeeDashboardEndpointsTests.GetDashboard_WithPeriodLastMonth_QuotaNotIntersecting_IsExcluded` y `GetPayeeAssignments_WithPeriodYtd_IncludesPastAndCurrentAssignments`: **400 Bad Request** al pasar `period=last-month` / `ytd` — el endpoint rechaza parámetros de período que la UI usa. `TransactionReadEndpointsTests.List_InvalidSortField_FallsBackToDefaultTransactionDateSort_No500`: el fallback de orden devuelve 2025-03-15 donde se esperaba 2025-01-15 (orden por fecha invertido o distinto default).
+
+**Riesgo BAJO (1).** `AuthEndpointsTests.Logout_RevokesAllActiveRefreshTokensForUser`: el logout responde **401** en vez de 200. No toca dinero/tenant/fecha, pero es gestión de sesión y conviene mirarlo por seguridad.
+
+**Veredicto.** Tres de los diez tocan la cadena de dinero y dos el multi-tenant, PERO en el modo de fallo "falta data / el test quedó viejo", no en el modo "el dinero sale mal". El único con mecanismo confirmado (ProcessPending) es **test desactualizado por un cambio deliberado**, no regresión. Ninguno demuestra un cálculo de comisión incorrecto ni una fuga entre tenants. **No bloquean el trigger churn**, pero los cinco de dinero/tenant deberían entenderse antes de dar por sana la suite. Recomendación presentada; **no se arregló nada** (WI read-only). No se ejecutó git.
+
+## 2026-07-28 — WI-CONFIABILIDAD: verificación HTTP del clawback + diagnóstico del aislamiento de tests
+
+**Parte A — 12 tests HTTP nuevos** (`Integration/Ledger/LedgerEndpointsTests.cs`), todos verdes a la primera. Cubren la CAÑERÍA, no el dominio: RBAC en el pipeline (Rep → **403** en el POST de ajuste y **200** en el GET del estado de cuenta; Manager → 403; CompManager/TenantAdmin → 200 y el asiento persiste), el **actor real** (el asiento guarda `user-b@test.com`, el usuario autenticado, no un default ni "system"), el **payee sale de la ruta** (mandar otro `payeeId` en el body no mueve ese balance), justificación vacía → 400 sin escribir nada, tipo engine-only → 400, anónimo → 401 en lectura y escritura, y la **serialización del DTO** con `capPercentApplied` en null (el caso multi-plan) más los nullables de las entradas. **No apareció ningún bug de cañería** — el atributo de autorización y el binding ya estaban bien puestos; no se tocó nada de producción.
+
+**Parte B — la premisa del WI no se sostiene.** Diagnóstico read-only, y el resultado contradice la hipótesis previa (y la mía del WI anterior):
+
+1. **Las colecciones NO comparten base.** `TestDatabaseFixture`, `PayoutEngineFixture`, `CreditAllocationServiceFixture`, `MoneyAuditTestFixture` y otras cuatro levantan **cada una su propio contenedor MsSql** (`MsSqlBuilder`, 8 fixtures con contenedor propio). No hay estado compartido entre `PayoutEngineCollection` (donde viven los `AntiDoublePayTests`) y `WasnieIntegrationTestCollection` (donde viven Authorization/TierLimit). La contaminación de estado queda **descartada por construcción**.
+2. **Los 8 fallos no son deterministas: no se reprodujeron ni una vez.** Cuatro corridas de la combinación exacta que había fallado dieron 127/128, con el único rojo conocido (el bug del `DateRange` reusado en quotas, fuera de alcance). La corrida que sí falló fue la **fría** (58s+ contra 6–21s de las siguientes): varios SQL Server 2022 arrancando a la vez tras un `dotnet build`. Eso apunta a contención de recursos en el arranque, no a un test sucio.
+3. **La suite COMPLETA (687 tests) tiene 11 rojos, y son otro problema.** Al menos uno —`AuthEndpointsTests.Logout_RevokesAllActiveRefreshTokensForUser`— **falla también corriendo su clase sola** (1 de 6), así que es un test roto preexistente, sin relación con aislamiento ni con el clawback.
+
+**Por eso NO apliqué el fix de la Parte B1.** El WI es explícito: "no elijas la solución antes de saber la causa". Serializar colecciones o meter reseteo entre ellas habría sido arreglar una causa que la evidencia descarta, con el costo de una suite más lenta y la falsa sensación de haber resuelto algo. Lo que sí queda documentado es que el escenario que dispara el flaky es el **arranque en frío con varios contenedores en paralelo**, y que la suite completa arrastra 11 rojos preexistentes que merecen su propio WI de saneamiento.
+
+**Números.** Backend unit **983** (sin cambios). Integración: money filter + los 12 HTTP nuevos = **132: 131 verdes, 1 rojo** (el de quotas). Suite completa 687: 674 verdes, 11 rojos preexistentes, 2 skipped. **No se tocó lógica de dominio ni de dinero.** No se ejecutó git.
+
+## 2026-07-28 — WI-CLAWBACK Paso 3: UI del estado de cuenta, ledger, ajuste manual y config por plan
+
+**Paso 0 (verificación).** No existía NADA de lectura sobre el ledger — solo el lado de escritura del Paso 1/2. Las columnas `ClawbackMaturationDays`/`ClawbackCapPercent` del plan estaban desde B19 sin UI y sin comando (el plan solo tenía Create/Activate/Archive/Clone + comandos de regla, ningún update de metadata). `CreateManualAdjustment` existía con **cero** endpoints. Copy fantasma localizado en `CompensationTransaction.cs:195/:221/:242`.
+
+**Lectura (valores terminados).** `PayeeStatementDto` expone un campo por número que la pantalla pinta, todos calculados server-side y leídos de `PayRunSettlement` — nada se recalcula desde payouts o créditos: si la liquidación dice que se retuvieron 500, eso es lo que salió de la empresa, y un segundo cálculo solo podría contradecirla. Dos decisiones que valen la pena registrar:
+- `previousDebt` se deriva de la aritmética de la PROPIA liquidación (`withheld + carryover`), no del balance vivo. Si se leyera el balance actual, un ajuste manual hecho DESPUÉS del run reescribiría la historia de un pago ya cerrado.
+- `capPercentApplied` es **nullable a propósito**. El tope es por plan y una liquidación puede abarcar planes con topes distintos; entonces no hay un porcentaje único que nombrar. Nombrar uno igual sería poner un número falso en una frase que le explica a una persona por qué cobró menos. Cuando es ambiguo viaja null y la UI usa una redacción sin porcentaje (`CAPTION_CAP_LIMITED_MIXED`).
+
+**Escritura.** `CreateManualLedgerAdjustmentHandler` es el ÚNICO camino humano al ledger e invoca la fábrica sellada `CreateManualAdjustment` — no se creó un segundo camino de escritura, que era el riesgo explícito del WI. El actor sale del usuario autenticado, nunca del body (un asiento cuyo dueño elige el llamador no es un audit trail); el payee sale de la ruta, no del body. Los tipos engine-only (`ClawbackDebit`, `ClawbackAppliedCredit`) se rechazan. El balance se abre en el primer toque y el índice único (tenant, payee, moneda) es lo que impide que dos primeros-toques concurrentes creen dos balances que netearían media deuda cada uno.
+
+**Permisos.** `Ledger.Read` para TenantAdmin, CompManager, Manager **y Rep** — que el rep vea su propio balance y por qué se movió es el diferenciador del producto, no una fuga. `Ledger.Adjust` solo TenantAdmin/CompManager. RBAC = ocultar: el tab usa `*hasPermission`, no un botón deshabilitado.
+
+**UI.** Feature `ledger/` que espeja Payees (models / services / state / panel). Cabecera con las DOS ecuaciones: flujo de caja arriba (valores absolutos, el signo lo lleva el operador `−`, "Cobra este mes" como ancla acentuada) y balance abajo, subordinada, con signos explícitos. El mismo importe aparece en ambas con significado opuesto y **ambos vienen del DTO** — el front no deriva uno del otro. Tabla del ledger con **tres señales redundantes** para distinguir System de Human sin un clic: ícono, banda de color en el borde izquierdo (+ tinte en filas humanas) y signo/color del monto; tres y no solo color, porque hay CFOs daltónicos. Filas humanas muestran autor y justificación inline, y un perdón aparece como fila NUEVA sin tocar los clawbacks previos (append-only visible). Config por plan como tab nuevo en el detalle del plan, con hint que aclara que completar los campos **ACTIVA** el clawback (el subsistema nace inerte).
+
+**Regla dura cumplida.** Cero aritmética de dinero en el cliente: el panel solo hace `toLocaleString()` y `Math.abs()` para elegir presentación. No hay una sola resta, ni aplicación del tope, ni derivación del neto o del arrastre. El store tampoco: sus `computed` seleccionan y cuentan, nunca suman importes. Tras crear un ajuste se **relee del servidor** en vez de empujar la fila y ajustar un balance local.
+
+**Copy fantasma.** Los tres mensajes ya no prometen un "accounting correction workflow" inexistente: ahora dicen que el dinero ya se movió y que la corrección se hace con un ajuste de balance en el ledger del payee — que es la pantalla que este WI construyó.
+
+**Tests.** Backend unit **971 → 983** (+12 del handler de ajuste: signo derivado del tipo, tipos engine-only rechazados, sin justificación no escribe nada, monto cero/negativo rechazado, dos ajustes acumulan en UN balance, otra moneda abre su propio balance). Frontend **501 → 511** (+10: las cifras se muestran tal como llegaron, formateo sin alterar el número, signo explícito en el balance, System vs Human, sin justificación no envía, una statement por moneda sin sumar entre monedas). Integración de dinero **119/120, idéntico** — el rojo sigue siendo el bug de test de `QuotaAttainmentServiceTests`. `ng build --configuration production` limpio, paridad de claves i18n EN/ES/PL verificada por script.
+
+**Observación de infraestructura de tests (no es de este WI).** Corriendo el filtro de dinero JUNTO con las suites de Authorization/TierLimit, 8 tests de `AntiDoublePayTests` fallan; cada suite pasa sola (9/9 y 8/8) y juntas con AntiDoublePay también (14/14). Es interferencia entre colecciones que comparten base bajo ejecución paralela, no un cambio de comportamiento. Queda anotado, sin diagnosticar a fondo.
+
+**Pendiente del subsistema:** el trigger churn→`ClawbackDebit` sobre transacciones Paid y la fecha real de churn del CRM. Van juntos en un WI aparte porque tocan la cadena de dinero, no la cara.
+
+## 2026-07-28 — WI-CLAWBACK: núcleo del subsistema (Pasos 0–2 completos; 3–4 pendientes) — TOCA DINERO PAGADO
+
+**Paso 0 (read-only, bloqueante).** Las líneas del diagnóstico siguen exactas: filtro anti-doble-pago `:168-169`, intersección `:80-85`, bloqueo Approved/Paid `:112-127`. Cuatro colisiones entre el diseño y el código real, todas frenadas y decididas por Rodolfo antes de escribir una línea de dinero:
+
+1. **Moneda.** `Money` lanza cross-currency (`Money.cs:145-149`) y un payee puede tener planes EUR y USD simultáneamente (`PayoutEngineTests.Handle_PatternB_TwoCurrencies…`, `PayRun.TotalAmounts` es dict por moneda). Un balance único global era imposible sin FX. → **ledger global por (Payee, Moneda)**, sigue NO particionado por plan (conserva: sin deuda huérfana al archivar un plan, realidad empleado-empresa).
+2. **Dónde netear.** NO en `:168-169` — ese filtro elige *qué créditos entran* a un payout de UN plan; el clawback retiene sobre lo que cobra UNA persona across planes. Y el cálculo es destructivo (`:130-143` borra y recrea payouts Calculated), así que un ledger append-only no puede escribirse ahí. → **proyección al calcular, asiento de aplicación al pagar**, en el mismo SaveChanges que `Credit.Consume`.
+3. **Inmutabilidad.** El neto no puede tocar `payout.TotalCommission`. → **entidad `PayRunSettlement` aparte**; el payout sigue diciendo lo que las reglas ganaron (bruto) y la liquidación lo que salió de la empresa (neto).
+4. **Concurrencia.** El WI asumía chunking que **no existe**: `CalculatePayoutsForPeriodHandler` es un loop con un SaveChanges por payout (`:226`); `MarkPayRunPaid` un único SaveChanges (`:206`) que ante `DbUpdateConcurrencyException` tumba el run entero (`:208-216`); el chunk-con-transacción solo vive en los jobs de fondo (`ProcessPendingTransactionsJobHandler:180`). El aislamiento per-payee exigiría transacción explícita + savepoints y pagos parcialmente aplicados. → Rodolfo eligió **mantener todo-o-nada** para el MVP (la atomicidad hoy sale gratis del único SaveChanges; el pay run es manual y poco frecuente, el reintento es barato). **Desviación consciente del WI, registrada.**
+
+También se decidió tomar `DaysActive` de la **fecha real de pérdida del CRM** en vez de `DetectedAt` (que mide latencia del sync: un deal perdido el día 20 y detectado el 27 pagaría menos clawback). Esa plomería queda pendiente.
+
+**Paso 1 — modelo.** `PayeeLedgerEntry` (`Domain/Compensation/Ledger/`): append-only sin un solo setter público; el **signo se deriva del `TransactionType`** (`IsDebit()`) y el caller pasa una magnitud positiva, así que un débito guardado en positivo es irrepresentable; `Origin` lo estampa la fábrica (`CreateSystemEntry`→System, `CreateManualAdjustment`→Human), nunca el llamador; actor y justificación son invariantes del constructor privado. Se **agregó un quinto `TransactionType`, `ClawbackAppliedCredit`**: los cuatro del WI solo crean o perdonan deuda, ninguno la *salda*, y sin él el ledger no cierra (balance ≠ suma de asientos). `PayeeBalance`: proyección por (payee, moneda) con **RowVersion real de SQL Server** (`IsRowVersion()`, mismo mecanismo que `Credit`); el carryover no es un mecanismo aparte — es simplemente el saldo que no se alcanzó a cobrar. Política de clawback **opt-in por plan** (`ClawbackMaturationDays`, `ClawbackCapPercent`), editable en Draft y Active pero no en Archived, porque cada asiento guarda los inputs con los que se calculó. Migración **B19_ClawbackLedger** aplicada Y verificada en DB (tablas, columnas, `RowVersion timestamp`, índice único (tenant,payee,currency), índice filtrado, fila en `__EFMigrationsHistory`). 36 tests de dominio.
+
+**Paso 2 — el dinero.** `ClawbackCalculator`: churn = `paid × (mat − activos) / mat` con piso en cero, escrito como UNA multiplicación y UNA división a propósito (calcular el ratio primero redondea antes de multiplicar y pierde centavos: así 900 × 60 / 90 = 600.00 exacto); error de origen = 100%, sin proporcionalidad. `PayeeSettlementCalculator`: el **tope % es por plan** y se aplica sobre el payout de ESE plan, mientras la **deuda es global** y se cobra de todos los payouts del payee en esa moneda, en orden determinista (por PlanId) para que el mismo dinero caiga siempre en el mismo plan. `PayRunSettlement` (migración **B20**, aplicada y verificada) se escribe SOLO al pagar. `PayRunSettlementService` **nunca llama SaveChanges** — solo stagea; el `MarkPayRunPaidHandler` lo invoca antes de su único SaveChanges, así que la retención viaja con el consumo de créditos o no viaja. Eso es lo que cierra el **test-pin #2**: el bloqueo por período exacto puede dejar el mismo crédito en dos payouts Calculated, pero la liquidación está atada al pago y el pago ya está guardado contra consumir un crédito dos veces.
+
+**Tests.** Unit **877 → 971** en el día (939 tras el Paso 1, +32 calculadoras). Integración de dinero **113 → 120: 119 verdes, 1 rojo** — el rojo sigue siendo el bug de test de `QuotaAttainmentServiceTests` reportado esta mañana, no tocado. Los 7 nuevos corren contra SQL real: tope+carryover (deuda 800, comisión 1000, tope 50% → retiene 500, paga 500, arrastra 300, balance −300, y el ledger cierra); deuda menor que el tope se cobra entera; tope 0 protege el pago completo; **deuda global cobrada desde un plan que no la creó** (plan A 400 + plan B 1000, deuda 600 → 200 de A y 400 de B); perdón manual que baja la deuda **sin borrar el débito original** (3 asientos, suma 0); y el **guard OCC**: dos contextos escribiendo el mismo balance → el segundo recibe `DbUpdateConcurrencyException` y solo aplica el ganador. Ese último tiene que ser de integración: EF InMemory no genera rowversion y la aserción pasaría en vacío.
+
+**PENDIENTE (no entregado en esta sesión, scope restante del WI):**
+- **Trigger churn → `ClawbackDebit`** sobre una tx **Paid**. Hoy `RevertCommissionForLostDealHandler` rehúsa Paid ("already paid") — esa es exactamente la puerta que el clawback abre, y debe ser un comando NUEVO: ese handler tiene que seguir rechazando el supersede de un crédito pagado o ledger y créditos se contradicen.
+- **Fecha real de churn del CRM**: `DealLostReconciler.cs:52-56` hace batch-read de `IsClosedWon` únicamente; hay que traer también la closedate del deal perdido.
+- **Paso 3 completo**: endpoint de `CreateManualAdjustment` (con permiso y actor del usuario autenticado), UI del balance del payee (asientos con Origin/TransactionType legibles, el rep VE su balance), formulario de ajuste con justificación obligatoria, i18n EN/ES/PL, y el copy fantasma "accounting correction workflow" (`CompensationTransaction.cs:195/:221/:242`).
+- **Paso 4**: la verificación de Rodolfo depende del trigger y de la UI, así que queda con ellos.
+
+**Confirmado:** migraciones aplicadas y verificadas contra la DB local; ningún comando git ejecutado. Rodolfo detuvo `Wasnie.Api` dos veces para permitir compilar (bloquea los DLL) — **acordarse de levantarla de nuevo**.
+
 ## 2026-07-28 — WI-UNIT-TESTS-CALCULATE-PAYOUTS: red de unit tests del handler de payouts (solo tests; sin tocar producción)
 
 Origen: diagnóstico 2026-07-27. `CommissionCalculatorTests` cubre la matemática por-transacción con 75 unit tests, pero `CalculatePayoutsForPeriodHandler` — la AGREGACIÓN que arma el payout — tenía **cero**. Su lógica de dinero estaba cubierta solo por integración con Docker. El clawback de Paid va a netear un ajuste negativo exactamente en `:168-169` de ese handler, así que la red rápida va primero.

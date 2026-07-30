@@ -157,10 +157,15 @@ public sealed class GetDashboardSummaryHandler(
         var planIds = assignments.Select(a => a.PlanId).Distinct().ToList();
         var plans = await db.CompensationPlans
             .Where(p => planIds.Contains(p.Id))
-            .Select(p => new { p.Id, p.Name, p.Currency })
+            .Select(p => new { p.Id, p.Name, p.Currency, p.Status })
             .ToDictionaryAsync(p => p.Id, ct);
 
         var planCurrencyById = plans.ToDictionary(kv => kv.Key, kv => kv.Value.Currency);
+        // An archived plan is not an eligible alternative, so it cannot make an attribution ambiguous.
+        var archivedPlanIds = plans
+            .Where(kv => kv.Value.Status == PlanStatus.Archived)
+            .Select(kv => kv.Key)
+            .ToHashSet();
 
         // Count per payee, and collect the DISTINCT plans that made each one ambiguous — that list is
         // what tells the admin which overlap to look at.
@@ -174,7 +179,7 @@ public sealed class GetDashboardSummaryHandler(
             // The projection already excluded rows with a declared plan, hence the null selection.
             var candidates = AmbiguousAttributionSpec.AmbiguousCandidates(
                 selectedPlanAssignmentId: null, tx.TransactionDate, tx.Currency,
-                payeeAssignments, planCurrencyById);
+                payeeAssignments, planCurrencyById, archivedPlanIds);
             if (candidates.Count == 0) continue;
 
             var payeeId = tx.PayeeId;
@@ -247,9 +252,32 @@ public sealed class GetDashboardSummaryHandler(
     private async Task<IReadOnlyList<DealLostAlertDto>> BuildDealLostAlertsAsync(CancellationToken ct)
     {
         const int cap = 20;
-        var rows = await db.DealLostAlerts
-            .Where(a => a.ResolvedAt == null)
-            .OrderByDescending(a => a.DetectedAt)
+
+        // JOIN to the transaction, deliberately. The alert stores the status it saw at detection, and a
+        // commission paid AFTERWARDS left that snapshot claiming "not paid" — the screen then offered to
+        // revert money that had already gone out. The snapshot stays (it is history); the decision moves
+        // to the live row. One join, no extra round trip.
+        var rows = await (
+            from a in db.DealLostAlerts
+            join t in db.CompensationTransactions on a.TransactionId equals t.Id
+            where a.ResolvedAt == null
+            orderby a.DetectedAt descending
+            select new
+            {
+                a.TransactionId,
+                a.ReferenceNumber,
+                a.ExternalDealId,
+                StatusAtDetection = a.TransactionStatus,
+                LiveStatus = t.Status,
+                a.CommissionAmount,
+                a.CommissionCurrency,
+                a.DetectedAt,
+                // Has the churn trigger already booked the debt for this transaction? Answered from the
+                // ledger, which is where the debt actually lives — not inferred from the alert.
+                ClawbackApplied = db.PayeeLedgerEntries.Any(
+                    e => e.SourceTransactionId == a.TransactionId
+                      && e.SourceType == LedgerSourceType.DealChurn),
+            })
             .Take(cap)
             .ToListAsync(ct);
 
@@ -257,7 +285,14 @@ public sealed class GetDashboardSummaryHandler(
             TransactionId: a.TransactionId,
             ReferenceNumber: a.ReferenceNumber,
             ExternalDealId: a.ExternalDealId,
-            TransactionStatus: a.TransactionStatus.ToString(),
+            TransactionStatus: a.LiveStatus.ToString(),
+            StatusAtDetection: a.StatusAtDetection.ToString(),
+            // Only a PAID commission can be clawed back; an unpaid one is reverted instead. Any other
+            // status (a commission cancelled or returned to Pending while its alert stayed open) claims
+            // nothing at all — the screen shows the live status and offers no action.
+            ClawbackState: a.LiveStatus != CompensationTransactionStatus.Paid
+                ? ClawbackStates.NotApplicable
+                : a.ClawbackApplied ? ClawbackStates.Applied : ClawbackStates.Pending,
             CommissionAmount: a.CommissionAmount,
             CommissionCurrency: a.CommissionCurrency,
             DetectedAt: a.DetectedAt)).ToList();

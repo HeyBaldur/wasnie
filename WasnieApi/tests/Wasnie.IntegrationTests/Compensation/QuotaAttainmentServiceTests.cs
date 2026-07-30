@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
@@ -556,8 +556,13 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
             db.Payees.Add(MakePayee(tenantId, payeeId));
-            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planA, 5_000m, period));
-            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planB, 5_000m, period));
+            // Each Quota gets its OWN DateRange instance. Sharing one made EF treat the owned type as
+            // already attached to the first Quota, and the second row was written with a NULL
+            // PeriodStart. Same trap CompensationPayout.Calculate warns about for Money.
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planA, 5_000m,
+                DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31))));
+            db.Quotas.Add(MakeActiveQuota(tenantId, payeeId, planB, 5_000m,
+                DateRange.Of(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 31))));
             await db.SaveChangesAsync();
 
             var tx = CompensationTransaction.Ingest(

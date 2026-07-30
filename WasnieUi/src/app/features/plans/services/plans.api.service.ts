@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+﻿import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Plan, PlanSummary, CreatePlanRequest } from '../models/plan.model';
@@ -51,6 +51,17 @@ export class PlansApiService {
 
   activatePlan(planId: string): Observable<void> {
     return this.http.post<void>(`${this.base}/${planId}/activate`, {});
+  }
+
+  /**
+   * Turns the clawback on (or off, with both nulls) for this plan. Nothing here computes money —
+   * it stores the policy the engine reads when a pay run is settled.
+   */
+  setClawbackPolicy(
+    planId: string,
+    policy: { maturationDays: number | null; capPercent: number | null },
+  ): Observable<void> {
+    return this.http.put<void>(`${this.base}/${planId}/clawback-policy`, policy);
   }
 
   archivePlan(planId: string): Observable<void> {

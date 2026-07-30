@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Commands.PayRuns;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Authorization;
@@ -19,6 +20,7 @@ public sealed class MarkPayRunPaidHandler(
     IClock clock,
     IGuidGenerator guid,
     IAuditService audit,
+    IPayRunSettlementService settlementService,
     ILogger<MarkPayRunPaidHandler> logger)
     : IRequestHandler<MarkPayRunPaidCommand, Result<PaymentBlockResult?>>
 {
@@ -189,9 +191,17 @@ public sealed class MarkPayRunPaidHandler(
                 }
             }
 
+            // ── CLAWBACK SETTLEMENT ───────────────────────────────────────────
+            // Withhold any outstanding balance from what is about to be paid. Staged only — it
+            // rides the SAME SaveChanges as the credit consumption above, so a payment can never
+            // move without its settlement, nor a settlement without its payment.
+            var settlements = await settlementService.StageSettlementsAsync(
+                allTenantId, request.PayRunId, payouts, actor, now, cancellationToken);
+
             logger.LogInformation(
-                "PayRun {PayRunId} marked Paid: {PayoutCount} payouts, {CreditCount} credits consumed, {TxCount} transactions marked Paid.",
-                request.PayRunId, payouts.Count, totalCreditsConsumed, totalTxsPaid);
+                "PayRun {PayRunId} marked Paid: {PayoutCount} payouts, {CreditCount} credits consumed, " +
+                "{TxCount} transactions marked Paid, {SettlementCount} clawback settlements applied.",
+                request.PayRunId, payouts.Count, totalCreditsConsumed, totalTxsPaid, settlements.Count);
 
             // Roll-ups don't change amounts on MarkPaid but UpdateRollUps keeps state consistent.
             var allRunPayouts = await db.CompensationPayouts
@@ -207,12 +217,17 @@ public sealed class MarkPayRunPaidHandler(
             }
             catch (DbUpdateConcurrencyException ex)
             {
-                // Another concurrent payment consumed the same credit between our check and save.
+                // Two sources now: a concurrent payment consumed the same credit, OR a manual ledger
+                // adjustment changed a payee's balance after we computed the withholding. Either way
+                // the whole run is aborted rather than partially applied — a retry recomputes the
+                // withholding against the balance as it stands then.
                 logger.LogError(ex,
-                    "PayRun {PayRunId} payment blocked by concurrent update — another payment consumed a shared credit.",
+                    "PayRun {PayRunId} payment blocked by concurrent update — a shared credit was consumed " +
+                    "or a payee balance changed while the run was being settled.",
                     request.PayRunId);
                 return Result<PaymentBlockResult?>.Failure(
-                    "Payment could not be processed: a concurrent payment already consumed one or more credits in this run. Please refresh and try again.");
+                    "Payment could not be processed: a concurrent payment consumed one or more credits in this run, "
+                    + "or a balance adjustment landed while it was being settled. Please refresh and try again.");
             }
 
             await audit.LogAsync(new AuditEntry(

@@ -48,7 +48,14 @@ public sealed record CrmLineItem(
 /// or back to an open stage). A deal id that the CRM does not return (deleted / archived / no access) is
 /// simply absent from the result — the caller treats "absent" conservatively, NOT as "lost".
 /// </summary>
-public sealed record CrmDealStatus(string Id, bool IsClosedWon);
+/// <param name="CloseDate">
+/// The deal's CRM close date AS IT STANDS NOW (HubSpot <c>closedate</c>). When the deal has moved to
+/// closed-lost this is the date it was LOST — the real event date the churn clawback prorates against,
+/// which is why it is read here and not taken from the detection stamp: a deal lost on the 20th and
+/// synced on the 27th must be clawed back as of the 20th. Null when the CRM has no value (an open
+/// stage, or a record with the property cleared) — the caller must NOT invent one.
+/// </param>
+public sealed record CrmDealStatus(string Id, bool IsClosedWon, DateOnly? CloseDate = null);
 
 /// <summary>
 /// A CRM owner (the user who owns a deal) mapped to a neutral shape. <see cref="Email"/> may be null

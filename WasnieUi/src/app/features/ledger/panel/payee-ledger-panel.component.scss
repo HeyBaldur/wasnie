@@ -1,0 +1,263 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ledger-loading {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-14);
+}
+
+// ── Statement header ────────────────────────────────────────────────────────
+
+.stmt__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.stmt__title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stmt__currency {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+}
+
+.eq {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.eq--cash {
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+// The balance equation is subordinate: same structure, quieter type.
+.eq--balance {
+  padding-top: var(--space-4);
+
+  .eq__value { font-size: var(--font-size-16); }
+  .eq__label { font-size: var(--font-size-11); }
+}
+
+.eq__term {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.eq__label {
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.eq__value {
+  font-size: var(--font-size-20);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.eq__op {
+  font-size: var(--font-size-18);
+  color: var(--color-text-tertiary);
+  padding-bottom: var(--space-1);
+}
+
+// "Takes home this month" is the anchor of the whole screen.
+.eq__term--anchor { margin-left: auto; text-align: right; }
+
+.eq__value--anchor {
+  font-size: var(--font-size-28);
+  font-weight: 700;
+  color: var(--color-brand);
+}
+
+.eq__value--retention { color: var(--color-danger); }
+.eq__value--debt { color: var(--color-danger); }
+.eq__value--credit { color: var(--color-success); }
+
+.stmt__caption {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-13);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+// ── Adjustment form ─────────────────────────────────────────────────────────
+
+.ledger__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.adj-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.adj-form__title {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.adj-form__hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+/* The amount is fixed by a domain rule, not by a preference — say so a shade louder than a hint. */
+.adj-form__hint--locked {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.adj-form__error {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-danger);
+}
+
+.adj-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+// ── Ledger table ────────────────────────────────────────────────────────────
+
+.ledger-table__head {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.ledger-table__title {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+// Signal 2 of 3: a colour band on the left edge, plus a tint on human rows.
+.ledger-row--system { box-shadow: inset 3px 0 0 0 var(--color-info); }
+
+.ledger-row--human {
+  box-shadow: inset 3px 0 0 0 var(--color-warning);
+  background: var(--color-warning-subtle);
+}
+
+.col-origin { width: 1%; white-space: nowrap; }
+.col-amount { text-align: right; white-space: nowrap; }
+.col-detail { max-width: 28rem; }
+
+.origin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.entry__justification {
+  display: block;
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+}
+
+.entry__author {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.entry__amount {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry__amount--credit { color: var(--color-success); }
+.entry__amount--debit { color: var(--color-danger); }
+
+/* ── The live balance: the number the screen leads with ────────────────────── */
+.stmt__live {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) 0 var(--space-5);
+}
+
+.stmt__live-label {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.stmt__live-value {
+  font-size: var(--font-size-32);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.stmt__live-value--debt { color: var(--color-danger); }
+.stmt__live-value--credit { color: var(--color-success); }
+
+.stmt__live-hint {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+/* ── The settled run: subordinate, and visibly a photograph ────────────────── */
+.stmt__snapshot {
+  border-top: 1px solid var(--color-border-default);
+  padding-top: var(--space-4);
+}
+
+.stmt__snapshot-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+/* The line that explains why the photograph and the live figure disagree. */
+.stmt__drift {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: var(--font-size-13);
+}

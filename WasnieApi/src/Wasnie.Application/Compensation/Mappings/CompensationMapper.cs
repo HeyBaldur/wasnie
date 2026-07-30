@@ -20,7 +20,9 @@ public static class CompensationMapper
             plan.Currency,
             plan.CreatedAt,
             plan.CreatedBy,
-            plan.Rules.Select(ToRuleDto).ToList());
+            plan.Rules.Select(ToRuleDto).ToList(),
+            plan.ClawbackMaturationDays,
+            plan.ClawbackCapPercent);
 
     public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan) =>
         new(

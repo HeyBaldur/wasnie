@@ -7,6 +7,7 @@ using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Assignments;
+using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
@@ -36,6 +37,21 @@ public sealed class AssignPlanToPayeeHandler(
 
         if (plan is null)
             return Result<PlanAssignmentDto>.Failure("Plan not found.");
+
+        // Money guard: an ARCHIVED plan is retired and must never gain a new assignment.
+        //
+        // Archiving already deactivates the assignments that exist at that moment (ArchivePlanHandler),
+        // but that sweep cannot cover one created afterwards — and the engine's eligibility check used
+        // to look only at the assignment's status, so a fresh Active assignment on a retired plan would
+        // have been credited. That is not hypothetical: on 2026-07-22 an assignment that outlived its
+        // plan's archiving let the CRM sync allocate €25,560 against a retired plan.
+        //
+        // Draft is deliberately still allowed: a plan is assigned while being prepared and activated
+        // afterwards, which is the normal setup order. Only Archived is a closed door.
+        if (plan.Status == PlanStatus.Archived)
+            return Result<PlanAssignmentDto>.Failure(
+                $"Plan '{plan.Name}' is archived and cannot be assigned to a payee. " +
+                "Assign an active plan, or create a new version of this one.");
 
         // Integrity guard: the assignment period must match the plan's effective period exactly.
         // The UI locks this field, but a direct API call must not be able to misalign the period

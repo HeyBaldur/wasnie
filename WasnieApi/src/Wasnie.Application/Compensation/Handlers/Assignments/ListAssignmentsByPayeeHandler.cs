@@ -13,13 +13,36 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
+/// <summary>
+/// A payee's plan assignments.
+///
+/// CONTRACT — the caller says what it wants; this handler never guesses:
+///
+///   status   Active (default) | Deactivated | all
+///            A STATUS filter, not a date one. Defaulting to Active is safe because it cannot
+///            hide a current assignment — only deactivated ones, and surfacing those has to be
+///            asked for (a payee card used to count deactivated rows as if they were current).
+///            Anything unrecognised falls back to Active: the permissive outcome is never the
+///            result of a typo.
+///
+///   dateFrom / dateTo   explicit range; an assignment matches when its effective period
+///                       INTERSECTS it. Either bound may be omitted.
+///
+///   period   the named-range convention (this-month, last-month, ytd, all…), honoured ONLY
+///            when the caller actually sends it.
+///
+///   none of the above → NO date filter. The full history is returned.
+///
+/// That last line is the change. This endpoint used to resolve a missing `period` to
+/// "this-month", so opening a payee's profile silently dropped every assignment that had
+/// expired — the caller never asked for that and was never told. Which slice of history to
+/// show is a presentation decision and belongs to the client.
+/// </summary>
 public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService, IClock clock)
     : IRequestHandler<ListAssignmentsByPayeeQuery, Result<PagedResult<PlanAssignmentDto>>>
 {
-    /// <summary>Explicit opt-in to return every status. Mirrors the `period=all` convention.</summary>
+    /// <summary>Explicit opt-in to return every status.</summary>
     public const string AllStatuses = "all";
-
-    private sealed record AssignmentRow(Wasnie.Domain.Compensation.Assignments.PlanAssignment Assignment, string PlanName, int PlanVersion);
 
     public async Task<Result<PagedResult<PlanAssignmentDto>>> Handle(
         ListAssignmentsByPayeeQuery request,
@@ -28,25 +51,16 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
 
-        // Load all assignments for this payee with plan info in-memory.
-        // DateOnly period filtering on owned DateRange is unreliable in SQL WHERE.
-        var allJoined = await (
+        // Everything below composes onto ONE IQueryable that is materialised exactly once, at the
+        // end, already filtered, sorted and paged. It used to load every assignment of the payee and
+        // discard in memory: a rep with 500 historical rows and 2 active ones shipped 498 rows across
+        // the wire per request, and TotalCount was computed on a list the database had already sent.
+        var query =
             from a in db.PlanAssignments.Where(a => a.PayeeId == request.PayeeId)
             join pl in db.CompensationPlans on a.PlanId equals pl.Id
-            select new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version }
-        ).ToListAsync(cancellationToken);
+            select new { Assignment = a, PlanName = pl.Name, PlanVersion = pl.Version };
 
-        var today = DateOnly.FromDateTime(clock.UtcNow);
-
-        // Status filter — the DEFAULT IS SAFE: callers that say nothing get only Active assignments.
-        // It used to be the opposite (no status → every status), which is why a payee's profile card
-        // counted and listed deactivated assignments as if they were current. Seeing deactivated rows
-        // now requires asking for them, so a caller can no longer surface them by omission.
-        //
-        // "all" is the repo's existing no-filter sentinel (same convention as PaginationQuery.Period,
-        // see PeriodHelper). Anything unrecognised falls back to Active rather than to "everything":
-        // the permissive outcome must be explicit, never the result of a typo.
-        var filtered = allJoined.AsEnumerable();
+        // ── Status ───────────────────────────────────────────────────────────
         if (string.Equals(p.Status, AllStatuses, StringComparison.OrdinalIgnoreCase))
         {
             // Explicit opt-in: no status filter at all.
@@ -54,31 +68,40 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
         else if (!string.IsNullOrWhiteSpace(p.Status) &&
                  Enum.TryParse<AssignmentStatus>(p.Status, ignoreCase: true, out var status))
         {
-            filtered = filtered.Where(x => x.Assignment.Status == status);
+            query = query.Where(x => x.Assignment.Status == status);
         }
         else
         {
-            filtered = filtered.Where(x => x.Assignment.Status == AssignmentStatus.Active);
+            query = query.Where(x => x.Assignment.Status == AssignmentStatus.Active);
         }
 
-        // Apply period intersection filter — assignment period [Start, End] must intersect [from, to]
-        var (from, to) = PeriodHelper.ComputeDateRange(p.Period, today);
-        if (from.HasValue || to.HasValue)
-            filtered = filtered.Where(x =>
-                (!from.HasValue || x.Assignment.EffectivePeriod.End >= from.Value) &&
-                (!to.HasValue || x.Assignment.EffectivePeriod.Start <= to.Value));
+        // ── Date range: explicit only ────────────────────────────────────────
+        var (from, to) = ResolveExplicitRange(p);
 
-        // Sort
+        if (from.HasValue)
+        {
+            var fromValue = from.Value;
+            query = query.Where(x => x.Assignment.EffectivePeriod.End >= fromValue);
+        }
+
+        if (to.HasValue)
+        {
+            var toValue = to.Value;
+            query = query.Where(x => x.Assignment.EffectivePeriod.Start <= toValue);
+        }
+
+        // ── Sort + page, both in SQL ─────────────────────────────────────────
         var desc = !string.Equals(p.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
-        var sortedList = desc
-            ? filtered.OrderByDescending(x => x.Assignment.EffectivePeriod.Start).ToList()
-            : filtered.OrderBy(x => x.Assignment.EffectivePeriod.Start).ToList();
+        query = desc
+            ? query.OrderByDescending(x => x.Assignment.EffectivePeriod.Start)
+            : query.OrderBy(x => x.Assignment.EffectivePeriod.Start);
 
-        var totalCount = sortedList.Count;
-        var pageItems = sortedList
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var pageItems = await query
             .Skip((p.Page - 1) * p.PageSize)
             .Take(p.PageSize)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         var dtos = pageItems
             .Select(x => CompensationMapper.ToPlanAssignmentDto(x.Assignment, x.PlanName, x.PlanVersion))
@@ -91,5 +114,22 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
             Page = p.Page,
             PageSize = p.PageSize,
         });
+    }
+
+    /// <summary>
+    /// The date window the caller ASKED for, or (null, null) when it asked for none.
+    /// PeriodHelper is only consulted when `period` was actually sent — calling it with a null
+    /// period is what used to manufacture the hidden "this-month" default. PeriodHelper itself is
+    /// shared with other endpoints and is deliberately left untouched.
+    /// </summary>
+    private (DateOnly? From, DateOnly? To) ResolveExplicitRange(PaginationQuery p)
+    {
+        if (p.DateFrom.HasValue || p.DateTo.HasValue)
+            return (p.DateFrom, p.DateTo);
+
+        if (!string.IsNullOrWhiteSpace(p.Period))
+            return PeriodHelper.ComputeDateRange(p.Period, DateOnly.FromDateTime(clock.UtcNow));
+
+        return (null, null);
     }
 }

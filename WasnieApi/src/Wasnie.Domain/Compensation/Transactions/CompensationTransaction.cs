@@ -1,4 +1,4 @@
-using Wasnie.Domain.Common;
+﻿using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -192,7 +192,7 @@ public sealed class CompensationTransaction : AggregateRoot
     public void RevertCalculatedToPending(string updatedBy, DateTimeOffset now)
     {
         if (Status == CompensationTransactionStatus.Paid)
-            throw new DomainException("Cannot revert a Paid transaction to Pending — it has already been paid out. Use the accounting correction workflow.");
+            throw new DomainException("Cannot revert a Paid transaction to Pending — it has already been paid out. Correct it with a balance adjustment on the payee's ledger instead.");
         if (Status == CompensationTransactionStatus.Cancelled)
             throw new DomainException("Cannot revert a Cancelled transaction to Pending.");
         if (Status != CompensationTransactionStatus.Calculated)
@@ -218,7 +218,7 @@ public sealed class CompensationTransaction : AggregateRoot
     public void Assign(Guid payeeId, string? comment, string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status == CompensationTransactionStatus.Paid)
-            throw new DomainException("Cannot assign a payee to a Paid transaction — please use the accounting correction workflow.");
+            throw new DomainException("Cannot assign a payee to a Paid transaction — the money has already moved. Correct it with a balance adjustment on the payee's ledger instead.");
         if (PayeeId.HasValue)
             throw new DomainException("Transaction already has an assigned payee. Use ReassignPayeeCommand to change it.");
         if (payeeId == Guid.Empty)
@@ -239,7 +239,7 @@ public sealed class CompensationTransaction : AggregateRoot
     public void Reassign(Guid newPayeeId, string reason, string updatedBy, DateTimeOffset now, Guid eventId)
     {
         if (Status == CompensationTransactionStatus.Paid)
-            throw new DomainException("Cannot reassign a Paid transaction — please use the accounting correction workflow.");
+            throw new DomainException("Cannot reassign a Paid transaction — the money has already moved. Correct it with a balance adjustment on the payee's ledger instead.");
         if (!PayeeId.HasValue)
             throw new DomainException("Transaction has no assigned payee. Use AssignPayeeCommand to assign one.");
         if (newPayeeId == Guid.Empty)

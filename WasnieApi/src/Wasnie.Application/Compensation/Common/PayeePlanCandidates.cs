@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Assignments;
+using Wasnie.Domain.Compensation.Plans;
 
 namespace Wasnie.Application.Compensation.Common;
 
@@ -38,14 +39,21 @@ public static class PayeePlanCandidates
             return [];
 
         var planIds = allPayeeAssignments.Select(a => a.PlanId).Distinct().ToList();
-        var planCurrencyById = (await db.CompensationPlans
-                .IgnoreQueryFilters()
-                .Where(p => p.TenantId == tenantId && planIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Currency })
-                .ToListAsync(ct))
-            .ToDictionary(p => p.Id, p => p.Currency);
+        var planFacts = await db.CompensationPlans
+            .IgnoreQueryFilters()
+            .Where(p => p.TenantId == tenantId && planIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Currency, p.Status })
+            .ToListAsync(ct);
+
+        var planCurrencyById = planFacts.ToDictionary(p => p.Id, p => p.Currency);
+        // An archived plan is not an option to offer and not one the engine would honour — the
+        // selector and the engine must agree, which is the entire reason this helper exists.
+        var archivedPlanIds = planFacts
+            .Where(p => p.Status == PlanStatus.Archived)
+            .Select(p => p.Id)
+            .ToHashSet();
 
         return PlanAssignmentResolver.Candidates(
-            allPayeeAssignments, txDate, txCurrency, planCurrencyById);
+            allPayeeAssignments, txDate, txCurrency, planCurrencyById, archivedPlanIds);
     }
 }

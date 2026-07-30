@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -17,8 +17,10 @@ public sealed record PayoutFilterQuery
     public string? PlanIds { get; init; }      // comma-separated GUIDs
     public string? Status { get; init; }       // Calculated|Approved|Paid|Disputed|All — default All
     public string? Currencies { get; init; }   // comma-separated 3-letter codes
-    public DateOnly? PeriodFrom { get; init; } // payouts where CalculatedAt.Date >= this
-    public DateOnly? PeriodTo { get; init; }   // payouts where CalculatedAt.Date <= this
+    // COMPENSATION period, not the calculation timestamp: a payout matches when its own period
+    // INTERSECTS [PeriodFrom, PeriodTo]. Same semantics as everywhere else in the domain.
+    public DateOnly? PeriodFrom { get; init; } // payouts whose Period.End >= this
+    public DateOnly? PeriodTo { get; init; }   // payouts whose Period.Start <= this
     public bool ExcludeZero { get; init; } = false; // exclude payouts with TotalCommission = 0
 
     // Optional: restrict to a specific pay run (used by the detail export and run-detail sub-table).

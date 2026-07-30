@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -192,7 +192,8 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         var payeeId = await CreatePayeeAsync(_clientA, "DASH-PEND-MT-001");
         var planId = await CreateActivePlanAsync(_clientA, "EUR");
         await CreateAssignmentAsync(_clientA, payeeId, planId);
-        await CreateTransactionAsync(_clientA, payeeId, planId, amount: 1_000m, currency: "EUR");
+        await CreateTransactionAsync(_clientA, payeeId, planId, amount: 1_000m, currency: "EUR",
+            processImmediately: false);
 
         var bodyA = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
@@ -220,8 +221,10 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         await CreateAssignmentAsync(_clientA, payeeId1, planId1);
         await CreateAssignmentAsync(_clientA, payeeId2, planId2);
 
-        await CreateTransactionAsync(_clientA, payeeId1, planId1, amount: 500m, currency: "EUR");
-        await CreateTransactionAsync(_clientA, payeeId2, planId2, amount: 700m, currency: "EUR");
+        await CreateTransactionAsync(_clientA, payeeId1, planId1, amount: 500m, currency: "EUR",
+            processImmediately: false);
+        await CreateTransactionAsync(_clientA, payeeId2, planId2, amount: 700m, currency: "EUR",
+            processImmediately: false);
 
         var body = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
@@ -422,8 +425,14 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         (await client.PostAsync($"/api/quotas/{quotaId}/activate", null)).EnsureSuccessStatusCode();
     }
 
+    /// <summary>
+    /// Ingest defaults to ProcessImmediately = true (IngestTransactionCommand.cs), which credits and
+    /// marks the transaction Calculated on the spot. Tests about PENDING work must opt out, or the
+    /// row they are asserting on never exists in the Pending state.
+    /// </summary>
     private async Task CreateTransactionAsync(
-        HttpClient client, Guid payeeId, Guid planId, decimal amount, string currency = "EUR")
+        HttpClient client, Guid payeeId, Guid planId, decimal amount, string currency = "EUR",
+        bool processImmediately = true)
     {
         var req = new
         {
@@ -433,6 +442,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
             currency,
             transactionDate = "2026-06-01",
             quantity = 1,
+            processImmediately,
         };
         (await client.PostAsJsonAsync("/api/transactions", req)).EnsureSuccessStatusCode();
     }

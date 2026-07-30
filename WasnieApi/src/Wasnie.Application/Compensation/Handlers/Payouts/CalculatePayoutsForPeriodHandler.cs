@@ -7,6 +7,7 @@ using Wasnie.Application.Compensation.Commands.Payouts;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Credits;
@@ -56,6 +57,43 @@ public sealed class CalculatePayoutsForPeriodHandler(
         if (overlapping.Count == 0)
             return Result<CalculatePayoutsResult>.Success(
                 new CalculatePayoutsResult(0, [], []));
+
+        // ── The circuit breaker for people who have left ──────────────────────────────────────────
+        // A terminated payee earns nothing further, so generating payouts for them produces a ghost the
+        // engine re-processes every run — and, worse, an outstanding clawback balance that keeps looking
+        // like it might still be collected from future commissions that will never exist.
+        //
+        // The switch lives HERE, reading the Payee aggregate, and NOT in the ledger: a ledger is a record
+        // of financial events, not of employment status, and freezing it with a mutable flag would break
+        // the append-only rule the whole subsystem rests on. Nothing is written or erased — the debt stays
+        // exactly where it is, visible on the balance and in the terminated-with-balance list, waiting for
+        // a person in finance to close it. Wasnie freezes and records; it does not collect.
+        //
+        // Terminating someone does NOT cancel a payout already calculated for work they did: this filter
+        // only stops NEW ones from being generated. A residual payout that already exists is still paid,
+        // and still nets against their debt at settlement — which is the last chance to recover it.
+        var payeeIds = overlapping.Select(a => a.PayeeId).Distinct().ToList();
+        var terminatedPayeeIds = (await db.Payees
+                .IgnoreQueryFilters()
+                .Where(p => p.TenantId == tenantId
+                         && payeeIds.Contains(p.Id)
+                         && p.Status == PayeeStatus.Terminated)
+                .Select(p => p.Id)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        if (terminatedPayeeIds.Count > 0)
+        {
+            var before = overlapping.Count;
+            overlapping = overlapping.Where(a => !terminatedPayeeIds.Contains(a.PayeeId)).ToList();
+            logger.LogInformation(
+                "CalculatePayouts: skipped {SkippedAssignments} assignment(s) of {TerminatedCount} terminated payee(s).",
+                before - overlapping.Count, terminatedPayeeIds.Count);
+
+            if (overlapping.Count == 0)
+                return Result<CalculatePayoutsResult>.Success(
+                    new CalculatePayoutsResult(0, [], []));
+        }
 
         // Batch-load plan currencies for all relevant plan IDs (one query).
         // Defense in depth: exclude Archived plans. An archived plan must never contribute to a

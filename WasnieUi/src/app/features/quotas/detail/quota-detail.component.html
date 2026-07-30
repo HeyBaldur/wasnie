@@ -43,6 +43,13 @@
               <app-icon name="calendar" [size]="13" />
               {{ quota.periodStart }} – {{ quota.periodEnd }}
             </span>
+            <!-- Still Active, but its period is behind us. Said next to the dates, where the reader
+                 is already looking, and next to the status badge it qualifies. -->
+            @if (quota.periodEnd | quotaPeriodExpired: quota.status) {
+              <ws-badge variant="warning" size="sm">
+                {{ 'QUOTAS.PERIOD_EXPIRED' | translate }}
+              </ws-badge>
+            }
             <span class="meta-chip">
               <app-icon name="coin" [size]="13" />
               {{ quota.amount | currencyFormat: quota.currency }}
@@ -66,7 +73,14 @@
         </div>
         <div class="field-group">
           <span class="field-label">{{ 'QUOTAS.FIELD_PERIOD' | translate }}</span>
-          <span class="field-value field-mono">{{ quota.periodStart }} – {{ quota.periodEnd }}</span>
+          <span class="field-value field-mono">
+            {{ quota.periodStart }} – {{ quota.periodEnd }}
+            @if (quota.periodEnd | quotaPeriodExpired: quota.status) {
+              <ws-badge variant="warning" size="sm">
+                {{ 'QUOTAS.PERIOD_EXPIRED' | translate }}
+              </ws-badge>
+            }
+          </span>
         </div>
         <div class="field-group">
           <span class="field-label">{{ 'QUOTAS.FIELD_AMOUNT' | translate }}</span>

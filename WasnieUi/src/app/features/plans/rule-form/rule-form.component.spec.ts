@@ -68,6 +68,9 @@ function makePlan(rule: Rule): Plan {
     createdAt: '2024-01-01T00:00:00Z',
     createdBy: 'user-1',
     rules: [rule],
+    // Opted out of clawbacks, like every plan until someone configures a maturation window.
+    clawbackMaturationDays: null,
+    clawbackCapPercent: null,
   };
 }
 
@@ -112,6 +115,85 @@ describe('RuleFormComponent — MeasurementType picker filter (V1)', () => {
     expect(values).not.toContain(MeasurementType.Margin);
     expect(values).not.toContain(MeasurementType.Attainment);
     expect(values).not.toContain(MeasurementType.Custom);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Floor above cap — a contradictory combination the engine accepts silently
+// ---------------------------------------------------------------------------
+// The engine applies modifier → cap → floor, so the floor runs LAST: a floor above the cap lifts the
+// commission back over the ceiling and the cap stops changing any outcome. The form must say so.
+
+describe('RuleFormComponent — floor above cap warning', () => {
+  function makeComponent() {
+    const planSignal = signal<Plan | null>(makePlan(makeApiRule()));
+    TestBed.configureTestingModule({
+      imports: [RuleFormComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: PlansStore,
+          useValue: {
+            selectedPlan: planSignal as unknown as PlansStore['selectedPlan'],
+            loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()),
+          },
+        },
+        { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: { get: (k: string) => (k === 'planId' ? PLAN_ID : null) } } },
+        },
+      ],
+    });
+    TestBed.overrideComponent(RuleFormComponent, {
+      set: { imports: [ReactiveFormsModule, TranslateModule], template: `<form [formGroup]="form"></form>` },
+    });
+    const fixture = TestBed.createComponent(RuleFormComponent);
+    fixture.detectChanges();
+    return fixture.componentInstance;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  function set(comp: RuleFormComponent, hasCap: boolean, cap: number, hasFloor: boolean, floor: number) {
+    comp.form.patchValue({ hasCap, cap: { amount: cap }, hasFloor, floor: { amount: floor } });
+  }
+
+  it('warns when the floor is above the cap', () => {
+    const comp = makeComponent();
+    set(comp, true, 200, true, 500);
+    expect(comp.floorExceedsCap()).toBeTrue();
+  });
+
+  it('stays quiet when the floor is below the cap', () => {
+    const comp = makeComponent();
+    set(comp, true, 500, true, 200);
+    expect(comp.floorExceedsCap()).toBeFalse();
+  });
+
+  it('stays quiet when floor and cap are equal — pinned, not contradictory', () => {
+    const comp = makeComponent();
+    set(comp, true, 300, true, 300);
+    expect(comp.floorExceedsCap()).toBeFalse();
+  });
+
+  it('says nothing when either section is switched off', () => {
+    const comp = makeComponent();
+    set(comp, false, 200, true, 500);
+    expect(comp.floorExceedsCap()).withContext('no cap to contradict').toBeFalse();
+
+    set(comp, true, 200, false, 500);
+    expect(comp.floorExceedsCap()).withContext('no floor to apply').toBeFalse();
+  });
+
+  it('treats a cap of zero as "no cap set yet" rather than a cap of nothing', () => {
+    // The field defaults to 0 the moment the section is toggled on; warning on that would fire
+    // before the user has typed anything.
+    const comp = makeComponent();
+    set(comp, true, 0, true, 500);
+    expect(comp.floorExceedsCap()).toBeFalse();
   });
 });
 

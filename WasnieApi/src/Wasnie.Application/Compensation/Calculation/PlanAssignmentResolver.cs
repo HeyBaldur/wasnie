@@ -15,21 +15,42 @@ namespace Wasnie.Application.Compensation.Calculation;
 public static class PlanAssignmentResolver
 {
     /// <summary>
-    /// The assignments that could legitimately carry this transaction: Active, covering the date,
-    /// and denominated in the transaction's currency. This is THE eligibility rule — the plan
-    /// selector offered to the admin must be built from this same method, so the options shown are
-    /// exactly the ones the engine would consider. Re-deriving it anywhere else is how a UI starts
-    /// promising an attribution the engine will not honour.
+    /// The assignments that could legitimately carry this transaction: their PLAN is not archived, the
+    /// assignment is Active, its period covers the date, and the plan is denominated in the
+    /// transaction's currency. This is THE eligibility rule — the plan selector offered to the admin
+    /// must be built from this same method, so the options shown are exactly the ones the engine would
+    /// consider. Re-deriving it anywhere else is how a UI starts promising an attribution the engine
+    /// will not honour.
     /// </summary>
+    /// <param name="archivedPlanIds">
+    /// Plans that have been retired. An assignment to one of these is NEVER a candidate, whatever its
+    /// own status says.
+    ///
+    /// This filter is the second layer of a two-layer guard. The first is that archiving a plan
+    /// deactivates its assignments, and that a payee cannot be assigned to an archived plan at all
+    /// (AssignPlanToPayeeHandler). Both of those act at write time and therefore only cover what
+    /// exists when they run — which is exactly how the 2026-07-22 incident happened: a plan was
+    /// archived while the deactivation sweep did not yet exist, its assignment stayed Active, and the
+    /// CRM sync credited €25,560 against a retired plan an hour later. Nothing in the READ path
+    /// noticed, because eligibility only ever looked at the assignment's status. It looks at the
+    /// plan's now.
+    ///
+    /// The parameter is required on purpose — no default. A default is how a caller silently opts out
+    /// of a money guard.
+    /// </param>
     public static IReadOnlyList<PlanAssignment> Candidates(
         IEnumerable<PlanAssignment> allPayeeAssignments,
         DateOnly txDate,
         string txCurrency,
-        IReadOnlyDictionary<Guid, string> planCurrencyById)
+        IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds)
     {
+        // Step 0: a retired plan pays nothing. Checked first: it is the cheapest filter and the one
+        // whose absence has already cost real money.
         // Step 1: active assignments whose effective period covers the transaction date.
         var dateCandidates = allPayeeAssignments
             .Where(pa =>
+                !archivedPlanIds.Contains(pa.PlanId) &&
                 pa.Status == AssignmentStatus.Active &&
                 pa.EffectivePeriod is not null &&
                 pa.EffectivePeriod.Start <= txDate &&
@@ -60,9 +81,11 @@ public static class PlanAssignmentResolver
         IEnumerable<PlanAssignment> allPayeeAssignments,
         DateOnly txDate,
         string txCurrency,
-        IReadOnlyDictionary<Guid, string> planCurrencyById)
+        IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds)
     {
-        var currencyMatched = Candidates(allPayeeAssignments, txDate, txCurrency, planCurrencyById);
+        var currencyMatched = Candidates(
+            allPayeeAssignments, txDate, txCurrency, planCurrencyById, archivedPlanIds);
 
         if (currencyMatched.Count == 0)
             return null; // No plan in this currency → stay Pending (another plan may be created later).
@@ -98,6 +121,7 @@ public static class PlanAssignmentResolver
         DateOnly txDate,
         string txCurrency,
         IReadOnlyDictionary<Guid, string> planCurrencyById,
+        IReadOnlySet<Guid> archivedPlanIds,
         Guid selectedAssignmentId)
     {
         var all = allPayeeAssignments as IReadOnlyList<PlanAssignment> ?? allPayeeAssignments.ToList();
@@ -106,6 +130,13 @@ public static class PlanAssignmentResolver
         if (selected is null)
             return SelectedAssignmentResolution.Rejected(
                 $"The plan assignment chosen for this transaction ({selectedAssignmentId}) no longer belongs to its payee. " +
+                "Re-select the plan on the transaction.");
+
+        // Checked explicitly rather than left to fall through the currency test, so the admin is told
+        // the real reason: the plan was retired, not that something is wrong with the currency.
+        if (archivedPlanIds.Contains(selected.PlanId))
+            return SelectedAssignmentResolution.Rejected(
+                "The plan chosen for this transaction has been archived, so it can no longer pay commission. " +
                 "Re-select the plan on the transaction.");
 
         if (selected.Status != AssignmentStatus.Active)

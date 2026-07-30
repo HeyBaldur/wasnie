@@ -241,6 +241,68 @@ describe('DashboardComponent helpers', () => {
     });
   });
 
+  // Departed payees whose account never closed. The engine stops processing them — correct — which
+  // is also why nothing else on any screen would ever mention the money still sitting there.
+  describe('terminated accounts pending settlement', () => {
+    const row = (payeeId: string, balance: number) => ({
+      payeeId,
+      payeeName: `Payee ${payeeId}`,
+      employeeCode: payeeId.toUpperCase(),
+      terminationDate: '2026-06-30',
+      balance,
+      currency: 'EUR',
+      balanceUpdatedAt: '2026-07-29T00:00:00Z',
+    });
+
+    it('shows nothing to do when no departed payee has an open account', () => {
+      component.terminated.rows.set([]);
+
+      expect(component.terminated.count()).toBe(0);
+      expect(component.terminated.owedToPayeesCount()).toBe(0);
+      expect(component.terminated.owedByPayeesCount()).toBe(0);
+    });
+
+    it('counts exactly the rows the server returned, both signs', () => {
+      // The endpoint decides what is "still open"; the card only counts what came back.
+      component.terminated.rows.set([row('a', -400), row('b', 500)]);
+
+      expect(component.terminated.count()).toBe(2);
+    });
+
+    it('keeps money owed TO a payee apart from money owed BY one', () => {
+      component.terminated.rows.set([row('a', -400), row('b', 500), row('c', -250)]);
+
+      expect(component.terminated.owedToPayeesCount())
+        .withContext('a liability: treasury still has to pay them').toBe(1);
+      expect(component.terminated.owedByPayeesCount())
+        .withContext('debt to recover or write off').toBe(2);
+    });
+
+    it('adds open accounts to the band badge so the header does not claim all-clear', () => {
+      component.store.summary.set(buildMockSummary({
+        draftPayRunsCount: 0,
+        payoutsPendingApprovalCount: 0,
+        payoutsApprovedUnpaidByCurrency: [],
+        pendingByPlanItems: [],
+      }));
+      component.terminated.rows.set([row('a', -400)]);
+
+      expect(component.pendingActionCount()).toBe(1);
+    });
+
+    it('does not inflate the badge when every account is settled', () => {
+      component.store.summary.set(buildMockSummary({
+        draftPayRunsCount: 2,
+        payoutsPendingApprovalCount: 0,
+        payoutsApprovedUnpaidByCurrency: [],
+        pendingByPlanItems: [],
+      }));
+      component.terminated.rows.set([]);
+
+      expect(component.pendingActionCount()).toBe(2);
+    });
+  });
+
   describe('pendingByPlanTotalCount', () => {
     it('returns 0 with no summary', () => {
       expect(component.pendingByPlanTotalCount()).toBe(0);
@@ -415,9 +477,15 @@ describe('Dashboard deal-lost alerts', () => {
   let component: DashboardComponent;
   let store: DashboardStore;
 
-  const alert = (status: 'Calculated' | 'Paid', ref: string) => ({
+  const alert = (
+    status: 'Calculated' | 'Paid',
+    ref: string,
+    clawbackState: 'NotApplicable' | 'Applied' | 'Pending' = 'NotApplicable',
+  ) => ({
     transactionId: `tx-${ref}`, referenceNumber: ref, externalDealId: '5000',
-    transactionStatus: status, commissionAmount: 100, commissionCurrency: 'EUR',
+    // transactionStatus is the LIVE status from the server; statusAtDetection is the old snapshot.
+    transactionStatus: status, statusAtDetection: 'Calculated', clawbackState,
+    commissionAmount: 100, commissionCurrency: 'EUR',
     detectedAt: '2026-07-27T00:00:00Z',
   });
 
@@ -448,6 +516,31 @@ describe('Dashboard deal-lost alerts', () => {
       .map(b => (b.nativeElement as HTMLElement).textContent ?? '');
     // Exactly one revert button — for the Calculated alert; the Paid one shows a badge, no button.
     expect(buttons.filter(t => t.includes('DEAL_LOST_REVERT')).length).toBe(1);
+  });
+
+  // ── The sentence has to track the button ───────────────────────────────────
+  // A row that offers no revert must not keep saying "you can revert (it has not been paid)". These
+  // pin the exact text keys, because the defect was never the button — it was the claim next to it.
+
+  it('an unpaid commission still reads as revertible', () => {
+    expect(component.dealLostActionKey(alert('Calculated', 'A') as never))
+      .toBe('DASHBOARD.DEAL_LOST_ACTION_CALCULATED');
+  });
+
+  it('a PAID commission whose clawback already ran says so — never "not paid"', () => {
+    expect(component.dealLostActionKey(alert('Paid', 'B', 'Applied') as never))
+      .toBe('DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_APPLIED');
+  });
+
+  it('a PAID commission whose clawback has not run yet reads as pending', () => {
+    expect(component.dealLostActionKey(alert('Paid', 'C', 'Pending') as never))
+      .toBe('DASHBOARD.DEAL_LOST_ACTION_PAID_CLAWBACK_PENDING');
+  });
+
+  it('a commission in any other state claims nothing and offers nothing', () => {
+    const cancelled = { ...alert('Paid', 'D'), transactionStatus: 'Cancelled' } as never;
+    expect(component.canRevert(cancelled)).toBeFalse();
+    expect(component.dealLostActionKey(cancelled)).toBe('DASHBOARD.DEAL_LOST_ACTION_OTHER');
   });
 
   it('askRevert sets the confirmation target; cancelRevert clears it', () => {

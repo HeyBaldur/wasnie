@@ -1,7 +1,9 @@
 using System.Text.Json;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Commands.Ledger;
 using Wasnie.Domain.Audit;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Integrations.Crm;
@@ -12,7 +14,8 @@ namespace Wasnie.Application.Integrations.Crm;
 public sealed class DealLostReconciler(
     IApplicationDbContext db,
     ICrmDealSource dealSource,
-    IGuidGenerator guid)
+    IGuidGenerator guid,
+    ISender sender)
     : IDealLostReconciler
 {
     /// <summary>The deal id is the part of the ExternalId before the first '-' (deal-level = "{dealId}",
@@ -52,6 +55,8 @@ public sealed class DealLostReconciler(
         var statuses = await dealSource.GetDealStatusesByIdsAsync(tenantId, dealIds, cancellationToken)
                        ?? [];
         var wonById = statuses.ToDictionary(s => s.Id, s => s.IsClosedWon, StringComparer.Ordinal);
+        // The CRM's own loss date, kept alongside the status: it is the churn trigger's EventDate.
+        var closeDateById = statuses.ToDictionary(s => s.Id, s => s.CloseDate, StringComparer.Ordinal);
 
         // A deal is "lost" ONLY when the CRM explicitly returned it as not-won. A deal absent from the batch
         // (deleted / archived / no access / transient error) is left alone — we never destroy a commission on
@@ -151,6 +156,29 @@ public sealed class DealLostReconciler(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // ── Churn trigger ────────────────────────────────────────────────────────────────────────────
+        // AFTER the alerts are committed, and one command per transaction: each churn debit owns its own
+        // SaveChanges + OCC retry, so a balance contended by a pay run retries alone instead of dragging
+        // the whole reconciliation with it.
+        //
+        // Only PAID transactions. A Calculated one is still handled by the admin's revert — that path is
+        // untouched, and it must keep refusing Paid.
+        foreach (var t in lostTxs.Where(t => t.Status == CompensationTransactionStatus.Paid))
+        {
+            var dealId = DealIdOf(t.ExternalId!);
+
+            // No CRM loss date → NO DEBIT. The alternative would be inventing one (DetectedAt), and a
+            // clawback computed from when we happened to sync is a number nobody can defend. The alert
+            // stays open, which is exactly the operator-visible signal that this one needs a human.
+            if (closeDateById.TryGetValue(dealId, out var closeDate) && closeDate is { } eventDate)
+            {
+                await sender.Send(
+                    new RegisterDealChurnClawbackCommand(tenantId, t.Id, eventDate, dealId),
+                    cancellationToken);
+            }
+        }
+
         return lostTxs.Count;
     }
 }

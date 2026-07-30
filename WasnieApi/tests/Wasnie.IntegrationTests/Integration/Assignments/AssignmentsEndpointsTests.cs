@@ -123,6 +123,68 @@ public sealed class AssignmentsEndpointsTests : IAsyncLifetime
         body.PlanId.Should().Be(plan.Id);
     }
 
+    // ── An archived plan is retired and cannot gain a new assignment ──────────
+    // Archiving already deactivates the assignments that exist at that moment, but that sweep cannot
+    // cover one created afterwards — and the engine used to check only the assignment's status. On
+    // 2026-07-22 an assignment that outlived its plan's archiving let the CRM sync allocate €25,560
+    // against a retired plan. This is the write-time half of the guard; the read-time half lives in
+    // PlanAssignmentResolver (see PlanAttributionTests).
+
+    [Fact]
+    public async Task CreateAssignment_ArchivedPlan_Returns400AndWritesNothing()
+    {
+        var payee = await CreatePayeeAsync(_clientA);
+        var plan = await CreateActivePlanAsync(_clientA);
+
+        var archiveResp = await _clientA.PostAsync($"/api/plans/{plan.Id}/archive", null);
+        archiveResp.EnsureSuccessStatusCode();
+
+        var response = await _clientA.PostAsJsonAsync("/api/assignments", new
+        {
+            planId = plan.Id,
+            payeeId = payee.Id,
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("archived");
+
+        // Nothing was persisted: the payee has no assignment to the retired plan.
+        var list = await _clientA.GetAsync($"/api/assignments/payee/{payee.Id}");
+        var result = await list.Content.ReadPagedResultAsync<AssignmentSummaryResponse>();
+        result.Items.Should().NotContain(a => a.PlanId == plan.Id);
+    }
+
+    [Fact]
+    public async Task CreateAssignment_DraftPlan_StillWorks()
+    {
+        // Unchanged on purpose: a plan is normally assigned while being prepared and activated after.
+        // Only Archived is a closed door — narrowing Draft too would break the ordinary setup order.
+        var payee = await CreatePayeeAsync(_clientA);
+
+        var planResp = await _clientA.PostAsJsonAsync("/api/plans", new
+        {
+            name = $"Draft Plan {Guid.NewGuid().ToString("N")[..8]}",
+            description = "",
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31",
+            currency = "EUR",
+        });
+        planResp.EnsureSuccessStatusCode();
+        var draft = (await planResp.Content.ReadFromJsonAsync<PlanResponse>())!;
+
+        var response = await _clientA.PostAsJsonAsync("/api/assignments", new
+        {
+            planId = draft.Id,
+            payeeId = payee.Id,
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     [Fact]
     public async Task CreateAssignment_EndBeforeStart_Returns400()
     {

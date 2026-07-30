@@ -1,4 +1,4 @@
-#pragma warning disable CS8602
+﻿#pragma warning disable CS8602
 
 using FluentAssertions;
 using MediatR;
@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Application.Compensation.Commands.PayRuns;
 using Wasnie.Application.Compensation.Commands.Payouts;
 using Wasnie.Application.Compensation.Handlers.PayRuns;
@@ -16,6 +17,7 @@ using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
+using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
@@ -125,6 +127,9 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
         new(db, auth ?? AlwaysAllowAuth.Instance,
             new FixedUser(), new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
             NoOpAuditService.Instance,
+            // The real settlement service: these tests exercise the payment path end to end, and a
+            // stub here would hide a clawback withholding money it should not.
+            new PayRunSettlementService(db, new FakeGuidGenerator()),
             NullLogger<MarkPayRunPaidHandler>.Instance);
 
     private static ReopenPayRunHandler ReopenHandler(
@@ -812,6 +817,69 @@ public sealed class PayRunEngineTests(PayoutEngineFixture fixture)
 
         await act.Should().ThrowAsync<ForbiddenException>()
             .WithMessage($"*{Permission.PayoutsReopen}*");
+    }
+
+    [Fact]
+    public async Task ListPayRuns_FilterByPeriod_FindsARunCreatedOutsideItsOwnPeriod()
+    {
+        // THE case the CreatedAt filter broke: January's money lives in a run that was opened on
+        // 1 February because the engine ran late. Finance filtering for January must still find it.
+        var tenantId = Guid.NewGuid();
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.PayRuns.Add(PayRun.Open(
+                tenantId, new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 31), "test",
+                Guid.NewGuid(), new DateTimeOffset(2026, 2, 1, 9, 0, 0, TimeSpan.Zero)));
+            // A March run, created the same day, must NOT match a January filter.
+            db.PayRuns.Add(PayRun.Open(
+                tenantId, new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 31), "test",
+                Guid.NewGuid(), new DateTimeOffset(2026, 2, 1, 9, 0, 0, TimeSpan.Zero)));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var result = await ListHandler(db).Handle(
+                new ListPayRunsQuery(new PayRunFilterQuery
+                {
+                    PeriodFrom = new DateOnly(2026, 1, 1),
+                    PeriodTo = new DateOnly(2026, 1, 31),
+                }),
+                CancellationToken.None);
+
+            var items = result.Value!.Items;
+            items.Should().ContainSingle(
+                "only the January run intersects the January filter, regardless of when it was created");
+            items[0].PeriodStart.Should().Be(new DateOnly(2026, 1, 1));
+        }
+    }
+
+    [Fact]
+    public async Task ListPayRuns_FilterByOneMonth_FindsARunSpanningAWholeQuarter()
+    {
+        // Intersection, not containment.
+        var tenantId = Guid.NewGuid();
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.PayRuns.Add(PayRun.Open(
+                tenantId, new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 31), "test",
+                Guid.NewGuid(), Now));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var result = await ListHandler(db).Handle(
+                new ListPayRunsQuery(new PayRunFilterQuery
+                {
+                    PeriodFrom = new DateOnly(2026, 2, 1),
+                    PeriodTo = new DateOnly(2026, 2, 28),
+                }),
+                CancellationToken.None);
+
+            result.Value!.Items.Should().ContainSingle(
+                "a quarter-long run covers February and must appear when February is filtered");
+        }
     }
 
     [Fact]

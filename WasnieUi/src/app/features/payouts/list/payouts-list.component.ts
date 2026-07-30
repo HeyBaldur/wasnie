@@ -138,7 +138,23 @@ export class PayoutsListComponent implements OnInit {
     );
 
   ngOnInit(): void {
-    const qp = this.route.snapshot.queryParams as Record<string, string>;
+    // SUBSCRIBE, don't snapshot. Angular reuses this component when only the query params change, so
+    // ngOnInit runs once and a snapshot read there goes stale: arriving from the dashboard's
+    // "Approved — Not Paid" card kept the previous filter until the user pressed reload, and leaving
+    // via the sidebar's Payouts link left the Approved filter applied under a URL that no longer said
+    // so. The URL is the filter, so the filter has to follow the URL every time it changes.
+    //
+    // No feedback loop: _syncUrl() writes with history.replaceState, which the router does not observe,
+    // and the form is patched with emitEvent:false, so re-applying never re-triggers itself.
+    this.route.queryParams
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(params => this._applyQueryParams(params as Record<string, string>));
+
+    this._wireFormSubscriptions();
+  }
+
+  /** Puts the URL's filter into the store and the form. Runs on entry AND on every later change. */
+  private _applyQueryParams(qp: Record<string, string>): void {
     const hasUrlParams = Object.keys(qp).length > 0;
 
     if (hasUrlParams) {
@@ -151,12 +167,16 @@ export class PayoutsListComponent implements OnInit {
       }
       this.hideZero.set(qp['hz'] !== '0');
     } else {
-      // Default: current month, hide zeros.
+      // No params means NO filter — the default view, not whatever was left over. clearFilters()
+      // first, because _applyPeriod only sets the dates: without it, leaving the page through the
+      // sidebar kept the previous status filter applied under a URL that no longer mentioned it.
+      this.store.clearFilters();
+      this.activePeriod.set('this-month');
+      this.hideZero.set(true);
       this._applyPeriod('this-month');
     }
 
     this._syncFormFromStore();
-    this._wireFormSubscriptions();
 
     // Resolve plan names for any IDs restored from URL params that aren't yet cached.
     const uncachedPlanIds = this.store.filter().planIds.filter(id => !this._planCache.has(id));
@@ -165,7 +185,7 @@ export class PayoutsListComponent implements OnInit {
     }
 
     // Refresh on route entry is handled centrally by [refreshOnEnter] (shared mechanism); the store's
-    // constructor effect covers the first mount. (Previously an ad-hoc reload() lived here.)
+    // constructor effect covers the first mount.
   }
 
   private _syncFormFromStore(): void {

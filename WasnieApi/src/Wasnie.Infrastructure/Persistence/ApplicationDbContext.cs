@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +8,7 @@ using Wasnie.Domain.BackgroundJobs;
 using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
+using Wasnie.Domain.Compensation.Ledger;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Plans;
@@ -59,6 +60,9 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<Credit> Credits => Set<Credit>();
     public Microsoft.EntityFrameworkCore.DbSet<CompensationPayout> CompensationPayouts => Set<CompensationPayout>();
     public Microsoft.EntityFrameworkCore.DbSet<PayRun> PayRuns => Set<PayRun>();
+    public Microsoft.EntityFrameworkCore.DbSet<PayeeLedgerEntry> PayeeLedgerEntries => Set<PayeeLedgerEntry>();
+    public Microsoft.EntityFrameworkCore.DbSet<PayeeBalance> PayeeBalances => Set<PayeeBalance>();
+    public Microsoft.EntityFrameworkCore.DbSet<PayRunSettlement> PayRunSettlements => Set<PayRunSettlement>();
     public Microsoft.EntityFrameworkCore.DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
     public Microsoft.EntityFrameworkCore.DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
 
@@ -93,6 +97,9 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new CompensationPayoutConfiguration());
         builder.ApplyConfiguration(new PayoutLineConfiguration());
         builder.ApplyConfiguration(new PayRunConfiguration());
+        builder.ApplyConfiguration(new PayeeLedgerEntryConfiguration());
+        builder.ApplyConfiguration(new PayeeBalanceConfiguration());
+        builder.ApplyConfiguration(new PayRunSettlementConfiguration());
         builder.ApplyConfiguration(new ImportAuditConfiguration());
         builder.ApplyConfiguration(new AuditLogConfiguration());
         builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
@@ -117,6 +124,9 @@ public sealed class ApplicationDbContext(
         builder.Entity<Credit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<CompensationPayout>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<PayRun>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<PayeeLedgerEntry>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<PayeeBalance>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<PayRunSettlement>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
+﻿import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -12,7 +12,7 @@ import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
-import { QuotaStatusVariantPipe, QuotaStatusLabelPipe } from '../../../shared/pipes/quota-status.pipe';
+import { QuotaStatusVariantPipe, QuotaStatusLabelPipe, QuotaPeriodExpiredPipe } from '../../../shared/pipes/quota-status.pipe';
 import { PayeesApiService } from '../services/payees.api.service';
 import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
 import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
@@ -39,8 +39,9 @@ import {
   type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
+import { PayeeLedgerPanelComponent } from '../../ledger/panel/payee-ledger-panel.component';
 
-type Tab = 'overview' | 'profile' | 'activity';
+type Tab = 'overview' | 'profile' | 'activity' | 'ledger';
 type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 
 @Component({
@@ -57,6 +58,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     CurrencyFormatPipe,
     QuotaStatusVariantPipe,
     QuotaStatusLabelPipe,
+    QuotaPeriodExpiredPipe,
     PayeeFormComponent,
     HasPermissionDirective,
     WsLoadMoreDirective,
@@ -71,6 +73,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
     WsBarChartComponent,
     WsSegmentedControlComponent,
     WsTooltipDirective,
+    PayeeLedgerPanelComponent,
   ],
   templateUrl: './payee-detail.component.html',
   styleUrl: './payee-detail.component.scss',
@@ -168,7 +171,12 @@ export class PayeeDetailComponent implements OnInit {
   /// Mirrors the original init sequence (loadPayee + loadOverview, which loads the list cards in
   /// its finally) and additionally clears the previous payee's data so nothing bleeds across.
   private initForCurrentPayee(): void {
-    this.activeTab.set('overview');
+    // Honour ?tab= when it names a real tab — the same convention plan-detail already uses. It is
+    // what lets a deep link land where it promised: the terminated-accounts queue sends finance
+    // straight to the clawback tab to close an account, not to a page they must navigate again.
+    const requested = this.route.snapshot.queryParamMap.get('tab') as Tab | null;
+    const tabs: Tab[] = ['overview', 'profile', 'activity', 'ledger'];
+    this.activeTab.set(requested && tabs.includes(requested) ? requested : 'overview');
     this.dashboard.set(null);
     this.assignments.set([]); this.assignmentsPage.set(1); this.assignmentsTotal.set(0);
     this.quotas.set([]); this.quotasPage.set(1); this.quotasTotal.set(0);

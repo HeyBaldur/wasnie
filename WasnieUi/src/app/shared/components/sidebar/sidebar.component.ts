@@ -144,6 +144,7 @@ export class SidebarComponent {
           children: [
             { path: '/pay-runs', labelKey: 'NAV.PAY_RUNS', icon: 'coin', permission: 'Reports.ViewAll' },
             { path: '/payouts', labelKey: 'NAV.PAYOUTS', icon: 'layers', permission: 'Reports.ViewAll' },
+            { path: '/terminated-accounts', labelKey: 'NAV.TERMINATED_ACCOUNTS', icon: 'users', permission: 'Ledger.Read' },
           ],
         },
       ],

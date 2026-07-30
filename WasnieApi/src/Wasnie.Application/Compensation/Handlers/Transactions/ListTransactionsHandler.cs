@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
@@ -29,6 +29,13 @@ public sealed class ListTransactionsHandler(
         await authorizationService.RequireAsync(Permission.TransactionsRead, cancellationToken);
 
         var p = request.Pagination;
+
+        // Fail fast on an unknown sort field instead of quietly ordering by something else. A caller
+        // that asked for a column it misspelled was previously handed a differently-ordered page and
+        // had no way to notice — worse than an error for a list people read as a record.
+        if (!string.IsNullOrWhiteSpace(p.SortBy) && !AllowedSortFields.Contains(p.SortBy))
+            return Result<PagedResult<TransactionDto>>.Failure(
+                $"Invalid sort field '{p.SortBy}'. Allowed values are: {string.Join(", ", AllowedSortFields.Order())}.");
 
         // Unfiltered total (whole tenant) — counted before any filter is applied.
         var unfilteredTotal = await db.CompensationTransactions.CountAsync(cancellationToken);
@@ -151,12 +158,21 @@ public sealed class ListTransactionsHandler(
                 ? query.OrderByDescending(t => t.Amount.Amount)
                 : query.OrderBy(t => t.Amount.Amount);
         }
+        else if (string.IsNullOrWhiteSpace(p.SortBy))
+        {
+            // Business default: newest EVENT first. An auditor reading this list assumes chronological
+            // order of when business happened, not of when a background job happened to ingest it.
+            // Ask for another direction explicitly with sortBy=transactiondate&sortOrder=asc.
+            query = query.OrderByDescending(t => t.TransactionDate);
+        }
         else
         {
-            var sortBy = AllowedSortFields.Contains(p.SortBy ?? "") ? p.SortBy!.ToLower() : "ingestedat";
+            // An unknown field was already rejected with 400 above, so every value reaching this
+            // switch is one of AllowedSortFields — there is no silent normalisation and no
+            // unreachable fallback arm pretending to be the default.
             var desc = !string.Equals(p.SortOrder, "asc", StringComparison.OrdinalIgnoreCase);
 
-            query = sortBy switch
+            query = p.SortBy!.ToLowerInvariant() switch
             {
                 "amount" => desc ? query.OrderByDescending(t => t.Amount.Amount) : query.OrderBy(t => t.Amount.Amount),
                 "status" => desc ? query.OrderByDescending(t => t.Status) : query.OrderBy(t => t.Status),

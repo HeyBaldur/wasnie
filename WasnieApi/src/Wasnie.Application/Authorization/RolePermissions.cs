@@ -1,4 +1,4 @@
-using Wasnie.Domain.Authorization;
+﻿using Wasnie.Domain.Authorization;
 
 namespace Wasnie.Application.Authorization;
 
@@ -20,6 +20,7 @@ public static class RolePermissions
             Permission.PayoutsRead, Permission.PayoutsCalculate, Permission.PayoutsApprove,
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
             Permission.PayoutsDeleteDraft,
+            Permission.LedgerRead, Permission.LedgerAdjust,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
             Permission.SettingsUpdate, Permission.IntegrationsManage,
@@ -41,6 +42,7 @@ public static class RolePermissions
             Permission.PayoutsRead, Permission.PayoutsCalculate, Permission.PayoutsApprove,
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
             Permission.PayoutsDeleteDraft,
+            Permission.LedgerRead, Permission.LedgerAdjust,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll,
         };
@@ -51,6 +53,8 @@ public static class RolePermissions
             Permission.PayeesRead,
             Permission.QuotasRead,
             Permission.AssignmentsRead,
+            // A manager must be able to explain a reduced payment to their rep.
+            Permission.LedgerRead,
         };
 
     private static readonly IReadOnlySet<string> RepPermissions =
@@ -59,6 +63,8 @@ public static class RolePermissions
             Permission.PayeesRead,
             Permission.AssignmentsRead,
             Permission.QuotasRead,
+            // Transparency is the differentiator: the rep sees their own balance and why it moved.
+            Permission.LedgerRead,
         };
 
     private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> Map =

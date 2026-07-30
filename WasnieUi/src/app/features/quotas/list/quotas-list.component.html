@@ -72,7 +72,16 @@
                       </div>
                     </div>
                   </td>
-                  <td class="col-secondary">{{ quota.periodStart | dateFormat:'short' }} – {{ quota.periodEnd | dateFormat:'short' }}</td>
+                  <td class="col-secondary">
+                    {{ quota.periodStart | dateFormat:'short' }} – {{ quota.periodEnd | dateFormat:'short' }}
+                    <!-- Complements the status badge, never replaces it: the quota IS still Active,
+                         its period simply ran out. -->
+                    @if (quota.periodEnd | quotaPeriodExpired: quota.status) {
+                      <ws-badge variant="warning" size="sm">
+                        {{ 'QUOTAS.PERIOD_EXPIRED' | translate }}
+                      </ws-badge>
+                    }
+                  </td>
                   <td class="col-num">{{ quota.amount | currencyFormat: quota.currency }}</td>
                   <td>
                     <ws-badge [variant]="quota.status | quotaStatusVariant">

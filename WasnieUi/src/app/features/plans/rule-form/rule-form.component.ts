@@ -348,6 +348,23 @@ export class RuleFormComponent implements OnInit {
   readonly hasCap = computed(() => !!this.formValue()?.hasCap);
   readonly hasFloor = computed(() => !!this.formValue()?.hasFloor);
 
+  /**
+   * A floor ABOVE the cap makes the cap dead. The engine applies modifier → cap → floor
+   * (`CreditAllocationService`), so the floor runs LAST and lifts the commission back over the
+   * ceiling that was just applied: with cap 200 and floor 500, every matching transaction pays 500
+   * and the cap never changes an outcome.
+   *
+   * A warning, not a validation error: the combination is contradictory rather than impossible, and
+   * the domain accepts it. Blocking the save would be inventing a rule the backend does not have.
+   */
+  readonly floorExceedsCap = computed(() => {
+    const v = this.formValue();
+    if (!v?.hasCap || !v?.hasFloor) return false;
+    const cap = Number(v.cap?.amount ?? 0);
+    const floor = Number(v.floor?.amount ?? 0);
+    return cap > 0 && floor > cap;
+  });
+
   get tiersArray(): FormArray {
     return this.form.get('rateTable.tiers') as FormArray;
   }
