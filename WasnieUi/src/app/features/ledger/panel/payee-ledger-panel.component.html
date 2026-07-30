@@ -135,7 +135,7 @@
             <ws-select
               formControlName="transactionType"
               [label]="'LEDGER.ADJUSTMENT_TYPE' | translate"
-              [options]="adjustmentTypes" />
+              [options]="adjustmentTypes()" />
 
             <ws-input
               formControlName="amount"

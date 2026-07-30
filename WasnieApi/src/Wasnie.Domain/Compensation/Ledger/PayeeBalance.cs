@@ -81,6 +81,38 @@ public sealed class PayeeBalance : AggregateRoot
                 $"Cannot apply a {entry.Amount.Currency} entry to the {Currency} balance of payee {PayeeId}. " +
                 "Balances are per currency because Wasnie holds no exchange rates.");
 
+        // A final settlement EXISTS to EXTINGUISH the account so it leaves the orphan-account queue.
+        // Two things follow, and both are invariants rather than validations:
+        //
+        //   1. It only applies to a POSITIVE balance. Against zero there is nothing owed, and against
+        //      a negative one it would sink the debt deeper under a label claiming the account closed.
+        //   2. The amount must EQUAL the balance exactly. The amount is typed by hand (Origin=Human),
+        //      so a typo — 600 against +500 — would otherwise flip the balance to −100 and invent a
+        //      debt against someone who already left, which in turn lights up the orphan-account
+        //      screen offering a write-off for a debt that never existed.
+        //
+        // Equality, NOT an upper bound: a PARTIAL settlement leaves a positive remainder, so the
+        // account is still orphaned and the entry has not done the one job its name claims. Wasnie
+        // does not orchestrate instalments — that is an ERP's accounts-payable, not a commission
+        // engine. A closing is total, or it is not a closing.
+        if (entry.TransactionType == Enums.LedgerTransactionType.FinalSettlementDebit)
+        {
+            // The entry is stored signed (negative); compare magnitudes against the positive balance.
+            var magnitude = entry.Amount.Abs();
+
+            if (Balance.Amount <= 0m)
+                throw new DomainException(
+                    "FinalSettlementRequiresPositiveBalance: a final settlement closes money the company " +
+                    $"still owes a departed payee. The balance of payee {PayeeId} is {Balance.Amount} " +
+                    $"{Currency}, so there is nothing to settle.");
+
+            if (magnitude.Amount != Balance.Amount)
+                throw new DomainException(
+                    "FinalSettlementMustEqualBalance: a final settlement closes the account in full, so it " +
+                    $"must equal the balance exactly. {magnitude.Amount} {Currency} was entered against a " +
+                    $"balance of {Balance.Amount} {Currency}.");
+        }
+
         Balance = Balance.Add(entry.Amount);
         UpdatedAt = now;
     }

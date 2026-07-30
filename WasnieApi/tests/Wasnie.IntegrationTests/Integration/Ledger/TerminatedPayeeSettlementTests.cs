@@ -198,4 +198,167 @@ public sealed class TerminatedPayeeSettlementTests(TestDatabaseFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+
+    // ══ The other direction: a departed payee the company OWES ═══════════════
+    // Terminated payees are excluded from every pay run, so a positive balance can never be paid by
+    // the engine — it would sit there forever. Treasury pays it outside Wasnie; this entry records it.
+
+    [Fact]
+    public async Task Paying_a_departed_payee_in_credit_takes_the_balance_to_absolute_zero()
+    {
+        var payeeId = await SeedPayeeAsync("LEFT-OWED", terminated: true, balance: 0m);
+
+        // Put them in credit the way it actually happens: a correction that outlives the withholding.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var balance = await db.PayeeBalances.IgnoreQueryFilters().SingleAsync(b => b.PayeeId == payeeId);
+            var credit = PayeeLedgerEntry.CreateManualAdjustment(
+                TestConstants.TenantA, payeeId, LedgerTransactionType.DataCorrectionCredit,
+                Money.Of(500m, Eur), "Technical correction — the withheld debt was not real.",
+                "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid());
+            balance.Apply(credit, Now);
+            db.PayeeLedgerEntries.Add(credit);
+            await db.SaveChangesAsync();
+        }
+
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+        (await ListAsync(client)).Should().Contain(r => r.GetProperty("payeeId").GetGuid() == payeeId,
+            "a departed payee the company owes is an open account too");
+
+        var post = await client.PostAsJsonAsync($"/api/payees/{payeeId}/ledger/adjustments", new
+        {
+            transactionType = "FinalSettlementDebit",
+            amount = 500m,
+            currency = Eur,
+            justification = "Treasury transferred the outstanding balance with the final paycheck.",
+        });
+        post.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var verify = fixture.Factory.Services.CreateScope();
+        var vdb = verify.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var after = await vdb.PayeeBalances.IgnoreQueryFilters().SingleAsync(b => b.PayeeId == payeeId);
+
+        after.Balance.Amount.Should().Be(0.0000m, "absolute zero — the account is closed, not nearly closed");
+        after.OutstandingDebt().Amount.Should().Be(0m);
+
+        // Append-only: the credit that put them in the black is untouched next to the payment.
+        var entries = await vdb.PayeeLedgerEntries.IgnoreQueryFilters()
+            .Where(e => e.PayeeId == payeeId).ToListAsync();
+        entries.Should().HaveCount(2);
+        entries.Should().Contain(e => e.TransactionType == LedgerTransactionType.DataCorrectionCredit
+                                   && e.Amount.Amount == 500m);
+        var payment = entries.Single(e => e.TransactionType == LedgerTransactionType.FinalSettlementDebit);
+        payment.Amount.Amount.Should().Be(-500m, "the sign comes from the type: cash left the company");
+        payment.Origin.Should().Be(LedgerEntryOrigin.Human);
+        entries.Sum(e => e.Amount.Amount).Should().Be(0m, "the ledger closes");
+
+        (await ListAsync(client)).Should().NotContain(r => r.GetProperty("payeeId").GetGuid() == payeeId);
+    }
+
+    [Fact]
+    public async Task Settling_a_departed_payee_does_not_pull_them_back_into_a_pay_run()
+    {
+        // The whole reason this is a manual entry and not an engine feature: closing the account must
+        // not look like a payment event. No payout, no settlement row, no netting — the payee stays
+        // excluded, exactly as terminating them decided.
+        var payeeId = await SeedPayeeAsync("LEFT-NOSIDE", terminated: true, balance: 0m);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var balance = await db.PayeeBalances.IgnoreQueryFilters().SingleAsync(b => b.PayeeId == payeeId);
+            var credit = PayeeLedgerEntry.CreateManualAdjustment(
+                TestConstants.TenantA, payeeId, LedgerTransactionType.ManualBonusCredit,
+                Money.Of(300m, Eur), "Owed on departure.", "finance@acme.com",
+                Guid.NewGuid(), Now, Guid.NewGuid());
+            balance.Apply(credit, Now);
+            db.PayeeLedgerEntries.Add(credit);
+            await db.SaveChangesAsync();
+        }
+
+        await client.PostAsJsonAsync($"/api/payees/{payeeId}/ledger/adjustments", new
+        {
+            transactionType = "FinalSettlementDebit", amount = 300m, currency = Eur,
+            justification = "Paid out on termination.",
+        });
+
+        using var verify = fixture.Factory.Services.CreateScope();
+        var vdb = verify.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        (await vdb.CompensationPayouts.IgnoreQueryFilters().CountAsync(p => p.PayeeId == payeeId))
+            .Should().Be(0, "settling an account is not a payout");
+        (await vdb.PayRunSettlements.IgnoreQueryFilters().CountAsync(s => s.PayeeId == payeeId))
+            .Should().Be(0, "no pay run settled anything — there was no run");
+        (await vdb.PayeeLedgerEntries.IgnoreQueryFilters()
+            .CountAsync(e => e.PayeeId == payeeId
+                          && e.TransactionType == LedgerTransactionType.ClawbackAppliedCredit))
+            .Should().Be(0, "no netting was triggered");
+
+        // And the payee is still terminated: the closing entry changed money, not employment.
+        (await vdb.Payees.IgnoreQueryFilters().SingleAsync(p => p.Id == payeeId))
+            .Status.Should().Be(PayeeStatus.Terminated);
+    }
+
+    [Fact]
+    public async Task A_final_settlement_that_would_overshoot_is_refused_over_HTTP_and_writes_nothing()
+    {
+        // The amount is typed by a person. A typo — €600 against +€500 — would flip the balance to
+        // −€100 and invent a debt against someone who already left, which then shows up on THIS very
+        // screen as an open account waiting for a write-off. The domain refuses before SaveChanges,
+        // so the API path leaves no trace at all.
+        var payeeId = await SeedPayeeAsync("LEFT-TYPO", terminated: true, balance: 0m);
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var balance = await db.PayeeBalances.IgnoreQueryFilters().SingleAsync(b => b.PayeeId == payeeId);
+            var credit = PayeeLedgerEntry.CreateManualAdjustment(
+                TestConstants.TenantA, payeeId, LedgerTransactionType.DataCorrectionCredit,
+                Money.Of(500m, Eur), "Technical correction — the withheld debt was not real.",
+                "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid());
+            balance.Apply(credit, Now);
+            db.PayeeLedgerEntries.Add(credit);
+            await db.SaveChangesAsync();
+        }
+
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+        var post = await client.PostAsJsonAsync($"/api/payees/{payeeId}/ledger/adjustments", new
+        {
+            transactionType = "FinalSettlementDebit",
+            amount = 600m,
+            currency = Eur,
+            justification = "Treasury transferred the outstanding balance.",
+        });
+
+        post.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var verify = fixture.Factory.Services.CreateScope();
+        var vdb = verify.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var after = await vdb.PayeeBalances.IgnoreQueryFilters().SingleAsync(b => b.PayeeId == payeeId);
+        after.Balance.Amount.Should().Be(500m, "the balance is exactly as it was");
+        after.OutstandingDebt().Amount.Should().Be(0m, "no fictitious debt was opened");
+
+        (await vdb.PayeeLedgerEntries.IgnoreQueryFilters()
+            .CountAsync(e => e.PayeeId == payeeId
+                          && e.TransactionType == LedgerTransactionType.FinalSettlementDebit))
+            .Should().Be(0, "the rejected entry was never persisted");
+    }
+
+    [Fact]
+    public async Task A_rep_cannot_pay_out_a_departed_payee_either()
+    {
+        var payeeId = await SeedPayeeAsync("RBAC-FINAL", terminated: true, balance: 0m);
+        var rep = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "Rep");
+
+        var response = await rep.PostAsJsonAsync($"/api/payees/{payeeId}/ledger/adjustments", new
+        {
+            transactionType = "FinalSettlementDebit", amount = 500m, currency = Eur,
+            justification = "Trying to pay myself out.",
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }

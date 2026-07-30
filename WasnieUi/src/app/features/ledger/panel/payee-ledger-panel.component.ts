@@ -1,4 +1,4 @@
-import { Component, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -59,14 +59,36 @@ export class PayeeLedgerPanelComponent {
     justification: ['', [Validators.required, Validators.maxLength(1000)]],
   });
 
-  readonly adjustmentTypes = [
+  /** Corrections a person can make at any time, whatever the balance says. */
+  private static readonly GENERAL_TYPES = [
     { value: 'ClawbackForgivenessCredit', label: 'LEDGER.TYPE_CLAWBACK_FORGIVENESS_CREDIT' },
     { value: 'ManualBonusCredit', label: 'LEDGER.TYPE_MANUAL_BONUS_CREDIT' },
     { value: 'DataCorrectionDebit', label: 'LEDGER.TYPE_DATA_CORRECTION_DEBIT' },
-    // For a payee who has left: the debt is recovered elsewhere, or absorbed as a loss.
-    { value: 'ExternalSettlementCredit', label: 'LEDGER.TYPE_EXTERNAL_SETTLEMENT_CREDIT' },
-    { value: 'WriteOffCredit', label: 'LEDGER.TYPE_WRITE_OFF_CREDIT' },
+    { value: 'DataCorrectionCredit', label: 'LEDGER.TYPE_DATA_CORRECTION_CREDIT' },
   ];
+
+  /**
+   * Closing an account only makes sense in the direction the balance actually points, so the
+   * available closing types follow its SIGN:
+   *   owes us  → the debt is recovered elsewhere, or absorbed as a loss;
+   *   we owe   → treasury pays it outside Wasnie and we record the payment.
+   * Offering both directions at once would let someone "write off" money the company OWES, which is
+   * not a write-off — it is not paying somebody.
+   */
+  readonly adjustmentTypes = computed(() => {
+    const balance = this.store.activeStatement()?.currentBalance ?? 0;
+    const closing =
+      balance < 0
+        ? [
+            { value: 'ExternalSettlementCredit', label: 'LEDGER.TYPE_EXTERNAL_SETTLEMENT_CREDIT' },
+            { value: 'WriteOffCredit', label: 'LEDGER.TYPE_WRITE_OFF_CREDIT' },
+          ]
+        : balance > 0
+          ? [{ value: 'FinalSettlementDebit', label: 'LEDGER.TYPE_FINAL_SETTLEMENT_DEBIT' }]
+          : [];
+
+    return [...PayeeLedgerPanelComponent.GENERAL_TYPES, ...closing];
+  });
 
   constructor() {
     effect(() => {

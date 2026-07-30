@@ -1905,6 +1905,7 @@
     "TYPE_DATA_CORRECTION_CREDIT": "Corrección de datos (crédito)",
     "TYPE_EXTERNAL_SETTLEMENT_CREDIT": "Saldado por fuera",
     "TYPE_WRITE_OFF_CREDIT": "Incobrable (baja)",
+    "TYPE_FINAL_SETTLEMENT_DEBIT": "Liquidación final",
     "TYPE_CLAWBACK_APPLIED_CREDIT": "Retenido en el pay run",
     "ADD_ADJUSTMENT": "Agregar ajuste",
     "ADJUSTMENT_TITLE": "Ajuste manual de saldo",

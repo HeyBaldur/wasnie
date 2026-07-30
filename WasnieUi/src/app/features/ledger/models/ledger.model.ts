@@ -42,14 +42,27 @@ export interface PayeeStatement {
 
 export type LedgerOrigin = 'System' | 'Human';
 
-export type LedgerTransactionType =
-  | 'ClawbackDebit'
-  | 'ClawbackForgivenessCredit'
-  | 'ManualBonusCredit'
-  | 'DataCorrectionDebit'
-  | 'ClawbackAppliedCredit'
-  | 'ExternalSettlementCredit'
-  | 'WriteOffCredit';
+/**
+ * Every ledger transaction type, as a runtime array so tests can WALK it instead of restating it.
+ * A type added here without its LEDGER.TYPE_* translation leaks the raw key onto the screen, and the
+ * spec that catches that needs a list it cannot forget to update — this is that list.
+ *
+ * Mirrors LedgerTransactionType in the backend; scripts/verify-i18n.mjs fails the build if the two
+ * ever drift apart.
+ */
+export const LEDGER_TRANSACTION_TYPES = [
+  'ClawbackDebit',
+  'ClawbackForgivenessCredit',
+  'ManualBonusCredit',
+  'DataCorrectionDebit',
+  'ClawbackAppliedCredit',
+  'ExternalSettlementCredit',
+  'WriteOffCredit',
+  'DataCorrectionCredit',
+  'FinalSettlementDebit',
+] as const;
+
+export type LedgerTransactionType = (typeof LEDGER_TRANSACTION_TYPES)[number];
 
 export interface PayeeLedgerEntry {
   id: string;

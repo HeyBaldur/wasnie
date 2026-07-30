@@ -4,6 +4,57 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-30 — Invariante de dominio: un `FinalSettlementDebit` cierra la cuenta EN SU TOTALIDAD (igualdad estricta)
+
+Una cláusula de guarda y sus tests. Cierra el hueco del `FinalSettlementDebit` recién construido: es
+`Origin=Human`, o sea que el monto lo **tipea** un operador de finanzas, y sin invariante un error
+tipográfico (€600 contra un saldo de +€500) hacía que el motor procesara el débito a ciegas y el
+balance pasara a **−€100**. Un asiento diseñado para EXTINGUIR un saldo a favor terminaba ABRIENDO
+una deuda ficticia contra alguien que ya se fue — y esa deuda falsa reaparecía en la cola de cuentas
+huérfanas ofreciendo un `WriteOffCredit` para "arreglar" el desastre.
+
+**La guarda vive en el DOMINIO, no en la UI:** `PayeeBalance.Apply` (`PayeeBalance.cs:84-108`), el
+único camino por el que un asiento mueve un balance. Se ejecuta **antes** de `SaveChanges` — el
+handler (`CreateManualLedgerAdjustmentHandler.cs:81`) llama a `Apply` antes de `db.SaveChangesAsync`,
+así que la `DomainException` se traduce a `Result.Failure` → **400 y cero escritura**. La UI ya
+prevenía la mitad del caso (`payee-ledger-panel.component.ts:78-91` solo ofrece el tipo cuando
+`balance > 0`), pero eso es UX: por API se saltea, y la verdad la impone el dominio.
+
+**La invariante es más fuerte que "amount > balance".** Dos cosas, ambas de dominio: (1) el balance
+debe ser **positivo** — contra 0 no hay nada que liquidar y contra un negativo el asiento hundiría la
+deuda bajo una etiqueta que afirma que la cuenta se cerró; (2) el monto debe **igualar** el balance.
+Regla final: rechazar `Balance <= 0 || |amount| != Balance`. El cierre lleva a CERO exacto.
+
+**★ DECISIÓN DE RODOLFO — IGUALDAD ESTRICTA: el cierre parcial se RECHAZA.** Propuse permitirlo
+(tesorería puede pagar en partes) y el asesor lo rechazó, con razón: el `FinalSettlementDebit` existe
+para **extinguir** la cuenta y sacarla de la cola de huérfanas, y un parcial deja un remanente
+positivo → la cuenta **sigue huérfana** → el asiento no hizo lo único que su nombre promete. Wasnie
+no orquesta pagos en cuotas (eso es Cuentas por Pagar de un ERP, no un motor de comisiones). Un
+cierre es TOTAL o no es un cierre. La condición pasó de límite superior (`>`) a **igualdad estricta**
+(`!=`), con **dos mensajes distintos** para que la causa sea legible: balance ≤ 0 →
+`FinalSettlementRequiresPositiveBalance`; monto ≠ balance → `FinalSettlementMustEqualBalance`.
+Efecto lateral bueno: ahora **cualquier** monto que no sea el balance es un error, se pase o se
+quede corto — el typo de €300 ya no pasa silenciosamente por "parcial legítimo".
+
+**Tests — 6 unit + 1 de integración.** Unit (`PayeeLedgerTests.cs`): €500 contra +€500 → 0.0000 (el
+caso feliz); €600 contra +€500 → rechazado y el balance queda intacto en +€500 sin deuda ficticia;
+**€300 contra +€500 → RECHAZADO** (el test que antes afirmaba el cierre parcial ahora afirma la
+excepción); contra −€100 y contra 0 → rechazados por falta de saldo a favor; y **regresión**:
+`WriteOffCredit` y `ExternalSettlementCredit` pueden pasar de deuda a positivo, y
+`ClawbackDebit`/`DataCorrectionDebit` pueden cruzar a negativo — la guarda toca **solo** a
+`FinalSettlementDebit`. Integración (`TerminatedPayeeSettlementTests.cs`): el mismo typo por HTTP →
+**400**, balance sin tocar y **cero asientos** `FinalSettlementDebit` persistidos.
+
+**Deuda de UI anotada (no tocada, es el "cap variable" fuera de alcance):** el panel del ledger ya
+solo ofrece el tipo con `balance > 0`, pero el campo de monto es libre — con igualdad estricta,
+cualquier cifra que no sea el balance exacto ahora da 400. Prefijar el monto (o mostrarlo fijo) es
+mejor UX y es la prueba funcional que Rodolfo se reservó.
+
+Unit **1020 → 1026**, integración **738 → 739 (737 verdes, 2 skipped), exit 0**, solución completa
+compilando. Para correr integración hubo que detener el API de dev que tenía los DLL bloqueados
+(autorizado por Rodolfo) y levantar Docker; **la API quedó detenida**. Sin commitear: el WI pedía
+commit, pero la regla permanente (CLAUDE.md §0) manda que solo Rodolfo commitee.
+
 ## 2026-07-29 — PRESENTACIÓN del clawback: DTO desambiguado, balance vivo primario, cola de huérfanas con pantalla, y DataCorrectionCredit
 
 Deuda de presentación/semántica. Ni el cálculo ni el núcleo se tocan.

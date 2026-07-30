@@ -387,4 +387,235 @@ public sealed class PayeeLedgerTests
 
         act.Should().Throw<DomainException>("an entry nobody signed is not a correction");
     }
+
+    // ── Closing an account that ends IN CREDIT ───────────────────────────────────
+    // The mirror of the debt case. A terminated payee is excluded from every pay run, so a positive
+    // balance would sit there forever — the engine will never pay someone it no longer processes.
+    // Treasury pays it outside Wasnie and this entry records that the money moved.
+
+    [Fact]
+    public void A_final_settlement_is_a_human_written_DEBIT()
+    {
+        var entry = PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), LedgerTransactionType.FinalSettlementDebit,
+            Money.Of(500m, "EUR"),
+            "Final settlement paid with the last paycheck.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        // Cash left the company, so the payee's balance comes DOWN toward zero.
+        entry.Amount.Amount.Should().Be(-500m);
+        LedgerTransactionType.FinalSettlementDebit.IsDebit().Should().BeTrue();
+        LedgerTransactionType.FinalSettlementDebit.IsManuallyCreatable().Should().BeTrue();
+        entry.Origin.Should().Be(LedgerEntryOrigin.Human);
+        entry.CreatedBy.Should().Be("finance@acme.com");
+    }
+
+    [Fact]
+    public void A_final_settlement_requires_an_actor_and_a_justification()
+    {
+        var noActor = () => PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), LedgerTransactionType.FinalSettlementDebit,
+            Money.Of(500m, "EUR"), "Paid.", "", Guid.NewGuid(), Now, Guid.NewGuid());
+        noActor.Should().Throw<DomainException>();
+
+        var noReason = () => PayeeLedgerEntry.CreateManualAdjustment(
+            Guid.NewGuid(), Guid.NewGuid(), LedgerTransactionType.FinalSettlementDebit,
+            Money.Of(500m, "EUR"), "  ", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid());
+        noReason.Should().Throw<DomainException>();
+    }
+
+    [Fact]
+    public void Paying_a_departed_payee_what_they_were_owed_brings_the_balance_to_zero()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        // They ended up in credit: a pay run withheld more than they actually owed.
+        var inCredit = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.DataCorrectionCredit, Money.Of(500m, "EUR"),
+            "Technical correction — the debt behind the withholding was not real.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+        balance.Apply(inCredit, Now);
+        balance.Balance.Amount.Should().Be(500m);
+
+        var settlement = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.FinalSettlementDebit, Money.Of(500m, "EUR"),
+            "Treasury transferred the outstanding balance with the final paycheck.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+        balance.Apply(settlement, Now);
+
+        balance.Balance.Amount.Should().Be(0m);
+        // Append-only: the credit that put them in the black is still there, next to the payment.
+        inCredit.Amount.Amount.Should().Be(500m);
+    }
+
+    [Fact]
+    public void The_two_directions_of_closing_stay_countable_apart()
+    {
+        // "Cash we transferred to people who are gone" and "debt we absorbed" are different figures;
+        // one type could never answer both.
+        LedgerTransactionType.FinalSettlementDebit.IsDebit().Should().BeTrue();
+        LedgerTransactionType.ExternalSettlementCredit.IsDebit().Should().BeFalse();
+        LedgerTransactionType.WriteOffCredit.IsDebit().Should().BeFalse();
+        LedgerTransactionType.FinalSettlementDebit.Should()
+            .NotBe(LedgerTransactionType.ExternalSettlementCredit);
+    }
+
+    // ── A closing entry closes the account IN FULL ───────────────────────────────
+    // FinalSettlementDebit is the one closing type whose amount a human types in full. Without an
+    // invariant, a typo turns an entry designed to EXTINGUISH a credit into one that OPENS a debt
+    // against someone who already left — and that fake debt then shows up on the orphan-account
+    // screen offering a write-off to "fix" it. The rule is EQUALITY, not an upper bound: the balance
+    // must be positive to begin with, and the amount must match it exactly, because a partial
+    // settlement leaves the account orphaned and so has not done what "Final" claims.
+
+    [Fact]
+    public void A_final_settlement_bigger_than_the_balance_is_rejected_and_writes_nothing()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        var inCredit = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.DataCorrectionCredit, Money.Of(500m, "EUR"),
+            "Technical correction — the withheld debt was not real.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+        balance.Apply(inCredit, Now);
+
+        // The typo: €600 against a balance of +€500.
+        var tooBig = PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.FinalSettlementDebit, Money.Of(600m, "EUR"),
+            "Treasury paid the final balance.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid());
+
+        var act = () => balance.Apply(tooBig, Now);
+
+        act.Should().Throw<DomainException>().WithMessage("*FinalSettlementMustEqualBalance*");
+        balance.Balance.Amount.Should().Be(500m, "a rejected entry must leave the balance untouched");
+        balance.OutstandingDebt().Amount.Should().Be(0m, "no fictitious debt was opened");
+    }
+
+    [Fact]
+    public void A_final_settlement_for_the_exact_balance_still_closes_the_account()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        balance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.DataCorrectionCredit, Money.Of(500m, "EUR"),
+            "Technical correction.", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        balance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.FinalSettlementDebit, Money.Of(500m, "EUR"),
+            "Treasury transferred the outstanding balance.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        balance.Balance.Amount.Should().Be(0.0000m);
+    }
+
+    [Fact]
+    public void A_PARTIAL_final_settlement_is_REJECTED_a_closing_is_total()
+    {
+        // The entry exists to EXTINGUISH the account so it leaves the orphan queue. Paying €300 of a
+        // €500 balance leaves +€200 — the account is still orphaned, so the entry did not do the one
+        // thing its name claims. Wasnie does not orchestrate instalments; that is an ERP's accounts
+        // payable. Rejecting it also keeps the typo case honest: any amount that is not the balance
+        // is a mistake, whether it overshoots or falls short.
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        balance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.DataCorrectionCredit, Money.Of(500m, "EUR"),
+            "Technical correction.", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        var act = () => balance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.FinalSettlementDebit, Money.Of(300m, "EUR"),
+            "Partial transfer with the final paycheck; remainder to follow.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        act.Should().Throw<DomainException>().WithMessage("*FinalSettlementMustEqualBalance*");
+        balance.Balance.Amount.Should().Be(500m, "the rejected entry left the balance untouched");
+    }
+
+    [Fact]
+    public void A_final_settlement_against_a_NEGATIVE_balance_is_rejected()
+    {
+        // They owe money; there is no credit to settle. Allowing it would sink the debt deeper under
+        // a label that claims the account was closed.
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        balance.Apply(PayeeLedgerEntry.CreateSystemEntry(
+            tenantId, payeeId, LedgerTransactionType.ClawbackDebit, Money.Of(100m, "EUR"),
+            "Churned deal.", LedgerSourceType.DealChurn, "system",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+        balance.Balance.Amount.Should().Be(-100m);
+
+        var act = () => balance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.FinalSettlementDebit, Money.Of(50m, "EUR"),
+            "Treasury paid the final balance.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        act.Should().Throw<DomainException>().WithMessage("*FinalSettlementRequiresPositiveBalance*");
+        balance.Balance.Amount.Should().Be(-100m, "the debt is unchanged");
+    }
+
+    [Fact]
+    public void A_final_settlement_against_a_ZERO_balance_is_rejected()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var balance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+
+        var act = () => balance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.FinalSettlementDebit, Money.Of(10m, "EUR"),
+            "Nothing left to pay.", "finance@acme.com",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        act.Should().Throw<DomainException>().WithMessage("*FinalSettlementRequiresPositiveBalance*");
+        balance.Balance.Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public void The_closing_guard_applies_ONLY_to_a_final_settlement()
+    {
+        // Regression: the other types keep their own semantics. A credit against a debt may legitimately
+        // overshoot into positive territory (finance recovered more than the outstanding figure), and a
+        // clawback may legitimately push a positive balance negative — that is what a clawback IS.
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+
+        var debtBalance = PayeeBalance.Open(tenantId, payeeId, "EUR", Guid.NewGuid(), Now);
+        debtBalance.Apply(PayeeLedgerEntry.CreateSystemEntry(
+            tenantId, payeeId, LedgerTransactionType.ClawbackDebit, Money.Of(100m, "EUR"),
+            "Churned deal.", LedgerSourceType.DealChurn, "system",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+
+        debtBalance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.WriteOffCredit, Money.Of(150m, "EUR"),
+            "Absorbed the loss.", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+        debtBalance.Balance.Amount.Should().Be(50m, "WriteOffCredit is not subject to the guard");
+
+        debtBalance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.ExternalSettlementCredit, Money.Of(25m, "EUR"),
+            "Recovered via payroll.", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+        debtBalance.Balance.Amount.Should().Be(75m, "ExternalSettlementCredit is not subject to the guard");
+
+        // A clawback CAN cross zero — that is exactly its job.
+        debtBalance.Apply(PayeeLedgerEntry.CreateSystemEntry(
+            tenantId, payeeId, LedgerTransactionType.ClawbackDebit, Money.Of(200m, "EUR"),
+            "Another churned deal.", LedgerSourceType.DealChurn, "system",
+            Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+        debtBalance.Balance.Amount.Should().Be(-125m, "ClawbackDebit is not subject to the guard");
+
+        // So can a manual data correction that removes an inflated payment.
+        debtBalance.Apply(PayeeLedgerEntry.CreateManualAdjustment(
+            tenantId, payeeId, LedgerTransactionType.DataCorrectionDebit, Money.Of(75m, "EUR"),
+            "Bad import inflated a payment.", "finance@acme.com", Guid.NewGuid(), Now, Guid.NewGuid()), Now);
+        debtBalance.Balance.Amount.Should().Be(-200m, "DataCorrectionDebit is not subject to the guard");
+    }
 }

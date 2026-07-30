@@ -8,7 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "verify:icons": "node scripts/verify-icons.mjs",
-    "verify": "npm run verify:icons && ng test --no-watch --browsers=ChromeHeadless && ng build --configuration production"
+    "verify:i18n": "node scripts/verify-i18n.mjs",
+    "verify": "npm run verify:icons && npm run verify:i18n && ng test --no-watch --browsers=ChromeHeadless && ng build --configuration production"
   },
   "prettier": {
     "printWidth": 100,

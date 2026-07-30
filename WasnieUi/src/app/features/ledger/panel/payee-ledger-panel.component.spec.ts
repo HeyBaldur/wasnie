@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { PayeeLedgerPanelComponent } from './payee-ledger-panel.component';
 import { LedgerStore } from '../state/ledger.store';
-import { PayeeLedgerEntry, PayeeStatement } from '../models/ledger.model';
+import { LEDGER_TRANSACTION_TYPES, PayeeLedgerEntry, PayeeStatement } from '../models/ledger.model';
 // The REAL locale file: a test with a hand-written stub would keep passing while the shipped
 // translation is missing, which is the failure mode this test exists to catch.
 import enTranslations from '../../../../assets/i18n/en.json';
@@ -255,10 +255,7 @@ describe('PayeeLedgerPanelComponent', () => {
   it('has a label for every ledger transaction type it can be handed', () => {
     // The key is derived from the type name at runtime, so a type added without its translation
     // leaks the raw key onto the screen — which is exactly what DataCorrectionCredit did.
-    const types = [
-      'ClawbackDebit', 'ClawbackForgivenessCredit', 'ManualBonusCredit', 'DataCorrectionDebit',
-      'ClawbackAppliedCredit', 'ExternalSettlementCredit', 'WriteOffCredit', 'DataCorrectionCredit',
-    ];
+    const types = LEDGER_TRANSACTION_TYPES;
     const translate = TestBed.inject(TranslateService);
     translate.setTranslation('en', enTranslations, true);
     translate.use('en');
@@ -268,6 +265,49 @@ describe('PayeeLedgerPanelComponent', () => {
       expect(translate.instant(key))
         .withContext(`${t} has no translation: ${key}`)
         .not.toBe(key);
+    }
+  });
+
+  // ── Closing types follow the sign of the balance ────────────────────────────
+  // A departed payee's account closes in the direction the money actually points. Offering both
+  // directions would let someone "write off" a balance the company OWES, which is not a write-off.
+
+  function typesFor(balance: number): string[] {
+    store.statements.set([statement({ currentBalance: balance })]);
+    store.selectCurrency('EUR');
+    return component.adjustmentTypes().map(t => t.value);
+  }
+
+  it('offers the debt-closing types when the payee owes money', () => {
+    const types = typesFor(-500);
+
+    expect(types).toContain('ExternalSettlementCredit');
+    expect(types).toContain('WriteOffCredit');
+    expect(types).not.toContain('FinalSettlementDebit');
+  });
+
+  it('offers the final settlement when the company owes the payee', () => {
+    const types = typesFor(500);
+
+    expect(types).toContain('FinalSettlementDebit');
+    expect(types).not.toContain('WriteOffCredit');
+    expect(types).not.toContain('ExternalSettlementCredit');
+  });
+
+  it('offers no closing type at all on a settled account', () => {
+    const types = typesFor(0);
+
+    expect(types).not.toContain('FinalSettlementDebit');
+    expect(types).not.toContain('WriteOffCredit');
+    expect(types).not.toContain('ExternalSettlementCredit');
+  });
+
+  it('keeps the general corrections available whatever the balance', () => {
+    for (const balance of [-500, 0, 500]) {
+      const types = typesFor(balance);
+      expect(types).withContext(`balance ${balance}`).toContain('ClawbackForgivenessCredit');
+      expect(types).withContext(`balance ${balance}`).toContain('DataCorrectionDebit');
+      expect(types).withContext(`balance ${balance}`).toContain('DataCorrectionCredit');
     }
   });
 });

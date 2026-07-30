@@ -1905,6 +1905,7 @@
     "TYPE_DATA_CORRECTION_CREDIT": "Data correction (credit)",
     "TYPE_EXTERNAL_SETTLEMENT_CREDIT": "Settled externally",
     "TYPE_WRITE_OFF_CREDIT": "Written off",
+    "TYPE_FINAL_SETTLEMENT_DEBIT": "Final settlement",
     "TYPE_CLAWBACK_APPLIED_CREDIT": "Withheld from pay run",
     "ADD_ADJUSTMENT": "Add adjustment",
     "ADJUSTMENT_TITLE": "Manual balance adjustment",
