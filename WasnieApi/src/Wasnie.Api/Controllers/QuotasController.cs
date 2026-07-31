@@ -42,6 +42,23 @@ public sealed class QuotasController(IMediator mediator) : ControllerBase
             : BadRequest(new { message = result.Error });
     }
 
+    // POST /api/quotas/bulk — one quota configuration for N payees, all-or-nothing.
+    // 400 carries the per-payee failure list, and in that case NOTHING was written: the handler
+    // refuses the batch before it reaches SaveChanges. Never a partial success.
+    [HttpPost("bulk")]
+    public async Task<IActionResult> BulkCreate(
+        [FromBody] BulkCreateQuotasCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return result.Value!.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(result.Value);
+    }
+
     [HttpPut("{quotaId:guid}")]
     public async Task<IActionResult> Update(Guid quotaId, [FromBody] UpdateQuotaCommand command, CancellationToken cancellationToken)
     {

@@ -29,37 +29,27 @@ public sealed class CreateQuotaHandler(
         if (plan is null)
             return Result<QuotaSummaryDto>.Failure("Plan not found.");
 
-        // Integrity guard: the quota period must fall within the plan's effective period.
-        // The UI defaults to the plan period and validates this client-side, but a direct API
-        // call must not be able to set a window outside the plan that attainment is measured against.
-        // Shared with UpdateQuotaHandler via QuotaPeriodGuard so both paths enforce the same rule.
-        var periodError = QuotaPeriodGuard.Validate(plan.EffectivePeriod, request.PeriodStart, request.PeriodEnd);
-        if (periodError is not null)
-            return Result<QuotaSummaryDto>.Failure(periodError);
-
         var amount = Money.OfNonNegative(request.Amount, request.Currency);
         var period = DateRange.Of(request.PeriodStart, request.PeriodEnd);
 
-        Quota quota;
-        try
-        {
-            quota = Quota.Create(
-                tenantContext.TenantId,
-                request.PayeeId,
-                request.PlanId,
-                amount,
-                period,
-                request.MeasurementType,
-                currentUser.UserId ?? "system",
-                guid.NewGuid(),
-                clock.UtcNowOffset,
-                request.Notes,
-                planCurrency: plan.Currency);
-        }
-        catch (Exception ex)
-        {
-            return Result<QuotaSummaryDto>.Failure(ex.Message);
-        }
+        // Validation and construction live in QuotaBuilder, shared with the bulk-create handler so the
+        // two paths cannot drift apart. The rules did not change when they moved there.
+        var built = QuotaBuilder.Build(
+            plan,
+            tenantContext.TenantId,
+            request.PayeeId,
+            amount,
+            period,
+            request.MeasurementType,
+            request.Notes,
+            currentUser.UserId ?? "system",
+            guid.NewGuid(),
+            clock.UtcNowOffset);
+
+        if (!built.IsSuccess)
+            return Result<QuotaSummaryDto>.Failure(built.Error!);
+
+        var quota = built.Value!;
 
         db.Quotas.Add(quota);
         await db.SaveChangesAsync(cancellationToken);

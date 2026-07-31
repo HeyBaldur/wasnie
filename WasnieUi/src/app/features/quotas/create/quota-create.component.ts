@@ -3,7 +3,7 @@ import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidatorFn, Validat
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { Observable, combineLatest, firstValueFrom, map, of, startWith, switchMap } from 'rxjs';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { QuotasStore } from '../state/quotas.store';
@@ -23,6 +23,24 @@ import {
   type DateRange,
   type BadgeVariant,
 } from '../../../shared/ui';
+
+/**
+ * Pulls the per-payee reasons out of a refused batch. The server answers a rejected bulk create with
+ * `{ created: [], failures: [{ payeeId, payeeName, payeeEmployeeCode, reason }] }` — a list, not a
+ * sentence, because "one of them was wrong" is not something an admin can act on.
+ */
+function extractBatchFailures(
+  err: unknown,
+): { payeeName: string; payeeEmployeeCode: string; reason: string }[] {
+  const body = (err as { error?: { failures?: unknown } } | null)?.error;
+  const failures = body?.failures;
+  if (!Array.isArray(failures)) return [];
+  return failures.map(f => ({
+    payeeName: String(f?.payeeName ?? ''),
+    payeeEmployeeCode: String(f?.payeeEmployeeCode ?? ''),
+    reason: String(f?.reason ?? ''),
+  }));
+}
 
 // V1: only Revenue and Units are supported (transaction data model).
 // Margin, ACV, Bookings require additional transaction fields — activate in a future WI.
@@ -85,9 +103,16 @@ export class QuotaCreateComponent implements OnInit {
       : null;
   };
 
+  /** id → label for whatever the search has shown, so a chip can be built without a second fetch. */
+  private readonly payeeLabels = new Map<string, string>();
+
   readonly payeeSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(
-      map(r => r.items.map(p => ({ value: p.id, label: `${p.fullName} (${p.employeeCode})` })))
+      map(r => r.items.map(p => {
+        const label = `${p.fullName} (${p.employeeCode})`;
+        this.payeeLabels.set(p.id, label);
+        return { value: p.id, label };
+      }))
     );
 
   readonly planSearchFn = (q: string): Observable<SelectOption[]> =>
@@ -102,8 +127,23 @@ export class QuotaCreateComponent implements OnInit {
       })))
     );
 
+  /**
+   * The payees this quota will be created for. ONE configuration, N people — the reason the batch
+   * endpoint exists is that filling this form twenty times to say the same thing is where mistakes
+   * come from.
+   *
+   * Chips + a search field rather than a new multi-select primitive: this is exactly how the payouts
+   * filter already lets you pick several payees, and mirroring it beats inventing a widget.
+   */
+  readonly selectedPayees = signal<{ id: string; label: string }[]>([]);
+
+  /** Per-payee reasons the last submit was refused. Empty until the server refuses a batch. */
+  readonly batchFailures = signal<{ payeeName: string; payeeEmployeeCode: string; reason: string }[]>([]);
+
   readonly form = this.fb.nonNullable.group({
-    payeeId: ['', Validators.required],
+    // Holds the CURRENT search selection only; the batch is `selectedPayees`. Not required — the
+    // submit guard checks the chips, because an empty search box with five chips is valid.
+    payeeId: [''],
     planId: ['', Validators.required],
     measurementType: [String(QuotaMeasurementType.Revenue), Validators.required],
     amount: [0, [Validators.required, Validators.min(0.01)]],
@@ -119,14 +159,18 @@ export class QuotaCreateComponent implements OnInit {
     const payeeCode = snap.get('payeeCode');
     this.returnTo.set(snap.get('returnTo'));
 
+    // Arriving from a payee's profile ("set a quota for this person") pre-loads them as the first
+    // chip — the batch of one, which is the old behaviour expressed in the new shape.
     if (payeeId) {
-      this.form.patchValue({ payeeId });
       if (payeeName) {
         const label = payeeCode ? `${payeeName} (${payeeCode})` : payeeName;
         this.preselectedPayeeOption.set({ value: payeeId, label });
+        this.addPayee(payeeId, label);
       } else {
         firstValueFrom(this.payeesApi.getPayee(payeeId)).then(p => {
-          this.preselectedPayeeOption.set({ value: p.id, label: `${p.fullName} (${p.employeeCode})` });
+          const label = `${p.fullName} (${p.employeeCode})`;
+          this.preselectedPayeeOption.set({ value: p.id, label });
+          this.addPayee(p.id, label);
         });
       }
     }
@@ -153,27 +197,63 @@ export class QuotaCreateComponent implements OnInit {
       this.form.controls.dateRange.updateValueAndValidity();
     });
 
-    // Gap #2: once both payee and plan are chosen, check whether the payee has an active
-    // assignment to that plan. If not, surface a non-blocking warning. switchMap cancels
-    // stale lookups when the selection changes again.
+    // The search field is a PICKER, not a value: whatever it resolves becomes a chip and the field
+    // clears itself for the next name. (ws-select is CVA-only — no valueChange output — so the
+    // control's own stream is the event, exactly as the payouts filter does it.)
+    this.form.controls.payeeId.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(value => this.onPayeeSelected(value));
+
+    // Gap #2: warn (never block) when a selected payee has NO active assignment to the plan — their
+    // attainment would sit at 0, because transactions are only credited to a (payee, plan) inside an
+    // active assignment window.
+    //
+    // ONE request for the batch, not one per payee: the plan's assignments are fetched once and
+    // intersected with the selection locally. Twenty payees must not mean twenty round trips.
     combineLatest([
-      this.form.controls.payeeId.valueChanges.pipe(startWith(this.form.controls.payeeId.value)),
+      toObservable(this.selectedPayees),
       this.form.controls.planId.valueChanges.pipe(startWith(this.form.controls.planId.value)),
     ]).pipe(
-      switchMap(([payeeId, planId]) => {
-        if (!payeeId || !planId) return of<boolean | null>(null);
-        return this.assignmentsApi.getAssignmentsByPayee(payeeId, { page: 1, pageSize: 100 }).pipe(
-          map(r => r.items.some(a => a.planId === planId && a.status === 'Active')),
+      switchMap(([payees, planId]) => {
+        if (payees.length === 0 || !planId) return of<boolean | null>(null);
+        return this.assignmentsApi.getAssignmentsByPlan(planId, { page: 1, pageSize: 500 }).pipe(
+          map(r => {
+            const assigned = new Set(
+              r.items.filter(a => a.status === 'Active').map(a => a.payeeId));
+            return payees.every(p => assigned.has(p.id));
+          }),
         );
       }),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(hasActiveAssignment => {
-      this.noActiveAssignment.set(hasActiveAssignment === false);
+    ).subscribe(allAssigned => {
+      this.noActiveAssignment.set(allAssigned === false);
     });
   }
 
+  /** Adds the payee the search field just resolved, then clears the field for the next one. */
+  onPayeeSelected(payeeId: string | number | null): void {
+    const id = payeeId ? String(payeeId) : '';
+    if (!id) return;
+
+    const label = this.payeeLabels.get(id) ?? id;
+    this.addPayee(id, label);
+    this.form.controls.payeeId.setValue('', { emitEvent: false });
+  }
+
+  private addPayee(id: string, label: string): void {
+    // Silently ignore a repeat: the same person twice in one batch would create two identical
+    // quotas, and the admin clicking a name they already picked means "include them", not "twice".
+    if (this.selectedPayees().some(p => p.id === id)) return;
+    this.selectedPayees.update(list => [...list, { id, label }]);
+  }
+
+  removePayee(id: string): void {
+    this.selectedPayees.update(list => list.filter(p => p.id !== id));
+  }
+
   async onSubmit(): Promise<void> {
-    if (this.form.invalid) {
+    const payees = this.selectedPayees();
+    if (this.form.invalid || payees.length === 0) {
       this.form.markAllAsTouched();
       return;
     }
@@ -183,10 +263,14 @@ export class QuotaCreateComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
+
     this.saving.set(true);
+    this.batchFailures.set([]);
     try {
-      const quota = await this.store.createQuota({
-        payeeId: v.payeeId,
+      // One request for the whole batch — the server creates all of them or none, so there is no
+      // half-applied state for this screen to explain or clean up.
+      const result = await this.store.bulkCreateQuotas({
+        payeeIds: payees.map(p => p.id),
         planId: v.planId,
         measurementType: Number(v.measurementType) as QuotaMeasurementType,
         amount: v.amount,
@@ -195,10 +279,20 @@ export class QuotaCreateComponent implements OnInit {
         periodEnd: range.end,
         notes: v.notes.trim() || null,
       });
+
       this.toast.show('QUOTAS.TOAST_CREATED', 'success');
-      this.router.navigateByUrl(this.returnTo() ?? `/quotas/${quota.id}`);
+      this.router.navigateByUrl(
+        this.returnTo() ?? (result.created.length === 1 ? `/quotas/${result.created[0].id}` : '/quotas'));
     } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
+      // A refused batch comes back with a reason per payee. Show them all: the admin has to know
+      // which rows to fix before re-sending, and NOTHING was created, so re-sending is safe.
+      const failures = extractBatchFailures(err);
+      if (failures.length > 0) {
+        this.batchFailures.set(failures);
+        this.toast.show('QUOTAS.BULK_REJECTED', 'error');
+      } else {
+        this.toast.show(extractApiError(err), 'error');
+      }
     } finally {
       this.saving.set(false);
     }

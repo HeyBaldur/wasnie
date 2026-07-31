@@ -39,6 +39,39 @@ export interface CreateQuotaRequest {
   notes?: string | null;
 }
 
+/**
+ * One quota configuration for N payees. A superset of {@link CreateQuotaRequest} with the single
+ * payee replaced by a list — there is no second way to describe a quota.
+ */
+export interface BulkCreateQuotasRequest {
+  payeeIds: string[];
+  planId: string;
+  measurementType: QuotaMeasurementType;
+  amount: number;
+  currency: string;
+  periodStart: string;
+  periodEnd: string;
+  notes?: string | null;
+}
+
+/** Why one payee of a batch could not receive the quota. Carries the name: the admin picked people. */
+export interface BulkQuotaFailure {
+  payeeId: string;
+  payeeName: string;
+  payeeEmployeeCode: string;
+  reason: string;
+}
+
+/**
+ * All-or-nothing: exactly one of the two lists is populated. A rejected batch created NOTHING, which
+ * is what makes "fix the reasons and send it again" safe — a partial success would duplicate the
+ * quotas that had already been created.
+ */
+export interface BulkCreateQuotasResult {
+  created: QuotaSummary[];
+  failures: BulkQuotaFailure[];
+}
+
 export interface UpdateQuotaRequest {
   quotaId: string;
   measurementType: QuotaMeasurementType;

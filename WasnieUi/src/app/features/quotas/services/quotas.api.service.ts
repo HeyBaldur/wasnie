@@ -1,7 +1,13 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { QuotaSummary, CreateQuotaRequest, UpdateQuotaRequest } from '../models/quota.model';
+import {
+  QuotaSummary,
+  CreateQuotaRequest,
+  UpdateQuotaRequest,
+  BulkCreateQuotasRequest,
+  BulkCreateQuotasResult,
+} from '../models/quota.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
@@ -20,6 +26,14 @@ export class QuotasApiService {
 
   createQuota(request: CreateQuotaRequest): Observable<QuotaSummary> {
     return this.http.post<QuotaSummary>(this.base, request);
+  }
+
+  /**
+   * One quota for N payees, all-or-nothing. A refused batch answers 400 with the per-payee reasons,
+   * which surface as the HttpErrorResponse's `error` body — see the create screen.
+   */
+  bulkCreateQuotas(request: BulkCreateQuotasRequest): Observable<BulkCreateQuotasResult> {
+    return this.http.post<BulkCreateQuotasResult>(`${this.base}/bulk`, request);
   }
 
   updateQuota(quotaId: string, request: UpdateQuotaRequest): Observable<QuotaSummary> {

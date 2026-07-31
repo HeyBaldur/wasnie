@@ -23,14 +23,38 @@
     <form [formGroup]="form" (ngSubmit)="onSubmit()" class="quota-create-form">
 
       <div class="ws-form-grid">
-        <ws-select
-          class="ws-form-grid__full"
-          label="QUOTAS.FIELD_PAYEE"
-          formControlName="payeeId"
-          [searchFn]="payeeSearchFn"
-          [initialOption]="preselectedPayeeOption()"
-          [error]="hasError('payeeId', 'required') ? 'VALIDATION.REQUIRED' : ''"
-        />
+        <!-- Pick as many payees as the quota applies to: one configuration, N people. Chips + a
+             search field is the same shape the payouts filter already uses to select several. -->
+        <div class="ws-form-grid__full">
+          <ws-select
+            label="QUOTAS.FIELD_PAYEES"
+            formControlName="payeeId"
+            [searchFn]="payeeSearchFn"
+            [initialOption]="preselectedPayeeOption()"
+            [error]="form.controls.payeeId.touched && selectedPayees().length === 0
+                      ? 'VALIDATION.REQUIRED' : ''"
+          />
+
+          @if (selectedPayees().length > 0) {
+            <div class="payee-chips">
+              @for (p of selectedPayees(); track p.id) {
+                <span class="payee-chip">
+                  {{ p.label }}
+                  <button
+                    type="button"
+                    class="payee-chip__remove"
+                    [attr.aria-label]="'COMMON.REMOVE' | translate"
+                    (click)="removePayee(p.id)">
+                    <app-icon name="x" [size]="11" />
+                  </button>
+                </span>
+              }
+            </div>
+            <p class="payee-chips__count">
+              {{ 'QUOTAS.BULK_SELECTED_COUNT' | translate: { count: selectedPayees().length } }}
+            </p>
+          }
+        </div>
 
         <ws-select
           class="ws-form-grid__full"
@@ -86,6 +110,31 @@
           [error]="hasError('notes', 'maxlength') ? 'VALIDATION.INVALID' : ''"
         />
       </div>
+
+      <!-- A refused batch: nothing was created, and every reason is listed so the admin knows what
+           to fix before sending the same batch again. -->
+      @if (batchFailures().length > 0) {
+        <div class="batch-failures">
+          <p class="batch-failures__title">
+            <app-icon name="alert-circle" [size]="14" />
+            {{ 'QUOTAS.BULK_REJECTED_TITLE' | translate }}
+          </p>
+          <p class="batch-failures__sub">{{ 'QUOTAS.BULK_REJECTED_SUB' | translate }}</p>
+          <ul class="batch-failures__list">
+            @for (f of batchFailures(); track f.payeeEmployeeCode + f.reason) {
+              <li class="batch-failures__item">
+                <span class="batch-failures__payee">
+                  {{ f.payeeName || ('QUOTAS.BULK_UNKNOWN_PAYEE' | translate) }}
+                  @if (f.payeeEmployeeCode) {
+                    <span class="batch-failures__code">({{ f.payeeEmployeeCode }})</span>
+                  }
+                </span>
+                <span class="batch-failures__reason">{{ f.reason }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
 
       <div class="form-actions">
         <ws-button variant="ghost" [routerLink]="returnTo() ?? '/quotas'">

@@ -3,7 +3,14 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { QuotasApiService } from '../services/quotas.api.service';
-import { QuotaSummary, QuotaStatus, QuotaListParams, CreateQuotaRequest } from '../models/quota.model';
+import {
+  QuotaSummary,
+  QuotaStatus,
+  QuotaListParams,
+  CreateQuotaRequest,
+  BulkCreateQuotasRequest,
+  BulkCreateQuotasResult,
+} from '../models/quota.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 
 @Injectable({ providedIn: 'root' })
@@ -114,6 +121,16 @@ export class QuotasStore {
     const quota = await firstValueFrom(this.api.createQuota(request));
     await this.loadQuotas();
     return quota;
+  }
+
+  /**
+   * One quota for N payees. Rejects on a refused batch — and a refused batch created NOTHING, so the
+   * list is not reloaded and the caller can re-send once the reported rows are fixed.
+   */
+  async bulkCreateQuotas(request: BulkCreateQuotasRequest): Promise<BulkCreateQuotasResult> {
+    const result = await firstValueFrom(this.api.bulkCreateQuotas(request));
+    await this.loadQuotas();
+    return result;
   }
 
   async activateQuota(quotaId: string): Promise<void> {
