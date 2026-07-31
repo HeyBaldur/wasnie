@@ -73,6 +73,29 @@ public sealed class PlansController(IMediator mediator) : ControllerBase
             : BadRequest(new { message = result.Error });
     }
 
+    // POST /api/plans/with-quota — a plan and its quota(s), all-or-nothing.
+    //
+    // 400 carries the per-quota failure list, and in that case NOTHING was written — not even the
+    // plan: the handler refuses the request before it reaches SaveChanges. There is no partial
+    // outcome, because a plan created without its quota measures attainment against nothing and pays
+    // zero without erroring.
+    //
+    // Agnostic about its caller: the AI assistant, a web wizard and an external API all post the same
+    // body and get the same rules.
+    [HttpPost("with-quota")]
+    public async Task<IActionResult> CreateWithQuota(
+        [FromBody] CreatePlanWithQuotaCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (!result.IsSuccess)
+            return BadRequest(new { message = result.Error });
+
+        return result.Value!.IsSuccess
+            ? CreatedAtAction(nameof(Get), new { planId = result.Value.Plan!.Id }, result.Value)
+            : BadRequest(result.Value);
+    }
+
     [HttpPost("{planId:guid}/clone")]
     public async Task<IActionResult> Clone(Guid planId, CancellationToken cancellationToken)
     {

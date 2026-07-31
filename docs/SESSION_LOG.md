@@ -4,6 +4,78 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-31 — Plan + Cuota en una escritura: auditoría del molde primero, después el cimiento
+
+Dos pasos, el segundo condicionado al primero.
+
+### Paso 1 — Auditoría del commit 9566530 (bulk quotas): PASA
+
+Se certificó ANTES de usarlo como molde, porque "el código está ahí" no es "el código hace lo correcto".
+
+- **Atomicidad estricta.** Las N cuotas se validan en memoria (`BulkCreateQuotasHandler.cs:81-96`), un
+  fallo retorna antes de tocar la base (`:101-103`), y el `AddRange` + único `SaveChangesAsync`
+  (`:105-106`) sólo es alcanzable si todas validaron. El éxito parcial no es evitado por convención:
+  es **inalcanzable estructuralmente**. El controlador devuelve `BadRequest(result.Value)` — el DTO
+  entero, con `PayeeId`, nombre, código y motivo por cada fallo.
+- **Paridad real.** `QuotaBuilder.Build` es el único constructor, llamado por las dos rutas. Se revisó
+  el diff del refactor: movimiento puro, sin cambio de reglas. Único delta semántico, `plan.Id` en vez
+  de `request.PlanId`, idénticos porque el plan se busca justamente por ese id.
+- **Sin reglas huérfanas.** El validator es sólo forma (lo declara su docstring) y el controlador no
+  tiene un solo `if` de negocio. Lo único exclusivo del bulk es `MaxPayeesPerBatch = 200`, que es una
+  cota de tamaño de request, no una regla sobre quotas.
+- **Silencio ante solapamientos**, con test dedicado.
+- **El test de rollback existe y muerde:** usa un `SaveChangesInterceptor` y afirma **0 llamadas** en
+  un lote rechazado — no cuenta filas, que es lo que haría pasar a un handler que escribe primero.
+
+### Paso 2 — `CreatePlanWithQuotaHandler` + `POST /api/plans/with-quota`
+
+- **Qué resuelve:** un plan con acelerador y sin cuota paga €0 sin errorear. Los dos son una operación.
+- **Cómo:** Id del plan generado por `IGuidGenerator` antes de escribir → las cuotas lo referencian en
+  memoria → `Add` de todo → **un solo `SaveChangesAsync`**. Sin Unit of Work ni pipeline transaccional
+  genérico; es el molde ya probado de `ArchivePlanHandler` y del bulk.
+- **Paridad:** ninguna regla de negocio en el handler. Plan por `Plan.Create`, cuotas por
+  `QuotaBuilder.Build`. Exige ambos permisos (`Plans.Create` **y** `Quotas.Set`): hacerlo en un request
+  no es una forma de necesitar menos autoridad que hacerlo en dos.
+- **Agnóstico de origen** por diseño: no es "el endpoint de IA". Nada bifurca por quién llamó.
+- **NO es `IMoneyCriticalCommand`**, a propósito: escribe configuración, y marcarlo haría que
+  `AuditBehavior` abriera una transacción explícita — inofensivo hoy, pero EF tira en transacción
+  anidada el día que este handler despache otro comando marcado (la trampa del diagnóstico previo).
+- **Lista vacía de cuotas rechazada:** un plan pelado ya lo crea `POST /api/plans`; aceptarla acá sería
+  una segunda forma de hacer lo mismo, y dos formas terminan divergiendo.
+
+### Verificación
+
+- **Mutación:** se introdujo el bug que el diseño evita (guardar el plan antes de validar las cuotas) →
+  **5 de 6 tests en rojo, incluido el de atomicidad**. Revertido → verde. Los tests muerden.
+- **Unit 1038 → 1044**, 0 rojos, exit 0.
+- **Integración 748 → 753** (751 verdes, 2 skipped preexistentes de rate limit), **exit 0**. Los 5 tests
+  nuevos cubren el 201 con plan y cuota enlazados, el **400 con el plan inexistente después** (la
+  atomicidad a nivel HTTP), la paridad contra `POST /api/quotas`, la lista vacía y el 401.
+- **★ El test de integración NO es teatro, a diferencia del caso del bulk.** Con la misma mutación
+  aplicada, `InvalidQuota_Returns400_AndTheRESULTINGPlanDoesNotExist` da **rojo con el mensaje exacto**
+  ("the plan must not outlive its rejected quota"). La diferencia con el bulk es real: allá el estado
+  parcial es inalcanzable porque ninguna regla lee el dato por payee, así que un test HTTP pasaba igual;
+  acá el plan y la cuota son entidades DISTINTAS con reglas distintas, y el estado parcial sí es
+  alcanzable por un handler mal escrito — por eso este nivel sí falsifica algo.
+- No hizo falta detener la API de dev: se compiló y corrió contra un directorio de salida alterno.
+- **Build:** compila limpio. El `dotnet build` del proyecto Api falla sólo en la COPIA de DLLs porque la
+  API está corriendo y los bloquea; se verificó compilando a un directorio de salida alterno.
+
+### Bug propio encontrado y arreglado
+
+Las bases InMemory de EF se comparten **por nombre en todo el proceso de test**. Mi harness usaba
+`nameof(test)` pelado y colisionó con el test homónimo de `BulkCreateQuotasHandlerTests` — los dos
+compartiendo filas en silencio, rompiendo el ajeno. Los nombres ahora llevan la clase como prefijo.
+
+### Nota de proceso
+
+El Paso 0 de reconciliación se ganó el lugar dos veces en un día: primero descubriendo que el bulk ya
+existía, después descubriendo que **el árbol de trabajo cambió de rama a mitad de sesión** (la rama
+correcta era `AI-CHAT-ASSISTANT`, no `AI-CHAT`). El estado del repo puede cambiar DURANTE una sesión,
+no sólo entre sesiones.
+
+**Sin commitear** — lo hace Rodolfo.
+
 ## 2026-07-30 — Creación masiva de quotas: N payees, una configuración, todo-o-nada (Camino A)
 
 `POST /api/quotas/bulk` + selección múltiple en el formulario. Los tres parámetros innegociables del
