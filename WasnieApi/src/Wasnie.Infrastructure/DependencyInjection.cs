@@ -22,6 +22,9 @@ using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
 using Wasnie.Infrastructure.Services.Email;
 using Wasnie.Infrastructure.Services.HubSpot;
+using Wasnie.Application.Assistant.Abstractions;
+using Wasnie.Infrastructure.Integrations.Groq;
+using Wasnie.Infrastructure.Services.Assistant;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -61,6 +64,10 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IClaimsService, ClaimsService>();
         services.AddScoped<IAuthorizationService, AuthorizationService>();
+        // The single point that decides assistant access. Registered next to the authorization
+        // services because it is answered the same way — and kept separate from them because it is an
+        // entitlement (per user, headed for per-seat billing), not a role permission.
+        services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -104,6 +111,22 @@ public static class DependencyInjection
         services.AddOptions<HubSpotSyncOptions>()
             .Bind(configuration.GetSection(HubSpotSyncOptions.SectionName));
         services.AddHttpClient("HubSpot");
+
+        // Chat model behind the vendor-neutral IChatCompletionProvider. Bound WITHOUT ValidateOnStart,
+        // like HubSpot: with no key configured the assistant falls back to its stand-in reply instead of
+        // stopping the API from starting. ONE key, server-side, for every tenant — it is attached to the
+        // outbound request inside GroqChatProvider and exists nowhere else.
+        services.AddOptions<GroqOptions>()
+            .Bind(configuration.GetSection(GroqOptions.SectionName));
+        services.AddHttpClient(GroqChatProvider.HttpClientName);
+        services.AddScoped<IChatCompletionProvider, GroqChatProvider>();
+        // The documentation the assistant answers from. SINGLETON because it reads one file once and
+        // that file cannot change while the process runs — re-reading fifteen thousand tokens of text
+        // per message would be work done for nothing.
+        services.AddSingleton<IAssistantKnowledgeBase, FileAssistantKnowledgeBase>();
+        // Step one of the two-step answer: picks the sections a question needs. Scoped because it
+        // depends on the scoped provider; it holds no state of its own.
+        services.AddScoped<Wasnie.Application.Assistant.Common.AssistantSectionRouter>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
         services.AddScoped<IHubSpotTokenProvider, HubSpotTokenProvider>();

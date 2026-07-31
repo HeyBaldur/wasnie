@@ -24,6 +24,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Wasnie.Api</RootNamespace>
+    <!--
+      Enables `dotnet user-secrets`, whose store lives OUTSIDE the repository entirely (in the user
+      profile). That is its advantage over the gitignored appsettings.Development.json: a file inside
+      the working tree can still be force-added or copied into a commit by accident, and a key that
+      reaches history stays there. The id is not a secret; it only names the local store.
+    -->
+    <UserSecretsId>wasnie-api-1f4c9a72-6d3b-4e51-9c88-2a7f5b0e6d14</UserSecretsId>
   </PropertyGroup>
 
 </Project>

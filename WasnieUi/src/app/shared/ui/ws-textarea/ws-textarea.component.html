@@ -1,0 +1,29 @@
+<div [class]="hostClasses()">
+  @if (label()) {
+    <label class="ws-textarea__label" [for]="inputId()">
+      {{ label() | translate }}
+    </label>
+  }
+
+  <div class="ws-textarea__field" [class.ws-textarea__field--focused]="isFocused()">
+    <textarea
+      #native
+      class="ws-textarea__native"
+      [class.ws-textarea__native--scrollable]="isScrollable()"
+      [id]="inputId()"
+      [value]="value()"
+      [placeholder]="placeholder() | translate"
+      [disabled]="isDisabled()"
+      [attr.maxlength]="maxlength()"
+      rows="1"
+      (input)="onInput($event)"
+      (keydown)="onKeydown($event)"
+      (focus)="onFocus()"
+      (blur)="onBlur()"
+    ></textarea>
+  </div>
+
+  @if (error()) {
+    <span class="ws-textarea__error">{{ error() | translate }}</span>
+  }
+</div>

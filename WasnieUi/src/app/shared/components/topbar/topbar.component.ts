@@ -2,13 +2,14 @@ import { Component, computed, HostListener, inject, OnInit, signal } from '@angu
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { IconComponent } from '../icon/icon.component';
+import { AssistantTriggerComponent } from '../../../features/assistant/trigger/assistant-trigger.component';
 import { Router } from '@angular/router';
 import { SubscriptionService } from '../../../features/subscription/services/subscription.service';
 
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [TranslatePipe, IconComponent],
+  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent],
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })

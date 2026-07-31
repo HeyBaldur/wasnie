@@ -4,6 +4,925 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-31 — `<br>` literal en las tablas: una excepción de una entrada, y cobertura total de Markdown
+
+### La causa
+
+`html: ({text}) => escape(text)` escapaba **todo** el HTML crudo, `<br>` incluido. Correcto para la
+seguridad, demasiado romo para el caso real: **Markdown no tiene sintaxis para un salto de línea dentro
+de una celda de tabla**, así que todos los modelos usan la etiqueta HTML — y el lector veía `<br>`
+literal en medio de la tabla.
+
+### El fix: lista blanca de UNA entrada
+
+Solo `<br>`. Se evaluó sumar `<strong>`/`<em>` y **se descartó**: Markdown ya hace negrita, cursiva,
+código y enlaces dentro de una celda, así que escaparlos no pierde nada. El salto de línea es lo único
+que Markdown genuinamente no puede expresar ahí.
+
+**★ La seguridad está en la FORMA del patrón, no en el nombre de la etiqueta:** `/^<\s*br\s*\/?\s*>$/i`
+matchea una etiqueta pelada y nada más — **no hay lugar para un atributo**. El peligro del HTML vive en
+los atributos (`onerror`, `onclick`, `src`, `href`), y un patrón sin espacio para uno no puede llevar un
+handler sea cual sea la etiqueta listada. `<br onload=…>` no pasa y se escapa como cualquier otra cosa.
+El sanitizador de Angular sigue corriendo después: esto angosta la capa 1, no la perfora.
+
+### ★ Cobertura completa de Markdown (lo que pediste)
+
+Suite exhaustiva, no por muestreo — las construcciones que nadie probó son justo las que salen mal, y
+el `<br>` fue el ejemplo: los 6 niveles de título; negrita/cursiva/ambas/tachado; código cercado con
+lenguaje e indentado; citas anidadas; listas ordenadas, desordenadas y anidadas en profundidad; listas
+que **empiezan en otro número** (un "paso 3" no debe renumerarse a 1); task lists; tablas con
+**alineación** y formato dentro de las celdas; enlaces inline, autolinks, URLs sueltas y con título;
+regla horizontal; caracteres escapados y entidades HTML; saltos de línea simples; imágenes Markdown (y
+la neutralización de una con `javascript:`); y el caso duro: construcciones **anidadas entre sí**
+(lista con bloque de código, lista con cita, celda con enlace y salto).
+
+### Un segundo bug que la cobertura destapó
+
+**Las task lists perdían las casillas.** `marked` genera `<input type="checkbox">` y el sanitizador de
+Angular elimina los controles de formulario — correctamente, no tienen por qué llegar de un modelo.
+Pero el resultado era que "hecho" y "pendiente" se veían como viñetas idénticas: **no una pérdida
+cosmética sino una lectura EQUIVOCADA de lo que dijo el asistente.** Ahora se convierten en `☑` / `☐`,
+que significan lo mismo, no son interactivos (esas casillas siempre venían `disabled`) y pasan
+cualquier sanitizador porque son texto.
+
+### Tests: 638 → 652
+
+**Probado por mutación, en dos direcciones opuestas:**
+- Quitar la lista blanca → **3 rojos** (el `<br>` suelto, el de la celda, el anidado). El bug vuelve.
+- Aflojar la lista blanca a cualquier etiqueta → **3 rojos**, incluido **`<img onerror>`**. La red XSS
+  se rompe.
+
+Que las dos mutaciones opuestas fallen es lo que muestra que la regla está calibrada, no simplemente
+puesta. **La protección XSS sigue intacta**: los tests de script, handlers, iframes y `javascript:`
+siguen verdes sin tocarse.
+
+Build prod limpio. **Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — Modelo cambiado a GPT OSS 20B (verificado contra la API, no adivinado)
+
+### Paso 0
+
+- **El modelo ya vivía en config** (`GroqOptions.Model` + los tres appsettings). No hubo que sacarlo de
+  código.
+- **★ Id de API REAL, consultado a `GET /v1/models`: `openai/gpt-oss-20b`.** El nombre comercial "GPT
+  OSS 20B" no sirve; un id mal escrito es 404 en cada llamada. (La lista también trae
+  `openai/gpt-oss-120b` y `openai/gpt-oss-safeguard-20b` — fácil equivocarse.)
+- **★ JSON mode CONFIRMADO con llamadas reales.** El router devolvió JSON válido y ruteó bien:
+  clawbacks → Clawback; *"si alguien renuncia y ya cobró comisiones"* → Clawback + Terminación;
+  *"¿qué es un plan?"* → The model on one page + Setup order. **Streaming también confirmado** (25
+  fragmentos). No hizo falta parar.
+- Los logs de la API confirmaron el motivo del WI: `TPD: Limit 100000, Used 97767`. Y de paso mostraron
+  el mensaje del proveedor — el arreglo de diagnóstico de esta mañana rindiendo.
+
+### ★ Una trampa encontrada al probar, que no estaba en el WI
+
+`response_format: json_object` **falla con 400 si los mensajes no contienen la palabra "json"**:
+
+> `'messages' must contain the word 'json' in some form, to use 'response_format' of type 'json_object'.`
+
+El prompt actual dice *"Return ONLY a JSON object"*, así que pasa. Pero alguien puliendo la redacción
+podría sacar esa frase y **todas** las llamadas del router empezarían a fallar con un 400 que no habla
+de prompts. Es un requisito invisible en el código → **hay un test que lo fija**.
+
+### El cambio
+
+`openai/gpt-oss-20b` en `GroqOptions.Model` y en los tres appsettings (base, Development, Production).
+Un solo modelo para ambos pasos, como pidió el WI.
+
+### Un cambio de comportamiento a verificar
+
+**"¿Wasnie tiene app móvil?" ahora SÍ rutea** (a Setup order / End-to-end) en vez de devolver `[]` como
+hacía el 70B. No es un defecto: la pregunta *es* sobre el producto, y la regla de generosidad dice que
+se elija. La generación leerá esas secciones, no encontrará nada de app móvil y —por la regla 2 del
+confinamiento— dirá que no lo tiene. Misma respuesta, otro camino. **Vale confirmarlo en pantalla.**
+
+### Tests: 1088 → 1090
+
+Uno para el id real (con forma de id de API: minúsculas, con `/`, sin espacios) y otro para la palabra
+"json". **Probado por mutación:** poner el nombre comercial y sacar "JSON" ponen en rojo a sus tests.
+
+**Y cerré una brecha que la mutación destapó:** el test del modelo leía solo el `appsettings.json`, así
+que el default de C# podía divergir sin que nadie lo notara. Ahora asserta que **ambos** nombran el
+mismo modelo.
+
+### Integración: una corrida con 3 fallos, dos verdes
+
+La primera corrida dio **3 fallos**; las dos siguientes, **751/753 en verde**. No pude capturar cuáles
+—la salida de esa corrida no quedó guardada— y no reproducen. Sospecha: timing del contenedor, no el
+cambio de modelo (ninguna prueba de integración llama a Groq). **Queda anotado como intermitente a
+vigilar**, no como verde limpio.
+
+Unit **1090 verde**, build limpio. **Reiniciá la API.**
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — Los estilos del Markdown estaban MUERTOS (encapsulación), ahora aplican
+
+### Aclaración del Paso 0
+
+El WI dice "ngx-markdown YA está integrado". **No es ngx-markdown**: es `marked` + un pipe propio
+(`AssistantMarkdownPipe`). No cambia el trabajo — el HTML inyectado se estila igual — pero conviene que
+el nombre en los docs coincida con el código.
+
+### La causa (un bug mío del WI anterior)
+
+Escribí los estilos de tabla/código/listas y **nunca aplicaron**. Con encapsulación **Emulated**,
+Angular compila `.assistant-msg__markdown table` a
+`.assistant-msg__markdown[_ngcontent-x] table[_ngcontent-x]`, y el HTML que entra por `[innerHTML]`
+**no lleva `_ngcontent`**. Cada regla matcheaba exactamente nada. La tabla se renderizaba como
+`<table>` real y se veía como dos columnas apretadas — justo lo que Rodolfo vio.
+
+**Reproducido con un test antes de tocar nada:** `padding-left: 0px`, `overflow-x: visible`, sin fondo
+en el código, sin subrayado en los enlaces.
+
+### El arreglo
+
+Todo el bloque pasó a `.assistant-msg__markdown ::ng-deep { … }` — **acotado**, con la clase del
+contenedor delante de cada selector. Un `::ng-deep` sin acotar acá restilaría cada tabla, lista y
+enlace de Wasnie desde el panel del chat. Auditado: los tres `::ng-deep` del repo están acotados.
+
+Estilado con tokens: tablas (borde, celdas con padding, encabezado destacado, zebra), código inline y
+bloques (fondo tenue, monoespaciada, **scroll horizontal propio**), enlaces (`--color-text-link` +
+hover), listas (indentación, viñetas, anidadas con marcador distinto), citas (barra lateral), títulos
+(contenidos: un h1 en una burbuja es una etiqueta, no un cartel), y espaciado vertical.
+
+### Dos tests míos que eran vacuos
+
+Asserté `borderTopStyle !== 'none'`, y **el preflight de Tailwind pone `border-style: solid` con
+`border-width: 0` en todo** — o sea que pasaba sin ninguna regla mía aplicada. Corregido a
+`borderTopWidth`, que es la señal real. Mismo error en el test de acotamiento.
+
+### Tests: 630 → 634
+
+Miden **estilo computado**, no la existencia del elemento: un test que solo verificara que hay
+`<table>` habría pasado todo el tiempo. Más el de contención: se renderiza una tabla idéntica **fuera**
+del panel y se verifica que quedó intacta.
+
+Build prod limpio.
+
+### ⚠️ HALLAZGO APARTE, NO TOCADO: `--shadow-card` no existe
+
+Se usa en **10+ componentes** (auth, plan-create, quota-create, assignments, el panel del asistente…)
+y **no está definido en ningún lado**. `DESIGN_SYSTEM.md` lo documenta como alias de `--shadow-sm`,
+pero el alias nunca se creó en `styles.scss`. Consecuencia: **todas esas tarjetas no tienen sombra.**
+Es un bug preexistente de toda la app, no del chat; el arreglo es una línea en `styles.scss`, pero
+cambia el aspecto de 10+ pantallas y esa decisión es de Rodolfo, no de un WI de estilos del chat.
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — El Markdown del asistente se renderiza (y se sanitiza)
+
+### Paso 0
+
+Burbuja en `assistant-panel.component.html`; **ninguna** librería de markdown ni de sanitizado en el
+proyecto. Se agregó **`marked`** (madura, GFM con tablas incluidas), +5.9 kB al bundle (797→803 kB;
+el presupuesto ya estaba excedido de antes).
+
+### El render
+
+`AssistantMarkdownPipe`. **Solo el mensaje del ASISTENTE** pasa por él; el del usuario se imprime tal
+cual — interpretar sus asteriscos estaría mal dos veces: no es lo que escribió, y convertiría su propio
+input en una ruta de renderizado, que es la forma que toma toda inyección.
+
+### La seguridad — dos capas independientes
+
+1. **`marked` escapa el HTML crudo** en vez de pasarlo (override del renderer `html`; marked quitó su
+   opción `sanitize` en la v5, éste es el reemplazo soportado). El payload nunca llega a ser markup:
+   se ve como texto.
+2. **El sanitizador de Angular tiene la última palabra** sobre lo que sobreviva.
+
+**No hay `bypassSecurityTrustHtml` en ninguna parte**, y no debe haberlo: esa llamada es el único modo
+de volver esto inseguro, y parecería una comodidad menor.
+
+**Enlaces:** todos salen con `rel="noopener noreferrer"` y `target="_blank"`, sobrescribiendo lo que el
+modelo haya puesto. `noopener` es la mitad de seguridad (sin él la página abierta alcanza
+`window.opener` y puede navegar la app); `noreferrer` mantiene la dirección donde estaba el usuario
+fuera del request.
+
+### Streaming
+
+Se renderiza **mientras** llega, desde lo que haya. Un `**` a medio cerrar simplemente todavía no es
+negrita y se ve como caracteres; el fragmento siguiente re-renderiza todo y se resuelve. **Nada tiene
+que detectar "el final".** Hay un test que renderiza *cada prefijo* de una respuesta real y verifica
+que ninguno explota.
+
+### Contención del layout
+
+El panel mide 420px y el modelo devuelve tablas de seis columnas. Tablas y bloques de código tienen
+**scroll horizontal propio dentro de la burbuja**; el layout del chat no se mueve. Tokens verificados
+en los **tres** temas (enlace, código y bordes son los que se volverían ilegibles en dark).
+
+### Un test que estaba mal escrito
+
+El de `<img onerror>` fallaba… porque el escapado **funcionaba**: la salida es
+`&lt;img … onerror=&#34;…&#34;&gt;`, texto inerte que legítimamente contiene los caracteres `onerror=`.
+Buscar esa subcadena fallaba con código correcto y habría pasado con un renderer que borrara el payload
+en silencio. **Corregido para preguntarle al DOM**, que es donde vive la propiedad de seguridad: que no
+exista el elemento. Ahora también asserta que el texto SÍ se ve — escapar no es borrar.
+
+### Tests: 619 → 630
+
+Los 4 del WI. **Probado por mutación:** quitar las dos capas pone **4** tests de seguridad en rojo
+(script, img onerror, handlers/iframes, y el enlace `javascript:`).
+
+Build prod limpio. **Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — El router rechazaba todo: eran DOS causas, y la principal un bug mío
+
+Rodolfo probó y el asistente decía "no tengo esa información" a preguntas claramente cubiertas.
+
+### El diagnóstico (con evidencia, no con teoría)
+
+No tenía sus logs, así que reproduje las 7 preguntas llamando a Groq directamente con su key
+configurada. (Nota lateral: `urllib` da **403** contra Groq; hace falta un User-Agent de navegador.
+La app no sufre esto porque `HttpClient` manda el suyo.) El resultado:
+
+| pregunta | router devolvió | ids válidos |
+|---|---|---|
+| ¿Qué es un plan? | `["6","15","3"]` | **NINGUNO** |
+| Muéstrame qué puede hacer Wasnie | `[]` | vacío |
+| Tabla de las secciones | `[]` | vacío |
+| Plan de comisiones al 5% | `["5","7","6"]` | **NINGUNO** |
+| ¿Soporta clawbacks? | `["17","15","18"]` | **NINGUNO** |
+| ¿App móvil? / receta | `[]` | correcto |
+
+**★ CAUSA 1 — un bug mío, y el que explica casi todo.** El router **estaba eligiendo bien**: `6` es
+"4. Plan and Rules", `17` es "15. Clawback". Pero los ids son `s1..s21` y el modelo devolvía `6`, `17`.
+¿Por qué? Porque el ejemplo en MI prompt decía `{"sections": ["3", "15"]}` — escrito **antes** de que
+los ids llevaran el prefijo `s`, y nunca actualizado. El modelo copió el ejemplo al pie de la letra,
+`TextFor` no matcheó ninguno, y todo cayó al fallback de "no tengo esa información". **El ruteo era
+correcto todo el tiempo; lo que fallaba era mi ejemplo.**
+
+**CAUSA 2 — calibración (la del WI).** Las preguntas de panorama sí devolvían `[]`: *"choose between 1
+and 3 ids… if NO section could answer, return an empty list"* le dio permiso al modelo para rendirse.
+
+### El arreglo (tres partes)
+
+1. **El ejemplo del prompt ahora usa el formato real** (`["s3", "s17"]`).
+2. **Normalización tolerante en `TextFor`**: `"6"` → `s6`, más comillas/puntos sobrantes. Es el
+   cinturón además de los tirantes — un modelo va a soltar el prefijo alguna vez por más claro que se
+   lo pidas. Deliberadamente angosta: recupera el prefijo y nada más; adivinar más empezaría a matchear
+   secciones que el router no eligió.
+3. **Generosidad**: *"BE GENEROUS… Broad questions deserve broad answers… choosing too many is a small
+   waste; choosing none is a wrong answer"*, y `[]` **solo** para lo genuinamente ajeno —
+   *"'I could not decide' is NOT a reason to return an empty list"*. Rango 1-4 secciones.
+
+### Verificado contra Groq real, las 8 preguntas
+
+| pregunta | secciones | ~tok/turno |
+|---|---|---|
+| ¿Qué es un plan? | Plan and Rules, The model on one page, … | ~3.500 |
+| Qué puede hacer Wasnie | The model on one page, Plan and Rules, … | ~4.200 |
+| Tabla de secciones | Coverage checklist, The model on one page, … | ~2.300 |
+| Plan al 5% | Plan and Rules, Rate tables, … | ~3.300 |
+| ¿Soporta clawbacks? | Clawback, Termination, … | ~6.300 |
+| "renuncia y ya cobró comisiones" (sinónimo) | **Clawback**, Termination | ~4.800 |
+| ¿App móvil? | (ninguna → fallback) ✔ | ~950 |
+| Receta | (ninguna → fallback) ✔ | ~950 |
+
+**El confinamiento correcto quedó intacto** y el peor caso (~6.300) sigue bajo los ~12.000 TPM.
+
+### Tests: 1084 → 1088
+
+El que más importa: **`The_example_ids_in_the_router_prompt_are_ids_that_ACTUALLY_EXIST`** — extrae los
+ids del ejemplo del prompt y verifica que la base de conocimiento los aceptaría. **Habría atrapado el
+bug al compilar.** Un ejemplo que no matchea la realidad le enseña al modelo a equivocarse, y nada más
+en el sistema puede notarlo. Más: id sin prefijo resuelve igual, el prompt exige generosidad, y una
+pregunta amplia rutea a secciones sin traerse la guía entera.
+
+**Probado por mutación:** restaurar el ejemplo viejo y quitar la normalización ponen en rojo esos dos.
+
+Integración **753 verde**. **Reiniciá la API.**
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — 2b rediseñada: confinamiento por enrutamiento semántico de dos pasos
+
+Reemplaza el parche de keywords del intento anterior. El LLM elige las secciones, no un contador de
+palabras.
+
+### Paso 0 — qué se reusó
+
+Todo lo que funcionaba: la carga del `.md` enlazado desde Infrastructure, las 5 reglas de confinamiento
+(`ConfinementRules`), el prompt de respaldo, y los tests de confinamiento. Cambió **qué** se inyecta.
+**Se eliminó** `AssistantKnowledgeSelector` (el matcher por keywords) y su opción
+`MaxDocumentationTokens`: dos mecanismos para el mismo trabajo es la deriva que este proyecto combate.
+El markdown tiene **21 encabezados `##`** limpios — se parte de forma fiable.
+
+### Paso 1 — el enrutador
+
+`AssistantSectionRouter` manda **solo el índice** (`id: título`, ~200 tokens) + la pregunta, con
+instrucciones frías: *"You are a lookup router. You do NOT answer questions"*. Personalidad acá invita
+al modelo a contestar en vez de rutear, y un preámbulo simpático es exactamente lo que rompe el parseo.
+**Modo JSON estricto** vía `response_format: {"type":"json_object"}` — nuevo método
+`CompleteJsonAsync` en el MISMO `IChatCompletionProvider`, no un cliente nuevo.
+
+Lo que resuelve frente a keywords: *"renuncia con comisiones ya cobradas"* rutea a Clawback aunque la
+palabra no aparezca. Ningún stemming encuentra eso.
+
+### Paso 2 — la generación
+
+`knowledge.TextFor(ids)` devuelve el texto de esas secciones **en orden de documento**, no en el orden
+que las nombró el router, y **ignora ids inventados**. Después, el flujo de 2a intacto.
+
+### ★ El fallback de lista vacía
+
+Router devuelve `[]` → **no** se lanza excepción → se inyecta `NoSourcePrompt`, que instruye
+explícitamente a decir que la documentación no cubre eso. **Sin sección el asistente NO tiene fuente, y
+un modelo sin fuente no se calla: responde desde su entrenamiento, con fluidez y con el badge del
+producto puesto.** En un sistema que decide cuánto cobra la gente, ése es el peor output posible.
+También cubre JSON ilegible (`""`, `null`, `{"other":[]}`): degrada a la misma respuesta honesta.
+
+**Y son dos silencios distintos, no uno:** guía ausente → `FallbackPrompt` (el asistente admite estar
+sin anclar); guía presente que no cubre el tema → `NoSourcePrompt` (dice ESO, que es una respuesta
+real). Confundirlos sería perder información.
+
+### Observabilidad
+
+Se loguean los ids **y los títulos** elegidos, para que el log siga siendo legible dentro de un mes.
+**La PREGUNTA no se loguea**: estas conversaciones son privadas por usuario por diseño, y copiarlas al
+log del operador desharía eso en silencio. Lo que necesita auditoría es la decisión; una pregunta que
+rutea mal se reproduce preguntándola.
+
+### Un hallazgo del propio test
+
+Los ids secuenciales producían un índice que decía **"17: 15. Clawback"** — dos números distintos para
+la misma sección, justo donde un humano lee el log para entender qué eligió el router. Ahora son
+`s1..s21`, imposibles de confundir con la numeración propia del documento.
+
+### Tokens y tests
+
+Router ~250 tok + generación ~2.500-3.500 tok = **~3.000-3.800 por turno**, contra ~15.300 antes y un
+techo de ~12.000/min: **de no poder completar una sola pregunta a varias por minuto**. Hay un test que
+lo asserta.
+
+Unit **1079 → 1084**, integración **753 verde**. **Probado por mutación:** quitar el `NoSourcePrompt`
+pone en rojo 3 tests, incluido el del fallback.
+
+**Para probar en pantalla:** (1) clawbacks con sinónimo — *"si alguien renuncia y ya cobró comisiones,
+¿qué pasa?"* → debe rutear a Clawback; (2) una receta → debe redirigir; (3) algo fuera de la guía —
+*"¿Wasnie tiene app móvil?"* → debe decir que no lo tiene en la documentación, sin inventar.
+**Reiniciá la API.**
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — HTTP 413: mi supuesto de 2b estaba medido contra el número equivocado
+
+Rodolfo probó el caso de oro y el asistente falló. Log: `StatusCode: 413` en cada request.
+
+### La causa
+
+2b mandaba la guía entera razonando que ~15.000 tokens entran cómodos en un contexto de 128.000. **Es
+cierto y es irrelevante.** El límite que manda no es la ventana de contexto: es la asignación de
+**TOKENS POR MINUTO** de Groq, que la API aplica **por request** y responde con **413** al pasarse. El
+plan free de `llama-3.3-70b-versatile` permite ~12.000 TPM. Un prompt de 15.000 tokens **no podía
+funcionar nunca** — ni una vez, ni con la conversación vacía.
+
+Y el test de 2b que "verificaba" esto medía contra los 128k y pasaba feliz. Medir contra el número
+equivocado no es un test más débil: es un test que certifica otra cosa.
+
+### El arreglo
+
+`AssistantKnowledgeSelector`: elige las secciones de la guía que la pregunta necesita, dentro de un
+presupuesto (`GroqOptions.MaxDocumentationTokens`). **Sigue sin ser una base vectorial** — puntúa por
+coincidencia de palabras contra 22 encabezados; embeddings e índices se ganan su costo cuando el corpus
+es demasiado grande para recorrer, y recorrer 22 strings es gratis. Detalles que importan:
+- El encabezado pesa ×10 sobre el cuerpo: una sección **titulada** "Clawback" es lo que quiere una
+  pregunta sobre clawbacks, aunque otra mencione la palabra dos veces.
+- Stem crudo de plurales, para que "clawback**s**" (y en español) encuentre la sección "Clawback".
+- Se reensambla en **orden del documento**, no de relevancia: darle la §15 antes de la §4 invita al
+  modelo a describir una regla posterior como si viniera primero.
+- Si el corpus **ya entra**, devuelve el documento entero sin tocar: el presupuesto es un techo, no una
+  política. Con un tier pago vuelve a ser 2b tal cual.
+
+### El presupuesto: 3000, y por qué
+
+La asignación es **por minuto**, así que el presupuesto decide cuántos mensajes se pueden mandar.
+Medido contra la guía real:
+
+| presupuesto | request total | mensajes/min a 12k TPM | ¿entra §15 Clawback? |
+|---|---|---|---|
+| 6000 | ~6,8k | 1 | sí |
+| 4000 | ~4,8k | 2 | sí |
+| **3000** | **~3,8k** | **3** | **sí** |
+| 2500 | ~3,4k | 3 | **NO** |
+
+3000 es el piso que todavía admite entera la sección más grande. Por debajo, la selección empieza a
+descartar justo el material que una pregunta sobre ese tema necesita — cambiar un error visible de rate
+limit por una respuesta segura y mal informada es el peor de los dos.
+
+### El diagnóstico que me hizo adivinar
+
+2a leía el cuerpo del error del proveedor y lo **descartaba**, incluso para el log. Cuando llegó el 413,
+el log decía solo "413" y Rodolfo tuvo que mandarme los logs para que yo dedujera la causa — el mensaje
+de Groq decía exactamente qué pasaba. La regla siempre fue "el USUARIO no lo ve"; callárselo también al
+**operador** fue una sobrecorrección que volvió opaco un problema resoluble. Ahora se loguea (truncado
+a 500 chars, porque un rechazo puede devolver un pedazo del prompt). Además **413 → `RateLimited`**, no
+`Unavailable`: es un límite de tasa, así que el usuario lee "probá en un momento" y no un fallo genérico.
+
+### Tests: 1075 → 1079
+
+El de la ventana de contexto fue **reemplazado** por uno que mide contra la asignación real, más: el
+caso de oro **bajo presión de presupuesto** (la §15 sobrevive), selección nula cuando el corpus entra,
+orden de documento, y que una pregunta fuera de tema igual reciba documentación (si no, el prompt caería
+al de respaldo y el asistente dejaría de estar confinado justo cuando más importa).
+
+Integración **753 verde**. Unit **1079 verde**.
+
+**Rodolfo: hay que REINICIAR la API** para que tome el arreglo. Y si querés cadencia de chat real, el
+tier free de Groq es el techo — 3 mensajes por minuto; el dev tier lo resuelve y permite subir
+`MaxDocumentationTokens` de vuelta hasta la guía completa.
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — AI Assistant Pieza 2b: confinamiento (el handbook en el prompt + reglas estrictas)
+
+### Paso 0
+
+- El system prompt "mínimo y temporal" de 2a vivía en `AssistantPrompt.SystemPrompt` — ese es el punto
+  que 2b reemplaza.
+- **Fuente elegida: `docs/Wasnie_Configuration_Guide.md`**, que es el markdown del que sale el
+  handbook PDF. Ya está commiteado y es texto plano. Contiene la §15 Clawback, que es justo el caso
+  de oro.
+- **Tamaño: 61.333 chars ≈ 15.300 tokens** (chars/4). El contexto del modelo es ~128k → entra con
+  ~110k libres para la conversación. **El liviano alcanza cómodo**; no hubo que reconsiderar nada.
+
+### Cómo se inyecta y cómo se mantiene
+
+El `.md` se **ENLAZA** (no se copia) desde el csproj de **Infrastructure**, junto al
+`FileAssistantKnowledgeBase` que lo lee, con `CopyToOutputDirectory`. Es el MISMO archivo que edita el
+equipo: actualizar lo que el asistente sabe es editar ese documento y recompilar — sin cambios de
+código, sin una segunda copia que sincronizar. Una copia duplicada derivaría de la guía en una release,
+y un asistente citando con seguridad las reglas del mes pasado es peor que uno que dice que no sabe.
+
+**Vive en Infrastructure, no en la Api,** a propósito: así llega al output de todo proyecto que la
+referencie —la API y los proyectos de test— desde **una** declaración en vez de una por consumidor.
+(Lo descubrí porque los tests fallaban: el enlace estaba solo en la Api y el archivo no llegaba al bin
+de test.) Se lee una vez y se cachea (singleton): el archivo no cambia mientras el proceso vive.
+
+### El system prompt de confinamiento
+
+Cinco reglas, en `AssistantPrompt.ConfinementRules`: (1) **responder DESDE la documentación**, con la
+regla y la pantalla reales — "dar una respuesta genérica de la industria cuando Wasnie tiene un diseño
+específico ES una respuesta equivocada"; (2) **decir cuando no sabe** y **nunca inventar** una feature,
+setting, pantalla o workaround — "si una regla es más estricta de lo que el usuario espera, enunciá la
+regla como está documentada en vez de ofrecer una alternativa más blanda que no existe"; (3) **quedarse
+en Wasnie**, redirigiendo con calidez lo genérico; (4) **explica, no ejecuta** (coherente con el
+disclaimer en pantalla); (5) responder en el idioma del usuario.
+
+**Las reglas se repiten DESPUÉS del corpus**, y hay un test que asserta esa POSICIÓN: 15.000 tokens
+separan una instrucción puesta antes del documento de la pregunta del usuario, y lo que está al final
+del contexto pesa más. El recordatorio es barato y es lo que evita que las negativas queden sepultadas
+bajo el material al que aplican.
+
+**Sin documentación → prompt de respaldo que ADMITE estar sin anclar** ("la documentación no está
+disponible; no afirmes especificidades"). Un archivo faltante no baja el chat, pero el respaldo tampoco
+sigue hablando en nombre del producto — un asistente describiendo Wasnie con seguridad y sin fuente es
+exactamente el modo de falla que esta pieza elimina.
+
+### Tests: 1066 → 1075
+
+Los cuatro del WI, más el respaldo y las garantías de 2a. **Uno merece mención: el test que asserta que
+la guía REAL llega con la §15 Clawback dentro** — es el caso de oro convertido en aserción determinista.
+
+**Probado por mutación:** hacer que `BuildSystemMessage` ignore la doc pone en rojo **5** tests (los de
+inyección, reglas, posición del recordatorio, la guía real, y el de 2a que verifica el prompt enviado).
+
+Lo que estos tests **no** prueban, y está escrito en el archivo: que el modelo OBEDEZCA. Eso no es
+determinista — un test que assertara "rechaza dar una receta" estaría assertando una propiedad de los
+pesos de otro y se pondría rojo en un upgrade de modelo que no rompió nada. Lo determinista es que la
+doc y las reglas LLEGAN.
+
+### 2a intacto
+
+Streaming, manejo de errores y persistencia sin tocar: integración **753 verde**, front **619 verde**
+(no se tocó), build prod limpio. Solo cambió el system prompt y de dónde sale.
+
+**Costo a tener en cuenta:** cada mensaje ahora manda ~15.300 tokens de entrada. Es la contrapartida
+del RAG liviano y es la decisión tomada; si el volumen crece, ahí es donde mirar primero.
+
+**Para verificar en pantalla:** preguntar *"¿Wasnie soporta clawbacks?"* (debe explicar el diseño real
+—deuda registrada contra el payee, cobrada de pay runs futuros, append-only— y no clawbacks en
+general) y pedirle *una receta de cocina* (debe redirigir con amabilidad a que es el asistente de
+Wasnie).
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — Configuración de Groq declarada en los appsettings (estructura sí, secreto no)
+
+### Paso 0
+
+- Sección real: **`Groq`** (`GroqOptions.SectionName`), con `ApiKey`, `BaseUrl`, `Model`,
+  `MaxHistoryMessages`, `TimeoutSeconds`.
+- **Qué se commitea (verificado con `git check-ignore`, no asumido):** `appsettings.json` y
+  `appsettings.Development.template.json` SÍ; `appsettings.Development.json` y
+  `appsettings.Production.json` están **ignorados**. El README ya documentaba esa tabla.
+- **No había `UserSecretsId`** en el csproj, así que `dotnet user-secrets` no funcionaba.
+
+### Lo hecho
+
+1. `appsettings.json`: sección `Groq` con la estructura completa, **`ApiKey` vacía** y los defaults
+   no-secretos reales.
+2. `appsettings.Development.template.json`: `Groq.ApiKey` vacía + comentario que apunta a User Secrets.
+3. `Wasnie.Api.csproj`: `UserSecretsId`. El store vive **fuera del repositorio** — esa es su ventaja
+   sobre el `appsettings.Development.json` gitignoreado, que sigue estando dentro del árbol y puede
+   colarse en un commit con un `add -f`.
+4. README: cómo poner el valor en dev (`dotnet user-secrets set "Groq:ApiKey" …`) y en Azure
+   (`Groq__ApiKey`), más la regla general para cualquier setting nuevo.
+
+### Verificación
+
+- **4 tests de configuración** que leen el `appsettings.json` REAL (no un fixture — un fixture solo
+  probaría que la copia está bien): la sección bindea sobre `GroqOptions` con sus defaults, la `ApiKey`
+  existe pero está **vacía**, ningún archivo commiteado contiene `gsk_`, y un valor inyectado por un
+  provider posterior **gana** sobre la declaración vacía (que es el mecanismo entero en una aserción).
+  Existen porque el nombre de sección y cada propiedad son strings de los dos lados: un rename compila
+  perfecto y falla en silencio, dejando la key vacía sin nada en el log que lo explique.
+- **Canal probado de punta a punta:** se guardó un secreto temporal, la API arrancó
+  (`Now listening` / `Application started`, endpoint responde 401 sin token = correcto), y **el secreto
+  se borró** — `user-secrets list` termina en "No secrets configured".
+- El test de `gsk_` cazó mi propio texto de ejemplo en el template; se sacó el literal de ahí en vez de
+  aflojar el chequeo.
+
+Unit **1062→1066**, integración **753 verde**, build limpio.
+
+### Corrección pedida por Rodolfo: los cuatro archivos, no solo dos
+
+La primera pasada declaró la sección solo en `appsettings.json` y en el template, dejando sin tocar
+`appsettings.Development.json` y `appsettings.Production.json`. Corregido — la sección `Groq` está
+ahora en los **cuatro**:
+
+| Archivo | Commiteado | `Groq.ApiKey` |
+|---|---|---|
+| `appsettings.json` | Sí | `""` + defaults no-secretos |
+| `appsettings.Development.template.json` | Sí | `""` + comentario |
+| `appsettings.Development.json` | **No** | `""` — Rodolfo pega su key acá |
+| `appsettings.Production.json` | **No** | `SET_VIA_ENVIRONMENT_VARIABLE_OR_KEY_VAULT` (+ `Model` pineado) |
+
+Los dos últimos están **gitignoreados** (reverificado con `git check-ignore` DESPUÉS de editarlos), así
+que la key real de dev no puede entrar al historial. Se editaron por inserción de texto, no
+re-serializando el JSON, para no reformatear archivos que git no puede diffear. Ambos siguen siendo
+JSON válido y la API arranca leyéndolos.
+
+El placeholder de producción usa la misma redacción que `JwtSettings.Secret` en ese archivo, que es la
+convención que ya estaba: el valor real llega como `Groq__ApiKey` por variable de entorno o Key Vault.
+
+### ⚠️ HALLAZGO DE SEGURIDAD (fuera del alcance de este WI, NO tocado)
+
+`appsettings.json` — **commiteado** — contiene lo que parece una **API key real de Resend**
+(`"Resend": { "ApiKey": "re_aBqdxPDq…" }`), mientras todos los demás secretos del archivo son
+`REPLACE_WITH_…` o vacíos. Entró en el commit `25809a4` ("Add email confirmation and qualification
+features"), así que **está en el historial de git**. Borrarla del archivo NO la saca del historial:
+hay que **ROTARLA** en Resend y recién después limpiar el valor. No se tocó porque romper el envío de
+mails de Rodolfo sin avisar sería peor; queda reportado para su decisión.
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — AI Assistant Pieza 2a: el asistente responde de verdad (Groq), aún SIN confinar
+
+### Paso 0
+
+- El placeholder se guardaba en `PostMessageHandler` — ahí entra el modelo.
+- **Secretos:** `XOptions` con `SectionName` en `Application/Common/Options`, bindeado en Infrastructure;
+  `appsettings.Development.json` está **gitignored**. HubSpot es el precedente de bindear **sin**
+  `ValidateOnStart` para que la app arranque sin configurar.
+- **HttpClient:** `AddHttpClient("Nombre")` + `IHttpClientFactory` (Resend y HubSpot ya lo usan).
+- **Front:** consumía `postMessage` por `HttpClient`, que resuelve con el cuerpo entero — inservible
+  para streaming.
+
+### La abstracción
+
+`IChatCompletionProvider` (Application) + **una** implementación `GroqChatProvider` (Infrastructure).
+Sin registro de proveedores, sin selección por tenant, sin fallback — **no hay segundo proveedor y
+construir la maquinaria para uno sería armar para un problema que nadie tiene**. Lo que sí da: el
+handler y el RAG que viene nunca aprenden qué vendor contesta. **Honestidad declarada en el código:
+el tool-calling NO se modeló** — difiere demasiado entre vendors como para abstraerlo antes de tener
+un segundo.
+
+### La key
+
+Server-side, una sola, para todos los tenants. **Vive únicamente dentro de `GroqChatProvider`**: se lee
+de options, se adjunta como header, y ahí termina su viaje. No se loguea (solo status codes), no se
+devuelve, y **ningún DTO tiene un campo donde pudiera caber**.
+
+### Streaming
+
+**SSE**, no WebSockets: el tráfico es unidireccional y corto, viaja por el stack HTTP y la auth que ya
+existen, y no necesita ciclo de vida propio. Backend: `IStreamRequest` de MediatR →
+`POST /messages/stream` escribe frames `data: {json}` (`user` / `delta` / `done` / `error`) con flush
+por frame y `X-Accel-Buffering: no`. Front: **`fetch` + `ReadableStream`**, no `HttpClient`, con buffer
+que preserva la cola porque un chunk puede partir un frame al medio.
+
+### Errores
+
+Todo fallo sale como **clave de traducción**, nunca como el texto del vendor (puede traer request ids,
+nombres de modelo y fragmentos del prompt). Cubiertos: caído/timeout → `ERROR_UNAVAILABLE`; 429 →
+`ERROR_RATE_LIMITED`; 401/403 → `ERROR_NOT_CONFIGURED`; conversación ajena → `ERROR_NOT_FOUND`; y
+**completion vacío tratado como fallo**, porque persistirlo renderiza una burbuja en blanco. i18n EN/ES/PL.
+
+**★ Nada parcial se persiste jamás.** Los fragmentos van a pantalla, pero la fila del asistente se
+escribe solo al terminar. Si el stream muere a mitad, el usuario ve un error, **su pregunta queda
+guardada** y el front descarta el texto parcial — dejarlo mostraría un mensaje que no existe y que no
+va a estar cuando vuelva.
+
+### Decisión de coherencia
+
+`PostMessageHandler` (no-streaming) también pasa por el **mismo** proveedor y el **mismo** prompt, en vez
+de quedarse con el placeholder. Dos caminos que responden distinto es exactamente la deriva que este
+proyecto combate. El placeholder queda como **fallback de "sin key configurada"** en ambos, y hay un
+test que fija las dos caras de esa regla.
+
+### Tests: backend 1052→1062, front 615→619
+
+Todos con **proveedor FAKE, ninguno le pega a Groq**. Probados por mutación:
+- Persistir la respuesta a medias ante un fallo → rojo en *"A_failure_PART_WAY_THROUGH_stores_nothing_either"*.
+- Agregar `ApiKey` a un DTO del cliente → rojo en *"No_stream_frame_or_assistant_DTO_has_anywhere_to_put_an_API_key"*
+  (recorre por reflexión todos los tipos que ve el cliente buscando nombres sospechosos).
+
+Aislamiento reverificado con el modelo conectado: Bob no puede hacer que el asistente lea el chat de
+Alice, y **el proveedor ni siquiera se invoca** en ese caso.
+
+Integración 753 verde. Build prod limpio. **Sin RAG ni confinamiento** — el system prompt es mínimo y
+está comentado como temporal; hoy el asistente contesta una receta si se la piden, y eso es esperado.
+
+**Para Rodolfo:** falta poner la key en `appsettings.Development.json` →
+`"Groq": { "ApiKey": "gsk_..." }`. Sin ella el panel sigue andando con el placeholder.
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — El chat abre mostrando el último mensaje (scroll al fondo)
+
+### Paso 0
+
+**No había auto-scroll de ningún tipo** — ni `ViewChild`, ni `scrollIntoView`, ni nada: el contenedor
+simplemente quedaba en `scrollTop 0`. No era un intento mal ubicado en el ciclo, era ausencia total.
+Los mensajes llegan **todos juntos** (`conversation().messages`, sin paginación), así que la lista se
+pinta en una sola pasada — no hace falta esperar cargas incrementales.
+
+### El fix: decidir antes del render, mover después
+
+Un `effect` que observa `conversation()?.id`, `isOpen()` y la cantidad de mensajes. El effect **no
+scrollea**: corre ANTES de que la plantilla pinte los turnos nuevos, así que ahí `scrollHeight` es el
+viejo y el salto quedaría corto (la misma trampa del bug de autosize de hoy). Lo que hace es **decidir**
+—y leer la posición previa, que es el único momento en que "¿el usuario estaba abajo?" todavía se puede
+responder— y delegar el movimiento a `afterNextRender`, que dispara con el DOM ya pintado.
+
+Los tres momentos, más la clave de vista:
+- **Abrir / cargar** → `behavior: 'auto'` (instantáneo, sin viaje visible).
+- **Enviar / llegar respuesta** → `'smooth'` (el usuario está mirando).
+- **Cambiar de conversación** → `'auto'`, como abrir.
+- La "vista" es `${isOpen}:${conversationId}`, **no solo el id**: cerrar el panel destruye el contenedor
+  y el nuevo arranca en `scrollTop 0` sin que ningún signal haya cambiado, así que reabrir cuenta como
+  vista fresca.
+
+### El matiz del scroll manual: IMPLEMENTADO (no quedó para follow-up)
+
+Si el usuario scrolleó hacia arriba a leer historial y llega una respuesta, **no se lo arranca de ahí**.
+Solo se lo sigue si estaba a ≤80px del fondo. Dos tests cubren los dos lados: no tironea al que está
+leyendo arriba, y sí acompaña al que está abajo (si no, "no tironear" rompería el caso normal en silencio).
+
+### ★ Un bug propio que atrapó el test antes de llegar a pantalla
+
+`isNearBottom()` lee el signal del `viewChild`, así que el effect **dependía** de él: al resolverse el
+contenedor, el effect corría una SEGUNDA vez, esa pasada ya no era "fresca" y usaba `'smooth'` — o sea,
+el usuario habría visto el scroll viajar desde el mensaje más viejo, exactamente el bug que este WI
+viene a eliminar. Arreglado envolviendo la lectura en `untracked()`. El test lo cazó con
+`Expected 'smooth' to be 'auto'`, no yo.
+
+### Tests
+
+Cuatro de wiring + los dos del matiz manual. **Probado por mutación:** scrollear dentro del effect en
+vez de en `afterNextRender` pone en rojo *"scrolls again when a message is sent"* — o sea, el test
+distingue el momento del ciclo, que es justo lo que hace que esto "funcione a veces" si se hace mal.
+
+Front **610→615**, build prod limpio. **Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — Bug del autosize: el compositor no volvía a su tamaño después de enviar
+
+Reportado por Rodolfo. Se reprodujo ANTES de tocar nada, y los números delataron la causa real.
+
+### La causa (no era la que parecía)
+
+El test de reproducción mostró algo más raro que "no achica": con 8 líneas la altura quedaba en **56**
+(el piso) y **al borrar** saltaba a **184**. O sea, la medición iba **un paso atrasada**.
+
+`resize()` corre desde un `effect`, que dispara **antes** de que la plantilla escriba el valor nuevo en
+el `<textarea>`. Así que `scrollHeight` medía el contenido ANTERIOR: al escribir un párrafo aplicaba la
+altura del texto viejo (por eso "no crecía"), y al limpiar aplicaba la altura del párrafo recién
+enviado (por eso "quedaba grande"). El síntoma visible era el segundo.
+
+### El arreglo
+
+`resize()` sincroniza el valor del DOM desde el modelo **antes** de medir, en vez de intentar agendarse
+después del render. Elimina la pregunta de orden en lugar de esquivarla. La asignación está guardada
+por desigualdad: reescribir la misma cadena no cambia el contenido pero puede mover el cursor mientras
+alguien escribe.
+
+### Tests
+
+Dos, en los dos niveles, **ambos probados por mutación** (quitar la sincronización los pone en rojo):
+- Primitiva: *"collapses back to the floor when the value is cleared from outside"* — mide alturas
+  reales con el elemento adjunto al documento.
+- Chat: *"the composer shrinks back to its original size after the message is sent"* — de punta a punta
+  por el panel, que es donde vive el síntoma.
+
+Front **608→610**, build prod limpio.
+
+**Corrección de dos comentarios míos que eran falsos:** decían que "headless Chrome no hace layout".
+Sí lo hace — lo que no hace layout es un elemento **desprendido del documento**. Los tests nuevos miden
+píxeles reales justamente por eso. Estaba mal escrito en la primitiva y en su spec; corregido en ambos.
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — Compositor del chat: tarjeta contenedora + disclaimer permanente
+
+Solo presentación. **La primitiva `WsTextarea` NO se tocó** — se reusa dentro de la tarjeta.
+
+### Paso 0
+
+- Compositor en `assistant-panel.component.html`, `.assistant-panel__composer`.
+- **Receta de tarjeta reusada de `ws-card.component.scss:6-9`**: `--color-bg-surface`,
+  `--radius-xl` (14px ≈ rounded-xl), `1px solid --color-border-subtle`, sombra. Se usó `--shadow-sm`
+  (más suave que el `--shadow-md` de ws-card, que competiría con la sombra del panel).
+- **Foco: los mismos dos tokens del design system** — `--color-border-focus` + `--shadow-focus`.
+- **Tres temas** (`:root`, `[data-theme='soft']`, `[data-theme='dark']`): verificado que **todos** los
+  tokens de color y sombra usados están redefinidos en los tres. `--radius-xl` vive solo en `:root`
+  porque la geometría no cambia con el tema.
+
+### Estructura
+
+Tarjeta → `WsTextarea` (sin borde propio) → fila de acciones alineada a la derecha (botón enviar,
+flecha arriba) → borde superior sutil → disclaimer.
+
+**★ NO se agregaron los botones fantasma de la referencia** (Search, Deep Research, Reason, Upload,
+micrófono). Ninguno existe en este asistente y varios nunca existirán. Un control que no hace nada es
+una promesa que el motor no puede cumplir. Hay un test que lo defiende de reaparecer por copy-paste.
+
+**Cómo se le sacó el borde al textarea sin tocar la primitiva:** `::ng-deep` acotado bajo
+`.assistant-composer`. Es el único camino para llegar a los internos de un hijo sin editarlo, y editar
+`WsTextarea` es justo lo prohibido — un flag `borderless` sería la preferencia de ESTA pantalla metida
+en un control compartido. Precedente en el repo: `pay-runs-list.component.scss:37`.
+**El foco se movió a la TARJETA** vía `:focus-within`, con los mismos tokens: cero estado plumbeado
+desde el hijo, y el conjunto se lee como un solo control.
+
+El botón deshabilitado sale de `WsButton` (`opacity .45` + `cursor: not-allowed`, `ws-button.
+component.scss:32-36`), no de CSS propio.
+
+### Disclaimer
+
+Siempre visible, no colapsable, no solo-primera-vez. Registro formal, sin voseo. EN/ES/PL.
+ES: *"El asistente solo orienta y responde consultas; no realiza cálculos ni modifica datos. Puede
+cometer errores: verifique la información importante."*
+
+### Tests: 605 → 608, 0 fallos
+
+**Probados por mutación:** quitar `[disabled]="!canSend()"` → rojo en el test del botón; agregar un
+`<ws-button>Search</ws-button>` → rojo en *"carries NO controls the assistant cannot perform"* (cuenta
+los botones de la tarjeta y revisa label/aria/title contra una lista de palabras prohibidas).
+
+Build prod limpio, i18n en paridad. **Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — Primitiva WsTextarea + el compositor del chat migrado a ella
+
+La carencia que la pieza 1 dejó anotada, cerrada como primitiva del design system (no como parche del
+chat): un chat de una sola línea no deja escribir párrafos, pegar un stack trace ni usar Shift+Enter.
+
+### Paso 0 — Qué hereda de WsInput (evidencia)
+
+- **Chrome del field** (`ws-input.component.scss:19-36`): `--color-bg-surface`, `1px solid
+  --color-border-default`, `--radius-md`, hover `--color-border-strong`.
+- **★ El focus NO es un ring de Tailwind** — es `border-color: var(--color-border-focus)` +
+  `box-shadow: var(--shadow-focus)` (`:33-36`). El WI asumía anillos de Tailwind; corregido. `ws-select`,
+  `ws-date-picker` y `ws-date-range-picker` lo expresan igual.
+- **Error** (`:38-44`): borde `--color-danger`, y enfocado `0 0 0 3px var(--color-danger-border)`.
+  **Disabled** (`:46-53`): `opacity .55` + `pointer-events: none`.
+- **Tipografía** (`:55-74`): `--font-size-14`, `font-family: inherit`, placeholder
+  `--color-text-placeholder`. Label `--font-size-13`/500, error `--font-size-12`.
+- **Formularios**: `ControlValueAccessor` con `NG_VALUE_ACCESSOR` + `forwardRef`, estado en signals
+  (`value`, `isDisabled`, `isFocused`), y `hostClasses` computado con los modificadores.
+- **Compositor del chat**: `assistant-panel.component.html`, dentro de
+  `.assistant-panel__composer-field`.
+
+**Decisión de estructura:** NO se creó un partial/mixin compartido. **Cuatro** primitivas
+(`ws-input`, `ws-select`, `ws-date-picker`, `ws-date-range-picker`) ya replican este chrome con los
+mismos tokens y declaraciones propias — esa es la convención de la casa. Inventar un `_control-field.scss`
+habría sido estructura nueva (CLAUDE.md §5.1: espejar, no inventar). "Cero duplicación" se cumple a
+nivel de TOKENS y contrato de clases, y hay un test que lo verifica por estilo computado.
+
+### La primitiva
+
+- **Teclado:** `submitOnEnter` (default **true**) → Enter envía, Shift+Enter salta línea. En false es un
+  textarea normal. El default favorece el caso conversacional porque equivocarlo ahí es destructivo: un
+  chat donde Enter salta línea se come en silencio cada mensaje que el usuario creyó enviar. Bonus:
+  Enter durante composición de IME (japonés/chino/coreano) no envía — cortaría la palabra a medio escribir.
+- **Autosize:** la regla vive en `computeAutosize(contentHeight, minHeight, maxHeight)`, **función pura
+  exportada**, porque headless no hace layout y un test de píxeles mediría cero. Crece desde `minHeight`
+  (56px) hasta `maxHeight` (200px) y ahí pasa a scroll interno. `resize()` pone `height:auto` antes de
+  medir — sin eso la caja crece pero nunca se achica.
+- **Paridad:** mismos tokens, mismo contrato de clases. Lo único que no hereda es
+  `height: var(--height-control-md)`, que es justo lo que un control multilínea no puede tener.
+
+### Migración del compositor
+
+`ws-input` + `(keydown.enter)="send()"` → `ws-textarea` + `(submitted)="send()"`. **El flujo de envío no
+cambió**: es el mismo `send()` que llama el botón, los mismos dos turnos persistidos, el mismo
+placeholder. Solo cambió el elemento de entrada.
+
+### Tests: 586 → 605 (+19), 0 fallos
+
+**Probados por mutación, los dos que importan:**
+- Quitar la guarda de `shiftKey` → rojo en *"Shift+Enter does NOT submit"*.
+- Cambiar `var(--color-border-default)` por `#cbd5e1` → rojo en *"resolves to the SAME border and
+  background as WsInput"*. El test de paridad compara **estilo computado**, no nombres de clase, así que
+  un color a mano o un ring de Tailwind lo rompen.
+
+Build de producción limpio, i18n en paridad (no hizo falta copy nuevo: es un input).
+`DESIGN_SYSTEM.md` documenta la primitiva. **Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — AI Assistant Pieza 1: panel lateral + historial de chat, SIN una sola llamada a un modelo
+
+El esqueleto del asistente: el panel abre/cierra, las conversaciones se guardan y se reabren. La IA
+es de piezas posteriores; acá la "respuesta" es un placeholder persistido.
+
+### Paso 0 — Reconciliación de estado (antes de escribir)
+
+- **No existe slide-over/drawer en el design system.** Hay 27 primitivas `ws-*`; ninguna es un panel
+  lateral. El `payee-ledger-panel` de ledger se llama "panel" pero es contenido inline, no un overlay.
+- **No existe nada de chat** en el backend ni en el front (grep de conversation/message/chat/assistant
+  → cero).
+- **Usuario y tenant** se resuelven con `ICurrentUserService` (UserId/Email) + `ITenantContext`
+  (TenantId), reusados tal cual.
+- **★ Tailwind SÍ está configurado Y EN USO** (`styles.scss:1` importa tailwindcss; v4 vía postcss), y
+  los badges de tier del topbar ya usan exactamente el idioma `bg-gradient-to-br … focus:ring-4`
+  mezclado con `var(--color-*)`. **Hay dark mode** (`core/theme/theme.service.ts`, tres temas). Así que
+  las clases que pasó Rodolfo van TAL CUAL, con precedente en el mismo archivo vecino, incluida la
+  variante `dark:`.
+
+### Modelo de datos (migración B22_AssistantChat)
+
+- `AssistantConversations`: Id, TenantId, UserId (nvarchar 450, ancho de Identity), Title, CreatedAt,
+  UpdatedAt. Índice `(TenantId, UserId, UpdatedAt)`.
+- `AssistantMessages`: Id, ConversationId (FK cascade), TenantId (desnormalizado), Role, Content,
+  **Payload nvarchar(max) NULLABLE**, Sequence, CreatedAt. Índice único `(ConversationId, Sequence)`.
+- **★ El payload existe y está VACÍO a propósito.** Es la columna donde encajan, sin migración sobre
+  historial vivo, las referencias del RAG, el contexto de pantalla y el JSON de pre-llenado. Nada la
+  escribe hoy; el DTO también la expone siempre en null, para que el contrato del cliente no cambie
+  cuando empiece a llenarse.
+- **Sequence, no CreatedAt**, para ordenar: el turno del usuario y su respuesta se escriben en el mismo
+  instante, así que ordenar por timestamp sería una moneda al aire entre la pregunta y la respuesta.
+
+### Acceso: entitlement, no rol
+
+`IAssistantEntitlement` (Application) + `AssistantEntitlement` (Infrastructure) es **el único lugar**
+que responde "¿este usuario puede usar el asistente?". Hoy: `role == TenantAdmin`. **El chequeo de rol
+vive ahí adentro y en ningún otro lado** — ni un `if` de rol en endpoints o handlers. No se creó un
+`Permission.AssistantUse` justamente porque los permisos derivan del ROL vía `RolePermissions` y no
+pueden expresar un hecho por-usuario; el asiento pago es por-usuario. El escalón futuro es editar ese
+método (admin OR asiento activo), sin tocar endpoints, handlers, front ni tests.
+
+`GET /api/assistant/entitlement` es el único endpoint que NO exige el entitlement: responde
+`{enabled:false}` en vez de 403, porque es la pregunta "¿me toca el botón?" y un 403 no es accionable.
+
+### Aislamiento por tenant Y por usuario
+
+`OwnedConversations.Mine()` es el único punto que convierte "la tabla" en "mis conversaciones". El
+filtro de tenant global es un PISO, no el aislamiento: no puede ver al principal, así que la mitad de
+usuario la ponen los handlers — y todos arrancan del mismo helper para que no haya query que se la
+olvide. Una conversación ajena responde "not found", con **el mismo texto** para las tres causas
+(no existe / es de otro usuario / es de otro tenant), porque distinguirlas confirmaría que existe.
+
+### Tests
+
+Backend **1044→1052 (+8)**, front **574→586 (+12)**, integración 753 sin cambios (**la migración B22 sí
+quedó validada: el fixture corre `MigrateAsync` contra SQL Server real**).
+
+**★ El test de aislamiento muerde, verificado por mutación:** quitar `.Where(c => c.UserId == …)` de
+`OwnedConversations` pone en rojo exactamente los 2 tests de ownership — y falla por **Bob, el colega
+del MISMO tenant**, que es el caso que el filtro de tenant no cubre. Revertido, verde.
+
+El test del entitlement está escrito contra la interfaz, no contra el rol, para que el día que se
+venda un asiento a un CompManager se EXTIENDA con un caso nuevo en vez de reescribirse.
+
+### Dos límites reportados, no improvisados
+
+1. **No hay primitiva de slide-over.** El panel se construyó como componente LOCAL de la feature,
+   siguiendo el precedente documentado de la barra de progreso del wizard de import ("local hasta que
+   una SEGUNDA feature lo necesite; elevarlo es un WI de design system, §10.3"). El asistente es la
+   primera. Usa tokens y elevación de la casa, así que promoverlo sería mover, no reescribir.
+2. **`WsInput` es de una sola línea** (`type: text|email|password|number|search`), no hay textarea en
+   el design system. El compositor es de una línea con Enter para enviar. Un compositor multilínea
+   necesita una primitiva nueva → decisión aparte, no improvisada acá.
+
+### Cierre
+
+- **Migración B22 APLICADA** a la base de dev (`HEYBALDUR/WasnieDb`) y verificada en SQL: las dos
+  tablas existen y `AssistantMessages.Payload` quedó **nullable**. `migrations list` sin `(Pending)`.
+- **Altura del botón del asistente igualada al badge de tier:** el badge mide 32px (`p-0.5` 2px +
+  `py-1` 4px + `leading-5` 20px); el disparador estaba en 40px (`py-2.5`). Ahora `px-3 py-1.5` = 6+20+6
+  = **32px exactos**, con el icono a 16px como el del badge. Los dos botones vecinos quedan iguales.
+
+**Sin commitear** — lo hace Rodolfo.
+
 ## 2026-07-31 — Plan + Cuota en una escritura: auditoría del molde primero, después el cimiento
 
 Dos pasos, el segundo condicionado al primero.

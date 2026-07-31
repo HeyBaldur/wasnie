@@ -1934,5 +1934,29 @@
     "LOAD_ERROR": "We couldn’t load the ledger. Try again in a moment.",
     "ADJUSTMENT_ERROR": "The adjustment could not be saved.",
     "TAB": "Clawback"
+  },
+  "ASSISTANT": {
+    "TITLE": "Assistant",
+    "SUBTITLE": "Not connected yet",
+    "TRIGGER_LABEL": "Assistant",
+    "OPEN": "Open the assistant",
+    "CLOSE": "Close",
+    "HISTORY": "Conversation history",
+    "NEW_CONVERSATION": "New conversation",
+    "NO_CONVERSATIONS": "No conversations yet.",
+    "EMPTY_TITLE": "Ask the assistant something",
+    "EMPTY_DESC": "Your messages are private to you. The assistant is not connected to a model yet, so it will reply with a placeholder.",
+    "COMPOSER_PLACEHOLDER": "Type a message…",
+    "SEND": "Send",
+    "DISCLAIMER": "The assistant only guides and answers questions; it does not calculate or modify data. It may make mistakes — verify important information.",
+    "PLACEHOLDER_REPLY": "The assistant is not connected yet. Your message was saved.",
+    "ERROR": "Something went wrong. Try again.",
+    "ERROR_UNAVAILABLE": "The assistant could not answer right now. Your message was saved — try again in a moment.",
+    "ERROR_RATE_LIMITED": "The assistant is busy right now. Your message was saved — try again in a moment.",
+    "ERROR_NOT_CONFIGURED": "The assistant is not available yet. Your message was saved.",
+    "ERROR_NOT_FOUND": "This conversation is no longer available.",
+    "DELETE": "Delete",
+    "DELETE_TITLE": "Delete this conversation?",
+    "DELETE_MESSAGE": "The conversation and all of its messages will be permanently deleted."
   }
 }

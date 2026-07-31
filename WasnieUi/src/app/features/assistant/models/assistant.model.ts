@@ -1,0 +1,70 @@
+export type AssistantMessageRole = 'User' | 'Assistant';
+
+/**
+ * One turn.
+ *
+ * `payload` is ALWAYS null in this piece. It is in the contract from day one because later pieces
+ * attach structure to a turn (retrieved document references, screen context, the JSON that pre-fills
+ * a Plan+Quota form) — a field that appears later is a breaking change for every consumer, a field
+ * that is always null is not.
+ */
+export interface AssistantMessage {
+  id: string;
+  role: AssistantMessageRole;
+  content: string;
+  payload: string | null;
+  sequence: number;
+  createdAt: string;
+}
+
+export interface AssistantConversationSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+export interface AssistantConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: AssistantMessage[];
+}
+
+export interface AssistantExchange {
+  userMessage: AssistantMessage;
+  assistantMessage: AssistantMessage;
+}
+
+export interface AssistantEntitlement {
+  enabled: boolean;
+}
+
+/**
+ * One frame of a streamed exchange.
+ *
+ * `errorKey` is a TRANSLATION KEY, never a sentence and never the model vendor's own words — the
+ * backend translates provider failures into keys precisely so nothing operational reaches the reader.
+ */
+export interface AssistantStreamEvent {
+  type: 'user' | 'delta' | 'done' | 'error';
+  delta?: string;
+  message?: AssistantMessage;
+  errorKey?: string;
+}
+
+/**
+ * The content the backend stores for the assistant's stand-in reply while no model is connected.
+ *
+ * A SENTINEL, not a sentence — it is stored language-neutral precisely so this client can render it
+ * in the reader's language. Must stay byte-identical to `AssistantMessage.NotConnectedPlaceholder`
+ * in the backend; when a real model answers, its words are stored instead and this stops matching
+ * new rows while old rows keep rendering as the translated placeholder.
+ */
+export const ASSISTANT_NOT_CONNECTED = '__ASSISTANT_NOT_CONNECTED__';
+
+export function isPlaceholderReply(message: AssistantMessage): boolean {
+  return message.role === 'Assistant' && message.content === ASSISTANT_NOT_CONNECTED;
+}

@@ -1934,5 +1934,29 @@
     "LOAD_ERROR": "Nie udało się wczytać zapisów. Spróbuj ponownie za chwilę.",
     "ADJUSTMENT_ERROR": "Nie udało się zapisać korekty.",
     "TAB": "Clawback"
+  },
+  "ASSISTANT": {
+    "TITLE": "Asystent",
+    "SUBTITLE": "Jeszcze niepodłączony",
+    "TRIGGER_LABEL": "Asystent",
+    "OPEN": "Otwórz asystenta",
+    "CLOSE": "Zamknij",
+    "HISTORY": "Historia rozmów",
+    "NEW_CONVERSATION": "Nowa rozmowa",
+    "NO_CONVERSATIONS": "Nie ma jeszcze żadnych rozmów.",
+    "EMPTY_TITLE": "Zapytaj o coś asystenta",
+    "EMPTY_DESC": "Twoje wiadomości są prywatne. Asystent nie jest jeszcze podłączony do modelu, więc odpowie tekstem zastępczym.",
+    "COMPOSER_PLACEHOLDER": "Napisz wiadomość…",
+    "SEND": "Wyślij",
+    "DISCLAIMER": "Asystent wyłącznie udziela wskazówek i odpowiada na pytania; nie wykonuje obliczeń ani nie modyfikuje danych. Może popełniać błędy — proszę zweryfikować istotne informacje.",
+    "PLACEHOLDER_REPLY": "Asystent nie jest jeszcze podłączony. Twoja wiadomość została zapisana.",
+    "ERROR": "Coś poszło nie tak. Spróbuj ponownie.",
+    "ERROR_UNAVAILABLE": "Asystent nie mógł teraz odpowiedzieć. Wiadomość została zapisana — proszę spróbować ponownie za chwilę.",
+    "ERROR_RATE_LIMITED": "Asystent jest w tej chwili przeciążony. Wiadomość została zapisana — proszę spróbować ponownie za chwilę.",
+    "ERROR_NOT_CONFIGURED": "Asystent nie jest jeszcze dostępny. Wiadomość została zapisana.",
+    "ERROR_NOT_FOUND": "Ta rozmowa nie jest już dostępna.",
+    "DELETE": "Usuń",
+    "DELETE_TITLE": "Usunąć tę rozmowę?",
+    "DELETE_MESSAGE": "Rozmowa i wszystkie jej wiadomości zostaną trwale usunięte."
   }
 }

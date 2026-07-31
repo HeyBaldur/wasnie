@@ -42,4 +42,21 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+
+  <ItemGroup>
+    <!--
+      The assistant's knowledge, LINKED rather than copied: this is the same file the team edits and
+      publishes the handbook from, so updating what the assistant knows is editing that document and
+      rebuilding. A duplicate under this project would drift from the guide within a release, and an
+      assistant confidently quoting last month's rules is worse than one that says it does not know.
+
+      It lives HERE, beside FileAssistantKnowledgeBase which reads it, so it flows to the output of
+      every project that references Infrastructure — the API and the test projects alike — from one
+      declaration instead of one per consumer.
+    -->
+    <Content Include="..\..\..\docs\Wasnie_Configuration_Guide.md"
+             Link="Knowledge\Wasnie_Configuration_Guide.md"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

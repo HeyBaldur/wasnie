@@ -1,0 +1,226 @@
+@if (store.isOpen()) {
+  <!-- Backdrop: dismisses on click, like every other overlay in the app. -->
+  <div class="assistant-backdrop" (click)="close()" data-testid="assistant-backdrop"></div>
+
+  <aside
+    class="assistant-panel"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="'ASSISTANT.TITLE' | translate"
+    data-testid="assistant-panel"
+  >
+    <!-- ── Header ─────────────────────────────────────────────────────────── -->
+    <header class="assistant-panel__head">
+      <div class="assistant-panel__title-group">
+        <span class="assistant-panel__title">
+          {{ store.conversation()?.title ?? ('ASSISTANT.TITLE' | translate) }}
+        </span>
+        <span class="assistant-panel__subtitle">{{ 'ASSISTANT.SUBTITLE' | translate }}</span>
+      </div>
+
+      <div class="assistant-panel__head-actions">
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [iconOnly]="true"
+          (click)="store.toggleHistory()"
+          [title]="'ASSISTANT.HISTORY' | translate"
+          data-testid="assistant-history-toggle"
+        >
+          <app-icon name="list" [size]="16" />
+        </ws-button>
+
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [iconOnly]="true"
+          (click)="startNew()"
+          [title]="'ASSISTANT.NEW_CONVERSATION' | translate"
+          data-testid="assistant-new"
+        >
+          <app-icon name="plus" [size]="16" />
+        </ws-button>
+
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [iconOnly]="true"
+          (click)="close()"
+          [title]="'ASSISTANT.CLOSE' | translate"
+          data-testid="assistant-close"
+        >
+          <app-icon name="x" [size]="16" />
+        </ws-button>
+      </div>
+    </header>
+
+    <!-- ── History ────────────────────────────────────────────────────────── -->
+    @if (store.historyOpen()) {
+      <div class="assistant-history" data-testid="assistant-history">
+        @if (store.conversations().length === 0) {
+          <p class="assistant-history__empty">{{ 'ASSISTANT.NO_CONVERSATIONS' | translate }}</p>
+        } @else {
+          @for (item of store.conversations(); track item.id) {
+            <button
+              type="button"
+              class="assistant-history__item"
+              [class.assistant-history__item--active]="item.id === store.conversation()?.id"
+              (click)="openConversation(item.id)"
+              data-testid="assistant-history-item"
+            >
+              <span class="assistant-history__item-title">{{ item.title }}</span>
+              <span class="assistant-history__item-meta">
+                {{ item.messageCount }} · {{ item.updatedAt | date: 'short' }}
+              </span>
+              <span
+                class="assistant-history__item-delete"
+                role="button"
+                tabindex="0"
+                (click)="askDelete(item.id, $event)"
+                (keydown.enter)="askDelete(item.id, $event)"
+                [attr.aria-label]="'ASSISTANT.DELETE' | translate"
+              >
+                <app-icon name="trash" [size]="14" />
+              </span>
+            </button>
+          }
+        }
+      </div>
+    }
+
+    <!-- ── Messages ───────────────────────────────────────────────────────── -->
+    <!-- #messages is the scroll container the panel drives to the bottom — see the component's effect. -->
+    <div #messages class="assistant-panel__body ws-scroll-thin" data-testid="assistant-messages">
+      @if (store.messages().length === 0) {
+        <ws-empty-state
+          icon="help-circle"
+          titleKey="ASSISTANT.EMPTY_TITLE"
+          descKey="ASSISTANT.EMPTY_DESC"
+        />
+      } @else {
+        @for (message of store.messages(); track message.id) {
+          <div
+            class="assistant-msg"
+            [class.assistant-msg--user]="message.role === 'User'"
+            [class.assistant-msg--assistant]="message.role === 'Assistant'"
+            [attr.data-role]="message.role"
+          >
+            <!--
+              The assistant's stand-in reply is stored as a language-neutral sentinel, so it is
+              TRANSLATED here rather than printed. Real answers (a later piece) print as they came.
+            -->
+            @if (isPlaceholder(message)) {
+              <span class="assistant-msg__placeholder">{{ 'ASSISTANT.PLACEHOLDER_REPLY' | translate }}</span>
+            } @else if (message.role === 'Assistant') {
+              <!--
+                ★ ONLY the assistant's words go through Markdown. The pipe escapes raw HTML and then
+                runs Angular's sanitiser over the result, so a model reply cannot introduce script.
+              -->
+              <div class="assistant-msg__markdown" [innerHTML]="message.content | assistantMarkdown"></div>
+            } @else {
+              <!--
+                ★ The USER's message is printed verbatim. Interpreting their asterisks would be wrong
+                twice over: it is not what they typed, and it would make their own input a rendering
+                path — the shape every injection takes.
+              -->
+              <span class="assistant-msg__text">{{ message.content }}</span>
+            }
+          </div>
+        }
+      }
+
+      <!--
+        The answer as it arrives, before it is a stored row. It renders in the same bubble shape as a
+        real reply so nothing shifts when the persisted message replaces it.
+      -->
+      @if (store.streamingReply() !== null) {
+        <div class="assistant-msg assistant-msg--assistant" data-testid="assistant-streaming">
+          @if (store.streamingReply()!.length > 0) {
+            <!--
+              Markdown is rendered WHILE it streams, from whatever has arrived. A half-written `**`
+              simply has not become bold yet and shows as the characters themselves; the next fragment
+              re-renders the whole string and it resolves. Nothing has to detect "the end".
+            -->
+            <div class="assistant-msg__markdown" [innerHTML]="store.streamingReply() | assistantMarkdown"></div>
+          } @else {
+            <span class="assistant-msg__typing" aria-hidden="true"><span></span><span></span><span></span></span>
+          }
+        </div>
+      }
+
+      <!--
+        A translation KEY from the server, rendered here — the model vendor's own error text never
+        reaches this screen. Nothing was persisted for the assistant, so the question above stands
+        alone and the user can simply try again.
+      -->
+      @if (store.errorKey()) {
+        <p class="assistant-panel__error" data-testid="assistant-error">{{ store.errorKey()! | translate }}</p>
+      }
+
+      @if (store.error()) {
+        <p class="assistant-panel__error">{{ 'ASSISTANT.ERROR' | translate }}</p>
+      }
+    </div>
+
+    <!-- ── Composer ───────────────────────────────────────────────────────── -->
+    <!--
+      ★ WHAT IS DELIBERATELY ABSENT: no Search, no Deep Research, no Reason, no file upload, no
+      microphone. The visual reference carries them; this assistant does none of them, and several it
+      never will. A control that does nothing is a promise the engine cannot keep. The composer holds
+      exactly three things: the textarea, send, and the disclaimer.
+    -->
+    <footer class="assistant-panel__composer">
+      <div class="assistant-composer" data-testid="assistant-composer-card">
+        <!--
+          Multi-line via the WsTextarea primitive: Enter sends, Shift+Enter breaks the line, the box
+          grows with the paragraph until it scrolls. The primitive is REUSED untouched — its own border
+          is neutralised from here so the card reads as one piece instead of a box inside a box.
+        -->
+        <ws-textarea
+          [placeholder]="'ASSISTANT.COMPOSER_PLACEHOLDER' | translate"
+          [ngModel]="draft()"
+          (valueChange)="onDraftChange($event)"
+          (submitted)="send()"
+          [submitOnEnter]="true"
+          [maxlength]="8000"
+          data-testid="assistant-composer"
+        />
+
+        <div class="assistant-composer__actions">
+          <ws-button
+            variant="primary"
+            size="sm"
+            [iconOnly]="true"
+            [disabled]="!canSend()"
+            [loading]="store.sending()"
+            (click)="send()"
+            [title]="'ASSISTANT.SEND' | translate"
+            [attr.aria-label]="'ASSISTANT.SEND' | translate"
+            data-testid="assistant-send"
+          >
+            <app-icon name="arrow-up" [size]="15" />
+          </ws-button>
+        </div>
+
+        <!--
+          Always rendered — not collapsible, not first-run-only. It is a permanent guard rail: the
+          assistant reads and explains, it does not compute pay or change data, and it can be wrong.
+        -->
+        <p class="assistant-composer__disclaimer" data-testid="assistant-disclaimer">
+          {{ 'ASSISTANT.DISCLAIMER' | translate }}
+        </p>
+      </div>
+    </footer>
+  </aside>
+
+  <ws-confirmation-modal
+    [isOpen]="pendingDeleteId() !== null"
+    [title]="'ASSISTANT.DELETE_TITLE' | translate"
+    [message]="'ASSISTANT.DELETE_MESSAGE' | translate"
+    [confirmLabel]="'ASSISTANT.DELETE' | translate"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    variant="danger"
+    (confirmed)="confirmDelete()"
+    (cancelled)="cancelDelete()"
+  />
+}

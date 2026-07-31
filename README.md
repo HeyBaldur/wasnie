@@ -76,6 +76,32 @@ Edit `appsettings.Development.json`:
 - `ConnectionStrings.DefaultConnection` — point to your local SQL Server instance
 - `JwtSettings.Secret` — generate a random string of at least 32 characters
 
+#### The assistant's chat model (optional)
+
+The AI assistant answers through Groq. **The API key never goes in a settings file** — the committed
+`appsettings.json` declares only the shape of the section, with an empty `ApiKey`, and the value is
+supplied by the secret channel at runtime. .NET merges the two: structure from JSON, value from the
+secret store.
+
+```bash
+cd WasnieApi/src/Wasnie.Api
+dotnet user-secrets set "Groq:ApiKey" "gsk_your_key_here"
+```
+
+In Azure (or any deployed environment) the same value arrives as an environment variable or a Key
+Vault entry, using `__` where the JSON has `:`:
+
+```
+Groq__ApiKey = gsk_your_key_here
+```
+
+This is the same pattern in both places — structure in JSON, value outside it — not two different
+setups. **The assistant works without a key**: it falls back to a stand-in reply, so nothing breaks if
+you skip this step.
+
+The non-secret options (`Model`, `BaseUrl`, `MaxHistoryMessages`, `TimeoutSeconds`) live in
+`appsettings.json` with working defaults and can be overridden per environment like any other setting.
+
 ### 2. Create the database and apply migrations
 
 ```bash
@@ -134,8 +160,15 @@ Test suite: 128 tests (101 unit + 27 integration), 0 skipped.
 | `appsettings.Development.template.json` | Yes | Setup template for local development |
 | `appsettings.Development.json` | **No** | Local dev secrets — never commit |
 | `appsettings.Production.json` | **No** | Production secrets — set via environment variables or Key Vault |
+| User Secrets (`dotnet user-secrets`) | **No** | Local dev secret values, stored outside the repository |
 
-Production secrets are injected at deploy time via environment variables (`ConnectionStrings__DefaultConnection`, `JwtSettings__Secret`) or Azure Key Vault. No secrets live in source control.
+Production secrets are injected at deploy time via environment variables (`ConnectionStrings__DefaultConnection`, `JwtSettings__Secret`, `Groq__ApiKey`) or Azure Key Vault. No secrets live in source control.
+
+**The rule for adding a new setting:** the *structure* goes in the committed `appsettings.json` — with
+the secret field left empty — so the setting is discoverable and Azure knows what to fill. The *value*
+goes in User Secrets locally and in the environment/Key Vault when deployed. A committed file must
+never hold a real credential: deleting it later does not remove it from git history, so a leaked key
+has to be rotated, not just erased.
 
 ---
 
