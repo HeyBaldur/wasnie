@@ -25,11 +25,11 @@ public sealed class StartConversationHandler(
 
         var now = clock.UtcNowOffset;
 
-        // A thread with no name is a row the history list cannot render, so it always gets one. The
-        // date is a placeholder for a title derived from the first message — which needs a model, so
-        // it is not this piece's problem.
+        // ★ Born UNTITLED, and named by the first thing said in it — see ConversationTitle. The
+        // previous "Chat 2026-07-31 14:58" told the reader nothing they could use: a history list of a
+        // dozen timestamps is a list you have to open one by one.
         var title = string.IsNullOrWhiteSpace(request.Title)
-            ? $"{DefaultTitlePrefix} {now:yyyy-MM-dd HH:mm}"
+            ? AssistantConversation.UntitledSentinel
             : request.Title!;
 
         var conversation = AssistantConversation.Start(
@@ -41,10 +41,4 @@ public sealed class StartConversationHandler(
         return Result<AssistantConversationDto>.Success(AssistantMapper.ToDto(conversation, []));
     }
 
-    /// <summary>
-    /// Language-neutral on purpose: the client renders its own label for an untitled thread, so the
-    /// stored title does not freeze one user's language into a row every other user of the tenant
-    /// might one day read in the history list.
-    /// </summary>
-    public const string DefaultTitlePrefix = "Chat";
 }

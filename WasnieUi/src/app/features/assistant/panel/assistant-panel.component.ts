@@ -14,7 +14,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { AssistantStore } from '../state/assistant.store';
-import { AssistantMessage, isPlaceholderReply } from '../models/assistant.model';
+import { AssistantMessage, isPlaceholderReply, isUntitled } from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
 import { WsEmptyStateComponent } from '../../../shared/ui/ws-empty-state/ws-empty-state.component';
@@ -136,6 +136,11 @@ export class AssistantPanelComponent {
     }
 
     el.scrollTo({ top: el.scrollHeight, behavior });
+  }
+
+  /** True while the thread has no name yet, so the template renders the translated label instead. */
+  isUntitled(title: string | null | undefined): boolean {
+    return isUntitled(title);
   }
 
   /** True when the row is the stand-in reply, so the template renders the translated copy instead. */

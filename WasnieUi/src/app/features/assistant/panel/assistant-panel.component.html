@@ -13,7 +13,11 @@
     <header class="assistant-panel__head">
       <div class="assistant-panel__title-group">
         <span class="assistant-panel__title">
-          {{ store.conversation()?.title ?? ('ASSISTANT.TITLE' | translate) }}
+          @if (isUntitled(store.conversation()?.title)) {
+            {{ 'ASSISTANT.UNTITLED' | translate }}
+          } @else {
+            {{ store.conversation()!.title }}
+          }
         </span>
         <span class="assistant-panel__subtitle">{{ 'ASSISTANT.SUBTITLE' | translate }}</span>
       </div>
@@ -56,7 +60,7 @@
 
     <!-- ── History ────────────────────────────────────────────────────────── -->
     @if (store.historyOpen()) {
-      <div class="assistant-history" data-testid="assistant-history">
+      <div class="assistant-history ws-scroll-thin" data-testid="assistant-history">
         @if (store.conversations().length === 0) {
           <p class="assistant-history__empty">{{ 'ASSISTANT.NO_CONVERSATIONS' | translate }}</p>
         } @else {
@@ -68,7 +72,13 @@
               (click)="openConversation(item.id)"
               data-testid="assistant-history-item"
             >
-              <span class="assistant-history__item-title">{{ item.title }}</span>
+              <span class="assistant-history__item-title">
+                @if (isUntitled(item.title)) {
+                  {{ 'ASSISTANT.UNTITLED' | translate }}
+                } @else {
+                  {{ item.title }}
+                }
+              </span>
               <span class="assistant-history__item-meta">
                 {{ item.messageCount }} · {{ item.updatedAt | date: 'short' }}
               </span>

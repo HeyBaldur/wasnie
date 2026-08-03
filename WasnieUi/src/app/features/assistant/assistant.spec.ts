@@ -616,6 +616,28 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     document.body.removeChild(fixture.nativeElement);
   });
 
+  it("every scrolling container in the panel wears the design system's scrollbar", () => {
+    // ★ REUSED, NOT REINVENTED. `ws-scroll-thin` is the app's one scrollbar (styles.scss), already on
+    // the sidebar, the modal body, the select list and the data table. The panel was showing the
+    // browser's native bars beside them. Asserted by CLASS because that is how the utility is applied
+    // everywhere else — a test on computed colours would pass just as well against a copy of the rules,
+    // which is exactly what must not happen.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversations.set([
+      { id: 'c1', title: 'One', createdAt: '', updatedAt: '', messageCount: 2 },
+    ]);
+    fixture.detectChanges();
+
+    const messages = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]');
+    const history = fixture.nativeElement.querySelector('[data-testid="assistant-history"]');
+    const composer = fixture.nativeElement.querySelector('[data-testid="assistant-composer"] textarea');
+
+    expect(messages.classList).toContain('ws-scroll-thin');
+    expect(history.classList).toContain('ws-scroll-thin', 'the conversation list scrolls too');
+    expect(composer.classList).toContain('ws-scroll-thin', 'a long draft scrolls inside the composer');
+  });
+
   it('★ the ::ng-deep styles do NOT escape the chat bubble', () => {
     // ★ THE CONTAINMENT TEST. ::ng-deep pierces encapsulation, and an unscoped one here would restyle
     // every table, list and link in Wasnie from a chat panel — borders and padding appearing on the
@@ -639,6 +661,35 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
 
     document.body.removeChild(outsider);
     document.body.removeChild(fixture.nativeElement);
+  });
+
+  it('★ shows a translated label for an untitled thread, never the sentinel', () => {
+    // ★ The backend stores `__UNTITLED__` so the history is not frozen into one user's language. If
+    // that ever reaches the screen it looks like a bug — this is what stops it.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversation.set({ ...CONVERSATION, title: '__UNTITLED__' });
+    store.conversations.set([
+      { id: 'conv-1', title: '__UNTITLED__', createdAt: '', updatedAt: '', messageCount: 0 },
+    ]);
+    fixture.detectChanges();
+
+    const header: string = fixture.nativeElement.querySelector('.assistant-panel__title').textContent;
+    const historyRow: string = fixture.nativeElement.querySelector('[data-testid="assistant-history-item"]').textContent;
+
+    expect(header).not.toContain('__UNTITLED__');
+    expect(historyRow).not.toContain('__UNTITLED__');
+    // The i18n key resolves (TranslateModule with no locale echoes the key, which is still not the sentinel).
+    expect(header).toContain('UNTITLED');
+  });
+
+  it('shows a real title as it was stored', () => {
+    store.isOpen.set(true);
+    store.conversation.set({ ...CONVERSATION, title: '¿Cómo creo un plan?' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.assistant-panel__title').textContent)
+      .toContain('¿Cómo creo un plan?');
   });
 
   it('identifies a placeholder reply only for the assistant role', () => {

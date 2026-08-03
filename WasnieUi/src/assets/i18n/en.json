@@ -1937,7 +1937,8 @@
   },
   "ASSISTANT": {
     "TITLE": "Assistant",
-    "SUBTITLE": "Not connected yet",
+    "SUBTITLE": "Wasnie assistant",
+    "UNTITLED": "New conversation",
     "TRIGGER_LABEL": "Assistant",
     "OPEN": "Open the assistant",
     "CLOSE": "Close",

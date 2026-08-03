@@ -62,9 +62,45 @@ public sealed class AssistantConversation : Entity
         };
     }
 
+    /// <summary>
+    /// A thread that has no name yet, because nothing has been said in it.
+    ///
+    /// A SENTINEL rather than a sentence, for the same reason the stand-in reply is one: the history
+    /// list is read by whoever owns it, in their own language, and freezing "New conversation" in
+    /// English into a row would show it that way forever. The client renders its own label.
+    /// </summary>
+    public const string UntitledSentinel = "__UNTITLED__";
+
+    public bool IsUntitled => Title == UntitledSentinel;
+
     public void Rename(string title, DateTimeOffset now)
     {
         Title = NormalizeTitle(title);
+        UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Names the thread after the first thing said in it — the way every chat product does it, because
+    /// a list of timestamps is a list nobody can search.
+    ///
+    /// ★ ONLY WHILE UNTITLED. A conversation the user renamed by hand keeps that name: their choice
+    /// outranks a derived one, and silently overwriting it would be the kind of small theft that makes
+    /// a feature untrustworthy. Equally, the SECOND message never re-titles the thread.
+    /// </summary>
+    public void TitleFromFirstMessage(string title, DateTimeOffset now)
+    {
+        if (!IsUntitled)
+        {
+            return;
+        }
+
+        var normalized = (title ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return;
+        }
+
+        Title = NormalizeTitle(normalized);
         UpdatedAt = now;
     }
 

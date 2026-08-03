@@ -99,10 +99,30 @@ export class AssistantMarkdownPipe implements PipeTransform {
     // and a stray Promise would surface immediately as "[object Promise]" rather than silently.
     const html = this.marked.parse(value, { async: false }) as string;
 
-    const withSafeLinks = this.hardenLinks(AssistantMarkdownPipe.renderTaskBoxes(html));
+    const withSafeLinks = this.hardenLinks(
+      AssistantMarkdownPipe.applyScrollbar(AssistantMarkdownPipe.renderTaskBoxes(html)),
+    );
 
     // ★ Layer 2 — Angular's sanitiser has the final say.
     return this.sanitizer.sanitize(SecurityContext.HTML, withSafeLinks) ?? '';
+  }
+
+  /**
+   * Puts the app's scrollbar on the two rendered elements that scroll.
+   *
+   * ★ REUSING THE UTILITY, NOT REPEATING IT. `ws-scroll-thin` is the design system's one scrollbar
+   * (styles.scss), already worn by the sidebar, the modal body, the select list and the data table. A
+   * code block or a wide table inside a chat bubble scrolls too, and was showing the browser's native
+   * bar next to all of them.
+   *
+   * They are reached HERE rather than in the stylesheet because this markup is generated: there is no
+   * template to put a class on, and copying the utility's rules into the panel's SCSS would be a second
+   * definition of the same scrollbar — the drift this codebase keeps refusing.
+   */
+  private static applyScrollbar(html: string): string {
+    return html
+      .replace(/<pre>/gi, '<pre class="ws-scroll-thin">')
+      .replace(/<table>/gi, '<table class="ws-scroll-thin">');
   }
 
   /**

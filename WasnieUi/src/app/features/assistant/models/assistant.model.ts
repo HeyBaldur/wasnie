@@ -65,6 +65,19 @@ export interface AssistantStreamEvent {
  */
 export const ASSISTANT_NOT_CONNECTED = '__ASSISTANT_NOT_CONNECTED__';
 
+/**
+ * What the backend stores as the title of a thread nothing has been said in yet.
+ *
+ * A SENTINEL, not a sentence, for the same reason as the stand-in reply: the history list is read by
+ * its owner in their own language, and freezing "New conversation" in English into a row would show it
+ * that way forever. Must stay byte-identical to `AssistantConversation.UntitledSentinel`.
+ */
+export const ASSISTANT_UNTITLED = '__UNTITLED__';
+
+export function isUntitled(title: string | null | undefined): boolean {
+  return !title || title === ASSISTANT_UNTITLED;
+}
+
 export function isPlaceholderReply(message: AssistantMessage): boolean {
   return message.role === 'Assistant' && message.content === ASSISTANT_NOT_CONNECTED;
 }

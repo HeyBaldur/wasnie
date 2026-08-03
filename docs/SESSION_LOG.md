@@ -4,6 +4,97 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-07-31 — Títulos de chat con el primer mensaje, y una etiqueta que mentía
+
+### El título
+
+Las conversaciones se guardaban como **"Chat 2026-07-31 14:58"**. Un historial de una docena de
+timestamps es una lista que hay que abrir de a una: el nombre no le decía al lector nada que pudiera
+usar para encontrar algo.
+
+Ahora la conversación **nace sin título** y **el primer mensaje la nombra**, como ChatGPT o Claude.
+
+- `ConversationTitle.FromMessage`: colapsa saltos y espacios (un pegado multilínea no debe romper la
+  fila), **quita el Markdown que el usuario haya tipeado** (`**urgente**` se lee "urgente", no se
+  arrastra los asteriscos), y corta a 60 chars **en frontera de palabra** — con un umbral para que una
+  sola palabra larguísima no colapse el título a dos letras.
+- **★ Solo mientras esté sin título.** Un nombre que el usuario puso a mano gana sobre uno derivado:
+  pisarlo en silencio es la clase de robo chico que vuelve poco confiable una feature. Y el **segundo**
+  mensaje nunca renombra.
+- **No se le pide el título al modelo.** Sería una segunda llamada por conversación, gastando el
+  presupuesto de tokens/día que ya es la restricción que manda, para resumir una frase que el usuario
+  acaba de escribir — cuando la frase misma es el mejor título.
+
+**Sentinel `__UNTITLED__`**, no "Nueva conversación" en inglés: el historial lo lee su dueño en su
+idioma, y congelar una cadena ahí la mostraría así para siempre. El cliente pone su etiqueta traducida.
+Mismo patrón que la respuesta placeholder de la pieza 1.
+
+### La etiqueta que mentía
+
+`ASSISTANT.SUBTITLE` decía **"Not connected yet" / "Todavía no conectado"** — copy de la pieza 1, de
+cuando no había modelo. Ahora sí está conectado. Cambiada a **"Asistente de Wasnie"** en los tres
+idiomas: dice lo que el panel es, en vez de un estado que dejó de ser cierto.
+
+### Tests: backend 1090→1102, front 654→656
+
+Cubren la derivación (verbatim, corte en palabra, palabra única enorme, saltos, Markdown, vacío), la
+regla de "solo la primera vez", que **un nombre manual gana**, el camino end-to-end por el handler, y
+que el sentinel **nunca llega a pantalla**.
+
+**Probado por mutación:** quitar la guarda `IsUntitled` pone en rojo **3** tests en los tres niveles —
+dominio, aplicación y end-to-end.
+
+Integración **753 verde**, build prod limpio, i18n en paridad. **Reiniciá la API.**
+
+**Nota:** las conversaciones ya creadas conservan su título con fecha. Solo las nuevas se nombran así.
+
+**Sin commitear** — lo hace Rodolfo.
+
+## 2026-07-31 — El scrollbar del design system aplicado al panel del asistente
+
+### Paso 0
+
+El scrollbar estilizado **ya existía**: **`.ws-scroll-thin`**, utilitario **global** en
+`styles.scss:457` (`scrollbar-width: thin` + las reglas `::-webkit-scrollbar`, con
+`--color-border-strong`, que es temático). Se aplica **poniendo la clase en el contenedor**, y ya lo
+usan sidebar, cuerpo del modal, lista del select, data-table, dashboard e imports.
+
+### Cinco contenedores scrollean en el panel; solo uno tenía la clase
+
+| Contenedor | Antes | Ahora |
+|---|---|---|
+| Área de mensajes | ✔ ya la tenía | ✔ |
+| **Lista de conversaciones** | nativo | clase en el template |
+| **Textarea del compositor** | nativo | clase en la primitiva |
+| **Bloques de código** del Markdown | nativo | clase desde el pipe |
+| **Tablas** del Markdown | nativo | clase desde el pipe |
+
+**El textarea se arregló en `WsTextarea`, no en el chat**, y a propósito: cualquier textarea de la app
+que scrollee debería llevar el scrollbar de la app. Es una línea en la primitiva que beneficia a todo
+consumidor futuro, no una preferencia de esta pantalla metida en un control compartido.
+
+**Código y tablas se alcanzan desde el pipe** porque ese markup es generado: no hay template donde
+poner una clase, y copiar las reglas del utilitario al SCSS del panel sería una segunda definición del
+mismo scrollbar. Poner la clase reusa; copiar reglas duplica.
+
+**Verificado: cero reglas de `::-webkit-scrollbar` escritas** en la feature o en la primitiva.
+
+### Tests: 652 → 654
+
+Asertan por **clase**, que es como se aplica el utilitario en todo el resto — un test sobre colores
+computados pasaría igual contra una copia de las reglas, que es justo lo que no debe pasar.
+
+Build prod limpio.
+
+### Deuda ajena detectada (no tocada)
+
+**Dos componentes duplican las reglas del scrollbar en vez de usar la clase**:
+`credits/detail/credit-detail.component.scss:204-211` y `pay-runs/list/pay-runs-list.component.scss:275+`.
+Son copias literales de `.ws-scroll-thin`. Fuera del alcance de este WI, pero es exactamente la deriva
+que el WI pedía evitar — quedan anotadas.
+
+**Sin commitear** — lo hace Rodolfo.
+
 ## 2026-07-31 — `<br>` literal en las tablas: una excepción de una entrada, y cobertura total de Markdown
 
 ### La causa

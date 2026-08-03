@@ -201,6 +201,32 @@ public sealed class AssistantChatCompletionTests
     }
 
     [Fact]
+    public async Task The_conversation_is_named_after_the_first_message_end_to_end()
+    {
+        // The whole path, not just the helper: a thread starts untitled and comes out of the first
+        // exchange wearing the user's own words.
+        var provider = new FakeProvider(["ok"]);
+        var h = Build(nameof(The_conversation_is_named_after_the_first_message_end_to_end), provider);
+
+        var conversation = AssistantConversation.Start(
+            Guid.NewGuid(), h.TenantId, AliceId, AssistantConversation.UntitledSentinel, Now);
+        h.Db.AssistantConversations.Add(conversation);
+        await h.Db.SaveChangesAsync();
+
+        await DrainAsync(h.Handler, conversation.Id, "¿Cómo creo un plan de comisiones?");
+
+        var stored = await h.Db.AssistantConversations.IgnoreQueryFilters().SingleAsync();
+        stored.Title.Should().Be("¿Cómo creo un plan de comisiones?");
+        stored.IsUntitled.Should().BeFalse();
+
+        // ★ And the SECOND message leaves the name alone.
+        await DrainAsync(h.Handler, conversation.Id, "otra pregunta totalmente distinta");
+
+        var after = await h.Db.AssistantConversations.IgnoreQueryFilters().SingleAsync();
+        after.Title.Should().Be("¿Cómo creo un plan de comisiones?");
+    }
+
+    [Fact]
     public async Task Prior_turns_are_replayed_to_the_model_in_order()
     {
         var provider = new FakeProvider(["ok"]);

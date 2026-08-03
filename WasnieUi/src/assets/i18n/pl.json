@@ -1937,7 +1937,8 @@
   },
   "ASSISTANT": {
     "TITLE": "Asystent",
-    "SUBTITLE": "Jeszcze niepodłączony",
+    "SUBTITLE": "Asystent Wasnie",
+    "UNTITLED": "Nowa rozmowa",
     "TRIGGER_LABEL": "Asystent",
     "OPEN": "Otwórz asystenta",
     "CLOSE": "Zamknij",

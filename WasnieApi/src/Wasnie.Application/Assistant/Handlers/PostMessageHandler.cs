@@ -93,6 +93,10 @@ public sealed class PostMessageHandler(
             return Result<AssistantExchangeDto>.Failure(ex.Message);
         }
 
+        // ★ The thread takes its name from the first thing said in it. Only while untitled: a name the
+        // user chose outranks a derived one, and the second message never re-titles anything.
+        conversation.TitleFromFirstMessage(ConversationTitle.FromMessage(userMessage.Content), now);
+
         conversation.Touch(now);
         db.AssistantMessages.AddRange(userMessage, assistantMessage);
 

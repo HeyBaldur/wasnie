@@ -235,6 +235,16 @@ describe('AssistantMarkdownPipe', () => {
     });
   });
 
+  it("wears the design system's scrollbar on the elements that scroll", () => {
+    // The utility is `ws-scroll-thin` from styles.scss — the same one the sidebar, the modal body and
+    // the data table use. Applied here rather than in SCSS because this markup is generated: there is
+    // no template to put a class on, and copying the rules would be a second scrollbar definition.
+    const host = render('```\nlong line\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |');
+
+    expect(host.querySelector('pre')?.classList).toContain('ws-scroll-thin');
+    expect(host.querySelector('table')?.classList).toContain('ws-scroll-thin');
+  });
+
   // ── 1b. ★ THE ALLOWLIST: <br> survives, everything else still does not ────
 
   describe('★ raw <br> is the one tag that renders', () => {
