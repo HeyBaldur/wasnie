@@ -58,6 +58,32 @@ public interface IChatCompletionProvider
     Task<string> CompleteJsonAsync(
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Asks the model whether one of <paramref name="tools"/> should be run for this question, and
+    /// returns the one it chose — or null when it wants no tool.
+    /// </summary>
+    /// <remarks>
+    /// ★ THE SEAM IS "WHICH TOOL", NOT "RUN THE CONVERSATION". The file's own note used to say tool
+    /// calling was not modelled here because it differs too much between vendors to abstract before a
+    /// second one exists. That is still true of the FULL protocol — the assistant/tool message roles,
+    /// the call ids, the multi-round loop — so none of it is abstracted. What IS portable is the one
+    /// question this method asks: given these messages and these tools, which tool and with what
+    /// arguments? Every vendor answers that; only the wire shape differs, and that stays inside the
+    /// implementation.
+    ///
+    /// ★ THE RESULT IS NOT FED BACK AS A `tool` ROLE MESSAGE. It is handed to the generating call as
+    /// clearly delimited data (see AssistantPrompt). That keeps <see cref="ChatMessage"/> free of call
+    /// ids and tool roles — vendor concepts the rest of the application would then have to carry — at
+    /// the cost of one round of tool use per turn, which is all a single read-only lookup needs.
+    ///
+    /// Returns null when the model wants no tool. Throws <see cref="ChatCompletionException"/> on the
+    /// same failures as the other methods.
+    /// </remarks>
+    Task<AssistantToolRequest?> SelectToolAsync(
+        IReadOnlyList<ChatMessage> messages,
+        IReadOnlyList<AssistantToolSchema> tools,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -81,4 +107,15 @@ public sealed class ChatCompletionException(string reasonKey, string message, Ex
 
     /// <summary>The key is missing, wrong or rejected. An operator problem, phrased for a user.</summary>
     public const string NotConfigured = "ASSISTANT.ERROR_NOT_CONFIGURED";
+
+    /// <summary>
+    /// The model produced a tool call the provider itself rejected (`400 tool_use_failed`).
+    ///
+    /// ★ ITS OWN REASON, NOT "UNAVAILABLE". This is a generation-quality failure — the model wrote a
+    /// call that did not validate — and it is recoverable by simply answering without the lookup. Filed
+    /// under the same key as "the provider is unreachable" it would read, to whoever is on the logs, as
+    /// an outage; and the two want opposite responses. It never reaches a user: the tool runner treats
+    /// it as "no tool was chosen".
+    /// </summary>
+    public const string ToolCallRejected = "ASSISTANT.ERROR_TOOL_CALL_REJECTED";
 }

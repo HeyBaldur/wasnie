@@ -31,6 +31,7 @@ const CONVERSATION: AssistantConversation = {
   createdAt: '2026-07-31T09:00:00Z',
   updatedAt: '2026-07-31T09:00:00Z',
   messages: [],
+  lastTurnUnanswered: false,
 };
 
 function exchange(content: string): AssistantExchange {
@@ -874,5 +875,616 @@ describe('AssistantPanelComponent — assistant links navigate without reloading
     container.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
 
     expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ RESILIENCE — the way out of a rate limit.
+ *
+ * The backend commits the user's turn BEFORE it calls the model, so a 429 leaves the question stored
+ * and no answer. These pin that Retry RE-ANSWERS that stored turn rather than sending it again — the
+ * difference between a recovered conversation and one where the user's own words appear twice.
+ */
+describe('AssistantStore — retry after a failed answer', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  /** A stream that stores the question and then fails — exactly what a 429 produces. */
+  function rateLimited(): void {
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' },
+      ]));
+  }
+
+  it('offers a retry after a rate-limited answer, and not before', async () => {
+    expect(store.retryable()).toBeNull();
+
+    rateLimited();
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_RATE_LIMITED');
+    expect(store.retryable()).not.toBeNull();
+    // The question survived — which is what the message on screen promises.
+    expect(store.messages().map((m) => m.role)).toEqual(['User']);
+  });
+
+  it('★ the retry RE-ANSWERS the stored turn instead of sending it again', async () => {
+    rateLimited();
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    // The provider recovers.
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'delta', delta: 'It was paid.' },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'It was paid.' } },
+      ]));
+
+    await store.retry();
+
+    // ★ isRetry is true, which is what tells the server not to store the question a second time.
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeTrue();
+
+    // ONE user row, still — and the answer beside it.
+    expect(store.messages().map((m) => m.role)).toEqual(['User', 'Assistant']);
+    expect(store.messages().filter((m) => m.role === 'User').length).toBe(1);
+    // Nothing left to retry once it worked.
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('a failure BEFORE the question reached the server retries as a normal send', async () => {
+    // No `user` frame arrived, so nothing is stored and there is nothing to re-answer. Sending it
+    // again is correct here — and telling the server "this is a retry" would be a lie it would act on
+    // by re-answering a turn that does not exist.
+    api.streamMessage.and.callFake(() =>
+      frames([{ type: 'error', errorKey: 'ASSISTANT.ERROR_UNAVAILABLE' }]));
+
+    await store.startConversation();
+    await store.send('a question that never landed');
+
+    expect(store.retryable()?.wasPersisted).toBeFalse();
+
+    await store.retry();
+
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeFalse();
+    expect(api.streamMessage.calls.mostRecent().args[1]).toBe('a question that never landed');
+  });
+
+  it('does nothing when there is nothing to retry', async () => {
+    await store.retry();
+    expect(api.streamMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('AssistantPanelComponent — the retry button', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('shows a NON-TECHNICAL message and a retry button when the assistant is rate limited', () => {
+    // ★ What the user reads is a translated KEY, never the provider's sentence — a vendor error string
+    // can carry request ids and slices of the prompt.
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'what happened with TERM-CC-10?',
+          payload: null, sequence: 0, createdAt: '',
+        },
+      ],
+      lastTurnUnanswered: true,
+    });
+    fixture.detectChanges();
+
+    const error = fixture.nativeElement.querySelector('[data-testid="assistant-error"]');
+    expect(error).toBeTruthy();
+    expect(error.textContent).toContain('ERROR_RATE_LIMITED');
+    expect(error.textContent).not.toContain('429');
+    expect(error.textContent).not.toContain('Groq');
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeTruthy();
+  });
+
+  it('hides the retry button when there is nothing to retry', () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.errorKey.set(null);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeNull();
+  });
+
+  it('the button asks the store to retry', async () => {
+    const spy = spyOn(store, 'retry').and.resolveTo();
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'x', payload: null, sequence: 0, createdAt: '' },
+      ],
+      lastTurnUnanswered: true,
+    });
+    fixture.detectChanges();
+
+    fixture.nativeElement
+      .querySelector('[data-testid="assistant-retry"] button')
+      ?.click() ?? fixture.nativeElement.querySelector('[data-testid="assistant-retry"]').click();
+
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ THE FAILURE SURVIVES A REFRESH.
+ *
+ * The bug this fixes: the assistant failed, the retry appeared, the user reloaded, and everything was
+ * gone — no message, no warning, no way back. These pin that the state is reconstructed from what the
+ * SERVER reports about the stored turns, with no help from session memory.
+ */
+describe('AssistantStore — a failed turn reloaded from the server', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  /** What the server returns for a thread whose last question was never answered. */
+  const FAILED_THREAD: AssistantConversation = {
+    ...CONVERSATION,
+    id: 'conv-failed',
+    messages: [
+      {
+        id: 'm1', role: 'User', content: 'what happened with TERM-CC-10?',
+        payload: null, sequence: 0, createdAt: '2026-08-03T10:29:00Z',
+      },
+    ],
+    lastTurnUnanswered: true,
+  };
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ reconstructs the retry from a FRESH load, with no session memory behind it', async () => {
+    // This store has never sent anything — exactly the state after a page refresh.
+    api.getConversation.and.returnValue(of(FAILED_THREAD));
+
+    await store.openConversation('conv-failed');
+
+    const failed = store.retryable();
+    expect(failed).withContext('the warning must come back after a refresh').not.toBeNull();
+    expect(failed!.wasPersisted).toBeTrue();
+    expect(failed!.content).toBe('what happened with TERM-CC-10?');
+  });
+
+  it('shows nothing to retry for a thread that was answered', async () => {
+    api.getConversation.and.returnValue(of({
+      ...FAILED_THREAD,
+      messages: [
+        ...FAILED_THREAD.messages,
+        { id: 'm2', role: 'Assistant', content: 'It was paid.', payload: null, sequence: 1, createdAt: '' },
+      ],
+      lastTurnUnanswered: false,
+    } as AssistantConversation));
+
+    await store.openConversation('conv-failed');
+
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('★ retrying a RELOADED failure re-answers without duplicating the question', async () => {
+    api.getConversation.and.returnValue(of(FAILED_THREAD));
+    await store.openConversation('conv-failed');
+
+    api.streamMessage.and.callFake(() =>
+      frames([
+        { type: 'delta', delta: 'It was paid.' },
+        {
+          type: 'done',
+          message: {
+            id: 'm2', role: 'Assistant', content: 'It was paid.',
+            payload: null, sequence: 1, createdAt: '',
+          },
+        },
+      ]));
+
+    await store.retry();
+
+    // isRetry = true: the server re-answers the stored turn instead of storing the question again.
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeTrue();
+    expect(store.messages().map((m) => m.role)).toEqual(['User', 'Assistant']);
+    expect(store.messages().filter((m) => m.role === 'User').length).toBe(1);
+    // ...and the warning is gone, without a second round trip to find that out.
+    expect(store.retryable()).toBeNull();
+  });
+});
+
+describe('AssistantPanelComponent — the failed-turn alert', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  /** Opens the panel on a thread the SERVER says ended on an unanswered question. */
+  function renderReloadedFailure(): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'what happened with TERM-CC-10?',
+          payload: null, sequence: 0, createdAt: '',
+        },
+      ],
+      lastTurnUnanswered: true,
+    });
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]');
+  }
+
+  it('★ renders the alert and the retry from the RELOADED state alone', () => {
+    const alert = renderReloadedFailure();
+
+    expect(alert).withContext('a refreshed page must still show what happened').toBeTruthy();
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.querySelector('[data-testid="assistant-retry"]'))
+      .withContext('the retry lives INSIDE the alert').toBeTruthy();
+    // The question is still on screen beside it — nothing to retype.
+    expect(fixture.nativeElement.textContent).toContain('what happened with TERM-CC-10?');
+  });
+
+  it('uses the design system WARNING tokens, not invented classes', () => {
+    // ★ Asserted by COMPUTED style, not by class name: a class that exists but resolves to nothing is
+    // exactly the failure mode of "styled with a token that was never defined" — the --shadow-card
+    // problem this codebase already found once.
+    const alert = renderReloadedFailure();
+    const styles = getComputedStyle(alert);
+
+    const warningBg = getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-warning-bg').trim();
+    expect(warningBg).withContext('the token must actually be defined').not.toBe('');
+
+    expect(styles.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(parseFloat(styles.borderTopWidth)).toBeGreaterThan(0);
+    expect(parseFloat(styles.paddingTop)).toBeGreaterThan(0);
+    expect(parseFloat(styles.paddingBottom)).toBeGreaterThan(0);
+  });
+
+  it('has NO dismiss control — the only ways out are retrying or asking again', () => {
+    // ★ Dismissing would throw away the only route back to an answer and leave the question sitting
+    // there with nothing under it: the exact state this fix removes, reached by the user's own click.
+    const alert = renderReloadedFailure();
+
+    const buttons = Array.from(alert.querySelectorAll('button')) as HTMLElement[];
+    expect(buttons.length).withContext('retry, and nothing else').toBe(1);
+    expect(alert.textContent).not.toContain('×');
+  });
+
+  it('falls back to a general explanation when the reason was not seen this session', () => {
+    // After a refresh the reason was never stored, so claiming a specific one would be inventing it.
+    const alert = renderReloadedFailure();
+
+    expect(alert.textContent).toContain('FAILED_TITLE');
+    expect(alert.textContent).toContain('FAILED_DESC');
+  });
+
+  it('shows the SPECIFIC reason when this session watched it fail', () => {
+    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    const alert = renderReloadedFailure();
+
+    expect(alert.textContent).toContain('ERROR_RATE_LIMITED');
+    expect(alert.textContent).not.toContain('FAILED_DESC');
+  });
+
+  it('is absent when nothing failed', () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
+  });
+});
+
+/**
+ * ★ THE FAILURE CARD MUST NOT APPEAR WHILE THE ANSWER IS ON ITS WAY.
+ *
+ * The bug: the moment the server echoed the stored question, the thread ended on an unanswered turn —
+ * true, but only because the answer had not arrived yet. The card appeared beside the typing dots and
+ * told the user their question had failed while it was being answered, then vanished when it landed.
+ * "Waiting" is not "failed".
+ */
+describe('AssistantStore — no failure card while an answer is in flight', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ stays hidden between the stored question and the answer', async () => {
+    // The frames are yielded one at a time and `retryable()` is read after each — which is exactly
+    // what the panel does as it re-renders. Any true in the middle is the card the user saw.
+    const seen: boolean[] = [];
+
+    api.streamMessage.and.callFake((_id: string, content: string) => {
+      const list: AssistantStreamEvent[] = [
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'delta', delta: 'It was ' },
+        { type: 'delta', delta: 'paid.' },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'It was paid.' } },
+      ];
+      return (async function* () {
+        for (const frame of list) {
+          yield frame;
+          seen.push(store.retryable() !== null);
+        }
+      })();
+    });
+
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    expect(seen).withContext('the card must never flash mid-exchange').toEqual([false, false, false, false]);
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('appears only once the answer has actually failed', async () => {
+    const seen: boolean[] = [];
+
+    api.streamMessage.and.callFake((_id: string, content: string) => {
+      const list: AssistantStreamEvent[] = [
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' },
+      ];
+      return (async function* () {
+        for (const frame of list) {
+          yield frame;
+          seen.push(store.retryable() !== null);
+        }
+      })();
+    });
+
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    // Hidden while the question was merely waiting; the error is what reveals it — and it stays after,
+    // when `sending` is back to false.
+    expect(seen).toEqual([false, false]);
+    expect(store.retryable()).not.toBeNull();
+    expect(store.conversation()!.lastTurnUnanswered)
+      .withContext('and a refresh would derive the same thing').toBeTrue();
+  });
+
+  it('★ a RETRY of a reloaded failure hides the card while it runs', async () => {
+    // This one starts with the thread already marked unanswered, so without the in-flight guard the
+    // card would sit beside the very loader that is resolving it — inviting a second retry of the
+    // request already running.
+    api.getConversation.and.returnValue(of({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'q', payload: null, sequence: 0, createdAt: '' },
+      ],
+      lastTurnUnanswered: true,
+    } as AssistantConversation));
+
+    await store.openConversation('conv-1');
+    expect(store.retryable()).withContext('visible before the retry starts').not.toBeNull();
+
+    const seen: boolean[] = [];
+    api.streamMessage.and.callFake(() => {
+      const list: AssistantStreamEvent[] = [
+        { type: 'delta', delta: 'It was paid.' },
+        {
+          type: 'done',
+          message: { id: 'm2', role: 'Assistant', content: 'It was paid.', payload: null, sequence: 1, createdAt: '' },
+        },
+      ];
+      return (async function* () {
+        for (const frame of list) {
+          yield frame;
+          seen.push(store.retryable() !== null);
+        }
+      })();
+    });
+
+    await store.retry();
+
+    expect(seen).withContext('hidden for the whole run').toEqual([false, false]);
+    expect(store.retryable()).toBeNull();
+  });
+});
+
+/**
+ * ★ THE RETRY MUST LOOK LIKE IT IS WORKING.
+ *
+ * The typing dots are normally lit by the `user` frame, and a retry never sends one — the question is
+ * already stored, and echoing it back would duplicate it on screen. So pressing Retry showed nothing
+ * at all until the first fragment arrived: a button that looks broken at the exact moment it works.
+ */
+describe('AssistantStore — the retry shows the assistant is working', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  const FAILED_THREAD = {
+    ...CONVERSATION,
+    messages: [
+      { id: 'm1', role: 'User' as const, content: 'q', payload: null, sequence: 0, createdAt: '' },
+    ],
+    lastTurnUnanswered: true,
+  };
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ lights the typing indicator BEFORE the first fragment arrives', async () => {
+    api.getConversation.and.returnValue(of(FAILED_THREAD as AssistantConversation));
+    await store.openConversation('conv-1');
+
+    // Captured at the instant the request is made — before any frame has come back. Null here is the
+    // dead pause the user was seeing.
+    let whenAsked: string | null | undefined;
+
+    api.streamMessage.and.callFake(() => {
+      whenAsked = store.streamingReply();
+      return frames([
+        { type: 'delta', delta: 'It was paid.' },
+        {
+          type: 'done',
+          message: { id: 'm2', role: 'Assistant', content: 'It was paid.', payload: null, sequence: 1, createdAt: '' },
+        },
+      ]);
+    });
+
+    await store.retry();
+
+    expect(whenAsked).withContext('the dots must be up the moment the button is pressed').toBe('');
+    expect(store.streamingReply()).withContext('and down once the answer is stored').toBeNull();
+    expect(store.messages().map((m) => m.role)).toEqual(['User', 'Assistant']);
+  });
+
+  it('takes the indicator down again when the retry ALSO fails', async () => {
+    api.getConversation.and.returnValue(of(FAILED_THREAD as AssistantConversation));
+    await store.openConversation('conv-1');
+
+    api.streamMessage.and.callFake(() =>
+      frames([{ type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' }]));
+
+    await store.retry();
+
+    // No dots left spinning over an answer that will never come — and the card is back, so the user
+    // can try once more.
+    expect(store.streamingReply()).toBeNull();
+    expect(store.retryable()).not.toBeNull();
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_RATE_LIMITED');
+  });
+
+  it('an ordinary send still waits for the stored question before showing anything', async () => {
+    // A first send has a `user` frame to light the dots, and lighting them earlier would put an
+    // assistant bubble on screen before the question the user typed appeared beside it.
+    let whenAsked: string | null | undefined;
+
+    api.streamMessage.and.callFake((_id: string, content: string) => {
+      whenAsked = store.streamingReply();
+      return frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'A real answer.' } },
+      ]);
+    });
+
+    await store.startConversation();
+    await store.send('hello');
+
+    expect(whenAsked).toBeNull();
+  });
+});
+
+describe('AssistantPanelComponent — the retry renders the typing bubble', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ shows the streaming bubble, and hides the failure card, while a retry runs', () => {
+    // The state a retry is in one tick after the button: thread still marked unanswered, request in
+    // flight, nothing streamed yet. The user must see the assistant working — not the card that told
+    // them it had failed.
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'q', payload: null, sequence: 0, createdAt: '' },
+      ],
+      lastTurnUnanswered: true,
+    });
+    store.sending.set(true);
+    store.streamingReply.set('');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]'))
+      .withContext('the typing bubble is the feedback the button owes the user').toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.assistant-msg__typing')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
   });
 });

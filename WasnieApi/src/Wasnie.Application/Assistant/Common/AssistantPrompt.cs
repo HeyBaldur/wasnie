@@ -129,6 +129,41 @@ public static class AssistantPrompt
         "write a full address with a domain: the link must stay inside the application the user is " +
         "already in.";
 
+    /// <summary>Wraps a tool's answer, so live data reads as data and not as more documentation.</summary>
+    public const string DataHeader = "=== LIVE DATA (looked up just now, for this user, from Wasnie) ===";
+
+    public const string DataFooter = "=== END OF LIVE DATA ===";
+
+    /// <summary>
+    /// How the model must treat what a tool returned.
+    ///
+    /// ★ RULE 9 IS THE ONE THAT PROTECTS THE REFUSAL. When the lookup comes back with `found: false`,
+    /// the model must relay that and stop. Left to itself it would soften the answer into something
+    /// helpful and wrong — "it may still be processing", "check with your administrator, it was
+    /// probably voided" — and each of those is a claim about a record it was just told it cannot see.
+    /// The refusal is deliberately identical for "does not exist" and "not yours"; a model that
+    /// speculates past it undoes that in one sentence.
+    ///
+    /// ★ RULE 11 KEEPS "EXPLAIN, DO NOT ACT" TRUE NOW THAT DATA IS REACHABLE. Reading is not doing.
+    /// The tool cannot write, and the assistant must not imply that asking it to would change anything.
+    /// </summary>
+    public const string DataRules =
+        "9. THE LIVE DATA BELOW IS THE ONLY THING YOU KNOW ABOUT THIS RECORD. Report it as it is. If it " +
+        "says found is false, tell the user plainly that you could not find that transaction or do not " +
+        "have access to it, and STOP — do not speculate about why, do not suggest what might have " +
+        "happened to it, and do not offer reasons it might be missing. Anything you add there is a " +
+        "claim about a record you cannot see.\n" +
+        "\n" +
+        "10. USE THE FIELD NAMES' MEANING. saleAmount is what the customer paid; commissionAmount is " +
+        "what the payee earned — never present one as the other. hasBeenPaid true means the money has " +
+        "gone out; a payoutStatus of Calculated or Approved is NOT paid. If a field says something is " +
+        "not visible to you, say that part is not available to this user rather than inventing it or " +
+        "reporting it as zero.\n" +
+        "\n" +
+        "11. YOU LOOKED IT UP, YOU DID NOT CHANGE IT. This lookup is read-only. You cannot create, " +
+        "edit, void, recalculate or pay anything, and you must never imply otherwise. If the user asks " +
+        "you to change what you just read, explain where THEY can do it.";
+
     /// <summary>
     /// The rules restated after the corpus, so what the model reads last is what it must obey.
     /// </summary>
@@ -169,11 +204,41 @@ public static class AssistantPrompt
     /// an invitation to fill the silence with navigation — the user would be walked confidently into a
     /// screen for a capability nobody confirmed exists. No source means no guidance, links included.
     /// </param>
-    public static string BuildSystemMessage(string documentation, bool documentationAvailable, string navigationMap)
+    public static string BuildSystemMessage(string documentation, bool documentationAvailable, string navigationMap) =>
+        BuildSystemMessage(documentation, documentationAvailable, navigationMap, toolData: string.Empty);
+
+    /// <param name="toolData">
+    /// What a read-only tool just looked up for THIS user, or empty when no tool ran.
+    ///
+    /// ★ LIVE DATA IS A SOURCE, so its presence overrides the no-source prompt. "What happened with
+    /// TERM-CC-10?" is a question the handbook cannot answer and the record can — routing it to "the
+    /// documentation does not cover this" while the answer sits in the context would be the feature
+    /// failing with its own result in hand.
+    /// </param>
+    public static string BuildSystemMessage(
+        string documentation, bool documentationAvailable, string navigationMap, string toolData)
     {
+        var hasData = !string.IsNullOrWhiteSpace(toolData);
+        var dataBlock = hasData
+            ? $"\n{DataRules}\n\n{DataHeader}\n{toolData}\n{DataFooter}\n"
+            : string.Empty;
+
         if (string.IsNullOrWhiteSpace(documentation))
         {
-            return documentationAvailable ? NoSourcePrompt : FallbackPrompt;
+            if (!hasData)
+            {
+                return documentationAvailable ? NoSourcePrompt : FallbackPrompt;
+            }
+
+            // Documentation silent, record in hand: answer FROM the record and nothing else. The
+            // confinement rules still apply — they are what stops "and here is how clawbacks generally
+            // work" being appended to a factual answer about one sale.
+            return $"""
+                {ConfinementRules}
+                {dataBlock}
+                Remember: the live data above is what you know. Report it as it is, say plainly when it
+                could not be found, never invent anything around it, and never claim to have changed it.
+                """;
         }
 
         if (string.IsNullOrWhiteSpace(navigationMap))
@@ -184,7 +249,7 @@ public static class AssistantPrompt
                 {DocumentationHeader}
                 {documentation}
                 {DocumentationFooter}
-
+                {dataBlock}
                 {Reminder}
                 """;
         }
@@ -201,7 +266,7 @@ public static class AssistantPrompt
             {NavigationHeader}
             {navigationMap}
             {NavigationFooter}
-
+            {dataBlock}
             {Reminder}
             {NavigationReminder}
             """;
@@ -230,7 +295,8 @@ public static class AssistantPrompt
         int maxHistory,
         string routedDocumentation,
         bool documentationAvailable,
-        string navigationMap = "")
+        string navigationMap = "",
+        string toolData = "")
     {
         var usable = history
             .Where(m => m.Content != AssistantMessage.NotConnectedPlaceholder)
@@ -244,7 +310,8 @@ public static class AssistantPrompt
 
         var messages = new List<ChatMessage>(usable.Count + 1)
         {
-            new(ChatMessage.SystemRole, BuildSystemMessage(routedDocumentation, documentationAvailable, navigationMap)),
+            new(ChatMessage.SystemRole,
+                BuildSystemMessage(routedDocumentation, documentationAvailable, navigationMap, toolData)),
         };
 
         messages.AddRange(usable.Select(m => new ChatMessage(

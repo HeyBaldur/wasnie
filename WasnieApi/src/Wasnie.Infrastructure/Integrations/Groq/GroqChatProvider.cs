@@ -176,6 +176,13 @@ public sealed class GroqChatProvider(
         var reasonKey = response.StatusCode switch
         {
             HttpStatusCode.TooManyRequests => ChatCompletionException.RateLimited,
+            // ★ `tool_use_failed`: the model wrote a tool call the provider's own validator rejected.
+            // Recognised by the body's error code because the status alone (400) says nothing — a 400
+            // is also a malformed request, which is our bug and not the model's. Separated so the
+            // caller can shrug it off and answer without the lookup, and so the log distinguishes
+            // "the model fumbled one call" from "the provider is down".
+            HttpStatusCode.BadRequest when excerpt.Contains("tool_use_failed", StringComparison.OrdinalIgnoreCase)
+                => ChatCompletionException.ToolCallRejected,
             // 413 from Groq is not "your upload is too big" in the usual sense — it is the
             // tokens-per-minute allowance refusing the request. It IS a rate limit, so the user is
             // told to try again in a moment rather than handed a generic failure.
@@ -246,13 +253,126 @@ public sealed class GroqChatProvider(
         }
     }
 
+    /// <summary>
+    /// Asks the model which tool to run, if any.
+    ///
+    /// ★ VERIFIED AGAINST THE REAL API, not assumed. `openai/gpt-oss-20b` — the configured model —
+    /// returns a `tool_calls` array for "What happened with transaction TERM-CC-10?" with the reference
+    /// correctly extracted. Not every model on the platform does tool calling, and shipping this on the
+    /// assumption that ours did would have failed silently as "the assistant just never looks anything
+    /// up".
+    ///
+    /// `tool_choice: auto` rather than forced: the model must be free to answer a documentation
+    /// question without a lookup, which is most questions.
+    ///
+    /// One call is returned even when the model asks for several. A single read-only lookup is the
+    /// whole of this piece; taking the first is honest about that, where quietly running all of them
+    /// would be a loop nobody designed.
+    /// </summary>
+    public async Task<AssistantToolRequest?> SelectToolAsync(
+        IReadOnlyList<ChatMessage> messages,
+        IReadOnlyList<AssistantToolSchema> tools,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConfigured)
+        {
+            throw new ChatCompletionException(
+                ChatCompletionException.NotConfigured, "No chat model API key is configured.");
+        }
+
+        if (tools.Count == 0)
+        {
+            return null;
+        }
+
+        var payload = new GroqRequest(
+            Model: _options.Model,
+            Stream: false,
+            Messages: messages.Select(m => new GroqRequestMessage(m.Role, m.Content)).ToList(),
+            Tools: tools.Select(t => new GroqTool(
+                "function",
+                new GroqFunction(t.Name, t.Description, JsonSerializer.Deserialize<JsonElement>(t.ParametersJson))))
+                .ToList(),
+            ToolChoice: "auto");
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, $"{_options.BaseUrl.TrimEnd('/')}/chat/completions")
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+
+        var client = httpClientFactory.CreateClient(HttpClientName);
+        client.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.SendAsync(request, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ChatCompletionException(
+                ChatCompletionException.Unavailable, "The chat model timed out.");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ChatCompletionException(
+                ChatCompletionException.Unavailable, "The chat model is unreachable.", ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw await TranslateFailureAsync(response, cancellationToken);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            try
+            {
+                var call = JsonSerializer.Deserialize<GroqCompletion>(body, JsonOptions)
+                    ?.Choices?.FirstOrDefault()?.Message?.ToolCalls?.FirstOrDefault();
+
+                return call?.Function is null || string.IsNullOrWhiteSpace(call.Function.Name)
+                    ? null
+                    : new AssistantToolRequest(call.Function.Name, call.Function.Arguments ?? "{}");
+            }
+            catch (JsonException ex)
+            {
+                throw new ChatCompletionException(
+                    ChatCompletionException.Unavailable, "The chat model returned an unreadable response.", ex);
+            }
+        }
+    }
+
     // ── Wire shapes, private on purpose: nothing outside this file models the vendor ──
 
     private sealed record GroqRequest(
         string Model,
         bool Stream,
         IReadOnlyList<GroqRequestMessage> Messages,
-        GroqResponseFormat? ResponseFormat = null);
+        GroqResponseFormat? ResponseFormat = null,
+        IReadOnlyList<GroqTool>? Tools = null,
+        string? ToolChoice = null);
+
+    private sealed record GroqTool(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("function")] GroqFunction Function);
+
+    private sealed record GroqFunction(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("description")] string Description,
+        [property: JsonPropertyName("parameters")] JsonElement Parameters);
+
+    private sealed record GroqToolCall(
+        [property: JsonPropertyName("function")] GroqToolCallFunction? Function);
+
+    private sealed record GroqToolCallFunction(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("arguments")] string? Arguments);
 
     /// <summary>The provider's structured-output switch. `json_object` makes a non-JSON reply impossible.</summary>
     private sealed record GroqResponseFormat(string Type);
@@ -264,7 +384,8 @@ public sealed class GroqChatProvider(
         [property: JsonPropertyName("message")] GroqCompletionMessage? Message);
 
     private sealed record GroqCompletionMessage(
-        [property: JsonPropertyName("content")] string? Content);
+        [property: JsonPropertyName("content")] string? Content,
+        [property: JsonPropertyName("tool_calls")] IReadOnlyList<GroqToolCall>? ToolCalls = null);
 
     private sealed record GroqRequestMessage(string Role, string Content);
 

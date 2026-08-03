@@ -211,6 +211,11 @@ export class AssistantPanelComponent {
     this.draft.set(value);
   }
 
+  /** Re-answers the last failed question. See the store — it does NOT re-send the message. */
+  async retry(): Promise<void> {
+    await this.store.retry();
+  }
+
   async startNew(): Promise<void> {
     await this.store.startConversation();
   }

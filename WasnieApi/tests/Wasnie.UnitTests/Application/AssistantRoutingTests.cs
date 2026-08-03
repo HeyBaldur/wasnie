@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wasnie.Application.Assistant.Abstractions;
@@ -38,6 +38,12 @@ public sealed class AssistantRoutingTests
             JsonModeUsed = true;
             return Task.FromResult(json);
         }
+
+        /// <summary>No tools in the routing tests: step 1 is what is under test, not step 1.5.</summary>
+        public Task<AssistantToolRequest?> SelectToolAsync(
+            IReadOnlyList<ChatMessage> messages,
+            IReadOnlyList<AssistantToolSchema> tools,
+            CancellationToken cancellationToken) => Task.FromResult<AssistantToolRequest?>(null);
 
         public async IAsyncEnumerable<string> StreamAsync(
             IReadOnlyList<ChatMessage> messages,

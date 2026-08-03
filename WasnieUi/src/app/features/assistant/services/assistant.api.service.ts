@@ -52,6 +52,7 @@ export class AssistantApiService {
     content: string,
     token: string | null,
     signal?: AbortSignal,
+    isRetry = false,
   ): AsyncGenerator<AssistantStreamEvent> {
     const response = await fetch(`${this.base}/conversations/${conversationId}/messages/stream`, {
       method: 'POST',
@@ -59,7 +60,7 @@ export class AssistantApiService {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, isRetry }),
       signal,
     });
 

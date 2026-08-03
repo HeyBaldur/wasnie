@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Text;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +39,7 @@ public sealed class StreamAssistantReplyHandler(
     IAssistantKnowledgeBase knowledge,
     IUiNavigationMap navigation,
     AssistantSectionRouter router,
+    AssistantToolRunner toolRunner,
     IOptions<GroqOptions> options)
     : IStreamRequestHandler<StreamAssistantReplyCommand, AssistantStreamEvent>
 {
@@ -66,39 +67,72 @@ public sealed class StreamAssistantReplyHandler(
 
         var nextSequence = history.Count == 0 ? 0 : history[^1].Sequence + 1;
 
-        // C# forbids `yield return` inside a catch, so every failure below is captured into a local and
-        // emitted after the try. It reads as a detour; it is the language, not the design.
-        AssistantMessage? userMessage = null;
-        try
+        AssistantMessage? userMessage;
+
+        if (request.IsRetry)
         {
-            userMessage = AssistantMessage.Create(
-                guid.NewGuid(), conversation.Id, tenantContext.TenantId,
-                AssistantMessageRole.User, request.Content, nextSequence, now);
+            // ★ A RETRY WRITES NOTHING. The question was committed before the model was called the
+            // first time — that is what made the failure survivable — so storing it again would put the
+            // same message in the thread twice, and the user would watch their own words duplicate as
+            // the reward for pressing Retry. The stored turn IS the question; it is re-answered, not
+            // re-asked. No `user` frame either: the client already has that row on screen.
+            userMessage = history.LastOrDefault(m => m.Role == AssistantMessageRole.User);
+
+            if (userMessage is null)
+            {
+                // Nothing to retry — a client asking to re-answer an empty thread. Same refusal as any
+                // other unusable request; there is nothing here worth a distinct message.
+                yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+                yield break;
+            }
+
+            // The failed attempt persisted no assistant row (see below), so the next slot is still the
+            // one the first attempt would have used.
+            nextSequence = userMessage.Sequence;
         }
-        catch (Wasnie.Domain.Exceptions.DomainException)
+        else
         {
-            // Nothing written: the turn was refused before it existed.
+            // C# forbids `yield return` inside a catch, so every failure below is captured into a local
+            // and emitted after the try. It reads as a detour; it is the language, not the design.
+            AssistantMessage? created = null;
+            try
+            {
+                created = AssistantMessage.Create(
+                    guid.NewGuid(), conversation.Id, tenantContext.TenantId,
+                    AssistantMessageRole.User, request.Content, nextSequence, now);
+            }
+            catch (Wasnie.Domain.Exceptions.DomainException)
+            {
+                // Nothing written: the turn was refused before it existed.
+            }
+
+            if (created is null)
+            {
+                yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+                yield break;
+            }
+
+            userMessage = created;
+
+            // The user's turn is committed BEFORE the model is called. Whatever the provider does next,
+            // the question is not lost — which is what makes "try again" safe rather than retyping.
+            // ★ The thread takes its name from the first thing said in it. Only while untitled: a name
+            // the user chose outranks a derived one, and the second message never re-titles anything.
+            conversation.TitleFromFirstMessage(ConversationTitle.FromMessage(userMessage.Content), now);
+
+            conversation.Touch(now);
+            db.AssistantMessages.Add(userMessage);
+            await db.SaveChangesAsync(cancellationToken);
+
+            yield return AssistantStreamEvent.OfUser(AssistantMapper.ToDto(userMessage));
+
+            history.Add(userMessage);
         }
 
-        if (userMessage is null)
-        {
-            yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
-            yield break;
-        }
-
-        // The user's turn is committed BEFORE the model is called. Whatever the provider does next,
-        // the question is not lost — which is what makes "try again" safe rather than retyping.
-        // ★ The thread takes its name from the first thing said in it. Only while untitled: a name the
-        // user chose outranks a derived one, and the second message never re-titles anything.
-        conversation.TitleFromFirstMessage(ConversationTitle.FromMessage(userMessage.Content), now);
-
-        conversation.Touch(now);
-        db.AssistantMessages.Add(userMessage);
-        await db.SaveChangesAsync(cancellationToken);
-
-        yield return AssistantStreamEvent.OfUser(AssistantMapper.ToDto(userMessage));
-
-        history.Add(userMessage);
+        // ★ The QUESTION comes from the stored turn, never from the request body. On a retry the body
+        // carries nothing meaningful, and even on a first send the stored row is the authoritative
+        // version of what was asked — routing and the lookup must see the same words the model will.
+        var question = userMessage.Content;
 
         // Not configured → the stand-in reply, exactly as before a model existed. A developer without
         // a key still gets a working panel instead of an error they cannot fix.
@@ -120,7 +154,7 @@ public sealed class StreamAssistantReplyHandler(
         string? routingFailure = null;
         try
         {
-            sectionIds = await router.RouteAsync(request.Content, cancellationToken);
+            sectionIds = await router.RouteAsync(question, cancellationToken);
         }
         catch (ChatCompletionException ex)
         {
@@ -141,10 +175,17 @@ public sealed class StreamAssistantReplyHandler(
         // the user plainly that the documentation does not cover this.
         var routed = knowledge.TextFor(sectionIds);
 
+        // ── Step 1.5: does this question need a RECORD, not just the documentation? ──
+        // Read-only, through the domain, with this user's identity — see GetTransactionTool. A failure
+        // here yields no data rather than an error: the answer degrades to the documentation, which is
+        // what it was yesterday.
+        var toolData = await toolRunner.RunAsync(question, cancellationToken);
+
         // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
         // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.
         var prompt = AssistantPrompt.Build(
-            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable, navigation.PromptBlock);
+            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable,
+            navigation.PromptBlock, toolData);
         var answer = new StringBuilder();
 
         // The enumerator is stepped by hand so a provider failure can be caught: `yield return` is not

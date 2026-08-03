@@ -178,8 +178,43 @@
         reaches this screen. Nothing was persisted for the assistant, so the question above stands
         alone and the user can simply try again.
       -->
-      @if (store.errorKey()) {
-        <p class="assistant-panel__error" data-testid="assistant-error">{{ store.errorKey()! | translate }}</p>
+      <!--
+        ★ THE FAILED TURN, AND THE WAY OUT OF IT.
+
+        Driven by `retryable()`, which the SERVER decides: a thread ending on a question with no reply
+        is a question that failed. So this alert is still here after a refresh — the state it renders
+        was never in this browser.
+
+        NO DISMISS BUTTON, deliberately. Dismissing would throw away the only route back to an answer
+        and leave a question sitting in the thread with nothing under it and no way to act on it — the
+        exact state this WI exists to remove, reached by the user's own click. It goes away when it is
+        resolved: retry successfully, or ask something new.
+      -->
+      @if (store.retryable(); as failed) {
+        <div class="assistant-alert" role="alert" data-testid="assistant-failed-alert">
+          <app-icon name="alert-triangle" [size]="16" class="assistant-alert__icon" />
+
+          <div class="assistant-alert__body">
+            <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
+            <!--
+              The specific reason when this session watched it happen; the general one after a reload,
+              because the reason was never stored and claiming a specific one would be inventing it.
+            -->
+            <p class="assistant-alert__text" data-testid="assistant-error">
+              {{ (store.errorKey() ?? 'ASSISTANT.FAILED_DESC') | translate }}
+            </p>
+
+            <ws-button
+              variant="secondary"
+              size="sm"
+              [disabled]="store.sending()"
+              (click)="retry()"
+              data-testid="assistant-retry"
+            >
+              {{ 'ASSISTANT.RETRY' | translate }}
+            </ws-button>
+          </div>
+        </div>
       }
 
       @if (store.error()) {

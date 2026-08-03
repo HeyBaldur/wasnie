@@ -56,6 +56,29 @@ public sealed class AssistantChatCompletionTests
             IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken) =>
             Task.FromResult("""{"sections":["1"]}""");
 
+        /// <summary>What the tool dispatcher should answer. Null (the default) means "no lookup".</summary>
+        public AssistantToolRequest? ToolChoice { get; set; }
+
+        public IReadOnlyList<AssistantToolSchema>? ToolsOffered { get; private set; }
+
+        /// <summary>Set to make the tool-selection call fail, as the provider's 400/429 would.</summary>
+        public ChatCompletionException? ToolFailure { get; set; }
+
+        public Task<AssistantToolRequest?> SelectToolAsync(
+            IReadOnlyList<ChatMessage> messages,
+            IReadOnlyList<AssistantToolSchema> tools,
+            CancellationToken cancellationToken)
+        {
+            ToolsOffered = tools;
+
+            if (ToolFailure is not null)
+            {
+                throw ToolFailure;
+            }
+
+            return Task.FromResult(ToolChoice);
+        }
+
         /// <summary>What the handler actually asked the model — the assertion surface for the prompt.</summary>
         public IReadOnlyList<ChatMessage>? Received { get; private set; }
 
@@ -121,7 +144,9 @@ public sealed class AssistantChatCompletionTests
         ICurrentUserService User,
         ITenantContext Tenant);
 
-    private static Harness Build(string dbName, FakeProvider provider, string userId = AliceId, Guid? tenantId = null)
+    private static Harness Build(
+        string dbName, FakeProvider provider, string userId = AliceId, Guid? tenantId = null,
+        IEnumerable<IAssistantTool>? tools = null)
     {
         var tenant = tenantId ?? Guid.NewGuid();
         var tenantCtx = Substitute.For<ITenantContext>();
@@ -146,6 +171,7 @@ public sealed class AssistantChatCompletionTests
             db, tenantCtx, user, new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
             entitlement, provider, knowledge, NavigationMap(),
             new AssistantSectionRouter(provider, knowledge, NullLogger<AssistantSectionRouter>.Instance),
+            new AssistantToolRunner(provider, tools ?? [], NullLogger<AssistantToolRunner>.Instance),
             Options.Create(new GroqOptions { ApiKey = "test-key" }));
 
         return new Harness(db, handler, provider, tenant, user, tenantCtx);
@@ -260,6 +286,348 @@ public sealed class AssistantChatCompletionTests
             "first", "answer", "second");
         provider.Received.Select(m => m.Role).Should().Equal(
             ChatMessage.SystemRole, ChatMessage.UserRole, ChatMessage.AssistantRole, ChatMessage.UserRole);
+    }
+
+    // ── 1b. ★ Tool calling: the model asks, the backend runs it, the answer carries the data ──
+
+    /// <summary>A tool that records what it was asked and returns a fixed payload.</summary>
+    private sealed class SpyTool : IAssistantTool
+    {
+        public AssistantToolSchema Schema { get; } = new(
+            "get_transaction", "Look up one sales transaction. Read-only.",
+            """{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}""");
+
+        public string? ArgumentsReceived { get; private set; }
+
+        public Task<string> RunAsync(string argumentsJson, CancellationToken cancellationToken)
+        {
+            ArgumentsReceived = argumentsJson;
+            return Task.FromResult("""{"found":true,"reference":"TERM-CC-10","saleAmount":1200.00}""");
+        }
+    }
+
+    [Fact]
+    public async Task Asked_about_a_transaction_the_backend_RUNS_the_tool_and_hands_the_result_to_the_model()
+    {
+        // ★ THE WHOLE FLOW, end to end: the model asks for `get_transaction`, the BACKEND intercepts it
+        // and runs the lookup (the model never touches data), and what comes back is in the context the
+        // generating call reads. Stop injecting the tool result into the prompt and this goes red — the
+        // assistant would answer "I do not have that information" with the answer in its hand.
+        var provider = new FakeProvider(["It was settled in May."])
+        {
+            ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"TERM-CC-10"}"""),
+        };
+        var tool = new SpyTool();
+        var h = Build(
+            nameof(Asked_about_a_transaction_the_backend_RUNS_the_tool_and_hands_the_result_to_the_model),
+            provider, tools: [tool]);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "What happened with TERM-CC-10?");
+
+        // The tool was offered, chosen, and run with the reference the user wrote.
+        provider.ToolsOffered.Should().ContainSingle().Which.Name.Should().Be("get_transaction");
+        tool.ArgumentsReceived.Should().Contain("TERM-CC-10");
+
+        // ...and its result reached the generating call, delimited as DATA rather than as documentation.
+        var system = provider.Received!.Single(m => m.Role == ChatMessage.SystemRole).Content;
+        system.Should().Contain(AssistantPrompt.DataHeader);
+        system.Should().Contain("\"saleAmount\":1200.00");
+        system.Should().Contain(AssistantPrompt.DataFooter);
+        // The rule that stops the model dressing up a refusal travels with the data.
+        system.Should().Contain("found is false");
+    }
+
+    [Fact]
+    public async Task A_question_needing_no_lookup_runs_NO_tool()
+    {
+        // Most questions are about how the product works. Calling a lookup "just in case" spends a
+        // database round trip to answer nothing, and puts an empty record in front of a model that then
+        // has to explain it.
+        var provider = new FakeProvider(["A plan is..."]) { ToolChoice = null };
+        var tool = new SpyTool();
+        var h = Build(nameof(A_question_needing_no_lookup_runs_NO_tool), provider, tools: [tool]);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "What is a plan?");
+
+        tool.ArgumentsReceived.Should().BeNull();
+        provider.Received!.Single(m => m.Role == ChatMessage.SystemRole).Content
+            .Should().NotContain(AssistantPrompt.DataHeader);
+    }
+
+    [Fact]
+    public async Task A_tool_the_model_INVENTED_is_ignored_rather_than_matched_to_a_real_one()
+    {
+        // A model naming a tool that does not exist is a hallucination like any other. It must not be
+        // resolved to the nearest real tool — running the wrong lookup is worse than running none.
+        var provider = new FakeProvider(["..."])
+        {
+            ToolChoice = new AssistantToolRequest("get_payee_balance", """{"payee":"anyone"}"""),
+        };
+        var tool = new SpyTool();
+        var h = Build(nameof(A_tool_the_model_INVENTED_is_ignored_rather_than_matched_to_a_real_one),
+            provider, tools: [tool]);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "What is Bob owed?");
+
+        tool.ArgumentsReceived.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_tool_that_THROWS_costs_the_data_not_the_answer()
+    {
+        // An optional enrichment failing must not turn a question into an error. The assistant answers
+        // from the documentation, exactly as it did before tools existed.
+        var provider = new FakeProvider(["Here is what the guide says."])
+        {
+            ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"X"}"""),
+        };
+        var h = Build(nameof(A_tool_that_THROWS_costs_the_data_not_the_answer), provider,
+            tools: [new ThrowingTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with X?");
+
+        frames.Should().NotContain(f => f.Type == "error");
+        provider.Received!.Single(m => m.Role == ChatMessage.SystemRole).Content
+            .Should().NotContain(AssistantPrompt.DataHeader);
+    }
+
+    private sealed class ThrowingTool : IAssistantTool
+    {
+        public AssistantToolSchema Schema { get; } = new(
+            "get_transaction", "Look up one sales transaction. Read-only.", """{"type":"object"}""");
+
+        public Task<string> RunAsync(string argumentsJson, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("the database is down");
+    }
+
+    // ── 1c. The 400 and the 429 ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_tool_call_the_PROVIDER_rejected_costs_the_lookup_not_the_turn()
+    {
+        // ★ THE 400 FROM THE LOG. `tool_use_failed` is the provider refusing the model's OWN generated
+        // call. It is a generation fumble — the identical request succeeds on the next attempt — so the
+        // turn must survive it: the assistant answers from the documentation, without live data, and
+        // the user sees an answer rather than an error. Remove the catch and this goes red.
+        var provider = new FakeProvider(["Here is what the guide says."])
+        {
+            ToolFailure = new ChatCompletionException(
+                ChatCompletionException.ToolCallRejected, "tool_use_failed"),
+        };
+        var h = Build(nameof(A_tool_call_the_PROVIDER_rejected_costs_the_lookup_not_the_turn),
+            provider, tools: [new SpyTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with TERM-CC-10?");
+
+        frames.Should().NotContain(f => f.Type == "error", "a rejected tool call is recoverable");
+        frames.Should().Contain(f => f.Type == "done");
+        provider.Received!.Single(m => m.Role == ChatMessage.SystemRole).Content
+            .Should().NotContain(AssistantPrompt.DataHeader);
+    }
+
+    [Fact]
+    public async Task A_rate_limited_answer_reaches_the_user_as_ITS_OWN_key_with_the_question_kept()
+    {
+        // ★ 429 IS NOT A 500. It arrives as the rate-limit translation key — which the client renders as
+        // "the assistant is busy, your message was saved" — and NEVER as the provider's own sentence.
+        // And the question really IS saved: that is what makes Retry an offer rather than a lie.
+        var provider = new FakeProvider(
+            failure: new ChatCompletionException(ChatCompletionException.RateLimited, "429"));
+        var h = Build(nameof(A_rate_limited_answer_reaches_the_user_as_ITS_OWN_key_with_the_question_kept),
+            provider);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with TERM-CC-10?");
+
+        var error = frames.Single(f => f.Type == "error");
+        error.ErrorKey.Should().Be(ChatCompletionException.RateLimited);
+        error.ErrorKey.Should().StartWith("ASSISTANT.", "the client translates a KEY, never vendor text");
+
+        // The user's turn is stored; no assistant row was written beside it.
+        var stored = await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync();
+        stored.Should().ContainSingle();
+        stored[0].Role.Should().Be(AssistantMessageRole.User);
+        stored[0].Content.Should().Be("What happened with TERM-CC-10?");
+    }
+
+    [Fact]
+    public async Task A_retry_RE_ANSWERS_the_stored_question_instead_of_asking_it_again()
+    {
+        // ★ THE DUPLICATION TEST. The backend stores the question BEFORE calling the model, so a retry
+        // that re-sent the text would leave the same words in the thread twice — the user watching their
+        // own message duplicate as the reward for pressing the button. A retry re-answers what is stored.
+        var failing = new FakeProvider(
+            failure: new ChatCompletionException(ChatCompletionException.RateLimited, "429"));
+        var h = Build(nameof(A_retry_RE_ANSWERS_the_stored_question_instead_of_asking_it_again), failing);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "What happened with TERM-CC-10?");
+
+        // The provider recovers; the user presses Retry. The content is deliberately EMPTY to prove the
+        // question comes from the stored turn and not from what the client sent.
+        var working = new FakeProvider(["It was paid in May."]);
+        // Same tenant and same user: a retry is the SAME person asking again, and the ownership gate
+        // that guards every other assistant call guards this one unchanged.
+        var retryHarness = Build(
+            nameof(A_retry_RE_ANSWERS_the_stored_question_instead_of_asking_it_again),
+            working, tenantId: h.TenantId);
+
+        var frames = new List<AssistantStreamEvent>();
+        await foreach (var frame in retryHarness.Handler.Handle(
+            new StreamAssistantReplyCommand(conversation.Id, string.Empty, IsRetry: true),
+            CancellationToken.None))
+        {
+            frames.Add(frame);
+        }
+
+        // ONE user row, still. And the model was asked the ORIGINAL question.
+        var stored = await retryHarness.Db.AssistantMessages
+            .IgnoreQueryFilters().OrderBy(m => m.Sequence).ToListAsync();
+        stored.Where(m => m.Role == AssistantMessageRole.User).Should().ContainSingle();
+        stored.Should().HaveCount(2, "the answer joined the question that was already there");
+        stored[1].Role.Should().Be(AssistantMessageRole.Assistant);
+        stored[1].Content.Should().Be("It was paid in May.");
+
+        working.Received![^1].Content.Should().Be("What happened with TERM-CC-10?");
+
+        // No `user` frame: the client already has that row on screen and re-appending would double it.
+        frames.Should().NotContain(f => f.Type == "user");
+        frames.Should().Contain(f => f.Type == "done");
+    }
+
+    [Fact]
+    public async Task A_retry_on_a_thread_with_nothing_to_re_answer_refuses_quietly()
+    {
+        var provider = new FakeProvider(["unused"]);
+        var h = Build(nameof(A_retry_on_a_thread_with_nothing_to_re_answer_refuses_quietly), provider);
+        var conversation = SeedConversation(h);
+
+        var frames = new List<AssistantStreamEvent>();
+        await foreach (var frame in h.Handler.Handle(
+            new StreamAssistantReplyCommand(conversation.Id, string.Empty, IsRetry: true),
+            CancellationToken.None))
+        {
+            frames.Add(frame);
+        }
+
+        frames.Should().ContainSingle().Which.Type.Should().Be("error");
+        (await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync()).Should().BeEmpty();
+    }
+
+    // ── 1d. ★ The failure SURVIVES a refresh ──────────────────────────────────
+
+    [Fact]
+    public async Task A_failed_turn_is_still_reported_as_unanswered_when_the_conversation_is_RELOADED()
+    {
+        // ★ THE TEST THIS WI STANDS ON. The user asks, the provider fails, the user refreshes. Nothing
+        // of the browser's state survives that — so the failure has to be readable from what was
+        // STORED. It is: the question is committed before the model is called and the reply only after
+        // it succeeds, so a thread ending on a user turn IS the record of the failure.
+        //
+        // Break the derivation (have UnansweredTurn always return false) and this goes red — which is
+        // the moment the user starts losing their question again.
+        var provider = new FakeProvider(
+            failure: new ChatCompletionException(ChatCompletionException.RateLimited, "429"));
+        var h = Build(nameof(A_failed_turn_is_still_reported_as_unanswered_when_the_conversation_is_RELOADED),
+            provider);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "what happened with TERM-CC-10?");
+
+        // The refresh: everything is re-derived from the rows, with no help from the failed request.
+        var stored = await h.Db.AssistantMessages
+            .IgnoreQueryFilters().Where(m => m.ConversationId == conversation.Id)
+            .OrderBy(m => m.Sequence).ToListAsync();
+
+        var reloaded = AssistantMapper.ToDto(conversation, stored);
+
+        reloaded.LastTurnUnanswered.Should().BeTrue("the reply never arrived, and the thread shows it");
+        reloaded.Messages.Should().ContainSingle();
+        reloaded.Messages[0].Content.Should().Be("what happened with TERM-CC-10?",
+            "the question is still there to be re-answered");
+    }
+
+    [Fact]
+    public async Task A_SUCCESSFUL_retry_clears_the_failure_for_good()
+    {
+        // The other half: once it is answered, a refresh must show the answer and NOT the warning.
+        // Nothing has to remember to clear a flag — the flag does not exist; the answer's presence is
+        // what makes the thread answered.
+        var failing = new FakeProvider(
+            failure: new ChatCompletionException(ChatCompletionException.RateLimited, "429"));
+        var h = Build(nameof(A_SUCCESSFUL_retry_clears_the_failure_for_good), failing);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "what happened with TERM-CC-10?");
+
+        var working = new FakeProvider(["It was paid in May."]);
+        var retryHarness = Build(
+            nameof(A_SUCCESSFUL_retry_clears_the_failure_for_good), working, tenantId: h.TenantId);
+
+        await foreach (var _ in retryHarness.Handler.Handle(
+            new StreamAssistantReplyCommand(conversation.Id, string.Empty, IsRetry: true),
+            CancellationToken.None))
+        {
+            // drain
+        }
+
+        var stored = await retryHarness.Db.AssistantMessages
+            .IgnoreQueryFilters().Where(m => m.ConversationId == conversation.Id)
+            .OrderBy(m => m.Sequence).ToListAsync();
+
+        AssistantMapper.ToDto(conversation, stored).LastTurnUnanswered
+            .Should().BeFalse("the answer is there now, so nothing is waiting");
+
+        // And still ONE question — the retry re-answered rather than re-asked.
+        stored.Where(m => m.Role == AssistantMessageRole.User).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task An_ANSWERED_turn_is_never_reported_as_failed()
+    {
+        var provider = new FakeProvider(["A real answer."]);
+        var h = Build(nameof(An_ANSWERED_turn_is_never_reported_as_failed), provider);
+        var conversation = SeedConversation(h);
+
+        await DrainAsync(h.Handler, conversation.Id, "hello");
+
+        var stored = await h.Db.AssistantMessages
+            .IgnoreQueryFilters().OrderBy(m => m.Sequence).ToListAsync();
+
+        AssistantMapper.ToDto(conversation, stored).LastTurnUnanswered.Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_EMPTY_conversation_has_nothing_to_retry()
+    {
+        // A thread nobody has spoken in is not a failed one. Getting this wrong would greet every new
+        // conversation with a warning that something went wrong.
+        var conversation = AssistantConversation.Start(Guid.NewGuid(), Guid.NewGuid(), AliceId, "Chat", Now);
+
+        AssistantMapper.ToDto(conversation, []).LastTurnUnanswered.Should().BeFalse();
+    }
+
+    [Fact]
+    public void The_unanswered_check_reads_SEQUENCE_and_not_the_order_it_was_handed()
+    {
+        // ★ Ordering by timestamp would be a coin flip: on the non-streaming path a question and its
+        // answer are written in the SAME instant. So the check sorts by sequence itself rather than
+        // trusting the caller — and this proves it, by handing them over backwards.
+        var conversationId = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+
+        var question = AssistantMessage.Create(
+            Guid.NewGuid(), conversationId, tenantId, AssistantMessageRole.User, "q", 0, Now);
+        var answer = AssistantMessage.Create(
+            Guid.NewGuid(), conversationId, tenantId, AssistantMessageRole.Assistant, "a", 1, Now);
+
+        UnansweredTurn.Exists([answer, question]).Should().BeFalse("sequence 1 is the last turn");
+        UnansweredTurn.Exists([question]).Should().BeTrue();
     }
 
     // ── 2. The placeholder is now ONLY the unconfigured fallback ──────────────

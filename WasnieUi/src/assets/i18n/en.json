@@ -1956,6 +1956,9 @@
     "ERROR_RATE_LIMITED": "The assistant is busy right now. Your message was saved — try again in a moment.",
     "ERROR_NOT_CONFIGURED": "The assistant is not available yet. Your message was saved.",
     "ERROR_NOT_FOUND": "This conversation is no longer available.",
+    "FAILED_TITLE": "The answer could not be generated",
+    "FAILED_DESC": "Your question was saved. The assistant could not answer it — you can try again.",
+    "RETRY": "Try again",
     "DELETE": "Delete",
     "DELETE_TITLE": "Delete this conversation?",
     "DELETE_MESSAGE": "The conversation and all of its messages will be permanently deleted."

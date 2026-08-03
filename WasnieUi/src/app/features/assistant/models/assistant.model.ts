@@ -31,6 +31,16 @@ export interface AssistantConversation {
   createdAt: string;
   updatedAt: string;
   messages: AssistantMessage[];
+
+  /**
+   * True when the thread ends on a question the assistant never answered.
+   *
+   * ★ THIS IS WHAT SURVIVES A REFRESH. The server derives it from the stored turns on every read — the
+   * question is committed before the model is called, and the reply only after it succeeds, so a
+   * trailing user turn IS the record of the failure. Nothing about it lives in this browser, which is
+   * exactly why reloading no longer loses it.
+   */
+  lastTurnUnanswered: boolean;
 }
 
 export interface AssistantExchange {

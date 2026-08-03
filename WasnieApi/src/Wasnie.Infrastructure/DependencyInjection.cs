@@ -131,6 +131,12 @@ public static class DependencyInjection
         // Step one of the two-step answer: picks the sections a question needs. Scoped because it
         // depends on the scoped provider; it holds no state of its own.
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantSectionRouter>();
+        // Step 1.5: the read-only lookups. SCOPED, and that is load-bearing — the tool sends the same
+        // MediatR queries the screens send, and it must do so inside the ASKING USER'S request scope so
+        // the tenant filter and the permission guards see the real caller. A singleton here would be a
+        // tool holding somebody else's identity.
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetTransactionTool>();
+        services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
         services.AddScoped<IHubSpotTokenProvider, HubSpotTokenProvider>();

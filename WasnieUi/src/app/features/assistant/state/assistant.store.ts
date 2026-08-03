@@ -134,10 +134,91 @@ export class AssistantStore {
       return;
     }
 
+    await this.exchange(trimmed, false);
+  }
+
+  /**
+   * Ask the server to answer the last question AGAIN, after a failure.
+   *
+   * ★ IT DOES NOT RE-SEND THE MESSAGE. The backend commits the user's turn before it calls the model —
+   * which is exactly what makes a failure survivable — so the question is already in the thread. Sending
+   * it again would put the same words in the conversation twice, and the user would watch their own
+   * message duplicate as the reward for pressing Retry. The retry flag tells the server to re-answer
+   * what it already stored.
+   *
+   * The content is passed for the case where the turn NEVER reached the server (a transport failure
+   * before the `user` frame); there is nothing stored to re-answer then, so it is a normal send.
+   */
+  async retry(): Promise<void> {
+    const pending = this.retryable();
+    if (!pending || this.sending()) {
+      return;
+    }
+
+    await this.exchange(pending.content, pending.wasPersisted);
+  }
+
+  /**
+   * A failure THIS session saw, for the one case the server cannot report: the turn never reached it.
+   *
+   * When the request died before the `user` frame — no network, the tab lost connectivity — nothing was
+   * stored, so there is no trailing question for the server to derive a failure from, and this is the
+   * only record that one happened. It is session-only by nature: a refresh genuinely loses that turn,
+   * because it never existed anywhere but here.
+   */
+  private readonly unsentFailure = signal<{ content: string } | null>(null);
+
+  /**
+   * What a Retry would re-run, or null when there is nothing to retry — which is what hides the alert.
+   *
+   * ★ THE SERVER'S ANSWER WINS, AND THAT IS WHAT SURVIVES THE REFRESH. `lastTurnUnanswered` is derived
+   * from the stored turns on every read, so a reloaded page reconstructs the failure with no help from
+   * session memory. The local signal only covers the turn that never reached the server at all.
+   */
+  readonly retryable = computed<{ content: string; wasPersisted: boolean } | null>(() => {
+    // ★ NOTHING TO OFFER WHILE ONE IS IN FLIGHT. A retry of a reloaded failure begins with the thread
+    // still marked unanswered — it only stops being so when the answer lands — so without this the
+    // card would sit next to the very loader that is resolving it, inviting a second retry of the
+    // request already running.
+    if (this.sending()) {
+      return null;
+    }
+
+    const conversation = this.conversation();
+
+    if (conversation?.lastTurnUnanswered) {
+      const lastQuestion = [...conversation.messages]
+        .sort((a, b) => a.sequence - b.sequence)
+        .reverse()
+        .find((m) => m.role === 'User');
+
+      if (lastQuestion) {
+        return { content: lastQuestion.content, wasPersisted: true };
+      }
+    }
+
+    const unsent = this.unsentFailure();
+    return unsent ? { content: unsent.content, wasPersisted: false } : null;
+  });
+
+  private async exchange(trimmed: string, isRetry: boolean): Promise<void> {
     this.sending.set(true);
     this.error.set(null);
     this.errorKey.set(null);
-    this.streamingReply.set(null);
+    this.unsentFailure.set(null);
+
+    // ★ THE TYPING DOTS ARE NORMALLY LIT BY THE `user` FRAME — and a retry never sends one, because
+    // the question is already stored and echoing it back would duplicate it on screen. So the retry
+    // has to light them itself, or the user presses the button and watches nothing happen until the
+    // first fragment lands: a button that looks broken at the exact moment it is working.
+    //
+    // Empty string, not null: the panel reads null as "nothing is streaming" and an empty reply as
+    // "something is coming", which is precisely the state a retry starts in.
+    this.streamingReply.set(isRetry ? '' : null);
+
+    // Tracks whether the server got as far as storing the question. It decides whether a retry
+    // re-answers the stored turn or sends a fresh one — get this wrong and the thread duplicates.
+    let persisted = isRetry;
 
     try {
       if (!this.conversation()) {
@@ -148,11 +229,19 @@ export class AssistantStore {
       const conversationId = this.conversation()!.id;
       const token = this.auth.getAccessToken();
 
-      for await (const frame of this.api.streamMessage(conversationId, trimmed, token)) {
+      for await (const frame of this.api.streamMessage(
+        conversationId, trimmed, token, undefined, isRetry)) {
         switch (frame.type) {
           case 'user':
+            persisted = true;
             // The SERVER's row for what we typed — never an optimistic local copy, which would be a
             // second version of the message that can drift from the stored one.
+            //
+            // ★ THE FLAG IS NOT TOUCHED HERE. The thread does technically end on an unanswered
+            // question at this instant, but it is unanswered because the answer is ON ITS WAY — and
+            // saying so put the failure card on screen beside the typing dots, telling the user their
+            // question had failed while it was being answered. "Waiting" is not "failed"; only the
+            // error frame below knows the difference.
             this.appendMessage(frame.message!);
             this.streamingReply.set('');
             break;
@@ -163,12 +252,21 @@ export class AssistantStore {
 
           case 'done':
             this.streamingReply.set(null);
-            this.appendMessage(frame.message!);
+            // ★ The answer landed, so the thread no longer ends on a question — the derived failure
+            // clears itself. Marking the conversation answered here keeps the open screen honest
+            // without a second round trip; a reload would compute the same thing.
+            this.appendMessage(frame.message!, { threadUnanswered: false });
+            this.unsentFailure.set(null);
             break;
 
           case 'error':
             this.streamingReply.set(null);
             this.errorKey.set(frame.errorKey ?? 'ASSISTANT.ERROR_UNAVAILABLE');
+            // NOW the thread is genuinely waiting on nothing — which is what the server will report
+            // on the next read too. A stored question needs no local record beyond this flag; only
+            // the turn that never arrived does.
+            this.markThreadUnanswered();
+            this.unsentFailure.set(persisted ? null : { content: trimmed });
             break;
         }
       }
@@ -177,18 +275,40 @@ export class AssistantStore {
     } catch {
       this.streamingReply.set(null);
       this.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
+      this.markThreadUnanswered();
+      this.unsentFailure.set(persisted ? null : { content: trimmed });
     } finally {
       this.sending.set(false);
     }
   }
 
-  /** Appends one persisted row to the open conversation. */
-  private appendMessage(message: AssistantMessage): void {
+  /** Records that the thread is waiting on an answer that will not come. */
+  private markThreadUnanswered(): void {
+    const current = this.conversation();
+    if (current) {
+      this.conversation.set({ ...current, lastTurnUnanswered: true });
+    }
+  }
+
+  /**
+   * Appends one persisted row to the open conversation.
+   *
+   * `threadUnanswered` mirrors the rule the SERVER applies — a thread ending on a user turn is one
+   * waiting for an answer — so the open screen and a reload of it cannot disagree. It is passed
+   * explicitly rather than inferred from the row's role because the caller knows which frame it is
+   * handling, and a rule guessed in two places is a rule that eventually differs in two places.
+   */
+  private appendMessage(
+    message: AssistantMessage, options?: { threadUnanswered: boolean }): void {
     const current = this.conversation();
     if (!current) {
       return;
     }
-    this.conversation.set({ ...current, messages: [...current.messages, message] });
+    this.conversation.set({
+      ...current,
+      messages: [...current.messages, message],
+      lastTurnUnanswered: options?.threadUnanswered ?? current.lastTurnUnanswered,
+    });
   }
 
   async rename(conversationId: string, title: string): Promise<void> {

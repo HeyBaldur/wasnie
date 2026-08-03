@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -98,7 +98,7 @@ public sealed class AssistantController(IMediator mediator) : ControllerBase
         Response.Headers["X-Accel-Buffering"] = "no";
 
         var stream = mediator.CreateStream(
-            new StreamAssistantReplyCommand(conversationId, body.Content), cancellationToken);
+            new StreamAssistantReplyCommand(conversationId, body.Content, body.IsRetry), cancellationToken);
 
         await foreach (var frame in stream.WithCancellation(cancellationToken))
         {
@@ -137,7 +137,12 @@ public sealed class AssistantController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>Body-only shape: the conversation id comes from the route, so it is not repeated here.</summary>
-    public sealed record PostMessageBody(string Content);
+    /// <param name="IsRetry">
+    /// Set by the Retry button after a failed answer. The question is already stored, so the server
+    /// re-answers the last user turn instead of writing it a second time — see the command.
+    /// Defaulted, so the non-streaming endpoint and every existing caller are unaffected.
+    /// </param>
+    public sealed record PostMessageBody(string Content, bool IsRetry = false);
 
     public sealed record RenameConversationBody(string Title);
 }

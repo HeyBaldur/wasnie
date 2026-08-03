@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -39,6 +39,7 @@ public sealed class PostMessageHandler(
     IAssistantKnowledgeBase knowledge,
     IUiNavigationMap navigation,
     AssistantSectionRouter router,
+    AssistantToolRunner toolRunner,
     IOptions<GroqOptions> options)
     : IRequestHandler<PostMessageCommand, Result<AssistantExchangeDto>>
 {
@@ -133,10 +134,14 @@ public sealed class PostMessageHandler(
         var sectionIds = await router.RouteAsync(userMessage.Content, cancellationToken);
         var routed = knowledge.TextFor(sectionIds);
 
-        // Same prompt as the streaming path, navigation map included — two paths that answer differently
-        // is the drift this codebase keeps refusing.
+        // Step 1.5, exactly as the streaming path runs it.
+        var toolData = await toolRunner.RunAsync(userMessage.Content, cancellationToken);
+
+        // Same prompt as the streaming path, navigation map and live data included — two paths that
+        // answer differently is the drift this codebase keeps refusing.
         var prompt = AssistantPrompt.Build(
-            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable, navigation.PromptBlock);
+            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable,
+            navigation.PromptBlock, toolData);
         var answer = new StringBuilder();
 
         try

@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Wasnie.Application.Assistant.DTOs;
 
 namespace Wasnie.Application.Assistant.Commands;
@@ -10,7 +10,20 @@ namespace Wasnie.Application.Assistant.Commands;
 /// is temporal — the answer appearing as it is written. Collecting it and returning at the end would
 /// be the same bytes and a worse product.
 /// </summary>
-public sealed record StreamAssistantReplyCommand(Guid ConversationId, string Content)
+/// <param name="IsRetry">
+/// True when the user pressed Retry after a failed answer.
+///
+/// ★ WHY A FLAG AND NOT A SECOND COMMAND. On a retry the user's turn is ALREADY STORED — the backend
+/// commits it before it calls the model precisely so a provider failure cannot lose the question. So a
+/// retry must NOT write it again; re-sending the text would put the same question in the thread twice
+/// and the user would watch their own message duplicate as the reward for pressing the button. The
+/// flag skips exactly that one step and re-runs everything after it, which keeps retrying and asking
+/// on ONE code path — two paths would eventually answer differently.
+///
+/// <see cref="Content"/> is ignored when this is set: the question is read from the stored thread,
+/// which is the only version of it that is authoritative.
+/// </param>
+public sealed record StreamAssistantReplyCommand(Guid ConversationId, string Content, bool IsRetry = false)
     : IStreamRequest<AssistantStreamEvent>;
 
 /// <summary>

@@ -1956,6 +1956,9 @@
     "ERROR_RATE_LIMITED": "Asystent jest w tej chwili przeciążony. Wiadomość została zapisana — proszę spróbować ponownie za chwilę.",
     "ERROR_NOT_CONFIGURED": "Asystent nie jest jeszcze dostępny. Wiadomość została zapisana.",
     "ERROR_NOT_FOUND": "Ta rozmowa nie jest już dostępna.",
+    "FAILED_TITLE": "Nie udało się wygenerować odpowiedzi",
+    "FAILED_DESC": "Pytanie zostało zapisane. Asystent nie mógł na nie odpowiedzieć — można spróbować ponownie.",
+    "RETRY": "Spróbuj ponownie",
     "DELETE": "Usuń",
     "DELETE_TITLE": "Usunąć tę rozmowę?",
     "DELETE_MESSAGE": "Rozmowa i wszystkie jej wiadomości zostaną trwale usunięte."

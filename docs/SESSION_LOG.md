@@ -4,6 +4,287 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-03 — El turno fallido sobrevive al refresco, y se ve como un alert de advertencia
+
+El asistente fallaba, aparecía el reintento, el usuario refrescaba y **no quedaba nada**: ni aviso, ni
+botón, ni forma de saber qué había pasado. Había que copiar el mensaje y reescribirlo.
+
+### Paso 0 — y la decisión de diseño que sale de él
+
+Confirmado lo que el WI suponía: **el mensaje del usuario YA persiste** (el backend lo commitea antes
+de llamar al modelo); lo que vivía solo en memoria del front era el estado "esto falló".
+
+Para representarlo había `AssistantMessage.Payload`, la columna reservada desde la pieza 1. **No se
+usó.** Y esto es lo importante del WI:
+
+**★ El fallo se DERIVA, no se guarda.** Un flag `HasFailed` es una SEGUNDA copia de un hecho que los
+datos ya contienen, y dos copias derivan. Un flag que dice "falló" con la respuesta justo debajo es peor
+que no tener flag: le decís al usuario que su pregunta falló mientras mira la respuesta. Y cada camino
+que escriba una respuesta tendría que acordarse de limpiarlo, para siempre, incluidos los que todavía no
+existen.
+
+**La ausencia de la respuesta ES el registro del fallo, y no puede mentir.** Un hilo que termina en un
+turno de usuario es un turno sin responder — y eso es verdad porque ambos escritores lo hacen verdad:
+el camino de streaming commitea la pregunta antes de llamar al modelo y escribe la respuesta **solo** al
+completarse (nada parcial se persiste nunca), y el no-streaming escribe las dos filas o ninguna.
+
+Bonus: **sin migración y sin decisión de backfill** para las conversaciones que ya existen.
+
+La única imprecisión honesta, y está escrita en el código: un turno que se está respondiendo AHORA se
+ve igual. Se resuelve solo en cuanto llega la respuesta, y el costo de equivocarse un segundo es ofrecer
+un reintento un poco antes — contra el costo de que el usuario pierda su pregunta, que es lo que esto
+reemplaza.
+
+`UnansweredTurn.Exists` es la definición, en UN solo lugar; `AssistantConversationDto.LastTurnUnanswered`
+la expone. **Se manda desde el servidor en vez de derivarla en el cliente** para que no haya dos
+definiciones: dos terminan discrepando, y la del cliente es la que el usuario ve.
+
+### El alert
+
+Tokens de warning REALES del design system —`--color-warning`, `--color-warning-bg`,
+`--color-warning-border`, definidos en los tres temas en `styles.scss:93-95`— los mismos que ya usan los
+banners de pay-runs y payouts. Las clases del ejemplo (`bg-warning-soft`, `text-fg-warning`) **no
+existen en Wasnie y no se copiaron**.
+
+**No hay `ws-alert` en el design system**, y agregar una primitiva es decisión aparte (DESIGN_SYSTEM
+§10.3). Se siguió el precedente documentado: CSS local en el componente que lo necesita, con los tokens
+de la casa. Si una segunda feature quiere un alert, esto es lo que se promueve — mover, no reescribir.
+
+**Warning y no danger:** nada está roto y nada se perdió, la pregunta está a salvo y se puede volver a
+responder. Rojo diría otra cosa.
+
+**★ Sin botón de cerrar, a propósito.** Descartar tiraría la única ruta de vuelta a una respuesta y
+dejaría la pregunta en el hilo sin nada debajo y sin forma de actuar — exactamente el estado que este WI
+elimina, alcanzado por el clic del propio usuario. Se va cuando se resuelve: reintentando, o preguntando
+otra cosa.
+
+El texto: el motivo ESPECÍFICO si esta sesión lo vio pasar; el general tras un refresco, porque el
+motivo nunca se guardó y afirmar uno concreto sería inventarlo.
+
+### Un hueco que los tests destaparon
+
+Al pasar `retryable` a computed, dos tests de la sesión anterior se pusieron en rojo — y tenían razón:
+**en la misma sesión**, tras un fallo con el turno ya persistido, el flag local no reflejaba que el hilo
+había quedado sin responder. Ahora el front aplica la MISMA regla que el servidor (`threadUnanswered:
+true` al llegar el frame `user`, `false` al `done`), así que la pantalla abierta y un refresco de ella
+no pueden discrepar.
+
+### Corrección inmediata: el card aparecía ANTES de tiempo
+
+Rodolfo lo vio al probar: el card de fallo se mostraba **junto al loader**, durante unos segundos,
+mientras la respuesta venía en camino, y desaparecía al llegar.
+
+**Causa, y es un error de significado mío, no de timing.** Al llegar el frame `user` yo marcaba el hilo
+como sin responder. Técnicamente cierto en ese instante — pero está sin responder **porque la respuesta
+viene en camino**. Decirlo ahí le informaba al usuario que su pregunta había fallado mientras se estaba
+respondiendo. **"Esperando" no es "falló"**, y solo el frame `error` conoce la diferencia.
+
+Dos arreglos, porque son dos casos:
+- **La raíz:** el frame `user` ya no toca el flag. Lo marca el `error`, que es quien sabe.
+- **El guardia:** `retryable()` devuelve null mientras hay una petición en vuelo. Hace falta aparte,
+  porque el **reintento de un fallo recargado** arranca con el flag ya en true — sin esto el card se
+  sentaría al lado del mismo loader que lo está resolviendo, invitando a reintentar por segunda vez la
+  petición que ya está corriendo.
+
+El test lee `retryable()` **después de cada frame**, que es lo que hace el panel al re-renderizar: un
+solo `true` en el medio es el card que Rodolfo vio. **Mutación: restaurar el marcado en el frame `user`
+y quitar el guardia → 3 rojos.**
+
+### Segunda corrección: el reintento no mostraba loader
+
+Rodolfo apretaba Try again y no pasaba nada visible hasta que llegaba el primer fragmento.
+
+**Causa, y es consecuencia directa del diseño del reintento:** los puntitos los enciende el frame
+`user`, y **un reintento no manda ese frame a propósito** — la pregunta ya está guardada y devolverla
+la duplicaría en pantalla. Así que el reintento tiene que encenderlos él: un botón que parece roto
+justo en el momento en que está funcionando es peor que no tenerlo.
+
+`streamingReply` arranca en `''` cuando es reintento (cadena vacía, no null: el panel lee null como
+"no hay nada en curso" y vacío como "viene algo", que es exactamente el estado en que arranca un
+reintento). El envío normal sigue esperando su frame `user` — encenderlos antes pondría una burbuja del
+asistente en pantalla antes de que aparezca la pregunta al lado. **Mutación: volver a `null` siempre →
+1 rojo.**
+
+### Verificación
+
+Backend **1131→1136**, front **672→688**, exit 0 en ambos. Build de API **0 errores 0 warnings**, build
+prod del front exit 0. **Mutación:** romper la derivación → **2 rojos** (el que asserta que sobrevive al
+refresco y el de que el reintento exitoso lo limpia). El test del alert asserta por **estilo computado**,
+no por nombre de clase — una clase que existe pero resuelve a nada es el modo de fallo de
+`--shadow-card` que este repo ya encontró una vez. i18n `FAILED_TITLE` / `FAILED_DESC` en EN/ES/PL, tres
+líneas por archivo, sin reformateo.
+
+**Para Rodolfo:** fallar (mandar varias seguidas hasta chocar el 429), **REFRESCAR**, ver que el alert y
+el botón siguen ahí con la pregunta al lado, y reintentar. **REINICIAR la API. Sin commitear** —
+`CLAUDE.md` §0.
+
+## 2026-08-03 — El 400 tool_use_failed: qué era realmente, y el reintento
+
+### Paso 0 — el diagnóstico contradice la premisa del WI, y hay evidencia
+
+El WI decía que el 400 era **determinista** y que iba a fallar SIEMPRE. **No lo es.** Reproduje el
+request EXACTO que arma `SelectToolAsync` contra la API real:
+
+| Prueba | Requests | 400 |
+|---|---|---|
+| Llamada de selección, 4 redacciones distintas de la pregunta | 4 | 0 |
+| Llamada de selección, 8 preguntas × 2 rondas (incluye ambiguas: "compará TERM-CC-10 con TERM-CC-11", "¿cuánto me deben?", "TERM-CC-10" a secas) | 16 | 0 |
+| Llamada de **generación** (sin tools), con y sin bloque LIVE DATA, preguntas sobre un registro | 12 | 0 |
+
+**28 requests, cero 400.** Y el ruteo fue correcto en todos: `get_transaction {"reference":"TERM-CC-10"}`
+cuando correspondía, `NO TOOL` cuando no.
+
+**Que el binario era el nuestro sí está verificado:** el `Wasnie.Application.dll` que corría la API se
+compiló a las **10:25:01** y `GetTransactionTool.cs` se escribió a las **10:23:38** — el error de las
+10:29:47 salió de este código.
+
+**Entonces qué es.** `tool_use_failed` es el validador de Groq rechazando **la llamada que el modelo
+generó**, no un contrato mal armado de nuestro lado. Es estocástico: el mismo request anda al siguiente
+intento. Y — esto es lo importante — **ya estaba contenido**: `AssistantToolRunner` atrapa la excepción
+y responde sin datos en vivo. Lo que Rodolfo vio romperse fue **el 429 de la llamada SIGUIENTE**, un
+segundo después. El 400 no le llegó nunca.
+
+### El fix, igual, en dos partes
+
+**1. Sacar la severidad del lugar que no puede degradar.** El esquema declaraba
+`"additionalProperties": false`, que le pide al PROVEEDOR validar del lado del servidor — y ahí un
+rechazo es un HTTP 400 de todo el request, que solo podemos loguear. El mismo rechazo en
+`ReadReference` es un refusal limpio que el usuario puede leer. Se quitó del esquema; **la severidad no
+se perdió, se mudó a la capa que puede degradar con gracia**.
+
+**2. `tool_use_failed` deja de ser "Unavailable".** Tenía la misma clave que "Groq está caído", y para
+quien lee logs eso se lee como una caída — dos cosas que piden respuestas opuestas. Ahora es
+`ERROR_TOOL_CALL_REJECTED`, se loguea en **Information** (algo que pasa por diseño no merece un warning;
+warnings así enseñan a ignorar warnings) y nunca llega al usuario.
+
+### Prioridad 2 — lo que YA existía, y lo que faltaba
+
+Hay que decirlo: **la mayor parte de la resiliencia ya estaba construida**. El backend ya mapeaba 429 →
+`ASSISTANT.ERROR_RATE_LIMITED`, ya viajaba como frame `error` sobre un 200 (nunca un 500), y el mensaje
+ya era no-técnico y estaba en **EN/ES/PL**: *"The assistant is busy right now. Your message was saved —
+try again in a moment."* Lo único que faltaba era **el botón**.
+
+**El botón, y el detalle que lo hace difícil.** El backend commitea la pregunta ANTES de llamar al
+modelo — eso es lo que hace que un 429 no la pierda. Así que un reintento que **reenvíe** el texto
+dejaría la misma pregunta DOS VECES en el hilo: el usuario vería su propio mensaje duplicarse como
+premio por apretar el botón. El reintento **re-responde el turno guardado**: flag `IsRetry`, se saltea
+la persistencia, se lee la pregunta del hilo y se corre todo lo demás igual — una sola ruta de código,
+porque dos rutas terminan respondiendo distinto.
+
+**El caso que no es ese:** si el fallo ocurrió ANTES de que el `user` frame llegara, no hay nada
+guardado que re-responder, y ahí el reintento sí es un envío normal. El store recuerda cuál de los dos
+fue (`wasPersisted`) — decir "esto es un reintento" cuando no hay turno guardado sería una mentira que
+el servidor obedecería.
+
+### Verificación
+
+Backend **1127→1131**, front **665→672**, exit 0 en ambos. Build de API **0 errores 0 warnings**, build
+prod del front exit 0. **Mutación:** hacer que el reintento persista igual → el test de duplicación en
+rojo. Las tres reglas de la pieza 5 (dominio+token, aislamiento, rechazo indistinguible) **siguen
+verdes y no se tocaron** — este WI no entró a los guardas. i18n `ASSISTANT.RETRY` en EN/ES/PL, una línea
+por archivo, sin reformateo.
+
+**Para Rodolfo:** preguntar por TERM-CC-10 **esperando entre mensajes** (el tool-calling suma ~400
+tokens/turno y el free tier son 8000 TPM); y para ver el reintento, mandar dos o tres seguidas hasta
+chocar el 429. **REINICIAR la API. Sin commitear** — `CLAUDE.md` §0.
+
+## 2026-08-03 — Pieza 5: el asistente lee datos reales (una herramienta, solo lectura)
+
+`get_transaction`. La pieza más delicada del asistente, cortada chica a propósito.
+
+### Paso 0 — lo que el terreno dijo, y en qué cambió el plan
+
+**El punto de entrada NO es el que parecía.** `GetTransactionByIdQuery` pide un **Guid**; el usuario
+escribe **"TERM-CC-10"**. La entrada es `ListTransactionsQuery` con `ReferenceNumbers`, que es el filtro
+de match **EXACTO**. El campo vecino `Reference` es un *substring*: preguntando por "TERM-CC-1"
+devolvería "TERM-CC-10" — una pregunta sobre una venta contestada con la plata de otra, que es
+exactamente la clase de error silencioso que este producto no puede permitirse. Hay test.
+
+**Qué del ciclo de vida es accesible LIMPIO por el dominio:**
+
+| Tramo | Cómo | Guarda |
+|---|---|---|
+| La venta | `ListTransactionsQuery(ReferenceNumbers)` | `Transactions.Read` + filtro de tenant |
+| Crédito + **regla y plan que la evaluaron** | `ListCreditsQuery(Reference)` | `Credits.Read` |
+| Liquidación | `ListPayoutsQuery` + `GetPayoutByIdQuery` | `Payouts.Read` |
+
+**El enlace crédito→payout no lo expone NINGUNA query** — vive en las líneas del payout. En vez de
+escribir una consulta nueva que cruzara las tablas (y tuviera que rederivar los guardas), se **componen
+las existentes**: los payouts de ESE payee, en ESE plan, cuyo período contiene la venta; después se
+abren y se busca la línea que lleva ese `CreditId`. Cada paso guardado. Componer en vez de atajar es
+literalmente la Regla 1.
+
+**NO accesible, y NO se forzó: el Pay Run como entidad.** `CompensationPayout.PayRunId` existe pero
+`PayoutDto` no lo expone. **No se tocó el DTO**: el período y el estado del payout ya dan la narrativa
+que el WI pide ("se liquidó en el período X" / "todavía no se ha pagado"), y agregarle un campo a un DTO
+que consume la UI es una decisión aparte, no un dato de más que se trae de paso.
+
+**Infra de tool-calling: no había** — el propio `IChatCompletionProvider` decía que se diseñaría cuando
+llegara la pieza. **★ Y el modelo SÍ la soporta, verificado contra la API real**: `openai/gpt-oss-20b`
+devolvió `tool_calls` con la referencia bien extraída. No hace falta otro modelo. Asumirlo habría
+fallado en silencio como "el asistente nunca consulta nada".
+
+### Las tres reglas
+
+**1 — Dominio + identidad.** El tool **no tiene DbContext** (hay un test estructural que lo asserta) y
+manda las mismas queries que las pantallas, dentro del scope del request; el filtro de tenant y los
+`RequireAsync` corren solos. Registrado **Scoped**, y eso es load-bearing: un singleton sería una
+herramienta sosteniendo la identidad de otro.
+
+**2 — Aislamiento.** Dos tenants sobre **la MISMA base en memoria**. Una base por test habría hecho
+pasar el test por el motivo equivocado — no habría nada que filtrar. Más un rol sin `Transactions.Read`
+en el mismo tenant. **Mutación: quitar `HasQueryFilter` de `CompensationTransaction` → 2 rojos.**
+
+**3 — Rechazo indistinguible.** No-existe, de-otro-tenant y sin-permiso devuelven el JSON **byte a
+byte idéntico**, comparado como texto crudo y no campo por campo, para que no se cuele un dato de más al
+lado del mensaje. Una respuesta distinta para "existe pero no es tuya" confirmaría que la referencia es
+real, que es justo lo que alguien tanteando quiere saber. **Mutación: hacer "útil" el rechazo por
+permiso ("You do not have permission…") → 1 rojo.**
+
+### El JSON, y por qué los nombres son la interfaz
+
+`saleAmount` / `commissionAmount`, no `amount` y `total`: un `amount` al lado de un `total` obliga al
+modelo a adivinar cuál es la venta y cuál la comisión, y su adivinanza es un número frente a alguien que
+le cree. `matchedRuleName`, `matchedPlanName`, `payRunPeriodStart/End`. **`hasBeenPaid` solo es true con
+estado `Paid`** — `Calculated` y `Approved` son etapas previas, y llamarlas pagado sería el asistente
+diciéndole a alguien que cobró cuando no cobró.
+
+**Permiso parcial degrada, no falla:** `Credits.Read` y `Transactions.Read` son permisos distintos y un
+rol con uno sin el otro es configuración normal, no un ataque. Se responde sobre la venta con
+`commissionVisibleToYou: false` — negar la pregunta entera le diría al usuario que su propia
+transacción no existe.
+
+### El prompt
+
+Reglas 9-11. **La 9 es la que protege el rechazo:** sin ella el modelo suaviza el "no lo encontré" en
+especulación útil y equivocada ("quizás sigue procesándose") sobre un registro que le acaban de decir
+que no puede ver — deshaciendo en una frase el trabajo de la Regla 3. La 11 mantiene viva la promesa de
+"explica pero no ejecuta" ahora que hay datos al alcance: leer no es hacer.
+
+**★ Live data cuenta como FUENTE**, así que su presencia anula el `NoSourcePrompt`. "¿Qué pasó con
+TERM-CC-10?" es una pregunta que el manual no puede contestar y el registro sí; rutearla a "la
+documentación no cubre esto" con la respuesta ya en el contexto sería la feature fallando con el
+resultado en la mano.
+
+### Decisión de diseño a la vista
+
+El resultado **no se devuelve como mensaje de rol `tool`**, sino como un bloque de datos delimitado en
+el system prompt. Eso mantiene `ChatMessage` libre de `tool_call_id` y roles de vendor — conceptos que
+el resto de la aplicación tendría que cargar — al costo de **una sola ronda de tool use por turno**, que
+es todo lo que una consulta de lectura necesita. Un loop en el que el modelo llama herramientas hasta
+quedar conforme es otra feature con otro perfil de costo.
+
+### Verificación
+
+Unit **1112→1127** (15 nuevos), exit 0. **Probado por mutación en las dos que importan** (arriba). Build
+de la API **0 errores, 0 warnings** (compilada a un output aparte: la API estaba corriendo y bloqueaba
+sus DLLs). **⚠️ Integración: COMPILA (0 errores) pero NO se corrió — Docker no estaba levantado.** El
+front no se tocó.
+
+**Para Rodolfo:** preguntar por **TERM-CC-10** (verificar la narrativa: venta → crédito → regla/plan →
+liquidación) y por una transacción de otro tenant (debe dar el mismo "no la encontré" que una inventada,
+sin pista de cuál es cuál). **REINICIAR la API. Sin commitear** — `CLAUDE.md` §0.
+
 ## 2026-08-03 — Guía navegable: pasos con links reales que no recargan la app
 
 El asistente explicaba bien y guiaba mal ("andá a Planes, creá una regla"). Ahora da los pasos y el
