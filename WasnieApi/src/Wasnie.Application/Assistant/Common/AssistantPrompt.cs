@@ -94,6 +94,53 @@ public static class AssistantPrompt
 
     public const string DocumentationFooter = "=== END OF WASNIE DOCUMENTATION ===";
 
+    /// <summary>Wraps the navigation map, so routes read as data and not as an example to imitate.</summary>
+    public const string NavigationHeader = "=== WASNIE NAVIGATION MAP (the only routes that exist) ===";
+
+    public const string NavigationFooter = "=== END OF WASNIE NAVIGATION MAP ===";
+
+    /// <summary>
+    /// The rules that turn an explanation into a set of steps somebody can follow.
+    ///
+    /// ★ RULE 6 IS THE ONE THAT MATTERS, and it is deliberately written as strictly as rule 2. A model
+    /// asked to guide will produce a URL that LOOKS right — `/admin/create-plan` reads perfectly and is
+    /// a 404 — for exactly the reason it invents features: a plausible shape is easy to generate and the
+    /// model cannot tell it apart from a real one. Rule 2 already stops invented FEATURES and holds; this
+    /// is the same discipline pointed at routes, and it must be as absolute, because a link is worse than
+    /// a wrong sentence. A user reading a wrong sentence may doubt it. A user CLICKS a link, and the
+    /// dead end arrives at the moment they finally acted.
+    ///
+    /// The fallback in rule 6 is what makes the strictness usable rather than paralysing: no route in
+    /// the map is not "say nothing", it is "name the screen without a link".
+    /// </summary>
+    public const string NavigationRules =
+        "6. NEVER INVENT A URL. When you tell the user to do something in Wasnie, give them the link — " +
+        "but ONLY a route that appears verbatim in the navigation map below. If the action has no route " +
+        "in the map, name the screen and say how to reach it, WITHOUT a link. A route that is not in " +
+        "the map does not exist, however sensible it looks. Do not guess, do not adapt a route by " +
+        "substituting an id or a name into it, and do not build one by analogy with another.\n" +
+        "\n" +
+        "7. GIVE STEPS, NOT ADVICE. When the user asks how to do something, answer with a NUMBERED LIST " +
+        "of the actual steps, in order. Put the exact name of every button, field and screen in bold — " +
+        "for example: click **New Plan**, fill in **Name**, choose the **Currency**. Use the names " +
+        "exactly as the navigation map spells them; the user is reading the same words on screen.\n" +
+        "\n" +
+        "8. LINK FORMAT: relative Markdown, starting with a slash — [Go to new plan](/plans/new). Never " +
+        "write a full address with a domain: the link must stay inside the application the user is " +
+        "already in.";
+
+    /// <summary>
+    /// The rules restated after the corpus, so what the model reads last is what it must obey.
+    /// </summary>
+    private const string Reminder =
+        "Remember: answer only from the documentation above, say so when it does not cover the " +
+        "question, decline questions that are not about Wasnie, and never claim to have performed " +
+        "an action.";
+
+    private const string NavigationReminder =
+        "When you tell the user to do something, give numbered steps with the exact button names in " +
+        "bold, and link ONLY to routes listed in the navigation map. Never invent a URL.";
+
     /// <summary>
     /// The system message: the rules, then the documentation, then a short restatement.
     ///
@@ -103,30 +150,60 @@ public static class AssistantPrompt
     /// refusals from being buried by the material they apply to.
     /// </summary>
     public static string BuildSystemMessage(string documentation) =>
-        BuildSystemMessage(documentation, documentationAvailable: true);
+        BuildSystemMessage(documentation, documentationAvailable: true, navigationMap: string.Empty);
+
+    public static string BuildSystemMessage(string documentation, bool documentationAvailable) =>
+        BuildSystemMessage(documentation, documentationAvailable, navigationMap: string.Empty);
 
     /// <param name="documentationAvailable">
     /// False only when the corpus could not be READ at all. It separates two different silences: a
     /// guide that is missing (the assistant is unanchored and says so) from a guide that simply does
     /// not cover the question (the assistant says THAT, which is a real and useful answer).
     /// </param>
-    public static string BuildSystemMessage(string documentation, bool documentationAvailable)
+    /// <param name="navigationMap">
+    /// The app's real routes. Empty when the map could not be read — the assistant then guides without
+    /// links, which rule 6 makes the correct degradation rather than an invitation to guess.
+    ///
+    /// ★ NOT SENT WITH THE NO-SOURCE PROMPT, on purpose. That prompt is used when the documentation
+    /// answers nothing, and its whole job is to say so. Handing it a list of screens at that moment is
+    /// an invitation to fill the silence with navigation — the user would be walked confidently into a
+    /// screen for a capability nobody confirmed exists. No source means no guidance, links included.
+    /// </param>
+    public static string BuildSystemMessage(string documentation, bool documentationAvailable, string navigationMap)
     {
         if (string.IsNullOrWhiteSpace(documentation))
         {
             return documentationAvailable ? NoSourcePrompt : FallbackPrompt;
         }
 
+        if (string.IsNullOrWhiteSpace(navigationMap))
+        {
+            return $"""
+                {ConfinementRules}
+
+                {DocumentationHeader}
+                {documentation}
+                {DocumentationFooter}
+
+                {Reminder}
+                """;
+        }
+
         return $"""
             {ConfinementRules}
+
+            {NavigationRules}
 
             {DocumentationHeader}
             {documentation}
             {DocumentationFooter}
 
-            Remember: answer only from the documentation above, say so when it does not cover the
-            question, decline questions that are not about Wasnie, and never claim to have performed
-            an action.
+            {NavigationHeader}
+            {navigationMap}
+            {NavigationFooter}
+
+            {Reminder}
+            {NavigationReminder}
             """;
     }
 
@@ -143,11 +220,17 @@ public static class AssistantPrompt
     /// ONLY the sections the router chose — never the whole guide. Sending everything exceeded the
     /// provider's per-request token allowance and no question got through at all.
     /// </param>
+    /// <param name="navigationMap">
+    /// The whole map, every time — it is NOT routed like the documentation. "Where do I do this?" is
+    /// not a question a subset can be chosen for in advance, and at a few hundred tokens it does not
+    /// need to be. Step 1, the router, never sees it and its budget is untouched.
+    /// </param>
     public static IReadOnlyList<ChatMessage> Build(
         IReadOnlyList<AssistantMessage> history,
         int maxHistory,
         string routedDocumentation,
-        bool documentationAvailable)
+        bool documentationAvailable,
+        string navigationMap = "")
     {
         var usable = history
             .Where(m => m.Content != AssistantMessage.NotConnectedPlaceholder)
@@ -161,7 +244,7 @@ public static class AssistantPrompt
 
         var messages = new List<ChatMessage>(usable.Count + 1)
         {
-            new(ChatMessage.SystemRole, BuildSystemMessage(routedDocumentation, documentationAvailable)),
+            new(ChatMessage.SystemRole, BuildSystemMessage(routedDocumentation, documentationAvailable, navigationMap)),
         };
 
         messages.AddRange(usable.Select(m => new ChatMessage(

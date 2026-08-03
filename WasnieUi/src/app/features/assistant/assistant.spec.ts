@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ApplicationRef } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { of, throwError } from 'rxjs';
 import { AssistantStore } from './state/assistant.store';
@@ -692,6 +692,30 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
       .toContain('¿Cómo creo un plan?');
   });
 
+  it('keeps title, meta and delete in every history row after the compacting', () => {
+    // The row was compacted (padding/gap) so more threads fit on screen. Spacing is Rodolfo's call, but
+    // the three parts of the row are not — this is what catches a "compact" that dropped one of them.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversations.set([
+      { id: 'c1', title: 'Primera', createdAt: '', updatedAt: '2026-08-03T10:00:00Z', messageCount: 4 },
+      { id: 'c2', title: 'Segunda', createdAt: '', updatedAt: '2026-08-02T10:00:00Z', messageCount: 2 },
+    ]);
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="assistant-history-item"]');
+    expect(rows.length).toBe(2);
+
+    for (const row of rows) {
+      expect(row.querySelector('.assistant-history__item-title')).toBeTruthy();
+      expect(row.querySelector('.assistant-history__item-meta')).toBeTruthy();
+      expect(row.querySelector('.assistant-history__item-delete')).toBeTruthy();
+    }
+
+    expect(rows[0].querySelector('.assistant-history__item-title').textContent).toContain('Primera');
+    expect(rows[0].querySelector('.assistant-history__item-meta').textContent).toContain('4');
+  });
+
   it('identifies a placeholder reply only for the assistant role', () => {
     expect(isPlaceholderReply({
       id: 'x', role: 'Assistant', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 0, createdAt: '',
@@ -701,5 +725,154 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     expect(isPlaceholderReply({
       id: 'y', role: 'User', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 0, createdAt: '',
     })).toBeFalse();
+  });
+});
+
+/**
+ * ★ PILLAR 3 — the link interceptor.
+ *
+ * The assistant now answers "how do I create a plan?" with steps and a link to `/plans/new`. Rendered
+ * Markdown gives that a plain `<a href>`, and a plain `<a href>` is a FULL PAGE LOAD: Angular is torn
+ * down and rebuilt, and the conversation that just told the user where to go is gone at the exact
+ * moment they acted on it. These tests pin that internal links route through Angular instead, and that
+ * external ones are left entirely alone.
+ */
+describe('AssistantPanelComponent — assistant links navigate without reloading the app', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+  let router: Router;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+    router = TestBed.inject(Router);
+    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+  });
+
+  /** Renders one assistant reply and hands back the anchor inside it. */
+  function anchorFor(markdown: string): HTMLAnchorElement {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'Assistant', content: markdown, payload: null, sequence: 0, createdAt: '' },
+      ],
+    });
+    fixture.detectChanges();
+
+    const anchor: HTMLAnchorElement | null =
+      fixture.nativeElement.querySelector('.assistant-msg__markdown a');
+    expect(anchor).withContext('the reply must actually render a link').toBeTruthy();
+    return anchor!;
+  }
+
+  /**
+   * Clicks the anchor and reports what the component did with the event.
+   *
+   * The listener on `document` runs AFTER the panel's own (which sits on the bubble container), so it
+   * reads an honest `defaultPrevented` — and then prevents the default itself, so a link the component
+   * deliberately left alone does not navigate the Karma page or open a popup mid-suite.
+   */
+  function clickAndObserve(anchor: HTMLAnchorElement): { preventedByPanel: boolean } {
+    let preventedByPanel = false;
+    const guard = (ev: Event) => {
+      preventedByPanel = ev.defaultPrevented;
+      ev.preventDefault();
+    };
+    document.addEventListener('click', guard);
+    try {
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    } finally {
+      document.removeEventListener('click', guard);
+    }
+    return { preventedByPanel };
+  }
+
+  it('★ an internal link is routed through Angular, not followed by the browser', () => {
+    // ★ THE TEST THIS FEATURE STANDS ON. Remove the (click) handler from the markdown container and
+    // this goes red — which is the moment the browser starts reloading the whole app and wiping the
+    // chat on the most valuable click in the product.
+    const anchor = anchorFor('Then [Go to new plan](/plans/new).');
+
+    expect(anchor.getAttribute('href')).toBe('/plans/new');
+
+    const { preventedByPanel } = clickAndObserve(anchor);
+
+    expect(preventedByPanel).withContext('the browser must not be allowed to load the page').toBeTrue();
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/plans/new');
+  });
+
+  it('an internal link does NOT open in a new tab', () => {
+    // The destination is the app the user is already inside. A second copy of it in a new tab is not
+    // what "go here" means — and target=_blank would fight the interceptor for the same click.
+    const anchor = anchorFor('[Plans](/plans)');
+
+    expect(anchor.getAttribute('target')).toBeNull();
+  });
+
+  it('★ an EXTERNAL link is not intercepted, and keeps its noopener', () => {
+    // The router is for this app. Anything else is the browser's job — and it still opens in a new tab
+    // with the hardening the Markdown work put there, because a model-authored page must not be able
+    // to reach back through window.opener and navigate Wasnie somewhere of its choosing.
+    const anchor = anchorFor('See [the docs](https://externo.com/guide).');
+
+    expect(anchor.getAttribute('target')).toBe('_blank');
+    expect(anchor.getAttribute('rel')).toContain('noopener');
+
+    const { preventedByPanel } = clickAndObserve(anchor);
+
+    expect(preventedByPanel).withContext('an external link is the browser\'s business').toBeFalse();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('★ a protocol-relative URL is EXTERNAL, however much it looks like a route', () => {
+    // ★ THE TRAP IN THE NAIVE CHECK. `//evil.com` starts with a slash and is not a path: the browser
+    // resolves it to `https://evil.com`. A leading-slash test alone would hand a model-authored
+    // destination straight to the app's own router.
+    const anchor = anchorFor('[looks internal](//evil.com/x)');
+
+    const { preventedByPanel } = clickAndObserve(anchor);
+
+    expect(preventedByPanel).toBeFalse();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+    expect(anchor.getAttribute('target')).toBe('_blank');
+  });
+
+  it('a ctrl-clicked internal link is left to the browser', () => {
+    // The user asked for a new tab on purpose. Hijacking that into an in-app navigation overrides an
+    // intent they expressed deliberately.
+    const anchor = anchorFor('[Plans](/plans)');
+
+    let preventedByPanel = false;
+    const guard = (ev: Event) => {
+      preventedByPanel = ev.defaultPrevented;
+      ev.preventDefault();
+    };
+    document.addEventListener('click', guard);
+    anchor.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true }));
+    document.removeEventListener('click', guard);
+
+    expect(preventedByPanel).toBeFalse();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('a click on the prose around a link does nothing', () => {
+    anchorFor('Some text and a [link](/plans).');
+
+    const container: HTMLElement = fixture.nativeElement.querySelector('.assistant-msg__markdown');
+    container.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
 });

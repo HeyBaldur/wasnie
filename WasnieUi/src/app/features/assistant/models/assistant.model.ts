@@ -81,3 +81,24 @@ export function isUntitled(title: string | null | undefined): boolean {
 export function isPlaceholderReply(message: AssistantMessage): boolean {
   return message.role === 'Assistant' && message.content === ASSISTANT_NOT_CONNECTED;
 }
+
+/**
+ * The route inside this app that an `href` points at, or null when it points somewhere else.
+ *
+ * ★ ONE DEFINITION, USED BY BOTH SIDES. The Markdown pipe asks this to decide whether a link gets
+ * `target="_blank"`, and the panel asks it to decide whether to intercept the click. If the two ever
+ * disagreed, a link would be opened in a new tab AND routed internally, or given neither treatment —
+ * so there is exactly one answer to "is this internal?" and both callers read it.
+ *
+ * ★ `//` IS NOT INTERNAL, and this is the trap the naive check falls into. `//evil.com` starts with a
+ * slash and is a PROTOCOL-RELATIVE URL: the browser resolves it to `https://evil.com`. Treating it as a
+ * route would hand a model-authored destination to the app's own router. A single leading slash, and
+ * only that, means "a path in this application".
+ */
+export function internalRouteOf(href: string | null | undefined): string | null {
+  if (!href || !href.startsWith('/') || href.startsWith('//')) {
+    return null;
+  }
+
+  return href;
+}

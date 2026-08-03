@@ -57,6 +57,16 @@
     <Content Include="..\..\..\docs\Wasnie_Configuration_Guide.md"
              Link="Knowledge\Wasnie_Configuration_Guide.md"
              CopyToOutputDirectory="PreserveNewest" />
+
+    <!--
+      The navigation map, linked the same way and for the same reason. It is a SEPARATE artefact from
+      the guide on purpose: the guide documents business rules, this documents the app's routing, and
+      the two change for different reasons — a UI redesign rewrites every route in here and not one
+      rule in there.
+    -->
+    <Content Include="..\..\..\docs\UINavigationMap.json"
+             Link="Knowledge\UINavigationMap.json"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

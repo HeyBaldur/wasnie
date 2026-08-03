@@ -350,7 +350,7 @@ describe('AssistantMarkdownPipe', () => {
 
   // ── 3. Links open without handing over the window ─────────────────────────
 
-  it('★ every link carries rel="noopener noreferrer" and opens in a new tab', () => {
+  it('★ every EXTERNAL link carries rel="noopener noreferrer" and opens in a new tab', () => {
     const host = render('See [the guide](https://example.com) and [another](https://other.example).');
 
     const links = Array.from(host.querySelectorAll('a'));
@@ -362,6 +362,29 @@ describe('AssistantMarkdownPipe', () => {
       expect(link.getAttribute('rel')).toBe('noopener noreferrer');
       expect(link.getAttribute('target')).toBe('_blank');
     }
+  });
+
+  it('★ a link INTO Wasnie is left for the app to route, not opened in a new tab', () => {
+    // ★ The assistant guides with real routes now. `target="_blank"` on one of them would fight the
+    // panel's interceptor for the same click, and would mean "go to /plans/new" opened a SECOND copy
+    // of the app the user is already inside.
+    const host = render('Then click [New Plan](/plans/new).');
+
+    const link = host.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('/plans/new');
+    expect(link.getAttribute('target')).toBeNull();
+    expect(link.getAttribute('rel')).toBeNull();
+  });
+
+  it('★ a protocol-relative URL is treated as EXTERNAL despite its leading slash', () => {
+    // `//evil.com` is not a path — the browser resolves it to `https://evil.com`. It must keep the
+    // external hardening, and the interceptor must leave it to the browser. Both sides ask the same
+    // `internalRouteOf`, so this and the panel's twin test cannot drift apart.
+    const host = render('[looks internal](//evil.com/x)');
+
+    const link = host.querySelector('a')!;
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('overrides a target the model tried to set for itself', () => {

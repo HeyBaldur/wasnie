@@ -37,6 +37,7 @@ public sealed class StreamAssistantReplyHandler(
     IAssistantEntitlement entitlement,
     IChatCompletionProvider provider,
     IAssistantKnowledgeBase knowledge,
+    IUiNavigationMap navigation,
     AssistantSectionRouter router,
     IOptions<GroqOptions> options)
     : IStreamRequestHandler<StreamAssistantReplyCommand, AssistantStreamEvent>
@@ -140,8 +141,10 @@ public sealed class StreamAssistantReplyHandler(
         // the user plainly that the documentation does not cover this.
         var routed = knowledge.TextFor(sectionIds);
 
+        // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
+        // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.
         var prompt = AssistantPrompt.Build(
-            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable);
+            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable, navigation.PromptBlock);
         var answer = new StringBuilder();
 
         // The enumerator is stepped by hand so a provider failure can be caught: `yield return` is not

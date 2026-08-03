@@ -124,6 +124,10 @@ public static class DependencyInjection
         // that file cannot change while the process runs — re-reading fifteen thousand tokens of text
         // per message would be work done for nothing.
         services.AddSingleton<IAssistantKnowledgeBase, FileAssistantKnowledgeBase>();
+        // The app's real routes, so the assistant can link instead of describing. Singleton for the same
+        // reason and separate from the knowledge base because it is a separate artefact with its own
+        // lifecycle — see IUiNavigationMap.
+        services.AddSingleton<IUiNavigationMap, FileUiNavigationMap>();
         // Step one of the two-step answer: picks the sections a question needs. Scoped because it
         // depends on the scoped provider; it holds no state of its own.
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantSectionRouter>();

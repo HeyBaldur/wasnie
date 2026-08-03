@@ -14,7 +14,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslateModule } from '@ngx-translate/core';
 import { AssistantStore } from '../state/assistant.store';
-import { AssistantMessage, isPlaceholderReply, isUntitled } from '../models/assistant.model';
+import { Router } from '@angular/router';
+import {
+  AssistantMessage,
+  internalRouteOf,
+  isPlaceholderReply,
+  isUntitled,
+} from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
 import { WsEmptyStateComponent } from '../../../shared/ui/ws-empty-state/ws-empty-state.component';
@@ -55,6 +61,7 @@ import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
 export class AssistantPanelComponent {
   readonly store = inject(AssistantStore);
   private readonly injector = inject(Injector);
+  private readonly router = inject(Router);
 
   readonly draft = signal('');
   readonly pendingDeleteId = signal<string | null>(null);
@@ -146,6 +153,49 @@ export class AssistantPanelComponent {
   /** True when the row is the stand-in reply, so the template renders the translated copy instead. */
   isPlaceholder(message: AssistantMessage): boolean {
     return isPlaceholderReply(message);
+  }
+
+  /**
+   * ★ THE LINK INTERCEPTOR — what makes the assistant's guidance usable rather than destructive.
+   *
+   * The assistant now answers "how do I create a plan?" with steps and a link to `/plans/new`. Rendered
+   * Markdown gives that a plain `<a href>`, and a plain `<a href>` is a FULL PAGE LOAD: Angular is torn
+   * down and rebuilt, and the conversation the user was reading — the thing that just told them where
+   * to go — is gone at the exact moment they acted on it. The most valuable click in the feature would
+   * be the one that destroys it.
+   *
+   * So internal links are routed instead: `preventDefault` stops the browser, and Angular's Router
+   * moves the app underneath the panel, which stays open with the instructions still on screen.
+   *
+   * ★ ONE HANDLER ON THE CONTAINER, not one per link. The anchors come from `[innerHTML]`, so there is
+   * no template to bind on — delegation is the only way to reach them, and it keeps working for every
+   * link of every message including the one still streaming.
+   *
+   * ★ EXTERNAL LINKS ARE NOT TOUCHED. `internalRouteOf` returns null for them and this returns early,
+   * so they open in a new tab with `noopener noreferrer` exactly as the Markdown pipe set them up. The
+   * router is for this app; anything else is the browser's job.
+   */
+  onMarkdownClick(event: MouseEvent): void {
+    const anchor = (event.target as HTMLElement | null)?.closest?.('a');
+    if (!anchor) {
+      return;
+    }
+
+    // The literal attribute, not `anchor.href` — the DOM property resolves "/plans/new" to a full
+    // absolute URL, which would fail the leading-slash test and let every internal link through.
+    const route = internalRouteOf(anchor.getAttribute('href'));
+    if (route === null) {
+      return;
+    }
+
+    // A modified click is the user deliberately asking the BROWSER for a new tab or window. Hijacking
+    // it into an in-app navigation would override an intent they expressed on purpose.
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    void this.router.navigateByUrl(route);
   }
 
   async send(): Promise<void> {

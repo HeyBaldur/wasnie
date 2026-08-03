@@ -4,6 +4,140 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-03 — Guía navegable: pasos con links reales que no recargan la app
+
+El asistente explicaba bien y guiaba mal ("andá a Planes, creá una regla"). Ahora da los pasos y el
+enlace. Tres pilares, y **falta uno y la feature se siente rota**.
+
+### Paso 0 — de dónde salió cada dato
+
+- **Rutas: del router de Angular.** `WasnieUi/src/app/app.routes.ts` para las de primer nivel y los
+  `features/*/*.routes.ts` para las hijas. Son las URLs que la app sirve de verdad.
+- **Nombres: de `WasnieUi/src/assets/i18n/en.json`, NO de los templates.** Los templates dicen
+  `{{ 'PLANS.ACTION_NEW' | translate }}` — sacarlos de ahí habría dado claves de i18n en vez de las
+  palabras que el usuario lee. `PLANS.ACTION_NEW` = "New Plan"; `PAYEES.NEW` = "New Payee".
+
+### Pilar 1 — el mapa, y por qué es un archivo APARTE
+
+`docs/UINavigationMap.json`, enlazado al csproj de Infrastructure igual que el handbook: el archivo que
+se cura es el que el asistente lee, sin copia que derive.
+
+**No va dentro de `Wasnie_Configuration_Guide.md`, y hay un test que lo asserta.** La guía documenta
+REGLAS DE NEGOCIO y se publica al cliente; esto documenta el ENRUTAMIENTO de la app. Cambian por razones
+distintas — un rediseño de UI reescribe todas las rutas de acá y ni una regla de allá — y mezclarlas
+haría que renombrar una pantalla ensucie un documento de cliente.
+
+**★ Quedaron fuera TODAS las rutas con `:id`.** `/plans/:planId`, `/payees/:payeeId`,
+`/plans/:planId/rules/new`, y las demás. El asistente no tiene un id que sustituir, así que
+`/plans/:planId` sería **un link roto disfrazado de link que funciona** — clickeable y muerto. Esas
+pantallas viven en `actionsWithoutRoute`: nombradas, con cómo llegar, y sin enlace. Fuera también
+`/auth`, `/onboarding`, `/forbidden`, `/__design-system`, `/admin` y `/integrations/hubspot/owners`.
+
+21 rutas + 7 pantallas sin ruta directa. El `_README` del archivo (largo, para quien lo cura) **no se le
+manda al modelo**: son instrucciones dirigidas a otro, pagadas en cada mensaje. Hay test.
+
+### Pilar 2 — las reglas 6, 7 y 8, en el prompt del PASO 2
+
+El mapa acompaña la generación y **nunca al router del paso 1** (test): el paso 1 elige secciones desde
+el índice y su presupuesto es la razón por la que existe el diseño de dos pasos.
+
+**★ La regla 6 es la que importa, y está escrita tan estricta como la 2.** Un modelo al que se le pide
+guiar produce una URL que PARECE correcta — `/admin/create-plan` se lee perfecto y es un 404 — por la
+misma razón por la que inventa features: una forma plausible es fácil de generar y no puede distinguirla
+de una real. **Un link es peor que una frase equivocada: una frase se duda, un link se CLICKEA**, y el
+callejón sin salida llega justo en el momento en que el usuario por fin actuó sobre el consejo.
+
+Lo que la vuelve usable en vez de paralizante es el escape: sin ruta en el mapa, **nombrá la pantalla
+SIN link**. Más la regla 7 (lista numerada, nombres de botones en **negrita**) y la 8 (Markdown
+relativo, nunca una dirección con dominio). Las reglas se repiten después del corpus, con test de
+POSICIÓN, por el mismo motivo que las de confinamiento.
+
+**★ El `NoSourcePrompt` NO recibe el mapa.** Ese prompt se usa cuando la documentación no cubre la
+pregunta y su único trabajo es decirlo. Darle una lista de pantallas justo ahí lo invita a llenar el
+silencio con navegación — caminar al usuario con confianza hacia una pantalla para una capacidad que
+nadie confirmó que existe, que es exactamente el fallo que el no-source existe para evitar, entrando por
+una puerta nueva. Sin fuente no hay guía, links incluidos.
+
+### Pilar 3 — el interceptor (sin esto la feature es destructiva)
+
+Un `<a href>` renderizado es un **FULL PAGE LOAD**: Angular se destruye y se reconstruye, y **la
+conversación que acaba de decirle al usuario a dónde ir desaparece en el instante en que hizo caso**. El
+clic de más valor del producto sería el que lo rompe.
+
+Handler delegado en el contenedor del Markdown — los `<a>` llegan por `[innerHTML]`, no hay template
+donde bindear uno por uno — que hace `preventDefault()` y `Router.navigateByUrl()`.
+
+**★ `//evil.com` NO es interno.** Empieza con barra y no es una ruta: es una URL protocol-relative que
+el browser resuelve a `https://evil.com`. Un test de "empieza con `/`" a secas le entregaría al router de
+la app un destino escrito por el modelo. **`internalRouteOf` es UNA sola definición**, leída por el pipe
+(para decidir el `target`) y por el interceptor (para decidir si intercepta): si discreparan, un link
+se abriría en pestaña nueva Y se rutearía, o ninguna de las dos.
+
+Los links internos **dejan de llevar `target="_blank"`** — el destino es la app en la que el usuario ya
+está, y abrir una segunda copia no es lo que significa "andá acá"; además pelearía por el mismo clic.
+Los externos conservan intacto su `noopener noreferrer`. Un ctrl/cmd/shift-clic se deja al browser: el
+usuario pidió una pestaña nueva a propósito.
+
+### Verificación
+
+Backend **1102→1112**, front **657→665**, `ng build --configuration production` exit 0. La API estaba
+corriendo y bloqueaba sus DLLs, así que `Wasnie.Api` se compiló contra un output aparte para confirmar
+que compila de verdad: **0 errores, 0 warnings**. El aviso de bundle inicial (803 kB sobre un umbral de
+aviso de 650 kB) es **preexistente y no es error** — el umbral de error es 1 MB; este cambio suma unos
+cientos de bytes.
+
+**⚠️ EL MAPA ES UN BORRADOR.** El WI para acá a propósito: qué rutas debe recibir un novato y si cada
+intención apunta a la pantalla correcta es autoridad semántica de Rodolfo, no un hecho verificable en el
+código. **Sin commitear**: el WI pedía commitear, pero `CLAUDE.md` §0 y la memoria del proyecto lo
+prohíben explícitamente aunque un WI diga lo contrario.
+
+## 2026-08-03 — La lista de conversaciones del asistente, más compacta
+
+Cosmético, front puro. El historial crece y cada entrada ocupaba más alto del que su contenido pide.
+
+### Paso 0 — de dónde salía el espacio
+
+Buscado antes de tocar, porque "hay mucho aire" puede venir de cuatro lugares distintos:
+
+- `.assistant-history` (`assistant-panel.component.scss:78`) — contenedor con `padding: var(--space-2)`
+  y **sin `gap`**.
+- Los ítems son `<button>` de ancho completo y **sin `margin`**: entre una fila y la siguiente no hay
+  nada. Todo el espacio vertical era **interno** al ítem.
+- `.assistant-history__item` (`:93`) — las dos fuentes reales: `padding: var(--space-2) var(--space-3)`
+  (8px arriba y abajo) y el **row-gap** de `gap: var(--space-1) var(--space-2)` (4px entre el título y
+  el `N · fecha`).
+- `line-height`: no hay declarado ni en el ítem ni en sus hijos, y **el design system no define tokens
+  de line-height** (`--line-height*` no existe en `styles.scss`). Se dejó como está: bajarlo habría
+  significado escribir un valor mágico, que es exactamente lo que el WI prohíbe.
+
+### El cambio
+
+`padding: var(--space-1) var(--space-2)` y `gap: var(--space-0) var(--space-2)`.
+
+El row-gap va a cero porque **título y meta son una sola unidad de lectura**, no dos bloques: separarlos
+alarga la fila sin ayudar a leerla. El column-gap se mantiene en `--space-2` — ése sí separa cosas
+distintas, el texto del botón de borrar. Padding horizontal a `--space-2` para que el aire lateral
+acompañe al vertical y la fila no quede desproporcionada.
+
+Fila de ~57px a ~45px: **~21% más conversaciones a la vista**.
+
+### Lo que NO se rompió
+
+- **Área de click:** ~45px, por encima de los 40px cómodos; el `<button>` sigue ocupando el ancho
+  completo de la lista.
+- **Legibilidad:** no se tocó `font-size` ni color de título ni de meta — se quitó aire, no se comprimió
+  la tipografía.
+- **Botón de borrar:** vive en su propia columna de la grilla (`grid-area: delete`) con
+  `align-items: center` en el ítem, así que sigue centrado vertical sea cual sea el alto de la fila.
+- **Temas:** todo el cambio es de tokens de espaciado, que no varían por tema.
+
+Test nuevo: cada fila renderiza sus **tres** partes (título, meta, tacho) tras el compactado. La
+densidad correcta la juzga Rodolfo en pantalla — puede pedir una segunda pasada; la estructura de la
+fila no es cuestión de gusto y por eso está asertada.
+
+Front **656→657**, build prod limpio, exit 0. **Sin commitear**: el WI pedía commitear, pero
+`CLAUDE.md` §0 y la memoria del proyecto lo prohíben explícitamente aunque un WI diga lo contrario.
+
 ## 2026-07-31 — Títulos de chat con el primer mensaje, y una etiqueta que mentía
 
 ### El título

@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -80,13 +80,23 @@ public sealed class AssistantChatHandlerTests
 
     private static PostMessageHandler Post(Principal p) =>
         new(p.Db, p.Tenant, p.User, new FakeClock(Now.UtcDateTime), p.Guids, Entitled(),
-            UnconfiguredProvider(), NoKnowledge(), NoRouter(), Options.Create(new GroqOptions()));
+            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), Options.Create(new GroqOptions()));
 
     /// <summary>
     /// No model configured, so these tests keep exercising the stand-in reply they were written
     /// against. The connected path has its own file (AssistantChatCompletionTests) — piece 1's
     /// guarantees (persistence, ownership, ordering) are the same either way.
     /// </summary>
+    /// <summary>No routes either, for the same reason: nothing here guides anyone anywhere.</summary>
+    private static IUiNavigationMap NoNavigation()
+    {
+        var navigation = Substitute.For<IUiNavigationMap>();
+        navigation.PromptBlock.Returns(string.Empty);
+        navigation.IsAvailable.Returns(false);
+        navigation.Routes.Returns([]);
+        return navigation;
+    }
+
     /// <summary>No documentation: these tests are about persistence and ownership, not confinement.</summary>
     private static IAssistantKnowledgeBase NoKnowledge()
     {
@@ -321,7 +331,7 @@ public sealed class AssistantChatHandlerTests
         var laterClock = new FakeClock(Now.AddHours(1).UtcDateTime);
         var post = new PostMessageHandler(
             alice.Db, alice.Tenant, alice.User, laterClock, alice.Guids, Entitled(),
-            UnconfiguredProvider(), NoKnowledge(), NoRouter(), Options.Create(new GroqOptions()));
+            UnconfiguredProvider(), NoKnowledge(), NoNavigation(), NoRouter(), Options.Create(new GroqOptions()));
         await post.Handle(new PostMessageCommand(older.Value!.Id, "bump"), CancellationToken.None);
 
         var list = await List(alice).Handle(new ListConversationsQuery(), CancellationToken.None);

@@ -37,6 +37,7 @@ public sealed class PostMessageHandler(
     IAssistantEntitlement entitlement,
     IChatCompletionProvider provider,
     IAssistantKnowledgeBase knowledge,
+    IUiNavigationMap navigation,
     AssistantSectionRouter router,
     IOptions<GroqOptions> options)
     : IRequestHandler<PostMessageCommand, Result<AssistantExchangeDto>>
@@ -132,8 +133,10 @@ public sealed class PostMessageHandler(
         var sectionIds = await router.RouteAsync(userMessage.Content, cancellationToken);
         var routed = knowledge.TextFor(sectionIds);
 
+        // Same prompt as the streaming path, navigation map included — two paths that answer differently
+        // is the drift this codebase keeps refusing.
         var prompt = AssistantPrompt.Build(
-            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable);
+            history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable, navigation.PromptBlock);
         var answer = new StringBuilder();
 
         try

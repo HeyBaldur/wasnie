@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -101,6 +101,18 @@ public sealed class AssistantChatCompletionTests
         return knowledge;
     }
 
+    private const string TestMap = "/plans | Plans | The list of plans.";
+
+    /// <summary>A stand-in map: these tests are about the exchange, not about which routes exist.</summary>
+    private static IUiNavigationMap NavigationMap()
+    {
+        var navigation = Substitute.For<IUiNavigationMap>();
+        navigation.PromptBlock.Returns(TestMap);
+        navigation.IsAvailable.Returns(true);
+        navigation.Routes.Returns(["/plans"]);
+        return navigation;
+    }
+
     private sealed record Harness(
         ApplicationDbContext Db,
         StreamAssistantReplyHandler Handler,
@@ -132,7 +144,7 @@ public sealed class AssistantChatCompletionTests
 
         var handler = new StreamAssistantReplyHandler(
             db, tenantCtx, user, new FakeClock(Now.UtcDateTime), new FakeGuidGenerator(),
-            entitlement, provider, knowledge,
+            entitlement, provider, knowledge, NavigationMap(),
             new AssistantSectionRouter(provider, knowledge, NullLogger<AssistantSectionRouter>.Instance),
             Options.Create(new GroqOptions { ApiKey = "test-key" }));
 
@@ -174,9 +186,12 @@ public sealed class AssistantChatCompletionTests
         // What the model received: the system prompt, then the conversation.
         provider.Received.Should().NotBeNull();
         provider.Received![0].Role.Should().Be(ChatMessage.SystemRole);
-        provider.Received[0].Content.Should().Be(AssistantPrompt.BuildSystemMessage(TestDoc));
+        provider.Received[0].Content.Should().Be(
+            AssistantPrompt.BuildSystemMessage(TestDoc, documentationAvailable: true, navigationMap: TestMap));
         // ★ 2b: the documentation really is in what the model receives.
         provider.Received[0].Content.Should().Contain(TestDoc);
+        // ★ Navigable guidance: so does the navigation map, on the SAME call — step 2, never step 1.
+        provider.Received[0].Content.Should().Contain(TestMap);
         provider.Received[^1].Role.Should().Be(ChatMessage.UserRole);
         provider.Received[^1].Content.Should().Be("How do accelerators work?");
 
@@ -241,7 +256,8 @@ public sealed class AssistantChatCompletionTests
         await DrainAsync(h.Handler, conversation.Id, "second");
 
         provider.Received!.Select(m => m.Content).Should().Equal(
-            AssistantPrompt.BuildSystemMessage(TestDoc), "first", "answer", "second");
+            AssistantPrompt.BuildSystemMessage(TestDoc, documentationAvailable: true, navigationMap: TestMap),
+            "first", "answer", "second");
         provider.Received.Select(m => m.Role).Should().Equal(
             ChatMessage.SystemRole, ChatMessage.UserRole, ChatMessage.AssistantRole, ChatMessage.UserRole);
     }

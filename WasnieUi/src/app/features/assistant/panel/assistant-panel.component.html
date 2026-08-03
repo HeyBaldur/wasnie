@@ -126,7 +126,17 @@
                 ★ ONLY the assistant's words go through Markdown. The pipe escapes raw HTML and then
                 runs Angular's sanitiser over the result, so a model reply cannot introduce script.
               -->
-              <div class="assistant-msg__markdown" [innerHTML]="message.content | assistantMarkdown"></div>
+              <!--
+                ★ The click handler is on the CONTAINER, not on the links: the anchors arrive through
+                [innerHTML] and there is no template to bind them individually. It routes internal
+                links through Angular instead of letting the browser reload the app — see
+                onMarkdownClick.
+              -->
+              <div
+                class="assistant-msg__markdown"
+                (click)="onMarkdownClick($event)"
+                [innerHTML]="message.content | assistantMarkdown"
+              ></div>
             } @else {
               <!--
                 ★ The USER's message is printed verbatim. Interpreting their asterisks would be wrong
@@ -151,7 +161,12 @@
               simply has not become bold yet and shows as the characters themselves; the next fragment
               re-renders the whole string and it resolves. Nothing has to detect "the end".
             -->
-            <div class="assistant-msg__markdown" [innerHTML]="store.streamingReply() | assistantMarkdown"></div>
+            <!-- Same interception while it streams: a link is clickable the moment it renders. -->
+            <div
+              class="assistant-msg__markdown"
+              (click)="onMarkdownClick($event)"
+              [innerHTML]="store.streamingReply() | assistantMarkdown"
+            ></div>
           } @else {
             <span class="assistant-msg__typing" aria-hidden="true"><span></span><span></span><span></span></span>
           }

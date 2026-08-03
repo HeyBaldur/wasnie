@@ -1,6 +1,7 @@
 import { Pipe, PipeTransform, SecurityContext, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Marked } from 'marked';
+import { internalRouteOf } from '../models/assistant.model';
 
 /**
  * Renders an assistant message's Markdown as safe HTML.
@@ -144,11 +145,19 @@ export class AssistantMarkdownPipe implements PipeTransform {
   }
 
   /**
-   * Every link the assistant produces opens in a new tab, without handing that tab a reference back.
+   * Every EXTERNAL link the assistant produces opens in a new tab, without handing that tab a
+   * reference back. Links into Wasnie itself are left alone.
    *
    * `noopener` is the security half: without it the opened page can reach `window.opener` and navigate
    * the app to somewhere of its choosing. `noreferrer` keeps the address of the page the user was on
    * out of the request — a chat panel URL is nobody else's business.
+   *
+   * ★ WHY INTERNAL LINKS ARE EXEMPT. The assistant now guides with real routes (`/plans/new`), and the
+   * panel intercepts those clicks to route through Angular so the app — and the conversation the user
+   * is reading — survives. `target="_blank"` would fight that: the destination is the app the user is
+   * already inside, and opening a second copy of it in a new tab is not what "go here" means.
+   * `internalRouteOf` is the SAME rule the interceptor applies, so the two cannot disagree about which
+   * links these are.
    *
    * Done by rewriting the emitted anchors rather than by overriding the renderer, because the
    * post-processing survives a `marked` upgrade changing its renderer API.
@@ -160,7 +169,11 @@ export class AssistantMarkdownPipe implements PipeTransform {
         .replace(/\s*rel\s*=\s*("[^"]*"|'[^']*'|\S+)/gi, '')
         .trim();
 
-      return `<a ${withoutOwn} target="_blank" rel="noopener noreferrer">`;
+      const href = /\bhref\s*=\s*"([^"]*)"/i.exec(withoutOwn)?.[1] ?? null;
+
+      return internalRouteOf(href) !== null
+        ? `<a ${withoutOwn}>`
+        : `<a ${withoutOwn} target="_blank" rel="noopener noreferrer">`;
     });
   }
 }
