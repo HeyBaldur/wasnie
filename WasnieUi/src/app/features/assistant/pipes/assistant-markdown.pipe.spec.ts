@@ -485,6 +485,69 @@ describe('AssistantMarkdownPipe', () => {
     expect(host.querySelector('ul')).toBeNull();
   });
 
+
+  // ── 3c. Links whose `](` seam was split by a Unicode space ────────────────
+
+  it('★ renders a link whose brackets were split from its URL by a NO-BREAK SPACE', () => {
+    // ★ THE REPORTED SYMPTOM, EXACTLY. `[Go to Plans]` + NBSP + `(/plans)` is not a link to Markdown —
+    // the grammar wants the bracket and the parenthesis adjacent — so it rendered as the literal text
+    // `[Go to Plans] (/plans)`, brackets and all. Remove `repairLinkSeams` and this goes red.
+    const host = render(`[Go to Plans]${NBSP}(/plans) and [Dashboard]${NBSP}(/dashboard)`);
+
+    const links = Array.from(host.querySelectorAll('a'));
+    expect(links.length).toBe(2);
+    expect(links[0].getAttribute('href')).toBe('/plans');
+    expect(links[0].textContent).toBe('Go to Plans');
+    expect(links[1].getAttribute('href')).toBe('/dashboard');
+
+    // Not a bracket left on screen.
+    expect(host.textContent).not.toContain('[');
+    expect(host.textContent).not.toContain('](');
+  });
+
+  it('★ the repaired link is still an INTERNAL link, so the SPA interceptor keeps it', () => {
+    // ★ The panel routes internal links through Angular instead of reloading the app. A repaired link
+    // must arrive in the same shape as a normally-parsed one — no target, no rel — or the fix for the
+    // render would quietly cost the navigation.
+    const host = render(`[Go to Plans]${NBSP}(/plans)`);
+    const link = host.querySelector('a')!;
+
+    expect(link.getAttribute('href')).toBe('/plans');
+    expect(link.getAttribute('target')).toBeNull();
+    expect(link.getAttribute('rel')).toBeNull();
+  });
+
+  it('repairs the seam for external links and images too, keeping external hardening', () => {
+    const external = render(`[docs]${NBSP}(https://example.com/guide)`);
+    expect(external.querySelector('a')?.getAttribute('href')).toBe('https://example.com/guide');
+    expect(external.querySelector('a')?.getAttribute('target')).toBe('_blank');
+    expect(external.querySelector('a')?.getAttribute('rel')).toBe('noopener noreferrer');
+
+    const image = render(`![chart]${NBSP}(/chart.png)`);
+    expect(image.querySelector('img')?.getAttribute('src')).toBe('/chart.png');
+  });
+
+  it('★ does NOT invent a link out of ordinary prose', () => {
+    // ★ THE FALSE POSITIVE THIS AVOIDS. Text really can contain "[1] (see appendix)", and collapsing
+    // that would turn a sentence into a link. The parenthesis has to open with something that is
+    // unmistakably a destination — which "see appendix" is not.
+    const host = render(`See note [1]${NBSP}(see appendix) for details.`);
+
+    expect(host.querySelector('a')).toBeNull();
+    expect(host.textContent).toContain('[1]');
+  });
+
+  it('leaves a link written with a NORMAL space alone', () => {
+    // A plain space there was typed by someone who meant it; only the Unicode ones are repaired.
+    const host = render('[1] (see /plans)');
+    expect(host.querySelector('a')).toBeNull();
+  });
+
+  it('a normally-written link is unaffected by the repair', () => {
+    const host = render('Click [Go to Plans](/plans).');
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('/plans');
+  });
+
   // ── 4. Partial Markdown, mid-stream ───────────────────────────────────────
 
   it('renders half-arrived Markdown without throwing', () => {

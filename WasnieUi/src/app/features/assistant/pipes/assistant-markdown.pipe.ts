@@ -134,6 +134,49 @@ export class AssistantMarkdownPipe implements PipeTransform {
       .replace(AssistantMarkdownPipe.OrderedMarker, '$1 ');
   }
 
+  /**
+   * A link or image whose `](` seam was split by a Unicode space.
+   *
+   * ★ THE SAME MODEL HABIT, A DIFFERENT SEAM. `[Go to Plans]` + NO-BREAK SPACE + `(/plans)` is not a
+   * link to Markdown — the grammar wants the bracket and the parenthesis adjacent — so it renders as
+   * the literal text `[Go to Plans] (/plans)`, brackets and all. That is exactly what the screen showed.
+   *
+   * ★ THE URL SHAPE IS THE SAFETY, and it is why this is narrower than it looks. Plain prose really can
+   * contain `[1] (see appendix)`, and collapsing that would invent a link out of a sentence. So the
+   * parenthesis must open with something that is unmistakably a destination — an app path, a fragment,
+   * or a real scheme. "(see appendix)" does not match; "(/plans)" does.
+   *
+   * Only a NON-ASCII space is repaired. A normal space there was typed by someone who meant it.
+   */
+  // ★ Double-escaped, like the digit class above and for the same reason: inside a template literal a
+  // single backslash is dropped, and `\(` would silently become a capture group instead of a literal
+  // parenthesis. The test that renders a real link is what catches it.
+  private static readonly SplitLinkSeam =
+    new RegExp(`\\]${AssistantMarkdownPipe.ExoticSpace}+\\((?=(?:/|#|https?:|mailto:))`, 'g');
+
+  private static repairLinkSeams(value: string): string {
+    return value.replace(AssistantMarkdownPipe.SplitLinkSeam, '](');
+  }
+
+  /**
+   * Puts back the ASCII the Markdown grammar needs, where this model writes typographic Unicode.
+   *
+   * ★ ONE HABIT, SEVERAL SYMPTOMS. The reported "asterisks instead of bullets" and "links shown as raw
+   * text with their brackets" looked like two bugs and are one: the model separates STRUCTURAL tokens
+   * with non-ASCII spaces, and Markdown's grammar is defined against ASCII whitespace. Its prose
+   * carries the same fingerprint — en-dashes, non-breaking hyphens in "Step-by-step".
+   *
+   * ★ WHAT IS DELIBERATELY NOT REPAIRED, having been measured rather than assumed: headings,
+   * blockquotes, table pipes, fenced-code languages and task-list boxes all survive a Unicode space
+   * untouched, so there is nothing to fix there. `**` + space is not emphasis by specification — the
+   * author wrote spaces inside the delimiters and changing that would edit their meaning. Each repair
+   * here exists because a real construction was observed to break without it.
+   */
+  private static repairModelMarkdown(value: string): string {
+    return AssistantMarkdownPipe.repairLinkSeams(
+      AssistantMarkdownPipe.repairListMarkers(value));
+  }
+
   /** Turns markup characters into the text a reader should see, rather than markup a browser runs. */
   private static escape(value: string): string {
     return value
@@ -154,7 +197,7 @@ export class AssistantMarkdownPipe implements PipeTransform {
     // `parse` is synchronous here because no async extension is registered; the cast documents that,
     // and a stray Promise would surface immediately as "[object Promise]" rather than silently.
     const html = this.marked.parse(
-      AssistantMarkdownPipe.repairListMarkers(value), { async: false }) as string;
+      AssistantMarkdownPipe.repairModelMarkdown(value), { async: false }) as string;
 
     const withSafeLinks = this.hardenLinks(
       AssistantMarkdownPipe.applyScrollbar(AssistantMarkdownPipe.renderTaskBoxes(html)),

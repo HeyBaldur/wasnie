@@ -4,6 +4,72 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-03 — Links crudos en el chat: sí hay causa raíz común, pero no la que el WI proponía
+
+### Paso 0 — reproduje los tres antes de tocar
+
+| Síntoma | Estado medido |
+|---|---|
+| 2 — listas con `*` | **ya arreglado** (WI de esta sesión), test verde |
+| 3 — `<br>` literal en tablas | **ya arreglado** (WI anterior), test verde |
+| 1 — links como texto crudo | **reproducido**, y con una sola forma |
+
+**La hipótesis del WI (el orden del pipeline) es incorrecta, y se puede comprobar:** `marked` parsea
+PRIMERO; el override del renderer escapa **solo HTML crudo**, nunca la sintaxis Markdown (los corchetes y
+los asteriscos jamás pasan por el escape); y el sanitizador de Angular corre sobre el HTML **resultante**.
+El orden ya era el correcto, y GFM ya estaba activado. Si el escape corriera antes, los tests de tablas y
+de negritas que llevan meses en verde estarían en rojo.
+
+### La causa real del síntoma 1
+
+Barrí las formas realistas de link. **Trece de catorce renderizan bien.** La que rompe:
+
+```
+[Go to Plans]<NBSP>(/plans)   →   <p>[Go to Plans] (/plans)</p>
+```
+
+Un espacio Unicode **entre el `]` y el `(`**. La gramática de Markdown quiere corchete y paréntesis
+pegados, así que eso no es un link — es texto literal, con los corchetes a la vista. Que es exactamente
+lo que se veía en pantalla.
+
+**Así que SÍ hay una causa raíz común, pero es otra:** este modelo escribe **Unicode tipográfico en
+posiciones estructurales**. Es la tercera vez en la sesión que aparece — el NBSP tras el bullet, el
+en-dash y el guion sin salto en "Step‑by‑step", y ahora la costura `](`. La raíz no está en la
+configuración: **el texto todavía no es Markdown cuando llega**.
+
+**Barrido de las demás posiciones estructurales, medido y no supuesto:** títulos, citas, pipes de tabla,
+lenguaje del fence y casillas de task list **sobreviven** a un espacio Unicode. No hay nada que arreglar
+ahí, y no se tocó.
+
+### El fix
+
+Una reparación más, hermana de la de los marcadores de lista: colapsa el espacio Unicode de la costura
+`](` — para links **y** para imágenes.
+
+**★ La forma de la URL es la seguridad.** Prosa normal puede contener `[1] (ver apéndice)`, y colapsar
+eso inventaría un link a partir de una frase. Por eso el paréntesis tiene que abrir con algo que sea
+inequívocamente un destino: `/`, `#`, `http(s):` o `mailto:`. `(ver apéndice)` no matchea; `(/plans)` sí.
+Y solo se repara el espacio **no-ASCII**: uno normal ahí lo escribió alguien a propósito.
+
+**El interceptor SPA sigue intacto**, y hay test: un link reparado llega con la misma forma que uno
+parseado normalmente —`href` relativo, sin `target`, sin `rel`— así que el panel lo sigue enrutando por
+Angular en vez de recargar. Arreglar el render no podía costar la navegación.
+
+### Y otra vez el mismo escalón de escape
+
+`\]` y `\(` dentro de un template literal pierden la barra: el `\(` habría abierto un **grupo de
+captura** en vez de matchear un paréntesis. Mismo tropiezo que el `\d` de las listas ordenadas, mismo
+remedio (doble escape) y mismo detector: un test que renderiza un link de verdad.
+
+### Verificación
+
+Front **728→734**. **Mutación: quitar la reparación de la costura → 3 rojos.** Siguen verdes: listas con
+`-` y con `*`, negritas y cursivas, tablas con alineación, el `<br>` de las celdas, las task lists, y los
+**cuatro tests de XSS** (`<script>`, `<img onerror>`, `<iframe>`, handlers). Build prod exit 0.
+
+**Para Rodolfo:** pedirle una guía con un link, una lista de asteriscos y una tabla con `<br>`, y ver los
+tres. **Sin commitear** — `CLAUDE.md` §0.
+
 ## 2026-08-03 — La nota de solo-lectura ahora admite el límite en cálculos complejos
 
 Cambio de texto, una clave.
