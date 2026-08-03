@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Assistant.Abstractions;
+using Wasnie.Application.Assistant.Common;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
@@ -92,6 +93,7 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
 
         if (string.IsNullOrWhiteSpace(reference))
         {
+            LogCause(AssistantToolCause.UnreadableArguments);
             return Refusal();
         }
 
@@ -111,15 +113,25 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
                 }),
                 cancellationToken);
 
-            transaction = found.IsSuccess
-                ? found.Value?.Items?.FirstOrDefault(t =>
-                    string.Equals(t.ReferenceNumber, reference, StringComparison.OrdinalIgnoreCase))
-                : null;
+            // ★ A FAILED QUERY IS NOT AN EMPTY ONE. This used to fold `IsSuccess == false` into the
+            // same null as "no rows matched", so a broken query came back to the user as "no such
+            // transaction". Two different things wearing one answer — and the wrong one of the two is
+            // a lie about their data. It is raised instead, and the runner turns it into a real error.
+            if (!found.IsSuccess)
+            {
+                logger.LogError(
+                    "{Tool}: the transaction query failed ({Error}).", ToolName, found.Error);
+                throw new InvalidOperationException($"The transaction query failed: {found.Error}");
+            }
+
+            transaction = found.Value?.Items?.FirstOrDefault(t =>
+                string.Equals(t.ReferenceNumber, reference, StringComparison.OrdinalIgnoreCase));
         }
         catch (ForbiddenException)
         {
-            // ★ The user may not read transactions at all. Same refusal — see Rule 3. It is logged
-            // (by the authorisation service) but never described to the reader.
+            // ★ The user may not read transactions at all. Same refusal to the READER — see Rule 3 —
+            // but the log now says which of the two it was.
+            LogCause(AssistantToolCause.NotPermitted);
             return Refusal();
         }
 
@@ -127,8 +139,11 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
         {
             // Covers both "no such reference" and "another tenant's reference": the query filter makes
             // the second one indistinguishable from the first before this line is even reached.
+            LogCause(AssistantToolCause.NotFound);
             return Refusal();
         }
+
+        LogCause(AssistantToolCause.Found);
 
         // ── What it earned ───────────────────────────────────────────────────
         var commission = await ReadCommissionAsync(reference, cancellationToken);
@@ -169,6 +184,21 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
 
         return JsonSerializer.Serialize(payload, Json);
     }
+
+    /// <summary>
+    /// Says in the LOG what the user is deliberately not told.
+    ///
+    /// ★ THE BLIND SPOT THIS CLOSES. Rule 3 makes "no such record" and "not yours" identical to the
+    /// READER on purpose — telling them apart would confirm the record exists. The log inherited that
+    /// blindness for free, and never should have: an operator could not tell a correct refusal from a
+    /// broken lookup, so a real fault was invisible by design. That is what made the reported
+    /// inconsistency impossible to diagnose from the logs.
+    ///
+    /// ★ THE REFERENCE IS NOT LOGGED. The cause is operational; the identifier is the user's own data,
+    /// and the same reason the question itself is never logged applies here.
+    /// </summary>
+    private void LogCause(AssistantToolCause cause) =>
+        logger.LogInformation("{Tool} finished: {Cause}.", ToolName, cause);
 
     /// <summary>The one refusal, serialised. Both causes reach it; neither is named.</summary>
     private static string Refusal() =>

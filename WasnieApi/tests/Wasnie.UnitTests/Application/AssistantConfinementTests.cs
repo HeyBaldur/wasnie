@@ -26,6 +26,71 @@ public sealed class AssistantConfinementTests
 
     private const string SampleDoc = "## 15. Clawback\nWasnie records a debt against the payee.";
 
+    // ── 0. ★ The numeric rule, and the guide it defers to ─────────────────────
+
+    [Fact]
+    public void The_STRICT_NUMERIC_RULE_travels_with_every_confined_answer()
+    {
+        // ★ WHY THIS IS PINNED. The assistant once told a user to enter "1.00" for a rate, and the
+        // report called it a hallucination. It was not — 1.00 IS 100% in this engine. But the same
+        // reasoning pointed the other way ("5% so enter 5") configures five hundred per cent, and
+        // nothing in rules 1-5 stops it: restating a number does not feel like invention to a model,
+        // it feels like arithmetic. This rule is the only thing that does, so it must not be tidied
+        // away in a future edit of the prompt.
+        var system = AssistantPrompt.BuildSystemMessage("## 5. Rate tables\nOne rate applied.");
+
+        system.Should().Contain(AssistantPrompt.NumericRule);
+        system.Should().Contain("NEVER convert between conventions");
+        system.Should().Contain("do not scale a value by 100");
+
+        // ★ And the fallback that keeps it honest rather than merely strict: not knowing the format is
+        // an answer, guessing it is not.
+        system.Should().Contain("If the documentation does NOT state the input format");
+        system.Should().Contain("Do not assume a convention");
+    }
+
+    [Fact]
+    public void The_numeric_rule_states_no_convention_of_its_OWN()
+    {
+        // ★ THE PROMPT DEFERS, IT DOES NOT DECLARE. A second copy of "rates are decimals" living here
+        // would be the copy that goes stale, and a prompt confidently contradicting the guide is worse
+        // than one that points at it. The example teaches the BEHAVIOUR — repeat, do not recompute.
+        AssistantPrompt.NumericRule.Should().Contain("the EXACT format the documentation gives");
+        AssistantPrompt.NumericRule.Should().Contain("documentation states");
+
+        // It must not assert the convention as a standalone fact.
+        AssistantPrompt.NumericRule.Should().NotContain("Rates are entered as");
+        AssistantPrompt.NumericRule.Should().NotContain("always a decimal");
+    }
+
+    [Fact]
+    public void The_REAL_guide_states_the_rate_input_format_where_a_rate_question_lands()
+    {
+        // ★ MEASURED, NOT ASSUMED: the routing was tested against the live router, and the question
+        // from the incident — "a plan that pays 100% with a cap of 200 EUR" — retrieved section 4 and
+        // NOT section 5. A guardrail that lives only in the rate-tables section would not have reached
+        // the model for the very question that caused this. So the guide states it in BOTH places, and
+        // this is what keeps the second one from being "tidied up" as duplication.
+        var knowledge = new FileAssistantKnowledgeBase(NullLogger<FileAssistantKnowledgeBase>.Instance);
+        knowledge.IsAvailable.Should().BeTrue();
+
+        var rateTables = knowledge.Sections.Single(s => s.Title.Contains("Rate tables", StringComparison.Ordinal));
+        var planAndRules = knowledge.Sections.Single(s => s.Title.Contains("Plan and Rules", StringComparison.Ordinal));
+
+        foreach (var section in new[] { rateTables, planAndRules })
+        {
+            section.Text.Should().Contain(
+                "0.05",
+                $"'{section.Title}' must state how a rate is typed — a question about rates can land here");
+            section.Text.Should().Contain("1.00");
+        }
+
+        // The engine's own behaviour is cited, so the claim can be checked rather than believed.
+        rateTables.Text.Should().Contain("Multiply(rateTable.FlatRate)");
+        // And the one case that is not a percentage at all is called out.
+        rateTables.Text.Should().Contain("money per unit");
+    }
+
     // ── 1. ★ The documentation reaches the model ──────────────────────────────
 
     [Fact]

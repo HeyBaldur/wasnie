@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ApplicationRef } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -1487,4 +1487,499 @@ describe('AssistantPanelComponent — the retry renders the typing bubble', () =
     expect(fixture.nativeElement.querySelector('.assistant-msg__typing')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
   });
+});
+
+import enTranslations from '../../../assets/i18n/en.json';
+import esTranslations from '../../../assets/i18n/es.json';
+import plTranslations from '../../../assets/i18n/pl.json';
+
+/** The shipped ASSISTANT sections, keyed by language. */
+const ASSISTANT_BUNDLES: Record<string, Record<string, string>> = {
+  en: (enTranslations as unknown as Record<string, Record<string, string>>)['ASSISTANT'],
+  es: (esTranslations as unknown as Record<string, Record<string, string>>)['ASSISTANT'],
+  pl: (plTranslations as unknown as Record<string, Record<string, string>>)['ASSISTANT'],
+};
+
+/**
+ * The welcome an empty panel opens on.
+ *
+ * ★ WHY IT WAS REWRITTEN. The old copy said the assistant "is not connected to a model yet, so it will
+ * reply with a placeholder". True in piece 1; a lie since the model was connected. Copy that describes
+ * a previous version of the product is worse than no copy — the reader believes it and stops asking.
+ */
+describe('AssistantPanelComponent — the welcome', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+  let translate: TranslateService;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+    translate = TestBed.inject(TranslateService);
+  });
+
+  /** Opens the panel on a thread with no turns — the state a new conversation starts in. */
+  function openEmpty(): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('[data-testid="assistant-welcome"]');
+  }
+
+  it('★ renders all THREE parts: the greeting, what to ask, and the read-only promise', () => {
+    const welcome = openEmpty();
+
+    expect(welcome).toBeTruthy();
+    expect(welcome.querySelector('.assistant-welcome__greeting')?.textContent)
+      .toContain('WELCOME_GREETING');
+    expect(welcome.querySelector('.assistant-welcome__subtitle')?.textContent)
+      .toContain('WELCOME_SUBTITLE');
+    expect(welcome.querySelector('[data-testid="assistant-welcome-readonly"]')?.textContent)
+      .toContain('WELCOME_READ_ONLY');
+  });
+
+  it('★ no longer claims the assistant is unconnected — that copy is GONE, not hidden', () => {
+    // It answers for real now. A panel that greets the user by saying it cannot answer is the kind of
+    // stale copy that quietly costs a feature its users.
+    const text: string = fixture.nativeElement.textContent ?? '';
+    openEmpty();
+
+    expect(text).not.toContain('EMPTY_TITLE');
+    expect(text).not.toContain('EMPTY_DESC');
+    expect(fixture.nativeElement.textContent).not.toContain('EMPTY_DESC');
+
+    // And the keys themselves are retired from every language, so nothing can render them by accident.
+    for (const language of ['en', 'es', 'pl']) {
+      const bundle = ASSISTANT_BUNDLES[language];
+      expect(bundle['EMPTY_TITLE']).withContext(`${language} still declares EMPTY_TITLE`).toBeUndefined();
+      expect(bundle['EMPTY_DESC']).withContext(`${language} still declares EMPTY_DESC`).toBeUndefined();
+    }
+  });
+
+  it('★ offers NOTHING the assistant cannot do', () => {
+    // The visual references for a screen like this carry suggested-prompt chips, "Add attachment" and
+    // "Use image". This assistant does none of them. The style was borrowed; the promises were not —
+    // the same rule the composer already lives under, and the same reason: a control that does nothing
+    // is a promise the engine cannot keep.
+    const welcome = openEmpty();
+
+    expect(welcome.querySelectorAll('button').length).withContext('no chips, no actions').toBe(0);
+    expect(welcome.querySelector('input')).toBeNull();
+    expect(welcome.querySelector('input[type="file"]')).toBeNull();
+
+    const text = (welcome.textContent ?? '').toLowerCase();
+    for (const word of ['attach', 'image', 'upload', 'file', 'voice', 'search']) {
+      expect(text).withContext(`the welcome must not mention "${word}"`).not.toContain(word);
+    }
+  });
+
+  it('the read-only promise carries WEIGHT, not small-print styling', () => {
+    // ★ Asserted by COMPUTED style, and the assertion MOVED with the design. It used to sit in a
+    // bordered box; on screen that turned a sentence into a widget, so the box went and the weight
+    // stayed. What must never change is the property underneath both: this is the sentence that makes
+    // the assistant safe to hand a finance team, so it may not be rendered as a faded footnote.
+    const welcome = openEmpty();
+    const note = welcome.querySelector('[data-testid="assistant-welcome-readonly"]') as HTMLElement;
+    const styles = getComputedStyle(note);
+    const subtitle = welcome.querySelector('.assistant-welcome__subtitle') as HTMLElement;
+
+    expect(parseInt(styles.fontWeight, 10))
+      .withContext('semibold is what stops it reading as small print').toBeGreaterThanOrEqual(600);
+
+    // Shares the subtitle's left edge — one column, not an inset panel.
+    expect(styles.paddingLeft).toBe(getComputedStyle(subtitle).paddingLeft);
+
+    // Not faded into the background: the same body colour the subtitle uses, never the tertiary grey.
+    expect(styles.color).toBe(getComputedStyle(subtitle).color);
+
+    const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
+    expect(parseFloat(getComputedStyle(greeting).fontSize))
+      .withContext('the greeting is the largest thing here')
+      .toBeGreaterThan(parseFloat(styles.fontSize));
+  });
+
+  it('the logo sits on the LEFT, not centred in a stretched box', () => {
+    // ★ The bug this catches is subtle and was real: the welcome is a flex COLUMN, so the default
+    // `align-items: stretch` widened the image box to the full column and `object-fit` centred the
+    // mark inside it — left-aligned CSS, centred result. Comparing the logo's left edge to the
+    // greeting's is what actually notices that.
+    const welcome = openEmpty();
+    const logo = welcome.querySelector('.assistant-welcome__logo') as HTMLElement;
+    const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
+
+    expect(logo).toBeTruthy();
+    expect(Math.round(logo.getBoundingClientRect().left))
+      .withContext('the mark lines up with the greeting under it')
+      .toBe(Math.round(greeting.getBoundingClientRect().left));
+  });
+
+  it('the greeting is large enough to read as one, and fits the panel', () => {
+    const welcome = openEmpty();
+    const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
+    const size = parseFloat(getComputedStyle(greeting).fontSize);
+
+    expect(size).withContext('large, with presence').toBeGreaterThanOrEqual(20);
+    // ★ The ceiling moved from 28 to 32 when the greeting was deliberately enlarged — this is the new
+    // intent, not a loosened assertion. It still HAS a ceiling because the panel is min(420px, 100vw)
+    // and the size is a clamp: past this the Spanish greeting stops being a greeting and becomes a
+    // headline wrapping onto three lines.
+    expect(size).withContext('not larger than the panel can carry').toBeLessThanOrEqual(32);
+  });
+
+  it('the welcome is gone once the conversation has turns', () => {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'hello', payload: null, sequence: 0, createdAt: '' },
+      ],
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-welcome"]')).toBeNull();
+  });
+
+  it('the COMPOSER was not touched', () => {
+    // The WI was explicit: the welcome only. This is what notices if a later edit drifts into it.
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+
+    const composer = fixture.nativeElement.querySelector('[data-testid="assistant-composer-card"]');
+    expect(composer).toBeTruthy();
+    expect(composer.querySelector('textarea')).toBeTruthy();
+    // Still exactly one control in there: send.
+    expect(composer.querySelectorAll('button').length).toBe(1);
+    // And the permanent disclaimer under it is a different thing, still present.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-disclaimer"]')).toBeTruthy();
+  });
+
+  it('renders the real Spanish copy when a language is loaded', () => {
+    translate.setTranslation('es', {
+      ASSISTANT: {
+        WELCOME_GREETING: '¿En qué puedo ayudarte con Wasnie?',
+        WELCOME_READ_ONLY: 'Este asistente es de solo lectura: te orienta y responde tus preguntas, pero nunca modifica datos ni ejecuta acciones en tu sistema. Verificá la información importante.',
+      },
+    });
+    translate.use('es');
+
+    const welcome = openEmpty();
+
+    expect(welcome.textContent).toContain('¿En qué puedo ayudarte con Wasnie?');
+    expect(welcome.textContent).toContain('nunca modifica datos ni ejecuta acciones');
+  });
+});
+
+describe('Assistant i18n — the welcome exists in every language', () => {
+  const KEYS = ['WELCOME_GREETING', 'WELCOME_SUBTITLE', 'WELCOME_READ_ONLY'];
+
+  it('★ EN, ES and PL all carry the three keys, with no English left in the others', () => {
+    for (const language of ['en', 'es', 'pl']) {
+      for (const key of KEYS) {
+        const value = ASSISTANT_BUNDLES[language][key];
+        expect(value).withContext(`${language}.ASSISTANT.${key} is missing`).toBeTruthy();
+        expect((value ?? '').trim().length).toBeGreaterThan(0);
+      }
+    }
+
+    // Each language says it in its own words — an untranslated key copied across is the failure mode
+    // "i18n is complete" is meant to prevent, and it passes a mere presence check.
+    for (const key of KEYS) {
+      expect(ASSISTANT_BUNDLES['es'][key]).not.toBe(ASSISTANT_BUNDLES['en'][key]);
+      expect(ASSISTANT_BUNDLES['pl'][key]).not.toBe(ASSISTANT_BUNDLES['en'][key]);
+    }
+  });
+
+  it('the read-only promise is stated in every language, not only in English', () => {
+    // The guarantee is the point of the note; a language that lost it would be shipping a different
+    // promise to its readers.
+    expect(ASSISTANT_BUNDLES['en']['WELCOME_READ_ONLY']).toContain('read-only');
+    expect(ASSISTANT_BUNDLES['es']['WELCOME_READ_ONLY']).toContain('solo lectura');
+    expect(ASSISTANT_BUNDLES['pl']['WELCOME_READ_ONLY']).toContain('tylko do odczytu');
+  });
+});
+
+/**
+ * The panel's exit.
+ *
+ * ★ WHY THIS ONE GETS TESTS WHEN THE ENTRANCE DID NOT. The entrance is a keyframe — nothing to assert
+ * but the existence of a class. The exit is a small state machine: the panel must OUTLIVE the click
+ * that closed it, and then actually close. Every branch here can fail as "the panel will not close",
+ * which is not a cosmetic bug.
+ */
+describe('AssistantPanelComponent — the closing animation', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let component: AssistantPanelComponent;
+  let store: AssistantStore;
+
+  /** The name in the stylesheet. If it is renamed there and not here, the panel stops closing. */
+  const EXIT = 'assistant-panel-out';
+
+  function reducedMotion(enabled: boolean): void {
+    spyOn(window, 'matchMedia').and.callFake((query: string) => ({
+      matches: enabled && query.includes('prefers-reduced-motion'),
+      media: query,
+    }) as MediaQueryList);
+  }
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    component = fixture.componentInstance;
+    store = TestBed.inject(AssistantStore);
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+  });
+
+  it('★ the ELEMENT outlives the click, but the STATE closes immediately', () => {
+    // ★ THE REGRESSION THIS FILE EXISTS FOR. The first version kept `isOpen` true until the animation
+    // finished, so for 200ms the application still believed the assistant was open — and anything that
+    // re-rendered the panel in that window brought it back at full opacity. On screen that read as
+    // "the chat opens whenever I click a sidebar item"; it had never closed.
+    reducedMotion(false);
+
+    component.close();
+    fixture.detectChanges();
+
+    expect(store.isOpen()).withContext('the state closes at once, not when the animation ends').toBeFalse();
+    expect(component.closing()).withContext('only the element lingers').toBeTrue();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeTruthy();
+
+    // ...and while it leaves it is neither a dialog nor a click target.
+    const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-panel"]');
+    expect(panel.classList).toContain('assistant-panel--closing');
+    expect(panel.getAttribute('aria-hidden')).toBe('true');
+    expect(panel.getAttribute('aria-modal')).toBeNull();
+  });
+
+  it('★ a re-render mid-exit does NOT bring the panel back', () => {
+    // The bug reproduced directly: close, then force the change detection a navigation would cause.
+    // With the state already closed there is nothing for a re-render to restore.
+    reducedMotion(false);
+    component.close();
+
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(store.isOpen()).toBeFalse();
+    const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-panel"]');
+    expect(panel?.classList).withContext('still on its way out, never restored').toContain('assistant-panel--closing');
+  });
+
+  it('★ a FRESH panel component does not show a closed assistant', () => {
+    // ★ What actually put the chat back on screen: the shell re-creating the panel while `isOpen` was
+    // still true. A new instance starts with `closing` false, so the old design rendered it wide open.
+    reducedMotion(false);
+    component.close();
+
+    const second = TestBed.createComponent(AssistantPanelComponent);
+    second.detectChanges();
+
+    expect(second.nativeElement.querySelector('[data-testid="assistant-panel"]'))
+      .withContext('a new instance must agree the assistant is closed').toBeNull();
+  });
+
+  it('reopening while it leaves cancels the exit', () => {
+    reducedMotion(false);
+    component.close();
+    expect(component.closing()).toBeTrue();
+
+    store.isOpen.set(true);
+    fixture.detectChanges();
+
+    expect(component.closing()).withContext('it is being shown, not sent away').toBeFalse();
+    const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-panel"]');
+    expect(panel.classList).not.toContain('assistant-panel--closing');
+    expect(panel.getAttribute('aria-modal')).toBe('true');
+  });
+
+  it('★ the element is removed once the exit finishes', () => {
+    reducedMotion(false);
+    component.close();
+
+    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: EXIT }));
+    fixture.detectChanges();
+
+    expect(store.isOpen()).toBeFalse();
+    expect(component.closing()).toBeFalse();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeNull();
+  });
+
+  it('a child animation finishing does NOT close the panel', () => {
+    // ★ `animationend` BUBBLES, and this panel contains other animations — the typing dots among them.
+    // Closing on "an animation ended somewhere in here" would make the panel shut itself while the
+    // assistant was typing.
+    reducedMotion(false);
+    component.close();
+
+    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: 'assistant-typing' }));
+    fixture.detectChanges();
+
+    expect(component.closing())
+      .withContext('the typing dots must not rip the panel out mid-animation').toBeTrue();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeTruthy();
+  });
+
+  it('★ closes IMMEDIATELY when the user asked for reduced motion', () => {
+    // ★ THE BRANCH THAT WOULD HAVE BROKEN IT. With `animation: none` the `animationend` event never
+    // fires, so waiting for it would leave the panel open forever — for exactly the people who asked
+    // for less movement. An accessibility preference must not become a broken close button.
+    reducedMotion(true);
+
+    component.close();
+    fixture.detectChanges();
+
+    expect(store.isOpen()).toBeFalse();
+    expect(component.closing()).toBeFalse();
+  });
+
+  it('a second click while it is already leaving changes nothing', () => {
+    reducedMotion(false);
+
+    component.close();
+    component.close();
+
+    expect(store.isOpen()).toBeFalse();
+    expect(component.closing()).toBeTrue();
+
+    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: EXIT }));
+    expect(component.closing()).toBeFalse();
+  });
+
+  it('the backdrop leaves with the panel, not after it', () => {
+    reducedMotion(false);
+    component.close();
+    fixture.detectChanges();
+
+    const backdrop: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-backdrop"]');
+    expect(backdrop.classList).toContain('assistant-backdrop--closing');
+  });
+});
+
+/**
+ * The waiting message.
+ *
+ * ★ THE COPY ITSELF NEEDS NO TEST — it is a translated string next to three dots. The CLOCK does: it
+ * starts, it must be cancelled when the answer arrives, and it must not outlive the panel. Each of
+ * those failing looks like "the assistant says it is still working after it answered".
+ */
+describe('AssistantPanelComponent — the waiting message', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let component: AssistantPanelComponent;
+  let store: AssistantStore;
+
+  /** Comfortably past the threshold; the exact value lives in the component, not here. */
+  const PAST_THRESHOLD = 6000;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    component = fixture.componentInstance;
+    store = TestBed.inject(AssistantStore);
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+  });
+
+  /** The state between "the request went out" and "the first token came back". */
+  function startWaiting(): void {
+    store.streamingReply.set('');
+    fixture.detectChanges();
+  }
+
+  it('shows the honest base message beside the dots, immediately', () => {
+    startWaiting();
+
+    const waiting: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]');
+    expect(waiting).toBeTruthy();
+    expect(waiting.textContent).toContain('PROCESSING');
+    // ★ The dots are ACCOMPANIED, not replaced.
+    expect(waiting.querySelector('.assistant-msg__typing')).toBeTruthy();
+    // The long-wait line has not earned its place yet.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting-long"]')).toBeNull();
+  });
+
+  it('★ explains the wait only once it has actually been a long one', fakeAsync(() => {
+    startWaiting();
+    expect(component.waitingLong()).toBeFalse();
+
+    tick(PAST_THRESHOLD);
+    fixture.detectChanges();
+
+    expect(component.waitingLong()).toBeTrue();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting-long"]').textContent)
+      .toContain('PROCESSING_LONG');
+  }));
+
+  it('★ a fast answer never triggers it, and the clock is cancelled', fakeAsync(() => {
+    startWaiting();
+
+    // The first token arrives well inside the threshold.
+    store.streamingReply.set('It was ');
+    fixture.detectChanges();
+
+    // ...and the pending timer must not fire into a turn that is already answering.
+    tick(PAST_THRESHOLD);
+    fixture.detectChanges();
+
+    expect(component.waitingLong()).withContext('the wait ended; the explanation is moot').toBeFalse();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeNull();
+  }));
+
+  it('the explanation is taken back down for the NEXT question', fakeAsync(() => {
+    startWaiting();
+    tick(PAST_THRESHOLD);
+    expect(component.waitingLong()).toBeTrue();
+
+    // Answer lands, then a second question goes out.
+    store.streamingReply.set('done');
+    fixture.detectChanges();
+    expect(component.waitingLong()).toBeFalse();
+
+    startWaiting();
+    expect(component.waitingLong())
+      .withContext('a fresh wait starts from scratch, not from the last one').toBeFalse();
+
+    tick(PAST_THRESHOLD);
+    expect(component.waitingLong()).toBeTrue();
+  }));
+
+  it('the clock does not outlive the panel', fakeAsync(() => {
+    startWaiting();
+    fixture.destroy();
+
+    // A timer left running would fire into a destroyed component. Nothing should be pending at all —
+    // fakeAsync fails the test if a task is still queued when it ends.
+    tick(PAST_THRESHOLD);
+
+    expect(component.waitingLong()).toBeFalse();
+  }));
 });

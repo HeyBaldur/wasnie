@@ -79,6 +79,61 @@ export class AssistantMarkdownPipe implements PipeTransform {
     return AssistantMarkdownPipe.AllowedRawHtml.test(value.trim());
   }
 
+  /**
+   * Every Unicode space that a model reaches for instead of a plain one.
+   *
+   * NO-BREAK, narrow no-break, thin, figure, the en/em quad family, medium mathematical and
+   * ideographic. Markdown's list rule is defined against ASCII whitespace, so any of these after the
+   * marker means the line is prose that happens to start with an asterisk.
+   */
+  private static readonly ExoticSpace = '[\u00A0\u2000-\u200A\u202F\u205F\u3000]';
+
+  /**
+   * Bullet and ordered markers separated from their text by a non-ASCII space.
+   *
+   * ★ ANCHORED TO THE LINE AND TO THE MARKER POSITION, and that narrowness is the safety. Up to three
+   * leading spaces (what Markdown itself allows before a marker), then the marker, then exactly one
+   * exotic space — which is replaced with a plain one. Nothing else in the line is touched, so a
+   * no-break space used deliberately INSIDE a sentence ("10 000") survives untouched.
+   */
+  private static readonly BulletMarker =
+    new RegExp(`^( {0,3}[*+-])${AssistantMarkdownPipe.ExoticSpace}`, 'gm');
+
+  private static readonly OrderedMarker =
+    // ★ THE DIGIT CLASS IS DOUBLE-ESCAPED, AND IT HAS TO BE. Inside a template literal an unrecognised
+    // escape loses its backslash, so a single one would compile to a pattern matching the LETTER "d" —
+    // silently, and only for ordered lists. The test that walks every marker is what caught it.
+    new RegExp(`^( {0,3}\\d{1,9}[.)])${AssistantMarkdownPipe.ExoticSpace}`, 'gm');
+
+  /**
+   * Puts an ASCII space back between a list marker and its text.
+   *
+   * ★ THE PARSER WAS RIGHT AND THE INPUT WAS NOT. Reproduced against the real reply before touching
+   * anything: `marked` renders `* item` as a list under this exact configuration, with `-` and `*`
+   * alike, with or without a blank line before it. What arrives from the model is `*` followed by a
+   * NO-BREAK SPACE, and Markdown's list rule is defined against ASCII whitespace — so the line is,
+   * correctly, a paragraph that begins with an asterisk. That is why the screen showed
+   * `<p>…<br>* How to view Plans…</p>`: raw markers and line breaks, no bullets.
+   *
+   * The same reply corroborates it: it also carries `–` and a non-breaking hyphen in "Step‑by‑step".
+   * This model writes typographic Unicode, and the bullet's space is more of the same. No `marked`
+   * option can fix that, because nothing is misconfigured — the text simply is not Markdown yet.
+   *
+   * ★ IT DOES NOT TOUCH `*emphasis*`. The pattern requires a SPACE after the marker; `*bold*` has a
+   * letter there and never matches. (Nor could a match break emphasis even in principle: CommonMark
+   * forbids an emphasis run from opening onto whitespace, so `*` followed by any space was never
+   * going to be italics.)
+   *
+   * ★ AND IT DELIBERATELY LEAVES `*item` — no space at all — ALONE. That one is genuinely ambiguous
+   * with emphasis: inserting a space would turn a line beginning an italic phrase into a bullet. A
+   * repair that has to guess is not a repair.
+   */
+  private static repairListMarkers(value: string): string {
+    return value
+      .replace(AssistantMarkdownPipe.BulletMarker, '$1 ')
+      .replace(AssistantMarkdownPipe.OrderedMarker, '$1 ');
+  }
+
   /** Turns markup characters into the text a reader should see, rather than markup a browser runs. */
   private static escape(value: string): string {
     return value
@@ -98,7 +153,8 @@ export class AssistantMarkdownPipe implements PipeTransform {
     //
     // `parse` is synchronous here because no async extension is registered; the cast documents that,
     // and a stray Promise would surface immediately as "[object Promise]" rather than silently.
-    const html = this.marked.parse(value, { async: false }) as string;
+    const html = this.marked.parse(
+      AssistantMarkdownPipe.repairListMarkers(value), { async: false }) as string;
 
     const withSafeLinks = this.hardenLinks(
       AssistantMarkdownPipe.applyScrollbar(AssistantMarkdownPipe.renderTaskBoxes(html)),

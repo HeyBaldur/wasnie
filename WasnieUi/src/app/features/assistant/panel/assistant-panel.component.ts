@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -23,7 +24,6 @@ import {
 } from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
-import { WsEmptyStateComponent } from '../../../shared/ui/ws-empty-state/ws-empty-state.component';
 import { WsConfirmationModalComponent } from '../../../shared/ui';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
@@ -50,7 +50,6 @@ import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
     TranslateModule,
     WsButtonComponent,
     WsTextareaComponent,
-    WsEmptyStateComponent,
     WsConfirmationModalComponent,
     IconComponent,
     AssistantMarkdownPipe,
@@ -62,9 +61,32 @@ export class AssistantPanelComponent {
   readonly store = inject(AssistantStore);
   private readonly injector = inject(Injector);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly draft = signal('');
   readonly pendingDeleteId = signal<string | null>(null);
+
+  /**
+   * True once the answer has been slow enough to be worth explaining.
+   *
+   * ★ THE SECOND LINE SAYS WHY, NOT WHERE. It never claims a stage — "consulting the documentation",
+   * "looking up the transaction" — because the front end does not know which of those is happening,
+   * and a progress message timed to a stopwatch is theatre. It would also be the one place in this
+   * assistant that states something it cannot verify, in a feature whose entire design is about not
+   * doing that. What IS true at every moment: work is in progress and it may take a few seconds.
+   */
+  readonly waitingLong = signal(false);
+
+  /**
+   * How long the answer may take before the wait is explained.
+   *
+   * Long enough that an ordinary documentation answer never trips it — those come back well inside
+   * this — and short enough to arrive before a tool-calling turn starts feeling broken. A message that
+   * appears on every request would be noise, and noise is what people learn to stop reading.
+   */
+  private static readonly LONG_WAIT_MS = 4500;
+
+  private longWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly canSend = computed(() => this.draft().trim().length > 0 && !this.store.sending());
 
@@ -122,6 +144,47 @@ export class AssistantPanelComponent {
 
       afterNextRender(() => this.scrollToBottom(behavior), { injector: this.injector });
     });
+
+    // Reopening while the exit is still playing cancels it: the element is being shown again, so it
+    // must not also be told to leave. Without this the panel would come back wearing the class that
+    // fades it out.
+    effect(() => {
+      if (this.store.isOpen()) {
+        this.closing.set(false);
+      }
+    });
+
+    // ── The long wait ────────────────────────────────────────────────────────
+    // `streamingReply` is the whole signal this needs: '' means the request is out and nothing has
+    // come back, anything longer means the answer has started arriving. So the clock starts on the
+    // empty string and stops the moment there is a first token — no extra state to keep in step.
+    effect(() => {
+      const waiting = this.store.streamingReply() === '';
+
+      untracked(() => {
+        if (!waiting) {
+          this.stopLongWaitClock();
+          return;
+        }
+
+        if (this.longWaitTimer === null) {
+          this.longWaitTimer = setTimeout(
+            () => this.waitingLong.set(true), AssistantPanelComponent.LONG_WAIT_MS);
+        }
+      });
+    });
+
+    this.destroyRef.onDestroy(() => this.stopLongWaitClock());
+  }
+
+  /** Stops the clock and takes the explanation back down. Safe to call when it was never started. */
+  private stopLongWaitClock(): void {
+    if (this.longWaitTimer !== null) {
+      clearTimeout(this.longWaitTimer);
+      this.longWaitTimer = null;
+    }
+
+    this.waitingLong.set(false);
   }
 
   /** True when the view is at (or within a hair of) the newest message — or when there is nothing yet. */
@@ -242,7 +305,59 @@ export class AssistantPanelComponent {
     this.pendingDeleteId.set(null);
   }
 
+  /**
+   * True while the panel is playing its exit — the ONLY thing keeping it mounted at that point.
+   *
+   * ★ IT DOES NOT MEAN "STILL OPEN". The first version kept `store.isOpen` true until the animation
+   * finished, and that was the bug: for those 200ms the application still believed the assistant was
+   * open, so anything that re-rendered or re-created the panel in that window brought it back at full
+   * opacity — which is what "the chat opens whenever I click a sidebar item" actually was. The panel
+   * had never closed; it was sitting there invisible, waiting to be shown again.
+   *
+   * So the shared state closes IMMEDIATELY and this flag only holds the element in the DOM long enough
+   * to animate. A stuck flag can now leave at worst an invisible, click-through element — never a
+   * panel that reopens itself.
+   */
+  readonly closing = signal(false);
+
+  /** The name of the exit keyframes, so a child's animation cannot be mistaken for the panel's. */
+  private static readonly EXIT_ANIMATION = 'assistant-panel-out';
+
+  /**
+   * Closes the panel at once, and keeps the element around just long enough to animate it away.
+   *
+   * ★ THE STATE CLOSES FIRST, THE PICTURE CATCHES UP. See `closing` for why the other order was wrong.
+   *
+   * ★ REDUCED MOTION SKIPS THE HOLD ENTIRELY. With `animation: none` the `animationend` event never
+   * fires, so an element held for it would linger forever — for exactly the people who asked for less
+   * movement. There is nothing to wait for, so nothing waits.
+   */
   close(): void {
+    if (!this.store.isOpen()) {
+      return;
+    }
+
     this.store.close();
+
+    if (!AssistantPanelComponent.prefersReducedMotion()) {
+      this.closing.set(true);
+    }
+  }
+
+  /** The exit finished: the element can go. */
+  onCloseAnimationEnd(event: AnimationEvent): void {
+    // The panel contains other animations — the typing dots run forever — so the panel's OWN exit is
+    // identified by name rather than by "an animation ended somewhere in here".
+    if (event.animationName !== AssistantPanelComponent.EXIT_ANIMATION) {
+      return;
+    }
+
+    this.closing.set(false);
+  }
+
+  private static prefersReducedMotion(): boolean {
+    return typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 }

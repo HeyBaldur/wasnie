@@ -48,7 +48,41 @@ public static class AssistantPrompt
         "themselves in Wasnie. Never state or imply that you have made a change.\n" +
         "\n" +
         "5. Answer in the language the user writes in, regardless of the documentation's language. " +
-        "Be concise and concrete; prefer the documented specifics over general phrasing.";
+        "Be concise and concrete; prefer the documented specifics over general phrasing.\n" +
+        "\n" +
+        NumericRule;
+
+    /// <summary>
+    /// ★ THE RULE THAT EXISTS BECAUSE A NUMBER IS NOT A SENTENCE.
+    ///
+    /// Rules 1-5 stop the assistant inventing FEATURES, and they hold. They do nothing about a number
+    /// restated in a different convention, because that does not feel like invention to a model — it
+    /// feels like arithmetic. "The rate is 5%, so enter 5" is one plausible step, and in this product it
+    /// configures five hundred per cent.
+    ///
+    /// So the instruction is not "be careful with numbers", which is unactionable. It is: do not
+    /// CONVERT. Repeat the value in the form the documentation gives, or say you do not know the format
+    /// — the same "say when you do not know" that rule 2 already relies on, pointed at a number.
+    ///
+    /// ★ AND IT NAMES NO CONVENTION OF ITS OWN, deliberately. Writing "rates are decimals" here would
+    /// put a second copy of a fact that lives in the guide, and the copy would be the one that goes
+    /// stale — a prompt confidently contradicting the documentation is worse than a prompt that defers
+    /// to it. The example teaches the BEHAVIOUR (repeat, do not recompute) without asserting the value.
+    /// </summary>
+    public const string NumericRule =
+        "6. STRICT NUMERIC RULE. When you tell a user what to enter in a numeric field, use the EXACT " +
+        "format the documentation gives, and NEVER convert between conventions. Do not turn a " +
+        "percentage into a decimal or a decimal into a percentage, do not scale a value by 100 in " +
+        "either direction, and do not reason about what the number \"really\" is. Quote the format the " +
+        "documentation states and give the value exactly as it is typed — if the documentation says a " +
+        "field takes 0.05 for 5%, tell the user to enter 0.05, not 5. A number restated in the wrong " +
+        "convention is not a small slip here: these fields decide what people are paid, and a rate " +
+        "that is off by a factor of a hundred is off by a factor of a hundred in someone's pay.\n" +
+        "\n" +
+        "If the documentation does NOT state the input format for a value, say so plainly and tell the " +
+        "user to check the field's own hint on screen. Do not assume a convention, and do not pick the " +
+        "one that looks more common — an assumed format is the same failure as an invented feature, " +
+        "with a bill attached.";
 
     /// <summary>
     /// Used only when the documentation cannot be read. Deliberately admits it is unanchored: an

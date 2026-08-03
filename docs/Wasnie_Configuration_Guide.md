@@ -198,6 +198,11 @@ anything else (`Rule.cs:34-40`), and the UI disables the other rate-table button
 
 See [section 5](#5-rate-tables).
 
+> ⚠️ **Rates are entered as a decimal fraction: `0.05` is 5%, `1.00` is 100%.** Repeated here on
+> purpose — a question about configuring a plan does not always retrieve section 5, and getting this
+> backwards misconfigures what people are paid. Full explanation, including the Units exception, in
+> [section 5](#5-rate-tables).
+
 ### 4.4 Modifier, Cap, Floor — applied in that order
 
 Applied after the rate table, in sequence: **modifier → cap → floor**
@@ -250,6 +255,37 @@ of processing and out of the "pending eligible" lists — a payee is no longer r
 
 Three types, all selectable.
 
+> ### ⚠️ RATE INPUT FORMAT — read this before configuring any rate
+>
+> **Every `Rate` field in Wasnie is entered as a DECIMAL FRACTION, never as a whole percentage.**
+>
+> | You want | You enter |
+> |---|---|
+> | 5% | `0.05` |
+> | 10% | `0.10` |
+> | 8.2% | `0.082` |
+> | 100% | `1.00` |
+>
+> Entering `5` does not mean 5% — it means **500%**. Entering `100` means **ten thousand per cent**.
+>
+> This is not a UI convention, it is what the engine computes: `CommissionCalculator.cs:166` does
+> `baseAmount.Multiply(rateTable.FlatRate)`, tiered does `inTier * tier.Rate`
+> (`CommissionCalculator.cs:193`), and attainment does `baseAmount.Multiply(tier.Rate)`
+> (`CommissionCalculator.cs:214`). The rate is a multiplier in all three. The form's own hint says the
+> same thing: *"Enter as decimal, e.g. 0.05 = 5%"*.
+>
+> **The percentages written throughout this document — "10% flat", "8.2% up to quota" — describe what a
+> rate MEANS, not the keystrokes.** A rate meaning 10% is typed `0.10`.
+>
+> **Two different fractions, and neither needs converting.** §5.3's `AttainmentFrom` / `AttainmentTo`
+> are fractions of the QUOTA (`1.0` = 100% of quota) — a different quantity from the Rate, expressed in
+> the same decimal convention. There is nowhere in Wasnie where a rate or a threshold is typed as a
+> whole percentage, so there is no conversion to remember and no place to get it backwards.
+>
+> **One exception, and it is not a percentage at all:** when a rule's Measurement is **Units**, the Flat
+> rate is **money per unit** (`ComputeUnitsCommission`, `CreditAllocationService.cs:356`). `2.00` there
+> means €2.00 per unit, not 200%.
+
 ### 5.1 Flat
 
 One rate applied to the whole base amount.
@@ -280,6 +316,45 @@ Not €80 (which is what a single-bracket lookup would give).
 > Also, `From` is used only to derive each tier's width. A gap between tiers, or a first tier that
 > doesn't start at 0, will silently mis-bracket — the model validates ascending non-overlap but not
 > contiguity (`RateTable.cs:23-34`).
+
+> ### ⚠️ Tiered is NOT available when Measurement is Units
+>
+> **You cannot band by quantity.** A rule with `Measurement = Units` and any rate table other than Flat
+> is rejected by the domain when you try to save it (`Rule.cs:36-39`):
+>
+> > *"Units measurement only supports a Flat rate table. Tiered and Attainment rate tables are not
+> > supported for unit-based commission."*
+>
+> The UI enforces the same thing earlier: choosing **Units** switches the rate table to **Flat** and
+> disables the other two buttons (`rule-form.component.ts`).
+>
+> **So a scheme like "€50 each for the first 10 units, €75 each above 10" is not supported in this
+> version.** There is no configuration that expresses it — not Tiered, not Attainment. Say so rather
+> than approximating it.
+>
+> **Why it does not simply work anyway:** Tiered's `From` / `To` are **absolute currency amounts of the
+> transaction**, not quantities (see the table above). Even if the combination were allowed, the bands
+> would slice the deal's VALUE, never its unit count — "1 to 10" would mean €1 to €10, not one to ten
+> units.
+>
+> **What Units does support:** exactly one rate per unit, applied to the whole quantity —
+> `ratePerUnit × quantity` (`ComputeUnitsCommission`, `CommissionCalculator.cs:159-160`). Ten units at
+> `2.00` is €20.00; a hundred units at `2.00` is €200.00. The rate never changes with volume.
+>
+> **The nearest supported alternatives**, both of which change what is being measured:
+>
+> - **Tier on the transaction's value instead of its quantity** — Revenue measurement with a Tiered
+>   table. This is a different rule ("more expensive deals earn a higher rate"), not a volume discount,
+>   and it resets on every transaction (see the warning above).
+> - **Two rules with different triggers**, if some field on the transaction distinguishes the cases.
+>   Note that the trigger cannot read quantity thresholds; it filters on transaction fields.
+>
+> **If a Units rule ever ends up with a non-Flat table** — the domain blocks it, so this would mean data
+> written around the domain — the engine does **not** fail loudly. It logs an error and sets that
+> commission to **zero** (`CreditAllocationService.cs:358-365`). The symptom is someone being paid
+> nothing, not an error message, which is why the restriction is worth knowing before configuring
+> rather than after a pay run.
+
 
 ### 5.3 Attainment-based — fractions of quota
 

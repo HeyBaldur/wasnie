@@ -1,4 +1,4 @@
-using Hangfire;
+﻿using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -24,6 +24,7 @@ using Wasnie.Infrastructure.Services.Email;
 using Wasnie.Infrastructure.Services.HubSpot;
 using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Infrastructure.Integrations.Groq;
+using Wasnie.Infrastructure.Integrations.OpenRouter;
 using Wasnie.Infrastructure.Services.Assistant;
 using Wasnie.Infrastructure.Services.Imports;
 
@@ -118,8 +119,33 @@ public static class DependencyInjection
         // outbound request inside GroqChatProvider and exists nowhere else.
         services.AddOptions<GroqOptions>()
             .Bind(configuration.GetSection(GroqOptions.SectionName));
+        services.AddOptions<OpenRouterOptions>()
+            .Bind(configuration.GetSection(OpenRouterOptions.SectionName));
+        services.AddOptions<AssistantProviderOptions>()
+            .Bind(configuration.GetSection(AssistantProviderOptions.SectionName));
+
+        // One named client per vendor: a timeout tuned for one endpoint must not silently apply to the
+        // other. Both are registered whichever is selected — an unused HttpClient costs nothing, and
+        // conditional registration would make switching provider a restart-and-pray.
         services.AddHttpClient(GroqChatProvider.HttpClientName);
-        services.AddScoped<IChatCompletionProvider, GroqChatProvider>();
+        services.AddHttpClient(OpenRouterChatProvider.HttpClientName);
+
+        // ★ THE CHOICE IS A CONFIGURATION VALUE. Both providers implement the same interface, so which
+        // one answers is a registration detail — and as a setting, switching back to Groq is an
+        // appsettings edit and a restart rather than a deployment.
+        //
+        // An unrecognised value falls back to Groq with a warning instead of throwing: a typo in a chat
+        // panel's configuration must not stop the API from starting.
+        var selected = configuration[$"{AssistantProviderOptions.SectionName}:{nameof(AssistantProviderOptions.Provider)}"];
+
+        if (string.Equals(selected, AssistantProviderOptions.OpenRouter, StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IChatCompletionProvider, OpenRouterChatProvider>();
+        }
+        else
+        {
+            services.AddScoped<IChatCompletionProvider, GroqChatProvider>();
+        }
         // The documentation the assistant answers from. SINGLETON because it reads one file once and
         // that file cannot change while the process runs — re-reading fifteen thousand tokens of text
         // per message would be work done for nothing.

@@ -15,10 +15,13 @@ namespace Wasnie.Application.Assistant.Common;
 /// ★ SHARED BY BOTH ANSWER PATHS for the same reason AssistantPrompt is: the streaming and
 /// non-streaming replies must not be able to differ in what they know.
 ///
-/// ★ A FAILING TOOL IS NOT A FAILING ANSWER. If the selection call or the lookup itself breaks, this
-/// returns no data and the assistant answers from the documentation alone. The alternative — turning a
-/// question into an error because an optional enrichment failed — is worse for the user and hides the
-/// fault from nobody, since it is logged either way.
+/// ★ A BROKEN LOOKUP IS NOT AN ANSWER — a position this file has reversed, and the reversal is the
+/// point. It used to swallow every failure and let the turn continue "without live data", on the
+/// reasoning that an optional enrichment failing should not cost the answer. That reasoning was wrong
+/// for one specific reason: the model does not treat missing data as missing. Asked about a named
+/// transaction with nothing in hand, it told the user the record could not be found — a claim about a
+/// row it never queried, that the user can see on their own screen. A wrong answer delivered
+/// confidently is worse than an error, so infrastructure failures now fail the turn.
 /// </summary>
 public sealed class AssistantToolRunner(
     IChatCompletionProvider provider,
@@ -28,13 +31,18 @@ public sealed class AssistantToolRunner(
     private readonly IReadOnlyList<IAssistantTool> _tools = tools.ToList();
 
     /// <summary>
-    /// The lookup's JSON, or empty when no tool was called (or one failed).
+    /// What the lookup did — see <see cref="AssistantToolOutcome"/> for why this is no longer a string.
+    ///
+    /// ★ THE DISTINCTION THAT WAS MISSING. "Nothing to look up" and "the lookup broke" used to be the
+    /// same empty string, so a fault reached the model as silence — and the model filled the silence by
+    /// telling the user their record could not be found. A generation CHOICE (no tool wanted, or a call
+    /// the provider rejected) is still not fatal. An INFRASTRUCTURE failure now is.
     /// </summary>
-    public async Task<string> RunAsync(string question, CancellationToken cancellationToken)
+    public async Task<AssistantToolOutcome> RunAsync(string question, CancellationToken cancellationToken)
     {
         if (_tools.Count == 0)
         {
-            return string.Empty;
+            return AssistantToolOutcome.NotAttempted;
         }
 
         AssistantToolRequest? request;
@@ -56,17 +64,22 @@ public sealed class AssistantToolRunner(
             // happens by design trains people to ignore warnings.
             logger.LogInformation(
                 "The model produced a tool call the provider rejected; answering without live data.");
-            return string.Empty;
+            return AssistantToolOutcome.NotAttempted;
         }
         catch (ChatCompletionException ex)
         {
-            logger.LogWarning(ex, "Tool selection failed; the assistant will answer without live data.");
-            return string.Empty;
+            // ★ NOT "answer without live data" ANY MORE. The provider being unreachable, timed out or
+            // rate limited is a FAULT, and letting the turn continue meant the model answered a
+            // question about a specific record having looked at nothing — and then said it could not
+            // find it. The user now gets the warning card and the retry button, which are both true.
+            logger.LogWarning(ex, "Tool selection could not be performed ({Reason}); failing the turn.", ex.ReasonKey);
+            return AssistantToolOutcome.Failed(ex.ReasonKey);
         }
 
         if (request is null)
         {
-            return string.Empty;
+            // The ordinary case: a documentation question needs no lookup.
+            return AssistantToolOutcome.NotAttempted;
         }
 
         var tool = _tools.FirstOrDefault(t =>
@@ -77,7 +90,7 @@ public sealed class AssistantToolRunner(
             // A model naming a tool that does not exist is a hallucination like any other, and it is
             // dropped like any other. It must NOT become a lookup of something else that seemed close.
             logger.LogWarning("The assistant asked for an unknown tool {Tool}; ignored.", request.Name);
-            return string.Empty;
+            return AssistantToolOutcome.NotAttempted;
         }
 
         try
@@ -88,7 +101,7 @@ public sealed class AssistantToolRunner(
             // user's own words about their own records, and a log is not where those belong.
             logger.LogInformation("The assistant ran the read-only tool {Tool}.", tool.Schema.Name);
 
-            return result;
+            return AssistantToolOutcome.Completed(result);
         }
         catch (OperationCanceledException)
         {
@@ -96,8 +109,12 @@ public sealed class AssistantToolRunner(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "The read-only tool {Tool} failed; answering without live data.", tool.Schema.Name);
-            return string.Empty;
+            // ★ A BROKEN LOOKUP IS NOT AN ANSWER. This used to return empty, and the model then told
+            // the user their transaction could not be found — about a row it had never queried and
+            // that they could see on screen. A fault fails the turn: "try again" is true, "I could not
+            // find it" was not.
+            logger.LogError(ex, "The read-only tool {Tool} failed; failing the turn.", tool.Schema.Name);
+            return AssistantToolOutcome.Failed(ChatCompletionException.Unavailable);
         }
     }
 

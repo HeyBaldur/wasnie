@@ -134,8 +134,16 @@ public sealed class PostMessageHandler(
         var sectionIds = await router.RouteAsync(userMessage.Content, cancellationToken);
         var routed = knowledge.TextFor(sectionIds);
 
-        // Step 1.5, exactly as the streaming path runs it.
-        var toolData = await toolRunner.RunAsync(userMessage.Content, cancellationToken);
+        // Step 1.5, exactly as the streaming path runs it — including failing the turn when the lookup
+        // could not run, rather than letting the model answer about a record it never queried.
+        var lookup = await toolRunner.RunAsync(userMessage.Content, cancellationToken);
+
+        if (lookup.DidFail)
+        {
+            return Result<string>.Failure(lookup.FailureReasonKey!);
+        }
+
+        var toolData = lookup.Data;
 
         // Same prompt as the streaming path, navigation map and live data included — two paths that
         // answer differently is the drift this codebase keeps refusing.

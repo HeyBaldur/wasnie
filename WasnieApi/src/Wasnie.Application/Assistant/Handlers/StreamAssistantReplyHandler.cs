@@ -176,10 +176,25 @@ public sealed class StreamAssistantReplyHandler(
         var routed = knowledge.TextFor(sectionIds);
 
         // ── Step 1.5: does this question need a RECORD, not just the documentation? ──
-        // Read-only, through the domain, with this user's identity — see GetTransactionTool. A failure
-        // here yields no data rather than an error: the answer degrades to the documentation, which is
-        // what it was yesterday.
-        var toolData = await toolRunner.RunAsync(question, cancellationToken);
+        // Read-only, through the domain, with this user's identity — see GetTransactionTool.
+        //
+        // ★ A LOOKUP THAT COULD NOT RUN ENDS THE TURN. It used to degrade to "answer without live
+        // data", and the model did not treat the absence as an absence: asked about a named
+        // transaction with nothing in hand, it told the user the record could not be found — about a
+        // row it never queried and that they can see on their own screen. The user now gets the
+        // warning card and the retry button, both of which are true, instead of a confident wrong
+        // answer that looks exactly like a correct refusal.
+        var lookup = await toolRunner.RunAsync(question, cancellationToken);
+
+        if (lookup.DidFail)
+        {
+            // Nothing was written for the assistant, so there is nothing to undo — the question stays
+            // in the thread and Retry re-answers it.
+            yield return AssistantStreamEvent.OfError(lookup.FailureReasonKey!);
+            yield break;
+        }
+
+        var toolData = lookup.Data;
 
         // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
         // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.

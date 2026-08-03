@@ -376,23 +376,92 @@ public sealed class AssistantChatCompletionTests
     }
 
     [Fact]
-    public async Task A_tool_that_THROWS_costs_the_data_not_the_answer()
+    public async Task A_tool_that_THROWS_fails_the_turn_instead_of_answering_without_it()
     {
-        // An optional enrichment failing must not turn a question into an error. The assistant answers
-        // from the documentation, exactly as it did before tools existed.
+        // ★ THIS TEST USED TO ASSERT THE OPPOSITE, AND THE OPPOSITE WAS THE BUG.
+        //
+        // The reasoning was: an optional enrichment failing should not cost the answer, so degrade to
+        // the documentation. It is wrong for one specific reason — THE MODEL DOES NOT TREAT MISSING
+        // DATA AS MISSING. Asked about a named transaction with nothing in hand, it told the user the
+        // record could not be found: a claim about a row it never queried, that the user can see on
+        // their own screen, and indistinguishable from a correct refusal.
+        //
+        // A confident wrong answer is worse than an error. The turn fails, the user sees the warning
+        // card and the retry button, and both of those are true.
         var provider = new FakeProvider(["Here is what the guide says."])
         {
             ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"X"}"""),
         };
-        var h = Build(nameof(A_tool_that_THROWS_costs_the_data_not_the_answer), provider,
+        var h = Build(nameof(A_tool_that_THROWS_fails_the_turn_instead_of_answering_without_it), provider,
             tools: [new ThrowingTool()]);
         var conversation = SeedConversation(h);
 
         var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with X?");
 
+        var error = frames.Should().ContainSingle(f => f.Type == "error").Subject;
+        error.ErrorKey.Should().Be(ChatCompletionException.Unavailable);
+
+        // ★ The model was never asked. It cannot say "not found" about something nobody looked up.
+        provider.Received.Should().BeNull("the generating call must not happen on a broken lookup");
+
+        // The question survives, so Retry re-answers it.
+        var stored = await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync();
+        stored.Should().ContainSingle().Which.Role.Should().Be(AssistantMessageRole.User);
+    }
+
+    [Fact]
+    public async Task A_provider_failure_during_tool_SELECTION_also_fails_the_turn()
+    {
+        // The other half of the same fault: the provider unreachable, timed out or rate limited while
+        // deciding whether to look anything up. It used to be swallowed the same way and reach the user
+        // as a confident "I could not find it".
+        var provider = new FakeProvider(["unused"])
+        {
+            ToolFailure = new ChatCompletionException(ChatCompletionException.RateLimited, "429"),
+        };
+        var h = Build(nameof(A_provider_failure_during_tool_SELECTION_also_fails_the_turn), provider,
+            tools: [new SpyTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with TERM-CC-10?");
+
+        frames.Should().ContainSingle(f => f.Type == "error")
+            .Which.ErrorKey.Should().Be(ChatCompletionException.RateLimited,
+                "the real reason travels, so the user reads 'busy' rather than 'not found'");
+    }
+
+    [Fact]
+    public async Task A_lookup_that_RAN_and_found_nothing_is_still_a_normal_answer()
+    {
+        // ★ RULE 3 IS UNTOUCHED. A refusal that the tool actually produced is an ANSWER — the user is
+        // told the same indistinguishable sentence whether the record is absent or not theirs, and the
+        // turn completes normally. Only a lookup that could not RUN is an error now.
+        var provider = new FakeProvider(["I could not find that transaction."])
+        {
+            ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"NOPE"}"""),
+        };
+        var h = Build(nameof(A_lookup_that_RAN_and_found_nothing_is_still_a_normal_answer), provider,
+            tools: [new RefusingTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with NOPE?");
+
         frames.Should().NotContain(f => f.Type == "error");
+        frames.Should().Contain(f => f.Type == "done");
+
+        // ...and the refusal reached the model as data, so the answer is grounded in a real lookup.
         provider.Received!.Single(m => m.Role == ChatMessage.SystemRole).Content
-            .Should().NotContain(AssistantPrompt.DataHeader);
+            .Should().Contain(AssistantPrompt.DataHeader).And.Contain("\"found\":false");
+    }
+
+    /// <summary>A tool that ran and legitimately found nothing — the payload rule 3 produces.</summary>
+    private sealed class RefusingTool : IAssistantTool
+    {
+        public AssistantToolSchema Schema { get; } = new(
+            "get_transaction", "Look up one sales transaction. Read-only.", """{"type":"object"}""");
+
+        public Task<string> RunAsync(string argumentsJson, CancellationToken cancellationToken) =>
+            Task.FromResult("""{"found":false,"message":"No transaction with that reference was found, or you do not have access to it."}""");
     }
 
     private sealed class ThrowingTool : IAssistantTool

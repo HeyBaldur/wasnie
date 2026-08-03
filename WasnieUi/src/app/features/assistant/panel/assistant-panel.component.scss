@@ -12,6 +12,8 @@
   inset: 0;
   background: var(--color-bg-overlay);
   z-index: 60;
+
+  animation: assistant-backdrop-in var(--transition-normal) both;
 }
 
 .assistant-panel {
@@ -31,6 +33,91 @@
   background: var(--color-bg-surface-raised);
   border-left: 1px solid var(--color-border-default);
   box-shadow: var(--shadow-card);
+
+  // ★ CSS, NOT @angular/animations — the package is not a dependency of this project and the whole
+  // feature is one entrance. Adding an animation framework to slide a panel would be a dependency
+  // bought for a keyframe.
+  //
+  // The token carries BOTH the duration and the easing (`--transition-normal` is `200ms ease`), which
+  // is why it can be dropped into the `animation` shorthand whole — 200ms is the house's "normal", so
+  // the panel moves at the same speed as everything else that moves, rather than at a number somebody
+  // liked.
+  animation: assistant-panel-in var(--transition-normal) both;
+}
+
+/**
+ * The entrance. It travels from the edge it is anchored to, so the movement reads as the panel coming
+ * IN from off-screen rather than as a box growing somewhere.
+ *
+ * Only a short distance: from fully off-screen the 200ms would look rushed, and a longer duration is
+ * exactly what the request ruled out — opening and closing this repeatedly must not become a wait.
+ */
+@keyframes assistant-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes assistant-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/**
+ * The exit — the entrance played backwards, at the same speed, so opening and closing feel like one
+ * gesture rather than two effects.
+ *
+ * ★ WHILE IT LEAVES, IT IS NOT A TARGET. `pointer-events: none` on the way out: the panel is still in
+ * the DOM for those 200ms, and a click landing on a control of something the user has already closed
+ * is the kind of bug that only shows up as "sometimes it does something weird when I close it".
+ */
+.assistant-panel--closing {
+  animation: assistant-panel-out var(--transition-normal) both;
+  pointer-events: none;
+}
+
+.assistant-backdrop--closing {
+  animation: assistant-backdrop-out var(--transition-normal) both;
+  pointer-events: none;
+}
+
+@keyframes assistant-panel-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+}
+
+@keyframes assistant-backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/**
+ * ★ NOT EVERYONE WANTS THINGS TO MOVE. `prefers-reduced-motion` is set by people for whom motion causes
+ * nausea or migraine, and honouring it is not a nicety — a panel that slides anyway is a product that
+ * ignored an accessibility setting the operating system already asked on their behalf.
+ *
+ * The panel still appears, instantly. The animation was the polish; the panel is the feature.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel,
+  .assistant-backdrop,
+  .assistant-panel--closing,
+  .assistant-backdrop--closing {
+    animation: none;
+  }
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────
@@ -341,6 +428,27 @@
 }
 
 /* Three dots while the model is thinking: the gap between pressing Enter and the first token. */
+.assistant-msg__waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+// Secondary, deliberately: it accompanies the answer, it is not the answer. Same size as the panel's
+// small print so it never competes with the content that is about to replace it.
+.assistant-msg__waiting-text {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// Only appears on a slow turn, so it is quieter still — an explanation offered, not an alarm raised.
+.assistant-msg__waiting-long {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+}
+
 .assistant-msg__typing {
   display: inline-flex;
   align-items: center;
@@ -366,6 +474,82 @@
 .assistant-msg__placeholder {
   color: var(--color-text-tertiary);
   font-style: italic;
+}
+
+// ── The welcome ─────────────────────────────────────────────────────────────
+//
+// Three levels, and the hierarchy is the message: what you can ask, then what to ask, then what this
+// will never do.
+.assistant-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  // Sits in the upper part of the empty panel rather than dead centre: the eye starts at the top and
+  // the composer is what it travels to next.
+  padding: var(--space-6) var(--space-2) var(--space-4);
+}
+
+.assistant-welcome__logo {
+  // ★ align-self, and it is the whole fix. The welcome is a flex COLUMN, whose default
+  // `align-items: stretch` was widening this box to the full column and letting `object-fit: contain`
+  // centre the mark inside it — so a left-aligned rule produced a visually centred logo. Shrinking the
+  // box to its content is what actually puts the mark on the left edge, in line with the greeting.
+  align-self: flex-start;
+
+  // Present, not shouting. Large enough to register as the product's mark above the greeting, small
+  // enough that the greeting is still the thing being read first.
+  height: 32px;
+  width: auto;
+  // The panel is min(420px, 100vw); on a narrow phone the mark must shrink rather than push the layout.
+  max-width: 60%;
+  margin-bottom: var(--space-1);
+}
+
+.assistant-welcome__greeting {
+  margin: 0;
+  // ★ SCALES WITH THE PANEL, WHICH IS min(420px, 100vw). On a desktop the panel is fixed at 420 and
+  // the viewport is wide, so the clamp lands on its 32px ceiling; on a phone the panel IS the viewport
+  // and the greeting comes down with it instead of overflowing. A single fixed size cannot do both,
+  // and the Spanish greeting is the long one that would break first.
+  font-size: clamp(var(--font-size-24), 7.5vw, var(--font-size-32));
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+
+  // ★ GRADIENT TEXT. The paint is clipped to the glyphs, which needs the text itself to be
+  // transparent — so `color` here is the fallback for anything that does not support the clip, NOT
+  // decoration. Getting that order wrong renders an invisible greeting.
+  color: var(--color-text-primary);
+  background: var(--gradient-assistant);
+  background-clip: text;
+  -webkit-background-clip: text;
+
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    color: transparent;
+  }
+
+  // The greeting is a question; long ones must wrap, never overflow the panel.
+  text-wrap: balance;
+}
+
+.assistant-welcome__subtitle {
+  margin: 0;
+  font-size: var(--font-size-15);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// ★ THE GUARANTEE, AND IT NO LONGER NEEDS A BOX. It carried its own surface and border so it would not
+// read as small print; on screen that box turned a sentence into a widget and broke the flow of the
+// welcome. The weight does the same job more quietly: same left edge as the subtitle, same colour as
+// ordinary body text, semibold so it still reads as a statement the product is making rather than a
+// footnote — which was always the point, not the border.
+.assistant-welcome__readonly {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }
 
 // ── The failed-turn alert ───────────────────────────────────────────────────

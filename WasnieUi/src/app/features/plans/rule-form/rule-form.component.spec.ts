@@ -197,6 +197,138 @@ describe('RuleFormComponent — floor above cap warning', () => {
   });
 });
 
+
+/**
+ * The flat rate defends itself against the percentage-convention mistake.
+ *
+ * ★ THE ENGINE'S TRUTH, WHICH THESE ARE WRITTEN AGAINST: `CommissionCalculator` computes
+ * `baseAmount.Multiply(FlatRate)`. The stored number is a MULTIPLIER — 0.05 is 5%, and 100 is ten
+ * thousand per cent. A user typing 100 for "one hundred per cent" is the money error this exists to
+ * catch, and nothing but the form is standing there when they do it.
+ */
+describe('RuleFormComponent — the flat rate protects itself', () => {
+  function makeComponent(): RuleFormComponent {
+    const planSignal = signal<Plan | null>(makePlan(makeApiRule()));
+    TestBed.configureTestingModule({
+      imports: [RuleFormComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: PlansStore,
+          useValue: {
+            selectedPlan: planSignal as unknown as PlansStore['selectedPlan'],
+            loadPlan: jasmine.createSpy('loadPlan').and.returnValue(Promise.resolve()),
+          },
+        },
+        { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: { get: (k: string) => (k === 'planId' ? PLAN_ID : null) } } },
+        },
+      ],
+    });
+    TestBed.overrideComponent(RuleFormComponent, {
+      set: { imports: [ReactiveFormsModule, TranslateModule], template: `<form [formGroup]="form"></form>` },
+    });
+    const fixture = TestBed.createComponent(RuleFormComponent);
+    fixture.detectChanges();
+    return fixture.componentInstance;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  function setRate(comp: RuleFormComponent, flatRate: number | undefined): void {
+    comp.form.patchValue({ rateTable: { flatRate } });
+  }
+
+  it('★ echoes back what the number actually means', () => {
+    // The static hint has always said "0.05 = 5%". A hint is also the easiest thing on a form to skim
+    // past, so this says it about the number in front of the user.
+    const comp = makeComponent();
+
+    setRate(comp, 0.05);
+    expect(comp.flatRatePercent()).toBe(5);
+
+    setRate(comp, 0.025);
+    expect(comp.flatRatePercent()).toBe(2.5);
+
+    setRate(comp, 1);
+    expect(comp.flatRatePercent()).toBe(100);
+  });
+
+  it('★ warns when the rate would pay out the whole sale or more', () => {
+    // ★ THE MISTAKE ITSELF. Someone typing 100 for "one hundred per cent" gets ten thousand — and the
+    // form is the only thing between them and a pay run.
+    const comp = makeComponent();
+
+    setRate(comp, 100);
+    expect(comp.flatRatePercent()).toBe(10000);
+    expect(comp.flatRateLooksMistaken()).toBeTrue();
+
+    // Exactly 100% is the boundary and it warns: the commission equals the entire transaction.
+    setRate(comp, 1);
+    expect(comp.flatRateLooksMistaken()).toBeTrue();
+  });
+
+  it('stays quiet for ordinary rates, including generous ones', () => {
+    // ★ A warning that fires on real values is one people learn to click past. 50% is a high rate, not
+    // a mistake.
+    const comp = makeComponent();
+
+    for (const rate of [0.05, 0.1, 0.25, 0.5, 0.999]) {
+      setRate(comp, rate);
+      expect(comp.flatRateLooksMistaken()).withContext(`${rate * 100}% is legitimate`).toBeFalse();
+    }
+  });
+
+  it('says nothing at all before a rate has been typed', () => {
+    const comp = makeComponent();
+
+    setRate(comp, undefined);
+    expect(comp.flatRatePercent()).withContext('nothing to echo yet').toBeNull();
+    expect(comp.flatRateLooksMistaken()).toBeFalse();
+  });
+
+  it('★ WARNS, it does not BLOCK — the unusual value is still saveable', () => {
+    // A rule paying the entire amount is unusual, not impossible, and a form that refuses a legitimate
+    // configuration sends the user to support. The warning is advice; the control stays valid.
+    const comp = makeComponent();
+    setRate(comp, 1.5);
+
+    expect(comp.flatRateLooksMistaken()).toBeTrue();
+    expect(comp.form.get('rateTable.flatRate')?.errors)
+      .withContext('advice, not a validation failure').toBeNull();
+    expect(comp.form.get('rateTable.flatRate')?.valid).toBeTrue();
+  });
+
+  it('★ the value the form carries is UNCHANGED — this is presentation only', () => {
+    // ★ The engine reads this number. Nothing here may convert, round or rescale it: the field still
+    // holds exactly what was typed, and the percentage lives only in what is displayed.
+    const comp = makeComponent();
+
+    setRate(comp, 0.05);
+    expect(comp.form.get('rateTable.flatRate')?.value).toBe(0.05);
+
+    setRate(comp, 100);
+    expect(comp.form.get('rateTable.flatRate')?.value).toBe(100);
+  });
+
+  it('says nothing about percentages in Units mode, where the field is money per unit', () => {
+    // ★ THE SAME FIELD MEANS TWO THINGS. Under Units the engine multiplies it by a QUANTITY, so it is
+    // euros per unit — and "2.00 = 200%" would be a fresh piece of nonsense in a form that exists to
+    // remove one.
+    const comp = makeComponent();
+    comp.form.patchValue({ measurement: { type: MeasurementType.Units } });
+    setRate(comp, 2);
+
+    expect(comp.isUnitsMode()).toBeTrue();
+    expect(comp.flatRatePercent()).withContext('a per-unit amount is not a percentage').toBeNull();
+    expect(comp.flatRateLooksMistaken()).withContext('€2.00 per unit is ordinary').toBeFalse();
+  });
+});
+
 describe('RuleFormComponent — enum rehydration from string API values', () => {
   let storeMock: Partial<PlansStore>;
 

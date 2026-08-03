@@ -90,12 +90,40 @@
                     type="number"
                   />
                   @if (!isUnitsMode()) {
-                    <span class="input-suffix">%×100</span>
+                    <!--
+                      ★ WHAT THIS VALUE MEANS, NOT HOW TO CONVERT IT. The suffix used to read "%×100",
+                      which asks the reader to do the arithmetic and can be misread as an instruction to
+                      multiply. This states the answer for the number actually typed, so 0.05 reads back
+                      "5%" and 100 reads back "10,000%" — visible before saving, not after a pay run.
+                    -->
+                    <span
+                      class="input-suffix"
+                      [class.input-suffix--warning]="flatRateLooksMistaken()"
+                      data-testid="flat-rate-percent"
+                    >
+                      @if (flatRatePercent() !== null) {
+                        = {{ flatRatePercent() | number: '1.0-4' }}%
+                      } @else {
+                        %
+                      }
+                    </span>
                   }
                 </div>
                 <span class="form-hint">
                   {{ (isUnitsMode() ? 'PLANS.HINT_RATE_UNITS' : 'PLANS.HINT_RATE') | translate }}
                 </span>
+
+                <!--
+                  ★ A WARNING, NEVER A BLOCK. Paying out the whole transaction is unusual, not
+                  impossible, and a form that refuses a legitimate configuration sends the user to
+                  support. It names the number they typed and the number they probably meant, because
+                  "check your input" is advice nobody can act on.
+                -->
+                @if (flatRateLooksMistaken()) {
+                  <p class="form-warning" role="alert" data-testid="flat-rate-warning">
+                    {{ 'PLANS.WARN_RATE_OVER_100' | translate: { percent: (flatRatePercent() | number: '1.0-4') } }}
+                  </p>
+                }
               </div>
             }
 

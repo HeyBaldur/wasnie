@@ -1,12 +1,34 @@
-@if (store.isOpen()) {
+<!--
+  ★ `closing()` is what keeps the panel on screen after it has ALREADY closed. The shared state flips
+  the moment the user asks to close — see the component for why the other order was the bug — and this
+  flag holds the element for the length of its exit animation and not a millisecond of meaning longer.
+-->
+@if (store.isOpen() || closing()) {
   <!-- Backdrop: dismisses on click, like every other overlay in the app. -->
-  <div class="assistant-backdrop" (click)="close()" data-testid="assistant-backdrop"></div>
+  <div
+    class="assistant-backdrop"
+    [class.assistant-backdrop--closing]="!store.isOpen()"
+    (click)="close()"
+    data-testid="assistant-backdrop"
+  ></div>
 
+  <!--
+    ★ IT STAYS MOUNTED WHILE IT LEAVES. `@if` would tear the panel out instantly and there would be
+    nothing left to animate, so `closing` keeps it for the length of the exit and `animationend` is
+    what finally closes it — see the component.
+
+    While it is leaving it stops being a dialog: `aria-modal` and the label are dropped and it is
+    hidden from assistive technology, because a screen reader announcing a dialog the user has already
+    dismissed is worse than no animation at all.
+  -->
   <aside
     class="assistant-panel"
+    [class.assistant-panel--closing]="!store.isOpen()"
+    (animationend)="onCloseAnimationEnd($event)"
     role="dialog"
-    aria-modal="true"
-    [attr.aria-label]="'ASSISTANT.TITLE' | translate"
+    [attr.aria-modal]="store.isOpen() ? 'true' : null"
+    [attr.aria-hidden]="store.isOpen() ? null : 'true'"
+    [attr.aria-label]="store.isOpen() ? ('ASSISTANT.TITLE' | translate) : null"
     data-testid="assistant-panel"
   >
     <!-- ── Header ─────────────────────────────────────────────────────────── -->
@@ -102,11 +124,40 @@
     <!-- #messages is the scroll container the panel drives to the bottom — see the component's effect. -->
     <div #messages class="assistant-panel__body ws-scroll-thin" data-testid="assistant-messages">
       @if (store.messages().length === 0) {
-        <ws-empty-state
-          icon="help-circle"
-          titleKey="ASSISTANT.EMPTY_TITLE"
-          descKey="ASSISTANT.EMPTY_DESC"
-        />
+        <!--
+          The welcome, in three levels: the greeting, what to ask, and the promise about what this
+          cannot do.
+
+          ★ NOTHING HERE OFFERS A CAPABILITY THE ASSISTANT LACKS. The visual references for a screen
+          like this carry suggested-prompt chips, "Add attachment" and "Use image"; none of those exist
+          here and several never will. The style is borrowed; the promises are not. Same rule the
+          composer already lives under, and there is a test for both.
+
+          ★ THE READ-ONLY NOTE IS NOT SMALL PRINT. It is the guarantee that makes the assistant safe to
+          hand a finance team, so it carries the weight of a statement rather than the grey of a
+          footnote.
+        -->
+        <div class="assistant-welcome" data-testid="assistant-welcome">
+          <!--
+            The product's own mark, the same asset the sidebar and the sign-in pages use. Decorative
+            here — the greeting beside it already says which product this is — so it carries an empty
+            alt rather than making a screen reader announce "Wasnie" twice.
+          -->
+          <img
+            src="wasnie_logo.png"
+            alt=""
+            aria-hidden="true"
+            class="assistant-welcome__logo"
+          />
+
+          <h2 class="assistant-welcome__greeting">{{ 'ASSISTANT.WELCOME_GREETING' | translate }}</h2>
+
+          <p class="assistant-welcome__subtitle">{{ 'ASSISTANT.WELCOME_SUBTITLE' | translate }}</p>
+
+          <p class="assistant-welcome__readonly" data-testid="assistant-welcome-readonly">
+            {{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}
+          </p>
+        </div>
       } @else {
         @for (message of store.messages(); track message.id) {
           <div
@@ -168,7 +219,25 @@
               [innerHTML]="store.streamingReply() | assistantMarkdown"
             ></div>
           } @else {
-            <span class="assistant-msg__typing" aria-hidden="true"><span></span><span></span><span></span></span>
+            <!--
+              ★ THE DOTS STAY; THE WORDS JOIN THEM. Three silent dots cannot tell "working" apart from
+              "hung", and this assistant can genuinely take several seconds — the router, the model,
+              and on a transaction question a real lookup.
+
+              ★ AND THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named and none is faked on a
+              stopwatch: the front end does not know which step is running, and inventing one would be
+              the single place in this feature that asserts something it cannot verify.
+            -->
+            <div class="assistant-msg__waiting" role="status" data-testid="assistant-waiting">
+              <span class="assistant-msg__typing" aria-hidden="true"><span></span><span></span><span></span></span>
+              <span class="assistant-msg__waiting-text">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
+            </div>
+
+            @if (waitingLong()) {
+              <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">
+                {{ 'ASSISTANT.PROCESSING_LONG' | translate }}
+              </p>
+            }
           }
         </div>
       }

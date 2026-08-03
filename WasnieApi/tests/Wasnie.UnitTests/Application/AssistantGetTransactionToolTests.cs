@@ -12,7 +12,10 @@ using Wasnie.Application.Compensation.Handlers.Credits;
 using Wasnie.Application.Compensation.Handlers.Transactions;
 using Wasnie.Application.Compensation.Queries.Credits;
 using Wasnie.Application.Compensation.Queries.Transactions;
+using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Transactions;
@@ -57,6 +60,9 @@ public sealed class AssistantGetTransactionToolTests
     {
         public int TransactionQueries { get; private set; }
 
+        /// <summary>Makes the transaction query come back as a FAILED Result, not an empty one.</summary>
+        public bool FailTransactionQuery { get; set; }
+
         public async Task<TResponse> Send<TResponse>(
             IRequest<TResponse> request, CancellationToken cancellationToken = default)
         {
@@ -64,6 +70,13 @@ public sealed class AssistantGetTransactionToolTests
             {
                 case ListTransactionsQuery q:
                     TransactionQueries++;
+
+                    if (FailTransactionQuery)
+                    {
+                        return (TResponse)(object)Result<PagedResult<TransactionDto>>.Failure(
+                            "Unknown sort field.");
+                    }
+
                     return (TResponse)(object)await new ListTransactionsHandler(db, auth)
                         .Handle(q, cancellationToken);
 
@@ -277,6 +290,28 @@ public sealed class AssistantGetTransactionToolTests
 
         garbage.Should().Contain(GetTransactionTool.RefusalMessage);
         empty.Should().Be(garbage);
+    }
+
+    [Fact]
+    public async Task A_query_that_FAILS_is_raised_rather_than_dressed_up_as_not_found()
+    {
+        // ★ THE MASK THIS REMOVES. `IsSuccess == false` used to fold into the same null as "no rows
+        // matched", so a broken query reached the user as "no such transaction" — a lie about their
+        // own data, wearing the exact words of a correct refusal. Two different things must not share
+        // one answer when one of them is a fault.
+        var tenant = Guid.NewGuid();
+        var h = Build(nameof(A_query_that_FAILS_is_raised_rather_than_dressed_up_as_not_found), tenant,
+            Permission.TransactionsRead, Permission.CreditsRead);
+        Seed(h.Db, tenant, "TERM-CC-10");
+
+        // An unknown sort field is the domain's own way of failing a list query.
+        h.Sender.FailTransactionQuery = true;
+
+        var act = async () => await h.Tool.RunAsync(
+            """{"reference":"TERM-CC-10"}""", CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            "a fault must reach the runner, which turns it into an error the user can act on");
     }
 
     // ── Test 4 — the JSON is named for what it MEANS ──────────────────────────

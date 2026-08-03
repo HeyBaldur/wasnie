@@ -107,6 +107,46 @@ export class RuleFormComponent implements OnInit {
     Number(this.formValue()?.measurement?.type ?? MeasurementType.Revenue) === MeasurementType.Units
   );
 
+  /**
+   * The flat rate as the engine will read it, expressed the way a person thinks about it.
+   *
+   * ★ THE ENGINE'S TRUTH, CHECKED AND NOT ASSUMED: `CommissionCalculator` does
+   * `baseAmount.Multiply(rateTable.FlatRate)`. The stored number is a MULTIPLIER, so 0.05 is 5% — and
+   * 100 would be ten thousand per cent, not "one hundred per cent". The static hint has always said
+   * so; a hint is also the easiest thing on a form to skim past, which is why this echoes back what
+   * THIS value means as it is typed.
+   *
+   * Null in Units mode, where the same field is euros per unit and a percentage would be nonsense.
+   */
+  readonly flatRatePercent = computed<number | null>(() => {
+    if (this.isUnitsMode()) {
+      return null;
+    }
+
+    const raw = this.formValue()?.rateTable?.flatRate;
+    return raw === null || raw === undefined || raw === '' as unknown as number || Number.isNaN(Number(raw))
+      ? null
+      : Number(raw) * 100;
+  });
+
+  /**
+   * True when the rate would pay out the whole transaction or more.
+   *
+   * ★ THE THRESHOLD IS 100%, AND IT WARNS RATHER THAN BLOCKS. A multiplier of 1 or above means the
+   * commission equals or exceeds the sale itself — which is what typing `100` for "one hundred per
+   * cent" produces here, and it produces ten thousand per cent. That is the money error this exists to
+   * catch.
+   *
+   * It does NOT block, because the value is not impossible: a referral rule paying the entire amount
+   * is unusual but real, and a form that refuses a legitimate configuration sends the user to
+   * support. Below 1 nothing is said at all — 0.5 is a high rate, not a mistake, and a warning that
+   * fires on ordinary values is one people learn to click past.
+   */
+  readonly flatRateLooksMistaken = computed(() => {
+    const percent = this.flatRatePercent();
+    return percent !== null && percent >= 100;
+  });
+
   readonly rateTableTypes = Object.entries(RateTableType)
     .filter(([, v]) => typeof v === 'number')
     .map(([k, v]) => ({ label: `PLANS.RATE_TABLE_${k.toUpperCase()}`, value: v as number }));

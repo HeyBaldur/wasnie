@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Wasnie.Application.Common.Options;
 
@@ -106,6 +106,56 @@ public sealed class GroqConfigurationTests
             File.ReadAllText(file).Should().NotContain(
                 "gsk_", $"{Path.GetFileName(file)} is committed and must never hold a real key");
         }
+    }
+
+    [Fact]
+    public void The_committed_files_declare_OpenRouter_without_holding_its_key_either()
+    {
+        // ★ THE SAME SWEEP, FOR THE SECOND VENDOR. A new provider is a new secret and a new chance to
+        // paste it into the wrong file — and the wrong file is the one git tracks. OpenRouter keys are
+        // prefixed `sk-or-`, so that is what this looks for.
+        var apiDir = Path.GetDirectoryName(AppSettingsPath())!;
+
+        var committed = new[]
+        {
+            Path.Combine(apiDir, "appsettings.json"),
+            Path.Combine(apiDir, "appsettings.Development.template.json"),
+        };
+
+        foreach (var file in committed.Where(File.Exists))
+        {
+            var text = File.ReadAllText(file);
+
+            text.Should().Contain(
+                OpenRouterOptions.SectionName,
+                $"{Path.GetFileName(file)} must declare the section so its shape is reviewable");
+            text.Should().NotContain(
+                "sk-or-", $"{Path.GetFileName(file)} is committed and must never hold a real key");
+        }
+    }
+
+    [Fact]
+    public void The_OpenRouter_section_binds_with_the_model_id_verified_against_the_catalogue()
+    {
+        // ★ A wrong model id is a failure on every call, and the same mistake already cost a release on
+        // Groq. This one was read from OpenRouter's own GET /api/v1/models, which lists `response_format`
+        // and `tools` among its supported parameters — JSON mode for the router, tool calling for the
+        // transaction lookup.
+        var configuration = new ConfigurationBuilder().AddJsonFile(AppSettingsPath(), optional: false).Build();
+
+        var options = new OpenRouterOptions();
+        configuration.GetSection(OpenRouterOptions.SectionName).Bind(options);
+
+        options.Model.Should().Be("openai/gpt-oss-20b");
+        options.Model.Should().NotEndWith(":free",
+            "the free variant carries the rate limits this provider exists to escape");
+        options.BaseUrl.Should().Be("https://openrouter.ai/api/v1");
+        options.ApiKey.Should().BeEmpty("the committed file declares the shape, never the secret");
+
+        // The C# default and the declared value must name the same model — a rename in one place only
+        // compiles perfectly and fails at runtime.
+        new OpenRouterOptions().Model.Should().Be(options.Model);
+        new OpenRouterOptions().BaseUrl.Should().Be(options.BaseUrl);
     }
 
     [Fact]

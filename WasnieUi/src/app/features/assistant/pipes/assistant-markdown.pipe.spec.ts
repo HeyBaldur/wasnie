@@ -395,6 +395,96 @@ describe('AssistantMarkdownPipe', () => {
     }
   });
 
+
+  // ── 3b. Lists whose marker is separated by a Unicode space ────────────────
+
+  /**
+   * The real reply from the screenshot, with the separator the model actually emitted: a NO-BREAK
+   * SPACE. Written with an explicit escape so the character survives every editor and diff that would
+   * otherwise "helpfully" normalise it back to a plain space and quietly retire the test.
+   */
+  const NBSP = ' ';
+
+  const REAL_REPLY =
+    "I can help you with anything that's part of the Wasnie product – such as:\n"
+    + `*${NBSP}How to view, create or edit Plans, Rules, Assignments...\n`
+    + `*${NBSP}What a field or setting means on a given screen...\n`
+    + `*${NBSP}Step-by-step instructions on performing an action inside Wasnie...`;
+
+  it('★ renders the REAL reply as bullets, not as raw asterisks', () => {
+    // ★ THE BUG, EXACTLY. Before the repair this produced
+    // `<p>…such as:<br>* How to view…<br>* What a field…</p>` — markers and line breaks on screen and
+    // no list at all. Remove `repairListMarkers` and this goes red.
+    const host = render(REAL_REPLY);
+
+    const items = Array.from(host.querySelectorAll('ul li'));
+    expect(items.length).withContext('three bullets, one per line').toBe(3);
+    expect(items[0].textContent).toContain('How to view, create or edit Plans');
+    // Not one raw marker left in the text the reader sees.
+    expect(host.textContent).not.toContain('*');
+  });
+
+  it('repairs every Unicode space a model reaches for, and every marker', () => {
+    // The family is listed rather than sampled: the next model to break this will pick a different one.
+    for (const space of [' ', ' ', ' ', ' ', ' ', '　']) {
+      for (const marker of ['*', '-', '+']) {
+        const host = render(`${marker}${space}one\n${marker}${space}two`);
+        expect(host.querySelectorAll('ul li').length)
+          .withContext(`marker "${marker}" with U+${space.codePointAt(0)!.toString(16).toUpperCase()}`)
+          .toBe(2);
+      }
+    }
+
+    // Ordered lists arrive the same way and are repaired the same way.
+    const ordered = render(`1.${NBSP}first\n2.${NBSP}second`);
+    expect(ordered.querySelectorAll('ol li').length).toBe(2);
+  });
+
+  it('a plain-space list still renders — the ordinary case was never broken', () => {
+    const host = render('* one\n* two');
+    expect(host.querySelectorAll('ul li').length).toBe(2);
+  });
+
+  it('a dash list still renders', () => {
+    // Worth pinning because the repair rewrites `-` markers too: the fix must not disturb the syntax
+    // that already worked.
+    const host = render('- one\n- two');
+    expect(host.querySelectorAll('ul li').length).toBe(2);
+  });
+
+  it('★ emphasis with asterisks is untouched by the repair', () => {
+    // ★ The pattern needs a SPACE after the marker, and `*bold*` has a letter there. This is what says
+    // so out loud, because "fix the lists" is exactly the change that eats italics.
+    const host = render('*italic* and **bold** and a *phrase here*');
+
+    expect(host.querySelector('em')?.textContent).toBe('italic');
+    expect(host.querySelector('strong')?.textContent).toBe('bold');
+    expect(host.querySelectorAll('em').length).toBe(2);
+    expect(host.querySelector('ul')).withContext('emphasis is not a list').toBeNull();
+  });
+
+  it('emphasis at the START of a line is still emphasis, not a bullet', () => {
+    // The riskiest shape for this repair: a line that opens with an asterisk.
+    const host = render('*Important:* read this');
+
+    expect(host.querySelector('em')?.textContent).toBe('Important:');
+    expect(host.querySelector('ul')).toBeNull();
+  });
+
+  it('a no-break space in ordinary prose is left alone', () => {
+    // ★ The repair is anchored to the marker position precisely so this survives: a model writing
+    // "10 000" with a NO-BREAK SPACE meant it, and rewriting it would be editing the answer.
+    const host = render(`The total is 10${NBSP}000 EUR.`);
+
+    expect(host.textContent).toContain(`10${NBSP}000`);
+  });
+
+  it('a bare asterisk with no space is NOT turned into a bullet', () => {
+    // Genuinely ambiguous with emphasis, so the repair declines to guess — see the pipe.
+    const host = render('*not a list item');
+    expect(host.querySelector('ul')).toBeNull();
+  });
+
   // ── 4. Partial Markdown, mid-stream ───────────────────────────────────────
 
   it('renders half-arrived Markdown without throwing', () => {
