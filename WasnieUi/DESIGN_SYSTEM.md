@@ -137,6 +137,26 @@ Outputs: `valueChange` (for use without reactive forms)
 <ws-input formControlName="email" label="Email" type="email" [error]="fieldError('email')" />
 ```
 
+### WsTextarea `<ws-textarea>`
+CVA. The multi-line counterpart of WsInput — use it for anything that takes a paragraph (chat message, note, description, pasted output). WsInput is single-line by construction; do NOT reach for a native `<textarea>`.
+
+Inputs: `label` · `placeholder` · `error` (translation key) · `inputId` · `maxlength` · `submitOnEnter` (default **true**) · `minHeight` (px, default 56) · `maxHeight` (px, default 200)
+Outputs: `valueChange` · `submitted` (fires on Enter when `submitOnEnter`, carries the value)
+
+**Keyboard.** With `submitOnEnter` (the default): **Enter submits, Shift+Enter breaks the line** — the conversational contract. Set `[submitOnEnter]="false"` for an ordinary textarea where Enter just breaks the line. Enter mid-IME-composition never submits.
+
+**Autosize.** Grows with the content from `minHeight` up to `maxHeight`, then scrolls internally instead of growing. The rule is the exported pure function `computeAutosize(contentHeight, minHeight, maxHeight)` — test growth behaviour against it, not against measured pixels (headless does not lay out).
+
+```html
+<!-- Chat composer: Enter sends -->
+<ws-textarea [placeholder]="'ASSISTANT.COMPOSER_PLACEHOLDER' | translate" (submitted)="send()" />
+
+<!-- Ordinary notes field: Enter breaks the line -->
+<ws-textarea formControlName="notes" label="Notes" [submitOnEnter]="false" [maxHeight]="320" />
+```
+
+★ Its chrome is token-for-token WsInput's: `--color-bg-surface`, `--color-border-default`, `--color-border-focus` + `--shadow-focus`, `--color-danger`, and the same `--error` / `--disabled` / `__field--focused` modifiers. **The focus treatment in this design system is a border colour plus `box-shadow: var(--shadow-focus)` — NOT a Tailwind ring utility.** A parity spec asserts the two resolve to the same computed border, background and focus shadow, so a hand-written colour here fails the suite.
+
 ### WsSelect `<ws-select>`
 CVA. Options type: `SelectOption { value: string; label: string; disabled?: boolean }`. Labels are run through `| translate` automatically.  
 Inputs: `options` · `label` · `placeholder` · `searchable` · `error` · `searchFn` · `initialOption`

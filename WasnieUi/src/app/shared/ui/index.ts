@@ -1,5 +1,10 @@
 export { WsButtonComponent } from './ws-button/ws-button.component';
 export { WsInputComponent } from './ws-input/ws-input.component';
+export {
+  WsTextareaComponent,
+  computeAutosize,
+  type WsTextareaAutosize,
+} from './ws-textarea/ws-textarea.component';
 export { WsSelectComponent, type SelectOption } from './ws-select/ws-select.component';
 export { WsCategoryPickerComponent } from './ws-category-picker/ws-category-picker.component';
 export { WsDatePickerComponent } from './ws-date-picker/ws-date-picker.component';

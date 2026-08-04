@@ -8,6 +8,12 @@
     </main>
   </div>
 </div>
+<!--
+  Lives at shell level, not inside a route: the panel must survive navigation. Its trigger is in the
+  topbar and the two never meet in the tree — AssistantStore is what connects them.
+-->
+<app-assistant-panel />
+
 <ws-toast-container />
 <app-two-fa-reminder />
 

@@ -1,4 +1,4 @@
-using Hangfire;
+﻿using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -22,6 +22,10 @@ using Wasnie.Infrastructure.Services;
 using Wasnie.Infrastructure.Services.Audit;
 using Wasnie.Infrastructure.Services.Email;
 using Wasnie.Infrastructure.Services.HubSpot;
+using Wasnie.Application.Assistant.Abstractions;
+using Wasnie.Infrastructure.Integrations.Groq;
+using Wasnie.Infrastructure.Integrations.OpenRouter;
+using Wasnie.Infrastructure.Services.Assistant;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -61,6 +65,10 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IClaimsService, ClaimsService>();
         services.AddScoped<IAuthorizationService, AuthorizationService>();
+        // The single point that decides assistant access. Registered next to the authorization
+        // services because it is answered the same way — and kept separate from them because it is an
+        // entitlement (per user, headed for per-seat billing), not a role permission.
+        services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -104,6 +112,57 @@ public static class DependencyInjection
         services.AddOptions<HubSpotSyncOptions>()
             .Bind(configuration.GetSection(HubSpotSyncOptions.SectionName));
         services.AddHttpClient("HubSpot");
+
+        // Chat model behind the vendor-neutral IChatCompletionProvider. Bound WITHOUT ValidateOnStart,
+        // like HubSpot: with no key configured the assistant falls back to its stand-in reply instead of
+        // stopping the API from starting. ONE key, server-side, for every tenant — it is attached to the
+        // outbound request inside GroqChatProvider and exists nowhere else.
+        services.AddOptions<GroqOptions>()
+            .Bind(configuration.GetSection(GroqOptions.SectionName));
+        services.AddOptions<OpenRouterOptions>()
+            .Bind(configuration.GetSection(OpenRouterOptions.SectionName));
+        services.AddOptions<AssistantProviderOptions>()
+            .Bind(configuration.GetSection(AssistantProviderOptions.SectionName));
+
+        // One named client per vendor: a timeout tuned for one endpoint must not silently apply to the
+        // other. Both are registered whichever is selected — an unused HttpClient costs nothing, and
+        // conditional registration would make switching provider a restart-and-pray.
+        services.AddHttpClient(GroqChatProvider.HttpClientName);
+        services.AddHttpClient(OpenRouterChatProvider.HttpClientName);
+
+        // ★ THE CHOICE IS A CONFIGURATION VALUE. Both providers implement the same interface, so which
+        // one answers is a registration detail — and as a setting, switching back to Groq is an
+        // appsettings edit and a restart rather than a deployment.
+        //
+        // An unrecognised value falls back to Groq with a warning instead of throwing: a typo in a chat
+        // panel's configuration must not stop the API from starting.
+        var selected = configuration[$"{AssistantProviderOptions.SectionName}:{nameof(AssistantProviderOptions.Provider)}"];
+
+        if (string.Equals(selected, AssistantProviderOptions.OpenRouter, StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IChatCompletionProvider, OpenRouterChatProvider>();
+        }
+        else
+        {
+            services.AddScoped<IChatCompletionProvider, GroqChatProvider>();
+        }
+        // The documentation the assistant answers from. SINGLETON because it reads one file once and
+        // that file cannot change while the process runs — re-reading fifteen thousand tokens of text
+        // per message would be work done for nothing.
+        services.AddSingleton<IAssistantKnowledgeBase, FileAssistantKnowledgeBase>();
+        // The app's real routes, so the assistant can link instead of describing. Singleton for the same
+        // reason and separate from the knowledge base because it is a separate artefact with its own
+        // lifecycle — see IUiNavigationMap.
+        services.AddSingleton<IUiNavigationMap, FileUiNavigationMap>();
+        // Step one of the two-step answer: picks the sections a question needs. Scoped because it
+        // depends on the scoped provider; it holds no state of its own.
+        services.AddScoped<Wasnie.Application.Assistant.Common.AssistantSectionRouter>();
+        // Step 1.5: the read-only lookups. SCOPED, and that is load-bearing — the tool sends the same
+        // MediatR queries the screens send, and it must do so inside the ASKING USER'S request scope so
+        // the tenant filter and the permission guards see the real caller. A singleton here would be a
+        // tool holding somebody else's identity.
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetTransactionTool>();
+        services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
         services.AddScoped<IHubSpotTokenProvider, HubSpotTokenProvider>();

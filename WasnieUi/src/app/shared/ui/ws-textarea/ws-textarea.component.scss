@@ -1,0 +1,103 @@
+@reference "../../../../styles.scss";
+
+/**
+ * Token-for-token the same chrome as ws-input.component.scss — same surface, same border, same focus
+ * treatment, same error and disabled handling. The only differences are the ones multi-line forces:
+ * the field has no fixed `--height-control-md`, and the native element carries vertical padding
+ * because it no longer fills a fixed-height row.
+ *
+ * ★ The focus treatment in this design system is `border-color: var(--color-border-focus)` plus
+ * `box-shadow: var(--shadow-focus)` — NOT a Tailwind ring utility. ws-select, ws-date-picker and
+ * ws-date-range-picker all express it the same way.
+ */
+
+:host {
+  display: block;
+}
+
+.ws-textarea {
+  @apply flex flex-col;
+  gap: var(--space-1);
+}
+
+.ws-textarea__label {
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+
+.ws-textarea__field {
+  @apply flex items-stretch;
+  position: relative;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  // No `height: var(--height-control-md)` — that is the one thing a multi-line control cannot inherit
+  // from WsInput. The height comes from the autosize pass instead.
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  &:hover:not(.ws-textarea__field--focused) {
+    border-color: var(--color-border-strong);
+  }
+}
+
+.ws-textarea__field--focused {
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.ws-textarea--error .ws-textarea__field {
+  border-color: var(--color-danger);
+
+  &.ws-textarea__field--focused {
+    box-shadow: 0 0 0 3px var(--color-danger-border);
+  }
+}
+
+.ws-textarea--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+
+  .ws-textarea__field {
+    pointer-events: none;
+  }
+}
+
+.ws-textarea__native {
+  flex: 1;
+  min-width: 0;
+  // Vertical padding, unlike WsInput's `padding: 0 var(--space-3)`: there is no fixed-height row to
+  // centre the text in any more, so the breathing room has to come from the element itself.
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-14);
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
+
+  // The user drags the panel, not the box: an OS resize grip would fight the autosize.
+  resize: none;
+  // Hidden until the content passes maxHeight, at which point the modifier below turns it on. A
+  // permanent `auto` makes the scrollbar gutter flicker in and out during the growth phase.
+  overflow-y: hidden;
+
+  &::placeholder {
+    color: var(--color-text-placeholder);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.ws-textarea__native--scrollable {
+  overflow-y: auto;
+}
+
+.ws-textarea__error {
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
+}

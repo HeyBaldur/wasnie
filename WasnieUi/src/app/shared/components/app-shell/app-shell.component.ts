@@ -9,6 +9,7 @@ import { WsConfirmationModalComponent } from '../../ui';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
 import { PastDueBannerComponent } from '../../../features/subscription/past-due-banner/past-due-banner.component';
 import { TwoFaReminderComponent } from '../two-fa-reminder/two-fa-reminder.component';
+import { AssistantPanelComponent } from '../../../features/assistant/panel/assistant-panel.component';
 
 @Component({
   selector: 'app-shell',
@@ -20,6 +21,7 @@ import { TwoFaReminderComponent } from '../two-fa-reminder/two-fa-reminder.compo
     WsConfirmationModalComponent,
     PastDueBannerComponent,
     TwoFaReminderComponent,
+    AssistantPanelComponent,
     TranslateModule,
   ],
   templateUrl: './app-shell.component.html',

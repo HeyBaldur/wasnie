@@ -1,0 +1,206 @@
+{
+  "_README": [
+    "THE ASSISTANT'S NAVIGATION MAP — DRAFT, PENDING RODOLFO'S CURATION.",
+    "",
+    "WHY THIS IS NOT IN Wasnie_Configuration_Guide.md. The guide documents BUSINESS RULES; this file",
+    "documents the app's ROUTING. They change for different reasons — a UI redesign moves every route",
+    "here and not one rule there — and mixing them means a screen rename dirties the handbook. Two",
+    "artefacts, two lifecycles.",
+    "",
+    "HOW IT WAS BUILT (no value here was invented):",
+    "  - `route` comes from the Angular router: WasnieUi/src/app/app.routes.ts and the per-feature",
+    "    *.routes.ts files. These are the URLs the app actually serves.",
+    "  - `label` comes from WasnieUi/src/assets/i18n/en.json, NOT from the templates. The templates say",
+    "    {{ 'PLANS.ACTION_NEW' | translate }} — reading them would yield i18n keys, not the words a user",
+    "    sees. en.json is the base language and holds the real button text.",
+    "",
+    "WHAT WAS LEFT OUT ON PURPOSE, for Rodolfo to add back if he disagrees:",
+    "  - Every route with an :id parameter (/plans/:planId, /plans/:planId/rules/new, /payees/:payeeId,",
+    "    /quotas/:quotaId, /transactions/:id, /credits/:id, /pay-runs/:id, /payouts/:id,",
+    "    /assignments/:assignmentId). A link the assistant emits must be CLICKABLE, and it has no id to",
+    "    put in one — `/plans/:planId` is a broken link dressed as a working one. Those screens appear",
+    "    under `actionsWithoutRoute` instead, named but not linked, which is exactly what the",
+    "    no-invented-routes rule asks for when a route does not exist.",
+    "  - /auth, /onboarding, /forbidden, /__design-system: not places to send a working user.",
+    "  - /admin (labelled \"Settings\") and /integrations/hubspot/owners: administrator surfaces. Add",
+    "    them if the assistant should guide admins there.",
+    "",
+    "TO CURATE: trim entries a beginner should never receive, fix any intent -> screen mapping that is",
+    "wrong as a matter of business meaning, and correct any `purpose` that misdescribes the screen. The",
+    "routes and labels are facts from the code; the SELECTION and the wording are Rodolfo's call."
+  ],
+
+  "entries": [
+    {
+      "intent": "dashboard",
+      "route": "/dashboard",
+      "label": "Dashboard",
+      "purpose": "The home screen: overview of the account."
+    },
+    {
+      "intent": "plans_list",
+      "route": "/plans",
+      "label": "Plans",
+      "purpose": "List every compensation plan. Open a plan from here to see or add its rules."
+    },
+    {
+      "intent": "plan_create",
+      "route": "/plans/new",
+      "label": "New Plan",
+      "purpose": "Create a compensation plan: name, currency and period."
+    },
+    {
+      "intent": "payees_list",
+      "route": "/payees",
+      "label": "Payees",
+      "purpose": "List the people who can earn commission."
+    },
+    {
+      "intent": "payee_create",
+      "route": "/payees/new",
+      "label": "New Payee",
+      "purpose": "Add one payee by hand. The form's own title is \"Add Payee\"."
+    },
+    {
+      "intent": "payees_import",
+      "route": "/payees/import",
+      "label": "Import",
+      "purpose": "Add many payees at once from a file."
+    },
+    {
+      "intent": "quotas_list",
+      "route": "/quotas",
+      "label": "Quotas",
+      "purpose": "List performance targets."
+    },
+    {
+      "intent": "quota_create",
+      "route": "/quotas/new",
+      "label": "New Quota",
+      "purpose": "Set a target for one payee within a plan period."
+    },
+    {
+      "intent": "assignments_list",
+      "route": "/assignments",
+      "label": "Assignments",
+      "purpose": "List which payees are on which plans."
+    },
+    {
+      "intent": "assignment_create",
+      "route": "/assignments/new",
+      "label": "New Assignment",
+      "purpose": "Put a payee on an active plan."
+    },
+    {
+      "intent": "transactions_list",
+      "route": "/transactions",
+      "label": "Transactions",
+      "purpose": "List recorded sales."
+    },
+    {
+      "intent": "transaction_create",
+      "route": "/transactions/new",
+      "label": "New Transaction",
+      "purpose": "Record one closed-won sale. The form's own title is \"Record Transaction\"."
+    },
+    {
+      "intent": "transactions_import",
+      "route": "/transactions/import",
+      "label": "Import",
+      "purpose": "Record many sales at once from a file."
+    },
+    {
+      "intent": "category_mappings",
+      "route": "/category-mappings",
+      "label": "Categories",
+      "purpose": "Map a product SKU or name to a category so rules can filter by it."
+    },
+    {
+      "intent": "credits_list",
+      "route": "/credits",
+      "label": "Credits",
+      "purpose": "Commission credits calculated from eligible pending transactions."
+    },
+    {
+      "intent": "pay_runs_list",
+      "route": "/pay-runs",
+      "label": "Pay Runs",
+      "purpose": "Calculate and close commission periods."
+    },
+    {
+      "intent": "payouts_list",
+      "route": "/payouts",
+      "label": "Payouts",
+      "purpose": "Review, approve and mark payouts as paid."
+    },
+    {
+      "intent": "terminated_accounts",
+      "route": "/terminated-accounts",
+      "label": "Terminated accounts",
+      "purpose": "Payees who have left with a balance still open."
+    },
+    {
+      "intent": "integrations",
+      "route": "/integrations",
+      "label": "Integrations",
+      "purpose": "Connect an external system such as a CRM."
+    },
+    {
+      "intent": "subscription",
+      "route": "/subscription",
+      "label": "Subscription",
+      "purpose": "The account's plan and billing."
+    },
+    {
+      "intent": "profile",
+      "route": "/profile",
+      "label": "Profile",
+      "purpose": "The signed-in user's own account settings."
+    }
+  ],
+
+  "actionsWithoutRoute": [
+    {
+      "intent": "plan_add_rule",
+      "label": "Add Rule",
+      "reachedFrom": "/plans",
+      "how": "Open the plan from the Plans list, then use the Add Rule button on the plan's page."
+    },
+    {
+      "intent": "plan_view_detail",
+      "label": "Plans",
+      "reachedFrom": "/plans",
+      "how": "Open the plan by name from the Plans list."
+    },
+    {
+      "intent": "payee_edit",
+      "label": "Edit Payee",
+      "reachedFrom": "/payees",
+      "how": "Open the payee from the Payees list, then use Edit."
+    },
+    {
+      "intent": "payee_terminate",
+      "label": "Terminate Payee",
+      "reachedFrom": "/payees",
+      "how": "Open the payee from the Payees list, then use Terminate Payee."
+    },
+    {
+      "intent": "category_mapping_add",
+      "label": "Add mapping",
+      "reachedFrom": "/category-mappings",
+      "how": "Use the Add mapping button on the Categories screen — it opens a dialog, not a separate page."
+    },
+    {
+      "intent": "pay_run_calculate",
+      "label": "Calculate Pay Run",
+      "reachedFrom": "/pay-runs",
+      "how": "Use the Calculate Pay Run action on the Pay Runs screen."
+    },
+    {
+      "intent": "ledger_adjustment",
+      "label": "Add adjustment",
+      "reachedFrom": "/terminated-accounts",
+      "how": "Open the payee's account from Terminated accounts, then use Add adjustment."
+    }
+  ]
+}

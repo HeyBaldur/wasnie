@@ -1,0 +1,681 @@
+/**
+ * Slide-over panel, right side. Local to this feature on purpose — see the component's class comment
+ * (no WsDrawer exists; adding one is a design-system decision, not a mid-feature improvisation).
+ *
+ * Every value is a token. The elevation follows the house layering: backdrop uses the overlay token,
+ * the panel sits at surface-raised (it floats above the page, like a modal), and the composer input
+ * is sunken relative to it.
+ */
+
+.assistant-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg-overlay);
+  z-index: 60;
+
+  animation: assistant-backdrop-in var(--transition-normal) both;
+}
+
+.assistant-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+
+  display: flex;
+  flex-direction: column;
+  // Wide enough to read a paragraph, capped so it never swallows the app on a large screen.
+  width: min(420px, 100vw);
+  // dvh, not vh: on mobile browsers the toolbar would otherwise push the composer off-screen.
+  height: 100dvh;
+
+  background: var(--color-bg-surface-raised);
+  border-left: 1px solid var(--color-border-default);
+  box-shadow: var(--shadow-card);
+
+  // ★ CSS, NOT @angular/animations — the package is not a dependency of this project and the whole
+  // feature is one entrance. Adding an animation framework to slide a panel would be a dependency
+  // bought for a keyframe.
+  //
+  // The token carries BOTH the duration and the easing (`--transition-normal` is `200ms ease`), which
+  // is why it can be dropped into the `animation` shorthand whole — 200ms is the house's "normal", so
+  // the panel moves at the same speed as everything else that moves, rather than at a number somebody
+  // liked.
+  animation: assistant-panel-in var(--transition-normal) both;
+}
+
+/**
+ * The entrance. It travels from the edge it is anchored to, so the movement reads as the panel coming
+ * IN from off-screen rather than as a box growing somewhere.
+ *
+ * Only a short distance: from fully off-screen the 200ms would look rushed, and a longer duration is
+ * exactly what the request ruled out — opening and closing this repeatedly must not become a wait.
+ */
+@keyframes assistant-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes assistant-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/**
+ * The exit — the entrance played backwards, at the same speed, so opening and closing feel like one
+ * gesture rather than two effects.
+ *
+ * ★ WHILE IT LEAVES, IT IS NOT A TARGET. `pointer-events: none` on the way out: the panel is still in
+ * the DOM for those 200ms, and a click landing on a control of something the user has already closed
+ * is the kind of bug that only shows up as "sometimes it does something weird when I close it".
+ */
+.assistant-panel--closing {
+  animation: assistant-panel-out var(--transition-normal) both;
+  pointer-events: none;
+}
+
+.assistant-backdrop--closing {
+  animation: assistant-backdrop-out var(--transition-normal) both;
+  pointer-events: none;
+}
+
+@keyframes assistant-panel-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+}
+
+@keyframes assistant-backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/**
+ * ★ NOT EVERYONE WANTS THINGS TO MOVE. `prefers-reduced-motion` is set by people for whom motion causes
+ * nausea or migraine, and honouring it is not a nicety — a panel that slides anyway is a product that
+ * ignored an accessibility setting the operating system already asked on their behalf.
+ *
+ * The panel still appears, instantly. The animation was the polish; the panel is the feature.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel,
+  .assistant-backdrop,
+  .assistant-panel--closing,
+  .assistant-backdrop--closing {
+    animation: none;
+  }
+}
+
+// ── Header ──────────────────────────────────────────────────────────────────
+
+.assistant-panel__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.assistant-panel__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.assistant-panel__title {
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-panel__subtitle {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+.assistant-panel__head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+// ── History ─────────────────────────────────────────────────────────────────
+
+.assistant-history {
+  flex-shrink: 0;
+  max-height: 40%;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--color-border-default);
+  padding: var(--space-2);
+}
+
+.assistant-history__empty {
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+.assistant-history__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'title delete'
+    'meta  delete';
+  align-items: center;
+  // Compact on purpose: the history grows without bound, so the row gives up its vertical air (the
+  // title/meta gap goes to 0, the block padding to space-1) while keeping ~40px of click target.
+  gap: var(--space-0) var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &--active {
+    background: var(--color-bg-surface-sunken);
+  }
+}
+
+.assistant-history__item-title {
+  grid-area: title;
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-history__item-meta {
+  grid-area: meta;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.assistant-history__item-delete {
+  grid-area: delete;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+
+  &:hover {
+    color: var(--color-danger);
+  }
+}
+
+// ── Messages ────────────────────────────────────────────────────────────────
+
+.assistant-panel__body {
+  // min-height: 0 is load-bearing in a flex column: without it the body refuses to shrink and pushes
+  // the composer out of the panel — the exact bug that hid Save/Cancel in ws-modal.
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.assistant-msg {
+  max-width: 85%;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  &--user {
+    align-self: flex-end;
+    background: var(--color-brand-subtle);
+    color: var(--color-text-primary);
+  }
+
+  &--assistant {
+    align-self: flex-start;
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-default);
+  }
+}
+
+/**
+ * Rendered Markdown from the assistant. Every value is a token, so it reads correctly in all three
+ * themes — the code background and the link colour are the two that would otherwise go unreadable in
+ * dark mode.
+ *
+ * ★ ::ng-deep IS LOAD-BEARING, NOT DECORATION. This markup arrives through [innerHTML], so it carries
+ * none of the `_ngcontent` attributes Angular's emulated encapsulation stamps onto template elements.
+ * Without the piercing selector every rule below compiles to `.assistant-msg__markdown[_ngcontent-x]
+ * table[_ngcontent-x]` and matches NOTHING — which is exactly what shipped: the table rendered as a
+ * real <table> and looked like two columns of cramped text.
+ *
+ * ★ AND IT IS SCOPED. `.assistant-msg__markdown` leads every selector, so none of this can reach a
+ * table, a list or a link anywhere else in the application. An unscoped ::ng-deep here would restyle
+ * every table in Wasnie from a chat panel.
+ *
+ * ★ NOTHING MAY OVERFLOW THE PANEL. It is 420px wide and a model will happily return a six-column
+ * table or a line of code longer than the screen. Each gets its own horizontal scroll INSIDE the
+ * bubble; the chat's own layout never moves.
+ */
+.assistant-msg__markdown {
+  // On the container itself, which IS a template element and so needs no piercing.
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+// Everything below targets the INJECTED markup, hence ::ng-deep — and every selector stays behind
+// `.assistant-msg__markdown`, so none of it escapes the chat bubble.
+.assistant-msg__markdown ::ng-deep {
+  p {
+    margin: 0 0 var(--space-2);
+
+    &:last-child { margin-bottom: 0; }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    margin: var(--space-3) 0 var(--space-2);
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--color-text-primary);
+
+    &:first-child { margin-top: 0; }
+  }
+
+  // A heading inside a chat bubble is a label, not a banner: only the first two get any lift at all.
+  h1 { font-size: var(--font-size-16); }
+  h2 { font-size: var(--font-size-15); }
+
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  ul, ol {
+    margin: 0 0 var(--space-2);
+    padding-left: var(--space-5);
+
+    &:last-child { margin-bottom: 0; }
+  }
+
+  ul { list-style: disc; }
+  ol { list-style: decimal; }
+
+  li {
+    margin-bottom: var(--space-1);
+
+    &::marker { color: var(--color-text-tertiary); }
+  }
+
+  // Nested lists indent without compounding the gap, and change marker so depth is readable.
+  li > ul, li > ol { margin: var(--space-1) 0 0; }
+  li > ul { list-style: circle; }
+
+  a {
+    color: var(--color-text-link);
+    text-decoration: underline;
+
+    &:hover { color: var(--color-text-link-hover); }
+  }
+
+  code {
+    padding: 1px var(--space-1);
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-surface-sunken);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--font-size-12);
+    color: var(--color-text-primary);
+  }
+
+  pre {
+    margin: 0 0 var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-surface-sunken);
+    // ★ Containment: a long line scrolls here instead of widening the panel.
+    overflow-x: auto;
+
+    &:last-child { margin-bottom: 0; }
+
+    code {
+      padding: 0;
+      background: none;
+      white-space: pre;
+    }
+  }
+
+  blockquote {
+    margin: 0 0 var(--space-2);
+    padding: var(--space-1) 0 var(--space-1) var(--space-3);
+    border-left: 2px solid var(--color-border-strong);
+    color: var(--color-text-secondary);
+  }
+
+  // ★ Tables were asked for by name ("better as a table"), and they are the construction most likely
+  // to be wider than 420px. `display: block` is what lets the element scroll; the bubble does not
+  // stretch to fit it.
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 var(--space-2);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    border-collapse: collapse;
+    font-size: var(--font-size-12);
+
+    &:last-child { margin-bottom: 0; }
+  }
+
+  th, td {
+    padding: var(--space-2);
+    border: 1px solid var(--color-border-default);
+    text-align: left;
+    vertical-align: top;
+    // Cells wrap rather than forcing the table wider; the scroll is the fallback for genuinely wide
+    // content, not the first resort.
+    overflow-wrap: anywhere;
+  }
+
+  th {
+    background: var(--color-bg-surface-sunken);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+  }
+
+  // Zebra striping: the cheapest way to keep the eye on one row across several columns.
+  tbody tr:nth-child(even) { background: var(--color-bg-surface-sunken); }
+
+  hr {
+    margin: var(--space-3) 0;
+    border: none;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  img { max-width: 100%; }
+}
+
+/* Three dots while the model is thinking: the gap between pressing Enter and the first token. */
+.assistant-msg__waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+// Secondary, deliberately: it accompanies the answer, it is not the answer. Same size as the panel's
+// small print so it never competes with the content that is about to replace it.
+.assistant-msg__waiting-text {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// Only appears on a slow turn, so it is quieter still — an explanation offered, not an alarm raised.
+.assistant-msg__waiting-long {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+}
+
+.assistant-msg__typing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--color-text-tertiary);
+    animation: assistant-typing 1.2s infinite ease-in-out;
+
+    &:nth-child(2) { animation-delay: 0.15s; }
+    &:nth-child(3) { animation-delay: 0.3s; }
+  }
+}
+
+@keyframes assistant-typing {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 1; }
+}
+
+.assistant-msg__placeholder {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+// ── The welcome ─────────────────────────────────────────────────────────────
+//
+// Three levels, and the hierarchy is the message: what you can ask, then what to ask, then what this
+// will never do.
+.assistant-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  // Sits in the upper part of the empty panel rather than dead centre: the eye starts at the top and
+  // the composer is what it travels to next.
+  padding: var(--space-6) var(--space-2) var(--space-4);
+}
+
+.assistant-welcome__logo {
+  // ★ align-self, and it is the whole fix. The welcome is a flex COLUMN, whose default
+  // `align-items: stretch` was widening this box to the full column and letting `object-fit: contain`
+  // centre the mark inside it — so a left-aligned rule produced a visually centred logo. Shrinking the
+  // box to its content is what actually puts the mark on the left edge, in line with the greeting.
+  align-self: flex-start;
+
+  // Present, not shouting. Large enough to register as the product's mark above the greeting, small
+  // enough that the greeting is still the thing being read first.
+  height: 32px;
+  width: auto;
+  // The panel is min(420px, 100vw); on a narrow phone the mark must shrink rather than push the layout.
+  max-width: 60%;
+  margin-bottom: var(--space-1);
+}
+
+.assistant-welcome__greeting {
+  margin: 0;
+  // ★ SCALES WITH THE PANEL, WHICH IS min(420px, 100vw). On a desktop the panel is fixed at 420 and
+  // the viewport is wide, so the clamp lands on its 32px ceiling; on a phone the panel IS the viewport
+  // and the greeting comes down with it instead of overflowing. A single fixed size cannot do both,
+  // and the Spanish greeting is the long one that would break first.
+  font-size: clamp(var(--font-size-24), 7.5vw, var(--font-size-32));
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+
+  // ★ GRADIENT TEXT. The paint is clipped to the glyphs, which needs the text itself to be
+  // transparent — so `color` here is the fallback for anything that does not support the clip, NOT
+  // decoration. Getting that order wrong renders an invisible greeting.
+  color: var(--color-text-primary);
+  background: var(--gradient-assistant);
+  background-clip: text;
+  -webkit-background-clip: text;
+
+  @supports (background-clip: text) or (-webkit-background-clip: text) {
+    color: transparent;
+  }
+
+  // The greeting is a question; long ones must wrap, never overflow the panel.
+  text-wrap: balance;
+}
+
+.assistant-welcome__subtitle {
+  margin: 0;
+  font-size: var(--font-size-15);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// ★ THE GUARANTEE, AND IT NO LONGER NEEDS A BOX. It carried its own surface and border so it would not
+// read as small print; on screen that box turned a sentence into a widget and broke the flow of the
+// welcome. The weight does the same job more quietly: same left edge as the subtitle, same colour as
+// ordinary body text, semibold so it still reads as a statement the product is making rather than a
+// footnote — which was always the point, not the border.
+.assistant-welcome__readonly {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// ── The failed-turn alert ───────────────────────────────────────────────────
+//
+// ★ LOCAL CSS, NOT A NEW SHARED PRIMITIVE. The design system has no `ws-alert`, and adding one is a
+// separate decision (DESIGN_SYSTEM §10.3) rather than something to improvise mid-feature. The
+// documented precedent is followed instead: build it here, in the one component that needs it, from
+// the SAME warning tokens the pay-run and payout screens already use for their banners. If a second
+// feature wants an alert, this is what gets promoted — the tokens are already the house ones, so
+// promotion is a move rather than a rewrite.
+//
+// WARNING, not danger: nothing is broken and nothing was lost — the question is safe and can be
+// answered again. Red would say otherwise.
+.assistant-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+}
+
+.assistant-alert__icon {
+  flex-shrink: 0;
+  color: var(--color-warning);
+  // Optically aligns the glyph with the first line of the title rather than the top of its box.
+  margin-top: 2px;
+}
+
+.assistant-alert__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.assistant-alert__title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.assistant-alert__text {
+  margin: 0;
+  font-size: var(--font-size-13);
+  // The body reads on the surface's own text colour: warning-on-warning for a whole paragraph is
+  // harder to read than it looks, and the title plus the icon already carry the severity.
+  color: var(--color-text-primary);
+}
+
+.assistant-panel__error {
+  font-size: var(--font-size-13);
+  color: var(--color-danger);
+}
+
+// ── Composer ────────────────────────────────────────────────────────────────
+
+.assistant-panel__composer {
+  flex-shrink: 0;
+  padding: var(--space-4);
+  // No border-top here any more: the composer card below draws its own edges, and two lines stacked
+  // a few pixels apart read as a rendering mistake.
+}
+
+/**
+ * The composer card — the same recipe ws-card uses (ws-card.component.scss:6-9): surface background,
+ * subtle border, --radius-xl corners, soft shadow. Not `<ws-card>` itself because that primitive owns
+ * its padding and section slots, and this content needs three flush bands (field / actions /
+ * disclaimer) that its padding would fight.
+ */
+.assistant-composer {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  // The focus treatment moves to the CARD, using the same two tokens WsInput and WsTextarea use for
+  // it. :focus-within means no state has to be plumbed from the child — the card lights up whenever
+  // the textarea inside has focus, which is what makes the pair read as one control.
+  &:focus-within {
+    border-color: var(--color-border-focus);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+/**
+ * The primitive keeps its own chrome for every other consumer; here the CARD is the chrome, so the
+ * field's border, background and focus shadow are neutralised. ::ng-deep is the one way to reach a
+ * child component's internals without editing the primitive — and editing WsTextarea is exactly what
+ * must not happen: a `borderless` flag would be this screen's preference baked into a shared control.
+ * Scoped under .assistant-composer so it cannot leak to any other textarea in the app.
+ */
+.assistant-composer ::ng-deep .ws-textarea__field {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+
+  &:hover:not(.ws-textarea__field--focused) {
+    border-color: transparent;
+  }
+}
+
+.assistant-composer__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.assistant-composer__disclaimer {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  // Semibold for the same reason the welcome's read-only note is: this is the standing promise about
+  // what the assistant will not do, and at 12px in tertiary grey it was the easiest thing on the panel
+  // to stop seeing. The weight is what keeps it readable without making it louder.
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}

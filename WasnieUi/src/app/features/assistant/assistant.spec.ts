@@ -1,0 +1,1985 @@
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ApplicationRef } from '@angular/core';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { Router, provideRouter } from '@angular/router';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { of, throwError } from 'rxjs';
+import { AssistantStore } from './state/assistant.store';
+import { AssistantApiService } from './services/assistant.api.service';
+import { AssistantPanelComponent } from './panel/assistant-panel.component';
+import { AssistantTriggerComponent } from './trigger/assistant-trigger.component';
+import {
+  ASSISTANT_NOT_CONNECTED,
+  AssistantConversation,
+  AssistantExchange,
+  AssistantStreamEvent,
+  isPlaceholderReply,
+} from './models/assistant.model';
+
+/**
+ * The assistant panel with NO AI behind it.
+ *
+ * What these tests pin is that the shell works end to end — the panel opens, a message round-trips
+ * through the server and comes back as two stored turns, a previous conversation reopens — and that
+ * the entry point is HIDDEN, not disabled, for a user without the entitlement.
+ */
+
+const CONVERSATION: AssistantConversation = {
+  id: 'conv-1',
+  title: 'Q3 planning',
+  createdAt: '2026-07-31T09:00:00Z',
+  updatedAt: '2026-07-31T09:00:00Z',
+  messages: [],
+  lastTurnUnanswered: false,
+};
+
+function exchange(content: string): AssistantExchange {
+  return {
+    userMessage: {
+      id: 'm-user', role: 'User', content, payload: null, sequence: 0,
+      createdAt: '2026-07-31T09:00:00Z',
+    },
+    assistantMessage: {
+      id: 'm-bot', role: 'Assistant', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 1,
+      createdAt: '2026-07-31T09:00:00Z',
+    },
+  };
+}
+
+function apiSpy(): jasmine.SpyObj<AssistantApiService> {
+  const api = jasmine.createSpyObj<AssistantApiService>('AssistantApiService', [
+    'getEntitlement', 'listConversations', 'getConversation', 'startConversation',
+    'postMessage', 'streamMessage', 'renameConversation', 'deleteConversation',
+  ]);
+  api.getEntitlement.and.returnValue(of({ enabled: true }));
+  api.listConversations.and.returnValue(of([]));
+  api.startConversation.and.returnValue(of(CONVERSATION));
+  api.getConversation.and.returnValue(of(CONVERSATION));
+  api.postMessage.and.returnValue(of(exchange('hello')));
+  api.deleteConversation.and.returnValue(of(void 0));
+  // The panel streams; the fake replays the frames a connected model would produce.
+  api.streamMessage.and.callFake((_id: string, content: string) =>
+    frames([
+      { type: 'user', message: exchange(content).userMessage },
+      { type: 'delta', delta: 'A real ' },
+      { type: 'delta', delta: 'answer.' },
+      { type: 'done', message: { ...exchange(content).assistantMessage, content: 'A real answer.' } },
+    ]));
+  return api;
+}
+
+/** Turns a list of frames into the async generator the store consumes. */
+async function* frames(list: AssistantStreamEvent[]): AsyncGenerator<AssistantStreamEvent> {
+  for (const frame of list) {
+    yield frame;
+  }
+}
+
+describe('AssistantStore', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('opens and closes the panel', async () => {
+    expect(store.isOpen()).toBeFalse();
+
+    await store.open();
+    expect(store.isOpen()).toBeTrue();
+    expect(api.listConversations).toHaveBeenCalled();
+
+    store.close();
+    expect(store.isOpen()).toBeFalse();
+    expect(store.historyOpen()).toBeFalse();
+  });
+
+  it('appends the SERVER rows for both turns, not an optimistic local copy', async () => {
+    await store.startConversation();
+    await store.send('hello');
+
+    // Two messages, in server order, with the ids the server assigned. Echoing what we typed instead
+    // would create a second version of the message that can drift from the stored row.
+    expect(store.messages().length).toBe(2);
+    expect(store.messages()[0].id).toBe('m-user');
+    expect(store.messages()[1].id).toBe('m-bot');
+    expect(api.streamMessage).toHaveBeenCalled();
+    expect(api.streamMessage.calls.mostRecent().args.slice(0, 2)).toEqual(['conv-1', 'hello']);
+  });
+
+  it('starts a conversation on the first message when there is none', async () => {
+    // The empty panel must not force the user to press "new conversation" before they may talk.
+    expect(store.hasConversation()).toBeFalse();
+
+    await store.send('first words');
+
+    expect(api.startConversation).toHaveBeenCalled();
+    expect(store.hasConversation()).toBeTrue();
+  });
+
+  it('ignores an empty message and does not call the server', async () => {
+    await store.send('   ');
+    expect(api.startConversation).not.toHaveBeenCalled();
+    expect(api.streamMessage).not.toHaveBeenCalled();
+  });
+
+  it('reopens a previous conversation with its messages', async () => {
+    const previous: AssistantConversation = {
+      ...CONVERSATION,
+      id: 'conv-old',
+      title: 'Last week',
+      messages: [
+        { id: 'a', role: 'User', content: 'older question', payload: null, sequence: 0, createdAt: '2026-07-20T09:00:00Z' },
+        { id: 'b', role: 'Assistant', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 1, createdAt: '2026-07-20T09:00:00Z' },
+      ],
+    };
+    api.getConversation.and.returnValue(of(previous));
+
+    await store.openConversation('conv-old');
+
+    expect(api.getConversation).toHaveBeenCalledWith('conv-old');
+    expect(store.conversation()?.title).toBe('Last week');
+    expect(store.messages().map((m) => m.sequence)).toEqual([0, 1]);
+  });
+
+  it('★ renders the answer as it streams, then replaces it with the stored row', async () => {
+    await store.startConversation();
+    await store.send('hello');
+
+    // The temporary bubble is gone once `done` arrived...
+    expect(store.streamingReply()).toBeNull();
+    // ...and what remains are the two PERSISTED rows, with the model's real answer.
+    expect(store.messages().map((m) => m.content)).toEqual(['hello', 'A real answer.']);
+    expect(store.messages()[1].content).not.toBe(ASSISTANT_NOT_CONNECTED);
+  });
+
+  it('★ discards the partial answer when the stream fails, and keeps the question', async () => {
+    // ★ The server stored nothing for the assistant, so leaving the fragments on screen would show a
+    // message the user cannot find again. The question they asked IS stored, so retrying is free.
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'delta', delta: 'The answer begins' },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' },
+      ]));
+
+    await store.startConversation();
+    await store.send('a question');
+
+    expect(store.streamingReply()).toBeNull('the partial text must not linger');
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_RATE_LIMITED');
+    // The user's turn survived; no assistant row was added.
+    expect(store.messages().map((m) => m.role)).toEqual(['User']);
+  });
+
+  it('surfaces a transport failure as the generic error key', async () => {
+    api.streamMessage.and.throwError('network down');
+
+    await store.startConversation();
+    await store.send('a question');
+
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_UNAVAILABLE');
+    expect(store.streamingReply()).toBeNull();
+  });
+
+  it('clears a previous error when a new message is sent', async () => {
+    // A stale error under a fresh answer would read as if the new one had failed too.
+    store.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
+
+    await store.startConversation();
+    await store.send('trying again');
+
+    expect(store.errorKey()).toBeNull();
+  });
+
+  it('treats a failed entitlement check as NO access, never as yes', async () => {
+    // Guessing generously here would only render a button that 403s on first use.
+    api.getEntitlement.and.returnValue(throwError(() => new Error('network')));
+
+    await store.loadEntitlement();
+
+    expect(store.entitled()).toBeFalse();
+  });
+});
+
+describe('AssistantTriggerComponent — hide, do not disable', () => {
+  let fixture: ComponentFixture<AssistantTriggerComponent>;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  async function setup(enabled: boolean) {
+    api = apiSpy();
+    api.getEntitlement.and.returnValue(of({ enabled }));
+
+    await TestBed.configureTestingModule({
+      imports: [AssistantTriggerComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantTriggerComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('renders the button for an entitled user', async () => {
+    await setup(true);
+    expect(fixture.nativeElement.querySelector('button')).toBeTruthy();
+  });
+
+  it('★ renders NOTHING for a user without the entitlement — not a disabled button', async () => {
+    await setup(false);
+
+    const button = fixture.nativeElement.querySelector('button');
+    expect(button).toBeNull('a forbidden action is hidden, never shown disabled');
+  });
+
+  it('renders nothing while the entitlement is still unknown', async () => {
+    // No flash of a button the user may not be allowed to use.
+    api = apiSpy();
+    await TestBed.configureTestingModule({
+      imports: [AssistantTriggerComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    }).compileComponents();
+
+    const f = TestBed.createComponent(AssistantTriggerComponent);
+    const store = TestBed.inject(AssistantStore);
+    store.entitled.set(null);
+    f.detectChanges();
+
+    expect(f.nativeElement.querySelector('button')).toBeNull();
+  });
+});
+
+describe('AssistantPanelComponent — placeholder rendering', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        // ws-empty-state renders an optional RouterLink action, so the panel needs a router context.
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('is not in the DOM while closed', () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeNull();
+  });
+
+  it('★ renders the assistant sentinel as translated copy, never as the raw marker', () => {
+    // The backend stores a language-neutral marker so a Spanish and a Polish reader can each see the
+    // placeholder in their own language. Printing the row verbatim would leak "__ASSISTANT_NOT_CONNECTED__"
+    // into the UI — this is the test that keeps that from shipping.
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'a', role: 'User', content: 'a question', payload: null, sequence: 0, createdAt: '2026-07-31T09:00:00Z' },
+        { id: 'b', role: 'Assistant', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 1, createdAt: '2026-07-31T09:00:00Z' },
+      ],
+    });
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]').textContent;
+    expect(text).not.toContain(ASSISTANT_NOT_CONNECTED);
+    expect(text).toContain('a question');
+  });
+
+  it('★ the composer is the multi-line primitive, and sending still works through it', async () => {
+    // The migration test: WsInput (one line) → WsTextarea. What must NOT change is the send flow —
+    // Enter still produces the same call, the same two stored turns come back, and the placeholder
+    // is persisted exactly as in piece 1. Only the input element changed.
+    const api = TestBed.inject(AssistantApiService) as jasmine.SpyObj<AssistantApiService>;
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+
+    const composer: HTMLTextAreaElement = fixture.nativeElement.querySelector(
+      '[data-testid="assistant-composer"] textarea',
+    );
+    expect(composer).withContext('the composer must be a textarea, not a single-line input').toBeTruthy();
+
+    // Type a genuine multi-line message — the thing the one-line composer could not accept.
+    composer.value = 'line one\nline two';
+    composer.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    // Enter sends (Shift+Enter would have inserted a break — that contract is pinned in the
+    // primitive's own spec).
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+
+    expect(api.streamMessage.calls.mostRecent().args.slice(0, 2)).toEqual(['conv-1', 'line one\nline two']);
+    expect(store.messages().map((m) => m.id)).toEqual(['m-user', 'm-bot']);
+    expect(store.messages()[1].content).toBe('A real answer.');
+  });
+
+  // ── The composer's presentation ─────────────────────────────────────────
+
+  function openComposer() {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+  }
+
+  function sendButton(): HTMLButtonElement {
+    return fixture.nativeElement.querySelector('[data-testid="assistant-send"] button');
+  }
+
+  it('★ the send button is disabled while the box is empty and enabled once there is text', () => {
+    openComposer();
+    expect(sendButton().disabled).withContext('nothing to send yet').toBeTrue();
+
+    const composer: HTMLTextAreaElement = fixture.nativeElement.querySelector(
+      '[data-testid="assistant-composer"] textarea',
+    );
+    composer.value = 'a question';
+    composer.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(sendButton().disabled).toBeFalse();
+
+    // Whitespace is not content: a box holding three spaces must not offer to send them.
+    composer.value = '   ';
+    composer.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(sendButton().disabled).withContext('whitespace is not a message').toBeTrue();
+  });
+
+  // ── Scroll to the newest message ────────────────────────────────────────
+  //
+  // Headless lays out, but the fixture's message list never grows tall enough to actually overflow,
+  // so these pin the WIRING: that the panel asks to be taken to the bottom, at the right moments,
+  // with the right behaviour — and that it does so AFTER the render, not during the effect (which is
+  // the mistake that makes a scroll-to-bottom "work sometimes").
+
+  function scrollSpy() {
+    return spyOn(fixture.componentInstance, 'scrollToBottom');
+  }
+
+  /** afterNextRender hooks run on the application tick, not on a bare detectChanges(). */
+  async function render() {
+    fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
+    await fixture.whenStable();
+  }
+
+  it('★ scrolls to the newest message when a conversation is opened, with no visible travel', async () => {
+    const spy = scrollSpy();
+
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'a', role: 'User', content: 'older', payload: null, sequence: 0, createdAt: '' },
+        { id: 'b', role: 'Assistant', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 1, createdAt: '' },
+      ],
+    });
+    await render();
+
+    expect(spy).toHaveBeenCalled();
+    // 'auto', not 'smooth': the user must find the newest message already in place, never watch the
+    // view travel down from the oldest one.
+    expect(spy.calls.mostRecent().args[0]).toBe('auto');
+  });
+
+  it('★ scrolls again when a message is sent', async () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    await render();
+
+    const spy = scrollSpy();
+    await store.send('hello');
+    await render();
+
+    expect(spy).toHaveBeenCalled();
+    // Smooth here: the turn arrives while the user is watching, so the movement is informative.
+    expect(spy.calls.mostRecent().args[0]).toBe('smooth');
+  });
+
+  it('★ re-runs when switching to another conversation', async () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    await render();
+
+    const spy = scrollSpy();
+    store.conversation.set({ ...CONVERSATION, id: 'conv-2', title: 'Another' });
+    await render();
+
+    expect(spy).toHaveBeenCalled();
+    expect(spy.calls.mostRecent().args[0]).toBe('auto');
+  });
+
+  it('does not yank the user down while they are reading older messages', async () => {
+    // The nuance: a reply arriving must not tear someone away from the history they scrolled up to.
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    await render();
+
+    const container: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]');
+    // Simulate "scrolled up to read": far from the bottom.
+    Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(container, 'scrollTop', { value: 0, configurable: true, writable: true });
+
+    const spy = scrollSpy();
+    await store.send('a new turn');
+    await render();
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('still follows along for a user who IS at the bottom', async () => {
+    // The other side of the same rule — otherwise "do not yank" would quietly break the normal case.
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    await render();
+
+    const container: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]');
+    Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true });
+    Object.defineProperty(container, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(container, 'scrollTop', { value: 1600, configurable: true, writable: true });
+
+    const spy = scrollSpy();
+    await store.send('a new turn');
+    await render();
+
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('★ the composer shrinks back to its original size after the message is sent', async () => {
+    // ★ The bug as the user meets it: type a paragraph, press Enter, and the box stays as tall as the
+    // text that just left it — eating the conversation above it a little more on every send.
+    // Asserted end to end through the panel, because that is where the symptom lives; the primitive
+    // has its own unit test for the same collapse.
+    document.body.appendChild(fixture.nativeElement);
+    openComposer();
+
+    const composer: HTMLTextAreaElement = fixture.nativeElement.querySelector(
+      '[data-testid="assistant-composer"] textarea',
+    );
+    const restingHeight = composer.getBoundingClientRect().height;
+
+    composer.value = ['one', 'two', 'three', 'four', 'five', 'six'].join('\n');
+    composer.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const grownHeight = composer.getBoundingClientRect().height;
+    expect(grownHeight).withContext('six lines must have grown the box').toBeGreaterThan(restingHeight);
+
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const afterSend = composer.getBoundingClientRect().height;
+    document.body.removeChild(fixture.nativeElement);
+
+    expect(afterSend).withContext('sending must return the composer to its original size').toBe(restingHeight);
+  });
+
+  it('renders the disclaimer ALWAYS, whatever the state', () => {
+    // Not collapsible, not first-run-only: a permanent guard rail. Checked in the two states that
+    // could plausibly hide it — a fresh empty panel and a conversation in progress.
+    store.isOpen.set(true);
+    store.conversation.set(null);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-disclaimer"]')).toBeTruthy();
+
+    // ...and it resolves THROUGH i18n rather than being hardcoded in the template: with a locale
+    // loaded, the rendered text is the translation, not the key.
+    const translate = TestBed.inject(TranslateService);
+    translate.setTranslation('es', {
+      ASSISTANT: { DISCLAIMER: 'El asistente solo orienta y responde consultas.' },
+    });
+    translate.use('es');
+    openComposer();
+
+    const disclaimer = fixture.nativeElement.querySelector('[data-testid="assistant-disclaimer"]');
+    expect(disclaimer).toBeTruthy();
+    expect(disclaimer.textContent.trim()).toBe('El asistente solo orienta y responde consultas.');
+  });
+
+  it('★ carries NO controls the assistant cannot perform', () => {
+    // The visual reference ships Search, Deep Research, Reason, file upload and a microphone. This
+    // assistant does none of them and several it never will — a control that does nothing is a
+    // promise the engine cannot keep. This test is what stops them reappearing via copy-paste.
+    openComposer();
+    const card: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-composer-card"]');
+
+    expect(card.querySelector('input[type="file"]')).withContext('no file upload').toBeNull();
+
+    const buttons = Array.from(card.querySelectorAll('button')) as HTMLButtonElement[];
+    // Exactly one button in the composer: send.
+    expect(buttons.length).withContext('the composer holds send and nothing else').toBe(1);
+
+    const label = (b: HTMLButtonElement) =>
+      `${b.textContent ?? ''} ${b.getAttribute('aria-label') ?? ''} ${b.getAttribute('title') ?? ''}`.toLowerCase();
+    const forbidden = ['search', 'research', 'reason', 'upload', 'attach', 'file', 'mic', 'voice', 'record'];
+    for (const button of buttons) {
+      for (const word of forbidden) {
+        expect(label(button)).withContext(`no "${word}" control belongs here`).not.toContain(word);
+      }
+    }
+  });
+
+  // ── Rendered Markdown must actually be STYLED ────────────────────────────
+
+  /** Renders one assistant message and returns the element for a CSS selector inside it. */
+  function renderMarkdown(markdown: string): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'md', role: 'Assistant', content: markdown, payload: null, sequence: 0, createdAt: '' },
+      ],
+    });
+    // Attached to the document because getComputedStyle only resolves for elements in the page.
+    document.body.appendChild(fixture.nativeElement);
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('.assistant-msg__markdown');
+  }
+
+  it('★ the rendered table is actually STYLED, not just rendered', () => {
+    // ★ THE BUG THIS PINS. Angular's default (Emulated) encapsulation compiles
+    // `.assistant-msg__markdown td` into `.assistant-msg__markdown[_ngcontent-x] td[_ngcontent-x]` —
+    // and HTML injected through [innerHTML] carries NO _ngcontent attribute, so every one of those
+    // rules silently matched nothing. The table rendered as a real <table> and looked like two columns
+    // of cramped text. A test that only asserted "a <table> exists" passed the whole time; only asking
+    // the browser what it COMPUTED catches it.
+    const host = renderMarkdown('| Función | Descripción |\n| --- | --- |\n| Planes | Reglas de comisión |');
+
+    const cell = host.querySelector('td') as HTMLElement;
+    const header = host.querySelector('th') as HTMLElement;
+    expect(cell).withContext('the table renders').toBeTruthy();
+
+    const cellStyle = getComputedStyle(cell);
+    const headerStyle = getComputedStyle(header);
+
+    expect(cellStyle.paddingLeft).not.toBe('0px', 'cells need breathing room to read as a table');
+    // WIDTH, not style: Tailwind's preflight sets `border-style: solid` with `border-width: 0` on
+    // every element, so asserting the style would pass with no rule of ours applied at all.
+    expect(cellStyle.borderTopWidth).not.toBe('0px', 'cells need separating lines');
+    expect(headerStyle.fontWeight).not.toBe('400', 'the header row must stand out');
+
+    document.body.removeChild(fixture.nativeElement);
+  });
+
+  it('★ code blocks and inline code are styled and contained', () => {
+    const host = renderMarkdown('Use `PlanStatus`:\n\n```csharp\nvar reallyLongLine = 1;\n```');
+
+    const pre = host.querySelector('pre') as HTMLElement;
+    const inline = host.querySelector('p code') as HTMLElement;
+
+    expect(getComputedStyle(inline).backgroundColor).not.toBe('rgba(0, 0, 0, 0)', 'inline code needs a tint');
+    // ★ Containment: a long line must scroll inside the bubble, never widen the 420px panel.
+    expect(getComputedStyle(pre).overflowX).toBe('auto');
+
+    document.body.removeChild(fixture.nativeElement);
+  });
+
+  it('★ links and lists are styled', () => {
+    const host = renderMarkdown('- one\n- two\n\n[guide](https://example.com)');
+
+    const list = host.querySelector('ul') as HTMLElement;
+    const link = host.querySelector('a') as HTMLElement;
+
+    expect(getComputedStyle(list).paddingLeft).not.toBe('0px', 'bullets need an indent to hang on');
+    expect(getComputedStyle(list).listStyleType).not.toBe('none');
+    expect(getComputedStyle(link).textDecorationLine).toContain('underline');
+
+    document.body.removeChild(fixture.nativeElement);
+  });
+
+  it("every scrolling container in the panel wears the design system's scrollbar", () => {
+    // ★ REUSED, NOT REINVENTED. `ws-scroll-thin` is the app's one scrollbar (styles.scss), already on
+    // the sidebar, the modal body, the select list and the data table. The panel was showing the
+    // browser's native bars beside them. Asserted by CLASS because that is how the utility is applied
+    // everywhere else — a test on computed colours would pass just as well against a copy of the rules,
+    // which is exactly what must not happen.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversations.set([
+      { id: 'c1', title: 'One', createdAt: '', updatedAt: '', messageCount: 2 },
+    ]);
+    fixture.detectChanges();
+
+    const messages = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]');
+    const history = fixture.nativeElement.querySelector('[data-testid="assistant-history"]');
+    const composer = fixture.nativeElement.querySelector('[data-testid="assistant-composer"] textarea');
+
+    expect(messages.classList).toContain('ws-scroll-thin');
+    expect(history.classList).toContain('ws-scroll-thin', 'the conversation list scrolls too');
+    expect(composer.classList).toContain('ws-scroll-thin', 'a long draft scrolls inside the composer');
+  });
+
+  it('★ the ::ng-deep styles do NOT escape the chat bubble', () => {
+    // ★ THE CONTAINMENT TEST. ::ng-deep pierces encapsulation, and an unscoped one here would restyle
+    // every table, list and link in Wasnie from a chat panel — borders and padding appearing on the
+    // payouts grid because someone asked the assistant a question. Asserted by rendering an identical
+    // table OUTSIDE the panel and checking it was left alone.
+    const host = renderMarkdown('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    const inside = getComputedStyle(host.querySelector('td') as HTMLElement);
+
+    const outsider = document.createElement('div');
+    outsider.innerHTML = '<table><tbody><tr><td id="outsider-cell">1</td></tr></tbody></table>';
+    document.body.appendChild(outsider);
+    const outside = getComputedStyle(outsider.querySelector('td') as HTMLElement);
+
+    // The bubble's cell is styled…
+    expect(inside.paddingLeft).not.toBe('0px');
+    // …and the identical cell outside it is untouched.
+    expect(outside.paddingLeft).toBe('0px', 'the chat must not restyle tables elsewhere in the app');
+    // Again width, not style — the `solid` here is Tailwind's preflight, present app-wide and nothing
+    // to do with these rules.
+    expect(outside.borderTopWidth).toBe('0px');
+
+    document.body.removeChild(outsider);
+    document.body.removeChild(fixture.nativeElement);
+  });
+
+  it('★ shows a translated label for an untitled thread, never the sentinel', () => {
+    // ★ The backend stores `__UNTITLED__` so the history is not frozen into one user's language. If
+    // that ever reaches the screen it looks like a bug — this is what stops it.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversation.set({ ...CONVERSATION, title: '__UNTITLED__' });
+    store.conversations.set([
+      { id: 'conv-1', title: '__UNTITLED__', createdAt: '', updatedAt: '', messageCount: 0 },
+    ]);
+    fixture.detectChanges();
+
+    const header: string = fixture.nativeElement.querySelector('.assistant-panel__title').textContent;
+    const historyRow: string = fixture.nativeElement.querySelector('[data-testid="assistant-history-item"]').textContent;
+
+    expect(header).not.toContain('__UNTITLED__');
+    expect(historyRow).not.toContain('__UNTITLED__');
+    // The i18n key resolves (TranslateModule with no locale echoes the key, which is still not the sentinel).
+    expect(header).toContain('UNTITLED');
+  });
+
+  it('shows a real title as it was stored', () => {
+    store.isOpen.set(true);
+    store.conversation.set({ ...CONVERSATION, title: '¿Cómo creo un plan?' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.assistant-panel__title').textContent)
+      .toContain('¿Cómo creo un plan?');
+  });
+
+  it('keeps title, meta and delete in every history row after the compacting', () => {
+    // The row was compacted (padding/gap) so more threads fit on screen. Spacing is Rodolfo's call, but
+    // the three parts of the row are not — this is what catches a "compact" that dropped one of them.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversations.set([
+      { id: 'c1', title: 'Primera', createdAt: '', updatedAt: '2026-08-03T10:00:00Z', messageCount: 4 },
+      { id: 'c2', title: 'Segunda', createdAt: '', updatedAt: '2026-08-02T10:00:00Z', messageCount: 2 },
+    ]);
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="assistant-history-item"]');
+    expect(rows.length).toBe(2);
+
+    for (const row of rows) {
+      expect(row.querySelector('.assistant-history__item-title')).toBeTruthy();
+      expect(row.querySelector('.assistant-history__item-meta')).toBeTruthy();
+      expect(row.querySelector('.assistant-history__item-delete')).toBeTruthy();
+    }
+
+    expect(rows[0].querySelector('.assistant-history__item-title').textContent).toContain('Primera');
+    expect(rows[0].querySelector('.assistant-history__item-meta').textContent).toContain('4');
+  });
+
+  it('identifies a placeholder reply only for the assistant role', () => {
+    expect(isPlaceholderReply({
+      id: 'x', role: 'Assistant', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 0, createdAt: '',
+    })).toBeTrue();
+
+    // A user who literally types the marker is not the assistant, and must be shown their own words.
+    expect(isPlaceholderReply({
+      id: 'y', role: 'User', content: ASSISTANT_NOT_CONNECTED, payload: null, sequence: 0, createdAt: '',
+    })).toBeFalse();
+  });
+});
+
+/**
+ * ★ PILLAR 3 — the link interceptor.
+ *
+ * The assistant now answers "how do I create a plan?" with steps and a link to `/plans/new`. Rendered
+ * Markdown gives that a plain `<a href>`, and a plain `<a href>` is a FULL PAGE LOAD: Angular is torn
+ * down and rebuilt, and the conversation that just told the user where to go is gone at the exact
+ * moment they acted on it. These tests pin that internal links route through Angular instead, and that
+ * external ones are left entirely alone.
+ */
+describe('AssistantPanelComponent — assistant links navigate without reloading the app', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+  let router: Router;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+    router = TestBed.inject(Router);
+    spyOn(router, 'navigateByUrl').and.resolveTo(true);
+  });
+
+  /** Renders one assistant reply and hands back the anchor inside it. */
+  function anchorFor(markdown: string): HTMLAnchorElement {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'Assistant', content: markdown, payload: null, sequence: 0, createdAt: '' },
+      ],
+    });
+    fixture.detectChanges();
+
+    const anchor: HTMLAnchorElement | null =
+      fixture.nativeElement.querySelector('.assistant-msg__markdown a');
+    expect(anchor).withContext('the reply must actually render a link').toBeTruthy();
+    return anchor!;
+  }
+
+  /**
+   * Clicks the anchor and reports what the component did with the event.
+   *
+   * The listener on `document` runs AFTER the panel's own (which sits on the bubble container), so it
+   * reads an honest `defaultPrevented` — and then prevents the default itself, so a link the component
+   * deliberately left alone does not navigate the Karma page or open a popup mid-suite.
+   */
+  function clickAndObserve(anchor: HTMLAnchorElement): { preventedByPanel: boolean } {
+    let preventedByPanel = false;
+    const guard = (ev: Event) => {
+      preventedByPanel = ev.defaultPrevented;
+      ev.preventDefault();
+    };
+    document.addEventListener('click', guard);
+    try {
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    } finally {
+      document.removeEventListener('click', guard);
+    }
+    return { preventedByPanel };
+  }
+
+  it('★ an internal link is routed through Angular, not followed by the browser', () => {
+    // ★ THE TEST THIS FEATURE STANDS ON. Remove the (click) handler from the markdown container and
+    // this goes red — which is the moment the browser starts reloading the whole app and wiping the
+    // chat on the most valuable click in the product.
+    const anchor = anchorFor('Then [Go to new plan](/plans/new).');
+
+    expect(anchor.getAttribute('href')).toBe('/plans/new');
+
+    const { preventedByPanel } = clickAndObserve(anchor);
+
+    expect(preventedByPanel).withContext('the browser must not be allowed to load the page').toBeTrue();
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/plans/new');
+  });
+
+  it('an internal link does NOT open in a new tab', () => {
+    // The destination is the app the user is already inside. A second copy of it in a new tab is not
+    // what "go here" means — and target=_blank would fight the interceptor for the same click.
+    const anchor = anchorFor('[Plans](/plans)');
+
+    expect(anchor.getAttribute('target')).toBeNull();
+  });
+
+  it('★ an EXTERNAL link is not intercepted, and keeps its noopener', () => {
+    // The router is for this app. Anything else is the browser's job — and it still opens in a new tab
+    // with the hardening the Markdown work put there, because a model-authored page must not be able
+    // to reach back through window.opener and navigate Wasnie somewhere of its choosing.
+    const anchor = anchorFor('See [the docs](https://externo.com/guide).');
+
+    expect(anchor.getAttribute('target')).toBe('_blank');
+    expect(anchor.getAttribute('rel')).toContain('noopener');
+
+    const { preventedByPanel } = clickAndObserve(anchor);
+
+    expect(preventedByPanel).withContext('an external link is the browser\'s business').toBeFalse();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('★ a protocol-relative URL is EXTERNAL, however much it looks like a route', () => {
+    // ★ THE TRAP IN THE NAIVE CHECK. `//evil.com` starts with a slash and is not a path: the browser
+    // resolves it to `https://evil.com`. A leading-slash test alone would hand a model-authored
+    // destination straight to the app's own router.
+    const anchor = anchorFor('[looks internal](//evil.com/x)');
+
+    const { preventedByPanel } = clickAndObserve(anchor);
+
+    expect(preventedByPanel).toBeFalse();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+    expect(anchor.getAttribute('target')).toBe('_blank');
+  });
+
+  it('a ctrl-clicked internal link is left to the browser', () => {
+    // The user asked for a new tab on purpose. Hijacking that into an in-app navigation overrides an
+    // intent they expressed deliberately.
+    const anchor = anchorFor('[Plans](/plans)');
+
+    let preventedByPanel = false;
+    const guard = (ev: Event) => {
+      preventedByPanel = ev.defaultPrevented;
+      ev.preventDefault();
+    };
+    document.addEventListener('click', guard);
+    anchor.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true }));
+    document.removeEventListener('click', guard);
+
+    expect(preventedByPanel).toBeFalse();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('a click on the prose around a link does nothing', () => {
+    anchorFor('Some text and a [link](/plans).');
+
+    const container: HTMLElement = fixture.nativeElement.querySelector('.assistant-msg__markdown');
+    container.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ RESILIENCE — the way out of a rate limit.
+ *
+ * The backend commits the user's turn BEFORE it calls the model, so a 429 leaves the question stored
+ * and no answer. These pin that Retry RE-ANSWERS that stored turn rather than sending it again — the
+ * difference between a recovered conversation and one where the user's own words appear twice.
+ */
+describe('AssistantStore — retry after a failed answer', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  /** A stream that stores the question and then fails — exactly what a 429 produces. */
+  function rateLimited(): void {
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' },
+      ]));
+  }
+
+  it('offers a retry after a rate-limited answer, and not before', async () => {
+    expect(store.retryable()).toBeNull();
+
+    rateLimited();
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_RATE_LIMITED');
+    expect(store.retryable()).not.toBeNull();
+    // The question survived — which is what the message on screen promises.
+    expect(store.messages().map((m) => m.role)).toEqual(['User']);
+  });
+
+  it('★ the retry RE-ANSWERS the stored turn instead of sending it again', async () => {
+    rateLimited();
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    // The provider recovers.
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'delta', delta: 'It was paid.' },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'It was paid.' } },
+      ]));
+
+    await store.retry();
+
+    // ★ isRetry is true, which is what tells the server not to store the question a second time.
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeTrue();
+
+    // ONE user row, still — and the answer beside it.
+    expect(store.messages().map((m) => m.role)).toEqual(['User', 'Assistant']);
+    expect(store.messages().filter((m) => m.role === 'User').length).toBe(1);
+    // Nothing left to retry once it worked.
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('a failure BEFORE the question reached the server retries as a normal send', async () => {
+    // No `user` frame arrived, so nothing is stored and there is nothing to re-answer. Sending it
+    // again is correct here — and telling the server "this is a retry" would be a lie it would act on
+    // by re-answering a turn that does not exist.
+    api.streamMessage.and.callFake(() =>
+      frames([{ type: 'error', errorKey: 'ASSISTANT.ERROR_UNAVAILABLE' }]));
+
+    await store.startConversation();
+    await store.send('a question that never landed');
+
+    expect(store.retryable()?.wasPersisted).toBeFalse();
+
+    await store.retry();
+
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeFalse();
+    expect(api.streamMessage.calls.mostRecent().args[1]).toBe('a question that never landed');
+  });
+
+  it('does nothing when there is nothing to retry', async () => {
+    await store.retry();
+    expect(api.streamMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('AssistantPanelComponent — the retry button', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('shows a NON-TECHNICAL message and a retry button when the assistant is rate limited', () => {
+    // ★ What the user reads is a translated KEY, never the provider's sentence — a vendor error string
+    // can carry request ids and slices of the prompt.
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'what happened with TERM-CC-10?',
+          payload: null, sequence: 0, createdAt: '',
+        },
+      ],
+      lastTurnUnanswered: true,
+    });
+    fixture.detectChanges();
+
+    const error = fixture.nativeElement.querySelector('[data-testid="assistant-error"]');
+    expect(error).toBeTruthy();
+    expect(error.textContent).toContain('ERROR_RATE_LIMITED');
+    expect(error.textContent).not.toContain('429');
+    expect(error.textContent).not.toContain('Groq');
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeTruthy();
+  });
+
+  it('hides the retry button when there is nothing to retry', () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.errorKey.set(null);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeNull();
+  });
+
+  it('the button asks the store to retry', async () => {
+    const spy = spyOn(store, 'retry').and.resolveTo();
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'x', payload: null, sequence: 0, createdAt: '' },
+      ],
+      lastTurnUnanswered: true,
+    });
+    fixture.detectChanges();
+
+    fixture.nativeElement
+      .querySelector('[data-testid="assistant-retry"] button')
+      ?.click() ?? fixture.nativeElement.querySelector('[data-testid="assistant-retry"]').click();
+
+    expect(spy).toHaveBeenCalled();
+  });
+});
+
+/**
+ * ★ THE FAILURE SURVIVES A REFRESH.
+ *
+ * The bug this fixes: the assistant failed, the retry appeared, the user reloaded, and everything was
+ * gone — no message, no warning, no way back. These pin that the state is reconstructed from what the
+ * SERVER reports about the stored turns, with no help from session memory.
+ */
+describe('AssistantStore — a failed turn reloaded from the server', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  /** What the server returns for a thread whose last question was never answered. */
+  const FAILED_THREAD: AssistantConversation = {
+    ...CONVERSATION,
+    id: 'conv-failed',
+    messages: [
+      {
+        id: 'm1', role: 'User', content: 'what happened with TERM-CC-10?',
+        payload: null, sequence: 0, createdAt: '2026-08-03T10:29:00Z',
+      },
+    ],
+    lastTurnUnanswered: true,
+  };
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ reconstructs the retry from a FRESH load, with no session memory behind it', async () => {
+    // This store has never sent anything — exactly the state after a page refresh.
+    api.getConversation.and.returnValue(of(FAILED_THREAD));
+
+    await store.openConversation('conv-failed');
+
+    const failed = store.retryable();
+    expect(failed).withContext('the warning must come back after a refresh').not.toBeNull();
+    expect(failed!.wasPersisted).toBeTrue();
+    expect(failed!.content).toBe('what happened with TERM-CC-10?');
+  });
+
+  it('shows nothing to retry for a thread that was answered', async () => {
+    api.getConversation.and.returnValue(of({
+      ...FAILED_THREAD,
+      messages: [
+        ...FAILED_THREAD.messages,
+        { id: 'm2', role: 'Assistant', content: 'It was paid.', payload: null, sequence: 1, createdAt: '' },
+      ],
+      lastTurnUnanswered: false,
+    } as AssistantConversation));
+
+    await store.openConversation('conv-failed');
+
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('★ retrying a RELOADED failure re-answers without duplicating the question', async () => {
+    api.getConversation.and.returnValue(of(FAILED_THREAD));
+    await store.openConversation('conv-failed');
+
+    api.streamMessage.and.callFake(() =>
+      frames([
+        { type: 'delta', delta: 'It was paid.' },
+        {
+          type: 'done',
+          message: {
+            id: 'm2', role: 'Assistant', content: 'It was paid.',
+            payload: null, sequence: 1, createdAt: '',
+          },
+        },
+      ]));
+
+    await store.retry();
+
+    // isRetry = true: the server re-answers the stored turn instead of storing the question again.
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeTrue();
+    expect(store.messages().map((m) => m.role)).toEqual(['User', 'Assistant']);
+    expect(store.messages().filter((m) => m.role === 'User').length).toBe(1);
+    // ...and the warning is gone, without a second round trip to find that out.
+    expect(store.retryable()).toBeNull();
+  });
+});
+
+describe('AssistantPanelComponent — the failed-turn alert', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  /** Opens the panel on a thread the SERVER says ended on an unanswered question. */
+  function renderReloadedFailure(): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'what happened with TERM-CC-10?',
+          payload: null, sequence: 0, createdAt: '',
+        },
+      ],
+      lastTurnUnanswered: true,
+    });
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]');
+  }
+
+  it('★ renders the alert and the retry from the RELOADED state alone', () => {
+    const alert = renderReloadedFailure();
+
+    expect(alert).withContext('a refreshed page must still show what happened').toBeTruthy();
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.querySelector('[data-testid="assistant-retry"]'))
+      .withContext('the retry lives INSIDE the alert').toBeTruthy();
+    // The question is still on screen beside it — nothing to retype.
+    expect(fixture.nativeElement.textContent).toContain('what happened with TERM-CC-10?');
+  });
+
+  it('uses the design system WARNING tokens, not invented classes', () => {
+    // ★ Asserted by COMPUTED style, not by class name: a class that exists but resolves to nothing is
+    // exactly the failure mode of "styled with a token that was never defined" — the --shadow-card
+    // problem this codebase already found once.
+    const alert = renderReloadedFailure();
+    const styles = getComputedStyle(alert);
+
+    const warningBg = getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-warning-bg').trim();
+    expect(warningBg).withContext('the token must actually be defined').not.toBe('');
+
+    expect(styles.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(parseFloat(styles.borderTopWidth)).toBeGreaterThan(0);
+    expect(parseFloat(styles.paddingTop)).toBeGreaterThan(0);
+    expect(parseFloat(styles.paddingBottom)).toBeGreaterThan(0);
+  });
+
+  it('has NO dismiss control — the only ways out are retrying or asking again', () => {
+    // ★ Dismissing would throw away the only route back to an answer and leave the question sitting
+    // there with nothing under it: the exact state this fix removes, reached by the user's own click.
+    const alert = renderReloadedFailure();
+
+    const buttons = Array.from(alert.querySelectorAll('button')) as HTMLElement[];
+    expect(buttons.length).withContext('retry, and nothing else').toBe(1);
+    expect(alert.textContent).not.toContain('×');
+  });
+
+  it('falls back to a general explanation when the reason was not seen this session', () => {
+    // After a refresh the reason was never stored, so claiming a specific one would be inventing it.
+    const alert = renderReloadedFailure();
+
+    expect(alert.textContent).toContain('FAILED_TITLE');
+    expect(alert.textContent).toContain('FAILED_DESC');
+  });
+
+  it('shows the SPECIFIC reason when this session watched it fail', () => {
+    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    const alert = renderReloadedFailure();
+
+    expect(alert.textContent).toContain('ERROR_RATE_LIMITED');
+    expect(alert.textContent).not.toContain('FAILED_DESC');
+  });
+
+  it('is absent when nothing failed', () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
+  });
+});
+
+/**
+ * ★ THE FAILURE CARD MUST NOT APPEAR WHILE THE ANSWER IS ON ITS WAY.
+ *
+ * The bug: the moment the server echoed the stored question, the thread ended on an unanswered turn —
+ * true, but only because the answer had not arrived yet. The card appeared beside the typing dots and
+ * told the user their question had failed while it was being answered, then vanished when it landed.
+ * "Waiting" is not "failed".
+ */
+describe('AssistantStore — no failure card while an answer is in flight', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ stays hidden between the stored question and the answer', async () => {
+    // The frames are yielded one at a time and `retryable()` is read after each — which is exactly
+    // what the panel does as it re-renders. Any true in the middle is the card the user saw.
+    const seen: boolean[] = [];
+
+    api.streamMessage.and.callFake((_id: string, content: string) => {
+      const list: AssistantStreamEvent[] = [
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'delta', delta: 'It was ' },
+        { type: 'delta', delta: 'paid.' },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'It was paid.' } },
+      ];
+      return (async function* () {
+        for (const frame of list) {
+          yield frame;
+          seen.push(store.retryable() !== null);
+        }
+      })();
+    });
+
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    expect(seen).withContext('the card must never flash mid-exchange').toEqual([false, false, false, false]);
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('appears only once the answer has actually failed', async () => {
+    const seen: boolean[] = [];
+
+    api.streamMessage.and.callFake((_id: string, content: string) => {
+      const list: AssistantStreamEvent[] = [
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' },
+      ];
+      return (async function* () {
+        for (const frame of list) {
+          yield frame;
+          seen.push(store.retryable() !== null);
+        }
+      })();
+    });
+
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    // Hidden while the question was merely waiting; the error is what reveals it — and it stays after,
+    // when `sending` is back to false.
+    expect(seen).toEqual([false, false]);
+    expect(store.retryable()).not.toBeNull();
+    expect(store.conversation()!.lastTurnUnanswered)
+      .withContext('and a refresh would derive the same thing').toBeTrue();
+  });
+
+  it('★ a RETRY of a reloaded failure hides the card while it runs', async () => {
+    // This one starts with the thread already marked unanswered, so without the in-flight guard the
+    // card would sit beside the very loader that is resolving it — inviting a second retry of the
+    // request already running.
+    api.getConversation.and.returnValue(of({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'q', payload: null, sequence: 0, createdAt: '' },
+      ],
+      lastTurnUnanswered: true,
+    } as AssistantConversation));
+
+    await store.openConversation('conv-1');
+    expect(store.retryable()).withContext('visible before the retry starts').not.toBeNull();
+
+    const seen: boolean[] = [];
+    api.streamMessage.and.callFake(() => {
+      const list: AssistantStreamEvent[] = [
+        { type: 'delta', delta: 'It was paid.' },
+        {
+          type: 'done',
+          message: { id: 'm2', role: 'Assistant', content: 'It was paid.', payload: null, sequence: 1, createdAt: '' },
+        },
+      ];
+      return (async function* () {
+        for (const frame of list) {
+          yield frame;
+          seen.push(store.retryable() !== null);
+        }
+      })();
+    });
+
+    await store.retry();
+
+    expect(seen).withContext('hidden for the whole run').toEqual([false, false]);
+    expect(store.retryable()).toBeNull();
+  });
+});
+
+/**
+ * ★ THE RETRY MUST LOOK LIKE IT IS WORKING.
+ *
+ * The typing dots are normally lit by the `user` frame, and a retry never sends one — the question is
+ * already stored, and echoing it back would duplicate it on screen. So pressing Retry showed nothing
+ * at all until the first fragment arrived: a button that looks broken at the exact moment it works.
+ */
+describe('AssistantStore — the retry shows the assistant is working', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  const FAILED_THREAD = {
+    ...CONVERSATION,
+    messages: [
+      { id: 'm1', role: 'User' as const, content: 'q', payload: null, sequence: 0, createdAt: '' },
+    ],
+    lastTurnUnanswered: true,
+  };
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ lights the typing indicator BEFORE the first fragment arrives', async () => {
+    api.getConversation.and.returnValue(of(FAILED_THREAD as AssistantConversation));
+    await store.openConversation('conv-1');
+
+    // Captured at the instant the request is made — before any frame has come back. Null here is the
+    // dead pause the user was seeing.
+    let whenAsked: string | null | undefined;
+
+    api.streamMessage.and.callFake(() => {
+      whenAsked = store.streamingReply();
+      return frames([
+        { type: 'delta', delta: 'It was paid.' },
+        {
+          type: 'done',
+          message: { id: 'm2', role: 'Assistant', content: 'It was paid.', payload: null, sequence: 1, createdAt: '' },
+        },
+      ]);
+    });
+
+    await store.retry();
+
+    expect(whenAsked).withContext('the dots must be up the moment the button is pressed').toBe('');
+    expect(store.streamingReply()).withContext('and down once the answer is stored').toBeNull();
+    expect(store.messages().map((m) => m.role)).toEqual(['User', 'Assistant']);
+  });
+
+  it('takes the indicator down again when the retry ALSO fails', async () => {
+    api.getConversation.and.returnValue(of(FAILED_THREAD as AssistantConversation));
+    await store.openConversation('conv-1');
+
+    api.streamMessage.and.callFake(() =>
+      frames([{ type: 'error', errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' }]));
+
+    await store.retry();
+
+    // No dots left spinning over an answer that will never come — and the card is back, so the user
+    // can try once more.
+    expect(store.streamingReply()).toBeNull();
+    expect(store.retryable()).not.toBeNull();
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_RATE_LIMITED');
+  });
+
+  it('an ordinary send still waits for the stored question before showing anything', async () => {
+    // A first send has a `user` frame to light the dots, and lighting them earlier would put an
+    // assistant bubble on screen before the question the user typed appeared beside it.
+    let whenAsked: string | null | undefined;
+
+    api.streamMessage.and.callFake((_id: string, content: string) => {
+      whenAsked = store.streamingReply();
+      return frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'A real answer.' } },
+      ]);
+    });
+
+    await store.startConversation();
+    await store.send('hello');
+
+    expect(whenAsked).toBeNull();
+  });
+});
+
+describe('AssistantPanelComponent — the retry renders the typing bubble', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+  });
+
+  it('★ shows the streaming bubble, and hides the failure card, while a retry runs', () => {
+    // The state a retry is in one tick after the button: thread still marked unanswered, request in
+    // flight, nothing streamed yet. The user must see the assistant working — not the card that told
+    // them it had failed.
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'q', payload: null, sequence: 0, createdAt: '' },
+      ],
+      lastTurnUnanswered: true,
+    });
+    store.sending.set(true);
+    store.streamingReply.set('');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]'))
+      .withContext('the typing bubble is the feedback the button owes the user').toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.assistant-msg__typing')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
+  });
+});
+
+import enTranslations from '../../../assets/i18n/en.json';
+import esTranslations from '../../../assets/i18n/es.json';
+import plTranslations from '../../../assets/i18n/pl.json';
+
+/** The shipped ASSISTANT sections, keyed by language. */
+const ASSISTANT_BUNDLES: Record<string, Record<string, string>> = {
+  en: (enTranslations as unknown as Record<string, Record<string, string>>)['ASSISTANT'],
+  es: (esTranslations as unknown as Record<string, Record<string, string>>)['ASSISTANT'],
+  pl: (plTranslations as unknown as Record<string, Record<string, string>>)['ASSISTANT'],
+};
+
+/**
+ * The welcome an empty panel opens on.
+ *
+ * ★ WHY IT WAS REWRITTEN. The old copy said the assistant "is not connected to a model yet, so it will
+ * reply with a placeholder". True in piece 1; a lie since the model was connected. Copy that describes
+ * a previous version of the product is worse than no copy — the reader believes it and stops asking.
+ */
+describe('AssistantPanelComponent — the welcome', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+  let translate: TranslateService;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+    translate = TestBed.inject(TranslateService);
+  });
+
+  /** Opens the panel on a thread with no turns — the state a new conversation starts in. */
+  function openEmpty(): HTMLElement {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+    return fixture.nativeElement.querySelector('[data-testid="assistant-welcome"]');
+  }
+
+  it('★ renders all THREE parts: the greeting, what to ask, and the read-only promise', () => {
+    const welcome = openEmpty();
+
+    expect(welcome).toBeTruthy();
+    expect(welcome.querySelector('.assistant-welcome__greeting')?.textContent)
+      .toContain('WELCOME_GREETING');
+    expect(welcome.querySelector('.assistant-welcome__subtitle')?.textContent)
+      .toContain('WELCOME_SUBTITLE');
+    expect(welcome.querySelector('[data-testid="assistant-welcome-readonly"]')?.textContent)
+      .toContain('WELCOME_READ_ONLY');
+  });
+
+  it('★ no longer claims the assistant is unconnected — that copy is GONE, not hidden', () => {
+    // It answers for real now. A panel that greets the user by saying it cannot answer is the kind of
+    // stale copy that quietly costs a feature its users.
+    const text: string = fixture.nativeElement.textContent ?? '';
+    openEmpty();
+
+    expect(text).not.toContain('EMPTY_TITLE');
+    expect(text).not.toContain('EMPTY_DESC');
+    expect(fixture.nativeElement.textContent).not.toContain('EMPTY_DESC');
+
+    // And the keys themselves are retired from every language, so nothing can render them by accident.
+    for (const language of ['en', 'es', 'pl']) {
+      const bundle = ASSISTANT_BUNDLES[language];
+      expect(bundle['EMPTY_TITLE']).withContext(`${language} still declares EMPTY_TITLE`).toBeUndefined();
+      expect(bundle['EMPTY_DESC']).withContext(`${language} still declares EMPTY_DESC`).toBeUndefined();
+    }
+  });
+
+  it('★ offers NOTHING the assistant cannot do', () => {
+    // The visual references for a screen like this carry suggested-prompt chips, "Add attachment" and
+    // "Use image". This assistant does none of them. The style was borrowed; the promises were not —
+    // the same rule the composer already lives under, and the same reason: a control that does nothing
+    // is a promise the engine cannot keep.
+    const welcome = openEmpty();
+
+    expect(welcome.querySelectorAll('button').length).withContext('no chips, no actions').toBe(0);
+    expect(welcome.querySelector('input')).toBeNull();
+    expect(welcome.querySelector('input[type="file"]')).toBeNull();
+
+    const text = (welcome.textContent ?? '').toLowerCase();
+    for (const word of ['attach', 'image', 'upload', 'file', 'voice', 'search']) {
+      expect(text).withContext(`the welcome must not mention "${word}"`).not.toContain(word);
+    }
+  });
+
+  it('the read-only promise carries WEIGHT, not small-print styling', () => {
+    // ★ Asserted by COMPUTED style, and the assertion MOVED with the design. It used to sit in a
+    // bordered box; on screen that turned a sentence into a widget, so the box went and the weight
+    // stayed. What must never change is the property underneath both: this is the sentence that makes
+    // the assistant safe to hand a finance team, so it may not be rendered as a faded footnote.
+    const welcome = openEmpty();
+    const note = welcome.querySelector('[data-testid="assistant-welcome-readonly"]') as HTMLElement;
+    const styles = getComputedStyle(note);
+    const subtitle = welcome.querySelector('.assistant-welcome__subtitle') as HTMLElement;
+
+    expect(parseInt(styles.fontWeight, 10))
+      .withContext('semibold is what stops it reading as small print').toBeGreaterThanOrEqual(600);
+
+    // Shares the subtitle's left edge — one column, not an inset panel.
+    expect(styles.paddingLeft).toBe(getComputedStyle(subtitle).paddingLeft);
+
+    // Not faded into the background: the same body colour the subtitle uses, never the tertiary grey.
+    expect(styles.color).toBe(getComputedStyle(subtitle).color);
+
+    const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
+    expect(parseFloat(getComputedStyle(greeting).fontSize))
+      .withContext('the greeting is the largest thing here')
+      .toBeGreaterThan(parseFloat(styles.fontSize));
+  });
+
+  it('the logo sits on the LEFT, not centred in a stretched box', () => {
+    // ★ The bug this catches is subtle and was real: the welcome is a flex COLUMN, so the default
+    // `align-items: stretch` widened the image box to the full column and `object-fit` centred the
+    // mark inside it — left-aligned CSS, centred result. Comparing the logo's left edge to the
+    // greeting's is what actually notices that.
+    const welcome = openEmpty();
+    const logo = welcome.querySelector('.assistant-welcome__logo') as HTMLElement;
+    const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
+
+    expect(logo).toBeTruthy();
+    expect(Math.round(logo.getBoundingClientRect().left))
+      .withContext('the mark lines up with the greeting under it')
+      .toBe(Math.round(greeting.getBoundingClientRect().left));
+  });
+
+  it('the greeting is large enough to read as one, and fits the panel', () => {
+    const welcome = openEmpty();
+    const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
+    const size = parseFloat(getComputedStyle(greeting).fontSize);
+
+    expect(size).withContext('large, with presence').toBeGreaterThanOrEqual(20);
+    // ★ The ceiling moved from 28 to 32 when the greeting was deliberately enlarged — this is the new
+    // intent, not a loosened assertion. It still HAS a ceiling because the panel is min(420px, 100vw)
+    // and the size is a clamp: past this the Spanish greeting stops being a greeting and becomes a
+    // headline wrapping onto three lines.
+    expect(size).withContext('not larger than the panel can carry').toBeLessThanOrEqual(32);
+  });
+
+  it('the welcome is gone once the conversation has turns', () => {
+    store.isOpen.set(true);
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        { id: 'm1', role: 'User', content: 'hello', payload: null, sequence: 0, createdAt: '' },
+      ],
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-welcome"]')).toBeNull();
+  });
+
+  it('the COMPOSER was not touched', () => {
+    // The WI was explicit: the welcome only. This is what notices if a later edit drifts into it.
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+
+    const composer = fixture.nativeElement.querySelector('[data-testid="assistant-composer-card"]');
+    expect(composer).toBeTruthy();
+    expect(composer.querySelector('textarea')).toBeTruthy();
+    // Still exactly one control in there: send.
+    expect(composer.querySelectorAll('button').length).toBe(1);
+    // And the permanent disclaimer under it is a different thing, still present.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-disclaimer"]')).toBeTruthy();
+  });
+
+  it('renders the real Spanish copy when a language is loaded', () => {
+    translate.setTranslation('es', {
+      ASSISTANT: {
+        WELCOME_GREETING: '¿En qué puedo ayudarte con Wasnie?',
+        WELCOME_READ_ONLY: 'Este asistente es de solo lectura: te orienta y responde tus preguntas, pero nunca modifica datos ni ejecuta acciones en tu sistema. Verificá la información importante.',
+      },
+    });
+    translate.use('es');
+
+    const welcome = openEmpty();
+
+    expect(welcome.textContent).toContain('¿En qué puedo ayudarte con Wasnie?');
+    expect(welcome.textContent).toContain('nunca modifica datos ni ejecuta acciones');
+  });
+});
+
+describe('Assistant i18n — the welcome exists in every language', () => {
+  const KEYS = ['WELCOME_GREETING', 'WELCOME_SUBTITLE', 'WELCOME_READ_ONLY'];
+
+  it('★ EN, ES and PL all carry the three keys, with no English left in the others', () => {
+    for (const language of ['en', 'es', 'pl']) {
+      for (const key of KEYS) {
+        const value = ASSISTANT_BUNDLES[language][key];
+        expect(value).withContext(`${language}.ASSISTANT.${key} is missing`).toBeTruthy();
+        expect((value ?? '').trim().length).toBeGreaterThan(0);
+      }
+    }
+
+    // Each language says it in its own words — an untranslated key copied across is the failure mode
+    // "i18n is complete" is meant to prevent, and it passes a mere presence check.
+    for (const key of KEYS) {
+      expect(ASSISTANT_BUNDLES['es'][key]).not.toBe(ASSISTANT_BUNDLES['en'][key]);
+      expect(ASSISTANT_BUNDLES['pl'][key]).not.toBe(ASSISTANT_BUNDLES['en'][key]);
+    }
+  });
+
+  it('the read-only promise is stated in every language, not only in English', () => {
+    // The guarantee is the point of the note; a language that lost it would be shipping a different
+    // promise to its readers.
+    expect(ASSISTANT_BUNDLES['en']['WELCOME_READ_ONLY']).toContain('read-only');
+    expect(ASSISTANT_BUNDLES['es']['WELCOME_READ_ONLY']).toContain('solo lectura');
+    expect(ASSISTANT_BUNDLES['pl']['WELCOME_READ_ONLY']).toContain('tylko do odczytu');
+  });
+});
+
+/**
+ * The panel's exit.
+ *
+ * ★ WHY THIS ONE GETS TESTS WHEN THE ENTRANCE DID NOT. The entrance is a keyframe — nothing to assert
+ * but the existence of a class. The exit is a small state machine: the panel must OUTLIVE the click
+ * that closed it, and then actually close. Every branch here can fail as "the panel will not close",
+ * which is not a cosmetic bug.
+ */
+describe('AssistantPanelComponent — the closing animation', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let component: AssistantPanelComponent;
+  let store: AssistantStore;
+
+  /** The name in the stylesheet. If it is renamed there and not here, the panel stops closing. */
+  const EXIT = 'assistant-panel-out';
+
+  function reducedMotion(enabled: boolean): void {
+    spyOn(window, 'matchMedia').and.callFake((query: string) => ({
+      matches: enabled && query.includes('prefers-reduced-motion'),
+      media: query,
+    }) as MediaQueryList);
+  }
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    component = fixture.componentInstance;
+    store = TestBed.inject(AssistantStore);
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    fixture.detectChanges();
+  });
+
+  it('★ the ELEMENT outlives the click, but the STATE closes immediately', () => {
+    // ★ THE REGRESSION THIS FILE EXISTS FOR. The first version kept `isOpen` true until the animation
+    // finished, so for 200ms the application still believed the assistant was open — and anything that
+    // re-rendered the panel in that window brought it back at full opacity. On screen that read as
+    // "the chat opens whenever I click a sidebar item"; it had never closed.
+    reducedMotion(false);
+
+    component.close();
+    fixture.detectChanges();
+
+    expect(store.isOpen()).withContext('the state closes at once, not when the animation ends').toBeFalse();
+    expect(component.closing()).withContext('only the element lingers').toBeTrue();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeTruthy();
+
+    // ...and while it leaves it is neither a dialog nor a click target.
+    const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-panel"]');
+    expect(panel.classList).toContain('assistant-panel--closing');
+    expect(panel.getAttribute('aria-hidden')).toBe('true');
+    expect(panel.getAttribute('aria-modal')).toBeNull();
+  });
+
+  it('★ a re-render mid-exit does NOT bring the panel back', () => {
+    // The bug reproduced directly: close, then force the change detection a navigation would cause.
+    // With the state already closed there is nothing for a re-render to restore.
+    reducedMotion(false);
+    component.close();
+
+    fixture.detectChanges();
+    fixture.detectChanges();
+
+    expect(store.isOpen()).toBeFalse();
+    const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-panel"]');
+    expect(panel?.classList).withContext('still on its way out, never restored').toContain('assistant-panel--closing');
+  });
+
+  it('★ a FRESH panel component does not show a closed assistant', () => {
+    // ★ What actually put the chat back on screen: the shell re-creating the panel while `isOpen` was
+    // still true. A new instance starts with `closing` false, so the old design rendered it wide open.
+    reducedMotion(false);
+    component.close();
+
+    const second = TestBed.createComponent(AssistantPanelComponent);
+    second.detectChanges();
+
+    expect(second.nativeElement.querySelector('[data-testid="assistant-panel"]'))
+      .withContext('a new instance must agree the assistant is closed').toBeNull();
+  });
+
+  it('reopening while it leaves cancels the exit', () => {
+    reducedMotion(false);
+    component.close();
+    expect(component.closing()).toBeTrue();
+
+    store.isOpen.set(true);
+    fixture.detectChanges();
+
+    expect(component.closing()).withContext('it is being shown, not sent away').toBeFalse();
+    const panel: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-panel"]');
+    expect(panel.classList).not.toContain('assistant-panel--closing');
+    expect(panel.getAttribute('aria-modal')).toBe('true');
+  });
+
+  it('★ the element is removed once the exit finishes', () => {
+    reducedMotion(false);
+    component.close();
+
+    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: EXIT }));
+    fixture.detectChanges();
+
+    expect(store.isOpen()).toBeFalse();
+    expect(component.closing()).toBeFalse();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeNull();
+  });
+
+  it('a child animation finishing does NOT close the panel', () => {
+    // ★ `animationend` BUBBLES, and this panel contains other animations — the typing dots among them.
+    // Closing on "an animation ended somewhere in here" would make the panel shut itself while the
+    // assistant was typing.
+    reducedMotion(false);
+    component.close();
+
+    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: 'assistant-typing' }));
+    fixture.detectChanges();
+
+    expect(component.closing())
+      .withContext('the typing dots must not rip the panel out mid-animation').toBeTrue();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeTruthy();
+  });
+
+  it('★ closes IMMEDIATELY when the user asked for reduced motion', () => {
+    // ★ THE BRANCH THAT WOULD HAVE BROKEN IT. With `animation: none` the `animationend` event never
+    // fires, so waiting for it would leave the panel open forever — for exactly the people who asked
+    // for less movement. An accessibility preference must not become a broken close button.
+    reducedMotion(true);
+
+    component.close();
+    fixture.detectChanges();
+
+    expect(store.isOpen()).toBeFalse();
+    expect(component.closing()).toBeFalse();
+  });
+
+  it('a second click while it is already leaving changes nothing', () => {
+    reducedMotion(false);
+
+    component.close();
+    component.close();
+
+    expect(store.isOpen()).toBeFalse();
+    expect(component.closing()).toBeTrue();
+
+    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: EXIT }));
+    expect(component.closing()).toBeFalse();
+  });
+
+  it('the backdrop leaves with the panel, not after it', () => {
+    reducedMotion(false);
+    component.close();
+    fixture.detectChanges();
+
+    const backdrop: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-backdrop"]');
+    expect(backdrop.classList).toContain('assistant-backdrop--closing');
+  });
+});
+
+/**
+ * The waiting message.
+ *
+ * ★ THE COPY ITSELF NEEDS NO TEST — it is a translated string next to three dots. The CLOCK does: it
+ * starts, it must be cancelled when the answer arrives, and it must not outlive the panel. Each of
+ * those failing looks like "the assistant says it is still working after it answered".
+ */
+describe('AssistantPanelComponent — the waiting message', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let component: AssistantPanelComponent;
+  let store: AssistantStore;
+
+  /** Comfortably past the threshold; the exact value lives in the component, not here. */
+  const PAST_THRESHOLD = 6000;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    component = fixture.componentInstance;
+    store = TestBed.inject(AssistantStore);
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+  });
+
+  /** The state between "the request went out" and "the first token came back". */
+  function startWaiting(): void {
+    store.streamingReply.set('');
+    fixture.detectChanges();
+  }
+
+  it('shows the honest base message beside the dots, immediately', () => {
+    startWaiting();
+
+    const waiting: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]');
+    expect(waiting).toBeTruthy();
+    expect(waiting.textContent).toContain('PROCESSING');
+    // ★ The dots are ACCOMPANIED, not replaced.
+    expect(waiting.querySelector('.assistant-msg__typing')).toBeTruthy();
+    // The long-wait line has not earned its place yet.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting-long"]')).toBeNull();
+  });
+
+  it('★ explains the wait only once it has actually been a long one', fakeAsync(() => {
+    startWaiting();
+    expect(component.waitingLong()).toBeFalse();
+
+    tick(PAST_THRESHOLD);
+    fixture.detectChanges();
+
+    expect(component.waitingLong()).toBeTrue();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting-long"]').textContent)
+      .toContain('PROCESSING_LONG');
+  }));
+
+  it('★ a fast answer never triggers it, and the clock is cancelled', fakeAsync(() => {
+    startWaiting();
+
+    // The first token arrives well inside the threshold.
+    store.streamingReply.set('It was ');
+    fixture.detectChanges();
+
+    // ...and the pending timer must not fire into a turn that is already answering.
+    tick(PAST_THRESHOLD);
+    fixture.detectChanges();
+
+    expect(component.waitingLong()).withContext('the wait ended; the explanation is moot').toBeFalse();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeNull();
+  }));
+
+  it('the explanation is taken back down for the NEXT question', fakeAsync(() => {
+    startWaiting();
+    tick(PAST_THRESHOLD);
+    expect(component.waitingLong()).toBeTrue();
+
+    // Answer lands, then a second question goes out.
+    store.streamingReply.set('done');
+    fixture.detectChanges();
+    expect(component.waitingLong()).toBeFalse();
+
+    startWaiting();
+    expect(component.waitingLong())
+      .withContext('a fresh wait starts from scratch, not from the last one').toBeFalse();
+
+    tick(PAST_THRESHOLD);
+    expect(component.waitingLong()).toBeTrue();
+  }));
+
+  it('the clock does not outlive the panel', fakeAsync(() => {
+    startWaiting();
+    fixture.destroy();
+
+    // A timer left running would fire into a destroyed component. Nothing should be pending at all —
+    // fakeAsync fails the test if a task is still queued when it ends.
+    tick(PAST_THRESHOLD);
+
+    expect(component.waitingLong()).toBeFalse();
+  }));
+});

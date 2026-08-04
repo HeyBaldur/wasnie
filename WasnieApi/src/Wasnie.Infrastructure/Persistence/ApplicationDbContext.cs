@@ -66,6 +66,9 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
     public Microsoft.EntityFrameworkCore.DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
 
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations => Set<Wasnie.Domain.Assistant.AssistantConversation>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages => Set<Wasnie.Domain.Assistant.AssistantMessage>();
+
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotConnection> HubSpotConnections => Set<HubSpotConnection>();
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotOAuthState> HubSpotOAuthStates => Set<HubSpotOAuthState>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings => Set<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping>();
@@ -105,6 +108,8 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new BackgroundJobRecordConfiguration());
         builder.ApplyConfiguration(new UserSubscriptionConfiguration());
         builder.ApplyConfiguration(new ProcessedStripeEventConfiguration());
+        builder.ApplyConfiguration(new Configurations.Assistant.AssistantConversationConfiguration());
+        builder.ApplyConfiguration(new Configurations.Assistant.AssistantMessageConfiguration());
         builder.ApplyConfiguration(new HubSpotConnectionConfiguration());
         builder.ApplyConfiguration(new HubSpotOAuthStateConfiguration());
         builder.ApplyConfiguration(new CrmOwnerMappingConfiguration());
@@ -131,6 +136,12 @@ public sealed class ApplicationDbContext(
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<UserSubscription>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        // Assistant chat. The tenant filter is a FLOOR, not the isolation: a conversation also belongs
+        // to one user, and every query adds `UserId == currentUser` on top of this. A query filter
+        // cannot express the user half — ITenantContext knows the tenant, not the principal — so the
+        // handlers carry it, and the isolation test is what keeps them honest.
+        builder.Entity<Wasnie.Domain.Assistant.AssistantConversation>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Wasnie.Domain.Assistant.AssistantMessage>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // HubSpotConnection is tenant-filtered for normal (authenticated) access. HubSpotOAuthState is
         // intentionally NOT filtered — the anonymous OAuth callback resolves the tenant from the state row.
         builder.Entity<HubSpotConnection>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

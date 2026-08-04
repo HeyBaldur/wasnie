@@ -48,6 +48,11 @@ public interface IApplicationDbContext
     DbSet<UserSubscription> UserSubscriptions { get; }
     DbSet<ProcessedStripeEvent> ProcessedStripeEvents { get; }
 
+    // Assistant chat. Tenant-filtered like everything else, but note that tenant is only HALF the
+    // isolation here: every read must also match the owning UserId (see AssistantConversation).
+    DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations { get; }
+    DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages { get; }
+
     DbSet<HubSpotConnection> HubSpotConnections { get; }
     DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }
     DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings { get; }

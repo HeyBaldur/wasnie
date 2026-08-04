@@ -12,6 +12,9 @@
   </div>
 
   <div class="topbar__actions">
+    <!-- Hidden entirely when the user has no assistant entitlement (hide, don't disable). -->
+    <app-assistant-trigger />
+
     @if (isFreeTier()) {
       <div
         class="topbar__upgrade-wrapper"
