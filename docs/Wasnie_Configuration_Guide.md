@@ -153,7 +153,25 @@ transaction that matches three rules produces three credits.
 
 ### 4.1 Trigger — when the rule fires
 
-Either **all transactions**, or a set of conditions combined with **And** / **Or**.
+A rule fires on **every transaction by default**. Narrowing it is opt-in.
+
+**On screen.** The rule form has a collapsible section headed **"Trigger (optional)"** with an on/off
+toggle, and **the toggle starts off**. Leave it off and the rule applies to all transactions — there is
+no "all transactions" option to pick, because that is simply what a rule does until you restrict it.
+Turn the toggle on to reveal the **AND** / **OR** selector and the **Add Condition** button, then add
+one or more conditions; the rule then fires only on transactions that satisfy them.
+
+The screen's own tooltip on that section states the same rule: *"If enabled, this rule only applies when
+the conditions are met. Without a trigger, the rule always runs on every matching transaction."*
+
+> ✅ **"Applies to all" is the absence of conditions, not a setting.** With the toggle off the form
+> sends no trigger at all and the domain substitutes `Trigger.Always()`
+> (`Plan.cs:97,136` — `trigger ?? Trigger.Always()`), which is a trigger with an empty condition list;
+> the engine then short-circuits to fire on everything (`CommissionCalculator.cs:33` —
+> `if (trigger.Conditions.Count == 0) return true`). Turning the toggle **on** but adding **no**
+> conditions lands on that same empty list and behaves identically — so the rule is "all transactions"
+> whenever it has zero conditions, however you got there. Read-only screens render this state as
+> *"Applies to all transactions (no conditions)."*
 
 > ✅ **The condition Field is a dropdown fed by the engine's own catalog** — not free text. The list
 > comes from `GET /api/plans/trigger-fields` (`TriggerFieldCatalog.cs:39-66`), so the UI can only offer
@@ -227,8 +245,10 @@ Applied after the rate table, in sequence: **modifier → cap → floor**
 
 **Floor** works as expected (raises commission up to the floor amount).
 
-**On screen.** The rule form shows Trigger, Measurement, Rate table (three buttons), and
-collapsible Modifier / Cap / Floor sections.
+**On screen.** The rule form shows Measurement and Rate table (three buttons) as always-visible
+sections, plus **four** collapsible sections that each start toggled **off**: **Trigger (optional)**,
+Modifier, Cap and Floor. Leaving one off means the rule has no trigger / no modifier / no cap / no
+floor — off is the normal state, not an incomplete one.
 
 ### 4.5 Plan lifecycle and assignments
 

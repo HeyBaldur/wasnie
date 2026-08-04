@@ -430,7 +430,7 @@ public sealed class GetDashboardSummaryHandler(
             .OrderBy(t => t.Currency)
             .ToList();
 
-        // Payouts by period intersection
+        // Payouts attributed to the period where their cycle closes (see PayoutsInPeriodRawAsync)
         var payoutsInPeriod = await PayoutsInPeriodRawAsync(from, to, ct);
         var payoutsByCurrency = payoutsInPeriod
             .GroupBy(p => p.Currency)
@@ -532,14 +532,24 @@ public sealed class GetDashboardSummaryHandler(
         return new DashboardTrendBandDto(currentLabel, priorLabel, trendPoints);
     }
 
-    // Shared helper: load payout amounts by currency for a date range (period intersection)
+    // Shared helper: load payout amounts by currency attributed to a date range.
+    //
+    // MONEY RULE — a payout belongs to the period in which its cycle CLOSES (Period.End),
+    // and to exactly one such period. Do NOT switch this back to period intersection
+    // (Period.End >= from AND Period.Start <= to): a payout spanning several months then
+    // gets counted IN FULL in every month it touches, so the same euros are reported more
+    // than once. That is what made the Banda 3 trend show identical current/prior totals
+    // (a 2026-01-01→2026-12-31 payout landed in all twelve months of 2026, always a 0% change).
+    //
+    // Intersection remains correct for LISTING payouts (ListPayoutsHandler) and for overlap
+    // guards — it is only wrong when summing amounts into a period total.
     private async Task<List<(decimal Amount, string Currency)>> PayoutsInPeriodRawAsync(
         DateOnly? from, DateOnly? to, CancellationToken ct)
     {
         var q = db.CompensationPayouts.AsQueryable();
-        // Period intersection: payout.Period.End >= from AND payout.Period.Start <= to
+        // Attribution by close date: from <= payout.Period.End <= to
         if (from.HasValue) q = q.Where(p => p.Period.End >= from.Value);
-        if (to.HasValue) q = q.Where(p => p.Period.Start <= to.Value);
+        if (to.HasValue) q = q.Where(p => p.Period.End <= to.Value);
 
         var raw = await q
             .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })

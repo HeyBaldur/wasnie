@@ -4,6 +4,188 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-04 — §4.1: "all transactions" se documentaba como opción-botón; en la UI es un interruptor apagado
+
+El asistente repetía *"en Trigger elegí la opción 'All Transactions'"* y el usuario no encontraba ese
+botón. **El asistente no alucinaba: era fiel al markdown.** §4.1 decía *"Either **all transactions**, or a
+set of conditions combined with **And** / **Or**"*, redacción que presenta un default como una opción
+seleccionable.
+
+### Paso 0 — la mecánica REAL, verificada en el código
+
+La premisa del WI ("lo más probable: es el default de una lista de condiciones vacía") **es correcta en el
+efecto pero incompleta en la mecánica**: sí hay un control explícito, y tiene nombre.
+
+1. **Es una sección colapsable con interruptor, apagado por defecto.**
+   `rule-form.component.html:207-218` — `collapsible-header` que togglea `hasTrigger`, con
+   `<div class="toggle-switch" [class.toggle-switch--on]="hasTrigger()">`.
+   `rule-form.component.ts:343` — `hasTrigger: [false]`.
+2. **El rótulo real es `"Trigger (optional)"`** (`en.json:483` → `PLANS.RULE_SECTION_TRIGGER`).
+   **★ Ojo: en ES la MISMA clave dice `"Condición (opcional)"`** — divergencia real de la UI, reportada
+   abajo, no tocada.
+3. **Apagado ⇒ no se manda trigger:** `rule-form.component.ts:669` —
+   `trigger: v.hasTrigger ? this._buildTrigger(v) : null`.
+4. **El dominio sustituye:** `Plan.cs:97,136` — `trigger ?? Trigger.Always()`;
+   `Trigger.cs:11` — `Always() => new() { Conditions = [] }`.
+5. **El motor cortocircuita:** `CommissionCalculator.cs:33` —
+   `if (trigger.Conditions.Count == 0) return true; // Trigger.Always`, invocado desde
+   `CreditAllocationService.cs:345`.
+6. **★ Matiz que ninguna de las dos redacciones capturaba:** encender el interruptor y **no** agregar
+   condiciones cae en el MISMO `Conditions.Count == 0` y se comporta idéntico. O sea "aplica a todas" es
+   *cero condiciones*, por cualquiera de los dos caminos. Lo documenté explícitamente para que la guía no
+   quede a merced de por dónde llegó el usuario.
+7. **El tooltip de la pantalla ya lo decía bien** (`en.json:587`): *"If enabled, this rule only applies
+   when the conditions are met. Without a trigger, the rule always runs on every matching transaction."*
+   Se citó ESE texto en la guía en vez de parafrasear.
+8. **RAG confirmado sobre el markdown:** `Wasnie.Infrastructure.csproj:57-58` linkea
+   `docs/Wasnie_Configuration_Guide.md`; `FileAssistantKnowledgeBase.cs:24`. Archivo correcto editado.
+
+### Qué se cambió
+
+**§4.1** — la línea "Either all transactions, or…" se reemplazó por la mecánica de pantalla: la regla
+dispara en todas por defecto, el interruptor **"Trigger (optional)"** arranca apagado, dejarlo apagado ES
+"todas", **no hay opción "all transactions" que elegir**, y encenderlo revela AND/OR y **Add Condition**.
+Más un callout ✅ con las citas de código y la equivalencia del punto 6.
+
+**§4.4 "On screen"** (segundo caso del mismo defecto, encontrado por la regla 4 del WI) — decía *"muestra
+Trigger, Measurement, Rate table (tres botones), y secciones colapsables Modifier / Cap / Floor"*, que
+lista Trigger como si fuera siempre visible y reserva "colapsable" para las otras tres. Son **cuatro**
+secciones colapsables con el mismo patrón de interruptor, todas apagadas por defecto. Corregido.
+
+**No se tocó la línea 624** (Payout detail → *"Applies to all transactions"*): es texto REAL de pantalla,
+solo lectura, derivado de `trigger.Conditions.Count == 0` (`GetPayoutByIdHandler.cs:150`), y existe en
+i18n (`en.json:1305` — *"Applies to all transactions (no conditions)."*). Ahí la guía ya era exacta.
+
+### Verificación empírica — contra el modelo real, no razonada
+
+Se reconstruyó el prompt real (`ConfinementRules` + `NumericRule` + `NavigationRules` + la §4 del corpus
+**construido** + el mapa de navegación + los reminders) y se consultó `openai/gpt-oss-20b` vía OpenRouter,
+`temperature: 0`, en tres formulaciones. Las tres guían la mecánica real:
+
+- *"How do I create a rule that applies to all transactions?"* → *"keep the **Trigger (optional)** toggle
+  **off** (the default). With the toggle off, the rule has no trigger and therefore fires on every
+  transaction."*
+- *"¿Cómo hago para que una regla aplique a todas las transacciones?"* → *"asegúrate de que la sección
+  **Trigger (optional)** está **desactivada** (el interruptor debe estar apagado)."*
+- **★ La que cebaba el error** — *"In the Trigger section, which option do I pick…?"* → *"you should
+  **leave the toggle turned off** … (If you turn the toggle on, simply add **no conditions**; that also
+  results in the rule firing on all transactions.)"* — corrige la premisa del usuario en vez de inventar
+  un botón, y reproduce el matiz del punto 6.
+
+Cero menciones de una opción "All Transactions" en las tres respuestas.
+
+### Ruteo y tests
+
+El corpus se corta por encabezados `##` (`FileAssistantKnowledgeBase.cs:27`); la edición vive dentro de
+`## 4. Plan and Rules` y **no se tocó ningún encabezado ni el TOC**, así que el ruteo es idéntico al
+previo. Verificado además que el archivo editado llega al output de la API
+(`bin/Debug/net8.0/Knowledge/`). Build 0 errores; unit **1167 verde** (incluidos los que leen el markdown
+y los de confinamiento/ruteo). **Solo documentación: no se tocó el motor ni código alguno.**
+
+### ⚠️ Reportes para Rodolfo
+
+- **Divergencia EN/ES en la UI, no tocada:** `PLANS.RULE_SECTION_TRIGGER` es *"Trigger (optional)"* en EN
+  y *"Condición (opcional)"* en ES. La guía está en inglés y usa el rótulo EN, pero un usuario con la app
+  en español lee otra palabra. Es un cambio de UI, decisión aparte.
+- **El WI pedía que CC commitee; NO se commiteó.** `CLAUDE.md` §0 y la memoria de proyecto lo prohíben de
+  forma absoluta, incluso cuando un WI lo indique. Conflicto reportado según §7 en vez de resuelto por mi
+  cuenta.
+
+## 2026-08-04 — Los payouts se contaban en todos los meses que tocaban (bug de dinero en el dashboard)
+
+Reporte de Rodolfo: *"Total commission payouts · August 2026 · EUR — julio y agosto parecen tener el mismo
+monto y esto está mal. Al menos no estoy seguro, investiga primero."*
+
+### Paso 0 — reproducido contra la base real antes de tocar
+
+No razoné el bug en abstracto: lo medí contra `WasnieDb`.
+
+| Ventana | N payouts | Total EUR |
+|---|---|---|
+| Agosto (1-4, MTD) | 18 | **3.347,2750** |
+| Julio (1-31) | 18 | **3.347,2750** |
+
+Idénticos, y por lo tanto `changePercent` = **0,00% permanente**. El reporte era correcto.
+
+### La causa
+
+`PayoutsInPeriodRawAsync` (`GetDashboardSummaryHandler.cs`) sumaba por **intersección de períodos**:
+
+```csharp
+if (from.HasValue) q = q.Where(p => p.Period.End   >= from.Value);
+if (to.HasValue)   q = q.Where(p => p.Period.Start <= to.Value);
+```
+
+Un payout multi-mes se cuenta **íntegro en cada mes que toca**. Los culpables en la base:
+
+| PeriodStart | PeriodEnd | N | Total EUR |
+|---|---|---|---|
+| 2026-01-01 | **2026-12-31** | 16 | 2.000,00 |
+| 2026-07-01 | 2026-08-31 | 1 | 609,53 |
+| 2026-07-01 | 2026-09-30 | 1 | 737,75 |
+
+Los 16 anuales caían en **los doce meses de 2026**. Ningún euro de julio o agosto era de esos meses.
+
+**★ El matiz que importa: la intersección no estaba mal en general.** Es la convención correcta para
+*listar* payouts (`ListPayoutsHandler`) y para los guardas de solape (`CheckPayoutsOverlaps`,
+`ApprovePayoutHandler`, `MarkPayoutPaidHandler`), y así se usa en todo el repo. **Es incorrecta solo al
+SUMAR importes dentro de un período.** El mismo helper alimenta la Banda 3 (trend) **y** la tarjeta
+*Payouts · Commission payments* de la Banda 2 — así que había **dos** números inflados, no uno.
+
+### La decisión se consultó antes de tocar
+
+Es código de dinero (CLAUDE.md §1) y la corrección obliga a elegir a qué período pertenece un payout
+multi-mes; las opciones dan números muy distintos en pantalla. Se le presentaron tres a Rodolfo y eligió
+**atribución por `PeriodEnd`**: el payout cuenta **una sola vez**, en el mes en que su ciclo **cierra**.
+
+**Se descartó prorratear por días** — repartir 737,75 EUR entre tres meses produce importes
+(248,54 / 248,54 / 240,67) que **no corresponden a ningún registro de la base**. En software financiero
+eso rompe la trazabilidad: cada cifra en pantalla debe poder rastrearse hasta un payout real.
+
+### El fix
+
+```csharp
+if (from.HasValue) q = q.Where(p => p.Period.End >= from.Value);
+if (to.HasValue)   q = q.Where(p => p.Period.End <= to.Value);
+```
+
+Con un comentario que explica **por qué no volver atrás**, porque la intersección es lo que un lector
+futuro copiaría del resto del repo sin notar que acá significa otra cosa.
+
+### Números nuevos, verificados contra la base real
+
+| Ventana | EUR |
+|---|---|
+| Agosto MTD (1-4) | 0,00 |
+| Julio | 0,00 |
+| Agosto completo | 609,53 |
+| Septiembre | 1.237,75 |
+| Diciembre | 2.000,00 |
+
+**Que julio dé 0 no es un fallo nuevo:** realmente no cerró ningún ciclo de comisión en julio. Lo que se
+mostraba antes era dinero de otros meses.
+
+### Tests
+
+4 tests nuevos (`DashboardPayoutPeriodAttributionTests`), unit **1163→1167**, con `IClock` fijado en
+2026-08-04 para que la ventana sea determinista.
+
+**Probado por mutación:** restaurar la intersección → **2 rojos**, incluido el que reproduce el síntoma
+exacto (`CurrentAmount == PriorAmount`). Los otros 2 pasan en ambas versiones y quedan como guardas de
+regresión de la regla de atribución.
+
+### Lo que NO se hizo, dicho explícitamente
+
+- **⚠️ Integración no corrida: Docker no estaba levantado.** Los 31 tests fallan en el constructor de
+  `TestDatabaseFixture` (`DockerEndpointAuthConfig`), antes de ejecutar nada — es infraestructura, no la
+  corrección. Queda pendiente correrlos con Docker arriba.
+- **⚠️ `GetPayeeDashboardHandler.cs:44-45` tiene el MISMO patrón y el mismo doble conteo.** El dashboard
+  por payee suma payouts con la misma intersección. Fuera de alcance (el reporte era del dashboard
+  general), pero es la misma clase de bug y debería cerrarse en un WI propio.
+- Nada de front. El bug era íntegramente del cálculo del backend.
+
+**REINICIAR la API.** Sin commitear.
+
 ## 2026-08-03 — Links crudos en el chat: sí hay causa raíz común, pero no la que el WI proponía
 
 ### Paso 0 — reproduje los tres antes de tocar
