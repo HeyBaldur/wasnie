@@ -20,6 +20,7 @@ const makeItem = (id: string, status: PayoutListItem['status'] = 'Calculated'): 
   calculatedBy: 'system',
   updatedAt: '2026-06-01T00:00:00Z',
   updatedBy: 'system',
+  paidAt: null,
 });
 
 const makePaged = (items: PayoutListItem[]) => ({

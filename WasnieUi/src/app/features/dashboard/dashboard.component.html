@@ -4,11 +4,15 @@
     [title]="'DASHBOARD.TITLE' | translate"
     [subtitle]="'DASHBOARD.SUBTITLE' | translate"
   >
-    <ws-segmented-control
+    <!-- Period filter. A dropdown rather than a six-item bar: the bar had no affordance (six words
+         floating in the header), its active state was a faint translucent box, and it overflowed below
+         ~640px. The select's trigger is a real bordered control that always states the current period. -->
+    <ws-select
       slot="actions"
+      class="period-select"
+      [formControl]="periodControl"
       [options]="periodOptions"
-      [value]="store.period()"
-      (valueChange)="onPeriodChange($event)"
+      [label]="'DASHBOARD.PERIOD_LABEL' | translate"
     />
 
     <!-- ── Banda 1: Requires action ──────────────────────────────────────── -->
@@ -711,11 +715,17 @@
     <!-- ── Banda 3: Trend — 2 fixed cols ─────────────────────────────────── -->
     @if (store.trendBand() && store.trendBand()!.commissionTrend.length > 0) {
       <div class="band-hd band-hd--mt">
-        <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_TREND' | translate }}</span>
+        <span class="band-hd__lbl">
+          {{ (store.trendBand()!.isPacing ? 'DASHBOARD.BAND_PACING' : 'DASHBOARD.BAND_TREND') | translate }}
+        </span>
         <span class="band-hd__chip">
-          {{ store.trendBand()!.currentPeriodLabel }}
-          {{ 'DASHBOARD.TREND_VS' | translate }}
-          {{ store.trendBand()!.priorPeriodLabel }}
+          @if (store.trendBand()!.isPacing) {
+            {{ 'DASHBOARD.PACING_CHIP' | translate: { period: store.trendBand()!.priorPeriodLabel } }}
+          } @else {
+            {{ store.trendBand()!.currentPeriodLabel }}
+            {{ 'DASHBOARD.TREND_VS' | translate }}
+            {{ store.trendBand()!.priorPeriodLabel }}
+          }
         </span>
       </div>
       <div class="trend-grid">
@@ -727,36 +737,46 @@
               <div class="trend-card__head">
                 <div class="min-w-0 flex-1">
                   <span class="trend-card__label">
-                    {{ 'DASHBOARD.TREND_METRIC' | translate }} · {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
+                    {{ (store.trendBand()!.isPacing ? 'DASHBOARD.PACING_METRIC' : 'DASHBOARD.TREND_METRIC') | translate }}
+                    · {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
                   </span>
                   <div class="trend-card__value">
                     {{ fmtCompact(point.currentAmount, point.currency) }}
                   </div>
                 </div>
+                <!-- ONE badge element for both states — same padding, height and typography. Only the
+                     background colour and the text inside it change. Two separate @if branches each with
+                     their own <span> would let the two states drift apart the moment either is edited. -->
                 <span class="trend-card__delta-pill flex-shrink-0"
-                      [class.trend-card__delta-pill--up]="point.direction === 'up' && !trendIsNoBase(point)"
-                      [class.trend-card__delta-pill--down]="point.direction === 'down' && !trendIsNoBase(point)">
-                  @if (!trendIsNoBase(point)) {
+                      [class.trend-card__delta-pill--up]="badgeIsPositive(point)"
+                      [class.trend-card__delta-pill--down]="badgeIsNegative(point)">
+                  @if (badgeShowsArrow(point)) {
                     <app-icon [name]="trendIcon(point.direction)" [size]="12"
                       [class.trend-icon--down]="point.direction === 'down'" />
-                    {{ trendChangeFormatted(point) }}
-                  } @else {
-                    {{ 'DASHBOARD.TREND_NO_BASE' | translate }}
                   }
+                  {{ badgeText(point) | translate: badgeParams(point) }}
                 </span>
               </div>
 
-              <!-- Horizontal bar chart — fills its own dedicated height, never overlaps header -->
+              <!-- ONE chart for both states. Trend: grey = previous period, blue = the period being
+                   evaluated. Progress: grey = previous period TOTAL (the baseline), blue = paid so far —
+                   the same two bars on the same X scale, so the axis and the bar positions do not move
+                   when the filter switches. The single-line progress bar this replaced had no axis and
+                   only one bar, which made the switch look like a different widget. -->
               <div class="trend-card__chart">
+                <!-- Each bar drills down to the payouts it is made of — every figure on screen must be
+                     traceable to its rows. Same link definition as the card above it. -->
                 <ws-hbar-chart
                   [points]="trendBarPoints(point, store.trendBand()!.currentPeriodLabel, store.trendBand()!.priorPeriodLabel)"
+                  (barClick)="onTrendBarClick($event)"
                 />
               </div>
 
-              <!-- Prior period comparison row -->
+              <!-- ONE footer for both states: same weight, colour, size and alignment. Only the wording
+                   differs — "Prior: June 2026" for a closed period, "July 2026 total" for a baseline. -->
               <div class="trend-card__prior">
                 <span class="trend-card__prior-lbl">
-                  {{ 'DASHBOARD.TREND_PRIOR' | translate }}: {{ store.trendBand()!.priorPeriodLabel }}
+                  {{ footerLabel() | translate: { period: store.trendBand()!.priorPeriodLabel } }}
                 </span>
                 <span class="trend-card__prior-amt">
                   {{ fmtCompact(point.priorAmount, point.currency) }}

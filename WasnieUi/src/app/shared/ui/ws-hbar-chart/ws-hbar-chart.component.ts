@@ -5,6 +5,7 @@ import {
   ElementRef,
   input,
   OnDestroy,
+  output,
   ViewChild,
 } from '@angular/core';
 import {
@@ -47,6 +48,13 @@ export class WsHBarChartComponent implements OnDestroy {
   @ViewChild('canvas', { static: true }) private canvasRef!: ElementRef<HTMLCanvasElement>;
 
   readonly points = input<BarChartPoint[]>([]);
+
+  /**
+   * Emitted when a bar is clicked, with the point that bar represents.
+   * Consumers use it to drill from a figure down to the rows that make it up; the chart itself stays
+   * navigation-agnostic (no Router in a shared primitive).
+   */
+  readonly barClick = output<BarChartPoint>();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private chart: Chart<'bar', number[], string> | null = null;
@@ -93,6 +101,20 @@ export class WsHBarChartComponent implements OnDestroy {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 300 },
+        // Bars are drill-down handles. The points are re-read from the input rather than captured from
+        // the closure, so a click always resolves against the data currently rendered.
+        onClick: (_evt, elements) => {
+          const index = elements[0]?.index;
+          if (index === undefined) return;
+          const [p, c] = this.splitPoints();
+          const point = index === 1 ? c : p;
+          if (point) this.barClick.emit(point);
+        },
+        // Affordance: the cursor only turns into a pointer while actually over a bar.
+        onHover: (evt, elements) => {
+          const target = evt.native?.target as HTMLElement | undefined;
+          if (target) target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+        },
         plugins: {
           legend: { display: false },
           tooltip: {

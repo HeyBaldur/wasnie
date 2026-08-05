@@ -35,10 +35,12 @@ public sealed class GetDashboardSummaryHandler(
         var (from, to) = PeriodHelper.ComputeDateRange(period, today);
         var (priorFrom, priorTo) = PeriodHelper.ComputePriorPeriodRange(period, today);
         var periodLabel = PeriodHelper.GetPeriodLabel(period, today);
-        // The TREND band labels the two windows it actually compares, which for a running period are
-        // slices ("1–5 Aug 2026" vs "1–5 Jul 2026") — not the period names used for the headline above.
-        // Naming a five-day slice "July 2026" next to €0 contradicts the Last Month screen outright.
-        var (trendCurrentLabel, trendPriorLabel) = PeriodHelper.GetTrendLabels(period, today);
+        // The band always compares against the WHOLE previous period now, so the plain period names are
+        // exact for both sides — no range labels needed, and "July 2026 = €4,939.41" agrees with what the
+        // Last Month screen reports for July.
+        var priorLabel = PeriodHelper.GetPriorPeriodLabel(period, today);
+        // Presentation switch only: running → pacing bar, closed → change percentage.
+        var isPacing = PeriodHelper.IsRunningPeriod(period, today);
 
         var actionBand = await BuildActionBandAsync(cancellationToken);
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
@@ -56,7 +58,7 @@ public sealed class GetDashboardSummaryHandler(
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
-            ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, trendCurrentLabel, trendPriorLabel, cancellationToken)
+            ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, periodLabel, priorLabel, isPacing, cancellationToken)
             : null;
         var activityFeed = await BuildActivityFeedAsync(cancellationToken);
 
@@ -501,6 +503,7 @@ public sealed class GetDashboardSummaryHandler(
         DateOnly? from, DateOnly? to,
         DateOnly priorFrom, DateOnly priorTo,
         string currentLabel, string priorLabel,
+        bool isPacing,
         CancellationToken ct)
     {
         var currentRaw = await PayoutsInPeriodRawAsync(from, to, ct);
@@ -521,6 +524,20 @@ public sealed class GetDashboardSummaryHandler(
         {
             var current = currentByCurrency.GetValueOrDefault(currency, 0m);
             var prior = priorByCurrency.GetValueOrDefault(currency, 0m);
+
+            // RUNNING period → pacing. ChangePercent stays null and Direction is "pacing", so nothing
+            // downstream can derive a red down arrow from a period that has simply not finished yet.
+            // Comparing a few days of the current period against the whole previous one as a change
+            // percentage is what printed -89.9% in red every first of the month.
+            if (isPacing)
+            {
+                decimal? pacingPercent = prior <= 0m
+                    ? null                                              // no baseline to pace against
+                    : Math.Round(current / prior * 100m, 2);            // may exceed 100 — baseline beaten
+                return new DashboardTrendPointDto(currency, current, prior, null, "pacing", pacingPercent);
+            }
+
+            // CLOSED period → unchanged behaviour: like-for-like change percentage.
             decimal? changePercent = prior == 0m ? null : Math.Round((current - prior) / prior * 100m, 2);
             var direction = changePercent switch
             {
@@ -532,7 +549,9 @@ public sealed class GetDashboardSummaryHandler(
             return new DashboardTrendPointDto(currency, current, prior, changePercent, direction);
         }).ToList();
 
-        return new DashboardTrendBandDto(currentLabel, priorLabel, trendPoints);
+        return new DashboardTrendBandDto(
+            currentLabel, priorLabel, trendPoints, isPacing,
+            CurrentFrom: from, CurrentTo: to, PriorFrom: priorFrom, PriorTo: priorTo);
     }
 
     // Shared helper: load payout amounts by currency attributed to a date range.

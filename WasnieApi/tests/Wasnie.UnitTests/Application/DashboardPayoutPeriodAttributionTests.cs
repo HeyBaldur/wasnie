@@ -281,25 +281,96 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
     // ── trend band uses the same rule ─────────────────────────────────────────
 
     [Fact]
-    public async Task TrendBand_ComparesCashPaidInEachPeriod()
+    public async Task TrendBand_RunningPeriod_PacesAgainstTheWholePreviousPeriod()
     {
-        // "today" is 2026-08-04, so this-month covers 1–4 August and — per the trend invariant — is
-        // compared against the EQUIVALENT SLICE of July, 1–4 July, not against the whole month.
-        // Two July payments, one inside that slice and one outside it, prove the window is honoured.
+        // "today" is 2026-08-04. this-month covers 1–4 August and is paced against ALL of July, not the
+        // slice that matches how far August has run — the opening days of a month would otherwise read
+        // €0 against €0 and say nothing.
         SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 1_000m, On(2026, 7, 2));
-        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 9_999m, On(2026, 7, 15));
-        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 9, 30), 737.75m, On(2026, 8, 3));
+        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 3_000m, On(2026, 7, 15));
+        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 9, 30), 1_000m, On(2026, 8, 3));
 
         var result = await _handler.Handle(
             new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
 
-        var trend = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
+        var band = result.Value!.TrendBand!;
+        var point = band.CommissionTrend.Single(p => p.Currency == "EUR");
 
-        trend.PriorAmount.Should().Be(1_000m,
-            "only the payment inside 1–4 July belongs to the comparison slice; the 15 July payment is " +
-            "outside the elapsed window and counting it would compare four days against thirty-one");
-        trend.CurrentAmount.Should().Be(737.75m,
-            "the Jul→Sep payout was paid on 3 August, so it is August cash regardless of its period");
+        band.IsPacing.Should().BeTrue("August has not finished");
+        point.CurrentAmount.Should().Be(1_000m, "paid so far in August");
+        point.PriorAmount.Should().Be(4_000m, "the WHOLE of July, both payments");
+        point.PacingPercent.Should().Be(25m, "1,000 of 4,000");
+    }
+
+    [Fact]
+    public async Task TrendBand_RunningPeriod_NeverReportsAChangePercentage()
+    {
+        // THE REGRESSION GUARD. €1,000 of August against €4,000 of July is -75% by the change formula,
+        // and a red down arrow every first of the month is what this whole design exists to prevent.
+        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 4_000m, On(2026, 7, 15));
+        SeedPaidPayout(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31), 1_000m, On(2026, 8, 3));
+
+        var result = await _handler.Handle(
+            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+
+        var point = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
+
+        point.ChangePercent.Should().BeNull("a running period has no change to report");
+        point.Direction.Should().Be("pacing");
+        point.Direction.Should().NotBe("down", "a period that has not finished cannot be 'down'");
+    }
+
+    [Fact]
+    public async Task TrendBand_RunningPeriod_BeatingTheBaselineExceedsOneHundredPercent()
+    {
+        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 1_000m, On(2026, 7, 15));
+        SeedPaidPayout(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31), 1_500m, On(2026, 8, 3));
+
+        var result = await _handler.Handle(
+            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+
+        var point = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
+
+        point.PacingPercent.Should().Be(150m, "the baseline was beaten — a good outcome, not an error");
+        point.ChangePercent.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TrendBand_RunningPeriod_WithNoBaseline_HasNoPacingPercent()
+    {
+        // Nothing was paid in July, so there is no baseline to pace against. Dividing by zero would be
+        // an infinite percentage; the field is null and the UI shows its "no base" state instead.
+        SeedPaidPayout(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31), 500m, On(2026, 8, 3));
+
+        var result = await _handler.Handle(
+            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+
+        var point = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
+
+        point.PriorAmount.Should().Be(0m);
+        point.PacingPercent.Should().BeNull();
+        point.ChangePercent.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TrendBand_ClosedPeriod_KeepsItsChangePercentage()
+    {
+        // Closed periods are untouched by the pacing change: July (closed) vs the whole of June.
+        SeedPaidPayout(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), 1_000m, On(2026, 6, 15));
+        SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 400m, On(2026, 7, 15));
+
+        var result = await _handler.Handle(
+            new GetDashboardSummaryQuery("last-month"), CancellationToken.None);
+
+        var band = result.Value!.TrendBand!;
+        var point = band.CommissionTrend.Single(p => p.Currency == "EUR");
+
+        band.IsPacing.Should().BeFalse("July has finished");
+        point.CurrentAmount.Should().Be(400m);
+        point.PriorAmount.Should().Be(1_000m);
+        point.ChangePercent.Should().Be(-60m, "a closed period still reports a real decline");
+        point.Direction.Should().Be("down");
+        point.PacingPercent.Should().BeNull("pacing does not apply to a finished period");
     }
 
     [Fact]

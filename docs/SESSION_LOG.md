@@ -4,6 +4,287 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-05 — Columna "Paid on" en la lista de Payouts
+
+**Paso 0:** `PaidAt` **ya viajaba** en el DTO de la lista (`PayoutListItemDto` + `ListPayoutsHandler`,
+agregados en el WI de PaidAt) — no hizo falta tocar el backend. Lo que faltaba era el campo en el modelo
+del front y la columna en la tabla. El patrón de fechas de la lista es el pipe `dateFormat`, que ya
+maneja tanto `DateOnly` (`2026-07-01`) como ISO con hora, y devuelve cadena vacía ante null.
+
+**El cambio:** columna **Paid on** entre Status y Actions. Fecha con `dateFormat`; si el payout no está
+pagado, un guion largo atenuado (`--color-text-tertiary`) en vez de celda en blanco, para que se lea
+"no tiene fecha de pago" y no "falta el dato". i18n EN/ES/PL (`PAYOUTS.COL_PAID_ON`:
+Paid on / Fecha de pago / Data wypłaty).
+
+**Detalle fácil de pasar por alto:** las filas de skeleton y de vacío tenían `colspan="7"` fijo; con la
+columna nueva quedaron en 8. Sin eso, el estado vacío y el de carga se rompen al ancho de la tabla.
+
+**★ Verificado en runtime, el caso exacto del WI:** entrando con la ventana de pago de agosto
+(`status=Paid&payFrom=2026-08-01&payTo=2026-08-05`), la fila **TERM-CC-01** muestra
+**Period "Sep 1, 2026 → Sep 30, 2026"** y **Paid on "Aug 4, 2026"**. El matcheo ahora se explica solo:
+el período es de septiembre, pero el dinero salió el 4 de agosto. Cabecera resultante:
+`Payee | Plan | Period | Total | Status | Paid on | Actions`.
+Con `status=Calculated`, las 10 filas muestran **—** en la columna, como corresponde.
+
+**Punto 4 del WI (ordenable): NO APLICA.** Esta lista no tiene headers ordenables — no existe `setSort`
+ni handler de clic en `<th>`; el `sortBy` del store es fijo (`calculatedAt`). Hacerla ordenable sería
+agregar la interacción a toda la tabla, que excede "solo la columna". El backend tampoco tiene caso
+`paidat` en su `switch` de orden. **Queda anotado por si Rodolfo lo quiere.**
+
+**★ Hallazgo lateral, NO tocado:** el **export a Excel** arma su propio `PayoutExportRow` y **no incluye
+`PaidAt`** (lleva PeriodStart/End, Status, CalculatedAt, UpdatedAt). Quien exporte una lista filtrada por
+fecha de pago recibe filas sin la fecha que explica el filtro — el mismo problema que este WI arregla en
+pantalla, pero en el archivo que va a nómina. Es un WI aparte.
+
+**Tests:** frontend **767** (sin cambio neto; se agregó `paidAt` a las dos fixtures de `PayoutListItem`,
+que el compilador exigió). No agregué test de DOM para la columna: el spec de esta lista usa template
+stubbeado, así que montar el render real sería desproporcionado para un binding de una celda.
+`ng build --configuration production` limpio.
+
+**Entorno:** el API en :5091 ya estaba corriendo y **no lo levanté yo** (mi intento salió con "address
+already in use"), así que lo dejé como estaba.
+
+## 2026-08-05 — Tarjeta de payouts → lista vacía: NO REPRODUCE + drill-down de las barras
+
+**★ El bug reportado NO se reproduce.** Probé el clic en la tarjeta desde los SEIS filtros contra el API
+real. En todos, la lista trae exactamente lo que la tarjeta promete:
+
+| Filtro | Tarjeta | Link | Lista |
+|---|---|---|---|
+| This Month | €500 | `status=Paid, payFrom=2026-08-01, payTo=2026-08-05` | 1 de 1 |
+| Last Month | €4.939,41 | `…payFrom=2026-07-01, payTo=2026-07-31` | 5 de 5 |
+| This Quarter | €5.439,41 | `…payFrom=2026-07-01, payTo=2026-08-05` | 6 de 6 |
+| Last Quarter | €181.715,99 | `…payFrom=2026-04-01, payTo=2026-06-30` | 32 |
+| YTD | €187.155,40 | `…payFrom=2026-01-01, payTo=2026-08-05` | 38 |
+| **Last Year** | **—** | `…payFrom=2025-01-01, payTo=2025-12-31` | **vacía (correcto: no hubo pagos en 2025)** |
+
+**La invariante tarjeta↔lista sigue intacta:** las 5 filas de julio suman
+1.000+1.000+1.000+1.000+939,41 = **€4.939,41**, idéntico al céntimo.
+
+**Hipótesis descartadas con evidencia:** el WI del pacing NO tocó el link (sigue emitiendo
+`period+status=Paid+payFrom+payTo`); la lista SÍ aplica la ventana (la request lleva
+`status=Paid&paidFrom&paidTo` y el resultado cambia con ella); los query params NO se pisan al cargar.
+
+**★ Único caso legítimamente vacío: Last Year**, donde la tarjeta muestra "—", no un número. Es la
+hipótesis más probable de lo que viste. **Falta que Rodolfo confirme desde qué filtro lo vio** — si fue
+desde otro, hace falta el dato para volver a buscarlo.
+
+**Trampa propia que vale anotar:** mi primer intento cliqueó la tarjeta equivocada — el selector agarraba
+el primer `<a href*="/payouts">`, que es "Pending Approval" (`status=Calculated`), no la de payouts. Casi
+reporto un falso positivo por eso.
+
+**★ ADEMÁS — drill-down de las barras (implementado):**
+- `ws-hbar-chart` expone `barClick` (output) usando `onClick` de Chart.js; `onHover` pone
+  `cursor: pointer` solo sobre una barra. El primitivo NO conoce el Router — sigue siendo agnóstico.
+- **UNA sola definición del link:** `payoutsLinkParamsFor(from, to)`. La tarjeta y ambas barras pasan por
+  ahí, así que no pueden divergir. Hay un test que compara el resultado de las dos rutas.
+- **Las ventanas vienen del backend** (`currentFrom/To`, `priorFrom/To` nuevos en `DashboardTrendBandDto`),
+  no se recalculan en el browser: `PeriodHelper` es la única fuente de verdad de qué cubre un período y
+  una segunda implementación derivaría.
+
+**Estado de verificación del drill-down — honesto:**
+- ✅ El handler funciona **en la app corriendo**: invocarlo con la barra "June 2026" navegó a
+  `/payouts?status=Paid&payFrom=2026-06-01&payTo=2026-06-30`.
+- ✅ En la instancia viva de Chart.js están registrados `onClick` y `onHover`, y el output `barClick`
+  existe; los chunks servidos contienen el código.
+- ❌ **NO pude verificar el clic físico sobre la barra.** A mitad de sesión el navegador dejó de entregar
+  clics: puse un overlay `position:fixed;inset:0` cubriendo TODO el viewport y **no recibió ninguno** de
+  dos clics en coordenadas distintas. Es falla del tooling, no del producto — pero **no lo doy por
+  verificado**. Queda pendiente probarlo a mano.
+
+**Tests:** frontend **759 → 767** (+8): tres que fijan el contrato del link de la tarjeta (que lleve
+`status=Paid`+`payFrom`+`payTo`, que NUNCA use `pFrom/pTo`, y que la ventana coincida con el período
+mostrado) y cinco de drill-down (barra prior → su ventana, barra current → la suya, que use la MISMA
+definición que la tarjeta, sin banda no navega, ventana sin límites no navega).
+Backend **1241**, prod build limpio.
+
+**Entorno:** el API que levanté quedó detenido y el puerto 5091 cerrado.
+
+## 2026-08-05 — Widget de payouts: esqueleto visual INMUTABLE (tendencia y progreso, un solo componente)
+
+**Solo presentación.** La lógica tendencia/progreso no se tocó: el backend sigue emitiendo
+`ChangePercent = null` + `Direction = "pacing"` para en-curso, y su `%` normal para cerrados.
+
+**Paso 0 — las dos ramas que había:**
+- Progreso (en curso): una `.attainment-bar` de una sola línea, **sin eje X**, dentro de un
+  `.trend-card__pacing`, y su propio `<span>` de badge.
+- Tendencia (cerrado): `ws-hbar-chart` con **dos barras** (gris = anterior, azul = evaluado) y eje X, y
+  otro `<span>` de badge.
+
+Al cambiar de filtro desaparecía el eje, dos barras colapsaban a una y saltaba la tipografía.
+
+**Cómo se unificó:** `ws-hbar-chart` **ya hacía exactamente lo que el WI pide para ambos estados** — dos
+barras horizontales, gris arriba / azul abajo, misma escala y eje X anclado abajo. Y `trendBarPoints`
+ya produce `[prior, current]`, que para pacing es `[total del período anterior, pagado hasta ahora]`.
+Así que la unificación fue **borrar** la rama de progreso, no construir nada nuevo:
+
+- **Un solo `.trend-card__chart` con `ws-hbar-chart`** para ambos estados. `.attainment-bar` y el estilo
+  `.trend-card__pacing` quedaron muertos y se eliminaron.
+- **Un solo `<span>` de badge**, con clases y texto condicionales. Antes eran dos `<span>` en ramas
+  separadas: **cualquier edición futura de uno los habría desalineado en silencio**. Ahora es
+  imposible por construcción.
+- **Un solo `.trend-card__prior`** de pie. `TREND_PRIOR` pasó de `"Prior"` a `"Prior: {{period}}"` para
+  que ambos estados usen la misma interpolación (no se usaba en ningún otro lado).
+- La diferencia entre estados vive en seis helpers del componente (`badgeIsPositive`, `badgeIsNegative`,
+  `badgeShowsArrow`, `badgeText`, `badgeParams`, `footerLabel`), no en el template.
+
+**★ Verificación en runtime — medida, no a ojo.** Se midió la tarjeta en un estado, se cambió el filtro
+y se volvió a medir, comparando posiciones relativas y estilos computados:
+
+```
+geometryDifferences: []
+```
+
+| | Progreso (This Month) | Tendencia (Last Month) |
+|---|---|---|
+| Tarjeta | 526x224 | 526x224 |
+| Gráfico | `0,72 526x100` | `0,72 526x100` |
+| Canvas | `0,72 526x100` | `0,72 526x100` |
+| Pie | `0,192 526x32` | `0,192 526x32` |
+| Badge | `h=24px pad=3px 10px 3px 8px fs=12px fw=800` | idéntico |
+| Pie (label/monto) | `11px/400` · `13px/600` | idéntico |
+| Barra de una línea | no | no |
+
+**Lo único que cambia**, como pide el WI: fondo del badge (`rgb(10,14,21)` neutro vs
+`rgba(163,45,45,0.2)` rojo), su texto (`10% of baseline` vs `-97.3%`) y el texto del pie
+(`July 2026 total €4.94K` vs `Prior: June 2026 €181.72K`). En pantalla, ambos estados muestran las dos
+barras (gris arriba, azul abajo) con el eje X abajo — 0/2.0K/4.0K/6.0K en progreso, 0/50K/100K/150K/200K
+en tendencia.
+
+**★ Decisión que conviene revisar:** el WI dice "gris para progreso, rojo/verde para tendencia". Dejé el
+badge de progreso **verde cuando se supera la línea base** (≥100%), porque el WI anterior estableció
+explícitamente que superarla se muestra como positivo. No afecta la geometría (solo color), pero
+contradice la letra de este WI — **si Rodolfo lo prefiere siempre gris, es cambiar una condición.**
+
+**Tests:** frontend **755 → 759**. Se reemplazaron los specs de la barra de progreso (que ya no existe,
+`pacingFillWidth` se eliminó) por specs de polimorfismo: que en pacing **nunca** haya badge negativo ni
+flecha (recorriendo 0/10/99.9/100/150/null), que el verde aparezca solo al superar la base, los textos
+de badge y pie por estado, y que el gráfico se arme igual en ambos.
+`ng build --configuration production` limpio.
+
+**Entorno:** el API de dev en :5091 **ya estaba corriendo y no lo levanté yo** (mi intento salió con
+"address already in use"), así que lo dejé como estaba.
+
+## 2026-08-05 — Períodos EN CURSO: PACING contra el total anterior, no rebanada
+
+**Decisión de Rodolfo.** La rebanada era matemáticamente honesta pero comercialmente inútil: en B2B los
+pagos se concentran al final del período, así que los primeros días daban €0 vs €0. Ahora un período en
+curso se mide contra el **total del período anterior completo**, como línea base.
+
+**Paso 0:**
+- La banda la arma `BuildTrendBandAsync` a partir de `PayoutsInPeriodRawAsync(actual)` y
+  `(prior)`, y emitía `{currency, current, prior, changePercent, direction}`.
+- En-curso vs cerrado ya se derivaba de `to == hoy`; se expuso como `PeriodHelper.IsRunningPeriod`.
+
+**El cambio — la ventana se unifica, lo que cambia es la PRESENTACIÓN:**
+- `ComputePriorPeriodRange` devuelve ahora **siempre el período anterior completo**, en curso o cerrado.
+  Toda la lógica de rebanada + clamp desapareció (era un caso particular que ya no aplica), y con ella
+  `GetTrendLabels`/`FormatRange`: como el prior vuelve a ser un período entero, los nombres de período son
+  exactos otra vez y "July 2026 = €4.939,41" coincide con lo que muestra Last Month.
+- `IsRunningPeriod` decide **solo la presentación**. Para en-curso: `ChangePercent = null`,
+  `Direction = "pacing"`, y `PacingPercent = actual/total_anterior*100`.
+  **★ Que `ChangePercent` sea null para en-curso es la garantía estructural** de que ninguna capa
+  posterior pueda derivar una flecha roja de caída de un período que simplemente no terminó.
+- Los períodos **CERRADOS no se tocaron**: mismo `%`, mismo `up/down/neutral`, mismo gráfico de dos barras.
+
+**Front:**
+- Rama de pacing separada en el template. Barra de progreso **reusando `.attainment-bar`**, que ya existe
+  en este mismo componente para Avg Quota Attainment — así "progreso contra una línea base" se ve igual en
+  toda la pantalla, sin primitiva nueva ni estilos inventados.
+- Fill clampeado a 100% para que no se escape del track, pero el pill sigue diciendo el valor real
+  (150% si se superó). **Superar la línea base se muestra como positivo**, nunca como exceso a corregir.
+- Sin línea base (total anterior = 0) → `PacingPercent` null y se muestra el estado "New" existente, en
+  vez de dividir por cero.
+- i18n EN/ES/PL: `BAND_PACING`, `PACING_CHIP`, `PACING_PILL`, `PACING_BASELINE`, `PACING_METRIC`.
+
+**★ Verificación en runtime (API :5091 + dev server), valores reales observados:**
+
+| Filtro | isPacing | Actual | Línea base | Lo que muestra |
+|---|---|---|---|---|
+| This Month | true | €500 | €4.939,41 (todo julio) | "10% of baseline", barra al 10%, **sin flecha ni rojo** |
+| This Quarter | true | €5.439,41 | €181.715,99 (todo Q2) | pacing 2,99% |
+| YTD | true | €187.155,40 | €0 | sin línea base → "New" |
+| **Last Month** | false | €4.939,41 | €181.715,99 | **−97,3% en rojo, con flecha — intacto** |
+| Last Quarter | false | €181.715,99 | €0 | neutral — intacto |
+
+En pantalla, This Month: banda **"PROGRESS"**, chip **"July 2026 total as baseline"**, tarjeta
+**"Paid so far · August 2026 · EUR €500"**, pill **"10% of baseline"** y pie **"July 2026 total €4,94K"**.
+Last Month conserva banda "Trend", chip "July 2026 vs June 2026", pill `-97.3%` con clase
+`trend-card__delta-pill--down` y el gráfico de dos barras.
+
+**★ Trampa evitada:** el dev server marcó `TS2345` — `trendIcon` aceptaba solo `'up'|'down'|'neutral'` y
+ahora existe `'pacing'`. **`ng test` había pasado igual**; el overlay del navegador mostraba la build
+anterior, así que la pantalla parecía correcta con el código roto. Se corrigió la firma (y `trendIcon`
+dibuja plano ante `'pacing'`, de modo que ni una llamada perdida podría pintar subida o bajada) y se
+reverificó con `ng build --configuration production` en verde antes de mirar la pantalla otra vez.
+
+**Tests:** unit **1241** (se reescribió `PeriodHelperTrendInvariantTests` a la regla nueva —ventana única
++ clasificación en-curso/cerrado— y se actualizaron 8 tests que fijaban la rebanada; nuevos tests de
+handler: pacing contra el total, que en curso **nunca** emita `ChangePercent`, superar la base >100%, sin
+línea base, y que un período cerrado conserve su `%`). Frontend **748 → 755** (+7 de los helpers de
+pacing, incluido que un punto de pacing no pueda clasificarse como caída). Prod build limpio.
+
+**Entorno:** el API de dev quedó **detenido** y el puerto 5091 cerrado.
+
+## 2026-08-05 — Filtro de fechas del dashboard: de barra segmentada a dropdown (WsSelect)
+
+**Solo presentación.** Cero cambios en `PeriodHelper`, en la query o en el cálculo de tendencia. El
+dropdown llama exactamente al mismo `onPeriodChange()` que llamaba la barra; el store sigue siendo dueño
+del período y de la recarga.
+
+**Paso 0:**
+- Filtro actual: `<ws-segmented-control [value] (valueChange)>` en el slot `actions` del page-layout,
+  con `periodOptions: SegOption[]` y `onPeriodChange()`.
+- **`WsSelect` es un ControlValueAccessor**: NO tiene par `[value]`/`(valueChange)`. En todo el repo se
+  usa con `formControlName` (assignments, credits, category-mappings). Así que el binding va por un
+  `FormControl` + `valueChanges` → `onPeriodChange()`, que es el patrón establecido, no uno nuevo.
+- Su trigger ya renderiza `selectedOption().label | translate`, así que el valor seleccionado se ve
+  siempre — que es justo lo que el WI pide.
+- `SegOption {label, value}` es estructuralmente compatible con `SelectOption`; se retipó a
+  `SelectOption[]` y **se reusaron las claves y labels i18n existentes** (`DASHBOARD.PERIOD_*`).
+  Única clave nueva: `PERIOD_LABEL` (Period / Período / Okres) para el label del select.
+
+**Dos ajustes que salieron de mirar, no de suponer:**
+1. Al abrir el dropdown, la opción seleccionada mostraba **"This Mo…"**: el panel se dimensiona al ancho
+   del trigger, y el ícono de check del estado seleccionado se comía el texto. Resuelto con
+   `min-width: 160px` en `.period-select` — **el mismo valor que ya usa la lista de créditos** para sus
+   selects de filtro, así que es precedente del repo, no un número inventado. `ws-select` tiene
+   `:host { display: block }`, así que aplica directo sin wrapper.
+2. Verificado que no quedaran estilos ni imports muertos del segmented-control (queda solo una mención en
+   un comentario). El primitivo sigue en uso en payouts, pay-runs y detalle de payee — no se tocó.
+
+**★ Verificación en runtime (API en :5091 + dev server):**
+- El trigger muestra "This Month" con borde y fondo sólidos — affordance real, frente a los 6 textos
+  flotantes con recuadro semitransparente de antes.
+- Abierto: las 6 opciones legibles, la seleccionada resaltada y con check.
+- Seleccionando "Last Month": el dropdown se cierra, el trigger pasa a "Last Month" y **Payouts muestra
+  €4.939,41**, exactamente la cifra ya verificada por API para ese período. Los datos recargan igual; el
+  backend no cambió.
+
+**★ Ancho — comparación directa con la misma prueba de umbral del WI anterior:**
+
+| | Control | Header desborda desde |
+|---|---|---|
+| Antes (barra) | **553 px** | por debajo de ~640 px |
+| Ahora (select) | **160 px** | por debajo de **320 px** |
+
+A **375 px el header NO desborda** (apila, alto 72 px). Criterio de aceptación cumplido.
+
+**⚠️ Hallazgo aparte, PREEXISTENTE y fuera de este WI:** probando en un iframe de 375 px (viewport real,
+las media queries evalúan de verdad) se ve que **el app-shell no colapsa la sidebar en ancho de teléfono**:
+la sidebar sigue ocupando ~195 px de 371, y **todo** el contenido —título, tarjetas, no solo el filtro—
+queda comprimido con scroll horizontal dentro del shell. El filtro dejó de ser el que rompe (pasó de 553
+a 160 px), pero **la página a 375 px sigue sin ser usable por una razón que este WI no toca**. Es un WI
+propio de responsive del shell, y no lo improvisé.
+
+**Presupuesto:** `dashboard.component.scss` pasa de 14,27 kB a 14,30 kB (+30 bytes por la regla nueva).
+Ya estaba por encima del presupuesto de 14 kB antes de este cambio; lo empeora marginalmente y no hay
+estilo muerto que compensar. Se reporta, no se esconde.
+
+**Tests:** frontend **745 → 748** (+3: que elegir una opción llegue al store, que el control arranque en
+el período vigente, y que todos los valores del menú sean períodos que el store acepta).
+`ng build --configuration production` limpio.
+
 ## 2026-08-05 — Integración en verde: arreglado un test time-bomb (no era regresión)
 
 Con Docker arriba se pudo correr por fin la suite de integración que había quedado pendiente.

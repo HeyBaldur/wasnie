@@ -153,6 +153,7 @@ function makePayoutListItem(
     status,
     calculatedAt: '2026-06-01T00:00:00Z', calculatedBy: 'test',
     updatedAt: '2026-06-01T00:00:00Z', updatedBy: 'test',
+    paidAt: null,
   };
 }
 

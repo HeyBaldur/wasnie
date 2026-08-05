@@ -54,51 +54,40 @@ public static class PeriodHelper
         };
 
     /// <summary>
-    /// Returns the [From, To] range the current period is compared against for the Banda 3 trend.
-    /// Returns (null, null) for "all-time" or unknown.
+    /// Whether the period is still RUNNING — derived from its own range rather than declared in a list,
+    /// so a period key added later classifies itself. A running period's range ends today; every closed
+    /// period ends on a fixed past date. "all-time" and unknown keys are unbounded and never running.
     ///
-    /// ── THE INVARIANT — ONE RULE FOR EVERY PERIOD ────────────────────────────────────────────
-    ///   · A period still RUNNING is compared against the EQUIVALENT ELAPSED SLICE of the previous
-    ///     one — the same number of days — clamped to that period's end.
-    ///   · A period already CLOSED is compared against the whole of the previous one.
+    /// This drives PRESENTATION only: a running period is shown as PACING (progress against the previous
+    /// period's total), a closed one as a percentage change. Both compare against the same window.
+    /// </summary>
+    public static bool IsRunningPeriod(string? period, DateOnly today)
+    {
+        var (_, to) = ComputeDateRange(period, today);
+        return to.HasValue && to.Value == today;
+    }
+
+    /// <summary>
+    /// Returns the FULL [From, To] range of the period preceding the given one — the comparison window
+    /// for the Banda 3 band. Returns (null, null) for "all-time" or unknown.
     ///
-    /// Both halves are computed here, generically, for every key. Nothing is special-cased per period,
-    /// and that is the point: this used to be a per-key switch in which "this-month" alone compared a
-    /// few elapsed days against a FULL previous month. On 5 August that read five days of August against
-    /// all thirty-one of July and printed roughly -85% in red, a collapse that never happened — and
-    /// switching the filter to This Quarter silently changed the formula under the user.
+    /// ONE WINDOW FOR EVERY PERIOD: always the whole previous period, running or closed. A running period
+    /// used to be compared against the equivalent elapsed slice (five days of August against five of
+    /// July). That was arithmetically honest but commercially useless — B2B payments cluster at the end
+    /// of a period, so the first days of a month read €0 against €0 and told nobody anything.
     ///
-    /// If a new period key is added, it inherits the correct rule automatically: whether it is running
-    /// is derived from its own range, not declared by hand.
+    /// The previous period's TOTAL is instead used as a baseline the running period is pacing towards.
+    /// That makes the comparison meaningful from day one, and it is why a running period must NOT be
+    /// rendered as a percentage change: €500 of August against all €4,939 of July is -89.9% by that
+    /// formula, a red collapse arrow every first of the month. See <see cref="IsRunningPeriod"/> — the
+    /// handler switches the PRESENTATION on it, never the window.
     /// </summary>
     public static (DateOnly? From, DateOnly? To) ComputePriorPeriodRange(string? period, DateOnly today)
     {
         var normalized = (period ?? "this-month").ToLowerInvariant();
-
-        var (from, to) = ComputeDateRange(normalized, today);
-        var previous = PreviousPeriodBounds(normalized, today);
-
-        // "all-time" and unknown keys have no bounded range, so there is nothing to compare against.
-        if (from is null || to is null || previous is null) return (null, null);
-
-        var (priorStart, priorEnd) = previous.Value;
-
-        // THE DISCRIMINATOR, derived rather than declared: a period is still running exactly when its
-        // range ends today. Every closed period ends on a fixed past date.
-        var isRunning = to.Value == today;
-        if (!isRunning) return (priorStart, priorEnd);
-
-        // Equal elapsed days. Clamped because periods differ in length — 31 days of March have no
-        // counterpart in February, and Q1 (90/91 days) is shorter than Q3 and Q4 (92). Without the
-        // clamp the "previous" window would spill forward into the current period and count days twice.
-        //
-        // Clamping is also what makes this leap-day safe: AddDays can never build an invalid date,
-        // whereas reconstructing the same calendar day a year earlier throws every 29 February.
-        var elapsedDays = to.Value.DayNumber - from.Value.DayNumber;
-        var priorTo = priorStart.AddDays(elapsedDays);
-        if (priorTo > priorEnd) priorTo = priorEnd;
-
-        return (priorStart, priorTo);
+        return PreviousPeriodBounds(normalized, today) is { } previous
+            ? (previous.Start, previous.End)
+            : (null, null);
     }
 
     /// <summary>
@@ -182,48 +171,4 @@ public static class PeriodHelper
     private static string QuarterLabel(DateOnly quarterStart) =>
         $"Q{QuarterNumber(quarterStart)} {quarterStart.Year}";
 
-    /// <summary>
-    /// Labels for the TREND comparison specifically — which is not the same question as "what period am
-    /// I looking at", and must not reuse those labels.
-    ///
-    /// A RUNNING period is compared slice against slice, so both sides are labelled with their actual
-    /// day ranges. Naming them after the whole period instead produces a flat contradiction inside the
-    /// same dashboard: on 5 August the trend card would read "Prior: July 2026 — €0" while the Last Month
-    /// filter reports July at €4,939.41. The number is right; the name is a lie, and the user has no way
-    /// to tell which screen to believe.
-    ///
-    /// A CLOSED period is compared whole against whole, so the period names are exact and are kept —
-    /// "July 2026 vs June 2026" reads better than spelling out both date ranges.
-    /// </summary>
-    public static (string Current, string Prior) GetTrendLabels(string? period, DateOnly today)
-    {
-        var normalized = (period ?? "this-month").ToLowerInvariant();
-        var (from, to) = ComputeDateRange(normalized, today);
-        var (priorFrom, priorTo) = ComputePriorPeriodRange(normalized, today);
-
-        // Closed periods, and anything unbounded, keep the period names.
-        if (from is not { } start || to is not { } end || end != today
-            || priorFrom is not { } priorStart || priorTo is not { } priorEnd)
-        {
-            return (GetPeriodLabel(normalized, today), GetPriorPeriodLabel(normalized, today));
-        }
-
-        return (FormatRange(start, end), FormatRange(priorStart, priorEnd));
-    }
-
-    /// <summary>Compact inclusive range, e.g. "1–5 Aug 2026", "1 Apr – 6 May 2026", "1 Jan 2026".</summary>
-    private static string FormatRange(DateOnly from, DateOnly to)
-    {
-        var ci = CultureInfo.InvariantCulture;
-        if (from == to)
-            return from.ToString("d MMM yyyy", ci);
-
-        if (from.Year == to.Year && from.Month == to.Month)
-            return $"{from.Day}–{to.Day} {to.ToString("MMM yyyy", ci)}";
-
-        if (from.Year == to.Year)
-            return $"{from.ToString("d MMM", ci)} – {to.ToString("d MMM yyyy", ci)}";
-
-        return $"{from.ToString("d MMM yyyy", ci)} – {to.ToString("d MMM yyyy", ci)}";
-    }
 }
