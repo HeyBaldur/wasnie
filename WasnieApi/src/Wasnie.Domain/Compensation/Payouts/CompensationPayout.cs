@@ -16,6 +16,22 @@ public sealed class CompensationPayout : AggregateRoot
     public DateRange Period { get; private set; } = null!;
     public Money TotalCommission { get; private set; } = null!;
     public CompensationPayoutStatus Status { get; private set; } = CompensationPayoutStatus.Calculated;
+
+    /// <summary>
+    /// The instant the money actually left — the cash event, not the compensation period it covers.
+    /// Null until paid.
+    ///
+    /// INVARIANT: PaidAt.HasValue ⟺ Status == Paid. It is stamped in <see cref="MarkPaid"/> and cleared
+    /// in <see cref="RevertPaidToApproved"/>, the only two transitions into and out of Paid.
+    ///
+    /// This is what the treasury/cash-flow reporting attributes to a month. Do NOT substitute Period.End
+    /// (the cycle close) — a payout covering 2026-01-01→2026-12-31 closes in December but its money may
+    /// have moved in July, and reporting it in December is simply false. Do NOT substitute the underlying
+    /// transaction dates either: those would make already-published historical reports mutate whenever a
+    /// back-dated transaction is added.
+    /// </summary>
+    public DateTimeOffset? PaidAt { get; private set; }
+
     public DateTimeOffset CalculatedAt { get; private set; }
     public string CalculatedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -110,6 +126,10 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Paid;
+        // Stamp the cash event. Immutability while Paid is enforced structurally by the guard above:
+        // MarkPaid is the ONLY writer of PaidAt, and it cannot run on an already-Paid payout, so no
+        // later operation can move the date of money that has already gone out.
+        PaidAt = now;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }
@@ -148,6 +168,11 @@ public sealed class CompensationPayout : AggregateRoot
             throw new DomainException("Only Paid payouts can be reverted to Approved.");
 
         Status = CompensationPayoutStatus.Approved;
+        // The payment is annulled, not amended: this handler also unconsumes every credit and returns the
+        // transactions to Calculated. A PaidAt left behind would keep claiming cash moved on a day it was
+        // taken back, so cash-flow reporting would double count it against the eventual re-payment. If the
+        // payout is paid again later, MarkPaid stamps the NEW date — which is when the money really left.
+        PaidAt = null;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

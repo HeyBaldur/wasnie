@@ -21,6 +21,16 @@ public sealed record PayoutFilterQuery
     // INTERSECTS [PeriodFrom, PeriodTo]. Same semantics as everywhere else in the domain.
     public DateOnly? PeriodFrom { get; init; } // payouts whose Period.End >= this
     public DateOnly? PeriodTo { get; init; }   // payouts whose Period.Start <= this
+
+    // PAYMENT date (cash flow), a different question from the compensation period above and therefore a
+    // separate pair of parameters rather than a mode switch on PeriodFrom/PeriodTo. "Which payouts does
+    // this month's payroll cover?" (period, intersection) and "what money left the account this month?"
+    // (payment date, containment) are both legitimate and both in use — payroll export needs the first,
+    // the dashboard cash-flow card needs the second. Collapsing them would silently change the export.
+    //
+    // Matches on PaidAt, so only Paid payouts can ever satisfy it (PaidAt is null in every other status).
+    public DateOnly? PaidFrom { get; init; }   // payouts whose PaidAt >= this day, 00:00:00 UTC
+    public DateOnly? PaidTo { get; init; }     // payouts whose PaidAt <= this day, 23:59:59.999… UTC
     public bool ExcludeZero { get; init; } = false; // exclude payouts with TotalCommission = 0
 
     // Optional: restrict to a specific pay run (used by the detail export and run-detail sub-table).

@@ -184,6 +184,8 @@ describe('PayoutsStore', () => {
       currencies: ['EUR', 'PLN'],
       periodFrom: '2026-01-01',
       periodTo: '2026-03-31',
+      paidFrom: '2026-07-01',
+      paidTo: '2026-07-31',
       hideZero: true,
     };
     store.setFilter(f);
@@ -199,7 +201,31 @@ describe('PayoutsStore', () => {
     expect(restored.currencies).toEqual(['EUR', 'PLN']);
     expect(restored.periodFrom).toBe('2026-01-01');
     expect(restored.periodTo).toBe('2026-03-31');
+    expect(restored.paidFrom).toBe('2026-07-01');
+    expect(restored.paidTo).toBe('2026-07-31');
     expect(restored.hideZero).toBeTrue();
+  });
+
+  // The dashboard's cash-flow card deep-links with payFrom/payTo, and the list must forward them to the
+  // API as paidFrom/paidTo — otherwise the list silently ignores the payment window and shows a total
+  // that disagrees with the card the user just clicked.
+  it('forwards a payment-date window to the API as paidFrom/paidTo', () => {
+    store.setFilter({ paidFrom: '2026-07-01', paidTo: '2026-07-31' });
+
+    const params = PayoutsStore._buildFilterRecord(store.filter());
+
+    expect(params['paidFrom']).toBe('2026-07-01');
+    expect(params['paidTo']).toBe('2026-07-31');
+  });
+
+  it('keeps the payment-date window separate from the compensation period', () => {
+    store.setFilter({ periodFrom: '2026-01-01', periodTo: '2026-12-31' });
+
+    const params = PayoutsStore._buildFilterRecord(store.filter());
+
+    expect(params['periodFrom']).toBe('2026-01-01');
+    expect(params['paidFrom']).toBeUndefined();
+    expect(params['paidTo']).toBeUndefined();
   });
 
   it('toQueryParams / loadFromQueryParams round-trip preserves hideZero=false', () => {

@@ -11,6 +11,14 @@ export interface PayoutFilter {
   currencies: string[];
   periodFrom: string | null;
   periodTo: string | null;
+  /**
+   * PAYMENT-date window (cash flow) — when the money left, as opposed to periodFrom/periodTo which are
+   * the compensation period the payout covers. Separate on purpose: the dashboard's payouts card sums by
+   * payment date and deep-links here with these two values, so the list it opens adds up to exactly the
+   * figure on the card. Only Paid payouts can match (nothing else has a payment date).
+   */
+  paidFrom: string | null;
+  paidTo: string | null;
   hideZero: boolean;
 }
 
@@ -21,6 +29,8 @@ export const EMPTY_PAYOUT_FILTER: PayoutFilter = {
   currencies: [],
   periodFrom: null,
   periodTo: null,
+  paidFrom: null,
+  paidTo: null,
   hideZero: true,
 };
 
@@ -112,6 +122,7 @@ export class PayoutsStore {
     if (f.status !== 'All') n++;
     if (f.currencies.length > 0) n++;
     if (f.periodFrom || f.periodTo) n++;
+    if (f.paidFrom || f.paidTo) n++;
     return n;
   });
 
@@ -133,6 +144,8 @@ export class PayoutsStore {
     if (f.currencies.length > 0) p['currencies'] = f.currencies.join(',');
     if (f.periodFrom) p['periodFrom'] = f.periodFrom;
     if (f.periodTo) p['periodTo'] = f.periodTo;
+    if (f.paidFrom) p['paidFrom'] = f.paidFrom;
+    if (f.paidTo) p['paidTo'] = f.paidTo;
     if (f.hideZero) p['excludeZero'] = 'true';
     return p;
   }
@@ -226,6 +239,8 @@ export class PayoutsStore {
     if (f.currencies.length > 0) p['currencies'] = f.currencies.join(',');
     if (f.periodFrom) p['pFrom'] = f.periodFrom;
     if (f.periodTo) p['pTo'] = f.periodTo;
+    if (f.paidFrom) p['payFrom'] = f.paidFrom;
+    if (f.paidTo) p['payTo'] = f.paidTo;
     if (!f.hideZero) p['hz'] = '0';
     return p;
   }
@@ -239,6 +254,8 @@ export class PayoutsStore {
     if (params['currencies']) f.currencies = params['currencies'].split(',').filter(Boolean);
     if (params['pFrom']) f.periodFrom = params['pFrom'];
     if (params['pTo']) f.periodTo = params['pTo'];
+    if (params['payFrom']) f.paidFrom = params['payFrom'];
+    if (params['payTo']) f.paidTo = params['payTo'];
     if (params['hz'] === '0') f.hideZero = false;
     this.filter.set(f);
   }

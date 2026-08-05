@@ -340,7 +340,9 @@ describe('DashboardComponent helpers', () => {
   // ── Period link params ────────────────────────────────────────────────────
 
   describe('_periodDates', () => {
-    it('returns null dates for all-time', () => {
+    // 'all-time' was removed from the dashboard menu, but a bookmarked URL can still carry it, so it
+    // must keep degrading to "no date filter" instead of throwing or silently becoming this-month.
+    it('returns null dates for the retired all-time key', () => {
       const { from, to } = component._periodDates('all-time');
       expect(from).toBeNull();
       expect(to).toBeNull();
@@ -350,6 +352,25 @@ describe('DashboardComponent helpers', () => {
       const { from, to } = component._periodDates('unknown-key');
       expect(from).toBeNull();
       expect(to).toBeNull();
+    });
+
+    it('does not offer all-time in the quick filters', () => {
+      expect(component.periodOptions.map(o => o.value)).not.toContain('all-time');
+    });
+
+    it('offers month, quarter and year filters', () => {
+      expect(component.periodOptions.map(o => o.value)).toEqual([
+        'this-month', 'last-month', 'this-quarter', 'last-quarter', 'ytd', 'last-year',
+      ]);
+    });
+
+    it('every quick filter has a translated label and resolves to a date range', () => {
+      for (const opt of component.periodOptions) {
+        expect(opt.label).toMatch(/^DASHBOARD\.PERIOD_/);
+        const { from, to } = component._periodDates(opt.value);
+        expect(from).not.toBeNull();
+        expect(to).not.toBeNull();
+      }
     });
 
     it('this-month: from is first of current month', () => {
@@ -373,6 +394,47 @@ describe('DashboardComponent helpers', () => {
       const { from } = component._periodDates('ytd');
       expect(from).toBe(`${new Date().getFullYear()}-01-01`);
     });
+
+    // Quarters are calendar quarters and must match PeriodHelper on the backend exactly — these link
+    // params drive the list screens the dashboard cards open, so a mismatch shows the user a list that
+    // disagrees with the card they clicked.
+    it('this-quarter: from is the first day of the calendar quarter, to is today', () => {
+      const { from, to } = component._periodDates('this-quarter');
+      const today = new Date();
+      const qMonth = Math.floor(today.getMonth() / 3) * 3 + 1;
+      const yyyy = today.getFullYear();
+      expect(from).toBe(`${yyyy}-${String(qMonth).padStart(2, '0')}-01`);
+      expect(to).toBe(
+        `${yyyy}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      );
+    });
+
+    it('last-quarter: ends the day before this quarter starts', () => {
+      const lastQ = component._periodDates('last-quarter');
+      const thisQ = component._periodDates('this-quarter');
+
+      const dayAfterLastEnds = new Date(`${lastQ.to}T00:00:00`);
+      dayAfterLastEnds.setDate(dayAfterLastEnds.getDate() + 1);
+      const asStr =
+        `${dayAfterLastEnds.getFullYear()}-` +
+        `${String(dayAfterLastEnds.getMonth() + 1).padStart(2, '0')}-` +
+        `${String(dayAfterLastEnds.getDate()).padStart(2, '0')}`;
+
+      expect(asStr).toBe(thisQ.from!);
+    });
+
+    it('last-quarter: spans exactly three months and starts on the 1st', () => {
+      const { from, to } = component._periodDates('last-quarter');
+      expect(from).toMatch(/-(01|04|07|10)-01$/);
+      expect(to).toMatch(/-(03|06|09|12)-(30|31)$/);
+    });
+
+    it('last-year: is the previous calendar year in full', () => {
+      const { from, to } = component._periodDates('last-year');
+      const prev = new Date().getFullYear() - 1;
+      expect(from).toBe(`${prev}-01-01`);
+      expect(to).toBe(`${prev}-12-31`);
+    });
   });
 
   describe('payoutsLinkParams', () => {
@@ -381,24 +443,42 @@ describe('DashboardComponent helpers', () => {
       expect(component.payoutsLinkParams()['period']).toBe('last-month');
     });
 
-    it('all-time: no pFrom or pTo', () => {
+    it('retired all-time key: no payFrom or payTo', () => {
       component.store.setPeriod('all-time');
       const p = component.payoutsLinkParams();
-      expect(p['pFrom']).toBeUndefined();
-      expect(p['pTo']).toBeUndefined();
+      expect(p['payFrom']).toBeUndefined();
+      expect(p['payTo']).toBeUndefined();
     });
 
-    it('this-month: pFrom is first of month', () => {
+    it('this-month: payFrom is first of month', () => {
       component.store.setPeriod('this-month');
       const today = new Date();
       const yyyy = today.getFullYear();
       const mm = String(today.getMonth() + 1).padStart(2, '0');
-      expect(component.payoutsLinkParams()['pFrom']).toBe(`${yyyy}-${mm}-01`);
+      expect(component.payoutsLinkParams()['payFrom']).toBe(`${yyyy}-${mm}-01`);
+    });
+
+    // The card is cash flow, so the list it opens has to be filtered the same way the card sums: by
+    // PAYMENT date and Paid only. Linking with the compensation period (pFrom/pTo) instead would open a
+    // list whose total contradicts the figure the user just clicked.
+    it('filters the destination list by payment date, not by compensation period', () => {
+      component.store.setPeriod('last-month');
+      const p = component.payoutsLinkParams();
+
+      expect(p['payFrom']).toBeDefined();
+      expect(p['payTo']).toBeDefined();
+      expect(p['pFrom']).toBeUndefined();
+      expect(p['pTo']).toBeUndefined();
+    });
+
+    it('restricts the destination list to Paid payouts', () => {
+      component.store.setPeriod('last-month');
+      expect(component.payoutsLinkParams()['status']).toBe('Paid');
     });
   });
 
   describe('transactionsLinkParams', () => {
-    it('all-time: returns empty object (no dates)', () => {
+    it('retired all-time key: returns empty object (no dates)', () => {
       component.store.setPeriod('all-time');
       const p = component.transactionsLinkParams();
       expect(Object.keys(p).length).toBe(0);
@@ -414,7 +494,7 @@ describe('DashboardComponent helpers', () => {
   });
 
   describe('creditsLinkParams', () => {
-    it('all-time: returns empty object', () => {
+    it('retired all-time key: returns empty object', () => {
       component.store.setPeriod('all-time');
       expect(Object.keys(component.creditsLinkParams()).length).toBe(0);
     });

@@ -70,7 +70,8 @@ public sealed class ListPayoutsHandler(
                 CalculatedAt: p.CalculatedAt,
                 CalculatedBy: p.CalculatedBy,
                 UpdatedAt: p.UpdatedAt,
-                UpdatedBy: p.UpdatedBy);
+                UpdatedBy: p.UpdatedBy,
+                PaidAt: p.PaidAt);
         }).ToList();
 
         return Result<PagedResult<PayoutListItemDto>>.Success(new PagedResult<PayoutListItemDto>
@@ -141,6 +142,27 @@ public sealed class ListPayoutsHandler(
         {
             var to = f.PeriodTo.Value;
             query = query.Where(p => p.Period.Start <= to);
+        }
+
+        // PAYMENT-date window (cash flow) — containment on PaidAt, NOT intersection on Period. This is the
+        // predicate the dashboard's "commission payouts" card sums, and the card deep-links here with the
+        // same two values, so both must agree to the cent. If you change one, change
+        // GetDashboardSummaryHandler.PayoutsInPeriodRawAsync in the same commit.
+        //
+        // The upper bound covers the whole end day: PaidAt is an instant, so comparing it against midnight
+        // would drop every payment made during the final day of the window.
+        if (f.PaidFrom.HasValue)
+        {
+            var paidFrom = new DateTimeOffset(
+                f.PaidFrom.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), TimeSpan.Zero);
+            query = query.Where(p => p.PaidAt >= paidFrom);
+        }
+
+        if (f.PaidTo.HasValue)
+        {
+            var paidTo = new DateTimeOffset(
+                f.PaidTo.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc), TimeSpan.Zero);
+            query = query.Where(p => p.PaidAt <= paidTo);
         }
 
         if (f.AmountMin.HasValue)

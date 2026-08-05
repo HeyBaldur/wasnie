@@ -17,6 +17,8 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
         builder.Property(p => p.PayeeId).IsRequired();
         builder.Property(p => p.PlanId).IsRequired();
         builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        // Nullable by design: only a Paid payout has a payment date (see the invariant on the property).
+        builder.Property(p => p.PaidAt).IsRequired(false);
         builder.Property(p => p.CalculatedAt).IsRequired();
         builder.Property(p => p.CalculatedBy).IsRequired().HasMaxLength(450);
         builder.Property(p => p.UpdatedAt).IsRequired();
@@ -56,6 +58,11 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(p => new { p.TenantId, p.PayeeId });
+
+        // Serves the cash-flow reporting predicate (tenant + Status == Paid + PaidAt in range) used by
+        // the dashboard payouts widget and the payouts list when filtered by payment date.
+        builder.HasIndex(p => new { p.TenantId, p.Status, p.PaidAt })
+            .HasDatabaseName("IX_CompensationPayouts_Tenant_Status_PaidAt");
 
         // IX_CompensationPayouts_Live: unique filtered index.
         // Since A4 it covered (TenantId, PayeeId, PlanId, PeriodStart, PeriodEnd) WHERE Status not Paid/Disputed.
