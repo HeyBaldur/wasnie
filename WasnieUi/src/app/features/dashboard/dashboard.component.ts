@@ -115,12 +115,19 @@ export class DashboardComponent {
   // Each computes the correct filter params for the destination list so the
   // data shown on arrival matches exactly what the dashboard card displays.
 
+  /**
+   * The payouts card is CASH FLOW: money that actually left in this period. So it links to the payouts
+   * list filtered the same way the card sums — by PAYMENT date (payFrom/payTo) and Status=Paid — not by
+   * the compensation period (pFrom/pTo), which is a different question and would open a list whose total
+   * does not match the number the user just clicked. With these params the list adds up to the card's
+   * figure to the cent, per currency.
+   */
   readonly payoutsLinkParams = computed(() => {
     const key = this.store.period();
     const { from, to } = this._periodDates(key);
-    const p: Record<string, string> = { period: key };
-    if (from) p['pFrom'] = from;
-    if (to) p['pTo'] = to;
+    const p: Record<string, string> = { period: key, status: 'Paid' };
+    if (from) p['payFrom'] = from;
+    if (to) p['payTo'] = to;
     return p;
   });
 
@@ -141,11 +148,18 @@ export class DashboardComponent {
   });
 
   /**
-   * Mirrors PeriodHelper.ComputeDateRange on the backend.
-   * this-month: first of month → today
-   * last-month: first of prev month → last day of prev month
-   * ytd: Jan 1 → today
-   * all-time: null, null
+   * Mirrors PeriodHelper.ComputeDateRange on the backend — these values only build the deep links to
+   * the list screens; the dashboard's own figures come from the backend, which computes the same
+   * ranges. If one side changes, both must (PeriodHelperQuarterAndYearTests pins the backend).
+   *
+   *   this-month   : first of month      → today
+   *   last-month   : first of prev month → last day of prev month
+   *   this-quarter : first of quarter    → today (quarter TO DATE)
+   *   last-quarter : previous quarter, in full
+   *   ytd          : Jan 1               → today
+   *   last-year    : previous calendar year, in full
+   *
+   * Quarters are calendar quarters (Q1 Jan–Mar … Q4 Oct–Dec); Wasnie has no fiscal-year concept.
    */
   _periodDates(key: string): { from: string | null; to: string | null } {
     const today = new Date();
@@ -153,31 +167,55 @@ export class DashboardComponent {
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const todayStr = `${yyyy}-${mm}-${dd}`;
+
+    // Local-time formatting on purpose: toISOString() converts to UTC and shifts the date by a day for
+    // anyone west of Greenwich, which would silently pick the wrong month or quarter.
+    const fmt = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    // Month index (0-11) of the first month of the quarter containing `today`.
+    const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
+
     switch (key) {
       case 'this-month':
         return { from: `${yyyy}-${mm}-01`, to: todayStr };
       case 'last-month': {
         const first = new Date(yyyy, today.getMonth() - 1, 1);
         const last = new Date(yyyy, today.getMonth(), 0);
-        const fy = first.getFullYear();
-        const fm = String(first.getMonth() + 1).padStart(2, '0');
-        const ly = last.getFullYear();
-        const lm = String(last.getMonth() + 1).padStart(2, '0');
-        const ld = String(last.getDate()).padStart(2, '0');
-        return { from: `${fy}-${fm}-01`, to: `${ly}-${lm}-${ld}` };
+        return { from: fmt(first), to: fmt(last) };
+      }
+      case 'this-quarter':
+        return { from: fmt(new Date(yyyy, quarterStartMonth, 1)), to: todayStr };
+      case 'last-quarter': {
+        // Day 0 of a month is the last day of the previous one, and the Date constructor rolls a
+        // negative month back into the previous year — so Q1 correctly yields Q4 of last year.
+        const first = new Date(yyyy, quarterStartMonth - 3, 1);
+        const last = new Date(yyyy, quarterStartMonth, 0);
+        return { from: fmt(first), to: fmt(last) };
       }
       case 'ytd':
         return { from: `${yyyy}-01-01`, to: todayStr };
+      case 'last-year':
+        return { from: `${yyyy - 1}-01-01`, to: `${yyyy - 1}-12-31` };
       default:
+        // Unknown keys (including the retired 'all-time', which may still sit in a bookmarked URL)
+        // degrade to no date filter rather than throwing.
         return { from: null, to: null };
     }
   }
 
+  /**
+   * "All time" was removed deliberately: as a quick filter it is an analytics anti-pattern (it blends
+   * years run under different plans into one number) and an unbounded scan that degrades as data grows.
+   * The default is 'this-month' (see DashboardStore), so removing it does not orphan the initial state.
+   */
   readonly periodOptions: SegOption[] = [
     { value: 'this-month', label: 'DASHBOARD.PERIOD_THIS_MONTH' },
     { value: 'last-month', label: 'DASHBOARD.PERIOD_LAST_MONTH' },
+    { value: 'this-quarter', label: 'DASHBOARD.PERIOD_THIS_QUARTER' },
+    { value: 'last-quarter', label: 'DASHBOARD.PERIOD_LAST_QUARTER' },
     { value: 'ytd', label: 'DASHBOARD.PERIOD_YTD' },
-    { value: 'all-time', label: 'DASHBOARD.PERIOD_ALL_TIME' },
+    { value: 'last-year', label: 'DASHBOARD.PERIOD_LAST_YEAR' },
   ];
 
   onPeriodChange(value: string): void {

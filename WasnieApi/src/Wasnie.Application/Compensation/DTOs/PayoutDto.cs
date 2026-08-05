@@ -24,7 +24,10 @@ public sealed record PayoutListItemDto(
     DateTimeOffset CalculatedAt,
     string CalculatedBy,
     DateTimeOffset UpdatedAt,
-    string UpdatedBy);
+    string UpdatedBy,
+    // When the money actually left. Null unless Status == Paid. Appended last so existing positional
+    // construction sites keep compiling.
+    DateTimeOffset? PaidAt = null);
 
 public sealed record PayoutDto(
     Guid Id,

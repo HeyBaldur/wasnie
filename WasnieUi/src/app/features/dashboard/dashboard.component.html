@@ -447,7 +447,9 @@
           <!-- Payouts total by currency -->
           <ws-card variant="interactive" padding="md">
             <a [routerLink]="['/payouts']" [queryParams]="payoutsLinkParams()" class="metric-card">
-              <div class="metric-card__hd">
+              <!-- title= carries the full cash-flow definition: this card is money transferred, not
+                   commission accrued, and the distinction is worth an explicit hover. -->
+              <div class="metric-card__hd" [title]="'DASHBOARD.PAYOUTS_PERIOD_HINT' | translate">
                 <h3 class="metric-card__title">{{ 'DASHBOARD.PAYOUTS_PERIOD' | translate }}</h3>
                 <p class="metric-card__sub">{{ 'DASHBOARD.PAYOUTS_PERIOD_DESC' | translate }}</p>
               </div>

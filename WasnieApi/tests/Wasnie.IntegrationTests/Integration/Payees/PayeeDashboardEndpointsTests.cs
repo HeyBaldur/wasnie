@@ -291,16 +291,32 @@ public sealed class PayeeDashboardEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task GetPayeeQuotas_WithPeriodThisMonth_ExcludesPastPeriodQuotas()
     {
+        // Dates are derived from the clock, never hard-coded. "this-month" is resolved against the real
+        // system date by PeriodHelper, so a literal window is only "current" until the calendar leaves it:
+        // this test seeded a Jun–Jul quota and called it current, and passed until 31 July 2026 — then
+        // failed every run afterwards, reporting a fault in production code that had not changed.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var currentStart = new DateOnly(today.Year, today.Month, 1);
+        var currentEnd = currentStart.AddMonths(1).AddDays(-1);
+        // Two months back, so the past quota can never touch the current month regardless of month length.
+        var pastStart = currentStart.AddMonths(-2);
+        var pastEnd = pastStart.AddMonths(1).AddDays(-1);
+
+        static string D(DateOnly d) => d.ToString("yyyy-MM-dd");
+
         var payeeId = await CreatePayeeAsync("EMP-DASH-010");
-        var planId = await CreateActivePlanAsync();
-        await CreateAndActivateQuotaAsync(payeeId, planId, "2026-01-01", "2026-01-31"); // Jan — NOT in this-month
-        await CreateAndActivateQuotaAsync(payeeId, planId, "2026-06-01", "2026-07-31"); // Jun-Jul — intersects
+        // The plan must stay effective across both quota windows AND today, or activation is rejected.
+        var planId = await CreateActivePlanAsync(
+            "EUR", D(pastStart.AddMonths(-1)), D(currentEnd.AddMonths(1)));
+
+        await CreateAndActivateQuotaAsync(payeeId, planId, D(pastStart), D(pastEnd));       // NOT in this-month
+        await CreateAndActivateQuotaAsync(payeeId, planId, D(currentStart), D(currentEnd)); // intersects
 
         var resp = await _clientA.GetAsync($"/api/payees/{payeeId}/quotas?period=this-month&page=1&pageSize=20");
 
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<PagedPayload>();
-        body!.TotalCount.Should().Be(1, "only Jun-Jul intersects this-month");
+        body!.TotalCount.Should().Be(1, "only the quota covering the current month intersects this-month");
     }
 
     [Fact]

@@ -4,6 +4,687 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-05 — Integración en verde: arreglado un test time-bomb (no era regresión)
+
+Con Docker arriba se pudo correr por fin la suite de integración que había quedado pendiente.
+**Resultado: 1 solo fallo de 753**, `PayeeDashboardEndpointsTests.GetPayeeQuotas_WithPeriodThisMonth_ExcludesPastPeriodQuotas`.
+
+**No era regresión de los WIs de esta sesión.** El endpoint de cuotas usa `PeriodHelper.ComputeDateRange`,
+no `ComputePriorPeriodRange` — que es lo único que tocó el WI de la invariante de tendencia — y la rama
+`this-month` de `ComputeDateRange` quedó intacta (verificado con `git diff`).
+
+**Era un test dependiente de la fecha real:** sembraba una cuota **Jun–Jul 2026** y la llamaba "current",
+afirmando que intersecta `this-month`. `this-month` se resuelve contra el reloj del sistema, así que el
+test pasó hasta el 31 de julio de 2026 y **falla en toda corrida desde el 1 de agosto**, acusando a código
+de producción que no había cambiado.
+
+**Arreglo:** las fechas se derivan del reloj (cuota "pasada" = dos meses atrás, "actual" = mes en curso, y
+el plan se crea con una ventana que cubre ambas y el día de hoy, porque si no la activación se rechaza).
+Queda independiente de cuándo se corra.
+
+**Por qué no se congeló el reloj:** existe `FakeClock`, pero solo se usa en tests de handler construidos a
+mano. Éste va por HTTP contra `TestWebApplicationFactory`, así que congelarlo implicaría registrarlo en el
+factory y afectar a **toda** la suite de endpoints — desproporcionado para un test.
+
+**★ PENDIENTE (no tocado, decisión de Rodolfo):** la misma clase tiene más fechas fijas y **toda ella deja
+de funcionar el 2027-01-01**:
+- `CreateActivePlanAsync` tiene por defecto `2025-01-01`–`2026-12-31`: en 2027 ningún plan queda vigente.
+- `GetPayeeQuotas_WithPeriodYtd_...` usa cuotas Jan y Jun–Jul: hoy pasa, pero **habría fallado si la suite
+  se corría antes de junio de 2026** y fallará en 2027.
+- Línea ~90: "Quota period Jan-Dec 2026 must intersect this-month" — mismo caso.
+
+No los reescribí porque hacer el de YTD robusto tiene una decisión real adentro (en enero no existe un mes
+del año en curso anterior al actual, que es lo que el test necesita).
+
+**Estado:** integración **751 passed / 2 skipped / 0 failed** (753). Unit 1243. Frontend 745.
+
+## 2026-08-05 — Invariante de tendencia UNIFICADA (rebanada vs rebanada) + verificación end-to-end real
+
+**Paso 0 — qué regla usaba cada período:**
+
+| Clave | Estado | Regla ANTES | Cambió |
+|---|---|---|---|
+| `this-month` / `active` | EN CURSO | mes anterior **COMPLETO** | **SÍ** |
+| `this-quarter` | EN CURSO | rebanada clampeada | no |
+| `ytd` | EN CURSO | mismo día del año anterior | solo en año bisiesto |
+| `last-month` | CERRADO | mes anterior completo | no |
+| `last-quarter` | CERRADO | trimestre anterior completo | no |
+| `last-year` | CERRADO | año anterior completo | no |
+| `all-time` / desconocida | — | sin banda de tendencia | no |
+
+O sea: **solo `this-month` usaba la regla vieja**. El 5 de agosto medía 5 días de agosto contra los 31 de
+julio → **-89,88% en rojo, un colapso que nunca ocurrió** (comprobado contra los datos reales, ver abajo).
+
+**★ El discriminador ahora se DERIVA, no se declara.** En vez de un `switch` por clave, el método calcula
+el rango del propio período y considera que está en curso **cuando su `to` es hoy**. Si mañana se agrega
+una clave nueva, hereda la regla correcta automáticamente: no hay lista que mantener a mano. La lógica de
+comparación vive en **un solo lugar**; lo único por clave son los límites del período anterior
+(`PreviousPeriodBounds`), sin regla de comparación dentro.
+
+**Clamp reusado, no duplicado:** el mismo mecanismo que ya existía para trimestres cubre ahora los meses.
+`PriorPartialQuarter` desapareció — era un caso particular de la regla genérica.
+
+**Bonus del refactor:** `SameDayPreviousYear` (el parche del día bisiesto) quedó innecesario y se eliminó.
+La aritmética de días transcurridos **no puede construir una fecha inválida**, así que el crash del 29 de
+febrero ahora es estructuralmente imposible en vez de estar parcheado.
+
+**⚠️ Efecto lateral consciente en `ytd`, solo en años bisiestos.** La regla universal es "los mismos N días
+transcurridos"; la vieja de YTD era "el mismo día del calendario". En años comunes dan idéntico. En un año
+bisiesto difieren un día (el 29-feb-2028 compara contra 1-mar-2027, no 28-feb). Es lo que pide la
+invariante y es el pacing honesto (60 días contra 60 días), pero **es un cambio de comportamiento en un
+filtro existente** y queda anotado.
+
+**★★ PROBLEMA QUE INTRODUJO MI PROPIO FIX, y que arreglé:** con la rebanada, el trend decía
+**"Prior: July 2026 — €0"** mientras el filtro *Last Month* reportaba julio en **€4.939,41**. El número
+era correcto (la rebanada 1–5 jul está vacía), pero la etiqueta mentía: **dos pantallas del mismo producto
+contradiciéndose**. Cambiar un colapso falso por un cero falso no es arreglar nada. Añadí
+`PeriodHelper.GetTrendLabels`, usado **solo por la banda de tendencia**: período en curso → etiqueta el
+rango real (`1–5 Aug 2026` vs `1–5 Jul 2026`); período cerrado → conserva los nombres (`July 2026` vs
+`June 2026`), que ahí son exactos. El titular de la página sigue diciendo "August 2026" — eso no se tocó.
+**Esto excede la letra del alcance del WI ("solo el % de tendencia"), y lo hice a propósito porque el
+defecto lo introducía mi propio cambio.** Si Rodolfo prefiere los nombres de período, se revierte solo.
+
+**★★ VERIFICACIÓN END-TO-END REAL (Frontend → API → BD), esta vez sí:**
+
+El 500 anterior tenía **dos causas**, ambas resueltas: (1) el backend de dev no estaba escuchando —lo
+levanté en :5091 y el proxy de Angular ya resuelve—, y (2) **yo había sondeado la ruta equivocada**:
+el endpoint es `/api/dashboard`, no `/api/dashboard/summary`. Con el API arriba, la ruta correcta y la
+sesión real de la app, los números observados en runtime:
+
+| Filtro | Trend actual | Trend prior | % | Dirección |
+|---|---|---|---|---|
+| This Month | `1–5 Aug 2026` €500 | `1–5 Jul 2026` €0 | null | neutral ("New") |
+| This Quarter | `1 Jul – 5 Aug 2026` €5.439,41 | `1 Apr – 6 May 2026` €0 | null | neutral |
+| YTD | `1 Jan – 5 Aug 2026` €187.155,40 | `1 Jan – 5 Aug 2025` €0 | null | neutral |
+| Last Month | `July 2026` €4.939,41 | `June 2026` €181.715,99 | **-97,28%** | down |
+| Last Quarter | `Q2 2026` €181.715,99 | `Q1 2026` €0 | null | neutral |
+
+**Cruzado contra SQL, coincide al céntimo:** ago €500; Q3 = 4.939,41+500 = 5.439,413; Q2 = 181.715,9867;
+YTD = 181.715,99+4.939,41+500 = 187.155,3997. Esto valida **también** la query de flujo de caja del WI de
+`PaidAt` end-to-end, que había quedado sin verificar.
+
+**La prueba del fix sobre datos reales:** para this-month, la ventana nueva (1–5 jul) suma **€0** y la
+vieja (todo julio) sumaba **€4.939,41**. Con la regla vieja el dashboard habría mostrado
+`(500 − 4939,41)/4939,41 = **-89,88%** en rojo`. Con la nueva muestra "New" / sin base — honesto, porque en
+la ventana equivalente genuinamente no se pagó nada. El colapso ficticio **ya no aparece**.
+
+Los priors en cero **son datos reales**, no un bug: no hay pagos de 2025 y los de Q2 se ejecutaron entre
+el 18 y el 24 de junio, fuera de las rebanadas equivalentes.
+
+**★ Trampa de binario viejo, otra vez (regla 4 de CLAUDE.md):** un `dotnet test --no-build` reportó
+**1238 verdes con la compilación FALLADA** (error CS8629 de nullable). Encadené build y test con guarda de
+exit code para que no vuelva a pasar. Tras arreglar: **1243 verdes reales**.
+
+**Tests:** unit **1238 → 1243**. Nuevo `PeriodHelperTrendInvariantTests` (24 tests): la rebanada de
+this-month, que la ventana comparada mida **lo mismo** que la actual, la invariante recorrida sobre TODOS
+los períodos a la vez (falla si alguno vuelve a divergir), que la clasificación en-curso/cerrado se derive
+del rango, clamp de meses de 28/29/30/31 con un barrido de los 31 días de marzo, y las etiquetas nuevas.
+Actualizados 4 tests viejos de `this-month` que fijaban la regla anterior, el test bisiesto de YTD y el de
+tendencia del handler de payouts (su prior asumía julio completo).
+Frontend **745/745** (sin cambios: el front no calcula rangos prior). Solución compila limpia.
+
+**Entorno:** dejé el API de dev **corriendo** en :5091 por si querés mirarlo. Se corta con
+`Get-Process Wasnie.Api | Stop-Process`.
+
+## 2026-08-05 — Quick-filters de fecha del dashboard: trimestres + Last Year, fuera "All Time"
+
+**Alcance real (Paso 0):** el rango NO alimenta solo el widget de payouts — `PeriodHelper.ComputeDateRange`
+escopa TODA la banda de período del dashboard (transacciones, payouts, credits, attainment promedio) y la
+banda de tendencia. Además `PeriodHelper` lo comparten **otros cinco handlers**
+(`ListAssignmentsByPayee`, `GetPayeeCredits`, `GetPayeeDashboard`, `ListQuotasByPayee`, más el dashboard),
+así que las claves nuevas son aditivas y no rompen nada.
+
+**Trimestres CALENDARIO.** No existe noción de año fiscal en ningún lado del dominio: `PlanPeriodType.Quarterly`
+no lleva offset de inicio de año y ninguna configuración de tenant define uno. Queda documentado en
+`PeriodHelper` dónde habría que tocarlo si algún día se introduce.
+
+**Filtros nuevos:** `this-quarter` (QTD: inicio de trimestre → hoy), `last-quarter` (trimestre anterior
+completo), `last-year` (año anterior completo). `ytd` ya existía.
+
+**★ Comparación de tendencia — regla explícita:** un período EN CURSO se compara contra la rebanada
+equivalente del anterior, nunca contra el anterior entero. Tres días de trimestre contra un trimestre
+completo se leería como un desplome cada vez que cambia el trimestre. Un período CERRADO (`last-quarter`,
+`last-year`) sí se compara contra el anterior completo. La rebanada parcial va **clampeada** al fin del
+trimestre previo porque los trimestres tienen largos distintos (Q1 90/91 días, Q3 y Q4 92): sin el clamp,
+el día 91 de Q2 caería dentro del propio Q2.
+
+**⚠️ `this-month` queda como estaba** (se compara contra el mes anterior COMPLETO, no contra la rebanada
+equivalente). Es inconsistente con la regla de arriba y es previo a este WI; cambiarlo alteraría los
+porcentajes de tendencia de un filtro existente, o sea el CONTENIDO de un widget, que este WI declara
+fuera de alcance. **Queda anotado para que Rodolfo decida.**
+
+**★ Bug latente arreglado de paso:** `ComputePriorPeriodRange("ytd")` hacía
+`new DateOnly(today.Year - 1, today.Month, today.Day)`. El 29 de febrero eso lanza
+`ArgumentOutOfRangeException` — el dashboard no cargaba para nadie que lo abriera en un día bisiesto.
+Clampeado al último día del mes; hay test con 2028-02-29.
+
+**"All Time" fuera del menú del dashboard**, por las dos razones del WI (mezcla años con planes distintos;
+scan sin límite de fecha). **El default ya era `this-month`**, así que no hubo que cambiarlo.
+**★ La clave sigue mapeada en el backend a propósito:** la lista de payouts, la de pay-runs y el detalle de
+payee siguen usando `all-time` — en las dos listas ES el estado que representa "rango de fechas
+personalizado". Quitar el mapeo habría hecho que su filtro cayera al default `this-month` y escondiera
+filas en silencio. Está cubierto con test.
+
+**i18n EN/ES/PL:** tres claves nuevas. `PERIOD_YTD`/`PERIOD_ALL_TIME` **no se tocaron** porque el bloque
+`DASHBOARD.PERIOD_*` lo comparte el detalle de payee.
+
+**Verificación visual (medida, no estimada):** el control segmentado con 6 opciones mide **553 px** en EN.
+El header aguanta sin desbordar hasta **768 px** de contenedor (a 768 apila, alto 72 px); el desborde
+empieza por debajo de ~640 px, ancho de teléfono. En ES las etiquetas suman ~120 px más, así que ese umbral
+sube a ~760 px. Es un panel de admin de escritorio y no introduce una clase de problema nueva, pero si se
+quiere cubrir móvil hace falta wrap o scroll horizontal en `ws-segmented-control`, que es una **modificación
+del design system** (DESIGN_SYSTEM §10.3) y por tanto decisión aparte — no la improvisé.
+
+**No verificado end-to-end contra la API:** el backend de dev no está escuchando (proxy a `localhost:5091`,
+cerrado), así que `/api/dashboard/summary` devuelve 500 para **todas** las claves, incluidas las viejas
+(`last-month`, `ytd`). Es estado del entorno, no del cambio. La lógica de rangos queda cubierta por los 56
+tests de `PeriodHelper`; el menú, las etiquetas y el layout se verificaron en el navegador.
+
+**Tests:** unit **1190 → 1222** (+32; nuevo `PeriodHelperQuarterAndYearTests` con límites de trimestre,
+cruce de año, clamp, día bisiesto, etiquetas y el guard de `all-time`). Frontend **738 → 745**.
+Solución completa compila limpia; `ng build --configuration production` OK.
+
+## 2026-08-05 — Widget "Payouts" del dashboard: de cifra indefinida a FLUJO DE CAJA real (PaidAt)
+
+**Contexto:** el diagnóstico del WI anterior confirmó dos defectos en el widget "commission payouts":
+no filtraba por estado (sumaba Calculated+Approved+Paid+Disputed) y atribuía por `Period.End` (cierre de
+ciclo). Julio 2026 mostraba €0 aunque se habían pagado €2.000, y junio estaba inflado con €166K de abril
+y mayo. **Decisión de Rodolfo: Escenario A — el widget es tesorería.** Filtrar estrictamente `Paid` y
+atribuir por fecha de pago real.
+
+**El defecto de raíz:** `CompensationPayout` no guardaba cuándo se pagó, solo `UpdatedAt`. Sin esa marca
+el sistema adivinaba con `Period.End`.
+
+**Lo que se construyó:**
+
+- **`PaidAt` (`DateTimeOffset?`) en `CompensationPayout`.** Invariante explícita: `PaidAt` tiene valor
+  **si y solo si** `Status == Paid`. Se estampa en `MarkPaid` y se **limpia** en `RevertPaidToApproved`.
+- **Inmutabilidad estructural, no por convención:** `MarkPaid` es el único escritor de `PaidAt` y su
+  guarda `Approved → Paid` impide invocarlo sobre un payout ya pagado. `Approve` y `Dispute` también
+  rechazan un payout `Paid`, y `AssignToRun` no toca timestamps. No hay camino que mueva la fecha de un
+  dinero ya salido.
+- **★ Decisión que hay que conocer — el revert LIMPIA `PaidAt`.** `RevertPaidToApproved` deshace el pago
+  entero (desconsume credits, devuelve transacciones a `Calculated`). Dejar la fecha puesta haría que el
+  flujo de caja siguiera afirmando que el dinero salió un día que después se revirtió, y lo contaría
+  doble contra el re-pago. Un re-pago posterior estampa la fecha NUEVA, que es cuando el dinero salió.
+- **Migración `B23_AddPayoutPaidAt`** — solo esquema (columna nullable + índice
+  `IX_CompensationPayouts_Tenant_Status_PaidAt`). **Deliberadamente sin datos:** meter el backfill en la
+  migración lo ejecutaría solo al desplegar y le quitaría a Rodolfo la decisión sobre dinero histórico.
+- **Backfill como script aparte** (`WasnieApi/scripts/backfill/001_BackfillPayoutPaidAt.sql`):
+  idempotente, transaccional, con bloques PREVIEW / APPLY / VERIFY / ROLLBACK.
+  **`SET QUOTED_IDENTIFIER ON` es obligatorio** — la tabla tiene un índice filtrado y SQL Server rechaza
+  el UPDATE sin eso (Msg 1934); SSMS lo pone solo, `sqlcmd -Q` no.
+- **Query del dashboard** (`GetDashboardSummaryHandler.PayoutsInPeriodRawAsync`): `Status == Paid`
+  estricto + atribución por `PaidAt`, con el límite superior en el ÚLTIMO instante del día final (si se
+  compara contra medianoche desaparece un día entero de caja de cada mes).
+- **Tarjeta ↔ lista alineadas:** la lista de payouts filtraba por INTERSECCIÓN de período, semántica
+  distinta de la tarjeta. En vez de cambiarla (el export de nómina depende de esa semántica y está
+  documentado), se añadieron parámetros nuevos `PaidFrom`/`PaidTo`, y la tarjeta enlaza con
+  `payFrom`/`payTo`+`status=Paid`. Verificado contra la base: ambos predicados dan €4.939,4130 / 70 filas.
+- i18n EN/ES/PL: el subtítulo pasa a "Pagado en el período" y se añade `PAYOUTS_PERIOD_HINT` explicando
+  que es dinero transferido, no comisión devengada.
+
+**`UpdatedAt` como fuente del backfill — verificado, no asumido.** Seis métodos del dominio escriben
+`UpdatedAt`; todos menos `MarkPaid` dejan el payout en otro estado o lanzan si está `Paid`. `AssignToRun`
+no lo toca y no hay SQL crudo sobre la tabla. Por tanto, en una fila cuyo estado ACTUAL es `Paid`, la
+última escritura de `UpdatedAt` fue necesariamente el `MarkPaid`. Contrastado además contra el audit log:
+en cada payout `Paid` con entrada `PAYOUT_CREDITS_CONSUMED` (escrita dentro de la misma transacción),
+`DATEDIFF(second, audit, UpdatedAt) = 0`. Por eso NO se usó el fallback de `Period.End`: sería peor y es
+justo lo que produjo los números malos.
+
+**Mutation testing (los tres mutantes, muertos):** revertir a `Period.End` → 6 fallos; colapsar el
+límite del día a medianoche → 1 fallo; quitar el filtro `Status == Paid` → **sobrevivió al principio**,
+porque contra datos generados por el dominio `PaidAt != null` ya implica `Paid`. Se cerró con un test que
+corrompe la fila a propósito (`PaidAt` puesto sobre un payout `Calculated` vía el change tracker) y exige
+que la caja siga dando 0 — sin ese test, el filtro defensivo se podía borrar sin que nada se quejara.
+
+**★ Trampa de binario viejo (regla 4 de CLAUDE.md, en vivo):** tras restaurar el fuente mutado, un
+`dotnet build` incremental NO recompiló y un test falló contra la DLL mutada. Limpieza de `obj`/`bin` de
+`Wasnie.Application` y recompilación → verde. Los resultados de mutación en sí son válidos (cada corrida
+mutada se compiló con su mutación).
+
+**Tests:** unit **1166 → 1190** (+24 netos: 14 de dashboard reescritos a la semántica nueva, 13 de
+dominio para `PaidAt`, menos los 4 viejos que fijaban `Period.End`). Frontend **738/738**.
+`ng build --configuration production` limpio (los avisos de presupuesto son previos).
+**Integración: NO ejecutados — Docker no está corriendo** (compilan limpio). Quedan pendientes de correr.
+
+**Verificado en dev de punta a punta:** migración aplicada, backfill corrido (323 filas, 0 faltantes,
+0 violaciones de invariante, 0 filas en la segunda pasada = idempotente). Julio pasa de **€0 → €4.939,41**
+(incluye los €2.000 de PRUEBA-CLAWBACK, pagados el 2026-07-29) y junio de €182.655,40 → **€181.715,99**
+(los €939,41 que se van eran de un pago del 2026-07-20 y ahora caen en julio, que es donde ocurrieron).
+
+**★ PENDIENTE — backfill en PRODUCCIÓN esperando OK explícito de Rodolfo.** Es dinero histórico. En dev
+ya está corrido y verificado. Sin backfill, todos los meses anteriores colapsan a €0.
+
+**Fuera de alcance (sin tocar):** widget de devengado (Escenario B), filtros de fecha del dashboard,
+limpieza del tenant de pruebas con €988 mil millones.
+
+## 2026-08-04 — `docs/Legal.md`: tablero vivo de estado de compliance GDPR
+
+Documento nuevo, **solo documentación, cero código**. Consolida los hechos de la auditoría read-only de
+hoy en un tablero interno accionable.
+
+**Encabezado en bloque de cita, arriba de todo, imposible de saltear:** no es asesoría legal, no es el
+Anexo Técnico Legal del abogado, no es un ROPA ni una DPIA. Y dice **por qué** el anexo va después:
+presentarle a un abogado una infracción abierta convierte su trabajo en gestión de incidente en vez de
+revisión de diseño — más caro y peor resultado.
+
+**★ Lo que agregué por decisión propia, porque un tablero de compliance sin esto es un pasivo:**
+
+1. **Tabla de PROCEDENCIA de los hechos** (§1). No todo el contenido tiene el mismo respaldo y mezclarlo
+   sería exactamente lo que este documento existe para evitar. Tres orígenes distintos: auditoría de
+   código (verificada línea por línea), configuración del panel del proveedor (**reportada por Rodolfo,
+   NO verificable desde el repo**) y decisiones de producto.
+2. **★ La §6 lleva su propio aviso de procedencia.** Los toggles de ZDR / Data Training / prompt logging
+   los reportó Rodolfo el 2026-08-03; **yo no los verifiqué ni puedo hacerlo desde el código**. Escribirlos
+   como hecho auditado al lado de hechos con `archivo:línea` habría sido justo el tipo de afirmación desde
+   memoria que la auditoría vino a eliminar. Marcado como pendiente de respaldo (captura fechada o
+   confirmación escrita del proveedor) antes de entrar en cualquier documento legal.
+3. **Delimitación explícita de lo NO auditado** (§1): Excel, HubSpot, Stripe y Resend **no** se miraron
+   bajo esta óptica. Sin esa frase, un lector futuro asume que el documento cubre todo el producto.
+4. **Pendiente nuevo identificado** (§5): **qué vendor downstream sirve `openai/gpt-oss-20b`** a través de
+   OpenRouter. No es determinable desde el repositorio y el DPA necesita cubrir la cadena entera.
+5. **Nota de que Groq sigue implementado y es seleccionable por configuración** — cualquier DPA tiene que
+   decir qué proveedores quedan habilitados, no solo el activo hoy.
+6. **La §2.3 cierra con la distinción que el abogado va a necesitar:** el hueco de PII **no está** en el
+   DTO de la herramienta, que está bien minimizado; está en dos campos concretos (§3.2) y en el input
+   libre (§3.3), que son riesgos de naturaleza distinta y se mitigan distinto.
+7. **Bitácora de cambios** (§8) y regla de mantenimiento: cada brecha se actualiza **en el mismo WI que la
+   cierra**. Un tablero desactualizado es peor que no tenerlo, porque se le cree.
+
+**Contenido factual:** los números salen tal cual de la auditoría (9/24 `TransactionDto`, 10/16
+`CreditListDto`, 12/17 `PayoutDto`, las cuatro validaciones JWT, `ClockSkew` cero, 15 min, la tabla de 7
+hops del prompt sin sanitizar, las dos causas independientes de la ausencia de auditoría del LLM).
+**Verifiqué en el código el único hecho del WI que mi auditoría no había cubierto**: los tests de
+aislamiento existen y se llaman `A_user_CANNOT_read_a_transaction_belonging_to_another_tenant`,
+`Not_found_and_not_allowed_are_BYTE_IDENTICAL` y
+`Unreadable_arguments_refuse_the_same_way_as_everything_else`.
+
+**Discrepancia de fecha, resuelta a favor del dato real:** el WI fecha la auditoría el 2026-08-03; se
+ejecutó y se registró el **2026-08-04**. En un documento de compliance las fechas son parte del hecho, así
+que el documento usa 2026-08-04 para la auditoría y 2026-08-03 para la configuración del proveedor, que sí
+es de ese día.
+
+**Estado consolidado: 4 brechas abiertas (2 de nivel 1, 2 de nivel 2) + 1 riesgo descartado con
+justificación** (revocación del token en su ventana de 15 min: una lista negra con estado destruye la auth
+stateless; se documenta, no se construye).
+
+**⚠️ El WI pedía que CC commitee; NO se commiteó** — `CLAUDE.md` §0 y la memoria de proyecto lo prohíben de
+forma absoluta aunque un WI lo indique (§7, conflicto reportado). Es la segunda vez en la sesión; conviene
+decidir si los WIs dejan de pedirlo o si la regla se amenda.
+
+## 2026-08-04 — Auditoría GDPR de extracción de datos (READ-ONLY, cero cambios de código)
+
+Insumo de hechos crudos para el Anexo Técnico Legal. **No se programó nada, no se cambió nada, no hay
+nada que commitear.** Cada hecho verificado contra el código actual, con archivo:línea.
+
+### TAREA 1 — DLP sobre el input libre: **NO. AUSENTE.**
+
+**No existe ningún middleware, regex, servicio de sanitización ni NER que oculte o anonimice nombres,
+correos ni datos sensibles antes de enviarlos al LLM. El input libre viaja tal cual al proveedor.**
+
+Cadena completa trazada, hop por hop, sin una sola transformación:
+
+| # | Punto | Qué hace con el texto | Evidencia |
+|---|---|---|---|
+| 1 | Store Angular | `content.trim()` y nada más | `assistant.store.ts:132` |
+| 2 | Servicio HTTP | `JSON.stringify({ content, isRetry })` | `assistant.api.service.ts:63` |
+| 3 | Handler | `var question = userMessage.Content;` — literal | `StreamAssistantReplyHandler.cs:135` |
+| 4 | Paso 1 (router) | `new ChatMessage(UserRole, question)` | `AssistantSectionRouter.cs:68` |
+| 5 | Paso 1.5 (tool) | `new ChatMessage(UserRole, question)` | `AssistantToolRunner.cs:53` |
+| 6 | Paso 2 (generación) | historial completo, contenido sin tocar | `AssistantPrompt.cs:351-353` |
+| 7 | Serialización HTTP | `messages.Select(m => new GroqRequestMessage(m.Role, m.Content))` | `OpenAiCompatibleChatProvider.cs:148,307` |
+
+Barridos negativos, todos vacíos: `sanitiz|anonymi|redact|scrub|mask|pii|dlp|obfusc` sobre todo
+`WasnieApi/src` no devuelve NADA en el camino del asistente — los únicos aciertos son `MaskEmail` en LOGS
+de recuperación de contraseña (`RequestPasswordResetCommandHandler.cs:149`) y el stripping de espacios de
+códigos 2FA (`IdentityService.cs:225`). **Ninguno toca el prompt.** `DomSanitizer` en
+`assistant-markdown.pipe.ts:207` es XSS sobre la respuesta ENTRANTE, no protección del dato SALIENTE.
+**Cero `DelegatingHandler` / `AddHttpMessageHandler` en todo el repo**, así que no hay forma de que algo
+reescriba el body en vuelo (`AddHttpClient` pelado, `DependencyInjection.cs:130-131`).
+
+**★ Dos agravantes que el WI no pedía pero el abogado va a preguntar:**
+1. **No viaja solo la pregunta actual: viaja el HILO.** El paso 2 manda hasta
+   `MaxHistoryMessages = 20` mensajes previos (usuario Y asistente) con el contenido intacto
+   (`AssistantPrompt.cs:335-353`; `appsettings.json` → `MaxHistoryMessages: 20`). El único filtro es
+   descartar el placeholder de "no conectado".
+2. **El destino es EEUU por configuración activa hoy:** `Assistant:Provider = OpenRouter`
+   (`appsettings.Development.json`), `BaseUrl = https://openrouter.ai/api/v1`,
+   modelo `openai/gpt-oss-20b`. OpenRouter es además un **agregador**, o sea que reenvía a un vendor
+   subyacente — cadena de subencargados relevante para el DPA.
+3. Los headers extra de OpenRouter (`HTTP-Referer`, `X-Title`) llevan nombre de producto y URL pública,
+   **sin datos de usuario ni secretos** (`OpenRouterChatProvider.cs:48-54`) — verificado, no asumido.
+
+**No se construyó el filtro: es WI aparte con decisión de Rodolfo.**
+
+### TAREA 2 — Barrera JWT y log de auditoría del LLM
+
+**2a. Validación del JWT — las cuatro ACTIVAS.** `Program.cs:51-61`, verbatim:
+
+```csharp
+options.TokenValidationParameters = new TokenValidationParameters
+{
+    ValidateIssuer = true,
+    ValidateAudience = true,
+    ValidateLifetime = true,
+    ValidateIssuerSigningKey = true,
+    ValidIssuer = jwtSettings["Issuer"],
+    ValidAudience = jwtSettings["Audience"],
+    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+    ClockSkew = TimeSpan.Zero
+};
+```
+
+| Comprobación | Estado | Valor |
+|---|---|---|
+| Firma | ✅ `ValidateIssuerSigningKey = true` | HMAC-SHA256 simétrica (`TokenService.cs:36`) |
+| Caducidad | ✅ `ValidateLifetime = true` | **`ClockSkew = TimeSpan.Zero`** — sin los 5 min de tolerancia por defecto |
+| Emisor | ✅ `ValidateIssuer = true` | `WasnieApi` |
+| Audiencia | ✅ `ValidateAudience = true` | `WasnieUi` |
+
+Vida del access token: **15 minutos** (`JwtSettings:ExpiryMinutes`, default 15 en
+`TokenService.cs:33`); refresh token en días (`RefreshTokenLifetimeDays`). El pipeline corre
+`UseAuthentication()` → `UseAuthorization()` (`Program.cs:263-264`) **antes** de llegar al controller y
+al handler, y el asistente suma `entitlement.RequireAsync` + `OwnedConversations.FindMineAsync`
+(`StreamAssistantReplyHandler.cs:50-53`).
+
+**⚠️ Límite honesto para el abogado:** los 15 minutos y `ClockSkew` cero acotan la ventana, pero
+**el access token no es revocable dentro de esa ventana** — la validación es puramente criptográfica
+(sin lista de revocación ni chequeo contra base). Un token robado sirve hasta que caduca. Es exactamente
+el escenario que el WI anticipa.
+
+**2b. Log de auditoría de la interacción con el LLM: NO. AUSENTE.**
+
+- **`AuditActions.cs` no tiene NINGUNA entrada de assistant / chat / LLM / OpenRouter / Groq** (búsqueda
+  por palabra completa: cero).
+- **Ningún comando del asistente implementa `IAuditableCommand`** (`AssistantCommands.cs`,
+  `StreamAssistantReplyCommand.cs`), así que `AuditBehavior` cortocircuita en su primera línea
+  (`AuditBehavior.cs:20-21` — `if (request is not IAuditableCommand) return await next();`).
+- **★ Y aunque lo implementara, el camino de streaming no pasaría por ahí:**
+  `StreamAssistantReplyCommand` es `IStreamRequest<T>` y `AuditBehavior` es `IPipelineBehavior<,>`, que
+  no intercepta requests de streaming en MediatR. Son dos razones independientes, no una.
+- **Lo que SÍ existe hoy son logs de aplicación (Serilog), no auditoría:** consola + archivo
+  `logs/wasnie-.log`, rotación diaria, **retención 30 días**, JSON (`appsettings.json` → `Serilog`).
+  Registran nombre de herramienta y desenlace — p. ej. `"{Tool} finished: {Cause}."`
+  (`GetTransactionTool.cs:201`), `"The assistant ran the read-only tool {Tool}."`
+  (`AssistantToolRunner.cs:102`). **Deliberadamente NO registran ni la pregunta ni el número de
+  referencia** (comentario explícito en `GetTransactionTool.cs:197-198`).
+
+**Conclusión de trazabilidad:** hoy es **imposible reconstruir ante un incidente qué se envió al LLM,
+cuándo, ni por qué usuario**. No hay huella de la request, no hay hash del prompt, no hay correlación
+con el proveedor, y los logs que existen no son inmutables (archivos rotados, 30 días).
+
+### TAREA 3 — Esquema JSON exacto que va al LLM (`get_transaction`, la única herramienta que existe)
+
+Serialización: `PropertyNamingPolicy = CamelCase`, `DefaultIgnoreCondition = WhenWritingNull`
+(`GetTransactionTool.cs:73-78`) — los nulos se **omiten**, no se envían vacíos.
+
+**3a. Lo que el LLM PIDE** (`GetTransactionTool.cs:60-71`): un único campo `reference` (string, requerido).
+
+**3b. Lo que el LLM RECIBE — `TransactionLifecycle`** (`GetTransactionTool.cs:366-393`), 27 campos:
+
+```json
+{
+  "found": true,
+  "reference": "TERM-CC-10",
+  "description": "…",
+  "transactionDate": "2026-05-14",
+  "saleAmount": 12000.00,
+  "saleCurrency": "EUR",
+  "quantity": 1,
+  "transactionStatus": "Calculated",
+  "payeeName": "…",
+  "payeeEmployeeCode": "…",
+  "productName": "…",
+  "productCategory": "…",
+  "ingestedAt": "2026-05-14",
+  "ingestedFrom": "Manual",
+  "cancelledAt": "2026-06-01",
+  "cancelledReason": "…",
+  "commissionVisibleToYou": true,
+  "commissionGenerated": true,
+  "commissions": [
+    {
+      "commissionAmount": 600.00,
+      "commissionCurrency": "EUR",
+      "matchedPlanName": "…",
+      "matchedRuleName": "…",
+      "creditIsSuperseded": false,
+      "creditAllocatedAt": "2026-05-15"
+    }
+  ],
+  "settlementVisibleToYou": true,
+  "hasBeenPaid": false,
+  "payoutStatus": "Approved",
+  "payRunPeriodStart": "2026-05-01",
+  "payRunPeriodEnd": "2026-05-31",
+  "payoutTotalCommissionAmount": 4200.00,
+  "payoutTotalCommissionCurrency": "EUR",
+  "settlementNote": "…"
+}
+```
+
+Rechazo (`RefusalPayload`, `GetTransactionTool.cs:406`) — idéntico para "no existe" y "no es tuya":
+`{"found": false, "message": "No transaction with that reference was found, or you do not have access to it."}`
+
+**🚨 DATO PERSONAL QUE SÍ VIAJA:** `payeeName` es el **nombre real de un empleado** y
+`payeeEmployeeCode` su **código de empleado** — dato personal identificable saliendo a EEUU en cada
+lookup, con independencia de lo que el usuario haya tipeado.
+
+**3c. Lo que se OMITE deliberadamente**
+
+De `CommissionEarned` — marcados `[property: JsonIgnore]`, se calculan pero **no se serializan**
+(`GetTransactionTool.cs:402-404`): `CreditId`, `PayeeId`, `PlanId`.
+
+De `TransactionDto` (24 campos; 15 viajan, **9 no**) — `TransactionDto.cs:3-31`:
+`Id`, `TenantId`, `PayeeId`, `ExternalId`, `IngestedBy`, `UpdatedAt`, `SelectedPlanAssignmentId`,
+`ProductSku`, `CancelledBy`.
+
+De `CreditListDto` (16 campos; 6 viajan, **10 no**) — `CreditDtos.cs:4-22`:
+`Id`, `TransactionId`, `ReferenceNumber`, `PayeeId`, `PayeeName`, `PayeeCode`, `PlanId`, `RuleId`,
+`OriginalAmount`, `OriginalCurrency`.
+
+De `PayoutDto` / `PayoutDetailDto` (17 campos; 5 viajan, **12 no**) — `PayoutDto.cs:29-46`:
+`Id`, `TenantId`, `PayeeId`, `PayeeName`, `PayeeCode`, `PlanId`, `PlanName`, `CalculatedAt`,
+`CalculatedBy`, `UpdatedAt`, `UpdatedBy`, `Lines[]` (las líneas se recorren en memoria para encontrar
+el `CreditId`, pero **no se serializan**).
+
+**★ Hecho favorable, verificado:** **ningún identificador interno (Guid) ni ningún actor
+(`IngestedBy` / `CalculatedBy` / `UpdatedBy` / `CancelledBy`) llega al modelo.** La minimización SÍ está
+ejercida sobre el payload de la herramienta — el hueco es el input libre (Tarea 1), no este DTO.
+
+### Ausencias declaradas
+
+1. **Filtro DLP / anonimización del prompt — AUSENTE.**
+2. **Log de auditoría de la interacción con el LLM — AUSENTE** (dos causas independientes).
+3. **Revocación del access token dentro de su ventana de 15 min — AUSENTE.**
+4. **Herramienta de Reglas del Plan — NO IMPLEMENTADA** (confirmado: `get_transaction` es la única;
+   `AssistantToolRunner._tools` no tiene otra). Su esquema se documentará cuando exista.
+
+**Read-only cumplido: cero archivos de código tocados, nada que commitear.**
+
+## 2026-08-04 — §4.1: "all transactions" se documentaba como opción-botón; en la UI es un interruptor apagado
+
+El asistente repetía *"en Trigger elegí la opción 'All Transactions'"* y el usuario no encontraba ese
+botón. **El asistente no alucinaba: era fiel al markdown.** §4.1 decía *"Either **all transactions**, or a
+set of conditions combined with **And** / **Or**"*, redacción que presenta un default como una opción
+seleccionable.
+
+### Paso 0 — la mecánica REAL, verificada en el código
+
+La premisa del WI ("lo más probable: es el default de una lista de condiciones vacía") **es correcta en el
+efecto pero incompleta en la mecánica**: sí hay un control explícito, y tiene nombre.
+
+1. **Es una sección colapsable con interruptor, apagado por defecto.**
+   `rule-form.component.html:207-218` — `collapsible-header` que togglea `hasTrigger`, con
+   `<div class="toggle-switch" [class.toggle-switch--on]="hasTrigger()">`.
+   `rule-form.component.ts:343` — `hasTrigger: [false]`.
+2. **El rótulo real es `"Trigger (optional)"`** (`en.json:483` → `PLANS.RULE_SECTION_TRIGGER`).
+   **★ Ojo: en ES la MISMA clave dice `"Condición (opcional)"`** — divergencia real de la UI, reportada
+   abajo, no tocada.
+3. **Apagado ⇒ no se manda trigger:** `rule-form.component.ts:669` —
+   `trigger: v.hasTrigger ? this._buildTrigger(v) : null`.
+4. **El dominio sustituye:** `Plan.cs:97,136` — `trigger ?? Trigger.Always()`;
+   `Trigger.cs:11` — `Always() => new() { Conditions = [] }`.
+5. **El motor cortocircuita:** `CommissionCalculator.cs:33` —
+   `if (trigger.Conditions.Count == 0) return true; // Trigger.Always`, invocado desde
+   `CreditAllocationService.cs:345`.
+6. **★ Matiz que ninguna de las dos redacciones capturaba:** encender el interruptor y **no** agregar
+   condiciones cae en el MISMO `Conditions.Count == 0` y se comporta idéntico. O sea "aplica a todas" es
+   *cero condiciones*, por cualquiera de los dos caminos. Lo documenté explícitamente para que la guía no
+   quede a merced de por dónde llegó el usuario.
+7. **El tooltip de la pantalla ya lo decía bien** (`en.json:587`): *"If enabled, this rule only applies
+   when the conditions are met. Without a trigger, the rule always runs on every matching transaction."*
+   Se citó ESE texto en la guía en vez de parafrasear.
+8. **RAG confirmado sobre el markdown:** `Wasnie.Infrastructure.csproj:57-58` linkea
+   `docs/Wasnie_Configuration_Guide.md`; `FileAssistantKnowledgeBase.cs:24`. Archivo correcto editado.
+
+### Qué se cambió
+
+**§4.1** — la línea "Either all transactions, or…" se reemplazó por la mecánica de pantalla: la regla
+dispara en todas por defecto, el interruptor **"Trigger (optional)"** arranca apagado, dejarlo apagado ES
+"todas", **no hay opción "all transactions" que elegir**, y encenderlo revela AND/OR y **Add Condition**.
+Más un callout ✅ con las citas de código y la equivalencia del punto 6.
+
+**§4.4 "On screen"** (segundo caso del mismo defecto, encontrado por la regla 4 del WI) — decía *"muestra
+Trigger, Measurement, Rate table (tres botones), y secciones colapsables Modifier / Cap / Floor"*, que
+lista Trigger como si fuera siempre visible y reserva "colapsable" para las otras tres. Son **cuatro**
+secciones colapsables con el mismo patrón de interruptor, todas apagadas por defecto. Corregido.
+
+**No se tocó la línea 624** (Payout detail → *"Applies to all transactions"*): es texto REAL de pantalla,
+solo lectura, derivado de `trigger.Conditions.Count == 0` (`GetPayoutByIdHandler.cs:150`), y existe en
+i18n (`en.json:1305` — *"Applies to all transactions (no conditions)."*). Ahí la guía ya era exacta.
+
+### Verificación empírica — contra el modelo real, no razonada
+
+Se reconstruyó el prompt real (`ConfinementRules` + `NumericRule` + `NavigationRules` + la §4 del corpus
+**construido** + el mapa de navegación + los reminders) y se consultó `openai/gpt-oss-20b` vía OpenRouter,
+`temperature: 0`, en tres formulaciones. Las tres guían la mecánica real:
+
+- *"How do I create a rule that applies to all transactions?"* → *"keep the **Trigger (optional)** toggle
+  **off** (the default). With the toggle off, the rule has no trigger and therefore fires on every
+  transaction."*
+- *"¿Cómo hago para que una regla aplique a todas las transacciones?"* → *"asegúrate de que la sección
+  **Trigger (optional)** está **desactivada** (el interruptor debe estar apagado)."*
+- **★ La que cebaba el error** — *"In the Trigger section, which option do I pick…?"* → *"you should
+  **leave the toggle turned off** … (If you turn the toggle on, simply add **no conditions**; that also
+  results in the rule firing on all transactions.)"* — corrige la premisa del usuario en vez de inventar
+  un botón, y reproduce el matiz del punto 6.
+
+Cero menciones de una opción "All Transactions" en las tres respuestas.
+
+### Ruteo y tests
+
+El corpus se corta por encabezados `##` (`FileAssistantKnowledgeBase.cs:27`); la edición vive dentro de
+`## 4. Plan and Rules` y **no se tocó ningún encabezado ni el TOC**, así que el ruteo es idéntico al
+previo. Verificado además que el archivo editado llega al output de la API
+(`bin/Debug/net8.0/Knowledge/`). Build 0 errores; unit **1167 verde** (incluidos los que leen el markdown
+y los de confinamiento/ruteo). **Solo documentación: no se tocó el motor ni código alguno.**
+
+### ⚠️ Reportes para Rodolfo
+
+- **Divergencia EN/ES en la UI, no tocada:** `PLANS.RULE_SECTION_TRIGGER` es *"Trigger (optional)"* en EN
+  y *"Condición (opcional)"* en ES. La guía está en inglés y usa el rótulo EN, pero un usuario con la app
+  en español lee otra palabra. Es un cambio de UI, decisión aparte.
+- **El WI pedía que CC commitee; NO se commiteó.** `CLAUDE.md` §0 y la memoria de proyecto lo prohíben de
+  forma absoluta, incluso cuando un WI lo indique. Conflicto reportado según §7 en vez de resuelto por mi
+  cuenta.
+
+## 2026-08-04 — Los payouts se contaban en todos los meses que tocaban (bug de dinero en el dashboard)
+
+Reporte de Rodolfo: *"Total commission payouts · August 2026 · EUR — julio y agosto parecen tener el mismo
+monto y esto está mal. Al menos no estoy seguro, investiga primero."*
+
+### Paso 0 — reproducido contra la base real antes de tocar
+
+No razoné el bug en abstracto: lo medí contra `WasnieDb`.
+
+| Ventana | N payouts | Total EUR |
+|---|---|---|
+| Agosto (1-4, MTD) | 18 | **3.347,2750** |
+| Julio (1-31) | 18 | **3.347,2750** |
+
+Idénticos, y por lo tanto `changePercent` = **0,00% permanente**. El reporte era correcto.
+
+### La causa
+
+`PayoutsInPeriodRawAsync` (`GetDashboardSummaryHandler.cs`) sumaba por **intersección de períodos**:
+
+```csharp
+if (from.HasValue) q = q.Where(p => p.Period.End   >= from.Value);
+if (to.HasValue)   q = q.Where(p => p.Period.Start <= to.Value);
+```
+
+Un payout multi-mes se cuenta **íntegro en cada mes que toca**. Los culpables en la base:
+
+| PeriodStart | PeriodEnd | N | Total EUR |
+|---|---|---|---|
+| 2026-01-01 | **2026-12-31** | 16 | 2.000,00 |
+| 2026-07-01 | 2026-08-31 | 1 | 609,53 |
+| 2026-07-01 | 2026-09-30 | 1 | 737,75 |
+
+Los 16 anuales caían en **los doce meses de 2026**. Ningún euro de julio o agosto era de esos meses.
+
+**★ El matiz que importa: la intersección no estaba mal en general.** Es la convención correcta para
+*listar* payouts (`ListPayoutsHandler`) y para los guardas de solape (`CheckPayoutsOverlaps`,
+`ApprovePayoutHandler`, `MarkPayoutPaidHandler`), y así se usa en todo el repo. **Es incorrecta solo al
+SUMAR importes dentro de un período.** El mismo helper alimenta la Banda 3 (trend) **y** la tarjeta
+*Payouts · Commission payments* de la Banda 2 — así que había **dos** números inflados, no uno.
+
+### La decisión se consultó antes de tocar
+
+Es código de dinero (CLAUDE.md §1) y la corrección obliga a elegir a qué período pertenece un payout
+multi-mes; las opciones dan números muy distintos en pantalla. Se le presentaron tres a Rodolfo y eligió
+**atribución por `PeriodEnd`**: el payout cuenta **una sola vez**, en el mes en que su ciclo **cierra**.
+
+**Se descartó prorratear por días** — repartir 737,75 EUR entre tres meses produce importes
+(248,54 / 248,54 / 240,67) que **no corresponden a ningún registro de la base**. En software financiero
+eso rompe la trazabilidad: cada cifra en pantalla debe poder rastrearse hasta un payout real.
+
+### El fix
+
+```csharp
+if (from.HasValue) q = q.Where(p => p.Period.End >= from.Value);
+if (to.HasValue)   q = q.Where(p => p.Period.End <= to.Value);
+```
+
+Con un comentario que explica **por qué no volver atrás**, porque la intersección es lo que un lector
+futuro copiaría del resto del repo sin notar que acá significa otra cosa.
+
+### Números nuevos, verificados contra la base real
+
+| Ventana | EUR |
+|---|---|
+| Agosto MTD (1-4) | 0,00 |
+| Julio | 0,00 |
+| Agosto completo | 609,53 |
+| Septiembre | 1.237,75 |
+| Diciembre | 2.000,00 |
+
+**Que julio dé 0 no es un fallo nuevo:** realmente no cerró ningún ciclo de comisión en julio. Lo que se
+mostraba antes era dinero de otros meses.
+
+### Tests
+
+4 tests nuevos (`DashboardPayoutPeriodAttributionTests`), unit **1163→1167**, con `IClock` fijado en
+2026-08-04 para que la ventana sea determinista.
+
+**Probado por mutación:** restaurar la intersección → **2 rojos**, incluido el que reproduce el síntoma
+exacto (`CurrentAmount == PriorAmount`). Los otros 2 pasan en ambas versiones y quedan como guardas de
+regresión de la regla de atribución.
+
+### Lo que NO se hizo, dicho explícitamente
+
+- **⚠️ Integración no corrida: Docker no estaba levantado.** Los 31 tests fallan en el constructor de
+  `TestDatabaseFixture` (`DockerEndpointAuthConfig`), antes de ejecutar nada — es infraestructura, no la
+  corrección. Queda pendiente correrlos con Docker arriba.
+- **⚠️ `GetPayeeDashboardHandler.cs:44-45` tiene el MISMO patrón y el mismo doble conteo.** El dashboard
+  por payee suma payouts con la misma intersección. Fuera de alcance (el reporte era del dashboard
+  general), pero es la misma clase de bug y debería cerrarse en un WI propio.
+- Nada de front. El bug era íntegramente del cálculo del backend.
+
+**REINICIAR la API.** Sin commitear.
+
 ## 2026-08-03 — Links crudos en el chat: sí hay causa raíz común, pero no la que el WI proponía
 
 ### Paso 0 — reproduje los tres antes de tocar

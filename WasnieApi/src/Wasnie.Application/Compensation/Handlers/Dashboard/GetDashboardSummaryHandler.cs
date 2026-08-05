@@ -35,7 +35,10 @@ public sealed class GetDashboardSummaryHandler(
         var (from, to) = PeriodHelper.ComputeDateRange(period, today);
         var (priorFrom, priorTo) = PeriodHelper.ComputePriorPeriodRange(period, today);
         var periodLabel = PeriodHelper.GetPeriodLabel(period, today);
-        var priorLabel = PeriodHelper.GetPriorPeriodLabel(period, today);
+        // The TREND band labels the two windows it actually compares, which for a running period are
+        // slices ("1–5 Aug 2026" vs "1–5 Jul 2026") — not the period names used for the headline above.
+        // Naming a five-day slice "July 2026" next to €0 contradicts the Last Month screen outright.
+        var (trendCurrentLabel, trendPriorLabel) = PeriodHelper.GetTrendLabels(period, today);
 
         var actionBand = await BuildActionBandAsync(cancellationToken);
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
@@ -53,7 +56,7 @@ public sealed class GetDashboardSummaryHandler(
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
         var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
-            ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, periodLabel, priorLabel, cancellationToken)
+            ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, trendCurrentLabel, trendPriorLabel, cancellationToken)
             : null;
         var activityFeed = await BuildActivityFeedAsync(cancellationToken);
 
@@ -430,7 +433,7 @@ public sealed class GetDashboardSummaryHandler(
             .OrderBy(t => t.Currency)
             .ToList();
 
-        // Payouts by period intersection
+        // Payouts attributed to the period where their cycle closes (see PayoutsInPeriodRawAsync)
         var payoutsInPeriod = await PayoutsInPeriodRawAsync(from, to, ct);
         var payoutsByCurrency = payoutsInPeriod
             .GroupBy(p => p.Currency)
@@ -532,14 +535,49 @@ public sealed class GetDashboardSummaryHandler(
         return new DashboardTrendBandDto(currentLabel, priorLabel, trendPoints);
     }
 
-    // Shared helper: load payout amounts by currency for a date range (period intersection)
+    // Shared helper: load payout amounts by currency attributed to a date range.
+    //
+    // MONEY RULE — this widget is CASH FLOW (treasury), not accrued commission. Two consequences,
+    // both deliberate:
+    //
+    //   1. Status == Paid, strictly. A Calculated or Approved payout is money the company still owes;
+    //      it has not left the account and must not appear in a cash-flow total. (This used to sum
+    //      every status, so the figure was neither cash nor accrual.)
+    //
+    //   2. Attribution by PaidAt — the day the money actually moved — NOT by Period.End (the cycle
+    //      close) and NOT by the underlying transaction dates:
+    //        · Period.End sends a payout to an arbitrary month. A 2026-01-01→2026-12-31 run whose
+    //          money moved in July was reported in December, and July showed €0 despite €2,000 paid.
+    //          A quarterly Apr–Jun run put April and May money into June, inflating it by €166K.
+    //        · Transaction dates would make already-published months MUTATE whenever a back-dated
+    //          transaction arrives. A closed month must never change.
+    //      PaidAt is stamped once, at the transition into Paid, and never moved (see CompensationPayout).
+    //
+    // Do NOT switch this to period intersection (Period.End >= from AND Period.Start <= to): a payout
+    // spanning several months then gets counted IN FULL in every month it touches, so the same euros
+    // are reported more than once — that is what once made the Banda 3 trend show a permanent 0% change.
+    // Intersection remains correct for the overlap guards; it is wrong when summing into a period total.
     private async Task<List<(decimal Amount, string Currency)>> PayoutsInPeriodRawAsync(
         DateOnly? from, DateOnly? to, CancellationToken ct)
     {
-        var q = db.CompensationPayouts.AsQueryable();
-        // Period intersection: payout.Period.End >= from AND payout.Period.Start <= to
-        if (from.HasValue) q = q.Where(p => p.Period.End >= from.Value);
-        if (to.HasValue) q = q.Where(p => p.Period.Start <= to.Value);
+        var q = db.CompensationPayouts
+            .Where(p => p.Status == CompensationPayoutStatus.Paid && p.PaidAt != null);
+
+        // Attribution by payment date: from <= payout.PaidAt <= to. The range is inclusive of the whole
+        // end day — PaidAt is an instant, so the upper bound must be the last tick of `to`, otherwise
+        // every payment made after midnight on the final day of the period silently disappears.
+        if (from.HasValue)
+        {
+            var fromDto = new DateTimeOffset(
+                from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), TimeSpan.Zero);
+            q = q.Where(p => p.PaidAt >= fromDto);
+        }
+        if (to.HasValue)
+        {
+            var toDto = new DateTimeOffset(
+                to.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc), TimeSpan.Zero);
+            q = q.Where(p => p.PaidAt <= toDto);
+        }
 
         var raw = await q
             .Select(p => new { p.TotalCommission.Amount, p.TotalCommission.Currency })

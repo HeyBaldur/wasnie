@@ -160,7 +160,13 @@ export class PayoutsListComponent implements OnInit {
     if (hasUrlParams) {
       this.store.loadFromQueryParams(qp);
       // Restore period key from URL if present; fall back to 'all-time' for custom date ranges.
-      if (qp['period'] && ['this-month', 'last-month', 'ytd', 'all-time'].includes(qp['period'])) {
+      // A payment-date filter (from the dashboard's cash-flow card) is NOT a compensation-period
+      // filter, so no period chip may light up for it: a lit chip invites a click, and clicking it
+      // would add a period filter on top of the payment window and silently shrink the list below the
+      // total the user came from. Checked first, so `period=` in the URL cannot override it.
+      if (qp['payFrom'] || qp['payTo']) {
+        this.activePeriod.set('all-time');
+      } else if (qp['period'] && ['this-month', 'last-month', 'ytd', 'all-time'].includes(qp['period'])) {
         this.activePeriod.set(qp['period'] as PeriodKey);
       } else if (qp['pFrom'] || qp['pTo']) {
         this.activePeriod.set('all-time');
@@ -271,7 +277,10 @@ export class PayoutsListComponent implements OnInit {
   setPeriod(key: string): void {
     this.activePeriod.set(key as PeriodKey);
     const { from, to } = this._computePeriodDates(key as PeriodKey);
-    this._setFilter({ periodFrom: from, periodTo: to });
+    // Choosing a compensation period replaces any payment-date window carried in from the dashboard's
+    // cash-flow card. Leaving both applied would intersect two different date questions and produce a
+    // list nobody asked for.
+    this._setFilter({ periodFrom: from, periodTo: to, paidFrom: null, paidTo: null });
     this.form.patchValue({ periodFrom: from, periodTo: to }, { emitEvent: false });
     this._syncUrl();
   }
