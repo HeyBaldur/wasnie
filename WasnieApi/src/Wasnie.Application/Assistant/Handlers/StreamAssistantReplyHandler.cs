@@ -2,6 +2,7 @@
 using System.Text;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Application.Assistant.Commands;
@@ -40,7 +41,8 @@ public sealed class StreamAssistantReplyHandler(
     IUiNavigationMap navigation,
     AssistantSectionRouter router,
     AssistantToolRunner toolRunner,
-    IOptions<GroqOptions> options)
+    IOptions<GroqOptions> options,
+    ILogger<StreamAssistantReplyHandler> logger)
     : IStreamRequestHandler<StreamAssistantReplyCommand, AssistantStreamEvent>
 {
     public async IAsyncEnumerable<AssistantStreamEvent> Handle(
@@ -184,7 +186,7 @@ public sealed class StreamAssistantReplyHandler(
         // row it never queried and that they can see on their own screen. The user now gets the
         // warning card and the retry button, both of which are true, instead of a confident wrong
         // answer that looks exactly like a correct refusal.
-        var lookup = await toolRunner.RunAsync(question, cancellationToken);
+        var lookup = await toolRunner.RunAsync(question, history, cancellationToken);
 
         if (lookup.DidFail)
         {
@@ -202,6 +204,10 @@ public sealed class StreamAssistantReplyHandler(
             history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable,
             navigation.PromptBlock, toolData);
         var answer = new StringBuilder();
+
+        // ★ THE BELT. Raising the generation model is the fix for the repetition collapse; this is what
+        // guarantees the user never reads one anyway. See DegenerationGuard.
+        var guard = new DegenerationGuard();
 
         // The enumerator is stepped by hand so a provider failure can be caught: `yield return` is not
         // allowed inside a try/catch that has a catch clause, and wrapping the whole loop would mean
@@ -255,8 +261,29 @@ public sealed class StreamAssistantReplyHandler(
                 break;
             }
 
+            if (guard.Observe(fragment))
+            {
+                // ★ A COLLAPSE IS A TECHNICAL FAILURE, and it takes the path technical failures already
+                // take: the fragment is NOT forwarded, nothing is persisted (the assistant row is only
+                // written after a clean finish), and the user gets the warning card with Retry. "Try
+                // again" is true; a wall of repeated words is not something anyone can act on.
+                logger.LogError(
+                    "The assistant's answer degenerated and was cut off: {Reason}.", guard.Reason);
+                yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+                yield break;
+            }
+
             answer.Append(fragment);
             yield return AssistantStreamEvent.OfFragment(fragment);
+        }
+
+        if (guard.Finish())
+        {
+            // The run ended on the last word, with no trailing punctuation to close it.
+            logger.LogError(
+                "The assistant's answer degenerated and was cut off: {Reason}.", guard.Reason);
+            yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+            yield break;
         }
 
         var text = answer.ToString().Trim();

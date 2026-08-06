@@ -34,6 +34,11 @@ public sealed class OpenRouterChatProvider(
         options.Value.ApiKey,
         options.Value.BaseUrl,
         options.Value.Model,
+        // Empty means "not configured separately" — the generation call then uses the same model as
+        // before, so an appsettings that predates the split keeps behaving exactly as it did.
+        string.IsNullOrWhiteSpace(options.Value.GenerationModel)
+            ? options.Value.Model
+            : options.Value.GenerationModel,
         options.Value.TimeoutSeconds,
         HttpClientName);
 

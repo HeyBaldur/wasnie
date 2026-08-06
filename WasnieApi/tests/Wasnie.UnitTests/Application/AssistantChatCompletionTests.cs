@@ -172,7 +172,8 @@ public sealed class AssistantChatCompletionTests
             entitlement, provider, knowledge, NavigationMap(),
             new AssistantSectionRouter(provider, knowledge, NullLogger<AssistantSectionRouter>.Instance),
             new AssistantToolRunner(provider, tools ?? [], NullLogger<AssistantToolRunner>.Instance),
-            Options.Create(new GroqOptions { ApiKey = "test-key" }));
+            Options.Create(new GroqOptions { ApiKey = "test-key" }),
+            NullLogger<StreamAssistantReplyHandler>.Instance);
 
         return new Harness(db, handler, provider, tenant, user, tenantCtx);
     }
@@ -407,6 +408,71 @@ public sealed class AssistantChatCompletionTests
         // The question survives, so Retry re-answers it.
         var stored = await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync();
         stored.Should().ContainSingle().Which.Role.Should().Be(AssistantMessageRole.User);
+    }
+
+    // ── ★ THE MODEL COLLAPSING INTO REPETITION ────────────────────────────────
+
+    [Fact]
+    public async Task An_answer_that_DEGENERATES_is_cut_off_and_becomes_a_retry_not_a_wall_of_text()
+    {
+        // ★ THE INCIDENT THIS GUARDS. gpt-oss-20b fell into a repetition loop explaining a three-rule
+        // plan — "valor mandatorio mandatorio mandatorio…" for hundreds of words — and shipped it to the
+        // screen of a product about people's pay. The generation model was raised in answer to it; this
+        // asserts the belt, because repetition collapse is a property of language models and not of one
+        // model, and a prompt does not remove it.
+        var collapse = new[] { "El plan paga un valor " }
+            .Concat(Enumerable.Repeat("mandatorio ", 300))
+            .ToArray();
+
+        var provider = new FakeProvider(collapse);
+        var h = Build(
+            nameof(An_answer_that_DEGENERATES_is_cut_off_and_becomes_a_retry_not_a_wall_of_text), provider);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "Explícame el plan");
+
+        // The user gets the warning card and Retry — the SAME failure path a provider timeout takes, on
+        // purpose: this is a technical failure, not a new kind of answer.
+        var error = frames.Should().ContainSingle(f => f.Type == "error").Subject;
+        error.ErrorKey.Should().Be(ChatCompletionException.Unavailable);
+
+        // ★ AND THE COLLAPSE IS BOUNDED. Streaming means some of it reached the screen before the run
+        // was provable — that is inherent — but a dozen repeats is not three hundred.
+        var forwarded = frames.Count(f => f.Type == AssistantStreamEvent.Fragment);
+        forwarded.Should().BeLessThan(20, "the cut happens while it is still a glitch, not a wall");
+
+        // ★ NOTHING DEGENERATE IS STORED. The assistant row is only written after a clean finish, so the
+        // thread keeps the question and no answer — which is the truth, and Retry re-answers it.
+        var stored = await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync();
+        stored.Should().ContainSingle().Which.Role.Should().Be(AssistantMessageRole.User);
+    }
+
+    [Fact]
+    public async Task A_NORMAL_answer_is_never_cut_by_the_degeneration_guard()
+    {
+        // The false-positive side. A guard that fired on real prose would trade a rare wall of text for
+        // a frequent, inexplicable "try again" — a worse product than the bug it fixes.
+        var real = new[]
+        {
+            "El plan tiene **tres reglas**.\n\n",
+            "| Orden | Regla | Cap | Floor |\n|---|---|---|---|\n",
+            "| 1 | Comisión Base | 10.000 EUR | 100 EUR |\n",
+            "| 2 | Acelerador Hardware | no | no |\n",
+            "| 3 | Spiff por Unidades | no | no |\n\n",
+            "La regla 3 paga 5 EUR por unidad vendida, no un porcentaje.",
+        };
+
+        var provider = new FakeProvider(real);
+        var h = Build(nameof(A_NORMAL_answer_is_never_cut_by_the_degeneration_guard), provider);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "Explícame el plan");
+
+        frames.Should().NotContain(f => f.Type == "error");
+        frames.Count(f => f.Type == AssistantStreamEvent.Fragment).Should().Be(real.Length);
+
+        var stored = await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync();
+        stored.Should().HaveCount(2, "the question and a complete answer");
     }
 
     [Fact]

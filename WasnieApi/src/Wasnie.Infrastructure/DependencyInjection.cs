@@ -162,6 +162,7 @@ public static class DependencyInjection
         // the tenant filter and the permission guards see the real caller. A singleton here would be a
         // tool holding somebody else's identity.
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetTransactionTool>();
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPlanRulesTool>();
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();

@@ -136,7 +136,7 @@ public sealed class PostMessageHandler(
 
         // Step 1.5, exactly as the streaming path runs it — including failing the turn when the lookup
         // could not run, rather than letting the model answer about a record it never queried.
-        var lookup = await toolRunner.RunAsync(userMessage.Content, cancellationToken);
+        var lookup = await toolRunner.RunAsync(userMessage.Content, history, cancellationToken);
 
         if (lookup.DidFail)
         {
@@ -152,11 +152,25 @@ public sealed class PostMessageHandler(
             navigation.PromptBlock, toolData);
         var answer = new StringBuilder();
 
+        // ★ THE SAME BELT AS THE STREAMING PATH. Two answer paths that can fail differently is the
+        // drift this file already refuses everywhere else.
+        var guard = new DegenerationGuard();
+
         try
         {
             await foreach (var fragment in provider.StreamAsync(prompt, cancellationToken))
             {
+                if (guard.Observe(fragment))
+                {
+                    return Result<string>.Failure(ChatCompletionException.Unavailable);
+                }
+
                 answer.Append(fragment);
+            }
+
+            if (guard.Finish())
+            {
+                return Result<string>.Failure(ChatCompletionException.Unavailable);
             }
         }
         catch (ChatCompletionException ex)

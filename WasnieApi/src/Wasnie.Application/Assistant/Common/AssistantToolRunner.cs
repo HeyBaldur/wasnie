@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Assistant.Abstractions;
+using Wasnie.Domain.Assistant;
 
 namespace Wasnie.Application.Assistant.Common;
 
@@ -38,7 +39,24 @@ public sealed class AssistantToolRunner(
     /// telling the user their record could not be found. A generation CHOICE (no tool wanted, or a call
     /// the provider rejected) is still not fatal. An INFRASTRUCTURE failure now is.
     /// </summary>
-    public async Task<AssistantToolOutcome> RunAsync(string question, CancellationToken cancellationToken)
+    /// <param name="history">
+    /// The conversation so far, so the dispatcher can resolve a FOLLOW-UP.
+    ///
+    /// ★ THE BUG THIS ARGUMENT EXISTS TO FIX, and it was structural rather than stochastic. The
+    /// dispatcher used to receive the current message and nothing else. Turn 1 — "explain the plan Q3
+    /// 2026 — Plan Comercial EMEA (Test Integral)" — carried the name and worked. Turn 2 — "I have a
+    /// transaction for 149.000 for 200 laptops, how many credits does it generate?" — names no plan,
+    /// because a person does not repeat the title they just used. The dispatcher, seeing only that
+    /// sentence, sent `{"planName": null}`, and the user was told their plan could not be found two
+    /// messages after having it explained to them.
+    ///
+    /// No amount of name normalisation reaches that: there was no name to normalise. What was missing
+    /// was the conversation.
+    /// </param>
+    public async Task<AssistantToolOutcome> RunAsync(
+        string question,
+        IReadOnlyList<AssistantMessage> history,
+        CancellationToken cancellationToken)
     {
         if (_tools.Count == 0)
         {
@@ -49,8 +67,7 @@ public sealed class AssistantToolRunner(
         try
         {
             request = await provider.SelectToolAsync(
-                [new ChatMessage(ChatMessage.SystemRole, SelectionInstructions),
-                 new ChatMessage(ChatMessage.UserRole, question)],
+                BuildSelectionMessages(question, history),
                 _tools.Select(t => t.Schema).ToList(),
                 cancellationToken);
         }
@@ -119,19 +136,101 @@ public sealed class AssistantToolRunner(
     }
 
     /// <summary>
+    /// How many earlier messages the dispatcher is shown.
+    ///
+    /// Four is two exchanges: enough for "that plan" to have a referent, short enough that the
+    /// dispatcher is deciding about the CURRENT question rather than re-litigating an old one. This
+    /// call is a classifier, and a classifier handed a whole thread starts answering the wrong turn.
+    /// </summary>
+    private const int MaxContextMessages = 4;
+
+    /// <summary>
+    /// How much of each earlier message is shown.
+    ///
+    /// The assistant's own replies run to three thousand characters of tables; the dispatcher needs the
+    /// NAMES in them, not the tables. Truncating keeps this call cheap and fast — it is on the critical
+    /// path of every turn — while preserving what a reference points at.
+    /// </summary>
+    private const int MaxContextCharacters = 600;
+
+    /// <summary>
+    /// The instructions, the recent turns, then the question — the question LAST, so the dispatcher
+    /// decides about it and treats what came before as context.
+    ///
+    /// The current turn is dropped from the history if the caller already appended it: the two answer
+    /// paths differ on that, and a dispatcher reading the same sentence twice is being told it matters
+    /// twice.
+    /// </summary>
+    private static IReadOnlyList<ChatMessage> BuildSelectionMessages(
+        string question, IReadOnlyList<AssistantMessage> history)
+    {
+        var usable = history
+            .Where(m => m.Content != AssistantMessage.NotConnectedPlaceholder)
+            .OrderBy(m => m.Sequence)
+            .ToList();
+
+        // The caller may or may not have appended the current question already.
+        if (usable.Count > 0 && usable[^1].Content == question)
+        {
+            usable.RemoveAt(usable.Count - 1);
+        }
+
+        if (usable.Count > MaxContextMessages)
+        {
+            usable = usable.Skip(usable.Count - MaxContextMessages).ToList();
+        }
+
+        var messages = new List<ChatMessage>(usable.Count + 2)
+        {
+            new(ChatMessage.SystemRole, SelectionInstructions),
+        };
+
+        messages.AddRange(usable.Select(m => new ChatMessage(
+            m.Role == AssistantMessageRole.Assistant ? ChatMessage.AssistantRole : ChatMessage.UserRole,
+            m.Content.Length > MaxContextCharacters ? m.Content[..MaxContextCharacters] : m.Content)));
+
+        messages.Add(new ChatMessage(ChatMessage.UserRole, question));
+
+        return messages;
+    }
+
+    /// <summary>
     /// ★ COLD, LIKE THE ROUTER'S. This call decides one thing and must not start composing an answer:
     /// personality here invites a reply instead of a decision, and a friendly preamble is what breaks
-    /// the parse. It is also told to abstain, because calling a lookup for a question about how the
-    /// product works spends a database round trip to answer nothing.
+    /// the parse. It is also told to abstain, because calling a lookup for a question the handbook
+    /// answers spends a database round trip to answer nothing.
+    ///
+    /// ★ THE ABSTENTION RULE HAD TO BE NARROWED, and this is the integration the second tool needed.
+    /// It used to read "if the message is about how the product works, call NO tool" — which is exactly
+    /// how a reasonable dispatcher classifies "how does my plan pay?", and that question is now
+    /// answerable from the tenant's real configuration. Left alone, the plan tool would have been
+    /// registered and never called. The distinction is no longer record-vs-explanation but THIS
+    /// TENANT'S DATA vs THE PRODUCT'S BEHAVIOUR: what MY plan does is data; what a plan IS is
+    /// documentation.
     /// </summary>
     public const string SelectionInstructions =
         "You are a lookup dispatcher inside Wasnie, a sales-commission product. You do NOT answer " +
         "questions and you do NOT write prose.\n" +
         "\n" +
-        "Decide whether answering the user's message requires looking up a SPECIFIC RECORD in Wasnie. " +
-        "If it does, call the matching tool with the identifier the user gave. If the message is about " +
-        "how the product works, what a term means, or how to do something, call NO tool — the " +
-        "documentation answers those and a lookup would return nothing useful.\n" +
+        "Decide whether answering the user's message requires reading THIS TENANT'S OWN DATA — a " +
+        "specific record, or how their own plans are actually configured. If it does, call the matching " +
+        "tool.\n" +
         "\n" +
-        "Never guess an identifier the user did not write. Never call a tool just in case.";
+        "Call a tool when the message asks about a specific transaction, deal or sale by reference; or " +
+        "about how a plan pays, what rules or rates a plan has, how a plan is configured, or why a " +
+        "commission came out the way it did. Questions about the user's OWN plan count even when no " +
+        "plan is named — call the plan tool without a name and it will ask which one.\n" +
+        "\n" +
+        "Call NO tool when the message is about what a term means, how the product works in general, or " +
+        "how to perform an action in the interface. The documentation answers those and a lookup would " +
+        "return nothing useful.\n" +
+        "\n" +
+        "Earlier messages in the conversation are given to you as CONTEXT. Decide about the LAST user " +
+        "message, but resolve what it refers to from that context: if the user asked about a plan by " +
+        "name and now says \"this plan\", \"that plan\", or asks a follow-up that plainly concerns it " +
+        "without naming it, pass that plan's name — copied EXACTLY as it appeared earlier, in full. A " +
+        "follow-up question is not a new subject.\n" +
+        "\n" +
+        "Never guess an identifier that appears nowhere — not in the last message and not in the " +
+        "context. Never call a tool just in case.";
 }

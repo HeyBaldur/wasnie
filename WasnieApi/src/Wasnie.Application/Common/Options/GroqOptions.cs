@@ -33,6 +33,18 @@ public sealed class GroqOptions
     public string Model { get; init; } = "openai/gpt-oss-20b";
 
     /// <summary>
+    /// The model that WRITES THE ANSWER — the only output a user reads. Falls back to
+    /// <see cref="Model"/> when unset, so an existing configuration keeps working unchanged.
+    ///
+    /// ★ WHY IT IS NOT <see cref="Model"/>. gpt-oss-20b fell into a repetition loop while explaining a
+    /// three-rule plan — "mandatorio mandatorio mandatorio" for hundreds of words, on screen, in a
+    /// product that tells people what they are paid. It is a property of a small model under a long
+    /// structured task, not something a prompt fixes. The router and the tool dispatcher are
+    /// classification and stay cheap; generation buys robustness where it is actually read.
+    /// </summary>
+    public string GenerationModel { get; init; } = "openai/gpt-oss-120b";
+
+    /// <summary>
     /// Ceiling on how much conversation is replayed to the model, in turns. A long thread would
     /// otherwise grow the request without bound — cost and latency both rise with it, and the oldest
     /// turns contribute least. Newest turns are the ones kept.

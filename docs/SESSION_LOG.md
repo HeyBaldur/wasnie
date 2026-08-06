@@ -4,6 +4,406 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-06 — DIAGNOSTICO: el turno 2 decia "plan no encontrado" tras explicarlo en el turno 1
+
+**El sintoma:** turno 1 "explicame el plan Q3 2026 — Plan Comercial EMEA (Test Integral)" -> lo explica
+entero, tres reglas, sin degeneracion. Turno 2 "tengo una transaccion por 149000 por 200 laptops, cuantos
+creditos genera?" -> "no se encontro ningun plan llamado Q3 2026 — Plan Comercial EMEA (Test Integral)".
+Dos mensajes despues de describirlo.
+
+**★ LA EVIDENCIA (log temporal del dispatcher, ya removido):**
+```
+turno 1: tool=get_plan_rules args={"planName":"Q3 2026 — Plan Comercial EMEA (Test Integral)"}
+turno 2: tool=get_plan_rules args={"planName": null}
+```
+**No mando un nombre recortado ni alterado: mando NULL.** La hipotesis 1 del WI (nombre alterado) queda
+descartada, y con ella toda idea de "mas normalizacion" — **no hay nombre que normalizar**.
+
+**Causa raiz, y es ESTRUCTURAL, no estocastica:** `AssistantToolRunner` armaba la llamada de seleccion
+con `[system(instrucciones), user(pregunta)]` y nada mas. **El dispatcher nunca vio la conversacion.** El
+turno 2 no nombra ningun plan — porque una persona no repite el titulo que uso hace una frase — asi que
+el dispatcher no tenia de donde sacarlo. Todo seguimiento estaba roto por diseno, no solo este caso:
+"y ese?", "cuanto paga?", "y la transaccion de la que hablabamos" — ninguno podia resolverse jamas.
+
+**Hipotesis descartadas con evidencia:** (2) binario viejo — build limpio y el turno 1 resolvio el
+em-dash, o sea que la normalizacion estaba viva; (3) el fix de normalizacion cubre el caso — lo cubre,
+pero el turno 2 no manda nombre.
+
+**Nota sobre lo que vio Rodolfo:** en el repro, con `planName: null` el tool devuelve `PlanNameRequired`
+y el asistente pregunta correctamente "a cual de tus planes?". Que el 20b lo redactara como "no se
+encontro el plan X" era el modelo de GENERACION (que si tiene la historia, y por eso sabia el nombre)
+redactando mal un resultado correcto. La causa de fondo es la misma: el dispatcher no tenia el nombre.
+
+**El fix — el dispatcher ve la conversacion.** `RunAsync(question, history, ct)`: instrucciones, luego
+los ultimos **4 mensajes** truncados a **600 caracteres** cada uno, y **la pregunta al final** para que
+decida sobre ELLA y trate lo anterior como contexto. Cuatro mensajes son dos intercambios: suficiente
+para que "este plan" tenga referente, corto para que un clasificador no se ponga a contestar el turno
+viejo. El truncado importa porque las respuestas del asistente son tablas de 3.000 caracteres y lo que
+el dispatcher necesita de ellas son los NOMBRES, no las tablas — y esta llamada esta en el camino
+critico de cada turno. Las instrucciones ahora dicen explicitamente que resuelva referencias desde el
+contexto copiando el nombre EXACTO y completo, y que un seguimiento no es un tema nuevo.
+
+**Por que NO se implemento "recordar el ultimo plan resuelto"** (la hipotesis principal del WI): habria
+arreglado este caso y ninguno de los otros. El agujero no era "falta memoria del plan", era "el
+dispatcher esta ciego"; darle la conversacion arregla la clase entera con menos estado y sin una
+segunda fuente de verdad que mantener sincronizada.
+
+**Aislamiento intacto, y por construccion:** el contexto es solo para ELEGIR la herramienta. El tool
+sigue recibiendo exactamente los argumentos que el modelo genero (hay test), y sigue resolviendo el plan
+por nombre a traves de `ListPlansQuery` + `GetPlanByIdQuery` con la identidad del que pregunta — o sea
+que **se re-valida en cada uso**. No se recuerda ningun id, no se saltea ningun permiso, y la historia
+que se lee es la de la conversacion propia (`OwnedConversations` ya la habia filtrado).
+
+**Tests:** el dispatcher recibe los turnos previos; las instrucciones le dicen para que; la pregunta
+actual no viaja DOS veces (los dos handlers difieren en si la anexan a la historia — el runner lo
+normaliza); solo viajan los turnos recientes y truncados; un primer mensaje sin historia sigue
+funcionando; y el contexto NO cambia lo que recibe el tool. **Mutacion:** volver el dispatcher a ver
+solo la pregunta -> 2 rojos. Unit **1341 -> 1347**, integracion **753**.
+
+**★ Verificacion en runtime, la conversacion del reporte, 5 corridas:** el turno 2 encuentra el plan y
+calcula, **5 de 5**. Ejemplo real: *"149 000 × 0.06 = 8.940 €; spiff 2 % = 2.980 € -> tope 250 €;
+acelerador 9 % = 13.410 € -> tope 1.000 €; **total 11.190 €**"*. Nueve invocaciones del tool en la
+tanda, **todas `Found`**, cero `PlanNameRequired`.
+
+## 2026-08-06 — Modelo de generacion mayor + red de seguridad anti-degeneracion
+
+**El disparador:** el asistente escupio en pantalla "valor mandatorio mandatorio mandatorio..." cientos
+de veces al explicar un plan de tres reglas. En un producto que dice cuanto cobra la gente, eso es
+inaceptable aunque pase 1 de cada 6 veces.
+
+**PARTE 1 — El modelo de generacion, separado del router.**
+*Paso 0:* los tres llamados (router, dispatcher de tools, generacion) compartian un unico
+`Settings.Model`. Ahora son dos campos: `Model` (router + dispatcher, clasificacion pura, nadie lee su
+salida) y **`GenerationModel`** (el unico texto que un usuario lee). `BuildRequest` recibe el modelo
+como parametro para que cada call site declare cual usa. **Sin ruptura al desplegar:** si
+`GenerationModel` viene vacio, la generacion usa el `Model` de siempre — hay test.
+
+*Candidatos, con precios REALES del catalogo de OpenRouter (`GET /api/v1/models`), no de memoria:*
+| modelo | ctx | $/M in | $/M out |
+|---|---|---|---|
+| openai/gpt-oss-20b (actual) | 131k | 0,03 | 0,13 |
+| **openai/gpt-oss-120b (elegido)** | 131k | **0,037** | **0,17** |
+| meta-llama/llama-3.3-70b-instruct | 131k | 0,10 | 0,32 |
+| openai/gpt-4o-mini | 128k | 0,15 | 0,60 |
+
+**Elegido `openai/gpt-oss-120b`:** 6x los parametros por **+23% de input y +31% de output** — decimas de
+milesima de dolar por turno — y **misma familia**, asi que los prompts afinados contra el 20b siguen
+valiendo (cambiar de familia habria hecho imposible atribuir cualquier cambio de conducta). Mismo
+soporte de `tools` y `response_format`, mismo contexto. **No habia trade-off real que delegar.**
+
+**PARTE 2 — `DegenerationGuard`, el cinturon.** Subir el modelo es el arreglo; esto es lo que vuelve la
+promesa incondicional, porque el colapso por repeticion es propiedad de los modelos de lenguaje en
+general y ningun prompt lo elimina (el de la regla 12c lo redujo, no lo quito). Vigila la respuesta
+mientras se escribe: **12 repeticiones consecutivas de una misma palabra**, o **20.000 caracteres**. El
+umbral no es arbitrario — la prosa no repite una palabra 12 veces seguidas, y la respuesta legitima mas
+larga medida fue de ~5.300 caracteres. La palabra es la unidad, no el fragmento: el proveedor parte
+"mandatorio" en "man"+"dator"+"io", asi que se acumula el parcial entre fragmentos.
+
+**Al detectarlo usa el camino de fallo que YA existia**, no uno nuevo: el fragmento NO se reenvia, se
+emite el evento de error, el usuario ve la tarjeta de reintento, y **no se persiste nada** (la fila del
+asistente solo se escribe tras un cierre limpio). Compartido por los DOS caminos de respuesta
+(streaming y no-streaming) por la misma razon que `AssistantPrompt`. Se loguea el motivo **sin la
+palabra repetida** — es texto del usuario sobre su propio plan.
+
+**Limite honesto del guardrail:** en streaming, lo que llego antes del corte YA esta en pantalla. Es
+inherente, no un bug — el umbral es lo que lo acota: una docena de repeticiones en vez de trescientas.
+
+**Tests:** el guard corta el colapso real, corta cerca del limite (no cientos de palabras despues),
+cuenta palabras partidas entre fragmentos, tiene backstop por largo, y **no corta respuestas
+legitimas** (una tabla markdown real con celdas "no" repetidas, "No, no, no", "| — | — | — |"). Mas dos
+tests de handler: una degeneracion inyectada -> **evento de error + <20 fragmentos reenviados + nada
+persistido**; una respuesta normal -> intacta. Y tres tests de que el stream lleva el modelo de
+generacion mientras router y dispatcher llevan el chico — verificado **sobre el body HTTP**, no sobre el
+objeto de opciones. **Mutaciones:** N=1000 -> no detecta el colapso (1 rojo); N=2 -> corta respuestas
+legitimas (3 rojos). Unit **1323 -> 1341**, integracion **753**.
+
+**★ Verificacion en runtime, protocolo de repeticion, 12 corridas con gpt-oss-120b:**
+**0 degeneraciones**, **0 cortes del guardrail**, y **11 de 12 explican las tres reglas completas**
+(1, 2 y 3, incluida la de Units).
+
+**Dos observaciones honestas:**
+1. **1 de 12 no invoco la herramienta** (respuesta de 368 chars sin datos del plan): eso es el
+   *dispatcher de tools*, que **por diseño de este WI sigue en el modelo chico**. Si molesta, subirlo es
+   cambiar `Model` — pero es clasificacion y su fallo es "no busca datos", no "escribe basura".
+2. **Latencia: no hay conclusion limpia con 4 muestras por lado.** 20b: 15,5 / 32,8 / 34,7 / **108,9**s.
+   120b: 28,7 / 52,7 / 53,0 / 65,4s. La mediana del 120b es mayor (~53s vs ~34s) pero **su peor caso fue
+   mejor que el peor caso del 20b**; la varianza del proveedor domina la diferencia. Coste estimado por
+   turno: fracciones de milesima de dolar en ambos.
+
+## 2026-08-06 — DIAGNOSTICO: GetPlanRules explicaba 2 de 3 reglas (la Units salia "no disponible")
+
+**La pregunta que separaba las dos causas — respondida con el JSON crudo en la mano.** Se volco el
+payload EXACTO del tool para el plan del incidente, sembrando las tres reglas copiadas fila por fila de
+la BD del tenant que lo reporto. **La regla #3 VIAJA COMPLETA:**
+`{"ruleName":"\"Spiff por Volumen de Unidades\" (Flat sobre Units)","sortOrder":3,"triggerCondition":
+"Unconditional","measurementType":"Units","measurementBase":"TransactionQuantity","rateTable":
+{"type":"Flat","semanticBehavior":"CurrencyAmountPerUnit","rawValue":5}}`. No falta un campo. **No es
+serializacion: es el MODELO.**
+
+**Y el fallo es peor que "omite una regla".** Reproducido en runtime con los nombres de regla REALES
+(que llevan comillas sueltas y acentos), 1 de cada 6 respuestas: gpt-oss-20b **degenera en un bucle de
+repeticion** en la regla #1 — *"valor mandatorio mandatorio mandatorio mandatorio..."* durante cientos de
+palabras — y nunca llega a la #3. El resto de esa misma respuesta tambien viene corrompido ("modulo" por
+modifier, "4 % para un rendimiento < 20 000 %-FA"). No es que la regla Units sea especial: es la ultima,
+y el modelo se rompe antes de llegar.
+
+**Dos arreglos reales, y una decision que no es mia:**
+1. **Regla 12c del prompt:** contar las reglas, decir cuantas hay, cubrirlas TODAS en orden de
+   `sortOrder`, y **nunca** escribir que la configuracion de una regla no esta disponible — si no sabe
+   redactarla, que imprima los valores crudos. Se nombra explicitamente que una regla en Units no es una
+   regla incompleta.
+2. **Encoder legible** (`UnsafeRelaxedJsonEscaping`) en el payload del tool. El encoder por defecto
+   escapa todo lo no-ASCII para seguridad HTML, asi que un plan en espanol llegaba al modelo como
+   `Comisión Base Revenue"`. **Honestidad sobre su peso: medido, era el 2,3% del payload
+   (60 caracteres de 2.593) — es una mejora de legibilidad, NO era la causa.** Seguro aca porque el
+   destino unico del payload es el prompt: nunca HTML, nunca una URL.
+
+**Medicion antes/despues, mismo protocolo (misma pregunta, nombres reales, conversaciones nuevas):**
+antes **5 de 6** mencionaban la regla 3 y hubo **1 degeneracion**; despues **12 de 12** la mencionan y
+**0 degeneraciones**. **Lo que esto NO prueba:** con esas muestras no se puede afirmar que la
+degeneracion este eliminada — es una propiedad del modelo, no del backend, y ningun test de backend
+puede obligar a un modelo a cumplir su palabra.
+
+**★ LA DECISION QUE QUEDA PARA RODOLFO: el modelo de generacion.** Un plan de 3 reglas ya empuja a
+gpt-oss-20b a romperse. La configuracion vive en `appsettings.Development.json` -> `OpenRouter:Model`
+(hoy `openai/gpt-oss-20b`) y subirlo solo para la generacion es un cambio de una linea, con impacto en
+costo y latencia — por eso no se toco. La evidencia para decidir esta arriba.
+
+**Test de regresion nuevo** (`PlanRulesPayloadCompletenessTests`): siembra el plan del incidente con sus
+tres reglas y afirma campo por campo que las tres viajan y que la de Units esta completa
+(`measurementBase`, `semanticBehavior`, `rawValue`, `triggerCondition`, `sortOrder`), mas un test de que
+el payload va en texto legible y no en secuencias de escape. Queda porque Units es la unica medicion que
+cambia la base y es la que se perdio. Unit **1321 -> 1323**.
+
+**Hallazgo lateral en los datos del plan de prueba (NO tocado, es dato del tenant):** la regla #2 tiene
+los tramos de attainment cargados como **importes absolutos** (0-20.000, 20.000-50.000, 50.000-100.000)
+donde el motor espera **fracciones de cuota** (1.00 = 100%). Tal como esta, el bracket que contiene
+cualquier attainment normal es el primero y paga 4% de todo. El DTO ya lo nombra
+`fromAttainmentFraction` y el prompt ensena que 1.00 es el 100%, asi que el asistente tiene con que
+detectarlo — pero el plan esta mal configurado. En un plan real eso es dinero.
+
+## 2026-08-06 — DIAGNOSTICO: GetPlanRules decia "no existe" de un plan Active y visible
+
+**Sintoma:** "Me puedes explicar el plan Q3 2026 — Plan Comercial EMEA (Test Integral)" -> "no se pudo
+localizar el plan / no tienes permisos", con el plan Active, v1, 3 reglas, visible en la UI.
+
+**Las 5 hipotesis, resueltas con evidencia (no por descarte):**
+1. **Versionado — REFUTADA.** Una sola fila en `CompensationPlans` con ese nombre, v1.
+2. **Tenant — REFUTADA.** `AspNetUserClaims`: `fillocj.rc@gmail.com` tiene
+   `tenant_id = 61d4d35b-f4d4-48ea-a1d5-08dfabff5a74`, que es exactamente el `TenantId` del plan. El chat
+   corre bajo el tenant dueño; no era aislamiento. (Nota: el id de la captura, `98d36903-...`, no existe
+   en la BD; el plan real es `df4e0d96-96cc-4897-b797-888c918ba352`.)
+3. **Estado — REFUTADA.** Active, y ni `ListPlansHandler` ni `GetPlanByIdHandler` filtran por estado
+   cuando no se pide.
+4. **Binario stale — REFUTADA POR TIMESTAMPS.** El proceso corriendo arranco 11:55:15 y cargo
+   `Wasnie.Application.dll` con fecha 11:40:04 — posterior al fix de normalizacion. La normalizacion SI
+   estaba viva.
+5. **★ EL STRING — CONFIRMADA, Y MEDIDA.** Se replico la llamada de seleccion de tool contra el
+   proveedor (mismo `SelectionInstructions`, mismos schemas, mismo modelo) **8 veces**: en **5** mando el
+   nombre completo y en **3 recorto el prefijo del trimestre**, mandando `Plan Comercial EMEA (Test
+   Integral)`. El match exacto rechazaba esas 3 — correctamente segun la regla, y **falsamente de cara al
+   usuario**, que estaba mirando el plan en pantalla. Estocastico: por eso a veces andaba.
+
+**El fix, en tres capas (defensa en profundidad):**
+1. **Causa raiz:** la `description` del argumento `planName` ahora exige copiar el titulo COMPLETO,
+   nombrando los dos casos que el modelo se come (prefijo tipo "Q3 2026 - " y parentesis final).
+2. **Red de seguridad — `PlanNameMatch.IsPartialNameOf`:** si no hay match exacto, se buscan candidatos
+   por **secuencia de palabras COMPLETAS** (ambos lados se padean con espacios, asi que " emea " no
+   entra en " emea_overlay "). Simetrico, porque tanto el modelo como el usuario recortan.
+3. **Que se hace con los candidatos:** 0 -> **rechazo puro, sin cambios** (es el camino sobre el que se
+   apoya la regla 3, y no dice nada nuevo). 2+ nombres distintos -> `PlanNameRequired` con esos
+   candidatos, sin mostrar ninguna tasa. **1 -> se resuelve Y SE DECLARA**, con un token nuevo
+   `matchedBy: PartialNameSingleCandidate` y la **regla 12b** del prompt, que obliga al modelo a decir en
+   su PRIMERA frase que el nombre no coincidia exacto y cual plan esta describiendo.
+
+**Por que resolver un candidato unico no es adivinar:** con un solo candidato no existe "el plan
+equivocado" que responder; y lo que hacia peligroso substituir un plan por otro era hacerlo EN SILENCIO
+— `matchedBy` lo vuelve imposible. Los candidatos se cuentan por NOMBRE, no por fila, porque un plan
+clonado son dos filas con el mismo titulo y preguntar "¿cual de estos dos?" con dos titulos identicos es
+una pregunta sin respuesta.
+
+**★ UN TEST EXISTENTE CAMBIO A PROPOSITO — decision para Rodolfo.**
+`An_exact_name_is_required_so_one_plan_cannot_answer_for_another` exigia rechazo plano para "EMEA"
+cuando solo existe "EMEA Overlay". La preocupacion era correcta, el remedio demasiado romo: decirle "no
+existe" a alguien que mira el unico plan que podia significar ES el incidente de este WI con otro
+disfraz. Ahora se llama `One_plan_never_answers_for_another_WITHOUT_SAYING_SO` y exige que se resuelva
+**declarando** `PartialNameSingleCandidate`. Si preferis el rechazo plano, es una linea.
+
+**Lo que NO cambio:** "Q3" con `Q3_Enterprise`/`Q3_SMB` sigue dando rechazo (un prefijo dentro de un
+token no es una palabra); un nombre sin candidatos sigue dando el rechazo de una sola frase, sin lista;
+y el aislamiento tiene un test dedicado NUEVO porque el fix vuelve a aflojar la comparacion.
+
+**Tests (mutation-proven, 3 mutaciones):** quitar el limite de palabra (Contains crudo) -> 2 rojos, entre
+ellos "Q3" adivinando `Q3_Enterprise`; resolver el primero de varios candidatos -> 1 rojo; `matchedBy`
+siempre `ExactName` (resolver sin declararlo) -> **5 rojos**. Unit **1303 -> 1321**, integracion **753**
+sin cambios.
+
+**★ Verificacion en runtime** (plan sembrado con el nombre EXACTO de la captura, em-dash y parentesis
+incluidos, 3 reglas):
+1. La pregunta literal de la captura, **5 de 5 veces la encuentra** (antes fallaba ~37%), y lista las
+   **tres** reglas: "Comision base", "Acelerador Enterprise", "Spiff producto nuevo".
+2. Con el nombre recortado que mandaba el modelo -> *"El plan que has solicitado coincide con el plan
+   **Q3 2026 — Plan Comercial EMEA (Test Integral)**"* y lo explica. El log confirma `resolved a partial
+   plan name`.
+3. "Programa de Incentivos LATAM" -> sigue rechazando (`Cause: NotFound`), sin lista.
+
+**Nota de proceso:** habia una instancia de la app corriendo que no era mia (PID 16476) bloqueando el
+DLL; se pidio permiso antes de pararla, y hubo que volver a levantarla para verificar.
+
+## 2026-08-06 — GetPlanRules: normalizacion tipografica del planName (el plan que "dejo de existir")
+
+**El defecto reportado:** el asistente explico "Q3 2026 - Plan Comercial" y dos mensajes despues dijo
+que ese plan no existia. No habia cambiado nada: al reescribir el nombre dentro del JSON de su SEGUNDA
+llamada, el modelo escribio un EM-DASH donde el nombre guardado tiene un guion normal. El `==` estricto
+dijo que no, el tool devolvio su rechazo, y el modelo lo relato obedientemente — una negacion segura
+de un registro que acababa de describir. **El error fue el rigor, no el modelo:** exactitud
+maquina-a-maquina es correcta cuando los dos extremos son maquinas; aca uno es un LLM reescribiendo
+las palabras de una persona, y eso sustituye guiones, agrega espacios y cambia mayusculas.
+
+**Paso 0 — la mitad del fix que era facil pasar por alto.** Normalizar la comparacion no sirve de nada
+si la fila nunca llega a la comparacion: `ListPlansHandler` narrowea en SQL con
+`Name.ToLower().Contains(search)`, asi que pasarle el nombre crudo con em-dash **devuelve CERO filas** y
+la lista de candidatos queda vacia antes de cualquier match en memoria. El bug estaba en los DOS pasos.
+
+**El fix — `PlanNameMatch` (capa de Aplicacion), normalizacion identica en ambos lados:**
+1. `Normalize`: familia de guiones -> `-` (hyphen, non-breaking hyphen, figure dash, en, em, horizontal
+   bar, minus). El WI nombraba em y en; se incluyo la familia completa porque es LA MISMA sustitucion y
+   cada uno es un mapeo 1:1 que no toca la exactitud. Espacios: `char.IsWhiteSpace` (no comparacion con
+   `' '`) porque los espacios exoticos son tan reales como los guiones — a este modelo ya se lo vio
+   emitiendo U+202F en su prosa; se colapsan a uno y se recortan los extremos.
+2. `AreSame`: normaliza **los dos lados** y compara con `OrdinalIgnoreCase`. Normalizar solo el request
+   arreglaria al modelo y rompería al tenant que pego el titulo desde un documento.
+3. `NarrowingKey`: la corrida mas larga sin guion ni espacio — la parte del nombre que la normalizacion
+   no puede alterar en ninguno de los dos lados. " q3 2026 — plan comercial " -> `comercial`, que
+   encuentra la fila guardada sean cuales sean los separadores. **Esto NO convierte el lookup en
+   substring:** el fragmento solo decide que filas se TRAEN; `AreSame` sigue teniendo que aceptar el
+   nombre entero. Esa separacion ya existia (el filtro SQL siempre fue narrowing, nunca el match).
+
+**Impacto en indices: NINGUNO, y se verifico.** `Contains` compila a `LIKE '%...%'`, que es
+non-sargable: la consulta ya era un scan sobre los planes del tenant y un fragmento mas corto no cambia
+la clase de plan. Trae algunas filas mas, que el match exacto filtra.
+
+**Sigue siendo match EXACTO:** "Q3_Enterprise" vs "Q3_SMB" siguen distintos, "Q3" solo no encuentra
+nada, "Plan-A" != "PlanA" (el guion se PLIEGA, no se borra), y un typo dentro de una palabra
+("Comercia") no matchea — eso es un error de escritura, no tipografia. Y "no encontrado" sigue siendo
+**business result** (`NotFoundOrNotVisible` + el mismo mensaje de rechazo), no `Failed`.
+
+**Aislamiento:** se agrego un test dedicado porque el fix AFLOJA una comparacion, y una comparacion mas
+floja es justo donde el aislamiento se rompe. Lo que protege la fila es el filtro de tenant, no el rigor
+del nombre: un nombre que AHORA si matchearia sigue sin encontrar nada desde otro tenant, con el rechazo
+indistinguible byte a byte.
+
+**Tests (mutation-proven, 3 mutaciones):** volver el narrowing key al nombre crudo -> **4 rojos** (prueba
+que la mitad SQL es portante); volver a `==` estricto -> 16 rojos; convertirlo en `StartsWith` -> 5
+rojos, incluidos los de colision Q3_Enterprise/Q3_SMB. Unit **1273 -> 1303**, integracion **753** sin
+cambios, ambos en verde.
+
+**Verificacion en runtime (plan real "Q3 2026 - Plan Comercial", flat 0.06 + cap 300 EUR):**
+1. Turno 1 con guion normal -> lo explica.
+2. **Turno 2 con em-dash, el caso reportado** -> *"Si, el plan Q3 2026 – Plan Comercial existe y esta
+   activo. El limite maximo (cap) para cada transaccion es 300 EUR."* Antes: "no existe".
+3. Nombre destrozado entero (" q3 2026 — plan comercial ", minusculas + padding + em-dash) en
+   conversacion NUEVA, sin historia donde apoyarse: **7 de 7 invocaciones del tool -> Found**. Con log de
+   diagnostico temporal se confirmo que el modelo manda literalmente `q3 2026 — plan comercial`, que
+   normaliza a `q3 2026 - plan comercial` y narrowea por `comercial`.
+4. "Q4 2026 — Plan Comercial" y "Q3" a secas -> siguen dando el rechazo. No adivina.
+
+**Dos observaciones honestas del runtime:** (a) antes de instrumentar se vio UN `NotFound` con el nombre
+destrozado que **no se pudo reproducir en 7 intentos posteriores**; lo mas probable es una generacion en
+la que el modelo mando un nombre distinto (p.ej. solo "plan comercial"), que es un NotFound correcto —
+queda anotado sin explicacion cerrada. (b) Los fallos intermitentes del endpoint son
+`ChatCompletionException: The chat model timed out` del proveedor, no del match, y llegan como fallo
+ruidoso con tarjeta de reintento — el diseño funcionando.
+
+**Hueco adyacente NO tocado (misma clase, decision de Rodolfo):** el apostrofo tipografico (' vs ')
+falla igual que fallaba el em-dash. Un plan llamado "Rudy's Plan" no se encontraria si el modelo escribe
+la comilla curva. Es una linea en el mismo mapa de caracteres, pero ampliar la normalizacion cambia que
+cuenta como igual, asi que no se hizo sin pedirlo. Mismo caso para los acentos.
+
+## 2026-08-06 — GetPlanRules: la segunda herramienta del asistente (leer las reglas REALES de un plan)
+
+**Qué resuelve:** el copiloto adivinaba configuraciones cruzando el manual — inventó un modo de tasa
+"Linear" que no existe, explicó Units como si fuera un porcentaje, y en un cálculo con acelerador +
+cap aplicó el acelerador y se olvidó del cap. Ahora LEE la configuración real del plan y explica sobre
+datos deterministas.
+
+**Paso 0 — el enum salió del código, no de la cabeza.** El mapeo RateTableType x Measurement se derivó
+de `CommissionCalculator` + `CreditAllocationService` y vive en `PlanRuleSemantics` (Application),
+porque el motor es `internal` en Infrastructure y no se puede referenciar. Un espejo que se desincroniza
+sería peor que no tenerlo, así que los tests **ejecutan el calculador REAL** y comprueban que su
+aritmética es la que el token promete. Tokens (enum CERRADO, cualquier combinación sin token lanza):
+`FractionalMultiplierOfBase`, `CurrencyAmountPerUnit`, `FractionalRatePerRevenueBracket`,
+`FractionalMultiplierFromAttainmentBracket`, `FractionalRateSplitAtQuotaBoundary`,
+`NoCommissionUnsupportedCombination` (Units + tabla no-Flat: el dominio lo rechaza al guardar y el
+motor acredita CERO — es un estado real que una regla guardada puede tener).
+
+**`measurementBase` es un token aparte, y es el que sorprende.** `MeasurementType` tiene cinco miembros
+y el motor ramifica en UNO: `Units` va por cantidad y **todo lo demás — Revenue, Margin, Attainment,
+Custom — usa el importe de la transacción**. Una regla etiquetada "Margin" se calcula sobre importe
+bruto. Reportar solo la etiqueta habría dejado al modelo describir un cálculo de margen que nadie
+implementó.
+
+**Tres hechos que el modelo no podía inferir y ahora viajan en el DTO:**
+1. `calculationOrder` = rate → modifier → cap → floor. Era el paso que improvisaba.
+2. **Un cap que el motor NO aplica.** Solo `PerTransaction` se honra; `PerPeriod` y `Total` se guardan y
+   se saltan, igual que un cap en moneda distinta a la del plan. Decirle a alguien "tenés un cap de
+   €500" cuando nada lo aplica es peor que no decir nada → token `NotEnforcedScopeNotImplemented` /
+   `NotEnforcedCurrencyMismatch`.
+3. **`ApplyModifier` NUNCA evalúa `Modifier.Trigger`.** Un acelerador "condicional" aplica siempre →
+   `ConditionsIgnoredModifierAlwaysApplies`. Y una condición sobre un campo que no está en
+   `TriggerFieldCatalog` hace que la regla no matchee JAMÁS → `UnknownFieldRuleNeverMatches`, que suele
+   ser la respuesta a "¿por qué no me pagaron?".
+
+**Los 3 no-negociables, intactos:** read-only vía dominio (`ListPlansQuery` + `GetPlanByIdQuery`, sin
+DbContext en el archivo); aislamiento por el filtro de tenant + `Plans.Read`; y rechazo indistinguible
+— "no existe" y "no es tuyo" devuelven el MISMO payload byte a byte (el test lo compara entero). Un
+error TÉCNICO en cambio lanza: `AssistantToolOutcome=Failed` → tarjeta de reintento, nunca disfrazado
+de "no encontré" (la lección del bug estocástico).
+
+**Un cuarto resultado, que no es rechazo:** si el usuario no nombra plan y hay varios visibles, el tool
+devuelve `PlanNameRequired` con la lista de nombres para que el asistente pregunte cuál. Reportarlo como
+"no encontrado" le diría a alguien con tres planes que no tiene ninguno.
+
+**Integración que casi se pasa por alto:** el `SelectionInstructions` del runner decía "si la pregunta
+es sobre cómo funciona el producto, NO llames a ninguna tool" — que es exactamente como se clasifica
+"¿cómo paga mi plan?". La herramienta habría quedado registrada y sin invocarse nunca. La distinción se
+reescribió: ya no es registro-vs-explicación sino **datos de ESTE tenant vs comportamiento del
+producto**.
+
+**GDPR:** el DTO no lleva ni un campo de payee (hay un test que barre el JSON buscando `payee`,
+`fullName`, `email`, `employeeCode`, `assignment`). La configuración de un plan no es dato personal y
+así queda.
+
+**Tests (mutation-proven, 4 mutaciones probadas):** quitar el filtro de tenant → rojo el de aislamiento;
+mapear Units a `FractionalMultiplierOfBase` → rojo el del token; devolver `[]` en vez de lanzar ante
+query rota → rojo el del fallo ruidoso; agregar un token al enum sin enseñarlo al prompt → rojo el de
+cobertura (recorre los enums por reflexión, incluidos los privados del tool). Unit **1241 → 1273**,
+integración **753** sin cambios, ambos en verde.
+
+**★ Verificación en runtime contra el modelo real** (tenant nuevo y aislado `wi-plan-rules-verify`, dos
+planes reales creados por API):
+1. *"How is the Full Payout Plan configured?"* → cita la config real: Flat **1.00 → 100%**, cap **200
+   EUR por transacción**, trigger Unconditional, sin modifier ni floor. Antes inventaba.
+2. *Estrés:* venta de 10.000 EUR sobre el plan Flat 0.08 + accelerator 1.5 + cap 500 → **800 × 1,5 =
+   1.200 → cap 500**, paso a paso y en el orden correcto. Este es el que fallaba.
+3. *"What rules does my plan have?"* (sin nombrar) → lista los dos planes y pregunta cuál.
+4. *Aislamiento:* preguntado por "Claude Code Test Plan" — que existe DE VERDAD en otro tenant — el
+   asistente da el rechazo indistinguible y no filtra ni una tasa.
+
+**Defecto que encontró la verificación y se corrigió:** el modelo imprimía los identificadores internos
+al usuario ("FractionalMultiplierOfBase", "enforcement = EnforcedPerTransaction"). Eso rompe el motivo
+mismo de los tokens: un identificador CamelCase en inglés no se traduce al ES/PL. Se agregó la **regla
+18** ("los tokens son para vos, no para el usuario"). Tras el arreglo la prosa quedó limpia ("Flat, 1.00
+→ 100 % of the transaction amount"), aunque **gpt-oss-20b sigue filtrando el token del cap en la tabla
+una de cada dos veces** — cumplimiento parcial de un modelo chico, no un fallo del contrato. Anotado.
+
+**Estado del entorno de verificación:** quedó en la DB de dev el tenant `wi-plan-rules-verify`
+(+ `wi-plan-rules-runtime`, huérfano y sin confirmar) con dos planes de prueba y `Tenants.Tier` subido a
+3 para poder crear el segundo plan. Se puede borrar cuando se quiera; queda para reproducir.
+
+**Fuera de alcance (siguientes piezas):** balance del payee, attainment, pay runs, clawbacks. Escribir o
+modificar planes: nunca — el tool es read-only por contrato de la interfaz.
+
 ## 2026-08-05 — Columna "Paid on" en la lista de Payouts
 
 **Paso 0:** `PaidAt` **ya viajaba** en el DTO de la lista (`PayoutListItemDto` + `ListPayoutsHandler`,
