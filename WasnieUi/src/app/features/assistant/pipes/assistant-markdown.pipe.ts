@@ -2,6 +2,7 @@ import { Pipe, PipeTransform, SecurityContext, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Marked } from 'marked';
 import { internalRouteOf } from '../models/assistant.model';
+import { protectMath } from './assistant-math';
 
 /**
  * Renders an assistant message's Markdown as safe HTML.
@@ -177,6 +178,21 @@ export class AssistantMarkdownPipe implements PipeTransform {
       AssistantMarkdownPipe.repairListMarkers(value));
   }
 
+  /**
+   * Lifts LaTeX formulas out before Markdown or the sanitiser can touch them.
+   *
+   * ★ FIRST, BEFORE THE UNICODE REPAIRS AND BEFORE `marked`. A block formula spans several lines, and
+   * `breaks: true` would put a `<br>` between them — splitting its delimiters across separate text
+   * nodes, where nothing can pair them up again. Markdown would also read `_` inside a formula as
+   * emphasis. What replaces each formula is a token of lowercase letters and digits, which survives
+   * both this parser and the sanitiser untouched; `AssistantMathDirective` renders it afterwards.
+   *
+   * See `assistant-math.ts` for why the maths cannot simply be rendered before the sanitiser instead.
+   */
+  private static protect(value: string): string {
+    return protectMath(value);
+  }
+
   /** Turns markup characters into the text a reader should see, rather than markup a browser runs. */
   private static escape(value: string): string {
     return value
@@ -197,7 +213,8 @@ export class AssistantMarkdownPipe implements PipeTransform {
     // `parse` is synchronous here because no async extension is registered; the cast documents that,
     // and a stray Promise would surface immediately as "[object Promise]" rather than silently.
     const html = this.marked.parse(
-      AssistantMarkdownPipe.repairModelMarkdown(value), { async: false }) as string;
+      AssistantMarkdownPipe.repairModelMarkdown(AssistantMarkdownPipe.protect(value)),
+      { async: false }) as string;
 
     const withSafeLinks = this.hardenLinks(
       AssistantMarkdownPipe.applyScrollbar(AssistantMarkdownPipe.renderTaskBoxes(html)),

@@ -27,6 +27,7 @@ import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.
 import { WsConfirmationModalComponent } from '../../../shared/ui';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
+import { AssistantMathDirective } from '../pipes/assistant-math.directive';
 
 /**
  * The assistant's slide-over panel: right side, opens and closes over the app.
@@ -53,6 +54,7 @@ import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
     WsConfirmationModalComponent,
     IconComponent,
     AssistantMarkdownPipe,
+    AssistantMathDirective,
   ],
   templateUrl: './assistant-panel.component.html',
   styleUrl: './assistant-panel.component.scss',

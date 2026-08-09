@@ -185,6 +185,7 @@
               -->
               <div
                 class="assistant-msg__markdown"
+                wsAssistantMath
                 (click)="onMarkdownClick($event)"
                 [innerHTML]="message.content | assistantMarkdown"
               ></div>
@@ -215,6 +216,7 @@
             <!-- Same interception while it streams: a link is clickable the moment it renders. -->
             <div
               class="assistant-msg__markdown"
+              wsAssistantMath
               (click)="onMarkdownClick($event)"
               [innerHTML]="store.streamingReply() | assistantMarkdown"
             ></div>

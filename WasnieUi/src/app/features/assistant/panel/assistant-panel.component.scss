@@ -304,6 +304,27 @@
     &:last-child { margin-bottom: 0; }
   }
 
+  // ── Rendered maths ────────────────────────────────────────────────────────
+  //
+  // ★ ONLY THE SPACING AND THE OVERFLOW LIVE HERE. Everything about how a formula is DRAWN — the
+  // fraction bars, the struts, the alignment — comes from KaTeX's own stylesheet, and restating any of
+  // it would be a second definition that drifts. What KaTeX has no opinion about is how a block formula
+  // sits inside a chat bubble, which is what these rules are.
+  .ws-math--block {
+    margin: var(--space-3) 0;
+    // A long formula must scroll inside its own bubble rather than widen it — the same rule the tables
+    // and code blocks in this panel already follow, wearing the same scrollbar.
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  // KaTeX's own error rendering: an unparseable formula shows as its source. It arrives with an inline
+  // colour of its own, which Angular's sanitiser is not involved in here — the node is built by KaTeX —
+  // but the design system's danger token is the colour this application uses for "this is wrong".
+  .katex-error {
+    color: var(--color-danger);
+  }
+
   h1, h2, h3, h4, h5, h6 {
     margin: var(--space-3) 0 var(--space-2);
     font-size: var(--font-size-14);
