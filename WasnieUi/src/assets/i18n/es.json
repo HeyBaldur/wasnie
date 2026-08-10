@@ -203,7 +203,18 @@
     "SUBSCRIPTION": "Suscripción",
     "INTEGRATIONS": "Integraciones",
     "IMPORT_TRANSACTIONS": "Importar transacciones",
+    "MANUAL": "Manual de usuario",
     "PROFILE": "Perfil"
+  },
+  "MANUAL": {
+    "TITLE": "Manual de usuario",
+    "ASIDE_TITLE": "¿Trabado con una regla compleja?",
+    "ASIDE_BODY": "El manual explica el motor en general y solo está disponible en inglés. El asistente responde sobre tus propios planes, con tus datos, en tu idioma.",
+    "ASK_ASSISTANT": "Preguntar al asistente",
+    "OPEN_FULL": "Abrir en una pestaña nueva",
+    "EMPTY_TITLE": "El manual todavía no está disponible",
+    "EMPTY_DESC": "Esta instalación aún no tiene publicado el manual de usuario. Cuando se agregue, aparecerá acá.",
+    "LOAD_ERROR": "No se pudo cargar el manual."
   },
   "CATEGORY_MAPPINGS": {
     "TITLE": "Categorías",

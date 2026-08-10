@@ -203,7 +203,18 @@
     "SUBSCRIPTION": "Subscription",
     "INTEGRATIONS": "Integrations",
     "IMPORT_TRANSACTIONS": "Import transactions",
+    "MANUAL": "User manual",
     "PROFILE": "Profile"
+  },
+  "MANUAL": {
+    "TITLE": "User manual",
+    "ASIDE_TITLE": "Stuck on a complex rule?",
+    "ASIDE_BODY": "The manual explains the engine in general, and it is only available in English. The assistant answers about your own plans, with your data, in your language.",
+    "ASK_ASSISTANT": "Ask the assistant",
+    "OPEN_FULL": "Open in a new tab",
+    "EMPTY_TITLE": "The manual is not available yet",
+    "EMPTY_DESC": "This installation does not have the user manual published yet. Once it is added, it will appear here.",
+    "LOAD_ERROR": "The manual could not be loaded."
   },
   "CATEGORY_MAPPINGS": {
     "TITLE": "Categories",

@@ -153,6 +153,17 @@ export const routes: Routes = [
       ),
   },
   {
+    // The user manual. NO hasPermissionGuard on purpose: the manual documents the product and holds no
+    // tenant data, so a valid session is the whole gate — hiding the instructions from the users with
+    // the fewest rights would be exactly backwards. The guards it DOES carry are the standard pair, so
+    // an unauthenticated visit lands on /auth/login like every other screen.
+    path: 'manual',
+    title: 'NAV.MANUAL',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/manual/manual.component').then((m) => m.ManualComponent),
+  },
+  {
     path: 'forbidden',
     title: 'ERRORS.FORBIDDEN_TITLE',
     canActivate: [planGuard, subscriptionGuard],

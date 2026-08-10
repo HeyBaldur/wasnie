@@ -4,6 +4,601 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-10 — ROLLBACK de PDF.js: vuelve el visor simple + nota de idioma
+
+**Decision de Rodolfo: se abandona el visor propio.** Yo lo construi con PDF.js y lo rompi dos veces —
+primero 2 de 44 paginas en blanco, despues paginas en blanco alternadas y contenido cortado. Cada arreglo
+compraba un modo de fallo nuevo. **El visor del navegador muestra el documento entero, a cualquier zoom,
+con texto seleccionable y Ctrl+F funcionando** — nada de eso lo tenia la version en canvas. Menos piezas
+moviles le gana a un visor que hay que seguir reparando.
+
+**Rollback completo, verificado por diff y no por memoria:**
+- `pdfjs-dist` desinstalado. **`package.json` y `package-lock.json` quedaron IDENTICOS a HEAD** (`git diff`
+  vacio), no "parecidos".
+- `angular.json` **identico a HEAD**: se quito el glob del worker.
+- Borrados `pdf-renderer.service.ts` y todo el codigo de canvas / IntersectionObserver / ResizeObserver /
+  sweep de scroll. **Cero coincidencias de `pdfjs` en `src/`** (la unica `IntersectionObserver` que queda es
+  la de `ws-load-more.directive.ts`, preexistente y ajena).
+- **Bundle: inicial de vuelta en 828,40 kB**, exactamente el valor previo a instalar la libreria, y **cero
+  archivos de pdf/worker en `dist/`**.
+
+**Lo que NO se toco, porque siempre estuvo bien:** `ManualController`, el blob autenticado, `/manual`, la
+ubicacion del PDF y su link desde `docs/`. La seguridad queda intacta.
+
+**El unico cambio respecto del visor original — los margenes grises.** Venian de apilar superficies:
+lienzo de la pagina, tarjeta, fondo propio del visor, papel. Se saco la `ws-card` de alrededor del
+documento y el `max-width`/`aspect-ratio` que habia agregado: el marco toma el ancho completo de la
+columna y lo unico que enmarca el papel es el visor mismo. **Limite honesto, dicho en el codigo:** el gris
+inmediato alrededor de la hoja lo pinta el visor del navegador POR DENTRO, que es otro documento y las
+hojas de estilo de la app no lo alcanzan; dandole ancho completo al marco no le queda lugar donde
+mostrarse salvo donde el visor lo dibuja. Si se quisiera cero gris, la unica palanca es `zoom=page-width`,
+que agranda la tipografia en monitores grandes y se habia rechazado explicitamente — **no lo puse por mi
+cuenta**.
+
+**Nota de idioma** en el subtitulo, EN/ES/PL: el manual por ahora solo esta en ingles y se invita a usar el
+asistente, que si responde en el idioma del usuario.
+
+**★ Un error propio del que conviene dejar registro:** para editar los i18n use `ConvertTo-Json`, que
+**reformateo los tres archivos enteros — 5.985 lineas de diff por 4 claves nuevas**. Se reconstruyeron
+desde `HEAD` reaplicando solo las inserciones, y ademas hubo que **sacar el BOM** que `Set-Content
+-Encoding UTF8` agrega en PowerShell 5.1 (un BOM puede romper el parseo del JSON en runtime). **Diff final:
+24 inserciones, cero borrados.** Regla para la proxima: los JSON de i18n se editan por texto, nunca
+serializandolos de nuevo.
+
+**★ AJUSTE POSTERIOR, EN LA MISMA SESION — el gris SI se puede reducir casi a cero, pero no con un
+porcentaje.** Rodolfo propuso `width: 62%` centrado. El mecanismo que intuia es correcto (el gris se pinta
+DENTRO del iframe, achicar el iframe deja menos superficie donde pintarlo), pero el porcentaje fijo no
+funciona, y el motivo es medible: **que se vea gris A LOS LADOS demuestra que el visor ajusta la hoja al
+ALTO del marco** — si ajustara al ancho no habria gris lateral. O sea que el ancho con el que se dibuja el
+papel **depende del ALTO del iframe, no de su ancho**: `ancho_hoja = alto / 1,4142` en A4. Con la altura de
+esta pantalla, en 1080p la hoja se dibuja a ~522 px mientras que el 62% de la columna son ~863 px:
+**quedarian ~341 px de gris igual**, y solo acertaria en una altura de ventana concreta.
+
+**El arreglo:** `aspect-ratio: 1 / 1.4142` sobre el marco con `width: auto` y `margin-inline: auto`, asi el
+ancho se recalcula solo en cada pantalla y el visor se queda sin lugar donde pintar el gris. **No agranda
+la tipografia:** el papel se sigue dibujando del mismo tamano que antes, porque lo gobierna el alto, que no
+cambio — lo unico que cambia es que el marco deja de sobrar a los costados. Sigue sin usarse
+`zoom=page-width`, que si agrandaria las letras en un monitor grande.
+
+**Queda una decision de Rodolfo, NO tomada por mi cuenta:** con el marco angosto y centrado, el encabezado
+de la pagina sigue alineado a la izquierda de una columna `wide`, asi que puede leerse despegado de la
+hoja. Pasar la columna a `narrow` los junta, pero es un cambio de layout que nadie pidio.
+
+**★ SEGUNDO AJUSTE — dos columnas, y el PDF vuelve a leerse.** Con el `aspect-ratio` anterior el gris se
+iba pero la hoja quedaba CHICA: al ajustar la pagina al alto del marco, y estando el alto limitado por la
+pantalla, el papel terminaba en ~522 px. Rodolfo pidio partir el contenedor de `/manual` en dos columnas
+con un panel al lado.
+
+**Y esa division es lo que permite el arreglo del tamano.** Con el documento en una columna de ancho
+ACOTADO ya se puede usar `view=FitH` (ajustar al ancho) sin el riesgo que lo hizo prohibido antes: a lo
+ancho de una columna completa agrandaria la tipografia en un monitor grande, pero dentro de esta columna da
+una pagina **bastante mas grande que el fit-to-page anterior**, y de paso al visor no le queda lugar para
+pintar gris a los costados. El tope de la columna es lo que impide que la letra crezca de mas.
+
+**El panel (320 px fijos, se va debajo por abajo de 1100 px — en pantalla angosta el manual es todo el
+punto de la pantalla):** ilustracion SVG inline con tokens (nada de un asset nuevo, y sigue los 3 temas),
+titulo, descripcion, tres datos y un boton.
+
+**★ Todo lo que dice el panel es medido o verificable, y ahi esta la contencion:** el tamano del archivo se
+**mide del blob** que ya tenemos; acceso e idioma son hechos de como se sirve. **NO hay resumen del
+CONTENIDO del manual ni conteo de paginas** — nadie aca lo leyo, y sin PDF.js no hay forma de contar
+paginas, asi que inventar capitulos o un numero seria exactamente el unico tipo de error que este panel
+podria cometer.
+
+**El boton "Abrir en una pestana nueva" es la respuesta directa a "se ve chico":** entrega el MISMO blob
+que ya esta en memoria, asi que no se hace ninguna peticion nueva, el manual no gana ninguna URL publica, y
+el lector se queda con la ventana entera y el zoom del navegador.
+
+**Tests:** dos nuevos, de comportamiento y no de estilo — el tamano informado se mide del blob (1,5 MB
+para un blob de 1536 KB) y "abrir en pestana nueva" usa el mismo object URL **sin** volver a pedir el
+archivo. Visor **5 -> 7 specs**. Front **794 verdes de 797**; los 3 rojos siguen siendo los de KaTeX
+(preexistentes y, como ya se anoto, intermitentes: en una corrida aparecio un cuarto que no reaparecio).
+i18n EN/ES/PL completo, insertado **por texto** — 48 inserciones, cero borrados. `ng build --configuration
+production` **exit 0**.
+
+**★ TERCER AJUSTE — sin encabezado, y la tarjeta pasa a pagar alquiler.**
+
+**(a) Se fueron el titulo y el subtitulo de `/manual`.** No se logro vaciando `ws-page-layout`: esa
+primitiva dibuja SIEMPRE su bloque de titulo, asi que una pantalla sin encabezado no es esa primitiva con
+inputs vacios, es otro contenedor — se reemplazo por uno propio. La pantalla ahora **manda la altura**
+(`height: 100%` sobre el area de contenido del shell, que ya tiene altura definida), con `min-height: 0`
+en la pantalla y en la grilla: sin eso un hijo flex se niega a achicarse por debajo de su contenido y
+devuelve el desbordamiento a la pagina — **exactamente el bug que una vez escondio el boton Save del
+modal**. Resultado: la unica barra de scroll de la pantalla es la del documento, y el marco mas alto
+ademas dibuja una pagina mas grande.
+
+**(b) La tarjeta deja de ser metadatos.** Rodolfo lo planteo bien: cada pixel paga alquiler, y una lista
+de "acceso / idioma / tamano de archivo" era un basurero de metadatos. Se evaluaron sus tres propuestas y
+**gano el gancho al asistente**, por una razon medible ademas de conceptual:
+- **Quick Links quedo BLOQUEADO por falta de datos, no por diseno** — y es importante decirlo porque era la
+  mejor idea para RevOps. Un link a una seccion de un PDF necesita `#page=N`, **numero de PAGINA**, y no
+  hay forma de leer el PDF hoy (falta `pdftoppm`/poppler y pdfjs se desinstalo en el rollback). Ademas se
+  verifico que las secciones citadas (5 Rate tables, 6 aceleradores, 4 Plan and Rules) **son las de
+  `docs/Wasnie_Configuration_Guide.md`, no una estructura confirmada del PDF**. Con un mapeo
+  seccion->pagina se construye en minutos: Chrome si honra `#page=N`.
+- **Edition/gobernanza tambien quedo fuera por lo mismo:** no se sabe la edicion real del documento, y
+  ponerle "2026" a una politica vigente sin verificarlo es justo la clase de dato que una auditoria no
+  perdona.
+- **El gancho al asistente si se puede construir entero y verificable hoy**, y es lo que mas rinde: el
+  manual es estatico, general y **solo en ingles**; el asistente responde sobre los planes de ESE tenant,
+  con sus datos, en el idioma del lector. Poner la entrega justo donde alguien no encuentra la respuesta es
+  el momento en que mas vale.
+
+`AssistantStore` es root-provided, asi que el boton abre el mismo panel que vive en el shell.
+**Gateado por `entitled() === true`, igual que el trigger del topbar: se OCULTA, no se deshabilita**
+(Spec 5b.6) — un usuario sin asiento nunca ve un boton que daria 403. "Abrir en pestana nueva" queda como
+accion secundaria. La nota de idioma, que antes vivia en el subtitulo eliminado, **se conserva dentro del
+cuerpo de la tarjeta**, asi que no se perdio al sacar el encabezado.
+
+**Tests:** el spec nuevo cubre las dos mitades de la regla RBAC — sin entitlement **no existe** el boton en
+el DOM, con entitlement aparece y `askAssistant()` abre el panel. Visor **7 specs**; front **794 verdes de
+797**. i18n EN/ES/PL reemplazado **por texto** (bloque `MANUAL` completo): 33 inserciones, cero
+reformateos. `ng build --configuration production` **exit 0**.
+
+**★ CUARTO AJUSTE — foto en la tarjeta, y el fondo blanco (con su limite dicho).**
+
+**(a) La imagen.** Rodolfo paso una URL de Unsplash. **Se descargo y se sirve desde nuestro propio origen**
+(`WasnieUi/public/manual-cover.jpg`) en vez de enlazar el CDN: un `<img>` remoto haria que el navegador de
+CADA lector le pegue a `images.unsplash.com` en cada visita, entregandole su IP y su referrer a un tercero
+— el mismo criterio por el que KaTeX viene de npm y por el que el worker de PDF.js se empaquetaba en vez
+de bajarse. Ya hay precedente en el repo: `hubspot.png`, `brain.gif`, `eu.png` viven en `public/`.
+**Se bajo la variante `w=640` y no la `w=1228` que traia la URL: 47 KB contra 109 KB.** El slot mide
+~288 px, asi que 640 es 2x para pantallas retina y pesa menos de la mitad; servir 1228 px para ese hueco
+era tirar bytes. Licencia: Unsplash License (uso comercial libre, sin permiso, atribucion apreciada pero
+no requerida), anotada en el HTML junto al id de la foto. Va a sangre en el tope de la tarjeta —`ws-card`
+ya recorta con su propio radius— y `alt` vacio porque es decorativa: no dice nada que el titulo de al lado
+no diga. La foto (un teclado con una tecla **AI** encendida) coincide con lo que la tarjeta hace ahora, que
+es entregar al asistente.
+
+**(b) El fondo blanco, y la tercera vez que aparecen los grises.** Se pinto `--manual-paper: #ffffff`
+sobre el marco y su contenedor, blanco en los 3 temas. Es un literal **declarado a proposito**: ningun
+token sirve porque todos los de superficie estan TEMATIZADOS —se oscurecen con el tema, correcto para las
+superficies de Wasnie y falso para un documento— y agregar `--color-paper` es decision del design system
+(DESIGN_SYSTEM §10.3).
+
+**★ Y hay que ser claro con lo que ESTO alcanza:** pinta lo que es NUESTRO —la superficie del marco, que
+se ve antes de que el documento renderice y donde el visor embebido deje transparencia—. **NO puede
+repintar el gris que el visor de PDF del navegador dibuja adentro suyo** (la estera alrededor y entre
+paginas): es otro documento y ninguna hoja de estilo nuestra lo cruza. Con la columna acotada y la pagina
+ajustada a su ancho a ese gris casi no le queda donde aparecer; si sobrevive una banda entre paginas, esta
+es la razon y **CSS no es la palanca**.
+
+**Verificado:** la imagen llega al build (`dist/wasnie-ui/browser/manual-cover.jpg`, 47.609 bytes) y el dev
+server ya la sirve (**200, `image/jpeg`, 47.609 bytes**). Front **794 verdes de 797**, `ng build
+--configuration production` **exit 0**.
+
+**Tests:** los 5 specs del visor vuelven a los del mecanismo original (pasa por el servicio, 404 != error,
+error con reintento, revoke al destruir y antes de recargar). Front **792 verdes de 795**; los 3 rojos son
+los de KaTeX, preexistentes. `ng build --configuration production` **exit 0**.
+
+**PENDIENTE de Rodolfo (navegador):** abrir `/manual` y confirmar el PDF completo sin cortes ni blancos,
+sin margenes grises a los lados, y la nota de idioma en el subtitulo. La API no quedo corriendo: este WI no
+toco backend.
+
+## 2026-08-10 — El visor del manual renderizaba 2 de 44 paginas: render lazy por viewport
+
+**El defecto era mio, del WI anterior, y tenia DOS causas — las dos de diseno, no de PDF.js.** El bucle
+rasterizaba las 44 paginas de golpe y hacia dos cosas mal a la vez:
+
+1. **`catch { }` VACIO.** Cada fallo por pagina se tragaba sin decir nada. Por eso el bug no dejo ni un
+   mensaje en consola: **el sintoma no tenia evidencia porque yo la habia suprimido.** Es la peor parte de
+   todo esto, mas que las paginas en blanco.
+2. **Un `return` que abandonaba TODO EL RESTO del documento.** Ante cualquier interrupcion (un re-render
+   pedido en vuelo) el bucle salia y las paginas siguientes quedaban como canvas sin dimensiones. Una sola
+   interrupcion despues de la pagina 2 explica exactamente lo observado: 1 y 2 con 710x918, de la 3 a la 44
+   vacias.
+
+Y un tercer detalle que lo hacia probable: el umbral de re-render era de **8 px**, mas chico que una barra
+de scroll (~15 px). Aparecer la barra cambia el ancho disponible lo suficiente como para pedir otro
+re-render — "dibujo, aparece la barra, cambio el ancho, vuelvo a dibujar" persiguiendose la cola.
+
+**El arreglo — lazy por viewport, que ademas elimina la CLASE de fallo:**
+- **Cada slot reserva su tamano real ANTES de dibujar.** `aspectRatios()` pide a PDF.js solo el viewport de
+  cada pagina (metadata, cero rasterizado), asi que las 44 cajas quedan con su alto verdadero desde el
+  arranque y **el scroll no salta** mientras se van pintando.
+- **`IntersectionObserver` sobre el contenedor de scroll**, con `rootMargin: 150%` de buffer: una pagina se
+  rasteriza cuando se esta acercando, no cuando ya se la esta mirando.
+- **Una pagina no puede afectar a otra.** Cada `paint()` es independiente: se reclama antes del await (dos
+  callbacks en el mismo tick no la arrancan dos veces), y si falla se **loguea**, se marca el slot
+  (`data-failed`) y se libera para reintentar al volver a pasar. **Ningun `catch` vacio.**
+- Umbral de reflow a **32 px**, comodamente mayor que una barra de scroll; y `ResizeObserver` sobre el
+  contenedor en vez de `resize` de window — lo que importa es el ancho que reciben las paginas, que cambia
+  cuando se colapsa el sidebar sin que la ventana se mueva.
+- No se recicla lo ya pintado: para 44 paginas mantenerlas es correcto y reciclarlas seria over-engineering,
+  como pedia el WI.
+
+**★ Verificacion en motor de navegador real** (arnes temporal en Chrome Headless, borrado despues) — no es
+una captura, pero es medicion y no opinion:
+- **44 slots, `scrollHeight` = 26.528 px con `clientHeight` = 351**: las 44 reservaron su alto ANTES de
+  rasterizarse. Ahi se ve que el scroll ya esta completo de entrada.
+- **Cerca del tope se pintan solo las paginas 1 y 2** — las mismas dos del bug, pero ahora eso es el estado
+  CORRECTO y no el final.
+- **Tras hacer scroll al final: 1, 2, 43, 44 — la ultima pagina pintada es la 44 de 44.** Es exactamente lo
+  que antes quedaba en blanco para siempre.
+
+**Tests:** 8 specs del visor (5 -> 8), y los nuevos apuntan a las dos propiedades cuya ausencia causo el
+defecto: **cada pagina recibe un slot dimensionado** (el alto sale de la proporcion real del documento, no
+de un supuesto) y **una pagina que falla no toca a las demas** (la 4 dibuja aunque la 3 reviente, la 3 queda
+marcada y el error SE REPORTA). Mas: no se dibuja dos veces, y el documento se libera al destruir. Front
+**795 verdes de 798**; los 3 rojos son los de KaTeX, preexistentes — con la observacion honesta de que ese
+archivo es **flaky**: en una corrida aparecio un cuarto rojo (la formula INLINE) que no reaparecio en las
+tres siguientes. `ng build --configuration production` **exit 0**; inicial **828,93 kB** sin cambios y
+pdfjs sigue confinado al chunk lazy `manual-component` (438,74 kB / 109,66 kB transferidos).
+
+**PENDIENTE de Rodolfo (navegador):** capturas de paginas del medio y del final con el PDF real de 44
+paginas. Lo medido arriba prueba que el mecanismo dispara y que la 44 se pinta; lo que no puedo ver sin ojos
+es el contenido dibujado.
+
+## 2026-08-10 — El manual se dibuja con PDF.js: visor propio, no el del navegador
+
+**El problema:** el `<iframe>` sobre el blob entregaba la aplicacion de PDF DEL NAVEGADOR — pagina chica
+perdida en un campo gris, scroll despegado del documento, cero control de escala. En monitores grandes era
+casi ilegible. **El problema era el RENDERER, no el contenedor:** ningun CSS alrededor de un visor ajeno
+cambia lo que ese visor dibuja adentro.
+
+**PASO 0:** Angular **20.3** con el builder `@angular/build:application`; `pdfjs-dist` **no estaba**
+instalado; `katex` sienta el precedente de "libreria desde npm, nunca CDN". Instalado **pdfjs-dist 6.2.108**,
+que tiene **cero dependencias** (los numeros de `npm audit` son el estado preexistente del arbol, no algo
+que trajo esta libreria).
+
+**Lo que se uso — y lo que NO.** Solo el nucleo de render: `getDocument` y `page.render`. **Nada de la
+interfaz de PDF.js**: ni su toolbar, ni su sidebar, ni su barra de busqueda, ni sus grises. Embeber eso
+seria meter el chrome de otro producto adentro de Wasnie, que es justo el look que esta pantalla existe
+para evitar. El papel, su sombra, la separacion entre paginas, el texto de carga y el estado vacio son de
+Wasnie, con tokens de Wasnie, siguiendo los 3 temas.
+
+**★ El worker es LOCAL, no un CDN.** PDF.js parsea en un worker y por defecto lo baja de una URL publica.
+El manual se sirve detras del login precisamente para que no viaje a un tercero; traer de otro servidor el
+codigo que lo lee desharia eso en silencio. El worker se copia de `node_modules` en el build
+(`angular.json` -> `assets/pdfjs/pdf.worker.min.mjs`) y se sirve desde este origen. Misma regla que KaTeX.
+
+**★ La seguridad no se toco.** Los bytes siguen llegando como blob autenticado por `ManualApiService`, y a
+PDF.js se le pasan **esos BYTES, nunca una URL**. Hay un test que lo fija (`args[0] instanceof
+ArrayBuffer`): si alguien algun dia le pasa una URL, se pone rojo.
+
+**★ Y NO hay "fit to width".** El ancho de pagina es una MEDIDA DE LECTURA fija (tope 880 px), asi que un
+monitor mas ancho da mas margen alrededor — nunca letra mas grande. El canvas se dimensiona en pixeles de
+DISPOSITIVO y se muestra en pixeles CSS (dpr acotado a 2): sin eso la pagina se dibuja a un tercio de la
+densidad real de la pantalla, que es el look "fotocopia borrosa".
+
+**★ BUG REAL ENCONTRADO Y ARREGLADO EN EL CAMINO.** La primera version hacia `await Promise.resolve()`
+antes de dibujar, confiando en que Angular ya hubiera creado los `<canvas>` del `@for`. **A veces
+funcionaba.** Cuando no, el render no encontraba canvases, no se quejaba, y el manual salia **en blanco sin
+un solo error**. Lo destapo el test (`renderPage` llamado 0 veces) y se arreglo con `afterNextRender`, que
+corre cuando el DOM existe de verdad en vez de adivinar el timing.
+
+**Dos cosas marcadas para decision de Rodolfo, no resueltas por mi cuenta:**
+1. **El texto ya no se puede seleccionar ni buscar con Ctrl+F.** Es el costo real de dibujar a canvas, y el
+   embed nativo si lo permitia. Recuperarlo es agregar la capa de texto de PDF.js — un WI aparte, porque
+   arrastra la hoja de estilos de la libreria, que es lo que esta pantalla busca mantener afuera.
+2. **Un literal declarado: `--manual-paper: #ffffff`.** Una pagina PDF se dibuja sobre TRANSPARENCIA, asi
+   que sin una hoja opaca el lienzo oscuro se filtra por los margenes en los dos temas oscuros y el manual
+   se ve roto. **Ningun token sirve, y eso es el punto:** todos los tokens de superficie estan TEMATIZADOS
+   — se oscurecen con el tema, que es correcto para las superficies de Wasnie y falso para el papel. Esto
+   no es una superficie de la app, es el material del documento, y es blanco en los 3 temas por la misma
+   razon por la que es blanco impreso. Agregar un `--color-paper` es decision del design system
+   (DESIGN_SYSTEM §10.3), no algo para improvisar; queda acotado al componente y con nombre para poder
+   encontrarlo.
+
+Tambien, juicio a la vista: **el documento NO va dentro de una `ws-card`**. Una tarjeta ahi seria una
+superficie detras del papel — caja dentro de caja otra vez. Cada PAGINA es su propia superficie (hoja
+blanca con la elevacion y el radius de la tarjeta) sobre el lienzo de la app, y el scroll pertenece a la
+columna, asi que corre contra el documento. Los estados de carga, vacio y error si siguen dentro de
+`ws-card`.
+
+**★ Presupuesto de bundle — lo que mas riesgo tenia y salio bien:** `/manual` es lazy, asi que **pdfjs cayo
+entero en el chunk `manual-component` (436,92 kB / 109 kB transferidos)** y el **inicial quedo en 828,93 kB
+contra 828,40 kB de antes: +0,5 kB**. El warning de presupuesto inicial es el preexistente de KaTeX, no de
+esto.
+
+**Tests:** 5 specs del visor **reescritos al mecanismo nuevo** (el objeto URL ya no existe): pasa por el
+servicio, PDF.js recibe bytes, 404 != error, PDF corrupto -> error con reintento, y el documento se
+**libera** al destruir (PDF.js deja un worker vivo: una referencia soltada es un hilo perdido por visita).
+Front **795 (792 verdes)**; los 3 rojos son los de KaTeX, preexistentes. `ng build --configuration
+production` **exit 0**.
+
+**Detalle operativo:** `ng serve` lee los globs de assets **al arrancar**, asi que el dev server que estaba
+corriendo devuelve 404 en `assets/pdfjs/pdf.worker.min.mjs` — **hay que reiniciarlo**. En el build de
+produccion el worker esta copiado y verificado.
+
+**PENDIENTE de Rodolfo (navegador):** la captura en pantalla ancha — tamano legible, centrado, multipagina
+con scroll propio, fondo integrado y hoja con sombra.
+
+## 2026-08-10 — El visor del manual deja de ser una caja dentro de otra
+
+**El problema:** el marco ocupaba el 100% del ancho de la columna, pero una pagina impresa tiene
+proporcion FIJA. Lo que sobra no lo puede llenar el documento, asi que lo pinta el visor del navegador con
+su gris — que no es ni el lienzo de la app ni el papel. El ojo lee una tercera caja entre los dos, con la
+barra de scroll varada en su borde derecho.
+
+**PASO 0 — tokens confirmados, no supuestos:** `--shadow-card` **sigue sin existir** en el proyecto (la
+`ws-card` usa `--shadow-md`, y las sombras SI estan tematizadas por los 3 temas). Tampoco existe
+`--color-bg-page` que menciona CLAUDE.md §5.3: el lienzo real de la app es `--color-base`
+(`app-shell.component.scss`). No hay token de "medida" de ancho: `ws-page-layout` fija sus columnas con px
+crudos (800/1200/1440), asi que un px crudo para el ancho del documento sigue el precedente y no inventa
+nada.
+
+**Los tres cambios:**
+1. **Ancho maximo + centrado.** `.manual__sheet` con `max-width: 850px; margin-inline: auto`. 850 es un
+   TECHO, no el ancho: A4 al 100% son ~794 px CSS, y esto deja lugar para la pagina mas la barra del visor
+   sin crecer hacia lienzo vacio en un monitor ancho. La `ws-card` sigue aportando radius, borde y sombra
+   — no se duplico ninguno de los tres.
+2. **Fondo integrado.** El fondo del marco pasa de `--color-bg-surface-sunken` (un pozo oscuro dentro de
+   una tarjeta clara) a `--color-base`, el lienzo de la app, por variable y no por hex, asi que sigue al
+   tema activo.
+3. **★ El contenedor toma la forma del papel; el papel NUNCA se estira al contenedor.** `aspect-ratio:
+   1 / 1.4142` sobre el marco, con la altura mandando y el ancho derivado. Al zoom por defecto del visor
+   la pagina entra completa, o sea que su ancho renderizado depende de la ALTURA del marco — dandole al
+   marco la proporcion del papel, la pagina lo llena y el gris no tiene donde aparecer.
+
+**★ Lo que NO se hizo, y quedo escrito en el codigo para que nadie lo "arregle" despues:** no se agrego
+`zoom=page-width` al fragmento de la URL. Cerraria el hueco de un plumazo y dejaria la tipografia enorme e
+ilegible en un monitor grande. Hay un comentario en el `.ts` y otro en el `.scss` diciendo exactamente eso.
+
+**Un dato que conviene tener claro:** el TAMANO con el que se dibuja la pagina no cambio. Ya estaba
+gobernado por la altura del marco (`min(78vh, …)`), y sigue igual — lo unico que cambio es que el marco
+ahora TERMINA donde termina la pagina. El tope de altura subio de 900 a 1000 px, que en pantallas altas da
+un poco mas de documento.
+
+Ademas la pagina pasa de `maxWidth="wide"` (1440) a `"narrow"` (800): una columna de dashboard alrededor de
+un documento solo agrega lienzo vacio y deja el encabezado varado lejos de la hoja que titula.
+
+**Supuesto declarado:** A4 vertical (1:√2). Un manual en US Letter es ~9% mas ancho de proporcion, asi que
+dejaria una banda fina arriba y abajo en vez de uno ancha a los costados — el modo de fallo es chico en
+ambos casos.
+
+**★ CORRECCION EN LA MISMA SESION — el manual se LINKEA desde `docs/`, ya no hay carpeta de drop.**
+Mientras se hacia este WI, Rodolfo renombro `docs\Wasnie_User_Handbook.pdf` a
+`docs\Wasnie_User_Manual.pdf` — mismo archivo, 692.101 bytes, y **ya estaba commiteado en el repo desde
+`b3bdc0f`**. Eso tira abajo la premisa del WI anterior ("el PDF real no va al repo si es grande o
+propietario"): son 676 KB y hace rato que estan versionados. Con el archivo EN el repo, el mecanismo
+correcto es el que la guia del asistente ya usaba — **linkearlo**, no copiarlo:
+
+- `Wasnie.Api.csproj` ahora linkea `..\..\..\docs\Wasnie_User_Manual.pdf` como
+  `Knowledge\Wasnie_User_Manual.pdf` en el output, igual que `Wasnie_Configuration_Guide.md` en
+  `Wasnie.Infrastructure.csproj`. Una sola copia: actualizar el manual es reemplazar ESE documento.
+- Se eliminaron la carpeta `WasnieApi\src\Wasnie.Api\Knowledge\` con su README y la regla de `.gitignore`
+  — describian un mecanismo que ya no existe, y andamio que contradice la realidad es peor que nada.
+- El comodin volvio a ser un include LITERAL, que aca es seguro **solo porque el archivo esta en el
+  repo**. Queda anotado en el `.csproj` y en `UserManualOptions`: si el manual algun dia sale del
+  repositorio, hay que volver al comodin sobre una carpeta gitignoreada, porque un include literal de un
+  archivo ausente rompe el build de todos.
+- Los `_comment` de `appsettings.json` y del template de Development se actualizaron al mecanismo nuevo.
+
+**★ Verificado contra la instancia de Rodolfo, que ya estaba corriendo:** `dotnet build` copio el PDF al
+output y **la API sirvio el manual REAL sin reiniciarse** — estado `available:true`, **200,
+`application/pdf`, 692.101 bytes, identicos al de `docs\`**, y anonimo sigue en **401 con 0 bytes**. Es la
+confirmacion en vivo de la cache de un solo lado: recuerda el acierto, nunca el fallo, asi que un manual
+que aparece se toma solo. (El `dotnet build` dio exit 1 por **bloqueo de DLL de esa misma instancia**, no
+por codigo; la copia del contenido ya habia ocurrido.)
+
+**Tests:** ninguno nuevo (SCSS/visual, politica de Rodolfo). Los 5 specs del visor **siguen verdes** — el
+`div` envolvente no rompio ninguno. Front **795 (792 verdes)**, `ng build --configuration production`
+limpio. Preexistentes y ajenos: los 3 rojos de `assistant-math.spec.ts` y el warning de bundle (KaTeX).
+
+**PENDIENTE de Rodolfo (navegador):** la captura en desktop ancho. Lo unico que no se puede medir sin ojos
+es el modo de zoom con el que el navegador abre ESE PDF: si abre en "ajustar a la pagina" el gris
+desaparece del todo; si abriera en otro modo, quedaria una banda y habria que ajustar la altura.
+
+## 2026-08-10 — El manual PDF sale de bin/: ubicacion estable en el SOURCE (y donde ponerlo)
+
+> **SUPERSEDIDO EN PARTE, EL MISMO DIA:** la carpeta de drop y la regla de .gitignore que describe esta entrada YA NO EXISTEN. El PDF resulto estar commiteado en docs/ desde 3bdc0f, asi que se linkea desde ahi. Lo que SIGUE valido: nunca en in/, y en produccion FilePath a una carpeta estable. Ver la entrada de mas arriba.
+
+**El problema:** el placeholder habia quedado en `bin/Debug/net8.0/Knowledge/`. `bin/` es **output del
+build**: se regenera, y `dotnet clean` lo borra. Un manual puesto ahi funciona hasta el dia en que
+silenciosamente deja de hacerlo, y nadie conecta su desaparicion con el clean que la causo.
+
+**PASO 0 — como leia la ruta:** no habia seccion `UserManual` en NINGUN appsettings, asi que `FilePath`
+estaba vacio y caia al default `Knowledge/Wasnie_User_Manual.pdf` **relativo a `AppContext.BaseDirectory`**
+— es decir, exactamente dentro de `bin/`. Confirmado leyendo `UserManualOptions` + `FileUserManualSource`.
+
+**El fix (dev):** carpeta nueva en el SOURCE, `WasnieApi/src/Wasnie.Api/Knowledge/`, y en el `.csproj`:
+`<Content Include="Knowledge\*.pdf" CopyToOutputDirectory="PreserveNewest" />`. Rodolfo pone el PDF UNA
+vez ahi y cada build lo lleva al output donde la API lo busca.
+
+**★ EL COMODIN ES EL TRUCO, no un detalle de estilo.** Un `<Content Include>` literal
+(`Knowledge\Wasnie_User_Manual.pdf`) **rompe el build de todo desarrollador que no tenga el archivo** — y
+no lo tiene ninguno, porque el PDF esta gitignoreado. Un comodin que no matchea nada es una lista de items
+vacia: el proyecto compila, la API arranca, y `/manual` dice "todavia no publicado", que es un estado que
+la pantalla ya maneja con honestidad. **Probado en runtime moviendo el PDF fuera: build con 0 errores,
+exit 0.**
+
+**El fix (prod):** el manual NO vive junto al binario. Una carpeta de deploy se reemplaza en cada release,
+y un manual adentro lo borraria un redeploy que nadie asociaria con haberlo perdido. Ahi se apunta
+`UserManual:FilePath` (o `UserManual__FilePath` como variable de entorno) a una **carpeta de datos estable
+fuera del directorio de deploy**. Absoluta se usa tal cual; relativa resuelve contra el base directory.
+Marcador puesto en `appsettings.Production.json` (que esta gitignoreado, asi que ademas quedo documentado
+en el README y en `appsettings.json` base, que si se commitea).
+
+**★ NO se uso R2/Cloudflare, a proposito.** Unos MB copiados al output no justifican separar el artefacto
+del deploy ni sumar un servicio; esa complejidad se paga con archivos grandes o con un ciclo de
+publicacion independiente, y no es el caso.
+
+**Lo que quedo escrito para que no haya que adivinar:**
+- `WasnieApi/src/Wasnie.Api/Knowledge/README.md` — que archivo va, con que nombre, por que no en `bin/`,
+  como se configura prod, y que reemplazar el PDF en un server corriendo requiere reinicio (la cache
+  recuerda el acierto) mientras que un manual **ausente que aparece** se toma sin reiniciar.
+- `.gitignore`: `WasnieApi/src/Wasnie.Api/Knowledge/*.pdf` — **la carpeta se trackea (el README), el PDF
+  no**. Verificado: `git status --untracked-files=all` sobre esa carpeta lista SOLO el README.
+- `appsettings.json` (commiteado), `appsettings.Development.template.json` y `appsettings.Production.json`
+  ganan la seccion `UserManual` con `_comment` explicativo — el patron `_comment` ya existia en el
+  template para Groq.
+- Se corrigio el comentario de `UserManualOptions`, que decia que un `Content Include` de un archivo
+  ausente rompe el build **y por eso** la ubicacion era configuracion. Con comodin eso ya no aplica, y
+  dejar la justificacion vieja habria sido una razon falsa defendiendo una decision correcta.
+
+**★ Verificacion runtime (los cuatro hechos, medidos):**
+1. PDF de prueba en el SOURCE -> `dotnet build` -> **aparece en el output** (700 bytes, timestamp nuevo).
+2. Servido: con token -> **200, `application/pdf`, 700 bytes, `%PDF-1.4`**; `status` -> `{"available":true}`.
+3. **Sin sesion sigue siendo 401 con 0 bytes** en ambos endpoints — la barrera no se toco.
+4. `dotnet clean` -> **la copia del output desaparece, la del SOURCE sobrevive**; `dotnet build` la
+   restaura. Que es exactamente el problema que este WI arregla, demostrado en vez de afirmado.
+
+**Limpieza:** el placeholder de 700 bytes se borro de las DOS ubicaciones (source y output). Un PDF falso
+que se sirve con exito es peor que el estado vacio honesto: parece que el manual esta publicado.
+
+**Tests:** backend unit **1358 -> 1358**, 0 rojos (no habia que agregar: el cambio es `.csproj`,
+`.gitignore` y JSON de configuracion). `dotnet build` de la solucion limpio.
+
+**★ LA LINEA PARA RODOLFO:** copiar el manual a
+`WasnieApi/src/Wasnie.Api/Knowledge/Wasnie_User_Manual.pdf` y compilar — nada mas. En prod, dejarlo en una
+carpeta de datos estable y apuntar `UserManual__FilePath` a su ruta absoluta.
+
+## 2026-08-10 — Manual de usuario en PDF, servido detras del login (y el link del asistente, resuelto)
+
+**La honestidad tecnica primero, porque define el diseno.** Un PDF que el navegador dibuja es un PDF que
+el navegador puede guardar. No hay visor, cabecera ni boton escondido que lo cambie, y **nada en el
+codigo ni en la UI promete lo contrario**. Lo que SI se garantiza es lo unico garantizable: los bytes
+viven en UNA direccion, esa direccion exige un token valido de Wasnie, y **no existe ninguna URL publica**
+que se pueda reenviar, indexar o filtrar. Quien tiene el archivo tuvo antes una sesion.
+
+**PASO 0 — patrones confirmados antes de escribir nada:**
+- Guards: `planGuard` + `subscriptionGuard` es el par estandar de toda ruta autenticada (`app.routes.ts`);
+  `planGuard` ya cubre no-autenticado -> `/auth/login`.
+- Servir bytes: `File(export.Bytes, ...)` en Credits/Payouts/PayRuns/Transactions.
+- **★ EL HECHO QUE DECIDE EL VISOR:** el token es un JWT en `localStorage` que un interceptor pone como
+  **cabecera**. El navegador NO corre interceptores para `iframe`/`embed`/`object`, asi que un
+  `<iframe src="/api/manual/pdf">` llegaria SIN token y el endpoint lo rechazaria — con razon. Por eso el
+  visor baja el PDF como **blob** por `HttpClient` (mismo patron que el export de payouts) y lo muestra
+  con un object URL. No es estilo: es la unica forma de que el documento este de verdad detras del login.
+
+**Decisiones de Rodolfo (preguntadas, no asumidas):** (1) **proxy autenticado en la API**, no signed URL
+de Cloudflare — una URL firmada, aunque dure 5 minutos, ES un link que funciona fuera de la app; (2) el
+PDF **todavia no existe** -> stub honesto; (3) **cualquier sesion valida + item en el sidebar**, sin
+permiso RBAC.
+
+**Backend:**
+- `IUserManualSource` (Application) + `FileUserManualSource` (Infrastructure) + `UserManualOptions`
+  (`UserManual:FilePath`, default `Knowledge/Wasnie_User_Manual.pdf` al lado del binario). **No se
+  "linkea" desde `docs/` como la guia del asistente**: ese archivo esta en el repo, este no, y un
+  `Content Include` de un archivo ausente rompe el build de todos.
+- **★ LA CACHE ES DE UN SOLO LADO, y es la decision que mas importa aca:** se cachea el ACIERTO, NO el
+  fallo. Si se cacheara el fallo, el operador copia el PDF al servidor, recarga, sigue viendo "no
+  disponible" y concluye razonablemente que la funcion esta rota. Hay test.
+- Archivo de 0 bytes = copia fallida, se trata como "no instalado" (si no, el visor sale en blanco y se
+  lee como "el manual esta vacio").
+- `ManualController`: `[Authorize]`, `GET /api/manual/status` (barato, para el estado vacio sin bajar
+  megas) y `GET /api/manual/pdf`. **Sin permiso RBAC a proposito:** el manual documenta el producto, no
+  tiene datos del tenant, y esconderlo detras de un permiso se lo ocultaria justo a quien menos derechos
+  tiene, que es quien mas lo necesita. **Inline, no attachment** (sin `fileName` en `File(...)`) — eso es
+  presentacion para que el visor lo dibuje, NO una barrera, y esta dicho asi en el codigo.
+
+**Front:** `/manual` (`planGuard` + `subscriptionGuard`, sin `hasPermissionGuard`), `ManualApiService`,
+`ManualComponent` con 4 estados — cargando / visor / **404 = "todavia no publicado"** (estado vacio
+calmo) / error con reintento. **404 y fallo son estados DISTINTOS**: una instalacion sin PDF es esperada,
+y colapsarlos le diria a todo el mundo que el producto esta roto. Object URL **revocado** al destruir y
+antes de recargar (si no, el documento entero queda en memoria mientras viva la pestana). `#toolbar=0`
+esta puesto como **friccion declarada**, no como control — algunos navegadores lo respetan, devtools
+ninguno. Item en el sidebar **sin `*hasPermission`** (el unico), i18n EN/ES/PL.
+
+**★ La dependencia del WI de errores queda CERRADA.** `AssistantPrompt.ManualGuidance` ya no dice "no hay
+direccion": ahora manda `[User manual](/manual)`. **Es una ruta INTERNA y eso es el punto** — mandar al
+usuario al PDF directo significaria publicar una URL que funciona fuera de la sesion, que es exactamente
+lo que este diseno rechaza. `/manual` se agrego tambien a `docs/UINavigationMap.json`, pero la constante
+lo dice explicito porque el escenario 2B tambien corre en el `NoSourcePrompt`, **que a proposito viaja
+SIN el mapa**.
+
+**★ Verificacion runtime (API real en :5091; PDF de prueba de 700 bytes generado y marcado para borrar):**
+- **Sin sesion:** `GET /api/manual/status` y `GET /api/manual/pdf` -> **401, Content-Length: 0**. Token
+  basura -> **401**. Cero bytes servidos.
+- **Con token valido:** `status` -> `{"available":true}`; `pdf` -> **200, `Content-Type: application/pdf`,
+  700 bytes, SIN `Content-Disposition`** (inline), cuerpo empezando en `%PDF-1.4`.
+- **Sin manual instalado** (segunda instancia en :5092 con `UserManual__FilePath` a una ruta inexistente):
+  `status` -> `{"available":false}`; `pdf` -> **404** con
+  `{"message":"The user manual is not available on this installation."}`.
+- **El link del asistente, modelo real, dos idiomas:** *"¿Donde configuro un acelerador?"* ->
+  "...consulta el manual de usuario de Wasnie, que contiene la informacion completa sobre como hacerlo:
+  **[User manual](/manual)**"; *"How do I export the payroll file?"* -> "...Please refer to the Wasnie
+  User Manual for the exact steps: **[User manual](/manual)**". El mapa contiene `/manual`.
+- **PENDIENTE de Rodolfo (navegador):** los dos puntos visuales — usuario logueado abre `/manual` y ve el
+  PDF, y el link del chat lleva ahi. La API quedo corriendo en :5091 con el PDF de prueba puesto.
+
+**Tests:** backend unit **1352 -> 1358** (6: manual ausente, manual presente, **aparecido despues del
+arranque sin reiniciar**, archivo de 0 bytes, ruta por defecto, y que el asistente linkee `/manual` y
+NUNCA un `http`). Front **790 -> 795** (5: fetch por el servicio, 404 != error, error con reintento,
+revoke al destruir, revoke antes de recargar). `ng build --configuration production` limpio.
+
+**Preexistentes, ajenos a este WI:** 3 rojos de `assistant-math.spec.ts` (KaTeX, commit 61ac72c) y el
+warning de bundle (828 kB vs 650 kB, tambien KaTeX).
+
+**Deuda anotada:** el PDF de prueba en
+`WasnieApi/src/Wasnie.Api/bin/Debug/net8.0/Knowledge/Wasnie_User_Manual.pdf` es un placeholder de 700
+bytes generado para verificar — **borrarlo y poner el manual real ahi** (o apuntar `UserManual:FilePath`
+a donde viva).
+
+## 2026-08-10 — El asistente clasifica POR QUE no sabe (3 respuestas, ninguna es "consulta al administrador")
+
+**El problema:** ante cualquier hueco el asistente terminaba en *"check with your administrator"*. Esa
+frase se equivoca de lector: el usuario del chat **ES** el administrador de su entorno Wasnie — el que
+configura los planes, las reglas y los payees. Mandarlo a si mismo es redundante, y sobre todo es una
+forma de no contestar que suena servicial.
+
+**PASO 0 — donde estaba.** `AssistantPrompt.ConfinementRules`, regla 2 ("SAY WHEN YOU DO NOT KNOW"),
+terminaba en *"and suggest they check with their administrator"*. Habia tres redirects mas al mismo
+sitio: `FallbackPrompt` (guia ilegible), `NoSourcePrompt` (el router no devolvio nada) y el
+*"an administrator must fix it"* de la regla 13 (`NoCommissionUnsupportedCombination`). Los cuatro
+salian.
+
+**El arreglo no es una frase mejor, es una MATRIZ.** "No se" colapsaba tres cosas distintas con tres
+respuestas correctas distintas. La regla 2 pasa a ser `AssistantPrompt.IgnoranceRules` y obliga al
+modelo a clasificar su propia ignorancia ANTES de responder:
+- **2A limite de dominio** — proyecciones de ventas, cifras futuras, RRHH, headcount, estrategia
+  comercial, legal/fiscal. Da el limite ("trabajo sobre transacciones ya procesadas y reglas
+  configuradas") y **NO** ofrece documentacion ni manual: ninguno responde eso, y mandar a leer algo
+  que no puede ayudar es peor que el limite honesto. Cierra ofreciendo lo que SI puede hacer.
+- **2B como se usa el producto** — pregunta real de Wasnie sin fuente en contexto. Dice que no puede
+  navegar ni cambiar ajustes, y remite al **Wasnie User Manual**. Prohibido reconstruir los pasos: una
+  secuencia de pantallas plausible es la misma invencion que una feature plausible.
+- **2C la busqueda no encontro nada** — `NotFoundOrNotVisible`. El culpable casi nunca es la
+  plataforma: es un typo, un nombre acortado o el id equivocado. Pide el nombre exacto o el id, y si la
+  herramienta listo lo que SI existe, muestra la lista.
+
+**Dos decisiones que valen mas que el texto:**
+- **Numeradas 2A/2B/2C, no 2/3/4.** Las reglas 6, 9, 13 y 16 se citan POR NUMERO desde las reglas de
+  datos y de tokens; renumerar para hacer sitio habria roto esas referencias cruzadas en silencio.
+- **2C se reconcilia con la regla 9 EXPLICITAMENTE**, por la misma razon que la 17 se reconcilia con la
+  6: la 9 dice "relata el no-encontrado y PARA", y la 2C pide decir algo mas. Se escribio la frontera en
+  el prompt en vez de dejar que la arbitre el modelo — pedir un nombre corregido es una pregunta sobre
+  SU input; sugerir que el registro fue anulado o sigue procesando es una afirmacion sobre un registro
+  que no puede ver, y esa sigue prohibida.
+
+**La dependencia abierta (marcada, no improvisada).** El manual del escenario 2B todavia no tiene URL
+publicada — la trae el WI del PDF. `AssistantPrompt.ManualGuidance` por eso **nombra** el manual y
+**prohibe** el link. No se dejo un `{MANUAL_URL}`: un placeholder asi se le imprime tal cual al usuario
+la primera vez que el modelo lo cita, y una direccion adivinada seria exactamente la URL inventada que
+la regla 6 existe para frenar. Nombrar un documento real sin link es la misma degradacion correcta que
+la regla 6 ya define para una pantalla sin ruta. **Cuando aterrice el WI del PDF se cambia esa constante
+y nada mas** — 2B y el `NoSourcePrompt` la comparten.
+
+Ademas, el `Reminder` final (lo ultimo que el modelo lee antes de la pregunta) ahora repite la RAMA, no
+solo la negativa: era justo la instruccion que se resolvia en "consulta al administrador", y repetir la
+version colapsada en la posicion de mas peso la habria traido de vuelta.
+
+**★ Verificacion runtime (arnes temporal contra el modelo REAL de OpenRouter + guia y mapa reales;
+borrado despues). Las tres respuestas literales:**
+- *"¿Cual es la proyeccion de ventas para Q4?"* (router: **ninguna** seccion) -> "Lo siento, no dispongo
+  de informacion sobre proyecciones de ventas. Trabajo con las transacciones que Wasnie ya ha procesado
+  y con las reglas de compensacion configuradas. Si necesita ayuda con esos aspectos, estare encantado
+  de asistir." — **sin link, sin manual, sin administrador.**
+- *"¿Donde configuro un acelerador?"* (router: s8) -> "No dispongo de la informacion necesaria para
+  indicarle los pasos exactos para configurar un acelerador, ya que esa funcionalidad no esta cubierta
+  en la documentacion que tengo a mano. Le recomiendo consultar el **Wasnie User Manual** (...). El
+  manual esta disponible dentro del portal de Wasnie despues de iniciar sesion." — **manual nombrado,
+  cero URL inventada.**
+- *"Explicame el plan XYZ que no existe"* (con `{"outcome":"NotFoundOrNotVisible","found":false,...}`)
+  -> "No he podido encontrar ningun plan llamado **XYZ** en tu entorno. Por favor, verifica que el
+  nombre este escrito correctamente o proporcioname el nombre exacto o el identificador del plan para
+  que pueda buscarlo de nuevo." — **pide correccion, no escala.**
+- **i18n comprobado:** las dos primeras preguntadas en ingles se contestan en ingles, con la misma
+  clasificacion ("...my focus is on the transactions and compensation rules already processed in
+  Wasnie" / "...please refer to the **Wasnie User Manual**"). El idioma no esta hardcodeado.
+
+**Tests:** unit **1352 -> 1352**, 0 rojos. No se toco ningun test: el unico archivo modificado es
+`AssistantPrompt.cs` y lo que cambio es texto de prompt. Los asserts existentes de
+`AssistantConfinementTests` / `AssistantRoutingTests` ("SAY WHEN YOU DO NOT KNOW", "NEVER invent a
+feature", "Do NOT invent a feature", la posicion del `Reminder`) siguen verdes a proposito — se
+conservaron esas frases al reescribir.
+
 ## 2026-08-09 — Loader de PASOS reales en el chat (progreso por fase en el stream)
 
 **El problema:** el loader del asistente era UNA frase fija ("Processing your request… looking things

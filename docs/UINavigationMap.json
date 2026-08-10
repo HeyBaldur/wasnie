@@ -156,6 +156,12 @@
       "route": "/profile",
       "label": "Profile",
       "purpose": "The signed-in user's own account settings."
+    },
+    {
+      "intent": "user_manual",
+      "route": "/manual",
+      "label": "User manual",
+      "purpose": "The written user manual, inside the application and behind the login. Send the user here when they ask HOW to do something in Wasnie and the documentation does not cover the procedure."
     }
   ],
 

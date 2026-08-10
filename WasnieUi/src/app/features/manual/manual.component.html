@@ -1,0 +1,90 @@
+<app-shell>
+  <!--
+    ★ NO PAGE HEADER, ON PURPOSE. `ws-page-layout` always draws its title block, so a headerless screen is
+    not that primitive with an empty input — it is a different container. The screen is a reader: the tab
+    already says where you are, and a title plus subtitle above the document cost exactly the vertical
+    space that forced the whole page to scroll. Now only the document scrolls, which is the one thing that
+    should.
+  -->
+  <div class="manual__screen">
+    @switch (state()) {
+      @case ('loading') {
+        <ws-card>
+          <p class="manual__message">{{ 'COMMON.LOADING' | translate }}</p>
+        </ws-card>
+      }
+
+      @case ('ready') {
+        <!--
+          Two columns: the document takes all the room it can get, and the panel beside it holds what a
+          reader needs to know ABOUT the document. Below the breakpoint the panel drops under the viewer
+          rather than squeezing it — on a narrow screen the manual is the whole point.
+        -->
+        <div class="manual__layout">
+          <div class="manual__viewer">
+            <iframe class="manual__frame" [src]="documentUrl()" [title]="'MANUAL.TITLE' | translate"></iframe>
+          </div>
+
+          <aside class="manual__aside">
+            <ws-card padding="none">
+              <!--
+                ★ SERVED FROM OUR OWN ORIGIN, NOT FROM UNSPLASH. Hot-linking the CDN would make every
+                reader's browser call a third party on every visit, handing it their IP and referrer — the
+                same reason KaTeX comes from npm and the PDF worker was bundled rather than fetched. The
+                file is vendored into `public/` like hubspot.png and brain.gif already are.
+                Source: images.unsplash.com/photo-1718241905916-1f9786324de9 (Unsplash License: free to
+                use commercially, no permission needed, attribution appreciated but not required).
+                Decorative, so alt is empty: it repeats nothing the heading beside it does not already say.
+              -->
+              <img class="manual__aside-cover" src="manual-cover.jpg" alt="" />
+
+              <div class="manual__aside-card">
+                <h2 class="manual__aside-title">{{ 'MANUAL.ASIDE_TITLE' | translate }}</h2>
+                <p class="manual__aside-body">{{ 'MANUAL.ASIDE_BODY' | translate }}</p>
+
+                <!--
+                  ★ THE PANEL'S RENT, PAID. The manual is static, general and English-only; the assistant
+                  answers about THIS tenant's plans, with their data, in the reader's language. Putting the
+                  hand-off exactly where someone is failing to find an answer is the moment it is worth
+                  most.
+
+                  ★ HIDDEN, NOT DISABLED (Spec 5b.6). Gated on the same entitlement signal the topbar
+                  trigger uses, so a user without a seat never sees a button that would 403.
+                -->
+                @if (assistant.entitled() === true) {
+                  <ws-button variant="primary" (click)="askAssistant()">
+                    {{ 'MANUAL.ASK_ASSISTANT' | translate }}
+                  </ws-button>
+                }
+
+                <!--
+                  Secondary, and the answer to "it reads too small": a new tab gives the document the whole
+                  window and the browser's own zoom. It opens the SAME blob already in memory, so nothing
+                  is fetched again and the manual never gains a public URL.
+                -->
+                <button type="button" class="manual__link" (click)="openFullScreen()">
+                  {{ 'MANUAL.OPEN_FULL' | translate }}
+                </button>
+              </div>
+            </ws-card>
+          </aside>
+        </div>
+      }
+
+      @case ('unavailable') {
+        <ws-card>
+          <ws-empty-state icon="file-text" titleKey="MANUAL.EMPTY_TITLE" descKey="MANUAL.EMPTY_DESC" />
+        </ws-card>
+      }
+
+      @case ('error') {
+        <ws-card>
+          <div class="manual__message">
+            <p>{{ 'MANUAL.LOAD_ERROR' | translate }}</p>
+            <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+          </div>
+        </ws-card>
+      }
+    }
+  </div>
+</app-shell>

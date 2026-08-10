@@ -203,7 +203,18 @@
     "SUBSCRIPTION": "Subskrypcja",
     "INTEGRATIONS": "Integracje",
     "IMPORT_TRANSACTIONS": "Importuj transakcje",
+    "MANUAL": "Podręcznik użytkownika",
     "PROFILE": "Profil"
+  },
+  "MANUAL": {
+    "TITLE": "Podręcznik użytkownika",
+    "ASIDE_TITLE": "Utknąłeś na złożonej regule?",
+    "ASIDE_BODY": "Podręcznik opisuje silnik ogólnie i jest dostępny wyłącznie po angielsku. Asystent odpowiada o Twoich własnych planach, na Twoich danych i w Twoim języku.",
+    "ASK_ASSISTANT": "Zapytaj asystenta",
+    "OPEN_FULL": "Otwórz w nowej karcie",
+    "EMPTY_TITLE": "Podręcznik nie jest jeszcze dostępny",
+    "EMPTY_DESC": "Ta instalacja nie ma jeszcze opublikowanego podręcznika użytkownika. Gdy zostanie dodany, pojawi się tutaj.",
+    "LOAD_ERROR": "Nie udało się wczytać podręcznika."
   },
   "CATEGORY_MAPPINGS": {
     "TITLE": "Kategorie",

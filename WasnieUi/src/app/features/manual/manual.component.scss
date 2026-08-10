@@ -1,0 +1,145 @@
+@reference "../../../styles.scss";
+
+.manual__message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+/* ── Two columns: the document, and what to know about it ────────────────────
+ *
+ * The document gets everything left over; the panel is a fixed measure, because a description column
+ * that grows with the window just makes long unreadable lines.
+ *
+ * ★ AND THE SPLIT IS WHAT MAKES THE PAGE BIG AGAIN. Bounded width is what allows fit-to-width in the
+ * viewer (see the component): across a full-width column that would blow the type up on a large monitor,
+ * but inside this column it produces a page much larger than fit-to-page ever did — and it leaves the
+ * viewer no room to paint grey down the sides.
+ */
+/* ★ THE SCREEN OWNS THE HEIGHT SO THE PAGE NEVER SCROLLS. The shell's content area has a definite
+ * height (`.shell` is h-screen with `overflow: hidden`, `.shell__content` is `flex-1`), so filling it
+ * here and letting the viewer take what is left means the only scrollbar on this screen belongs to the
+ * document.
+ *
+ * `min-height: 0` on both the screen and the layout is load-bearing, not decoration: a flex child
+ * defaults to `min-height: auto` and refuses to shrink below its content, which pushes the overflow back
+ * out to the page. That is the exact bug that once hid the modal's Save button. */
+.manual__screen {
+  height: 100%;
+  min-height: 0;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+}
+
+.manual__layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+/* Below this the panel drops underneath instead of squeezing the document: on a narrow screen the manual
+   is the whole point of the screen. */
+@media (max-width: 1100px) {
+  .manual__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Fills the column instead of guessing at a viewport fraction — with the header gone there is a real
+   height to fill, and a taller frame is also a bigger page. */
+.manual__viewer {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--manual-paper);
+}
+
+.manual__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--manual-paper);
+}
+
+/* ★ WHITE IN ALL THREE THEMES, AND DECLARED RATHER THAN SLIPPED IN.
+ *
+ * Paper is white whatever the interface is wearing, so no token fits: every surface token is THEMED and
+ * would darken with the theme, which is right for Wasnie's own surfaces and wrong for a document. Adding
+ * a `--color-paper` token is a design-system decision (DESIGN_SYSTEM §10.3), so the value stays scoped to
+ * this component and named where it can be found.
+ *
+ * ★ WHAT THIS DOES AND DOES NOT REACH — worth stating, because it is the third time the greys come up.
+ * It paints what WE own: the frame's own surface, visible before the document renders and anywhere the
+ * embedded viewer leaves transparent. It CANNOT repaint the grey the browser's PDF viewer draws inside
+ * itself (the mat around and between pages): that is a separate document, and no stylesheet of ours
+ * crosses into it. With the column bounded and the page fitted to its width, that mat has almost nowhere
+ * left to show — but if a band survives between pages, this is why, and CSS is not the lever.
+ */
+:host {
+  --manual-paper: #ffffff;
+}
+
+/* ── The panel ───────────────────────────────────────────────────────────────
+ *
+ * Everything in it is either measured (the file's size) or a fact about how the manual is served. There
+ * is no summary of the manual's CONTENTS: nobody here has read it, and inventing chapter names would be
+ * the one kind of wrong this panel could be.
+ */
+.manual__aside-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+/* Full-bleed at the top of the card: `ws-card` already clips with its own radius, so the photo meets the
+   card's corners instead of sitting in a padded box inside it. */
+.manual__aside-cover {
+  display: block;
+  width: 100%;
+  height: 148px;
+  object-fit: cover;
+}
+
+.manual__aside-title {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.manual__aside-body {
+  margin: 0;
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+/* The secondary action. A button element rather than an anchor because it opens a blob already in memory
+   — there is no href to give it, and a link with no destination is a lie to a screen reader. */
+.manual__link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: var(--font-size-13);
+  color: var(--color-brand);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

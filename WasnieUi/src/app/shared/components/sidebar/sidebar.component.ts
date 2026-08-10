@@ -151,6 +151,13 @@ export class SidebarComponent {
     },
   ];
 
+  /**
+   * The user manual. It has NO `permission` because it needs none — the manual documents the product,
+   * not the tenant's data, and every signed-in user should be able to read it. The template renders this
+   * one item without *hasPermission for that reason; see app.routes.ts, where the route is gated the
+   * same way.
+   */
+  readonly manualItem: Omit<NavItem, 'permission'> = { path: '/manual', labelKey: 'NAV.MANUAL', icon: 'file-text' };
   readonly subscriptionItem: NavItem = { path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
   readonly integrationsItem: NavItem = { path: '/integrations', labelKey: 'NAV.INTEGRATIONS', icon: 'link-2', permission: 'Integrations.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
