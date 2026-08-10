@@ -26,6 +26,12 @@ namespace Wasnie.Application.Assistant.Common;
 /// So a stored user turn with nothing after it means exactly one thing: it was asked and never
 /// answered.
 ///
+/// ★ A CANCELLED REPLY COUNTS AS AN ANSWER HERE, and that is not a loophole. The rule this asks is
+/// "is the thread waiting for something?", and a turn the user themselves stopped is not waiting: the
+/// partial answer is stored, it is on screen, and it carries its own mark saying where it stops.
+/// Treating it as unanswered would put the failure card under it and offer a retry for a turn nobody
+/// wants retried — the assistant contradicting a decision the user just made.
+///
 /// The one honest imprecision: a turn being answered AT THIS MOMENT also looks like this. That
 /// resolves itself the instant the answer lands, and the cost of being briefly wrong is offering a
 /// retry a second early — against the cost of the user losing their question, which is what this

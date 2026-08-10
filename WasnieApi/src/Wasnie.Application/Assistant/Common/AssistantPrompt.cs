@@ -553,8 +553,17 @@ public static class AssistantPrompt
         string navigationMap = "",
         string toolData = "")
     {
+        // ★ A STOPPED ANSWER IS NOT SOMETHING THE ASSISTANT SAID, and it must not be replayed as if it
+        // were — the same rule the stand-in reply above lives under, for a closely related reason.
+        //
+        // The row is a sentence that breaks off mid-thought, kept because the user read it. Handed back
+        // as the previous assistant turn it becomes an instruction by example: asked the SAME question
+        // again (which is exactly what Try again does), the model sees its own truncated attempt and
+        // carries on from the cut rather than answering. The user pressed a button labelled "try again"
+        // and would get the second half of the thing they stopped.
         var usable = history
             .Where(m => m.Content != AssistantMessage.NotConnectedPlaceholder)
+            .Where(m => m.Status != AssistantMessageStatus.Cancelled)
             .OrderBy(m => m.Sequence)
             .ToList();
 

@@ -197,6 +197,48 @@
               -->
               <span class="assistant-msg__text">{{ message.content }}</span>
             }
+
+            <!--
+              ★ WHERE THE ANSWER STOPS, AND WHY IT STOPS THERE. The words above are real — the user
+              watched them arrive and then pressed Stop — but an answer that ends mid-sentence with
+              nothing under it reads as the assistant's finished thought. This says who ended it.
+
+              ★ IT COMES FROM THE STORED ROW, not from anything this session remembers, which is why it
+              is still here for someone who reopens the conversation tomorrow.
+
+              Attenuated on purpose: this is not a failure and there is nothing to act on. The warning
+              card's weight belongs to the turn that went wrong, not to a decision the user made.
+            -->
+            @if (isCancelled(message)) {
+              <p class="assistant-msg__cancelled" data-testid="assistant-cancelled-notice">
+                <app-icon name="ban" [size]="13" />
+                <span class="assistant-msg__cancelled-text">
+                  {{ 'ASSISTANT.CANCELLED_NOTICE' | translate }}
+                </span>
+
+                <!--
+                  ★ THE SAME BUTTON AND THE SAME FLOW AS THE FAILURE CARD'S — same primitive, same
+                  variant and size, same `store.retry()`, same `isRetry` request. The question is
+                  already stored, so this re-answers it rather than typing it again; the stopped
+                  fragment above is NOT deleted, the fresh answer lands after it.
+
+                  ★ ONLY ON THE LAST TURN. Retrying re-answers the last stored question — see the store
+                  — so on an older cancelled reply this button would re-answer a different message than
+                  the one it sits beside.
+                -->
+                @if (store.retryableCancelled()) {
+                  <ws-button
+                    variant="secondary"
+                    size="sm"
+                    [disabled]="store.sending()"
+                    (click)="retry()"
+                    data-testid="assistant-cancelled-retry"
+                  >
+                    {{ 'ASSISTANT.RETRY' | translate }}
+                  </ws-button>
+                }
+              </p>
+            }
           </div>
         }
       }
@@ -362,6 +404,30 @@
         />
 
         <div class="assistant-composer__actions">
+          <!--
+            ★ STOP IS ITS OWN BUTTON, BESIDE SEND — send is not transformed into it. A control that
+            changes what it does under the cursor is a control you can press by accident: the user
+            aiming at Send for their next question would stop the answer instead, and the two actions
+            are opposites. Two buttons, each meaning one thing.
+
+            ★ AND IT ONLY EXISTS WHILE THERE IS SOMETHING TO STOP. Not shown-then-disabled: a disabled
+            button is a promise about a moment that has not arrived. It appears when the answer starts
+            and leaves when the answer does.
+          -->
+          @if (store.sending()) {
+            <ws-button
+              variant="secondary"
+              size="sm"
+              [iconOnly]="true"
+              (click)="cancel()"
+              [title]="'ASSISTANT.CANCEL' | translate"
+              [attr.aria-label]="'ASSISTANT.CANCEL' | translate"
+              data-testid="assistant-cancel"
+            >
+              <app-icon name="square" [size]="13" />
+            </ws-button>
+          }
+
           <ws-button
             variant="primary"
             size="sm"

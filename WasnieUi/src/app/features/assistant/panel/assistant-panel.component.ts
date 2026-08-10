@@ -19,6 +19,7 @@ import { Router } from '@angular/router';
 import {
   AssistantMessage,
   internalRouteOf,
+  isCancelledReply,
   isPlaceholderReply,
   isUntitled,
   phaseLabelKey,
@@ -242,6 +243,15 @@ export class AssistantPanelComponent {
   }
 
   /**
+   * True when the row is an answer the user stopped, so the template says where it stops.
+   *
+   * Read from the STORED row — see `isCancelledReply`. Nothing about the click is remembered here.
+   */
+  isCancelled(message: AssistantMessage): boolean {
+    return isCancelledReply(message);
+  }
+
+  /**
    * ★ THE LINK INTERCEPTOR — what makes the assistant's guidance usable rather than destructive.
    *
    * The assistant now answers "how do I create a plan?" with steps and a link to `/plans/new`. Rendered
@@ -295,6 +305,14 @@ export class AssistantPanelComponent {
 
   onDraftChange(value: string): void {
     this.draft.set(value);
+  }
+
+  /**
+   * Stops the answer being written. See the store — the words already on screen are KEPT, and the
+   * composer is usable again immediately, which is the whole reason someone presses this.
+   */
+  async cancel(): Promise<void> {
+    await this.store.cancel();
   }
 
   /** Re-answers the last failed question. See the store — it does NOT re-send the message. */

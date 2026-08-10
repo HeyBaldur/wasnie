@@ -10,6 +10,37 @@ public enum AssistantMessageRole
 }
 
 /// <summary>
+/// How a stored turn ENDED. Terminal at the moment it is written and never changed afterwards.
+///
+/// ★ WHY THIS EXISTS WHEN "FAILED" DELIBERATELY DOES NOT. <see cref="AssistantMessageRole.User"/> turns
+/// that never got a reply are the record of a failure, and <c>UnansweredTurn</c> argues at length
+/// against storing a flag for it: the absence of the answer already IS the fact, and a second copy of a
+/// fact drifts from the first. That argument holds — and it does not reach this.
+///
+/// A cancelled turn is the one outcome the absence cannot express, because there is something present:
+/// the words the model had already written and the user had already read. Deleting them to keep the
+/// "nothing partial is ever stored" rule would erase what was on their screen; storing them unmarked
+/// would put a sentence that stops mid-word into the thread wearing the clothes of a finished answer,
+/// and the assistant would appear to have said it. So the row is stored WITH the reason it stops.
+///
+/// ★ IT CANNOT DRIFT, because nothing ever writes it twice. The status is decided by the one path that
+/// creates the row and there is no operation anywhere that changes it — no "mark complete", no clear.
+/// The flag <c>UnansweredTurn</c> refused was a mutable one on a turn whose truth could change
+/// underneath it; this is part of what the row IS.
+/// </summary>
+public enum AssistantMessageStatus
+{
+    /// <summary>The turn finished on its own. Every user turn and every completed answer.</summary>
+    Complete = 0,
+
+    /// <summary>
+    /// The user stopped the answer while it was being written. The content is whatever had arrived —
+    /// real words, deliberately kept, and marked so the client can say where they stop.
+    /// </summary>
+    Cancelled = 1,
+}
+
+/// <summary>
 /// One turn in a conversation.
 ///
 /// ★ WHY <see cref="Payload"/> EXISTS BEFORE ANYTHING FILLS IT. A message that is only a string is
@@ -50,6 +81,12 @@ public sealed class AssistantMessage : Entity
     public string Content { get; private set; } = string.Empty;
 
     /// <summary>
+    /// How this turn ended — see <see cref="AssistantMessageStatus"/>. Written once, with the row, and
+    /// never modified: there is deliberately no method here that changes it.
+    /// </summary>
+    public AssistantMessageStatus Status { get; private set; } = AssistantMessageStatus.Complete;
+
+    /// <summary>
     /// Reserved for structure that later pieces attach to a turn (RAG references, screen context,
     /// pre-fill JSON). ALWAYS null today. See the type-level note above for why it exists already.
     /// </summary>
@@ -73,7 +110,8 @@ public sealed class AssistantMessage : Entity
         string content,
         int sequence,
         DateTimeOffset now,
-        string? payload = null)
+        string? payload = null,
+        AssistantMessageStatus status = AssistantMessageStatus.Complete)
     {
         if (conversationId == Guid.Empty)
             throw new DomainException("ConversationId must not be empty.");
@@ -92,6 +130,13 @@ public sealed class AssistantMessage : Entity
         if (trimmed.Length > MaxContentLength)
             throw new DomainException($"Message content must not exceed {MaxContentLength} characters.");
 
+        // ★ ONLY AN ANSWER CAN BE CANCELLED. A question is typed and sent in one motion — there is no
+        // interval during which the user could stop it — so a cancelled user turn would be a state the
+        // product cannot reach, and the client would render "response cancelled" under words the user
+        // themselves wrote.
+        if (status == AssistantMessageStatus.Cancelled && role != AssistantMessageRole.Assistant)
+            throw new DomainException("Only an assistant turn can be cancelled.");
+
         return new AssistantMessage
         {
             Id = id,
@@ -99,6 +144,7 @@ public sealed class AssistantMessage : Entity
             TenantId = tenantId,
             Role = role,
             Content = trimmed,
+            Status = status,
             Payload = payload,
             Sequence = sequence,
             CreatedAt = now,

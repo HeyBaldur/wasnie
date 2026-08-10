@@ -1973,6 +1973,8 @@
     "WELCOME_READ_ONLY": "This assistant is read-only: it guides and answers your questions, but never modifies data or performs any action in your system. For complex calculations or configurations it may give a partial answer, so verify important information with your administrator.",
     "COMPOSER_PLACEHOLDER": "Type a message…",
     "SEND": "Send",
+    "CANCEL": "Stop the answer",
+    "CANCELLED_NOTICE": "Response cancelled",
     "DISCLAIMER": "The assistant only guides and answers questions; it does not calculate or modify data. It may make mistakes — verify important information.",
     "PLACEHOLDER_REPLY": "The assistant is not connected yet. Your message was saved.",
     "PROCESSING": "Processing your request…",

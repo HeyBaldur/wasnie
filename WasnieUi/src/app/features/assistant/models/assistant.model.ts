@@ -1,6 +1,16 @@
 export type AssistantMessageRole = 'User' | 'Assistant';
 
 /**
+ * How a stored turn ENDED.
+ *
+ * `Cancelled` means the user stopped the answer while it was being written: the words that had already
+ * arrived are stored — they were on screen and deleting them would erase what the user read — and this
+ * is what stops them from passing for a finished reply. It comes from the SERVER on every read, which
+ * is why a cancellation is still marked after a reload.
+ */
+export type AssistantMessageStatus = 'Complete' | 'Cancelled';
+
+/**
  * One turn.
  *
  * `payload` is ALWAYS null in this piece. It is in the contract from day one because later pieces
@@ -15,6 +25,13 @@ export interface AssistantMessage {
   payload: string | null;
   sequence: number;
   createdAt: string;
+
+  /**
+   * How the turn ended. Optional in the type only so a response from a backend older than this field
+   * still parses; absent is read as `Complete` by {@link isCancelledReply}, which is what every turn
+   * written before cancelling existed actually was.
+   */
+  status?: AssistantMessageStatus;
 }
 
 export interface AssistantConversationSummary {
@@ -129,6 +146,17 @@ export function isUntitled(title: string | null | undefined): boolean {
 
 export function isPlaceholderReply(message: AssistantMessage): boolean {
   return message.role === 'Assistant' && message.content === ASSISTANT_NOT_CONNECTED;
+}
+
+/**
+ * True when this row is an answer the user stopped mid-write.
+ *
+ * ★ READ FROM THE ROW, NEVER FROM SESSION MEMORY. That is the whole reason the status is stored: the
+ * notice under a cancelled answer must be there for someone who reopens the conversation tomorrow, in
+ * a browser that never saw the click.
+ */
+export function isCancelledReply(message: AssistantMessage): boolean {
+  return message.role === 'Assistant' && message.status === 'Cancelled';
 }
 
 /**

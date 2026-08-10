@@ -4,6 +4,161 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-10 — "Try again" en la respuesta cancelada, y por que la linea de "...few seconds." estaba torcida
+
+Pulido del cancelar terminado hace un rato. Dos cambios chicos de cara al usuario; **uno de los dos
+escondia un bug real de backend** que el WI daba por inexistente ("Tipo: Front").
+
+### * EL RETRY SOBRE UN TURNO CANCELADO SE HABRIA ROTO, Y NO DE FORMA VISIBLE
+
+El WI decia "reusar el flujo `IsRetry` que ya existe". El flujo existe, pero fue escrito para el unico
+caso que habia: un turno **fallido**, que **no guarda fila del asistente**. Por eso calculaba el slot de
+la respuesta como `sequence de la pregunta + 1` — libre, garantizado.
+
+Un turno **cancelado SI guarda fila** (esa es toda la funcionalidad del WI anterior), y esa fila ocupa
+justamente ese slot. Con `(ConversationId, Sequence)` como indice **UNICO**, el retry no habria producido
+un hilo desordenado: habria producido un **save fallido**. Y no lo habrian atrapado los tests — la base
+in-memory de los unit tests **no aplica indices unicos**; se rompia recien contra SQL Server.
+
+**Fix:** `nextSequence = history[^1].Sequence`. Una linea, y **degenera exactamente al comportamiento
+actual** para el caso fallido (ahi el ultimo mensaje ES la pregunta). El retry **appendea**: el fragmento
+detenido se queda donde esta, todavia marcado, y la respuesta nueva cae despues. Que ademas es la forma
+honesta de lo que paso — el usuario tiene el pedazo que corto y la respuesta que volvio a pedir.
+
+### * Y EL MODELO NO PUEDE VER EL FRAGMENTO EN EL QUE LO PARARON
+
+Segundo problema, mas silencioso. `AssistantPrompt.Build` manda el historial al modelo. Devuelto como el
+turno previo del asistente, el parcial cancelado **es una instruccion por ejemplo**: preguntado lo MISMO
+otra vez (que es literalmente lo que hace Try again), el modelo ve su propio intento truncado y
+**continua desde el corte en vez de responder**. El usuario apretaria "intentar de nuevo" y recibiria la
+segunda mitad de lo que habia parado.
+
+Se filtra, **al lado del filtro que ya existia** para el placeholder de "no conectado" — misma clase de
+razon, escrita ahi mismo: no es algo que el asistente haya dicho. Aplica a todo el historial, no solo al
+retry: un fragmento truncado tampoco es buen contexto para la pregunta siguiente.
+
+### El boton
+
+Mismo primitivo, misma variante, mismo `store.retry()`, mismo `isRetry`. Lo unico nuevo es **donde**
+aparece y **cuando**:
+
+- `retryableCancelled()` es un computed **hermano** de `retryable()`, no un reemplazo. Estan separados
+  porque son dos VISTAS distintas — la tarjeta de fallo no puede aparecer sobre un turno que el usuario
+  corto a proposito — pero `retry()` consulta los dos y corre lo mismo. **Nunca pueden ser ambos
+  no-nulos:** `retryable` necesita que el hilo este esperando una respuesta, y una respuesta cancelada ES
+  una respuesta guardada.
+- **Solo si el turno cancelado es el ULTIMO del hilo.** El retry re-responde la ultima pregunta
+  almacenada; sobre un cancelado viejo, el boton diria "try again" debajo de un mensaje y responderia
+  otro. La nota "Respuesta cancelada" si se queda para siempre — ese turno fue cancelado, y eso no deja
+  de ser cierto.
+- **Sin claves i18n nuevas:** `ASSISTANT.RETRY` ya estaba traducida en EN/ES/PL y es la misma accion.
+  Inventar una segunda clave serian dos strings que hay que mantener diciendo lo mismo en tres idiomas.
+
+### * "seconds" no estaba desalineado por culpa de ese parrafo
+
+`.assistant-msg` tiene `white-space: pre-wrap`, **y lo necesita**: el mensaje del usuario se imprime
+verbatim y los saltos de linea que escribio tienen que sobrevivir. Pero **hereda**. Y dentro de la
+burbuja, esa frase no es texto tipeado: es un string de UI que en el template vive en su propia linea
+indentada. Con `pre-wrap`, el salto de linea y los espacios del template **dejan de ser formato y pasan a
+ser contenido** — la frase arranca indentada, el wrap vuelve al borde izquierdo real, y la ultima palabra
+queda colgando debajo de nada.
+
+`white-space: normal` en el elemento cuyo texto no debe preservar espacios. Reflowear el template a una
+linea larga tambien lo arreglaba **hoy**, y se rompia la proxima vez que alguien formatee el archivo: la
+regla pertenece al elemento, no al formateo. Se aplico tambien a la nota de cancelado, que tiene la misma
+forma.
+
+**Tests:** unit backend 1365 -> **1367** (el retry appendea + el modelo no ve el fragmento), front 804 ->
+**813** (9 nuevos). Siguen los **3 rojos preexistentes de KaTeX** en `assistant-math.spec.ts`, ajenos.
+`ng build --configuration production` limpio y con el bundle **identico** (828.50 kB).
+
+**Runtime:** lo prueba Rodolfo — pidio explicitamente no usar el browser en este WI.
+
+**NO se commiteo nada.**
+
+## 2026-08-10 — Detener la respuesta del asistente: boton propio, y el turno cancelado como estado durable
+
+**El problema:** una respuesta en curso no se podia parar. Si el usuario ya no la queria — porque se dio
+cuenta de que preguntaba mal, o simplemente quiere otra cosa — tenia que esperarla entera.
+
+**★ EL HALLAZGO DEL PASO 0, Y POR QUE EL WI NO SE PUDO SEGUIR LITERALMENTE.** El WI pedia "reusar el
+patron de FALLIDO que ya existe: mismo enum, mismo campo, misma persistencia". **Ese patron no es un
+enum ni un campo.** `UnansweredTurn.cs` DERIVA el fallo de la ausencia de la fila del asistente y
+argumenta, largamente y por escrito, **en contra** de guardar un flag: "una copia mas de un hecho que
+los datos ya contienen, y dos copias derivan". Cancelado **no puede** usar ese mecanismo, porque el
+requisito central es CONSERVAR el texto parcial — y una fila parcial sin marca se lee exactamente como
+una respuesta que el asistente decidio terminar ahi.
+
+**La decision, y por que no contradice ese archivo.** El estado va **en la propia fila**
+(`AssistantMessageStatus {Complete, Cancelled}`), **escrito una sola vez con la fila y nunca mutado**:
+no hay metodo que lo cambie, no hay "marcar completo", no hay limpieza. El flag que `UnansweredTurn`
+rechazaba era uno *mutable* sobre un turno cuya verdad podia cambiar debajo; este es parte de lo que la
+fila ES.
+
+**Backend.**
+- Migracion **B24**, columna `nvarchar(20)` como `Role` (una fila leida a mano dice `Cancelled`, no `1`).
+  **El default lo scaffoldeo EF como `""` y se corrigio a mano a `Complete`:** todo turno escrito antes
+  de que cancelar existiera SI termino, asi que `Complete` es la verdad registrada y no una conveniencia;
+  `""` habria dejado un valor que ningun cliente sabe leer sobre todo el historial de chat.
+- `StreamAssistantReplyHandler`: la rama `OperationCanceledException` **deja de descartar**. Persiste lo
+  generado con estado `Cancelled` — **la unica excepcion a "nunca se guarda nada parcial", y solo es
+  segura por la marca**: el usuario VIO llegar esas palabras y despues eligio pararlas; tirarlas borra lo
+  que tenia en pantalla y deja el hilo diciendo que su pregunta nunca se respondio.
+- **`CancellationToken.None` en ese save, a proposito.** El token de la request YA esta cancelado — es
+  como se llego ahi — asi que pasarlo abortaria justo la escritura que la rama existe para hacer.
+- **Si no se genero ni una palabra, no se escribe nada.** Cancelar durante el clasificador o el lookup
+  deja el builder vacio, y una burbuja vacia no es una respuesta mas corta: ese turno queda sin
+  responder, que es lo que es, y lo cubre el camino de reintento que ya existia.
+- Guarda de dominio: **solo un turno del asistente puede cancelarse** (una pregunta se escribe y se manda
+  en un solo movimiento; no hay intervalo donde pararla).
+- `UnansweredTurn` **sin cambios**: un turno cancelado CUENTA como respondido. Reportarlo como pendiente
+  pondria la tarjeta de fallo debajo y ofreceria reintentar la respuesta que el usuario acaba de cortar.
+
+**Front.**
+- **STOP es un boton propio, al lado del de enviar** — enviar no se transforma. Son acciones opuestas, y
+  un control que cambia de significado bajo el cursor se aprieta por accidente: el usuario apuntando a
+  Enviar para su proxima pregunta pararia la respuesta.
+- **Existe solo mientras hay algo que parar** (oculto, no deshabilitado).
+- `AbortController` por turno. **Abortar el fetch es TODO el mecanismo, de los dos lados**: corta la
+  lectura en el browser y el server ve caer la conexion, cancela su token, suelta la llamada a
+  OpenRouter (no se pagan tokens por palabras que nadie va a leer) y escribe lo que habia llegado. Una
+  sola señal, sin un segundo endpoint que mantener en sincronia.
+- Flag `cancelling` para que el `catch` **no confunda cancelar con fallar**: abortar tira exactamente
+  igual que una conexion muerta, y sin esto el usuario apretaba Stop y se le decia que el asistente no
+  pudo responder — culpado por una falla, y con un reintento ofrecido para un turno que termino a
+  proposito.
+- El parcial **queda congelado en pantalla y lo reemplaza la fila del servidor** (refetch, con **un
+  reintento a 300ms**: la fila se escribe mientras la request aborta del lado del server, y la lectura
+  sale del browser casi en el mismo instante, asi que la primera respuesta puede genuinamente ser previa
+  al insert). Nada de copia local optimista.
+- `sending` cae en el acto: **el input queda listo antes incluso de que se lea la fila guardada**, que es
+  el caso de uso entero del boton.
+- Aviso **"Respuesta cancelada"** atenuado bajo el mensaje, con icono y borde superior — un peldaño por
+  debajo de la tarjeta de fallo, que es exactamente la diferencia entre las dos cosas: aquella es una
+  advertencia con algo que hacer, esta es una nota al pie sobre una decision del propio usuario. Se lee
+  del `status` de la FILA, nunca de memoria de sesion; por eso sigue ahi mañana.
+- i18n EN/ES/PL de `CANCEL` y `CANCELLED_NOTICE`.
+
+**Un tropiezo que vale documentar (en los tests).** Cuatro tests nuevos del store colgaban a los 5s. La
+causa no era el codigo: el helper devolvia el `send()` en vuelo desde una funcion `async`, o sea una
+promesa-de-promesa, y `await` las colapsa — el test esperaba justo la request que el helper existe para
+dejar colgada. Se devuelve envuelto (`{ sending }`) y queda comentado en el spec.
+
+**Verificacion runtime (los 3 escenarios del WI).** Pregunta larga en español → stop a mitad de la lista:
+la escritura se detiene, el parcial (4 items) queda con "Response cancelled", el boton stop desaparece y
+el input queda listo, **sin tarjeta de fallo**. Pregunta nueva inmediatamente despues → sale y se
+responde normal, con el turno cancelado intacto arriba. **Recarga completa de la pagina + reabrir la
+conversacion desde el historial → el turno cancelado sigue marcado**, con su texto parcial y su aviso.
+El contenido guardado termina exactamente donde se corto, que es la evidencia de que el server dejo de
+consumir el stream del proveedor.
+
+**Tests:** unit backend 1359 → **1365** (6 nuevos en `AssistantCancellationTests.cs`), front 788 → **804**
+(16 nuevos). Los **3 rojos de `assistant-math.spec.ts` son preexistentes** (KaTeX / sanitizado XSS) y
+ajenos a este WI: ni ese spec ni sus fuentes se tocaron. `dotnet build` y
+`ng build --configuration production` limpios (los warnings de budget del bundle vienen de antes).
+
+**NO se commiteo nada** — arbol reportado, como siempre.
+
 ## 2026-08-10 — El manual deja de ser un PDF embebido: se renderiza el Markdown, con atajos por seccion
 
 **La decision de Rodolfo: el `.md` es la fuente de verdad; el PDF puede estar mal.** Eso desbloqueo el

@@ -1973,6 +1973,8 @@
     "WELCOME_READ_ONLY": "Ten asystent działa tylko do odczytu: prowadzi i odpowiada na pytania, ale nigdy nie modyfikuje danych ani nie wykonuje żadnych działań w systemie. W przypadku złożonych obliczeń lub konfiguracji może udzielić częściowej odpowiedzi, dlatego ważne informacje potwierdź u swojego administratora.",
     "COMPOSER_PLACEHOLDER": "Napisz wiadomość…",
     "SEND": "Wyślij",
+    "CANCEL": "Zatrzymaj odpowiedź",
+    "CANCELLED_NOTICE": "Odpowiedź anulowana",
     "DISCLAIMER": "Asystent wyłącznie udziela wskazówek i odpowiada na pytania; nie wykonuje obliczeń ani nie modyfikuje danych. Może popełniać błędy — proszę zweryfikować istotne informacje.",
     "PLACEHOLDER_REPLY": "Asystent nie jest jeszcze podłączony. Twoja wiadomość została zapisana.",
     "PROCESSING": "Przetwarzanie zapytania…",

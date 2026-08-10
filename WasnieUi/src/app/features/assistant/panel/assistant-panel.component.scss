@@ -468,6 +468,22 @@
   font-size: var(--font-size-12);
   line-height: 1.45;
   color: var(--color-text-tertiary);
+
+  /**
+   * ★ THIS ONE LINE IS THE "…few seconds." BUG, AND IT IS NOT ABOUT THIS PARAGRAPH.
+   *
+   * `.assistant-msg` sets `white-space: pre-wrap`, which it must: a user's message is printed verbatim
+   * and the line breaks they typed have to survive. But it INHERITS, and inside it this sentence is not
+   * typed text — it is a translated UI string sitting in a template on its own indented line. With
+   * pre-wrap the template's newline and leading spaces stop being formatting and become CONTENT: the
+   * sentence starts indented, the wrap comes back to the true left edge, and the last word ("seconds.")
+   * lands under nothing, looking like a broken layout.
+   *
+   * So the inheritance is refused exactly where it does not belong. Fixing it by reflowing the template
+   * onto one long line would work today and break the next time anyone formats this file — the rule
+   * belongs to the element whose text must not preserve whitespace.
+   */
+  white-space: normal;
 }
 
 // ── The waiting avatar ──────────────────────────────────────────────────────
@@ -591,6 +607,35 @@
 .assistant-msg__placeholder {
   color: var(--color-text-tertiary);
   font-style: italic;
+}
+
+/**
+ * "Response cancelled", under the words that did arrive.
+ *
+ * ★ QUIETER THAN THE FAILURE CARD, ON PURPOSE. That card is a warning with something to do about it —
+ * warning border, warning title, a Retry button. This is a footnote on a decision the user made
+ * themselves: it explains where the answer stops and asks nothing of them. Same family of component,
+ * one step down in weight, which is exactly the difference between the two states.
+ */
+.assistant-msg__cancelled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  // See --waiting-long below: the bubble preserves whitespace for the USER's typed text, and this is
+  // not typed text.
+  white-space: normal;
+}
+
+// Pushed to the right edge: the note explains, the button is the way out of it — the same left-to-right
+// reading order the failure card already uses for its own retry.
+.assistant-msg__cancelled-text {
+  flex: 1;
+  min-width: 0;
 }
 
 // ── The welcome ─────────────────────────────────────────────────────────────

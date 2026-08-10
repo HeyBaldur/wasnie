@@ -17,6 +17,13 @@ public sealed class AssistantMessageConfiguration : IEntityTypeConfiguration<Ass
         builder.Property(m => m.Role).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(m => m.Content).IsRequired().HasMaxLength(AssistantMessage.MaxContentLength);
 
+        // Stored as text, like Role and for the same reason: a row read straight from the database says
+        // "Cancelled" rather than "1", and adding a third outcome later cannot silently renumber the
+        // two that already exist. Existing rows take the migration's default — every turn written
+        // before this column existed did finish, so `Complete` is the truth for all of them and not a
+        // convenient guess.
+        builder.Property(m => m.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+
         // Untyped JSON, nullable, unused in this piece. nvarchar(max) because what later pieces attach
         // (retrieved document references, screen context, a pre-fill payload) has no bound worth
         // guessing today — and guessing low is a migration over live chat history.

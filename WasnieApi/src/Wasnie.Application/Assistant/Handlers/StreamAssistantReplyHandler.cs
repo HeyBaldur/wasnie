@@ -88,9 +88,20 @@ public sealed class StreamAssistantReplyHandler(
                 yield break;
             }
 
-            // The failed attempt persisted no assistant row (see below), so the next slot is still the
-            // one the first attempt would have used.
-            nextSequence = userMessage.Sequence;
+            // ★ THE ANSWER GOES AFTER EVERYTHING THAT IS ALREADY STORED, which is not the same thing as
+            // "after the question" any more.
+            //
+            // A FAILED turn stored no assistant row, so the last message IS the question and this is
+            // exactly the slot the first attempt would have used — unchanged behaviour.
+            //
+            // A CANCELLED turn did store one: the partial answer the user watched arrive and chose to
+            // stop. Reusing the question's slot would write the new answer on top of a sequence that is
+            // taken, and (ConversationId, Sequence) is a UNIQUE index — the retry would not produce a
+            // wrong thread, it would produce a failed save. So the retry APPENDS: the stopped attempt
+            // stays where it is, still marked, and the new answer lands after it. That is also the
+            // honest shape of what happened — the user has both the fragment they stopped and the
+            // answer they asked for again.
+            nextSequence = history[^1].Sequence;
         }
         else
         {
@@ -300,7 +311,8 @@ public sealed class StreamAssistantReplyHandler(
             }
             catch (OperationCanceledException)
             {
-                // The user closed the panel or navigated away. There is nobody left to tell.
+                // The client is gone: Stop was pressed, the panel was closed, the tab navigated away.
+                // Nobody is listening to this stream any more — see below for what is written.
                 abandoned = true;
             }
             catch (Exception)
@@ -312,6 +324,39 @@ public sealed class StreamAssistantReplyHandler(
 
             if (abandoned)
             {
+                // ★ THE ONE PLACE SOMETHING PARTIAL IS STORED, AND WHY IT IS NOT A HOLE IN THAT RULE.
+                //
+                // "Nothing partial is ever stored" exists so the user never finds a reply that stops
+                // mid-sentence and reads it as the assistant's finished opinion. A cancellation is the
+                // case where the partial answer is not an accident: the user WATCHED these words
+                // arrive and then chose to stop them. Dropping them would erase what was on their
+                // screen a moment ago and leave the thread claiming their question was never answered
+                // — offering a retry for a turn they deliberately ended.
+                //
+                // So it is kept, and it is kept MARKED: the row carries `Cancelled`, which is what
+                // stops it from ever passing for a finished answer here or in any client. That mark is
+                // the whole reason storing it is safe.
+                //
+                // ★ NOTHING IS WRITTEN WHEN NOTHING WAS WRITTEN YET. Cancelling during the classifier
+                // or the lookup leaves an empty builder, and an empty row is not a shorter answer —
+                // it is a blank bubble. That turn stays unanswered, which is exactly what it is, and
+                // the existing retry path covers it.
+                //
+                // ★ THE SAVE USES `CancellationToken.None` ON PURPOSE. The request's token is ALREADY
+                // cancelled — that is how we got here — so passing it would abort the write that this
+                // whole branch exists to perform, and the answer the user watched would be lost to the
+                // very click meant to preserve it. The work is deliberately small and bounded: one
+                // insert of text already in memory, no provider call (that connection is what just
+                // ended).
+                var interrupted = answer.ToString().Trim();
+
+                if (interrupted.Length > 0)
+                {
+                    await PersistAssistantAsync(
+                        conversation.Id, interrupted, nextSequence + 1, clock.UtcNowOffset,
+                        CancellationToken.None, AssistantMessageStatus.Cancelled);
+                }
+
                 yield break;
             }
 
@@ -373,8 +418,14 @@ public sealed class StreamAssistantReplyHandler(
         yield return AssistantStreamEvent.OfDone(AssistantMapper.ToDto(assistantMessage));
     }
 
+    /// <param name="status">
+    /// <see cref="AssistantMessageStatus.Cancelled"/> only for the interrupted branch above — every
+    /// other caller is storing an answer that finished.
+    /// </param>
     private async Task<AssistantMessage> PersistAssistantAsync(
-        Guid conversationId, string content, int sequence, DateTimeOffset now, CancellationToken cancellationToken)
+        Guid conversationId, string content, int sequence, DateTimeOffset now,
+        CancellationToken cancellationToken,
+        AssistantMessageStatus status = AssistantMessageStatus.Complete)
     {
         // Truncated rather than rejected: a model that overruns the column has still written something
         // the user watched arrive, and refusing to store it would erase what they just read.
@@ -384,7 +435,7 @@ public sealed class StreamAssistantReplyHandler(
 
         var message = AssistantMessage.Create(
             guid.NewGuid(), conversationId, tenantContext.TenantId,
-            AssistantMessageRole.Assistant, stored, sequence, now);
+            AssistantMessageRole.Assistant, stored, sequence, now, payload: null, status: status);
 
         db.AssistantMessages.Add(message);
         await db.SaveChangesAsync(cancellationToken);

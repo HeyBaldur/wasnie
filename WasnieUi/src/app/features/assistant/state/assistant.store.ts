@@ -7,6 +7,7 @@ import {
   AssistantConversationSummary,
   AssistantMessage,
   AssistantProgressStep,
+  isCancelledReply,
 } from '../models/assistant.model';
 
 /**
@@ -161,12 +162,128 @@ export class AssistantStore {
    * before the `user` frame); there is nothing stored to re-answer then, so it is a normal send.
    */
   async retry(): Promise<void> {
-    const pending = this.retryable();
+    // ★ ONE RETRY, TWO WAYS IN. The button under a failed turn and the one beside a stopped answer run
+    // the SAME thing: re-answer the last stored question, without writing it again. They are kept as
+    // separate signals only because they are separate SIGHTS — the failure card must not appear over a
+    // turn the user stopped on purpose — and the two can never both be true, since a cancelled reply is
+    // a stored answer and `retryable` needs the thread to be waiting on one.
+    const pending = this.retryable() ?? this.retryableCancelled();
     if (!pending || this.sending()) {
       return;
     }
 
     await this.exchange(pending.content, pending.wasPersisted);
+  }
+
+  /**
+   * The handle on the request in flight — what Stop actually pulls.
+   *
+   * ★ ABORTING THE FETCH IS THE WHOLE MECHANISM, on both sides. The browser stops reading, and the
+   * server sees the connection go: its request token cancels, the call to the model is dropped mid
+   * answer (no more tokens are paid for words nobody will read), and it writes what had arrived as a
+   * cancelled turn. One signal, no second endpoint to keep in step with this one.
+   */
+  private controller: AbortController | null = null;
+
+  /**
+   * True from the instant Stop is pressed until the failed exchange has finished unwinding.
+   *
+   * ★ IT IS WHAT TELLS A CANCELLATION APART FROM A FAILURE, and they arrive identically: aborting the
+   * fetch throws into the same catch a dead connection would. Without this the user would press Stop
+   * and be told the assistant could not answer — blamed for a fault, and offered a retry for a turn
+   * they deliberately ended.
+   */
+  private cancelling = false;
+
+  /**
+   * Stops the answer being written, and keeps what was written.
+   *
+   * ★ THE INPUT IS FREE IMMEDIATELY, which is the point of the button: someone presses Stop because
+   * they want to ask something ELSE, so `sending` falls as the request unwinds and the composer is
+   * usable before the stored row has even been read back.
+   *
+   * ★ THE PARTIAL TEXT STAYS ON SCREEN AND IS THEN REPLACED BY THE SERVER'S ROW, never kept as a local
+   * copy. The frozen text is what the user was reading a moment ago; `reconcileCancelled` swaps it for
+   * the turn the backend actually stored, so what is on screen after this settles is the same thing a
+   * reload would show. Nothing here invents a message.
+   */
+  async cancel(): Promise<void> {
+    const controller = this.controller;
+
+    if (!this.sending() || controller === null) {
+      return;
+    }
+
+    this.cancelling = true;
+    this.progressSteps.set([]);
+
+    const conversationId = this.conversation()?.id ?? null;
+    // Read BEFORE the abort: the exchange's own unwinding must not be racing us for this value.
+    const partial = this.streamingReply();
+
+    controller.abort();
+
+    // ★ NOTHING WRITTEN YET MEANS NOTHING TO KEEP. Stopping during the classifier or a lookup leaves
+    // the server with an empty answer, and it stores nothing rather than a blank bubble — so there is
+    // no row to wait for and no partial to show. The question simply stands unanswered, which is what
+    // it is, and the composer is already free for the next one.
+    if (partial === null || partial.length === 0) {
+      this.streamingReply.set(null);
+      return;
+    }
+
+    if (conversationId !== null) {
+      await this.reconcileCancelled(conversationId);
+    } else {
+      this.streamingReply.set(null);
+    }
+  }
+
+  /** How long to wait before asking the server a second time. See {@link reconcileCancelled}. */
+  private static readonly RECONCILE_RETRY_MS = 300;
+
+  /**
+   * Replaces the frozen partial with the turn the server stored for it.
+   *
+   * ★ WHY IT CAN NEED A SECOND ASK. The row is written while the aborted request unwinds on the
+   * server, and this read leaves the browser at almost the same instant — so the first answer can
+   * genuinely predate the insert. One retry, once, after a short pause: enough for a local write to
+   * land, short enough that nobody watches for it.
+   *
+   * ★ AND IF IT NEVER APPEARS, THE PARTIAL GOES. Leaving it would show an answer that exists nowhere
+   * — gone on the next reload, and impossible to find again. A turn that stops with nothing under it
+   * is the honest picture of a question the assistant never finished answering.
+   */
+  private async reconcileCancelled(conversationId: string): Promise<void> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, AssistantStore.RECONCILE_RETRY_MS));
+      }
+
+      let refreshed: AssistantConversation;
+      try {
+        refreshed = await firstValueFrom(this.api.getConversation(conversationId));
+      } catch {
+        break;
+      }
+
+      // The panel may have moved on while we were asking — a new thread, or the same one already
+      // answering something else. Overwriting it with this older read would be the worse outcome.
+      if (this.conversation()?.id !== conversationId) {
+        return;
+      }
+
+      const last = [...refreshed.messages].sort((a, b) => a.sequence - b.sequence).at(-1);
+
+      if (last && isCancelledReply(last)) {
+        this.conversation.set(refreshed);
+        this.streamingReply.set(null);
+        await this.loadConversations();
+        return;
+      }
+    }
+
+    this.streamingReply.set(null);
   }
 
   /**
@@ -212,11 +329,45 @@ export class AssistantStore {
     return unsent ? { content: unsent.content, wasPersisted: false } : null;
   });
 
+  /**
+   * What the "Try again" beside a STOPPED answer would re-run, or null when there is no such offer.
+   *
+   * ★ ONLY WHEN THE STOPPED ANSWER IS THE LAST THING IN THE THREAD. Retrying re-answers the last stored
+   * question, so on an older cancelled turn — one the user has since asked past — the button would say
+   * "try again" and re-answer something else entirely. A control whose label describes a different
+   * message than the one it sits under is worse than no control.
+   *
+   * ★ ALWAYS `wasPersisted: true`. There IS a stored assistant row here, which means the question that
+   * produced it certainly reached the server. This can never be the never-arrived case.
+   */
+  readonly retryableCancelled = computed<{ content: string; wasPersisted: boolean } | null>(() => {
+    // Nothing to offer while one is in flight — same rule as `retryable`, and for the same reason.
+    if (this.sending()) {
+      return null;
+    }
+
+    const ordered = [...(this.conversation()?.messages ?? [])].sort((a, b) => a.sequence - b.sequence);
+    const last = ordered.at(-1);
+
+    if (!last || !isCancelledReply(last)) {
+      return null;
+    }
+
+    const question = [...ordered].reverse().find((m) => m.role === 'User');
+
+    return question ? { content: question.content, wasPersisted: true } : null;
+  });
+
   private async exchange(trimmed: string, isRetry: boolean): Promise<void> {
     this.sending.set(true);
     this.error.set(null);
     this.errorKey.set(null);
     this.unsentFailure.set(null);
+    this.cancelling = false;
+    // One controller per turn: an AbortController is single-use, so reusing last turn's would arrive
+    // already fired and stop this request before it began.
+    const controller = new AbortController();
+    this.controller = controller;
     // Last turn's steps belong to last turn. Cleared here rather than at the end of the previous
     // exchange so a finished list is never left half-shown while the next request is being opened.
     this.progressSteps.set([]);
@@ -244,7 +395,7 @@ export class AssistantStore {
       const token = this.auth.getAccessToken();
 
       for await (const frame of this.api.streamMessage(
-        conversationId, trimmed, token, undefined, isRetry)) {
+        conversationId, trimmed, token, controller.signal, isRetry)) {
         switch (frame.type) {
           case 'user':
             persisted = true;
@@ -296,13 +447,20 @@ export class AssistantStore {
 
       await this.loadConversations();
     } catch {
-      this.streamingReply.set(null);
-      this.progressSteps.set([]);
-      this.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
-      this.markThreadUnanswered();
-      this.unsentFailure.set(persisted ? null : { content: trimmed });
+      // ★ A CANCELLATION LANDS HERE TOO — aborting the fetch throws exactly like a dead connection —
+      // and it must take none of this. `cancel()` owns that path: it keeps the partial answer on
+      // screen until the stored row replaces it, leaves the thread answered, and offers no retry,
+      // because the user did not suffer a failure, they made a decision.
+      if (!this.cancelling) {
+        this.streamingReply.set(null);
+        this.progressSteps.set([]);
+        this.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
+        this.markThreadUnanswered();
+        this.unsentFailure.set(persisted ? null : { content: trimmed });
+      }
     } finally {
       this.sending.set(false);
+      this.controller = null;
     }
   }
 

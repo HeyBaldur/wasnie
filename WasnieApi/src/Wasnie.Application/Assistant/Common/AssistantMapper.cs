@@ -11,7 +11,8 @@ public static class AssistantMapper
             message.Content,
             message.Payload,
             message.Sequence,
-            message.CreatedAt);
+            message.CreatedAt,
+            message.Status.ToString());
 
     public static AssistantConversationDto ToDto(
         AssistantConversation conversation, IReadOnlyList<AssistantMessage> messages) =>

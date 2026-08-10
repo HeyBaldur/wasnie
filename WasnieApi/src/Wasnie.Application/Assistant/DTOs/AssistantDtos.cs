@@ -16,13 +16,22 @@ public sealed record AssistantConversationSummaryDto(
 /// pieces start attaching structure to a turn — a field that appears later is a breaking change for
 /// every consumer; a field that is always null is not.
 /// </param>
+/// <param name="Status">
+/// How the turn ended: `Complete`, or `Cancelled` when the user stopped the answer mid-write.
+///
+/// ★ THIS IS WHAT MAKES A CANCELLATION SURVIVE THE RELOAD. The partial text is stored, so without the
+/// status beside it a reopened conversation would show an answer that stops mid-sentence as if the
+/// assistant had chosen to end there. The client renders the notice from THIS, never from anything it
+/// remembers about the session.
+/// </param>
 public sealed record AssistantMessageDto(
     Guid Id,
     string Role,
     string Content,
     string? Payload,
     int Sequence,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string Status);
 
 /// <summary>A conversation with its turns, in order.</summary>
 /// <param name="LastTurnUnanswered">

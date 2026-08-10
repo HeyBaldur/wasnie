@@ -1973,6 +1973,8 @@
     "WELCOME_READ_ONLY": "Este asistente es de solo lectura: te orienta y responde tus preguntas, pero nunca modifica datos ni ejecuta acciones en tu sistema. En cálculos o configuraciones complejas puede darte una respuesta parcial, así que verificá la información importante con tu administrador.",
     "COMPOSER_PLACEHOLDER": "Escribí un mensaje…",
     "SEND": "Enviar",
+    "CANCEL": "Detener la respuesta",
+    "CANCELLED_NOTICE": "Respuesta cancelada",
     "DISCLAIMER": "El asistente solo orienta y responde consultas; no realiza cálculos ni modifica datos. Puede cometer errores: verifique la información importante.",
     "PLACEHOLDER_REPLY": "El asistente todavía no está conectado. Tu mensaje se guardó.",
     "PROCESSING": "Procesando tu consulta…",
