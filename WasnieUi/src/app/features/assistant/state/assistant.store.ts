@@ -202,10 +202,18 @@ export class AssistantStore {
    * they want to ask something ELSE, so `sending` falls as the request unwinds and the composer is
    * usable before the stored row has even been read back.
    *
-   * ★ THE PARTIAL TEXT STAYS ON SCREEN AND IS THEN REPLACED BY THE SERVER'S ROW, never kept as a local
-   * copy. The frozen text is what the user was reading a moment ago; `reconcileCancelled` swaps it for
-   * the turn the backend actually stored, so what is on screen after this settles is the same thing a
-   * reload would show. Nothing here invents a message.
+   * ★ THE CANCELLED TURN IS ON SCREEN BEFORE THE SERVER IS ASKED ANYTHING, and that is a correction of
+   * how this worked at first. The original version froze the partial text and waited for the stored row
+   * to read back before showing anything final — and the read LOST THE RACE: the server writes that row
+   * while the aborted request unwinds, which is after the browser has already fired its question. Both
+   * asks came back with the turn not yet stored, the frozen text was cleared as "it never existed", and
+   * the user watched their answer VANISH on the click that was supposed to preserve it. Only a refresh
+   * brought it back.
+   *
+   * So the order is inverted: the turn is written into the thread here, immediately, from the words that
+   * were on screen — and the server's own row replaces it quietly when it lands. What is shown is never
+   * invented; it is exactly the text the user just read, which is also exactly what the backend is in
+   * the middle of storing.
    */
   async cancel(): Promise<void> {
     const controller = this.controller;
@@ -223,53 +231,110 @@ export class AssistantStore {
 
     controller.abort();
 
+    this.streamingReply.set(null);
+
+    // ★ SET HERE, SYNCHRONOUSLY, NOT LEFT TO THE EXCHANGE'S `finally`. That runs a few microtasks later,
+    // once the aborted stream has finished throwing — so leaving it to that made "the composer is free"
+    // depend on scheduling, and made the reconcile below unable to tell "the turn I just cancelled is
+    // still unwinding" from "a new question is being answered". Pressing Stop IS the end of this turn;
+    // saying so immediately is both truer and simpler.
+    this.sending.set(false);
+
     // ★ NOTHING WRITTEN YET MEANS NOTHING TO KEEP. Stopping during the classifier or a lookup leaves
     // the server with an empty answer, and it stores nothing rather than a blank bubble — so there is
     // no row to wait for and no partial to show. The question simply stands unanswered, which is what
     // it is, and the composer is already free for the next one.
     if (partial === null || partial.length === 0) {
-      this.streamingReply.set(null);
       return;
     }
 
+    this.appendCancelledTurn(partial.trim());
+
     if (conversationId !== null) {
       await this.reconcileCancelled(conversationId);
-    } else {
-      this.streamingReply.set(null);
     }
   }
 
-  /** How long to wait before asking the server a second time. See {@link reconcileCancelled}. */
-  private static readonly RECONCILE_RETRY_MS = 300;
+  /**
+   * The id carried by the cancelled turn until the server's own row replaces it.
+   *
+   * A CONSTANT, not a generated id: there can only ever be one of these at a time — it is the answer
+   * that was being written, and there is only one of those — and a stable value makes it obvious in a
+   * debugger that this row is the local stand-in rather than something the backend sent.
+   */
+  static readonly PENDING_CANCELLED_ID = 'pending-cancelled';
 
   /**
-   * Replaces the frozen partial with the turn the server stored for it.
+   * Puts the stopped answer into the thread, as the turn it is.
    *
-   * ★ WHY IT CAN NEED A SECOND ASK. The row is written while the aborted request unwinds on the
-   * server, and this read leaves the browser at almost the same instant — so the first answer can
-   * genuinely predate the insert. One retry, once, after a short pause: enough for a local write to
-   * land, short enough that nobody watches for it.
+   * ★ IT GOES INTO `messages`, NOT BESIDE THEM. A separate "here is the cancelled bubble" signal would
+   * render after every stored message, so the moment the user asked their next question — which is the
+   * whole reason they pressed Stop — the stopped answer would jump BELOW it and the thread would read
+   * out of order. Put in sequence, it is simply where it happened.
+   */
+  private appendCancelledTurn(content: string): void {
+    const current = this.conversation();
+
+    if (!current || content.length === 0) {
+      return;
+    }
+
+    const lastSequence = current.messages.reduce((max, m) => Math.max(max, m.sequence), -1);
+
+    this.conversation.set({
+      ...current,
+      messages: [
+        ...current.messages,
+        {
+          id: AssistantStore.PENDING_CANCELLED_ID,
+          role: 'Assistant',
+          content,
+          payload: null,
+          sequence: lastSequence + 1,
+          createdAt: new Date().toISOString(),
+          status: 'Cancelled',
+        },
+      ],
+      // The thread ends on an answer now, so it is not waiting on one. Without this the failure card
+      // would appear beside a turn the user ended on purpose.
+      lastTurnUnanswered: false,
+    });
+  }
+
+  /**
+   * How long to wait before each further ask. See {@link reconcileCancelled}.
    *
-   * ★ AND IF IT NEVER APPEARS, THE PARTIAL GOES. Leaving it would show an answer that exists nowhere
-   * — gone on the next reload, and impossible to find again. A turn that stops with nothing under it
-   * is the honest picture of a question the assistant never finished answering.
+   * Backing off rather than hammering: the first gap covers the ordinary case (the write lands while
+   * the request unwinds), and the later ones cover a server busy enough that it has not noticed the
+   * dropped connection yet.
+   */
+  private static readonly RECONCILE_DELAYS_MS = [0, 300, 900, 2000];
+
+  /**
+   * Swaps the local stand-in for the row the server actually stored.
+   *
+   * ★ IT IS A CORRECTION, NEVER A REMOVAL. The stand-in is already correct — same words, same state —
+   * so this exists only to replace it with the authoritative row (real id, server's truncation, server's
+   * timestamp). If every ask comes back without it, the stand-in simply STAYS: taking it away would
+   * reproduce the exact bug this ordering was changed to fix, and the next time the conversation is
+   * opened the server's version is what renders anyway.
    */
   private async reconcileCancelled(conversationId: string): Promise<void> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) {
-        await new Promise((resolve) => setTimeout(resolve, AssistantStore.RECONCILE_RETRY_MS));
+    for (const delay of AssistantStore.RECONCILE_DELAYS_MS) {
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
 
       let refreshed: AssistantConversation;
       try {
         refreshed = await firstValueFrom(this.api.getConversation(conversationId));
       } catch {
-        break;
+        return;
       }
 
-      // The panel may have moved on while we were asking — a new thread, or the same one already
-      // answering something else. Overwriting it with this older read would be the worse outcome.
-      if (this.conversation()?.id !== conversationId) {
+      // The panel may have moved on while we were asking — a different thread, or this one already
+      // busy answering something new. A snapshot taken before that started would erase it.
+      if (this.conversation()?.id !== conversationId || this.sending()) {
         return;
       }
 
@@ -277,13 +342,10 @@ export class AssistantStore {
 
       if (last && isCancelledReply(last)) {
         this.conversation.set(refreshed);
-        this.streamingReply.set(null);
         await this.loadConversations();
         return;
       }
     }
-
-    this.streamingReply.set(null);
   }
 
   /**
@@ -459,8 +521,15 @@ export class AssistantStore {
         this.unsentFailure.set(persisted ? null : { content: trimmed });
       }
     } finally {
-      this.sending.set(false);
-      this.controller = null;
+      // ★ ONLY IF THIS IS STILL THE TURN IN FLIGHT. A cancelled exchange frees the composer at the
+      // click and then keeps unwinding for a few microtasks; the user can start a new question inside
+      // that window, and this clean-up — belonging to a request that is already over — would otherwise
+      // clear the NEW turn's sending flag and drop its abort handle, leaving a Stop button with nothing
+      // to stop.
+      if (this.controller === controller) {
+        this.sending.set(false);
+        this.controller = null;
+      }
     }
   }
 

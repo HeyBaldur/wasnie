@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { AssistantStore } from './state/assistant.store';
 import { AssistantApiService } from './services/assistant.api.service';
 import { AssistantPanelComponent } from './panel/assistant-panel.component';
@@ -2253,6 +2253,48 @@ describe('AssistantStore — stopping an answer', () => {
     expect(store.messages()[1].status).toBe('Cancelled');
     expect(store.messages()[1].content).toBe('A real');
     expect(store.streamingReply()).withContext('the stored row replaced it').toBeNull();
+  });
+
+  it('★ shows the cancelled turn AT THE CLICK, before the server has been asked anything', async () => {
+    const { sending } = await sendAndReachHalfway();
+
+    // ★ THE BUG THIS PINS. The first version froze the partial and waited for the stored row to read
+    // back — and that read loses the race, because the server writes it while the aborted request
+    // unwinds. Both asks returned a thread with no cancelled turn, the frozen text was cleared as
+    // "it never existed", and the answer VANISHED on the click meant to preserve it. Only a refresh
+    // brought it back.
+    //
+    // The server never answers in this test: `getConversation` hangs forever, which is the strongest
+    // possible version of losing that race.
+    api.getConversation.and.returnValue(NEVER);
+
+    const cancelling = store.cancel();
+    await settle();
+
+    expect(store.messages().length).withContext('the stopped answer is in the thread').toBe(2);
+    expect(store.messages()[1].status).toBe('Cancelled');
+    expect(store.messages()[1].content).toBe('A real');
+    expect(store.streamingReply()).withContext('no bubble left mid-stream').toBeNull();
+    expect(store.sending()).withContext('the composer is free at the click').toBeFalse();
+
+    // And it is not taken away again when the server never confirms it.
+    expect(store.messages().length).toBe(2);
+
+    await sending;
+    void cancelling;
+  });
+
+  it('replaces the stand-in with the server row once it lands', async () => {
+    const { sending } = await sendAndReachHalfway();
+    api.getConversation.and.returnValue(of(withCancelledRow()));
+
+    await store.cancel();
+    await sending;
+
+    // Same words, but now the authoritative row: the server's id, not the local placeholder.
+    expect(store.messages()[1].id).toBe('m-bot');
+    expect(store.messages()[1].id).not.toBe('pending-cancelled');
+    expect(store.messages()[1].status).toBe('Cancelled');
   });
 
   it('★ is not a failure: no error, no retry offered', async () => {

@@ -4,6 +4,69 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-10 — FIX: al cancelar, el mensaje desaparecia hasta refrescar
+
+Reportado por Rodolfo probando el WI anterior: *"presiono cancelar, lo hace, pero el mensaje desaparece,
+tengo que volver a refrescar para ver que fue cancelado"*.
+
+### * LA CAUSA: UN RACE QUE LA LECTURA SIEMPRE IBA A PERDER
+
+El diseño original era "nada de copias locales optimistas": congelar el parcial en pantalla, pedirle al
+servidor la conversacion, y mostrar como definitiva **la fila que el servidor devuelva**. Honesto en
+principio, y **equivocado en el orden de los hechos**.
+
+El servidor escribe esa fila **mientras la request abortada se desenrolla** — o sea *despues* de que el
+browser ya mando su pregunta, porque el browser la manda inmediatamente al abortar. Los dos intentos
+(inmediato y a 300ms) volvian con el hilo todavia sin turno cancelado, y el codigo interpretaba eso como
+"no se guardo nada" y **limpiaba el texto congelado**. Resultado exacto del reporte: la respuesta
+desaparece en el click que existia para preservarla, y solo vuelve con un refresh — porque para entonces
+el servidor **si** la habia guardado. El estado durable nunca estuvo roto; lo que estaba roto era el
+momento en que se lo consultaba.
+
+### El orden invertido
+
+El turno cancelado se escribe en el hilo **en el acto**, con las palabras que estaban en pantalla, y la
+fila del servidor lo **reemplaza** despues, calladamente (id real, truncado del servidor, timestamp del
+servidor).
+
+Esto no viola "no inventar mensajes": lo que se muestra es **exactamente el texto que el usuario acababa
+de leer**, que es **exactamente lo que el backend esta guardando en ese mismo instante**. La copia local
+no es una suposicion sobre lo que el servidor hara — es la misma cosa, unos milisegundos antes.
+
+Dos decisiones que van con eso:
+- **Va dentro de `messages`, no al lado.** Una señal aparte ("aca esta la burbuja cancelada") se
+  renderiza despues de todos los mensajes guardados, asi que en cuanto el usuario hiciera su proxima
+  pregunta — que es el motivo entero por el que apreto Stop — el turno cancelado **saltaria por debajo**
+  y el hilo se leeria fuera de orden.
+- **Si el servidor nunca confirma, el stand-in se queda.** Sacarlo es literalmente reproducir el bug. Y
+  la proxima vez que se abra la conversacion, lo que renderiza es lo que el servidor tenga.
+
+El reconcile pasa de 2 intentos a un **backoff de 0/300/900/2000ms**, y ahora es una **correccion, nunca
+una remocion**.
+
+### * Y DOS HAZARDS DE ORDEN QUE APARECIERON MIRANDO ESTO
+
+1. **`sending` se apaga sincronicamente en el click**, no en el `finally` del exchange. Ese `finally`
+   corre unos microtasks despues, cuando el stream abortado termina de tirar — con lo cual "el composer
+   queda libre" dependia del scheduling, y peor: el reconcile no podia distinguir **"el turno que acabo
+   de cancelar sigue desenrollandose"** de **"hay una pregunta nueva en curso"**, que es justo el chequeo
+   que lo protege de pisar el hilo. Apretar Stop ES el final del turno; decirlo en el momento es mas
+   cierto y mas simple.
+2. **El `finally` del exchange solo limpia si sigue siendo el turno en vuelo** (`this.controller ===
+   controller`). Como ahora el composer se libera en el click, el usuario puede empezar una pregunta
+   nueva dentro de la ventana en la que la anterior todavia se desenrolla — y esa limpieza, perteneciente
+   a una request ya terminada, le apagaba el `sending` y le robaba el AbortController **al turno nuevo**:
+   un boton Stop sin nada que parar. Practicamente inalcanzable (hace falta tipear y clickear en unos
+   microtasks), pero es una clase de bug que no vale la pena dejar viva por una linea.
+
+**Tests:** front 813 -> **815**. El test del bug hace que `getConversation` devuelva `NEVER` — la version
+mas fuerte posible de perder el race — y exige que el turno cancelado este en el hilo igual, con el
+composer libre, **antes** de que el servidor conteste nada. El segundo test fija el reemplazo: cuando la
+fila del servidor llega, el id deja de ser el placeholder. Siguen los 3 rojos preexistentes de KaTeX.
+Bundle identico (828.50 kB).
+
+**Solo front: cero cambios de backend.** **NO se commiteo nada.**
+
 ## 2026-08-10 — "Try again" en la respuesta cancelada, y por que la linea de "...few seconds." estaba torcida
 
 Pulido del cancelar terminado hace un rato. Dos cambios chicos de cara al usuario; **uno de los dos
