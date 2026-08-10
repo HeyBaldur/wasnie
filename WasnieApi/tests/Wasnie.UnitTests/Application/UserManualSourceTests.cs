@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Assistant.Common;
 using Wasnie.Application.Common.Options;
+using Wasnie.Infrastructure.Services.Assistant;
 using Wasnie.Infrastructure.Services.Manual;
 
 namespace Wasnie.UnitTests.Application;
@@ -96,6 +97,37 @@ public sealed class UserManualSourceTests : IDisposable
 
         source.Location.Should().StartWith(AppContext.BaseDirectory);
         source.Location.Should().EndWith("Wasnie_User_Manual.pdf");
+    }
+
+    // ── The screen and the assistant read ONE document ────────────────────────
+
+    [Fact]
+    public void The_REAL_guide_contains_every_section_the_screen_offers_as_a_shortcut()
+    {
+        // ★ THE MANUAL SCREEN AND THE ASSISTANT NOW READ ONE DOCUMENT — `/api/manual/content` serves this
+        // very knowledge base. The drift that closes was real and silent: the assistant answered from the
+        // markdown while the screen showed an exported PDF, and nothing regenerated one from the other, so
+        // editing the guide made the two quietly disagree.
+        //
+        // ★ AND THIS IS WHAT GUARDS THE SHORTCUTS. The panel matches these section numbers against the
+        // headings actually in the document and silently drops any that is missing — correct behaviour,
+        // but it means a renamed heading would make a shortcut vanish with nobody noticing. This is the
+        // test that notices.
+        var knowledge = new FileAssistantKnowledgeBase(NullLogger<FileAssistantKnowledgeBase>.Instance);
+        knowledge.IsAvailable.Should().BeTrue("the guide ships next to the binary — see Wasnie.Infrastructure.csproj");
+
+        foreach (var heading in new[]
+                 {
+                     "## 5. Rate tables",
+                     "### 4.4 Modifier, Cap, Floor",
+                     "## 6. SplitAtQuota",
+                     "### 4.5 Plan lifecycle",
+                 })
+        {
+            knowledge.Documentation.Should().Contain(
+                heading,
+                $"the manual screen offers '{heading}' as a shortcut; renaming it drops the shortcut silently");
+        }
     }
 
     // ── The assistant's end of the same feature ───────────────────────────────

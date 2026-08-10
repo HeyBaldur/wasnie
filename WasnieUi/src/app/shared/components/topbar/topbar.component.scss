@@ -253,3 +253,41 @@
     }
   }
 }
+
+/* Available to a screen reader, invisible on screen. Named on the topbar rather than pulled from a
+   utility framework because it is projected INTO ws-button: content projection keeps the declaring
+   component's style scope, so this rule reaches it and the design system stays untouched. */
+.topbar__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// ── Manual (help) ─────────────────────────────────────────────────────────────
+//
+// Deliberately the same geometry as `.topbar__avatar-btn` below: same 32px circle, same 2px border, same
+// hover to brand. The two sit side by side, and a control that is nearly-but-not-quite its neighbour
+// reads as a mistake. Secondary, not filled — it is help, and it must not compete with the assistant.
+.topbar__manual-btn {
+  @apply flex items-center justify-center cursor-pointer rounded-full;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: none;
+  border: 2px solid var(--color-bd-default);
+  color: var(--color-fg-secondary);
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
+
+  &:hover {
+    border-color: var(--color-brand);
+    color: var(--color-brand);
+  }
+}

@@ -208,10 +208,10 @@
   },
   "MANUAL": {
     "TITLE": "Podręcznik użytkownika",
-    "ASIDE_TITLE": "Utknąłeś na złożonej regule?",
-    "ASIDE_BODY": "Podręcznik opisuje silnik ogólnie i jest dostępny wyłącznie po angielsku. Asystent odpowiada o Twoich własnych planach, na Twoich danych i w Twoim języku.",
+    "SHORTCUTS_TITLE": "Przejdź od razu do",
+    "SHORTCUTS_BODY": "Podręcznik jest gęsty i techniczny. To są sekcje silnika obliczeniowego, których ludzie najczęściej szukają.",
     "ASK_ASSISTANT": "Zapytaj asystenta",
-    "OPEN_FULL": "Otwórz w nowej karcie",
+    "OPEN_PDF": "Otwórz PDF do druku",
     "EMPTY_TITLE": "Podręcznik nie jest jeszcze dostępny",
     "EMPTY_DESC": "Ta instalacja nie ma jeszcze opublikowanego podręcznika użytkownika. Gdy zostanie dodany, pojawi się tutaj.",
     "LOAD_ERROR": "Nie udało się wczytać podręcznika."

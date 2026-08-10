@@ -1,10 +1,8 @@
 <app-shell>
   <!--
     ★ NO PAGE HEADER, ON PURPOSE. `ws-page-layout` always draws its title block, so a headerless screen is
-    not that primitive with an empty input — it is a different container. The screen is a reader: the tab
-    already says where you are, and a title plus subtitle above the document cost exactly the vertical
-    space that forced the whole page to scroll. Now only the document scrolls, which is the one thing that
-    should.
+    not that primitive with an empty input — it is a different container. The tab already says where you
+    are, and a title above the document costs exactly the vertical space that made the whole page scroll.
   -->
   <div class="manual__screen">
     @switch (state()) {
@@ -15,56 +13,75 @@
       }
 
       @case ('ready') {
-        <!--
-          Two columns: the document takes all the room it can get, and the panel beside it holds what a
-          reader needs to know ABOUT the document. Below the breakpoint the panel drops under the viewer
-          rather than squeezing it — on a narrow screen the manual is the whole point.
-        -->
         <div class="manual__layout">
-          <div class="manual__viewer">
-            <iframe class="manual__frame" [src]="documentUrl()" [title]="'MANUAL.TITLE' | translate"></iframe>
-          </div>
+          <!--
+            ★ THE MANUAL IS NOW A WASNIE SCREEN, NOT AN EMBEDDED VIEWER. It is the app's own HTML, so there
+            is no foreign viewer painting grey around it, the three themes apply, the text is selectable
+            and the browser's own Ctrl+F searches it — none of which an embedded PDF allowed.
 
-          <aside class="manual__aside">
+            [innerHTML] with a plain string runs Angular's sanitiser; nothing here is trusted by hand.
+          -->
+          <article
+            class="manual__doc ws-scroll-thin"
+            #doc
+            [innerHTML]="html()"
+            (click)="onDocumentClick($event)"
+          ></article>
+
+          <aside class="manual__aside ws-scroll-thin">
             <ws-card padding="none">
               <!--
-                ★ SERVED FROM OUR OWN ORIGIN, NOT FROM UNSPLASH. Hot-linking the CDN would make every
-                reader's browser call a third party on every visit, handing it their IP and referrer — the
-                same reason KaTeX comes from npm and the PDF worker was bundled rather than fetched. The
-                file is vendored into `public/` like hubspot.png and brain.gif already are.
-                Source: images.unsplash.com/photo-1718241905916-1f9786324de9 (Unsplash License: free to
-                use commercially, no permission needed, attribution appreciated but not required).
-                Decorative, so alt is empty: it repeats nothing the heading beside it does not already say.
+                Served from our own origin, not from Unsplash: hot-linking would make every reader's
+                browser call a third party on each visit, handing it their IP and referrer — the same
+                reason KaTeX comes from npm. Source: images.unsplash.com/photo-1718241905916-1f9786324de9
+                (Unsplash License: free commercial use, attribution appreciated, not required).
+                Decorative, so alt is empty.
               -->
               <img class="manual__aside-cover" src="manual-cover.jpg" alt="" />
 
               <div class="manual__aside-card">
-                <h2 class="manual__aside-title">{{ 'MANUAL.ASIDE_TITLE' | translate }}</h2>
-                <p class="manual__aside-body">{{ 'MANUAL.ASIDE_BODY' | translate }}</p>
+                <h2 class="manual__aside-title">{{ 'MANUAL.SHORTCUTS_TITLE' | translate }}</h2>
+                <p class="manual__aside-body">{{ 'MANUAL.SHORTCUTS_BODY' | translate }}</p>
 
                 <!--
-                  ★ THE PANEL'S RENT, PAID. The manual is static, general and English-only; the assistant
-                  answers about THIS tenant's plans, with their data, in the reader's language. Putting the
-                  hand-off exactly where someone is failing to find an answer is the moment it is worth
-                  most.
-
-                  ★ HIDDEN, NOT DISABLED (Spec 5b.6). Gated on the same entitlement signal the topbar
-                  trigger uses, so a user without a seat never sees a button that would 403.
+                  ★ EVERY CHAPTER, READ OUT OF THE DOCUMENT. Not a list in the code: a hand-written menu of
+                  four entries described a guide that has nineteen, and it would have described the wrong
+                  ones the moment the markdown changed — which it will, because the markdown is the source
+                  of truth and is edited by hand. Add a section and it appears here; rename one and the
+                  label follows; delete one and it goes.
                 -->
-                @if (assistant.entitled() === true) {
-                  <ws-button variant="primary" (click)="askAssistant()">
-                    {{ 'MANUAL.ASK_ASSISTANT' | translate }}
-                  </ws-button>
+                @if (chapters().length) {
+                  <nav class="manual__shortcuts">
+                    @for (heading of chapters(); track heading.id) {
+                      <!-- `title` so a chapter clipped to one line is still readable on hover. -->
+                      <button
+                        type="button"
+                        class="manual__shortcut"
+                        [title]="heading.text"
+                        (click)="jumpTo(heading.id)"
+                      >
+                        {{ heading.text }}
+                      </button>
+                    }
+                  </nav>
                 }
 
-                <!--
-                  Secondary, and the answer to "it reads too small": a new tab gives the document the whole
-                  window and the browser's own zoom. It opens the SAME blob already in memory, so nothing
-                  is fetched again and the manual never gains a public URL.
-                -->
-                <button type="button" class="manual__link" (click)="openFullScreen()">
-                  {{ 'MANUAL.OPEN_FULL' | translate }}
-                </button>
+                <div class="manual__aside-actions">
+                  <!--
+                    ★ HIDDEN, NOT DISABLED (Spec 5b.6), on the same entitlement the topbar trigger uses.
+                    The shortcuts answer "where is it written"; the assistant answers "what does it mean
+                    for MY plan", in the reader's language — the manual is English-only.
+                  -->
+                  @if (assistant.entitled() === true) {
+                    <ws-button variant="primary" (click)="askAssistant()">
+                      {{ 'MANUAL.ASK_ASSISTANT' | translate }}
+                    </ws-button>
+                  }
+
+                  <button type="button" class="manual__link" (click)="openPdf()">
+                    {{ 'MANUAL.OPEN_PDF' | translate }}
+                  </button>
+                </div>
               </div>
             </ws-card>
           </aside>

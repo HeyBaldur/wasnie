@@ -1,65 +1,103 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  Injector,
+  OnInit,
+  afterNextRender,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslatePipe } from '@ngx-translate/core';
+import { Marked } from 'marked';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
 import { WsCardComponent, WsButtonComponent, WsEmptyStateComponent } from '../../shared/ui';
 import { ManualApiService } from './services/manual.api.service';
+import { ManualHeading } from './models/manual.model';
 import { AssistantStore } from '../assistant/state/assistant.store';
 
 type ManualState = 'loading' | 'ready' | 'unavailable' | 'error';
 
 /**
- * The user manual, rendered inside the app from an authenticated fetch.
+ * The id a heading gets, matching the slug Markdown tooling already assumes.
  *
- * ★ THE BROWSER'S OWN PDF VIEWER, ON PURPOSE. A custom renderer (PDF.js drawing to canvases) was built
- * and then removed: it produced blank and clipped pages, and each fix bought a new failure mode. The
- * browser's viewer displays the whole document correctly, at every zoom, with selectable text and working
- * Ctrl+F — none of which the canvas version had. Fewer moving parts beat a viewer we have to keep
- * repairing. If it is ever revisited, the bar is: all 44 pages correct on the first try.
+ * ★ THIS IS NOT A STYLE CHOICE — IT IS WHAT MAKES THE DOCUMENT'S OWN LINKS WORK. The guide is full of
+ * internal references written by hand: `[Rate tables](#5-rate-tables)`,
+ * `[4.5](#45-plan-lifecycle-and-assignments)`, `[15.1](#151-configuration-the-policy-is-opt-in-per-plan)`.
+ * Inventing our own id scheme left every one of them pointing at nothing — a document full of links that
+ * look right and go nowhere.
  *
- * ★ WHAT THIS SCREEN PROMISES. The document is behind the login: the bytes come from `/api/manual/pdf`,
- * which requires the session token, and no public URL to the file exists. What it does NOT promise —
- * anywhere, in code or on screen — is that the PDF cannot be saved. The browser's viewer renders it, and
- * a rendered PDF is a savable PDF.
- *
- * ★ THE FETCH IS A BLOB, AND THAT IS LOAD-BEARING. The session is a JWT that an interceptor attaches as a
- * request HEADER; the browser does not run interceptors for iframe/embed loads, so pointing the frame
- * straight at the endpoint would arrive unauthenticated and be refused. Fetching the bytes here and
- * handing the frame an object URL is what lets an authenticated document be displayed at all.
+ * The rule was derived from those real anchors, not guessed: lowercase, drop punctuation entirely (so the
+ * dot in "4.5" disappears and it becomes `45`), turn spaces into hyphens. "6. SplitAtQuota — the
+ * accelerator question" gives `6-splitatquota--the-accelerator-question`, double hyphen and all, because
+ * the em dash vanishes between two spaces.
  */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} -]/gu, '')
+    .trim()
+    .replace(/ /g, '-');
+}
+
 @Component({
   selector: 'app-manual',
   standalone: true,
-  imports: [
-    AppShellComponent,
-    TranslatePipe,
-    WsCardComponent,
-    WsButtonComponent,
-    WsEmptyStateComponent,
-  ],
+  imports: [AppShellComponent, TranslatePipe, WsCardComponent, WsButtonComponent, WsEmptyStateComponent],
   templateUrl: './manual.component.html',
   styleUrl: './manual.component.scss',
 })
 export class ManualComponent implements OnInit {
   private readonly api = inject(ManualApiService);
-  private readonly sanitizer = inject(DomSanitizer);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
 
-  /**
-   * Root-provided, and the same instance the topbar trigger uses — which is what lets a button on this
-   * screen open the panel that lives in the shell.
-   */
+  /** Root-provided, so a button here opens the panel that lives in the shell. */
   readonly assistant = inject(AssistantStore);
 
+  private readonly docRef = viewChild<ElementRef<HTMLElement>>('doc');
+
   readonly state = signal<ManualState>('loading');
-  readonly documentUrl = signal<SafeResourceUrl | null>(null);
+  readonly html = signal('');
+  readonly headings = signal<ManualHeading[]>([]);
 
   /**
-   * The object URL as a plain string, kept so it can be revoked. A SafeResourceUrl cannot be read back,
-   * and an un-revoked blob holds the whole PDF in memory for the life of the tab.
+   * The navigation: the document's numbered chapters, in document order.
+   *
+   * ★ DERIVED, NEVER LISTED. A hand-written menu of four entries described a guide that has eighteen, and
+   * it would have described the wrong ones the moment the markdown changed — which it will, since the
+   * markdown is the source of truth and is edited by hand. This reads the headings that were actually
+   * rendered, so the menu cannot disagree with the document: add a chapter and it appears, rename one and
+   * the label follows, delete one and it goes.
+   *
+   * ★ NUMBERED ONLY, USING THE DOCUMENT'S OWN CONVENTION RATHER THAN A LIST OF EXCEPTIONS. The guide
+   * numbers what a reader is meant to navigate ("1.", "2." … "18.") and leaves its own housekeeping
+   * unnumbered: "Coverage checklist", "How to read this document", "Maintenance" — that last one is an
+   * instruction to whoever maintains the FILE ("re-verify this document against the code"), not a chapter
+   * about Wasnie. Filtering on the numbering keeps them out of a menu meant for someone hunting an
+   * answer, without hard-coding a single title: add a section 19 and it shows up on its own.
+   *
+   * ★ THE COST, STATED: a real chapter written WITHOUT a number would be missing from this menu. It stays
+   * in the document and is still reachable by scrolling, so nothing is lost — but if unnumbered chapters
+   * ever become normal, this rule is what has to change.
    */
-  private objectUrl: string | null = null;
+  readonly chapters = computed(() =>
+    this.headings().filter(h => h.level === 2 && /^\d+[.\s]/.test(h.text)),
+  );
+
+  /**
+   * ★ NO `bypassSecurityTrust…` ANYWHERE HERE. Binding a plain string to [innerHTML] runs Angular's own
+   * sanitiser, which is the right default even though the markdown comes from our own repository: the
+   * document travels over the network, and "we trust the source" is an assumption that only has to be
+   * wrong once. Heading ids are attached afterwards, in the DOM, so nothing depends on attributes
+   * surviving sanitisation.
+   */
+  private readonly marked = new Marked({ gfm: true, breaks: false });
+
+  private pdfUrl: string | null = null;
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => this.release());
@@ -70,46 +108,99 @@ export class ManualComponent implements OnInit {
     this.release();
     this.state.set('loading');
 
-    this.api.getPdf().subscribe({
-      next: blob => {
-        this.objectUrl = URL.createObjectURL(blob);
-
-        // SAFETY NOTE (ARCHITECTURE.md Rule 4.6.1): bypassSecurityTrustResourceUrl is safe here because
-        // the value is a blob: URL this component just minted from a response body of our own API. It is
-        // never user input, never interpolated, and never comes from the page.
-        //
-        // ★ `view=FitH` — FIT TO WIDTH, AND HERE THAT IS RIGHT RATHER THAN WRONG. It was refused before
-        // for a good reason: across a full-width column it makes the type enormous on a large monitor.
-        // The document now lives in a COLUMN OF BOUNDED WIDTH beside the panel, so filling that width
-        // gives a page far larger than the previous fit-to-page (which sized the paper from the frame's
-        // HEIGHT and left it small), while the cap keeps it from ever becoming huge. It also leaves the
-        // viewer no room to paint grey down the sides.
-        this.documentUrl.set(
-          this.sanitizer.bypassSecurityTrustResourceUrl(
-            `${this.objectUrl}#toolbar=0&navpanes=0&view=FitH`,
-          ),
-        );
+    this.api.getContent().subscribe({
+      next: content => {
+        this.html.set(this.marked.parse(content.markdown, { async: false }) as string);
         this.state.set('ready');
+        afterNextRender(() => this.indexHeadings(), { injector: this.injector });
       },
       error: (err: HttpErrorResponse) => {
-        // 404 is not a failure, it is "this installation has no manual yet" — a different message and a
-        // different tone from a network or permission error, which is why they are separate states.
+        // 404 is "no manual on this installation", which is an expected state with its own calm screen —
+        // not the same thing as a failure, which offers a retry.
         this.state.set(err.status === 404 ? 'unavailable' : 'error');
       },
     });
   }
 
   /**
-   * Opens the document in its own tab.
+   * Gives every chapter and sub-section an id, and collects them.
    *
-   * ★ THIS IS THE ANSWER TO "IT READS TOO SMALL", and it costs nothing: it hands the browser the SAME
-   * blob already in memory, so no request is made, the manual never gains a public URL, and the reader
-   * gets the whole window plus the browser's own zoom controls.
+   * Ids are derived from the heading's own text, so an anchor cannot point at a section that is not
+   * there: the list and the document are built from the same DOM, in the same pass.
    */
-  openFullScreen(): void {
-    if (this.objectUrl) {
-      window.open(this.objectUrl, '_blank', 'noopener');
+  private indexHeadings(): void {
+    const host = this.docRef()?.nativeElement;
+    if (!host) {
+      return;
     }
+
+    const found: ManualHeading[] = [];
+    const used = new Set<string>();
+
+    host.querySelectorAll<HTMLHeadingElement>('h2, h3, h4').forEach(el => {
+      const text = (el.textContent ?? '').trim();
+      if (!text) {
+        return;
+      }
+
+      // Two headings can slugify identically; the document's own links point at the FIRST, which is the
+      // convention Markdown tooling follows, so later duplicates get the suffix rather than the first.
+      let id = slugify(text);
+      let suffix = 1;
+      while (used.has(id)) {
+        id = `${slugify(text)}-${suffix++}`;
+      }
+      used.add(id);
+
+      el.id = id;
+      found.push({ id, level: Number(el.tagName.slice(1)), text });
+    });
+
+    this.headings.set(found);
+  }
+
+  /**
+   * ★ THE DOCUMENT'S OWN LINKS, MADE TO WORK. The guide cross-references itself constantly, and a plain
+   * `#anchor` would ask the WINDOW to jump — which does nothing useful here, because the scrolling
+   * element is the article, not the page. Catching the click on the way up lets the right container do
+   * the scrolling, and leaves external links alone.
+   */
+  onDocumentClick(event: MouseEvent): void {
+    const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+    const href = anchor?.getAttribute('href');
+    if (!href?.startsWith('#')) {
+      return;
+    }
+
+    event.preventDefault();
+    this.jumpTo(decodeURIComponent(href.slice(1)));
+  }
+
+  /**
+   * Scrolls the DOCUMENT column, not the window.
+   *
+   * Measured with rectangles rather than `offsetTop`: the headings' offset parent is not necessarily the
+   * scroller, and `scrollIntoView` would move whichever ancestor it felt like — including the page.
+   */
+  jumpTo(id: string): void {
+    const host = this.docRef()?.nativeElement;
+    if (!host || !id) {
+      return;
+    }
+
+    let target: HTMLElement | null = null;
+    try {
+      target = host.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    } catch {
+      // An id from the document that is not a usable selector: nothing to jump to, and not worth throwing.
+      return;
+    }
+    if (!target) {
+      return;
+    }
+
+    const top = target.getBoundingClientRect().top - host.getBoundingClientRect().top + host.scrollTop;
+    host.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' });
   }
 
   /** Opens the assistant panel that lives in the shell. The manual stays on screen behind it. */
@@ -117,11 +208,36 @@ export class ManualComponent implements OnInit {
     void this.assistant.open();
   }
 
-  private release(): void {
-    if (this.objectUrl) {
-      URL.revokeObjectURL(this.objectUrl);
-      this.objectUrl = null;
+  /**
+   * The printable export.
+   *
+   * ★ FETCHED ONLY WHEN ASKED. The screen no longer needs the PDF to show the manual, so downloading
+   * ~700 KB on every visit to power a button most readers never press would be pure waste. The blob is
+   * still authenticated, and it still never becomes a public URL.
+   */
+  openPdf(): void {
+    if (this.pdfUrl) {
+      window.open(this.pdfUrl, '_blank', 'noopener');
+      return;
     }
-    this.documentUrl.set(null);
+
+    this.api.getPdf().subscribe({
+      next: blob => {
+        this.pdfUrl = URL.createObjectURL(blob);
+        window.open(this.pdfUrl, '_blank', 'noopener');
+      },
+      // Silent by design: the manual is already on screen. A toast about the optional export would be
+      // noise about something the reader does not need.
+      error: () => undefined,
+    });
+  }
+
+  private release(): void {
+    if (this.pdfUrl) {
+      URL.revokeObjectURL(this.pdfUrl);
+      this.pdfUrl = null;
+    }
+    this.html.set('');
+    this.headings.set([]);
   }
 }

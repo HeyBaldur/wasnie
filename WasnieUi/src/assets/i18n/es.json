@@ -208,10 +208,10 @@
   },
   "MANUAL": {
     "TITLE": "Manual de usuario",
-    "ASIDE_TITLE": "¿Trabado con una regla compleja?",
-    "ASIDE_BODY": "El manual explica el motor en general y solo está disponible en inglés. El asistente responde sobre tus propios planes, con tus datos, en tu idioma.",
+    "SHORTCUTS_TITLE": "Ir directo a",
+    "SHORTCUTS_BODY": "El manual es denso y técnico. Estas son las secciones del motor de cálculo que la gente viene a buscar.",
     "ASK_ASSISTANT": "Preguntar al asistente",
-    "OPEN_FULL": "Abrir en una pestaña nueva",
+    "OPEN_PDF": "Abrir el PDF para imprimir",
     "EMPTY_TITLE": "El manual todavía no está disponible",
     "EMPTY_DESC": "Esta instalación aún no tiene publicado el manual de usuario. Cuando se agregue, aparecerá acá.",
     "LOAD_ERROR": "No se pudo cargar el manual."

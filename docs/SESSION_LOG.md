@@ -4,6 +4,156 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-10 — El manual deja de ser un PDF embebido: se renderiza el Markdown, con atajos por seccion
+
+**La decision de Rodolfo: el `.md` es la fuente de verdad; el PDF puede estar mal.** Eso desbloqueo el
+enfoque que el visor nunca iba a poder dar.
+
+**★ EL HALLAZGO QUE LO HABILITO TODO.** El contenido del manual **ya estaba en el repo**: el `.csproj` de
+Infrastructure dice que `docs/Wasnie_Configuration_Guide.md` es *"the same file the team edits and
+publishes the handbook from"*, y el PDF viejo se llamaba literalmente `Wasnie_User_Handbook.pdf`. Ademas
+`marked` ya era dependencia. O sea que no habia que traer nada nuevo para dejar de depender del visor.
+
+**★ Y HABIA UN DRIFT SILENCIOSO QUE NADIE HABRIA NOTADO.** Se verifico que **no existe pandoc, script ni
+paso de build que genere el PDF desde el `.md`**: son dos artefactos independientes. El asistente
+respondia desde el markdown y el usuario leia el PDF, asi que **editar la guia hacia que los dos empezaran
+a contradecirse, en silencio**. Servir la pantalla desde el mismo `IAssistantKnowledgeBase` que ya lee el
+asistente vuelve eso imposible: hay UN documento, entonces hay UNA respuesta. El PDF queda como
+exportacion para imprimir, detras de un boton.
+
+**Backend:** `GET /api/manual/content` en `ManualController`, `[Authorize]` como el resto, devolviendo el
+markdown de `IAssistantKnowledgeBase` — **no una copia propia del archivo**, que es el punto. Devuelve
+markdown y no HTML a proposito: el render es del cliente, que ya tiene `marked` y un sanitizador, y
+mandar HTML desde el servidor haria a ese endpoint responsable de la presentacion.
+
+**Front:** la pantalla renderiza el markdown como **HTML propio de Wasnie**. Eso resuelve de una todo lo
+que el visor no podia: **cero gris** (no hay visor ajeno pintando nada), los 3 temas aplican, el texto se
+**selecciona** y el **Ctrl+F del navegador funciona de verdad** — nada de eso existia con el PDF embebido.
+Tipografia de documento largo con tokens (encabezados, listas, tablas que scrollean solas, `code`,
+`blockquote`), y **medida de lectura acotada**: una linea que cruza un monitor entero es lo que vuelve
+ilegible un documento largo.
+
+**★ SIN `bypassSecurityTrust…` EN NINGUN LADO.** Se ata `[innerHTML]` con un string plano, asi que corre
+el sanitizador de Angular. Es el default correcto **aunque el markdown venga de nuestro propio
+repositorio**: el documento viaja por la red, y "confiamos en la fuente" es una suposicion que solo hace
+falta que sea falsa una vez. Los `id` de los encabezados se agregan DESPUES, en el DOM, para no depender de
+que sobrevivan a la sanitizacion.
+
+**★ Los atajos se EMPAREJAN, no se hardcodean.** La tarjeta lista los numeros de seccion que pidio el
+asesor (5, 4.4, 6, 4.5) y **construye cada link desde el encabezado realmente encontrado en el documento**.
+Hardcodear el texto pondria una copia de un encabezado en el codigo, y la copia es la que se queda vieja:
+un titulo renombrado dejaria un link que se ve bien y no lleva a ningun lado — la misma falla que una URL
+inventada. Un prefijo sin match **simplemente no se renderiza**; menos atajos es degradacion correcta, un
+atajo muerto no. Verificado contra la guia real: los cuatro existen.
+
+**Y el PDF ya no se baja de arranque:** la pantalla no lo necesita para mostrar el manual, asi que traer
+~700 KB en cada visita para alimentar un boton que casi nadie toca era desperdicio puro. Se pide solo al
+hacer clic, sigue siendo blob autenticado y sigue sin tener URL publica.
+
+**★ Verificacion runtime (API en :5099, apagada despues):**
+- **Sin sesion: `GET /api/manual/content` -> 401 con 0 bytes.**
+- Con token: **200, 69.663 bytes de markdown**.
+- **Las cuatro secciones de los atajos estan en lo que sirve el endpoint** (`## 5. Rate tables`,
+  `### 4.4 Modifier, Cap, Floor`, `## 6. SplitAtQuota`, `### 4.5 Plan lifecycle`) — comprobado sobre la
+  respuesta real, no sobre el archivo.
+
+**★ TRES DEFECTOS DEL PRIMER INTENTO, Y UN HALLAZGO QUE CAMBIA EL PANORAMA.**
+
+**(1) Todos los links internos del documento estaban rotos.** El `.md` se referencia a si mismo todo el
+tiempo con anclas en formato Markdown estandar — `[Rate tables](#5-rate-tables)`,
+`[4.5](#45-plan-lifecycle-and-assignments)`,
+`[15.1](#151-configuration-the-policy-is-opt-in-per-plan)` — y yo generaba ids con un esquema inventado
+(`manual-{i}-{slug}`), asi que **ninguna coincidia**: un documento lleno de links que se ven bien y no
+llevan a ningun lado. Se reemplazo por el slug real, **derivado de esas anclas y no adivinado**:
+minusculas, se borra la puntuacion (el punto de "4.5" desaparece y queda `45`), espacios a guiones. Se
+agrego ademas interceptar el click, porque un `#ancla` le pide saltar a la VENTANA y aca el que scrollea es
+el articulo, no la pagina.
+
+**(2) El CSS existia y no podia aplicar NUNCA.** Angular scopea los estilos de un componente estampando
+`_ngcontent-xxx` en los elementos que EL crea; el contenido insertado con `[innerHTML]` no recibe ese
+atributo, asi que `.manual__doc h2 { … }` compila a `h2[_ngcontent-xxx]` y **no matchea nada**. Por eso el
+documento se veia crudo. Va con `::ng-deep`.
+
+**★ Y el `:host` adelante es la seguridad, no decoracion.** `::ng-deep` solo **filtra GLOBALMENTE**:
+restilaria cada `h2`, `table` y `code` de toda la aplicacion, **incluido el chat del asistente, que
+renderiza este mismo markdown**. Con `:host` compila a `[_nghost-xxx] h2` y solo puede matchear dentro del
+subarbol de este componente. El chat queda intacto.
+
+**(3) La navegacion pasa a ser DINAMICA.** Un menu escrito a mano de cuatro entradas describia una guia que
+tiene ~20 capitulos, y habria descrito los equivocados apenas cambiara el markdown — que va a cambiar,
+porque es la fuente de verdad y se edita a mano. Ahora se leen los `h2` realmente renderizados: se agrega
+una seccion y aparece, se renombra y la etiqueta la sigue, se borra y se va.
+
+**★ EL HALLAZGO: el PDF y el `.md` NO son el mismo documento.** La lista de 19 secciones que paso Rodolfo
+**no sale del markdown**. El `.md` tiene 18 numeradas (mas "Coverage checklist", "How to read this
+document" y "Maintenance"), **no tiene seccion 19 ni nada de HubSpot**, y sus titulos son de trabajo, no
+los pulidos del PDF: "4. Plan and Rules" contra "Plans and calculation rules", "6. SplitAtQuota — the
+accelerator question" contra "Quota accelerator", "1. The model on one page" contra "The functional model
+on a single page". **O sea que el PDF esta mas pulido y ademas tiene MAS contenido** (la integracion con
+HubSpot). Se declaro al `.md` como fuente de verdad, y la pantalla lo respeta — pero conviene decidir a
+conciencia: hoy renderiza el documento mas crudo y menos completo de los dos.
+
+
+**Ajuste de la navegacion (mismo dia):** la lista de capitulos ocupaba demasiado del panel y algunos
+titulos se iban a dos lineas. Filas mas compactas (`--space-1`/`--space-2` de padding, sin `gap`, 12 px),
+links en **semibold**, y **una linea por seccion siempre**: los titulos largos —"6. SplitAtQuota — the
+accelerator question" es el peor— se recortan con elipsis. **Una lista cuyas filas tienen alturas
+distintas deja de escanearse como un menu**, que es justamente para lo que existe. El titulo completo
+sigue disponible en el `title` del boton, asi que no se pierde nada al recortarlo.
+
+**Ajuste: el ultimo capitulo no saltaba, y el menu mostraba secciones que no son capitulos.**
+
+**(a) Defecto real del scroll.** Un contenedor scrolleable se detiene en su ultimo pixel, asi que un
+encabezado cerca del final **no puede subir hasta arriba**: no hay contenido debajo que lo empuje. Clickear
+"Maintenance" —a nueve lineas del final— no movia absolutamente nada si el lector ya estaba abajo, y eso se
+lee como un link roto. Se reservo una pantalla de aire al pie del documento (`padding-bottom: 70vh`), asi
+**cualquier** capitulo puede quedar arriba y toda entrada del menu hace lo mismo. No es aire decorativo: es
+lo que vuelve predecible el salto.
+
+**(b) "Maintenance" no es un capitulo del producto.** Es una instruccion para quien mantiene el ARCHIVO
+("re-verify this document against the code and update the verification date"), igual que "Coverage
+checklist" y "How to read this document". En un menu pensado para alguien que entra a buscar una respuesta,
+son ruido.
+
+**El filtro usa la convencion del propio documento, no una lista de excepciones:** la guia numera lo que se
+navega ("1." … "18.") y deja su propia intendencia sin numerar. Se filtra por eso, asi que **no hay ni un
+titulo hardcodeado** — se agrega una seccion 19 y aparece sola. Medido sobre la guia real: **18 capitulos
+en el menu, 3 metas afuera**. **El costo, dicho:** un capitulo real escrito SIN numerar quedaria fuera del
+menu (sigue en el documento y se llega scrolleando); si los capitulos sin numero se vuelven normales, esta
+es la regla que hay que cambiar.
+
+**El manual sale del sidebar y pasa al topbar, junto al usuario.** Es ayuda, no un destino de la
+navegacion del producto, y quedaba raro entre Subscription / Integrations / Settings. Ahora es un
+`ws-button variant="secondary" size="sm" iconOnly` con el `info-circle` de Tabler, agregado al registro de
+`IconComponent` **al lado del `info` existente y sin reemplazarlo** (el viejo esta en uso y dibuja la "i"
+con lineas planas; este trae el pie con serifa). Sigue **sin permiso RBAC**, por la misma razon de siempre:
+el manual documenta el producto, no tiene datos del tenant, y esconderlo se lo ocultaria justo a quien
+menos derechos tiene.
+
+**★ Un detalle de accesibilidad que casi se cuela:** poner `[attr.aria-label]` sobre `<ws-button>` deja el
+atributo en el HOST, mientras que lo que un lector de pantalla anuncia es el `<button>` de adentro — que,
+siendo solo-icono, **se habria quedado sin nombre accesible**. Se resolvio proyectando texto oculto dentro
+del boton. La clase vive en el SCSS del topbar y no en una utilidad global a proposito: el contenido
+proyectado conserva el scope del componente que lo DECLARA, asi que la regla lo alcanza sin tocar el design
+system.
+**Tests:** por instruccion de Rodolfo **no se corrio la suite del front y se elimino
+`manual.component.spec.ts`** — no queria dejar un spec que describiera el mecanismo viejo sin poder
+verificarlo. Los tests del backend siguen igual (1359). `ng build --configuration production` **exit 0**,
+con los dos warnings preexistentes de siempre.
+
+**Tests:** backend **1358 -> 1359**; el nuevo fija que la guia real contenga las cuatro secciones que la
+pantalla ofrece como atajo — hace falta porque el emparejamiento **descarta en silencio** un atajo que ya
+no existe, que es el comportamiento correcto pero invisible. Front: 7 specs del visor reescritos al
+mecanismo nuevo (renderiza markdown, atajos construidos DESDE el documento, un atajo inexistente se cae en
+vez de linkear a la nada, el PDF **no** se descarga hasta que se lo pide, y el boton del asistente
+**oculto** sin entitlement). Front **794 verdes de 797**; los 3 rojos siguen siendo los de KaTeX,
+preexistentes. `ng build --configuration production` **exit 0**.
+
+**PENDIENTE de Rodolfo:** abrir `/manual` y ver el documento como pantalla de Wasnie. **No verifique que
+el PDF y el `.md` digan hoy lo mismo** — no puedo abrir el PDF; con el `.md` como fuente de verdad eso deja
+de bloquear, pero si el PDF tiene portada o secciones propias, ahora son dos documentos distintos y
+conviene decidir si se sigue exportando.
+
 ## 2026-08-10 — ROLLBACK de PDF.js: vuelve el visor simple + nota de idioma
 
 **Decision de Rodolfo: se abandona el visor propio.** Yo lo construi con PDF.js y lo rompi dos veces —

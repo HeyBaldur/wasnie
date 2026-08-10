@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Application.Manual;
 
 namespace Wasnie.Api.Controllers;
@@ -25,8 +26,37 @@ namespace Wasnie.Api.Controllers;
 [ApiController]
 [Route("api/manual")]
 [Authorize]
-public sealed class ManualController(IUserManualSource manual) : ControllerBase
+public sealed class ManualController(
+    IUserManualSource manual,
+    IAssistantKnowledgeBase knowledge) : ControllerBase
 {
+    /// <summary>
+    /// GET /api/manual/content — the manual as the MARKDOWN it is authored in.
+    ///
+    /// ★ THE SAME OBJECT THE ASSISTANT READS, AND THAT IS THE ENTIRE POINT. `IAssistantKnowledgeBase`
+    /// already loads `docs/Wasnie_Configuration_Guide.md`, which is the file the team edits and publishes
+    /// the handbook from. Serving the screen from that same instance means the manual a user reads and
+    /// the answers the assistant gives cannot drift apart — they are one document.
+    ///
+    /// ★ WHICH FIXES A DRIFT THAT ALREADY EXISTED, SILENTLY. Until now the assistant answered from the
+    /// markdown while the screen showed an exported PDF, and nothing regenerated one from the other: edit
+    /// the guide, and the two would quietly start contradicting each other with no build step to notice.
+    /// The PDF stays available as the printable export; the markdown is the source of truth.
+    ///
+    /// Markdown, not HTML: rendering belongs to the client, which already has `marked` and a sanitiser,
+    /// and shipping HTML from the server would make this endpoint responsible for presentation.
+    /// </summary>
+    [HttpGet("content")]
+    public IActionResult Content()
+    {
+        if (!knowledge.IsAvailable)
+        {
+            return NotFound(new { message = "The user manual is not available on this installation." });
+        }
+
+        return Ok(new { markdown = knowledge.Documentation });
+    }
+
     /// <summary>
     /// GET /api/manual/status — whether a manual is installed, without shipping it.
     ///

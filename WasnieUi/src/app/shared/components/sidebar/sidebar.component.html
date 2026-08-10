@@ -120,20 +120,6 @@
         <span class="sidebar__section-label">{{ 'NAV.SECTION_SETTINGS' | translate }}</span>
       }
       <ul class="sidebar__nav">
-        <!-- No *hasPermission: the manual is for every signed-in user (see manualItem). -->
-        <li class="sidebar__nav-item">
-          <a
-            [routerLink]="manualItem.path"
-            class="sidebar__nav-link"
-            [class.sidebar__nav-link--active]="isNavActive(manualItem.path)"
-            [title]="!sidebarState.isExpanded() ? (manualItem.labelKey | translate) : ''"
-          >
-            <app-icon [name]="manualItem.icon" [size]="18" />
-            @if (sidebarState.isExpanded()) {
-              <span class="sidebar__nav-label">{{ manualItem.labelKey | translate }}</span>
-            }
-          </a>
-        </li>
         <li *hasPermission="subscriptionItem.permission" class="sidebar__nav-item">
           <a
             [routerLink]="subscriptionItem.path"

@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { ManualStatus } from '../models/manual.model';
+import { ManualContent, ManualStatus } from '../models/manual.model';
 
 /**
  * The manual is fetched as a BLOB through HttpClient, and that is not a style choice.
@@ -20,6 +20,16 @@ export class ManualApiService {
   /** Cheap check: is a manual installed at all? Avoids downloading megabytes to find out it is missing. */
   getStatus(): Observable<ManualStatus> {
     return this.http.get<ManualStatus>(`${this.base}/status`);
+  }
+
+  /**
+   * The manual as markdown — the source of truth, and the same document the assistant answers from.
+   *
+   * This is what the screen renders. `getPdf` below is the printable export, fetched only when someone
+   * asks for it.
+   */
+  getContent(): Observable<ManualContent> {
+    return this.http.get<ManualContent>(`${this.base}/content`);
   }
 
   getPdf(): Observable<Blob> {
