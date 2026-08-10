@@ -6,6 +6,7 @@ import {
   AssistantConversation,
   AssistantConversationSummary,
   AssistantMessage,
+  AssistantProgressStep,
 } from '../models/assistant.model';
 
 /**
@@ -44,6 +45,16 @@ export class AssistantStore {
 
   /** A translation key for the last failure, rendered by the panel in the reader's language. */
   readonly errorKey = signal<string | null>(null);
+
+  /**
+   * The steps of the turn in flight, in the order the server announced them.
+   *
+   * ★ APPEND-ONLY, AND ONLY FROM THE SERVER. Nothing here is predicted: a step exists because the
+   * backend said it started, and turns green because the backend said it finished. A stream that sends
+   * no progress frames at all — an older backend, or a turn that fails before any work — simply leaves
+   * this empty, and the panel falls back to the plain loader it has always shown.
+   */
+  readonly progressSteps = signal<AssistantProgressStep[]>([]);
 
   readonly messages = computed<AssistantMessage[]>(() => this.conversation()?.messages ?? []);
   readonly hasConversation = computed(() => this.conversation() !== null);
@@ -206,6 +217,9 @@ export class AssistantStore {
     this.error.set(null);
     this.errorKey.set(null);
     this.unsentFailure.set(null);
+    // Last turn's steps belong to last turn. Cleared here rather than at the end of the previous
+    // exchange so a finished list is never left half-shown while the next request is being opened.
+    this.progressSteps.set([]);
 
     // ★ THE TYPING DOTS ARE NORMALLY LIT BY THE `user` FRAME — and a retry never sends one, because
     // the question is already stored and echoing it back would duplicate it on screen. So the retry
@@ -246,12 +260,17 @@ export class AssistantStore {
             this.streamingReply.set('');
             break;
 
+          case 'progress':
+            this.recordStep(frame.phase, frame.state);
+            break;
+
           case 'delta':
             this.streamingReply.update((soFar) => (soFar ?? '') + (frame.delta ?? ''));
             break;
 
           case 'done':
             this.streamingReply.set(null);
+            this.progressSteps.set([]);
             // ★ The answer landed, so the thread no longer ends on a question — the derived failure
             // clears itself. Marking the conversation answered here keeps the open screen honest
             // without a second round trip; a reload would compute the same thing.
@@ -261,6 +280,10 @@ export class AssistantStore {
 
           case 'error':
             this.streamingReply.set(null);
+            // The steps go with the loader. Leaving a half-ticked checklist above a failure card would
+            // show the user how far it got as if that were an outcome — nothing was persisted, and the
+            // only thing to do with the turn is retry it.
+            this.progressSteps.set([]);
             this.errorKey.set(frame.errorKey ?? 'ASSISTANT.ERROR_UNAVAILABLE');
             // NOW the thread is genuinely waiting on nothing — which is what the server will report
             // on the next read too. A stored question needs no local record beyond this flag; only
@@ -274,12 +297,46 @@ export class AssistantStore {
       await this.loadConversations();
     } catch {
       this.streamingReply.set(null);
+      this.progressSteps.set([]);
       this.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
       this.markThreadUnanswered();
       this.unsentFailure.set(persisted ? null : { content: trimmed });
     } finally {
       this.sending.set(false);
     }
+  }
+
+  /**
+   * Folds one `progress` frame into the visible list of steps.
+   *
+   * ★ A `done` FOR A STEP NOBODY ANNOUNCED IS STILL SHOWN, as an already-finished one. Frames can only
+   * arrive in order over one stream, so this cannot really happen today — but the alternative, dropping
+   * it, would silently lose a step the server did perform, and losing information is the one failure
+   * mode this list must not have.
+   */
+  private recordStep(phase: string | undefined, state: string | undefined): void {
+    if (!phase) {
+      return;
+    }
+
+    const done = state === 'done';
+
+    this.progressSteps.update((steps) => {
+      const index = steps.findIndex((s) => s.phase === phase);
+
+      if (index === -1) {
+        return [...steps, { phase, done }];
+      }
+
+      // A repeated `start` must not un-tick a step that already finished.
+      if (!done) {
+        return steps;
+      }
+
+      const next = [...steps];
+      next[index] = { phase, done: true };
+      return next;
+    });
   }
 
   /** Records that the thread is waiting on an answer that will not come. */

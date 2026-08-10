@@ -32,6 +32,15 @@ public sealed class AssistantToolRunner(
     private readonly IReadOnlyList<IAssistantTool> _tools = tools.ToList();
 
     /// <summary>
+    /// Whether a dispatcher call will happen at all.
+    ///
+    /// Asked by the streaming handler before it announces the "understanding" step: with no tools
+    /// registered there is no decision to make, and a step that reports work nobody did is exactly the
+    /// dishonesty the progress events exist to avoid.
+    /// </summary>
+    public bool HasTools => _tools.Count > 0;
+
+    /// <summary>
     /// What the lookup did — see <see cref="AssistantToolOutcome"/> for why this is no longer a string.
     ///
     /// ★ THE DISTINCTION THAT WAS MISSING. "Nothing to look up" and "the lookup broke" used to be the
@@ -58,9 +67,31 @@ public sealed class AssistantToolRunner(
         IReadOnlyList<AssistantMessage> history,
         CancellationToken cancellationToken)
     {
+        var selection = await SelectAsync(question, history, cancellationToken);
+
+        return selection.DidFail
+            ? AssistantToolOutcome.Failed(selection.FailureReasonKey!)
+            : await ExecuteAsync(selection, cancellationToken);
+    }
+
+    /// <summary>
+    /// The DECISION half: which lookup, if any, this question needs. Runs the dispatcher; touches no data.
+    ///
+    /// ★ WHY THIS IS SEPARATE FROM RUNNING IT. The streaming handler has to tell the user "searching
+    /// your records" BEFORE the search happens — announcing it afterwards is a progress indicator that
+    /// only ever reports the past. It also must NOT announce it on the turns where the dispatcher
+    /// declines, which are most of them. Only a caller that can see the decision before the read can do
+    /// both, so the two halves are two calls. <see cref="RunAsync"/> is still the whole thing for the
+    /// non-streaming path, which has nobody to report to.
+    /// </summary>
+    public async Task<AssistantToolSelection> SelectAsync(
+        string question,
+        IReadOnlyList<AssistantMessage> history,
+        CancellationToken cancellationToken)
+    {
         if (_tools.Count == 0)
         {
-            return AssistantToolOutcome.NotAttempted;
+            return AssistantToolSelection.None;
         }
 
         AssistantToolRequest? request;
@@ -81,7 +112,7 @@ public sealed class AssistantToolRunner(
             // happens by design trains people to ignore warnings.
             logger.LogInformation(
                 "The model produced a tool call the provider rejected; answering without live data.");
-            return AssistantToolOutcome.NotAttempted;
+            return AssistantToolSelection.None;
         }
         catch (ChatCompletionException ex)
         {
@@ -90,13 +121,13 @@ public sealed class AssistantToolRunner(
             // question about a specific record having looked at nothing — and then said it could not
             // find it. The user now gets the warning card and the retry button, which are both true.
             logger.LogWarning(ex, "Tool selection could not be performed ({Reason}); failing the turn.", ex.ReasonKey);
-            return AssistantToolOutcome.Failed(ex.ReasonKey);
+            return AssistantToolSelection.Failed(ex.ReasonKey);
         }
 
         if (request is null)
         {
             // The ordinary case: a documentation question needs no lookup.
-            return AssistantToolOutcome.NotAttempted;
+            return AssistantToolSelection.None;
         }
 
         var tool = _tools.FirstOrDefault(t =>
@@ -107,12 +138,34 @@ public sealed class AssistantToolRunner(
             // A model naming a tool that does not exist is a hallucination like any other, and it is
             // dropped like any other. It must NOT become a lookup of something else that seemed close.
             logger.LogWarning("The assistant asked for an unknown tool {Tool}; ignored.", request.Name);
+            return AssistantToolSelection.None;
+        }
+
+        return AssistantToolSelection.Of(tool, request.ArgumentsJson);
+    }
+
+    /// <summary>
+    /// The READING half: runs the lookup the dispatcher chose. A selection that chose nothing is not an
+    /// error — it returns <see cref="AssistantToolOutcome.NotAttempted"/>, which is the ordinary case.
+    /// </summary>
+    public async Task<AssistantToolOutcome> ExecuteAsync(
+        AssistantToolSelection selection, CancellationToken cancellationToken)
+    {
+        if (selection.DidFail)
+        {
+            return AssistantToolOutcome.Failed(selection.FailureReasonKey!);
+        }
+
+        if (selection.Tool is null)
+        {
             return AssistantToolOutcome.NotAttempted;
         }
 
+        var tool = selection.Tool;
+
         try
         {
-            var result = await tool.RunAsync(request.ArgumentsJson, cancellationToken);
+            var result = await tool.RunAsync(selection.ArgumentsJson ?? string.Empty, cancellationToken);
 
             // ★ The ARGUMENTS are not logged, for the same reason the question is not: they are the
             // user's own words about their own records, and a log is not where those belong.

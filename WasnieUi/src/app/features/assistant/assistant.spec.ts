@@ -202,6 +202,84 @@ describe('AssistantStore', () => {
     expect(store.errorKey()).toBeNull();
   });
 
+  // ── ★ The steps of a turn ──────────────────────────────────────────────────
+
+  it('★ builds the step list from the frames the server sent, and ticks each one on its done', async () => {
+    // ★ NOTHING IS PREDICTED. The list is exactly what arrived, in the order it arrived, and a step is
+    // green because the server said so — not because the next one started or a timer expired.
+    // ★ OBSERVED FROM INSIDE THE STREAM, not by racing microtasks from outside. A `for await` resumes
+    // the generator only after it has handled the frame it was given, so the line below runs at a
+    // precisely known moment: the search has been announced and nothing else has arrived yet. That is
+    // the state the loader actually renders, and it is the only one worth asserting.
+    let midTurn: { phase: string; done: boolean }[] = [];
+
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      (async function* () {
+        yield { type: 'user', message: exchange(content).userMessage } as AssistantStreamEvent;
+        yield { type: 'progress', phase: 'understanding', state: 'start' } as AssistantStreamEvent;
+        yield { type: 'progress', phase: 'understanding', state: 'done' } as AssistantStreamEvent;
+        yield { type: 'progress', phase: 'searching_data', state: 'start' } as AssistantStreamEvent;
+        midTurn = store.progressSteps();
+        yield { type: 'progress', phase: 'searching_data', state: 'done' } as AssistantStreamEvent;
+        yield { type: 'delta', delta: 'Answer.' } as AssistantStreamEvent;
+        yield {
+          type: 'done',
+          message: { ...exchange(content).assistantMessage, content: 'Answer.' },
+        } as AssistantStreamEvent;
+      })());
+
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    // One finished step and one still running — in the order the server announced them.
+    expect(midTurn).toEqual([
+      { phase: 'understanding', done: true },
+      { phase: 'searching_data', done: false },
+    ]);
+
+    // The answer landed: the steps go with the loader rather than staying as a finished checklist.
+    expect(store.progressSteps()).toEqual([]);
+    expect(store.messages().map((m) => m.content)).toEqual(['what happened with TERM-CC-10?', 'Answer.']);
+  });
+
+  it('★ a stream with NO progress frames still answers — the events are additive', async () => {
+    // The compatibility guarantee, from the client side: the default fake in this file sends `user`,
+    // deltas and `done` and nothing else. Nothing may depend on a progress frame having arrived.
+    await store.startConversation();
+    await store.send('hello');
+
+    expect(store.progressSteps()).toEqual([]);
+    expect(store.messages().map((m) => m.content)).toEqual(['hello', 'A real answer.']);
+    expect(store.errorKey()).toBeNull();
+  });
+
+  it('★ a failed turn clears the steps instead of leaving a half-ticked list above the error', async () => {
+    // How far it got is not an outcome. Nothing was persisted, and the only thing to do is retry.
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'progress', phase: 'understanding', state: 'start' },
+        { type: 'progress', phase: 'understanding', state: 'done' },
+        { type: 'progress', phase: 'searching_data', state: 'start' },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_UNAVAILABLE' },
+      ]));
+
+    await store.startConversation();
+    await store.send('a question');
+
+    expect(store.progressSteps()).toEqual([]);
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_UNAVAILABLE');
+  });
+
+  it("clears the previous turn's steps when the next one starts", async () => {
+    store.progressSteps.set([{ phase: 'searching_data', done: true }]);
+
+    await store.startConversation();
+    await store.send('a new question');
+
+    expect(store.progressSteps()).toEqual([]);
+  });
+
   it('treats a failed entitlement check as NO access, never as yes', async () => {
     // Guessing generously here would only render a button that 403s on first use.
     api.getEntitlement.and.returnValue(throwError(() => new Error('network')));
@@ -310,6 +388,97 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     const text: string = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]').textContent;
     expect(text).not.toContain(ASSISTANT_NOT_CONNECTED);
     expect(text).toContain('a question');
+  });
+
+  // ── ★ The loader: real steps, or the plain one ─────────────────────────────
+
+  /** Puts the panel in the state it is in while an answer is being worked on. */
+  function waiting(steps: { phase: string; done: boolean }[]) {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    // '' is "the request is out and nothing has come back" — the only state the loader renders in.
+    store.streamingReply.set('');
+    store.progressSteps.set(steps);
+    fixture.detectChanges();
+  }
+
+  it('★ renders one item per reported step, and marks the finished ones done', () => {
+    waiting([
+      { phase: 'understanding', done: true },
+      { phase: 'reading_docs', done: true },
+      { phase: 'searching_data', done: false },
+    ]);
+
+    const list = fixture.nativeElement.querySelector('[data-testid="assistant-steps"]');
+    expect(list).withContext('a turn that reported real work shows what it did').toBeTruthy();
+
+    const items = Array.from(list.querySelectorAll('li')) as HTMLElement[];
+    expect(items.map((i) => i.getAttribute('data-phase')))
+      .toEqual(['understanding', 'reading_docs', 'searching_data']);
+    // ★ Finished steps carry the tick; the one still running carries the spinner. Getting this
+    // backwards would show a green mark beside work that has not happened.
+    expect(items.map((i) => i.getAttribute('data-state')))
+      .toEqual(['done', 'done', 'running']);
+    expect(items[0].querySelector('app-icon')).withContext('a done step shows the check').toBeTruthy();
+    expect(items[2].querySelector('.assistant-steps__spinner'))
+      .withContext('a running step shows the spinner').toBeTruthy();
+
+    // The plain loader is NOT also on screen — one statement about the wait, not two.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeNull();
+  });
+
+  it('★ falls back to the plain loader when the turn reported no steps — old backend included', () => {
+    // The compatibility branch, and the simple-question branch: a stream without progress frames must
+    // look exactly like it did before they existed.
+    waiting([]);
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeTruthy();
+  });
+
+  it('does not turn two steps into a checklist', () => {
+    // Understand, then answer — what every turn does. A two-line list that appears, ticks and vanishes
+    // on every single request is movement without information, so the plain loader stands in.
+    waiting([
+      { phase: 'understanding', done: true },
+      { phase: 'generating', done: false },
+    ]);
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeTruthy();
+  });
+
+  it('★ never prints a raw phase identifier, and shows an unknown phase rather than hiding it', () => {
+    // Phases are identifiers translated here, exactly like the error keys. A newer backend reporting a
+    // step this build has never heard of must still show something honest — hiding it would make the
+    // panel look stalled during the very work it was told about.
+    waiting([
+      { phase: 'understanding', done: true },
+      { phase: 'searching_data', done: true },
+      { phase: 'something_new', done: false },
+    ]);
+
+    const text: string = fixture.nativeElement.querySelector('[data-testid="assistant-steps"]').textContent;
+    expect(text).not.toContain('searching_data');
+    expect(text).not.toContain('something_new');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="assistant-steps"] li').length).toBe(3);
+  });
+
+  it('★ the steps disappear the moment the answer starts arriving', () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.progressSteps.set([
+      { phase: 'understanding', done: true },
+      { phase: 'reading_docs', done: true },
+      { phase: 'generating', done: false },
+    ]);
+    // The first fragment landed: the bubble now holds the answer, not the wait.
+    store.streamingReply.set('The answer begins');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]').textContent)
+      .toContain('The answer begins');
   });
 
   it('★ the composer is the multi-line primitive, and sending still works through it', async () => {
@@ -1484,7 +1653,8 @@ describe('AssistantPanelComponent — the retry renders the typing bubble', () =
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]'))
       .withContext('the typing bubble is the feedback the button owes the user').toBeTruthy();
-    expect(fixture.nativeElement.querySelector('.assistant-msg__typing')).toBeTruthy();
+    // The waiting mark — the assistant's avatar, which took the three dots' place.
+    expect(fixture.nativeElement.querySelector('.assistant-msg__avatar')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
   });
 });
@@ -1826,17 +1996,18 @@ describe('AssistantPanelComponent — the closing animation', () => {
   });
 
   it('a child animation finishing does NOT close the panel', () => {
-    // ★ `animationend` BUBBLES, and this panel contains other animations — the typing dots among them.
-    // Closing on "an animation ended somewhere in here" would make the panel shut itself while the
-    // assistant was typing.
+    // ★ `animationend` BUBBLES, and this panel contains other animations — the step spinner among
+    // them. Closing on "an animation ended somewhere in here" would make the panel shut itself while
+    // the assistant was still working.
     reducedMotion(false);
     component.close();
 
-    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: 'assistant-typing' }));
+    component.onCloseAnimationEnd(
+      new AnimationEvent('animationend', { animationName: 'assistant-step-spin' }));
     fixture.detectChanges();
 
     expect(component.closing())
-      .withContext('the typing dots must not rip the panel out mid-animation').toBeTrue();
+      .withContext('a step spinner must not rip the panel out mid-animation').toBeTrue();
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeTruthy();
   });
 
@@ -1915,14 +2086,14 @@ describe('AssistantPanelComponent — the waiting message', () => {
     fixture.detectChanges();
   }
 
-  it('shows the honest base message beside the dots, immediately', () => {
+  it('shows the honest base message beside the assistant mark, immediately', () => {
     startWaiting();
 
     const waiting: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]');
     expect(waiting).toBeTruthy();
     expect(waiting.textContent).toContain('PROCESSING');
-    // ★ The dots are ACCOMPANIED, not replaced.
-    expect(waiting.querySelector('.assistant-msg__typing')).toBeTruthy();
+    // ★ The mark is ACCOMPANIED, not replaced. (It used to be three dots; it is now the avatar.)
+    expect(waiting.querySelector('.assistant-msg__avatar')).toBeTruthy();
     // The long-wait line has not earned its place yet.
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting-long"]')).toBeNull();
   });

@@ -59,10 +59,49 @@ export interface AssistantEntitlement {
  * backend translates provider failures into keys precisely so nothing operational reaches the reader.
  */
 export interface AssistantStreamEvent {
-  type: 'user' | 'delta' | 'done' | 'error';
+  type: 'user' | 'delta' | 'done' | 'error' | 'progress';
   delta?: string;
   message?: AssistantMessage;
   errorKey?: string;
+
+  /**
+   * Which step of the turn a `progress` frame is about — an IDENTIFIER, never a sentence, translated
+   * here for the same reason `errorKey` is: the reader gets their own language.
+   */
+  phase?: string;
+
+  /** `'start'` or `'done'` on a `progress` frame. */
+  state?: string;
+}
+
+/**
+ * One step of the turn, as the panel renders it.
+ *
+ * ★ THE LIST IS BUILT FROM WHAT THE SERVER REPORTS, NEVER FROM A SCRIPT. The backend emits a step only
+ * when it really performs that work, so a documentation question shows no database search and a
+ * question the guide does not cover shows no documentation step. Pre-seeding the list with the steps a
+ * turn "usually" takes would put a tick beside work nobody did — and this panel's whole design is that
+ * it never claims what it cannot verify.
+ */
+export interface AssistantProgressStep {
+  phase: string;
+  done: boolean;
+}
+
+/** The steps this client has wording for. Anything else is still shown, under a neutral label. */
+const KNOWN_PHASES = new Set(['understanding', 'reading_docs', 'searching_data', 'generating']);
+
+/**
+ * The translation key for a phase.
+ *
+ * ★ AN UNKNOWN PHASE IS RENDERED, NOT DROPPED. A newer backend may report a step this build has never
+ * heard of; showing it as "Working…" is honest — something IS happening — while hiding it would make
+ * the panel look stalled during the very step it was told about.
+ */
+export function phaseLabelKey(phase: string): string {
+  return KNOWN_PHASES.has(phase)
+    ? `ASSISTANT.PHASE.${phase.toUpperCase()}`
+    : 'ASSISTANT.PHASE.WORKING';
 }
 
 /**

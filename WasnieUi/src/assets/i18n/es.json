@@ -1966,6 +1966,13 @@
     "PLACEHOLDER_REPLY": "El asistente todavía no está conectado. Tu mensaje se guardó.",
     "PROCESSING": "Procesando tu consulta…",
     "PROCESSING_LONG": "El asistente está consultando la información; esto puede tomar unos segundos.",
+    "PHASE": {
+      "UNDERSTANDING": "Entendiendo tu pregunta",
+      "READING_DOCS": "Consultando la documentación",
+      "SEARCHING_DATA": "Buscando en tus datos",
+      "GENERATING": "Preparando la respuesta",
+      "WORKING": "Trabajando…"
+    },
     "ERROR": "Algo salió mal. Probá de nuevo.",
     "ERROR_UNAVAILABLE": "El asistente no pudo responder en este momento. Su mensaje se guardó; vuelva a intentarlo en unos instantes.",
     "ERROR_RATE_LIMITED": "El asistente está saturado en este momento. Su mensaje se guardó; vuelva a intentarlo en unos instantes.",

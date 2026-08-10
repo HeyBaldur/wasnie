@@ -1966,6 +1966,13 @@
     "PLACEHOLDER_REPLY": "Asystent nie jest jeszcze podłączony. Twoja wiadomość została zapisana.",
     "PROCESSING": "Przetwarzanie zapytania…",
     "PROCESSING_LONG": "Asystent wyszukuje informacje; może to potrwać kilka sekund.",
+    "PHASE": {
+      "UNDERSTANDING": "Analizuję pytanie",
+      "READING_DOCS": "Sprawdzam dokumentację",
+      "SEARCHING_DATA": "Przeszukuję Twoje dane",
+      "GENERATING": "Przygotowuję odpowiedź",
+      "WORKING": "Pracuję…"
+    },
     "ERROR": "Coś poszło nie tak. Spróbuj ponownie.",
     "ERROR_UNAVAILABLE": "Asystent nie mógł teraz odpowiedzieć. Wiadomość została zapisana — proszę spróbować ponownie za chwilę.",
     "ERROR_RATE_LIMITED": "Asystent jest w tej chwili przeciążony. Wiadomość została zapisana — proszę spróbować ponownie za chwilę.",

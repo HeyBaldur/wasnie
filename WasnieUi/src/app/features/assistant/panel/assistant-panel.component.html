@@ -222,18 +222,62 @@
             ></div>
           } @else {
             <!--
-              ★ THE DOTS STAY; THE WORDS JOIN THEM. Three silent dots cannot tell "working" apart from
-              "hung", and this assistant can genuinely take several seconds — the router, the model,
-              and on a transaction question a real lookup.
+              ★ THE STEPS ARE THE SERVER'S, NOT A STORYBOARD. Each item exists because the backend
+              reported starting that work, and turns green because it reported finishing it. Nothing is
+              pre-seeded and nothing is timed on a stopwatch — a question the documentation answers
+              shows no database search, because none happened.
 
-              ★ AND THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named and none is faked on a
-              stopwatch: the front end does not know which step is running, and inventing one would be
-              the single place in this feature that asserts something it cannot verify.
+              ★ TWO STEPS ARE NOT A CHECKLIST. A short turn (understand, then answer) reports two
+              phases, and a two-line list that appears and vanishes is more movement than information —
+              so below the threshold this degrades to the plain loader, in the same place and the same
+              type. The dots have not been replaced; they are what a simple turn still looks like.
             -->
-            <div class="assistant-msg__waiting" role="status" data-testid="assistant-waiting">
-              <span class="assistant-msg__typing" aria-hidden="true"><span></span><span></span><span></span></span>
-              <span class="assistant-msg__waiting-text">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
-            </div>
+            @if (showSteps()) {
+              <ul class="assistant-steps" role="status" data-testid="assistant-steps">
+                @for (step of store.progressSteps(); track step.phase) {
+                  <li
+                    class="assistant-steps__item"
+                    [class.assistant-steps__item--done]="step.done"
+                    [attr.data-phase]="step.phase"
+                    [attr.data-state]="step.done ? 'done' : 'running'"
+                  >
+                    @if (step.done) {
+                      <app-icon name="check" [size]="14" class="assistant-steps__check" />
+                    } @else {
+                      <span class="assistant-steps__spinner" aria-hidden="true"></span>
+                    }
+                    <span class="assistant-steps__label">{{ phaseLabel(step.phase) | translate }}</span>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <!--
+                ★ THE DOTS STAY; THE WORDS JOIN THEM. Three silent dots cannot tell "working" apart
+                from "hung", and this assistant can genuinely take several seconds.
+
+                ★ AND THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named here: this is the branch for
+                turns that reported no steps at all — an older backend, or the instant before the first
+                one lands — and naming one would be the single place in this feature that asserts
+                something it cannot verify.
+              -->
+              <div class="assistant-msg__waiting" role="status" data-testid="assistant-waiting">
+                <!--
+                  The assistant's own face while it thinks — an avatar, in the shape every chat uses for
+                  one. It replaces the three dots: the dots said "something is happening", the mark says
+                  WHO is doing it, which is the same information plus an identity.
+
+                  ★ TWO IMAGES, ONE VISIBLE. The animated mark is a GIF, and a GIF cannot be paused from
+                  CSS — so a reader who has asked for less motion gets the STILL assistant mark in the
+                  same circle, swapped in stylesheet-side. Both are square and already served from the
+                  app root, so neither crops badly and neither is a new asset.
+                -->
+                <span class="assistant-msg__avatar" aria-hidden="true">
+                  <img class="assistant-msg__avatar-motion" src="/brain.gif" alt="" />
+                  <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+                </span>
+                <span class="assistant-msg__waiting-text">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
+              </div>
+            }
 
             @if (waitingLong()) {
               <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">

@@ -148,6 +148,24 @@ public sealed class StreamAssistantReplyHandler(
             yield break;
         }
 
+        // ★ THE STEPS THE USER WATCHES, AND WHY THEY ARE EMITTED FROM HERE.
+        //
+        // The panel used to show one fixed sentence for however long the turn took, because the browser
+        // genuinely does not know what is happening — and inventing a stage on a stopwatch would be the
+        // one place in this feature that asserts something it cannot verify. This handler DOES know. So
+        // the steps are reported from the only place that can report them honestly, and each one is
+        // emitted only on the turns where that work really occurs: a documentation question never
+        // announces a database search, and a turn with no guide loaded never announces reading one.
+        //
+        // Every `progress` frame is ADDITIVE. It carries no answer, no stored row and no failure, so a
+        // client that ignores the type behaves exactly as it did before this existed.
+        var classifies = router.CanRoute || toolRunner.HasTools;
+
+        if (classifies)
+        {
+            yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.Understanding);
+        }
+
         // ── Step 1: which sections does this question need? ──────────────────
         // A small call against the table of contents only. Its result decides what step 2 carries.
         // Failing here is the same class of failure as failing to answer, and reaches the user the
@@ -173,12 +191,12 @@ public sealed class StreamAssistantReplyHandler(
             yield break;
         }
 
-        // Empty is a real answer, not a miss: the prompt below becomes the no-source one, which tells
-        // the user plainly that the documentation does not cover this.
-        var routed = knowledge.TextFor(sectionIds);
-
-        // ── Step 1.5: does this question need a RECORD, not just the documentation? ──
+        // ── Step 1.5, first half: does this question need a RECORD, not just the documentation? ──
         // Read-only, through the domain, with this user's identity — see GetTransactionTool.
+        //
+        // ★ THE DECISION IS TAKEN BEFORE THE STEP IS ANNOUNCED, which is why the runner is now two
+        // calls. "Searching your records" is only worth showing before the search and only on the turns
+        // where a search happens; both need the choice to be visible before the read.
         //
         // ★ A LOOKUP THAT COULD NOT RUN ENDS THE TURN. It used to degrade to "answer without live
         // data", and the model did not treat the absence as an absence: asked about a named
@@ -186,17 +204,62 @@ public sealed class StreamAssistantReplyHandler(
         // row it never queried and that they can see on their own screen. The user now gets the
         // warning card and the retry button, both of which are true, instead of a confident wrong
         // answer that looks exactly like a correct refusal.
-        var lookup = await toolRunner.RunAsync(question, history, cancellationToken);
+        var selection = await toolRunner.SelectAsync(question, history, cancellationToken);
 
-        if (lookup.DidFail)
+        // Both classifier calls are behind us: the one step the user was shown is genuinely finished.
+        // A FAILED decision gets no `done` — the error frame below is what ends that turn.
+        if (classifies && !selection.DidFail)
+        {
+            yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.Understanding);
+        }
+
+        if (selection.DidFail)
         {
             // Nothing was written for the assistant, so there is nothing to undo — the question stays
             // in the thread and Retry re-answers it.
-            yield return AssistantStreamEvent.OfError(lookup.FailureReasonKey!);
+            yield return AssistantStreamEvent.OfError(selection.FailureReasonKey!);
             yield break;
         }
 
-        var toolData = lookup.Data;
+        // Empty is a real answer, not a miss: the prompt below becomes the no-source one, which tells
+        // the user plainly that the documentation does not cover this. And that is exactly why the step
+        // is announced only when sections were found — "consulting the documentation" over an empty
+        // routing result would describe a consultation that did not take place.
+        var consultsDocs = sectionIds.Count > 0;
+
+        if (consultsDocs)
+        {
+            yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.ReadingDocs);
+        }
+
+        var routed = knowledge.TextFor(sectionIds);
+
+        if (consultsDocs)
+        {
+            yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.ReadingDocs);
+        }
+
+        // ── Step 1.5, second half: run what was chosen, if anything was. ──
+        var toolData = string.Empty;
+
+        if (selection.WillRead)
+        {
+            yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.SearchingData);
+
+            var lookup = await toolRunner.ExecuteAsync(selection, cancellationToken);
+
+            if (lookup.DidFail)
+            {
+                // No `done` for a step that failed, and no answer either: the error frame is the end of
+                // this turn. The question stays in the thread and Retry re-answers it.
+                yield return AssistantStreamEvent.OfError(lookup.FailureReasonKey!);
+                yield break;
+            }
+
+            yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.SearchingData);
+
+            toolData = lookup.Data;
+        }
 
         // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
         // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.
@@ -208,6 +271,10 @@ public sealed class StreamAssistantReplyHandler(
         // ★ THE BELT. Raising the generation model is the fix for the repetition collapse; this is what
         // guarantees the user never reads one anyway. See DegenerationGuard.
         var guard = new DegenerationGuard();
+
+        // The last step, and the only one that is always present: something is always written, even if
+        // the turn needed neither the guide nor a record.
+        yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.Generating);
 
         // The enumerator is stepped by hand so a provider failure can be caught: `yield return` is not
         // allowed inside a try/catch that has a catch clause, and wrapping the whole loop would mean
@@ -299,6 +366,10 @@ public sealed class StreamAssistantReplyHandler(
         var assistantMessage = await PersistAssistantAsync(
             conversation.Id, text, nextSequence + 1, clock.UtcNowOffset, cancellationToken);
 
+        // Closes the last step for symmetry — every start this handler emits has exactly one matching
+        // done, or an error frame in its place. The panel has long since swapped the steps for the
+        // answer by now; the invariant is for whatever reads this stream next.
+        yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.Generating);
         yield return AssistantStreamEvent.OfDone(AssistantMapper.ToDto(assistantMessage));
     }
 

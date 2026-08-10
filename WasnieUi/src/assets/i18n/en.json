@@ -1966,6 +1966,13 @@
     "PLACEHOLDER_REPLY": "The assistant is not connected yet. Your message was saved.",
     "PROCESSING": "Processing your request…",
     "PROCESSING_LONG": "The assistant is looking things up; this may take a few seconds.",
+    "PHASE": {
+      "UNDERSTANDING": "Understanding your question",
+      "READING_DOCS": "Consulting the documentation",
+      "SEARCHING_DATA": "Searching your data",
+      "GENERATING": "Preparing the answer",
+      "WORKING": "Working…"
+    },
     "ERROR": "Something went wrong. Try again.",
     "ERROR_UNAVAILABLE": "The assistant could not answer right now. Your message was saved — try again in a moment.",
     "ERROR_RATE_LIMITED": "The assistant is busy right now. Your message was saved — try again in a moment.",

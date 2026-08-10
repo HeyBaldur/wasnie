@@ -21,6 +21,7 @@ import {
   internalRouteOf,
   isPlaceholderReply,
   isUntitled,
+  phaseLabelKey,
 } from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
@@ -78,6 +79,26 @@ export class AssistantPanelComponent {
    * doing that. What IS true at every moment: work is in progress and it may take a few seconds.
    */
   readonly waitingLong = signal(false);
+
+  /**
+   * How many reported steps make a list worth showing instead of the plain loader.
+   *
+   * Three, because two is the floor: every turn understands the question and then writes an answer, so
+   * a two-item list is what "nothing special happened" looks like — and a checklist that appears on
+   * every request, ticks twice and disappears is movement without information. At three the list is
+   * telling the user something they could not have assumed: the guide was consulted, or their records
+   * were read.
+   */
+  private static readonly MIN_STEPS_TO_LIST = 3;
+
+  /** True when this turn reported enough distinct work to be worth listing. */
+  readonly showSteps = computed(
+    () => this.store.progressSteps().length >= AssistantPanelComponent.MIN_STEPS_TO_LIST);
+
+  /** The translation key for a reported phase — see `phaseLabelKey` for the unknown-phase rule. */
+  phaseLabel(phase: string): string {
+    return phaseLabelKey(phase);
+  }
 
   /**
    * How long the answer may take before the wait is explained.

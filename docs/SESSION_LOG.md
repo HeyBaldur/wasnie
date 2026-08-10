@@ -4,6 +4,61 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-09 — Loader de PASOS reales en el chat (progreso por fase en el stream)
+
+**El problema:** el loader del asistente era UNA frase fija ("Processing your request… looking things
+up") durante todo el turno. Un turno que consulta la guia y ademas lee un registro puede tardar varios
+segundos, y el usuario no tenia forma de distinguir "trabajando" de "colgado".
+
+**La decision de diseno (Rodolfo):** los pasos reflejan FASES REALES del backend, no una animacion. El
+backend REPORTA lo que hizo; no narra una secuencia fija. Una pregunta que no toca la base NO muestra
+"buscando en la base".
+
+**Backend — evento `progress`, aditivo:**
+- `AssistantStreamEvent` gana `Phase` + `State` y el tipo `"progress"` (`{type, phase, state}`), con
+  `OfPhaseStart` / `OfPhaseDone`. No lleva respuesta, ni fila persistida, ni fallo: **un cliente que no
+  lo entienda sigue funcionando igual** (test explicito, front y back).
+- `AssistantPhase`: `understanding`, `reading_docs`, `searching_data`, `generating`. Son
+  IDENTIFICADORES, no frases — el navegador traduce, igual que con los `errorKey`.
+- Cada fase se emite SOLO si ese trabajo ocurre: `understanding` solo si hay router o herramientas,
+  `reading_docs` solo si el router devolvio secciones, `searching_data` solo si el dispatcher eligio de
+  verdad una herramienta. **Un paso que FALLA no recibe `done`** — el frame de error termina el turno.
+- `AssistantToolRunner` se partio en `SelectAsync` (decision, sin tocar datos) + `ExecuteAsync`
+  (lectura), porque "buscando en tus datos" solo sirve si se anuncia ANTES de buscar y solo en los turnos
+  donde se busca. `RunAsync` sigue existiendo como composicion para el camino NO streaming
+  (`PostMessageHandler`), que no tiene a quien reportarle. `AssistantSectionRouter.CanRoute` y
+  `AssistantToolRunner.HasTools` responden "esto va a pasar de verdad?".
+
+**Front — lista de pasos:**
+- `AssistantStore.progressSteps` (append-only, solo desde el servidor; nada se predice). Se limpia al
+  empezar el turno siguiente, y en `done`/`error` — dejar un checklist a medio tildar encima de la
+  tarjeta de fallo mostraria "hasta donde llego" como si fuera un resultado.
+- El panel muestra la lista **desde 3 pasos**; con 0-2 cae al loader clasico de puntos, en el mismo
+  lugar y con el mismo peso visual. Dos pasos (entender + responder) es lo que hace CUALQUIER turno: un
+  checklist que aparece, tilda dos veces y desaparece en cada pregunta es movimiento sin informacion.
+- Paso en curso = anillo girando (CSS propio con tokens, respeta `prefers-reduced-motion`); paso
+  terminado = check en `--color-success` y el texto se va a terciario (el ojo debe ir al paso que falta,
+  no al que ya esta). **Sin libreria externa** — mismo precedente que los puntos de "escribiendo".
+- Una fase DESCONOCIDA se muestra igual, con etiqueta neutra ("Working…"): esconderla haria parecer que
+  el panel se colgo justo durante el trabajo del que le avisaron.
+- i18n EN/ES/PL completo (`ASSISTANT.PHASE.*`, 5 claves x 3 idiomas).
+
+**★ Verificacion runtime (arnes temporal, modelo REAL de OpenRouter + guia real de 21 secciones,
+borrado despues). Tres secuencias observadas, distintas entre si:**
+- "dame la razon de la transaccion TERM-CC-10" → understanding start/done, reading_docs start/done,
+  **searching_data start/done**, generating start/done, done (41 deltas).
+- "que es un plan de comisiones" → understanding, reading_docs, generating (**sin** searching_data; 61 deltas).
+- "what is the weather in Madrid today" → understanding, generating (**sin** reading_docs ni
+  searching_data — el router no devolvio secciones; 28 deltas).
+
+**Tests:** backend **1347 → 1352** (5 nuevos: secuencia completa con lectura de registro, turno sin
+lookup, pregunta que la guia no cubre, paso fallido sin `done`, y ningun frame de progreso lleva una
+frase). Front **781 → 790** (4 de store + 5 de render, incluida la compatibilidad sin frames `progress`).
+Frontend `ng build --configuration production` limpio.
+
+**Preexistente, NO de este WI:** 3 rojos en `assistant-math.spec.ts` (KaTeX, commit 61ac72c) y el
+warning de bundle (828 kB vs 650 kB, tambien de KaTeX). Ninguno de los dos toca archivos de este WI.
+
 ## 2026-08-06 — DIAGNOSTICO: el turno 2 decia "plan no encontrado" tras explicarlo en el turno 1
 
 **El sintoma:** turno 1 "explicame el plan Q3 2026 — Plan Comercial EMEA (Test Integral)" -> lo explica

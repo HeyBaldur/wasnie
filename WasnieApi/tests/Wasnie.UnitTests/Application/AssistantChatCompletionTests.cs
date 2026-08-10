@@ -51,10 +51,12 @@ public sealed class AssistantChatCompletionTests
 
         public bool IsConfigured { get; }
 
-        /// <summary>Routing is exercised in AssistantRoutingTests; here it always says "section 1".</summary>
+        /// <summary>What the router should answer. Routing itself is exercised in AssistantRoutingTests.</summary>
+        public string RouterJson { get; set; } = """{"sections":["1"]}""";
+
         public Task<string> CompleteJsonAsync(
             IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken) =>
-            Task.FromResult("""{"sections":["1"]}""");
+            Task.FromResult(RouterJson);
 
         /// <summary>What the tool dispatcher should answer. Null (the default) means "no lookup".</summary>
         public AssistantToolRequest? ToolChoice { get; set; }
@@ -223,7 +225,9 @@ public sealed class AssistantChatCompletionTests
         provider.Received[^1].Content.Should().Be("How do accelerators work?");
 
         // What the client saw: the stored user turn, the fragments in order, then the stored answer.
-        frames.Select(f => f.Type).Should().Equal(
+        // The progress frames are filtered out HERE and asserted on their own below: they are additive,
+        // and this is the assertion that says so — the answer-carrying stream is unchanged by them.
+        frames.Where(f => f.Type != AssistantStreamEvent.Progress).Select(f => f.Type).Should().Equal(
             AssistantStreamEvent.UserTurn,
             AssistantStreamEvent.Fragment,
             AssistantStreamEvent.Fragment,
@@ -408,6 +412,151 @@ public sealed class AssistantChatCompletionTests
         // The question survives, so Retry re-answers it.
         var stored = await h.Db.AssistantMessages.IgnoreQueryFilters().ToListAsync();
         stored.Should().ContainSingle().Which.Role.Should().Be(AssistantMessageRole.User);
+    }
+
+    // ── 1e. ★ The steps the user watches ──────────────────────────────────────
+    //
+    // The rule these tests exist to hold: the backend REPORTS what it did, it does not narrate a fixed
+    // sequence. Two turns that do different work must produce different steps, and no step may name
+    // work that did not happen.
+
+    /// <summary>The phase names in the order they were announced, as "phase:state" pairs.</summary>
+    private static List<string> Steps(IEnumerable<AssistantStreamEvent> frames) =>
+        frames
+            .Where(f => f.Type == AssistantStreamEvent.Progress)
+            .Select(f => $"{f.Phase}:{f.State}")
+            .ToList();
+
+    [Fact]
+    public async Task A_turn_that_READS_A_RECORD_reports_every_step_it_really_took_in_order()
+    {
+        // The full sequence, and each part of it is earned: the guide was routed AND a lookup was
+        // dispatched (understanding), sections came back (reading_docs), a tool really ran
+        // (searching_data), and the answer was written (generating).
+        var provider = new FakeProvider(["It was settled in May."])
+        {
+            ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"TERM-CC-10"}"""),
+        };
+        var h = Build(nameof(A_turn_that_READS_A_RECORD_reports_every_step_it_really_took_in_order),
+            provider, tools: [new SpyTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with TERM-CC-10?");
+
+        Steps(frames).Should().Equal(
+            "understanding:start", "understanding:done",
+            "reading_docs:start", "reading_docs:done",
+            "searching_data:start", "searching_data:done",
+            "generating:start", "generating:done");
+
+        // ★ AND THE SEARCH IS ANNOUNCED BEFORE IT HAPPENS. A step that only ever appears after the work
+        // is a receipt, not a progress indicator — the user would watch nothing during the slow part.
+        var searchStart = frames.FindIndex(
+            f => f.Type == AssistantStreamEvent.Progress && f.Phase == AssistantPhase.SearchingData);
+        var generation = frames.FindIndex(
+            f => f.Type == AssistantStreamEvent.Progress && f.Phase == AssistantPhase.Generating);
+        searchStart.Should().BeLessThan(generation);
+
+        // ★ ADDITIVE: the answer-carrying stream is exactly what it was before progress existed.
+        frames.Where(f => f.Type != AssistantStreamEvent.Progress).Select(f => f.Type)
+            .Should().Equal(
+                AssistantStreamEvent.UserTurn,
+                AssistantStreamEvent.Fragment,
+                AssistantStreamEvent.Done);
+    }
+
+    [Fact]
+    public async Task A_turn_that_needs_NO_lookup_never_announces_a_search()
+    {
+        // ★ THE HONESTY TEST. Tools ARE registered and the dispatcher was asked — it declined. Nothing
+        // was read, so nothing may claim to have been read. Emit a fixed sequence instead of the real
+        // one and this goes red, which is the moment the loader starts lying.
+        var provider = new FakeProvider(["A plan is..."]) { ToolChoice = null };
+        var h = Build(nameof(A_turn_that_needs_NO_lookup_never_announces_a_search), provider,
+            tools: [new SpyTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What is a plan?");
+
+        Steps(frames).Should().Equal(
+            "understanding:start", "understanding:done",
+            "reading_docs:start", "reading_docs:done",
+            "generating:start", "generating:done");
+        Steps(frames).Should().NotContain(s => s.StartsWith(AssistantPhase.SearchingData));
+    }
+
+    [Fact]
+    public async Task A_question_the_GUIDE_does_not_cover_never_announces_reading_it()
+    {
+        // The other half of the same rule, and the one that produces the SHORT sequence: the router
+        // found no section, so no documentation was consulted and none is claimed. This is the turn the
+        // panel degrades to a plain loader for — two steps are not a checklist worth showing.
+        var provider = new FakeProvider(["I do not have that in the documentation."])
+        {
+            RouterJson = """{"sections":[]}""",
+        };
+        var h = Build(nameof(A_question_the_GUIDE_does_not_cover_never_announces_reading_it), provider);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What is the weather?");
+
+        Steps(frames).Should().Equal(
+            "understanding:start", "understanding:done",
+            "generating:start", "generating:done");
+    }
+
+    [Fact]
+    public async Task A_step_that_FAILED_is_never_reported_as_done()
+    {
+        // A green tick means the work finished. A lookup that threw did not finish, and the turn ends on
+        // the error frame instead — the same warning card and Retry any other fault produces.
+        var provider = new FakeProvider(["never reached"])
+        {
+            ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"X"}"""),
+        };
+        var h = Build(nameof(A_step_that_FAILED_is_never_reported_as_done), provider,
+            tools: [new ThrowingTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with X?");
+
+        Steps(frames).Should().Equal(
+            "understanding:start", "understanding:done",
+            "reading_docs:start", "reading_docs:done",
+            "searching_data:start");
+        frames.Last().Type.Should().Be(AssistantStreamEvent.Error);
+    }
+
+    [Fact]
+    public async Task No_progress_frame_carries_a_sentence_the_client_would_have_to_display()
+    {
+        // Phases are IDENTIFIERS, translated by the browser — the same discipline as the error keys, for
+        // the same reason: the reader gets their own language, and nothing operational leaks into a
+        // string the panel would have no choice but to render verbatim.
+        var provider = new FakeProvider(["ok"])
+        {
+            ToolChoice = new AssistantToolRequest("get_transaction", """{"reference":"R"}"""),
+        };
+        var h = Build(nameof(No_progress_frame_carries_a_sentence_the_client_would_have_to_display),
+            provider, tools: [new SpyTool()]);
+        var conversation = SeedConversation(h);
+
+        var frames = await DrainAsync(h.Handler, conversation.Id, "What happened with R?");
+
+        var known = new[]
+        {
+            AssistantPhase.Understanding, AssistantPhase.ReadingDocs,
+            AssistantPhase.SearchingData, AssistantPhase.Generating,
+        };
+
+        foreach (var frame in frames.Where(f => f.Type == AssistantStreamEvent.Progress))
+        {
+            frame.Phase.Should().BeOneOf(known);
+            frame.State.Should().BeOneOf(AssistantStreamEvent.PhaseStart, AssistantStreamEvent.PhaseDone);
+            frame.Delta.Should().BeNull();
+            frame.Message.Should().BeNull();
+            frame.ErrorKey.Should().BeNull();
+        }
     }
 
     // ── ★ THE MODEL COLLAPSING INTO REPETITION ────────────────────────────────
