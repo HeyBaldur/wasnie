@@ -789,3 +789,10 @@
 @media (min-width: 640px) and (max-width: 1023px) {
   .action-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+// Period filter. The dropdown panel is sized to its trigger, and a trigger sized to "This Month" made
+// the option rows too narrow once the selected-state check icon claimed space — "This Mo…". 160px is the
+// same floor the credits list uses for its filter selects, so the two screens stay consistent.
+.period-select {
+  min-width: 160px;
+}

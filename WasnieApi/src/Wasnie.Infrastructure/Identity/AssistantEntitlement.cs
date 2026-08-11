@@ -5,7 +5,13 @@ using Wasnie.Domain.Authorization;
 namespace Wasnie.Infrastructure.Identity;
 
 /// <summary>
-/// The current answer to "may this user use the assistant?": tenant admins only.
+/// The current answer to "may this user use the assistant?": tenant admins on a PAID plan.
+///
+/// ★ TWO INDEPENDENT GATES, and they are not interchangeable. The seat (role, today) is about the
+/// PERSON — a colleague without one must not see the entry point at all. The plan is about the
+/// TENANT — the admin of a Free workspace may see it locked, because upgrading is a thing they can
+/// actually do. That is why <see cref="RequiresPaidPlanAsync"/> exists: it is the difference between
+/// "hide this" and "offer this", and only this class can tell them apart.
 ///
 /// ★ THE ROLE CHECK LIVES HERE AND NOWHERE ELSE. It is an implementation detail of the entitlement,
 /// not the definition of it — see <see cref="IAssistantEntitlement"/> for why the distinction matters.
@@ -17,28 +23,31 @@ namespace Wasnie.Infrastructure.Identity;
 /// handlers, the frontend gate and the tests all keep calling the same question and never learn that
 /// the answer changed shape. That is the entire design.
 /// </summary>
-public sealed class AssistantEntitlement(IClaimsService claimsService) : IAssistantEntitlement
+public sealed class AssistantEntitlement(
+    IClaimsService claimsService,
+    IPaidPlanGate paidPlanGate)
+    : IAssistantEntitlement
 {
     private const string Feature = "Assistant.Use";
+    private const string FeatureLabel = "The AI assistant";
 
-    public Task<bool> IsEnabledAsync(CancellationToken cancellationToken = default)
-    {
-        var role = claimsService.GetRole();
+    public async Task<bool> IsEnabledAsync(CancellationToken cancellationToken = default)
+        => HasSeat() && await paidPlanGate.IsOnPaidPlanAsync(cancellationToken);
 
-        // Today: the tenant admin, and only the tenant admin. Tomorrow: this line reads the seat.
-        var enabled = string.Equals(role, nameof(Role.TenantAdmin), StringComparison.Ordinal);
-
-        return Task.FromResult(enabled);
-    }
+    public async Task<bool> RequiresPaidPlanAsync(CancellationToken cancellationToken = default)
+        => HasSeat() && !await paidPlanGate.IsOnPaidPlanAsync(cancellationToken);
 
     public async Task RequireAsync(CancellationToken cancellationToken = default)
     {
-        if (await IsEnabledAsync(cancellationToken))
-            return;
+        // Order matters. The plan is checked FIRST so a tenant admin on Free gets the answer that is
+        // true and actionable ("not in your plan") instead of a bare Forbidden that reads like a bug.
+        if (!HasSeat())
+            throw new ForbiddenException(Feature);
 
-        // Deliberately NOT audited the way a denied permission is. A user without a seat hitting the
-        // assistant is a billing state, not an attempt to exceed their authority — logging it as a
-        // security denial would fill the audit trail with noise the day seats are sold.
-        throw new ForbiddenException(Feature);
+        await paidPlanGate.RequirePaidPlanAsync(FeatureLabel, cancellationToken);
     }
+
+    // Today: the tenant admin, and only the tenant admin. Tomorrow: this line reads the seat.
+    private bool HasSeat() =>
+        string.Equals(claimsService.GetRole(), nameof(Role.TenantAdmin), StringComparison.Ordinal);
 }

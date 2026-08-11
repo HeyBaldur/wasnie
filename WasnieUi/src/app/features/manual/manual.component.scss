@@ -1,0 +1,309 @@
+@reference "../../../styles.scss";
+
+.manual__message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+/* ★ THE SCREEN OWNS THE HEIGHT SO THE PAGE NEVER SCROLLS. The shell's content area has a definite height
+ * (`.shell` is h-screen with `overflow: hidden`, `.shell__content` is `flex-1`), so filling it here and
+ * letting the document take what is left means the only scrollbars on this screen belong to the two
+ * columns.
+ *
+ * `min-height: 0` is load-bearing, not decoration: a flex child defaults to `min-height: auto` and
+ * refuses to shrink below its content, pushing the overflow back out to the page. That is the exact bug
+ * that once hid the modal's Save button. */
+.manual__screen {
+  height: 100%;
+  min-height: 0;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+}
+
+.manual__layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .manual__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── The document ────────────────────────────────────────────────────────────
+ *
+ * ★ MEASURE, NOT WIDTH. The column can be wide; the TEXT is capped at a reading measure, because a line
+ * that runs the width of a monitor is the thing that makes long documents unreadable. This is the same
+ * problem the PDF had, solved where it can actually be solved now that we own the rendering.
+ */
+.manual__doc {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* ★ THE TRAILING SPACE IS FUNCTIONAL, NOT AIR. A scroll container stops at its last pixel, so a heading
+     near the end can never rise to the top — there is nothing below to push it there. Clicking the final
+     chapter ("Maintenance", nine lines from the end) moved nothing at all when the reader was already at
+     the bottom, which reads as a broken link. Reserving a screen of room below the document means EVERY
+     chapter can land at the top, so every entry in the menu does the same visible thing. */
+  padding: var(--space-6) var(--space-8) 70vh;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  line-height: 1.65;
+}
+
+/* ── Typography for the rendered markdown ────────────────────────────────────
+ *
+ * ★ `::ng-deep` IS REQUIRED HERE, AND THE WHY MATTERS. Angular scopes a component's styles by stamping
+ * `_ngcontent-xxx` on the elements IT creates. Content inserted with `[innerHTML]` never receives that
+ * attribute, so an ordinary `.manual__doc h2 { … }` compiles to `h2[_ngcontent-xxx]` and matches NOTHING.
+ * That is why the document rendered completely unstyled: the rules existed and could never apply.
+ *
+ * ★ AND `:host` IN FRONT OF IT IS THE SAFETY, NOT DECORATION. `::ng-deep` on its own leaks GLOBALLY — it
+ * would restyle every `h2`, `table` and `code` in the application, including the assistant's chat, which
+ * renders this very markdown. Prefixed with `:host` it compiles to `[_nghost-xxx] h2`, which can only
+ * match inside this component's own subtree. The chat is untouched.
+ *
+ * Bare element selectors below because markdown output has no classes to hook, and inventing some would
+ * mean post-processing the HTML for nothing.
+ */
+:host ::ng-deep .manual__doc {
+  > :first-child {
+    margin-top: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--color-text-primary);
+    line-height: 1.3;
+    /* So a shortcut does not land with the heading glued to the top edge. */
+    scroll-margin-top: var(--space-4);
+  }
+
+  h1 {
+    font-size: var(--font-size-24);
+    margin: var(--space-6) 0 var(--space-4);
+  }
+
+  h2 {
+    font-size: var(--font-size-20);
+    margin: var(--space-8) 0 var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  h3 {
+    font-size: var(--font-size-16);
+    margin: var(--space-6) 0 var(--space-2);
+  }
+
+  h4 {
+    font-size: var(--font-size-14);
+    margin: var(--space-5) 0 var(--space-2);
+  }
+
+  p,
+  ul,
+  ol {
+    margin: 0 0 var(--space-4);
+  }
+
+  ul,
+  ol {
+    padding-left: var(--space-6);
+  }
+
+  li {
+    margin-bottom: var(--space-2);
+  }
+
+  strong {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+
+  a {
+    color: var(--color-brand);
+  }
+
+  code {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size-12);
+    background: var(--color-bg-surface-sunken);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+  }
+
+  pre {
+    background: var(--color-bg-surface-sunken);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    overflow-x: auto;
+    margin: 0 0 var(--space-4);
+
+    code {
+      background: none;
+      padding: 0;
+    }
+  }
+
+  blockquote {
+    margin: 0 0 var(--space-4);
+    padding-left: var(--space-4);
+    border-left: 3px solid var(--color-border-default);
+    color: var(--color-text-tertiary);
+  }
+
+  /* Wide tables scroll inside themselves rather than stretching the column. */
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 0 0 var(--space-4);
+    font-size: var(--font-size-13);
+  }
+
+  th,
+  td {
+    border: 1px solid var(--color-border-subtle);
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+  }
+
+  th {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--color-border-subtle);
+    margin: var(--space-6) 0;
+  }
+}
+
+/* ── The panel ───────────────────────────────────────────────────────────────*/
+
+.manual__aside {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.manual__aside-cover {
+  display: block;
+  width: 100%;
+  height: 148px;
+  object-fit: cover;
+}
+
+.manual__aside-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.manual__aside-title {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.manual__aside-body {
+  margin: 0;
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.manual__shortcuts {
+  display: flex;
+  flex-direction: column;
+  /* No gap: the rows are compact enough that the hover background reads better as a continuous list than
+     as detached chips, and twenty separated rows was most of the panel's height. */
+  gap: 0;
+}
+
+/* A button, not a link: it moves a scroll container, it does not navigate. An anchor with a fake href
+   would lie to a screen reader and add a history entry nobody asked for.
+ *
+ * ★ ONE LINE EACH, ALWAYS. Chapter titles run long — "6. SplitAtQuota — the accelerator question" wraps
+ * to two lines in a 320px panel, and a menu whose rows are different heights stops scanning like a menu.
+ * The overflow is clipped with an ellipsis and the full title stays reachable through the element's
+ * `title`, so nothing is actually lost. */
+.manual__shortcut {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    background: var(--color-bg-surface-hover);
+    color: var(--color-brand);
+  }
+}
+
+.manual__aside-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  // Tight, because the two text links below are ONE group ("other ways to read this") and 12px read
+  // as three unrelated items. The assistant button buys its own separation back with a margin, so it
+  // still sits apart as the primary action.
+  gap: var(--space-1);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+
+  ws-button {
+    margin-bottom: var(--space-2);
+  }
+}
+
+.manual__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: var(--font-size-13);
+  // Matches the weight the app gives every real <a> (styles.scss): these are <button>s that read as
+  // links, and a <button> inherits none of that.
+  font-weight: 600;
+  color: var(--color-brand);
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

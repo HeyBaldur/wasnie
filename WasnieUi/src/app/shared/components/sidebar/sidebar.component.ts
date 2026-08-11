@@ -151,7 +151,9 @@ export class SidebarComponent {
     },
   ];
 
-  readonly subscriptionItem: NavItem = { path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
+  // The manual is NOT in this menu. It moved to the topbar, beside the user: it is help, not a place in
+  // the product's navigation, and it sat oddly among Subscription / Integrations / Settings.
+  readonly subscriptionItem: NavItem ={ path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
   readonly integrationsItem: NavItem = { path: '/integrations', labelKey: 'NAV.INTEGRATIONS', icon: 'link-2', permission: 'Integrations.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
 

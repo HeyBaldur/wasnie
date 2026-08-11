@@ -18,6 +18,7 @@ public sealed class GetAssistantEntitlementHandler(IAssistantEntitlement entitle
 {
     public async Task<Result<AssistantEntitlementDto>> Handle(
         GetAssistantEntitlementQuery request, CancellationToken cancellationToken) =>
-        Result<AssistantEntitlementDto>.Success(
-            new AssistantEntitlementDto(await entitlement.IsEnabledAsync(cancellationToken)));
+        Result<AssistantEntitlementDto>.Success(new AssistantEntitlementDto(
+            Enabled: await entitlement.IsEnabledAsync(cancellationToken),
+            RequiresUpgrade: await entitlement.RequiresPaidPlanAsync(cancellationToken)));
 }

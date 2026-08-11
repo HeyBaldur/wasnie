@@ -4,6 +4,1854 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-11 — El asistente de IA y HubSpot dejan de ser gratis: gate de plan de punta a punta
+
+**El problema.** La tabla de precios de `/onboarding/plan` ya anunciaba el asistente de IA y la
+integracion con HubSpot como funciones de pago, pero **el codigo las regalaba**. El asistente miraba
+el ROL (`AssistantEntitlement`: `role == TenantAdmin`) y nunca el tier, asi que cualquier admin de un
+workspace Free tenia el copiloto entero con gpt-oss-120b. HubSpot no miraba nada: `TierLimits` solo
+limita payees y planes, no capacidades, y el orquestador horario abanicaba un job por CADA tenant
+conectado sin preguntar por el plan — o sea, un tenant que conecto pagando y despues bajo a Free
+seguia consumiendo API saliente para siempre, sin que nadie iniciara sesion.
+
+**Dos decisiones de producto de Rodolfo antes de escribir codigo:**
+1. **Bloqueado + CTA de upgrade, no oculto.** Choca con la letra de CLAUDE.md 5.8 ("RBAC = ocultar,
+   no deshabilitar") y se hizo a proposito: esa regla es sobre PERMISOS (lo que el usuario nunca va a
+   poder hacer), y esto es FACTURACION (lo que si puede tener si paga). Ocultarlo mataba el upsell que
+   la propia tabla de precios acababa de prometer.
+2. **Congelar, no borrar.** Un tenant que baja a Free conserva su conexion de HubSpot cifrada; el job
+   deja de sincronizarla y la API la rechaza, pero al volver a un plan de pago revive sin re-autorizar
+   ni remapear owners. Nada destructivo.
+
+**El gate vive en UN lugar por capa.** `TierFeatures.IncludesPaidFeatures(tier)` (Domain) es la unica
+definicion de "que planes incluyen lo caro", expresada como `!= Free` y NO como lista de planes de
+pago: un tier nuevo queda incluido por defecto, porque el modo de fallo de la lista blanca es
+silencioso (se vende con asistente y despues se niega en runtime). Encima va `IPaidPlanGate`
+(Application) con su implementacion `PaidPlanGate` (Infrastructure), que lee el tier de la **base de
+datos, nunca del JWT** — un claim seguiria negandole el asistente a quien acaba de pagar y, peor,
+seguiria REGALANDO el sync a quien acaba de bajar, mientras viva el token.
+
+**Superficies cerradas (7):**
+- **Asistente:** un solo cambio dentro de `AssistantEntitlement`, que ahora exige asiento **Y** plan.
+  Los 7 handlers ya llamaban `RequireAsync()`, asi que ninguno se toco.
+- **HubSpot, 8 handlers** (`connect`, `category-property`, `ping`, `deals/preview`, `deals/import`,
+  `deals/sync-now`, `owners/unresolved`, `owners/link`): `RequirePaidPlanAsync` despues del permiso.
+- **Callback OAuth anonimo:** re-chequea el tier desde el tenant del `state` (no hay tenant ambiente).
+  Cierra una ventana real: empezar el OAuth pagando y volver ya en Free dejaba tokens vivos guardados.
+- **Orquestador horario:** filtra los Free ANTES de crear el job. Es el bucle que gasta.
+- **Job por tenant:** vuelve a chequear, porque el stagger puede ser de horas y el plan cambia en el medio.
+- **`GET /status`:** el UNICO endpoint que un Free sigue pudiendo llamar — lee nuestra propia DB, no
+  gasta nada de HubSpot, y es lo que la UI necesita para explicar POR QUE esta bloqueado. Devuelve
+  `requiresUpgrade`.
+- **`disconnect`:** deliberadamente SIN gate. Es la unica operacion que no gasta, y negarsela seria
+  dejar que el estado de facturacion decida si alguien puede revocar sus propias credenciales.
+
+**Dos negativas distintas, dos UIs distintas.** `ForbiddenException` (no tenes autoridad) -> se
+esconde. `PaidPlanRequiredException` (no esta en tu plan) -> se muestra bloqueado con camino de
+compra. Mismo 403, distinto discriminador. Por eso `AssistantEntitlementDto` gano `RequiresUpgrade`:
+sin asiento no se ofrece upgrade **nunca**, porque un plan mas caro no le daria el asistente a esa
+persona y ofrecerselo seria mentir.
+
+**Frontend.** El trigger del topbar pasa a un link plano y apagado hacia `/subscription` cuando el
+unico impedimento es el plan (nunca cuando falta el asiento). La tarjeta de `/integrations` cambia el
+badge de conexion por "Plan de pago", muestra un aviso distinto si nunca conecto (venta) o si esta
+congelado (tranquilizar: no se borro nada), oculta los bloques de sync/categoria y deja Disconnect.
+Claves nuevas en EN/ES/PL.
+
+**Verificacion.** Backend unit **1367 -> 1378 en verde** (tests nuevos: el gate lee de la DB y un
+downgrade pega en la llamada siguiente; tenant sin resolver y tenant inexistente = negacion; Free
+conectado nunca se agenda y conserva la fila; job de un tenant degradado no toca el CRM ni mueve el
+checkpoint; asistente con las dos puertas por separado). Front **811 -> 813**, con los 3 rojos
+preexistentes de KaTeX. `dotnet build` y `ng build --configuration production` limpios.
+
+**9 tests existentes se pusieron rojos y eso fue la senal correcta:** sus harnesses nunca sembraban
+fila `Tenant`, asi que el gate los leia como "plan desconocido" y refusaba. Se les agrego un tenant
+pago explicito.
+
+**Queda abierto (decision de negocio, no tecnica):** el asiento del asistente sigue siendo el rol
+TenantAdmin. En un tenant de pago, un CompManager sigue sin asistente y no ve nada — correcto segun el
+diseno per-seat, pero conviene confirmar que es lo que se quiere vender.
+
+## 2026-08-10 — Rebranding a Incentra (incentra.work): SOLO lo visible al usuario
+
+Decision de negocio de Rodolfo (compro `incentra.work`). **La regla dura del WI: cambiar SOLO lo que el
+usuario VE.** El codigo sigue llamandose Wasnie — namespaces, clases, models, tablas, migraciones,
+nombres de archivo y el nombre interno del proyecto quedaron INTACTOS. "Wasnie" como identificador
+interno es invisible para el cliente; renombrarlo seria riesgo puro (cientos de archivos, snapshot de
+EF, referencias rotas) sin ningun beneficio.
+
+### El diagnostico primero, el cambio despues
+
+Se clasifico CADA aparicion de "Wasnie" en VISIBLE vs INTERNO antes de tocar nada. De ~5.500
+apariciones en el repo, **solo ~40 eran visibles**. El resto son namespaces, `using`, el snapshot de EF
+y 24 Designer.cs de migraciones (~80 refs c/u), comentarios de codigo y nombres de tests.
+
+### Lo que cambio (visible)
+
+- **i18n EN/ES/PL** — 18 strings x 3 idiomas. Ya existia la clave de marca `APP.NAME`; se dejo como
+  punto unico y se aprovecho para los dos literales que NO la usaban.
+- **Metadatos del navegador** — `index.html` `<title>` y `TranslatedTitleStrategy.BRAND`
+  (`Incentra | ICM & SPM`, y el sufijo `<Page> | Incentra`).
+- **Templates** — 8 `alt="Wasnie"` -> `alt="Incentra"`; y los dos literales sueltos
+  (`qualification`, `subscription-reactivation`) ahora leen `{{ 'APP.NAME' | translate }}` en vez de
+  tener el nombre hardcodeado.
+- **System prompt del asistente** (`AssistantPrompt.cs`, ~30 refs + `AssistantToolRunner`) — el
+  asistente se presenta como Incentra y la regla de confinamiento es `STAY ON INCENTRA`.
+- **Plantillas de email** (`EmailTemplates.cs`) — asuntos y cuerpos EN/ES/PL, el header y el footer
+  (`© 2025 Incentra · incentra.work`).
+- **Config de dominio** — `FrontendBaseUrl` -> `https://app.incentra.work`; `FromAddress` ->
+  `Incentra <...>`; `ResendOptions` default -> `Incentra <noreply@incentra.work>`; los mailtos del
+  perfil -> `support@incentra.work` / `privacy@incentra.work`; `REACTIVATION_GDPR_EMAIL` idem.
+- **El manual** — `docs/Wasnie_Configuration_Guide.md` es lo que RENDERIZA la pantalla `/manual` (y es
+  la base de conocimiento del asistente), asi que su prosa se rebrandeo. El i18n de `/manual` ya estaba
+  limpio. El PDF real lo regenera Rodolfo.
+- **Swagger** (`Incentra API v1`) y el **PDF de payouts** (`Sales Performance Management — Incentra`).
+
+### * TRES SUPERFICIES VISIBLES QUE NO ESTABAN EN LA LISTA DEL WI
+
+El barrido las destapo y son las que un rebrand a medias deja rotas por meses:
+
+1. **El issuer de 2FA** (`GetTwoFactorSetupHandler`) — es el nombre que Google Authenticator muestra
+   en la pantalla del telefono. Ahora dice Incentra. Los ya enrolados siguen viendo Wasnie: la etiqueta
+   se graba en el momento del enrolamiento y no se puede reescribir desde el server. No es un bug.
+2. **Dos mensajes de `DomainException`** ("...because Wasnie holds no exchange rates") — se confirmo en
+   `ExceptionHandlingMiddleware` que el `.Message` viaja al cliente como 422, o sea el usuario los LEE.
+3. **El header `X-Title`/`AppUrl` de OpenRouter** — es atribucion de marca en los dashboards del
+   proveedor.
+
+### El polaco no admitia reemplazo literal
+
+"Wasnie" era indeclinable; **"Incentra" termina en -a y cae en el paradigma femenino polaco**, asi que
+dejarlo en nominativo daba frases agramaticales ("skonfigurowac Incentra", "o Incentra?"). Se declino
+donde correspondia (`Incentrę` / `Incentry` / `w Incentrze`) en i18n y en los emails. Ingles: un
+articulo corregido ("a Incentra" -> "an Incentra"). Espanol no necesito nada.
+
+### Lo que se dejo en Wasnie A PROPOSITO
+
+`wasnie_logo.png` (nombre de archivo — la IMAGEN ya no tiene ninguna "W": es una marca de barras con
+flecha, sirve tal cual para Incentra), las claves de `localStorage`/`sessionStorage`
+(`wasnie.theme`, `wasnie_session`, `wasnie_lang`, ...) — cambiarlas desloguea a todo el mundo y resetea
+preferencias; JWT `Issuer`/`Audience` — cambiarlos **invalida todos los tokens vivos**; la policy CORS
+`WasnieUi`; `WasnieDb`; `logs/wasnie-.log`; los nombres en disco del manual y de la guia; y todos los
+comentarios de codigo.
+
+### Verificacion
+
+`dotnet build` limpio (0 errores; el build a `bin/` normal choca con la API corriendo que bloquea los
+DLLs — se compilo a un `BaseOutputPath` temporal). Unit **1367 -> 1367 en verde**: 4 asserts de marca
+actualizados (`STAY ON WASNIE` x2, `X-Title`, `OtpauthUri`). `ng build --configuration production`
+limpio. Front 810-811/814 — **los 4 rojos son todos del suite de KaTeX/maths, preexistentes** y su
+numero varia entre corridas (flaky), ninguno de marca. Runtime en `localhost:4200`: title
+`Sign in | Incentra` y `Zaloguj się | Incentra`, footer `© 2025 Incentra`, **cero "Wasnie" en el DOM**
+en EN y PL.
+
+### Pendiente para Rodolfo (NO es codigo)
+
+Los buzones `support@incentra.work` y `privacy@incentra.work` **tienen que existir** — hoy la app ya
+apunta ahi. Idem el dominio verificado en Resend si se quiere salir del sender de sandbox
+(`onboarding@resend.dev`, que quedo igual), y `app.incentra.work` apuntando al front. Y regenerar
+`docs/Wasnie_User_Manual.pdf` con la marca nueva (el nombre de descarga que ve el navegador ya dice
+`Incentra_User_Manual.pdf`; el nombre en disco sigue siendo el viejo, a proposito).
+
+## 2026-08-10 — FIX: al cancelar, el mensaje desaparecia hasta refrescar
+
+Reportado por Rodolfo probando el WI anterior: *"presiono cancelar, lo hace, pero el mensaje desaparece,
+tengo que volver a refrescar para ver que fue cancelado"*.
+
+### * LA CAUSA: UN RACE QUE LA LECTURA SIEMPRE IBA A PERDER
+
+El diseño original era "nada de copias locales optimistas": congelar el parcial en pantalla, pedirle al
+servidor la conversacion, y mostrar como definitiva **la fila que el servidor devuelva**. Honesto en
+principio, y **equivocado en el orden de los hechos**.
+
+El servidor escribe esa fila **mientras la request abortada se desenrolla** — o sea *despues* de que el
+browser ya mando su pregunta, porque el browser la manda inmediatamente al abortar. Los dos intentos
+(inmediato y a 300ms) volvian con el hilo todavia sin turno cancelado, y el codigo interpretaba eso como
+"no se guardo nada" y **limpiaba el texto congelado**. Resultado exacto del reporte: la respuesta
+desaparece en el click que existia para preservarla, y solo vuelve con un refresh — porque para entonces
+el servidor **si** la habia guardado. El estado durable nunca estuvo roto; lo que estaba roto era el
+momento en que se lo consultaba.
+
+### El orden invertido
+
+El turno cancelado se escribe en el hilo **en el acto**, con las palabras que estaban en pantalla, y la
+fila del servidor lo **reemplaza** despues, calladamente (id real, truncado del servidor, timestamp del
+servidor).
+
+Esto no viola "no inventar mensajes": lo que se muestra es **exactamente el texto que el usuario acababa
+de leer**, que es **exactamente lo que el backend esta guardando en ese mismo instante**. La copia local
+no es una suposicion sobre lo que el servidor hara — es la misma cosa, unos milisegundos antes.
+
+Dos decisiones que van con eso:
+- **Va dentro de `messages`, no al lado.** Una señal aparte ("aca esta la burbuja cancelada") se
+  renderiza despues de todos los mensajes guardados, asi que en cuanto el usuario hiciera su proxima
+  pregunta — que es el motivo entero por el que apreto Stop — el turno cancelado **saltaria por debajo**
+  y el hilo se leeria fuera de orden.
+- **Si el servidor nunca confirma, el stand-in se queda.** Sacarlo es literalmente reproducir el bug. Y
+  la proxima vez que se abra la conversacion, lo que renderiza es lo que el servidor tenga.
+
+El reconcile pasa de 2 intentos a un **backoff de 0/300/900/2000ms**, y ahora es una **correccion, nunca
+una remocion**.
+
+### * Y DOS HAZARDS DE ORDEN QUE APARECIERON MIRANDO ESTO
+
+1. **`sending` se apaga sincronicamente en el click**, no en el `finally` del exchange. Ese `finally`
+   corre unos microtasks despues, cuando el stream abortado termina de tirar — con lo cual "el composer
+   queda libre" dependia del scheduling, y peor: el reconcile no podia distinguir **"el turno que acabo
+   de cancelar sigue desenrollandose"** de **"hay una pregunta nueva en curso"**, que es justo el chequeo
+   que lo protege de pisar el hilo. Apretar Stop ES el final del turno; decirlo en el momento es mas
+   cierto y mas simple.
+2. **El `finally` del exchange solo limpia si sigue siendo el turno en vuelo** (`this.controller ===
+   controller`). Como ahora el composer se libera en el click, el usuario puede empezar una pregunta
+   nueva dentro de la ventana en la que la anterior todavia se desenrolla — y esa limpieza, perteneciente
+   a una request ya terminada, le apagaba el `sending` y le robaba el AbortController **al turno nuevo**:
+   un boton Stop sin nada que parar. Practicamente inalcanzable (hace falta tipear y clickear en unos
+   microtasks), pero es una clase de bug que no vale la pena dejar viva por una linea.
+
+**Tests:** front 813 -> **815**. El test del bug hace que `getConversation` devuelva `NEVER` — la version
+mas fuerte posible de perder el race — y exige que el turno cancelado este en el hilo igual, con el
+composer libre, **antes** de que el servidor conteste nada. El segundo test fija el reemplazo: cuando la
+fila del servidor llega, el id deja de ser el placeholder. Siguen los 3 rojos preexistentes de KaTeX.
+Bundle identico (828.50 kB).
+
+**Solo front: cero cambios de backend.** **NO se commiteo nada.**
+
+## 2026-08-10 — "Try again" en la respuesta cancelada, y por que la linea de "...few seconds." estaba torcida
+
+Pulido del cancelar terminado hace un rato. Dos cambios chicos de cara al usuario; **uno de los dos
+escondia un bug real de backend** que el WI daba por inexistente ("Tipo: Front").
+
+### * EL RETRY SOBRE UN TURNO CANCELADO SE HABRIA ROTO, Y NO DE FORMA VISIBLE
+
+El WI decia "reusar el flujo `IsRetry` que ya existe". El flujo existe, pero fue escrito para el unico
+caso que habia: un turno **fallido**, que **no guarda fila del asistente**. Por eso calculaba el slot de
+la respuesta como `sequence de la pregunta + 1` — libre, garantizado.
+
+Un turno **cancelado SI guarda fila** (esa es toda la funcionalidad del WI anterior), y esa fila ocupa
+justamente ese slot. Con `(ConversationId, Sequence)` como indice **UNICO**, el retry no habria producido
+un hilo desordenado: habria producido un **save fallido**. Y no lo habrian atrapado los tests — la base
+in-memory de los unit tests **no aplica indices unicos**; se rompia recien contra SQL Server.
+
+**Fix:** `nextSequence = history[^1].Sequence`. Una linea, y **degenera exactamente al comportamiento
+actual** para el caso fallido (ahi el ultimo mensaje ES la pregunta). El retry **appendea**: el fragmento
+detenido se queda donde esta, todavia marcado, y la respuesta nueva cae despues. Que ademas es la forma
+honesta de lo que paso — el usuario tiene el pedazo que corto y la respuesta que volvio a pedir.
+
+### * Y EL MODELO NO PUEDE VER EL FRAGMENTO EN EL QUE LO PARARON
+
+Segundo problema, mas silencioso. `AssistantPrompt.Build` manda el historial al modelo. Devuelto como el
+turno previo del asistente, el parcial cancelado **es una instruccion por ejemplo**: preguntado lo MISMO
+otra vez (que es literalmente lo que hace Try again), el modelo ve su propio intento truncado y
+**continua desde el corte en vez de responder**. El usuario apretaria "intentar de nuevo" y recibiria la
+segunda mitad de lo que habia parado.
+
+Se filtra, **al lado del filtro que ya existia** para el placeholder de "no conectado" — misma clase de
+razon, escrita ahi mismo: no es algo que el asistente haya dicho. Aplica a todo el historial, no solo al
+retry: un fragmento truncado tampoco es buen contexto para la pregunta siguiente.
+
+### El boton
+
+Mismo primitivo, misma variante, mismo `store.retry()`, mismo `isRetry`. Lo unico nuevo es **donde**
+aparece y **cuando**:
+
+- `retryableCancelled()` es un computed **hermano** de `retryable()`, no un reemplazo. Estan separados
+  porque son dos VISTAS distintas — la tarjeta de fallo no puede aparecer sobre un turno que el usuario
+  corto a proposito — pero `retry()` consulta los dos y corre lo mismo. **Nunca pueden ser ambos
+  no-nulos:** `retryable` necesita que el hilo este esperando una respuesta, y una respuesta cancelada ES
+  una respuesta guardada.
+- **Solo si el turno cancelado es el ULTIMO del hilo.** El retry re-responde la ultima pregunta
+  almacenada; sobre un cancelado viejo, el boton diria "try again" debajo de un mensaje y responderia
+  otro. La nota "Respuesta cancelada" si se queda para siempre — ese turno fue cancelado, y eso no deja
+  de ser cierto.
+- **Sin claves i18n nuevas:** `ASSISTANT.RETRY` ya estaba traducida en EN/ES/PL y es la misma accion.
+  Inventar una segunda clave serian dos strings que hay que mantener diciendo lo mismo en tres idiomas.
+
+### * "seconds" no estaba desalineado por culpa de ese parrafo
+
+`.assistant-msg` tiene `white-space: pre-wrap`, **y lo necesita**: el mensaje del usuario se imprime
+verbatim y los saltos de linea que escribio tienen que sobrevivir. Pero **hereda**. Y dentro de la
+burbuja, esa frase no es texto tipeado: es un string de UI que en el template vive en su propia linea
+indentada. Con `pre-wrap`, el salto de linea y los espacios del template **dejan de ser formato y pasan a
+ser contenido** — la frase arranca indentada, el wrap vuelve al borde izquierdo real, y la ultima palabra
+queda colgando debajo de nada.
+
+`white-space: normal` en el elemento cuyo texto no debe preservar espacios. Reflowear el template a una
+linea larga tambien lo arreglaba **hoy**, y se rompia la proxima vez que alguien formatee el archivo: la
+regla pertenece al elemento, no al formateo. Se aplico tambien a la nota de cancelado, que tiene la misma
+forma.
+
+**Tests:** unit backend 1365 -> **1367** (el retry appendea + el modelo no ve el fragmento), front 804 ->
+**813** (9 nuevos). Siguen los **3 rojos preexistentes de KaTeX** en `assistant-math.spec.ts`, ajenos.
+`ng build --configuration production` limpio y con el bundle **identico** (828.50 kB).
+
+**Runtime:** lo prueba Rodolfo — pidio explicitamente no usar el browser en este WI.
+
+**NO se commiteo nada.**
+
+## 2026-08-10 — Detener la respuesta del asistente: boton propio, y el turno cancelado como estado durable
+
+**El problema:** una respuesta en curso no se podia parar. Si el usuario ya no la queria — porque se dio
+cuenta de que preguntaba mal, o simplemente quiere otra cosa — tenia que esperarla entera.
+
+**★ EL HALLAZGO DEL PASO 0, Y POR QUE EL WI NO SE PUDO SEGUIR LITERALMENTE.** El WI pedia "reusar el
+patron de FALLIDO que ya existe: mismo enum, mismo campo, misma persistencia". **Ese patron no es un
+enum ni un campo.** `UnansweredTurn.cs` DERIVA el fallo de la ausencia de la fila del asistente y
+argumenta, largamente y por escrito, **en contra** de guardar un flag: "una copia mas de un hecho que
+los datos ya contienen, y dos copias derivan". Cancelado **no puede** usar ese mecanismo, porque el
+requisito central es CONSERVAR el texto parcial — y una fila parcial sin marca se lee exactamente como
+una respuesta que el asistente decidio terminar ahi.
+
+**La decision, y por que no contradice ese archivo.** El estado va **en la propia fila**
+(`AssistantMessageStatus {Complete, Cancelled}`), **escrito una sola vez con la fila y nunca mutado**:
+no hay metodo que lo cambie, no hay "marcar completo", no hay limpieza. El flag que `UnansweredTurn`
+rechazaba era uno *mutable* sobre un turno cuya verdad podia cambiar debajo; este es parte de lo que la
+fila ES.
+
+**Backend.**
+- Migracion **B24**, columna `nvarchar(20)` como `Role` (una fila leida a mano dice `Cancelled`, no `1`).
+  **El default lo scaffoldeo EF como `""` y se corrigio a mano a `Complete`:** todo turno escrito antes
+  de que cancelar existiera SI termino, asi que `Complete` es la verdad registrada y no una conveniencia;
+  `""` habria dejado un valor que ningun cliente sabe leer sobre todo el historial de chat.
+- `StreamAssistantReplyHandler`: la rama `OperationCanceledException` **deja de descartar**. Persiste lo
+  generado con estado `Cancelled` — **la unica excepcion a "nunca se guarda nada parcial", y solo es
+  segura por la marca**: el usuario VIO llegar esas palabras y despues eligio pararlas; tirarlas borra lo
+  que tenia en pantalla y deja el hilo diciendo que su pregunta nunca se respondio.
+- **`CancellationToken.None` en ese save, a proposito.** El token de la request YA esta cancelado — es
+  como se llego ahi — asi que pasarlo abortaria justo la escritura que la rama existe para hacer.
+- **Si no se genero ni una palabra, no se escribe nada.** Cancelar durante el clasificador o el lookup
+  deja el builder vacio, y una burbuja vacia no es una respuesta mas corta: ese turno queda sin
+  responder, que es lo que es, y lo cubre el camino de reintento que ya existia.
+- Guarda de dominio: **solo un turno del asistente puede cancelarse** (una pregunta se escribe y se manda
+  en un solo movimiento; no hay intervalo donde pararla).
+- `UnansweredTurn` **sin cambios**: un turno cancelado CUENTA como respondido. Reportarlo como pendiente
+  pondria la tarjeta de fallo debajo y ofreceria reintentar la respuesta que el usuario acaba de cortar.
+
+**Front.**
+- **STOP es un boton propio, al lado del de enviar** — enviar no se transforma. Son acciones opuestas, y
+  un control que cambia de significado bajo el cursor se aprieta por accidente: el usuario apuntando a
+  Enviar para su proxima pregunta pararia la respuesta.
+- **Existe solo mientras hay algo que parar** (oculto, no deshabilitado).
+- `AbortController` por turno. **Abortar el fetch es TODO el mecanismo, de los dos lados**: corta la
+  lectura en el browser y el server ve caer la conexion, cancela su token, suelta la llamada a
+  OpenRouter (no se pagan tokens por palabras que nadie va a leer) y escribe lo que habia llegado. Una
+  sola señal, sin un segundo endpoint que mantener en sincronia.
+- Flag `cancelling` para que el `catch` **no confunda cancelar con fallar**: abortar tira exactamente
+  igual que una conexion muerta, y sin esto el usuario apretaba Stop y se le decia que el asistente no
+  pudo responder — culpado por una falla, y con un reintento ofrecido para un turno que termino a
+  proposito.
+- El parcial **queda congelado en pantalla y lo reemplaza la fila del servidor** (refetch, con **un
+  reintento a 300ms**: la fila se escribe mientras la request aborta del lado del server, y la lectura
+  sale del browser casi en el mismo instante, asi que la primera respuesta puede genuinamente ser previa
+  al insert). Nada de copia local optimista.
+- `sending` cae en el acto: **el input queda listo antes incluso de que se lea la fila guardada**, que es
+  el caso de uso entero del boton.
+- Aviso **"Respuesta cancelada"** atenuado bajo el mensaje, con icono y borde superior — un peldaño por
+  debajo de la tarjeta de fallo, que es exactamente la diferencia entre las dos cosas: aquella es una
+  advertencia con algo que hacer, esta es una nota al pie sobre una decision del propio usuario. Se lee
+  del `status` de la FILA, nunca de memoria de sesion; por eso sigue ahi mañana.
+- i18n EN/ES/PL de `CANCEL` y `CANCELLED_NOTICE`.
+
+**Un tropiezo que vale documentar (en los tests).** Cuatro tests nuevos del store colgaban a los 5s. La
+causa no era el codigo: el helper devolvia el `send()` en vuelo desde una funcion `async`, o sea una
+promesa-de-promesa, y `await` las colapsa — el test esperaba justo la request que el helper existe para
+dejar colgada. Se devuelve envuelto (`{ sending }`) y queda comentado en el spec.
+
+**Verificacion runtime (los 3 escenarios del WI).** Pregunta larga en español → stop a mitad de la lista:
+la escritura se detiene, el parcial (4 items) queda con "Response cancelled", el boton stop desaparece y
+el input queda listo, **sin tarjeta de fallo**. Pregunta nueva inmediatamente despues → sale y se
+responde normal, con el turno cancelado intacto arriba. **Recarga completa de la pagina + reabrir la
+conversacion desde el historial → el turno cancelado sigue marcado**, con su texto parcial y su aviso.
+El contenido guardado termina exactamente donde se corto, que es la evidencia de que el server dejo de
+consumir el stream del proveedor.
+
+**Tests:** unit backend 1359 → **1365** (6 nuevos en `AssistantCancellationTests.cs`), front 788 → **804**
+(16 nuevos). Los **3 rojos de `assistant-math.spec.ts` son preexistentes** (KaTeX / sanitizado XSS) y
+ajenos a este WI: ni ese spec ni sus fuentes se tocaron. `dotnet build` y
+`ng build --configuration production` limpios (los warnings de budget del bundle vienen de antes).
+
+**NO se commiteo nada** — arbol reportado, como siempre.
+
+## 2026-08-10 — El manual deja de ser un PDF embebido: se renderiza el Markdown, con atajos por seccion
+
+**La decision de Rodolfo: el `.md` es la fuente de verdad; el PDF puede estar mal.** Eso desbloqueo el
+enfoque que el visor nunca iba a poder dar.
+
+**★ EL HALLAZGO QUE LO HABILITO TODO.** El contenido del manual **ya estaba en el repo**: el `.csproj` de
+Infrastructure dice que `docs/Wasnie_Configuration_Guide.md` es *"the same file the team edits and
+publishes the handbook from"*, y el PDF viejo se llamaba literalmente `Wasnie_User_Handbook.pdf`. Ademas
+`marked` ya era dependencia. O sea que no habia que traer nada nuevo para dejar de depender del visor.
+
+**★ Y HABIA UN DRIFT SILENCIOSO QUE NADIE HABRIA NOTADO.** Se verifico que **no existe pandoc, script ni
+paso de build que genere el PDF desde el `.md`**: son dos artefactos independientes. El asistente
+respondia desde el markdown y el usuario leia el PDF, asi que **editar la guia hacia que los dos empezaran
+a contradecirse, en silencio**. Servir la pantalla desde el mismo `IAssistantKnowledgeBase` que ya lee el
+asistente vuelve eso imposible: hay UN documento, entonces hay UNA respuesta. El PDF queda como
+exportacion para imprimir, detras de un boton.
+
+**Backend:** `GET /api/manual/content` en `ManualController`, `[Authorize]` como el resto, devolviendo el
+markdown de `IAssistantKnowledgeBase` — **no una copia propia del archivo**, que es el punto. Devuelve
+markdown y no HTML a proposito: el render es del cliente, que ya tiene `marked` y un sanitizador, y
+mandar HTML desde el servidor haria a ese endpoint responsable de la presentacion.
+
+**Front:** la pantalla renderiza el markdown como **HTML propio de Wasnie**. Eso resuelve de una todo lo
+que el visor no podia: **cero gris** (no hay visor ajeno pintando nada), los 3 temas aplican, el texto se
+**selecciona** y el **Ctrl+F del navegador funciona de verdad** — nada de eso existia con el PDF embebido.
+Tipografia de documento largo con tokens (encabezados, listas, tablas que scrollean solas, `code`,
+`blockquote`), y **medida de lectura acotada**: una linea que cruza un monitor entero es lo que vuelve
+ilegible un documento largo.
+
+**★ SIN `bypassSecurityTrust…` EN NINGUN LADO.** Se ata `[innerHTML]` con un string plano, asi que corre
+el sanitizador de Angular. Es el default correcto **aunque el markdown venga de nuestro propio
+repositorio**: el documento viaja por la red, y "confiamos en la fuente" es una suposicion que solo hace
+falta que sea falsa una vez. Los `id` de los encabezados se agregan DESPUES, en el DOM, para no depender de
+que sobrevivan a la sanitizacion.
+
+**★ Los atajos se EMPAREJAN, no se hardcodean.** La tarjeta lista los numeros de seccion que pidio el
+asesor (5, 4.4, 6, 4.5) y **construye cada link desde el encabezado realmente encontrado en el documento**.
+Hardcodear el texto pondria una copia de un encabezado en el codigo, y la copia es la que se queda vieja:
+un titulo renombrado dejaria un link que se ve bien y no lleva a ningun lado — la misma falla que una URL
+inventada. Un prefijo sin match **simplemente no se renderiza**; menos atajos es degradacion correcta, un
+atajo muerto no. Verificado contra la guia real: los cuatro existen.
+
+**Y el PDF ya no se baja de arranque:** la pantalla no lo necesita para mostrar el manual, asi que traer
+~700 KB en cada visita para alimentar un boton que casi nadie toca era desperdicio puro. Se pide solo al
+hacer clic, sigue siendo blob autenticado y sigue sin tener URL publica.
+
+**★ Verificacion runtime (API en :5099, apagada despues):**
+- **Sin sesion: `GET /api/manual/content` -> 401 con 0 bytes.**
+- Con token: **200, 69.663 bytes de markdown**.
+- **Las cuatro secciones de los atajos estan en lo que sirve el endpoint** (`## 5. Rate tables`,
+  `### 4.4 Modifier, Cap, Floor`, `## 6. SplitAtQuota`, `### 4.5 Plan lifecycle`) — comprobado sobre la
+  respuesta real, no sobre el archivo.
+
+**★ TRES DEFECTOS DEL PRIMER INTENTO, Y UN HALLAZGO QUE CAMBIA EL PANORAMA.**
+
+**(1) Todos los links internos del documento estaban rotos.** El `.md` se referencia a si mismo todo el
+tiempo con anclas en formato Markdown estandar — `[Rate tables](#5-rate-tables)`,
+`[4.5](#45-plan-lifecycle-and-assignments)`,
+`[15.1](#151-configuration-the-policy-is-opt-in-per-plan)` — y yo generaba ids con un esquema inventado
+(`manual-{i}-{slug}`), asi que **ninguna coincidia**: un documento lleno de links que se ven bien y no
+llevan a ningun lado. Se reemplazo por el slug real, **derivado de esas anclas y no adivinado**:
+minusculas, se borra la puntuacion (el punto de "4.5" desaparece y queda `45`), espacios a guiones. Se
+agrego ademas interceptar el click, porque un `#ancla` le pide saltar a la VENTANA y aca el que scrollea es
+el articulo, no la pagina.
+
+**(2) El CSS existia y no podia aplicar NUNCA.** Angular scopea los estilos de un componente estampando
+`_ngcontent-xxx` en los elementos que EL crea; el contenido insertado con `[innerHTML]` no recibe ese
+atributo, asi que `.manual__doc h2 { … }` compila a `h2[_ngcontent-xxx]` y **no matchea nada**. Por eso el
+documento se veia crudo. Va con `::ng-deep`.
+
+**★ Y el `:host` adelante es la seguridad, no decoracion.** `::ng-deep` solo **filtra GLOBALMENTE**:
+restilaria cada `h2`, `table` y `code` de toda la aplicacion, **incluido el chat del asistente, que
+renderiza este mismo markdown**. Con `:host` compila a `[_nghost-xxx] h2` y solo puede matchear dentro del
+subarbol de este componente. El chat queda intacto.
+
+**(3) La navegacion pasa a ser DINAMICA.** Un menu escrito a mano de cuatro entradas describia una guia que
+tiene ~20 capitulos, y habria descrito los equivocados apenas cambiara el markdown — que va a cambiar,
+porque es la fuente de verdad y se edita a mano. Ahora se leen los `h2` realmente renderizados: se agrega
+una seccion y aparece, se renombra y la etiqueta la sigue, se borra y se va.
+
+**★ EL HALLAZGO: el PDF y el `.md` NO son el mismo documento.** La lista de 19 secciones que paso Rodolfo
+**no sale del markdown**. El `.md` tiene 18 numeradas (mas "Coverage checklist", "How to read this
+document" y "Maintenance"), **no tiene seccion 19 ni nada de HubSpot**, y sus titulos son de trabajo, no
+los pulidos del PDF: "4. Plan and Rules" contra "Plans and calculation rules", "6. SplitAtQuota — the
+accelerator question" contra "Quota accelerator", "1. The model on one page" contra "The functional model
+on a single page". **O sea que el PDF esta mas pulido y ademas tiene MAS contenido** (la integracion con
+HubSpot). Se declaro al `.md` como fuente de verdad, y la pantalla lo respeta — pero conviene decidir a
+conciencia: hoy renderiza el documento mas crudo y menos completo de los dos.
+
+
+**Ajuste de la navegacion (mismo dia):** la lista de capitulos ocupaba demasiado del panel y algunos
+titulos se iban a dos lineas. Filas mas compactas (`--space-1`/`--space-2` de padding, sin `gap`, 12 px),
+links en **semibold**, y **una linea por seccion siempre**: los titulos largos —"6. SplitAtQuota — the
+accelerator question" es el peor— se recortan con elipsis. **Una lista cuyas filas tienen alturas
+distintas deja de escanearse como un menu**, que es justamente para lo que existe. El titulo completo
+sigue disponible en el `title` del boton, asi que no se pierde nada al recortarlo.
+
+**Ajuste: el ultimo capitulo no saltaba, y el menu mostraba secciones que no son capitulos.**
+
+**(a) Defecto real del scroll.** Un contenedor scrolleable se detiene en su ultimo pixel, asi que un
+encabezado cerca del final **no puede subir hasta arriba**: no hay contenido debajo que lo empuje. Clickear
+"Maintenance" —a nueve lineas del final— no movia absolutamente nada si el lector ya estaba abajo, y eso se
+lee como un link roto. Se reservo una pantalla de aire al pie del documento (`padding-bottom: 70vh`), asi
+**cualquier** capitulo puede quedar arriba y toda entrada del menu hace lo mismo. No es aire decorativo: es
+lo que vuelve predecible el salto.
+
+**(b) "Maintenance" no es un capitulo del producto.** Es una instruccion para quien mantiene el ARCHIVO
+("re-verify this document against the code and update the verification date"), igual que "Coverage
+checklist" y "How to read this document". En un menu pensado para alguien que entra a buscar una respuesta,
+son ruido.
+
+**El filtro usa la convencion del propio documento, no una lista de excepciones:** la guia numera lo que se
+navega ("1." … "18.") y deja su propia intendencia sin numerar. Se filtra por eso, asi que **no hay ni un
+titulo hardcodeado** — se agrega una seccion 19 y aparece sola. Medido sobre la guia real: **18 capitulos
+en el menu, 3 metas afuera**. **El costo, dicho:** un capitulo real escrito SIN numerar quedaria fuera del
+menu (sigue en el documento y se llega scrolleando); si los capitulos sin numero se vuelven normales, esta
+es la regla que hay que cambiar.
+
+**El manual sale del sidebar y pasa al topbar, junto al usuario.** Es ayuda, no un destino de la
+navegacion del producto, y quedaba raro entre Subscription / Integrations / Settings. Ahora es un
+`ws-button variant="secondary" size="sm" iconOnly` con el `info-circle` de Tabler, agregado al registro de
+`IconComponent` **al lado del `info` existente y sin reemplazarlo** (el viejo esta en uso y dibuja la "i"
+con lineas planas; este trae el pie con serifa). Sigue **sin permiso RBAC**, por la misma razon de siempre:
+el manual documenta el producto, no tiene datos del tenant, y esconderlo se lo ocultaria justo a quien
+menos derechos tiene.
+
+**★ Un detalle de accesibilidad que casi se cuela:** poner `[attr.aria-label]` sobre `<ws-button>` deja el
+atributo en el HOST, mientras que lo que un lector de pantalla anuncia es el `<button>` de adentro — que,
+siendo solo-icono, **se habria quedado sin nombre accesible**. Se resolvio proyectando texto oculto dentro
+del boton. La clase vive en el SCSS del topbar y no en una utilidad global a proposito: el contenido
+proyectado conserva el scope del componente que lo DECLARA, asi que la regla lo alcanza sin tocar el design
+system.
+**Tests:** por instruccion de Rodolfo **no se corrio la suite del front y se elimino
+`manual.component.spec.ts`** — no queria dejar un spec que describiera el mecanismo viejo sin poder
+verificarlo. Los tests del backend siguen igual (1359). `ng build --configuration production` **exit 0**,
+con los dos warnings preexistentes de siempre.
+
+**Tests:** backend **1358 -> 1359**; el nuevo fija que la guia real contenga las cuatro secciones que la
+pantalla ofrece como atajo — hace falta porque el emparejamiento **descarta en silencio** un atajo que ya
+no existe, que es el comportamiento correcto pero invisible. Front: 7 specs del visor reescritos al
+mecanismo nuevo (renderiza markdown, atajos construidos DESDE el documento, un atajo inexistente se cae en
+vez de linkear a la nada, el PDF **no** se descarga hasta que se lo pide, y el boton del asistente
+**oculto** sin entitlement). Front **794 verdes de 797**; los 3 rojos siguen siendo los de KaTeX,
+preexistentes. `ng build --configuration production` **exit 0**.
+
+**PENDIENTE de Rodolfo:** abrir `/manual` y ver el documento como pantalla de Wasnie. **No verifique que
+el PDF y el `.md` digan hoy lo mismo** — no puedo abrir el PDF; con el `.md` como fuente de verdad eso deja
+de bloquear, pero si el PDF tiene portada o secciones propias, ahora son dos documentos distintos y
+conviene decidir si se sigue exportando.
+
+## 2026-08-10 — ROLLBACK de PDF.js: vuelve el visor simple + nota de idioma
+
+**Decision de Rodolfo: se abandona el visor propio.** Yo lo construi con PDF.js y lo rompi dos veces —
+primero 2 de 44 paginas en blanco, despues paginas en blanco alternadas y contenido cortado. Cada arreglo
+compraba un modo de fallo nuevo. **El visor del navegador muestra el documento entero, a cualquier zoom,
+con texto seleccionable y Ctrl+F funcionando** — nada de eso lo tenia la version en canvas. Menos piezas
+moviles le gana a un visor que hay que seguir reparando.
+
+**Rollback completo, verificado por diff y no por memoria:**
+- `pdfjs-dist` desinstalado. **`package.json` y `package-lock.json` quedaron IDENTICOS a HEAD** (`git diff`
+  vacio), no "parecidos".
+- `angular.json` **identico a HEAD**: se quito el glob del worker.
+- Borrados `pdf-renderer.service.ts` y todo el codigo de canvas / IntersectionObserver / ResizeObserver /
+  sweep de scroll. **Cero coincidencias de `pdfjs` en `src/`** (la unica `IntersectionObserver` que queda es
+  la de `ws-load-more.directive.ts`, preexistente y ajena).
+- **Bundle: inicial de vuelta en 828,40 kB**, exactamente el valor previo a instalar la libreria, y **cero
+  archivos de pdf/worker en `dist/`**.
+
+**Lo que NO se toco, porque siempre estuvo bien:** `ManualController`, el blob autenticado, `/manual`, la
+ubicacion del PDF y su link desde `docs/`. La seguridad queda intacta.
+
+**El unico cambio respecto del visor original — los margenes grises.** Venian de apilar superficies:
+lienzo de la pagina, tarjeta, fondo propio del visor, papel. Se saco la `ws-card` de alrededor del
+documento y el `max-width`/`aspect-ratio` que habia agregado: el marco toma el ancho completo de la
+columna y lo unico que enmarca el papel es el visor mismo. **Limite honesto, dicho en el codigo:** el gris
+inmediato alrededor de la hoja lo pinta el visor del navegador POR DENTRO, que es otro documento y las
+hojas de estilo de la app no lo alcanzan; dandole ancho completo al marco no le queda lugar donde
+mostrarse salvo donde el visor lo dibuja. Si se quisiera cero gris, la unica palanca es `zoom=page-width`,
+que agranda la tipografia en monitores grandes y se habia rechazado explicitamente — **no lo puse por mi
+cuenta**.
+
+**Nota de idioma** en el subtitulo, EN/ES/PL: el manual por ahora solo esta en ingles y se invita a usar el
+asistente, que si responde en el idioma del usuario.
+
+**★ Un error propio del que conviene dejar registro:** para editar los i18n use `ConvertTo-Json`, que
+**reformateo los tres archivos enteros — 5.985 lineas de diff por 4 claves nuevas**. Se reconstruyeron
+desde `HEAD` reaplicando solo las inserciones, y ademas hubo que **sacar el BOM** que `Set-Content
+-Encoding UTF8` agrega en PowerShell 5.1 (un BOM puede romper el parseo del JSON en runtime). **Diff final:
+24 inserciones, cero borrados.** Regla para la proxima: los JSON de i18n se editan por texto, nunca
+serializandolos de nuevo.
+
+**★ AJUSTE POSTERIOR, EN LA MISMA SESION — el gris SI se puede reducir casi a cero, pero no con un
+porcentaje.** Rodolfo propuso `width: 62%` centrado. El mecanismo que intuia es correcto (el gris se pinta
+DENTRO del iframe, achicar el iframe deja menos superficie donde pintarlo), pero el porcentaje fijo no
+funciona, y el motivo es medible: **que se vea gris A LOS LADOS demuestra que el visor ajusta la hoja al
+ALTO del marco** — si ajustara al ancho no habria gris lateral. O sea que el ancho con el que se dibuja el
+papel **depende del ALTO del iframe, no de su ancho**: `ancho_hoja = alto / 1,4142` en A4. Con la altura de
+esta pantalla, en 1080p la hoja se dibuja a ~522 px mientras que el 62% de la columna son ~863 px:
+**quedarian ~341 px de gris igual**, y solo acertaria en una altura de ventana concreta.
+
+**El arreglo:** `aspect-ratio: 1 / 1.4142` sobre el marco con `width: auto` y `margin-inline: auto`, asi el
+ancho se recalcula solo en cada pantalla y el visor se queda sin lugar donde pintar el gris. **No agranda
+la tipografia:** el papel se sigue dibujando del mismo tamano que antes, porque lo gobierna el alto, que no
+cambio — lo unico que cambia es que el marco deja de sobrar a los costados. Sigue sin usarse
+`zoom=page-width`, que si agrandaria las letras en un monitor grande.
+
+**Queda una decision de Rodolfo, NO tomada por mi cuenta:** con el marco angosto y centrado, el encabezado
+de la pagina sigue alineado a la izquierda de una columna `wide`, asi que puede leerse despegado de la
+hoja. Pasar la columna a `narrow` los junta, pero es un cambio de layout que nadie pidio.
+
+**★ SEGUNDO AJUSTE — dos columnas, y el PDF vuelve a leerse.** Con el `aspect-ratio` anterior el gris se
+iba pero la hoja quedaba CHICA: al ajustar la pagina al alto del marco, y estando el alto limitado por la
+pantalla, el papel terminaba en ~522 px. Rodolfo pidio partir el contenedor de `/manual` en dos columnas
+con un panel al lado.
+
+**Y esa division es lo que permite el arreglo del tamano.** Con el documento en una columna de ancho
+ACOTADO ya se puede usar `view=FitH` (ajustar al ancho) sin el riesgo que lo hizo prohibido antes: a lo
+ancho de una columna completa agrandaria la tipografia en un monitor grande, pero dentro de esta columna da
+una pagina **bastante mas grande que el fit-to-page anterior**, y de paso al visor no le queda lugar para
+pintar gris a los costados. El tope de la columna es lo que impide que la letra crezca de mas.
+
+**El panel (320 px fijos, se va debajo por abajo de 1100 px — en pantalla angosta el manual es todo el
+punto de la pantalla):** ilustracion SVG inline con tokens (nada de un asset nuevo, y sigue los 3 temas),
+titulo, descripcion, tres datos y un boton.
+
+**★ Todo lo que dice el panel es medido o verificable, y ahi esta la contencion:** el tamano del archivo se
+**mide del blob** que ya tenemos; acceso e idioma son hechos de como se sirve. **NO hay resumen del
+CONTENIDO del manual ni conteo de paginas** — nadie aca lo leyo, y sin PDF.js no hay forma de contar
+paginas, asi que inventar capitulos o un numero seria exactamente el unico tipo de error que este panel
+podria cometer.
+
+**El boton "Abrir en una pestana nueva" es la respuesta directa a "se ve chico":** entrega el MISMO blob
+que ya esta en memoria, asi que no se hace ninguna peticion nueva, el manual no gana ninguna URL publica, y
+el lector se queda con la ventana entera y el zoom del navegador.
+
+**Tests:** dos nuevos, de comportamiento y no de estilo — el tamano informado se mide del blob (1,5 MB
+para un blob de 1536 KB) y "abrir en pestana nueva" usa el mismo object URL **sin** volver a pedir el
+archivo. Visor **5 -> 7 specs**. Front **794 verdes de 797**; los 3 rojos siguen siendo los de KaTeX
+(preexistentes y, como ya se anoto, intermitentes: en una corrida aparecio un cuarto que no reaparecio).
+i18n EN/ES/PL completo, insertado **por texto** — 48 inserciones, cero borrados. `ng build --configuration
+production` **exit 0**.
+
+**★ TERCER AJUSTE — sin encabezado, y la tarjeta pasa a pagar alquiler.**
+
+**(a) Se fueron el titulo y el subtitulo de `/manual`.** No se logro vaciando `ws-page-layout`: esa
+primitiva dibuja SIEMPRE su bloque de titulo, asi que una pantalla sin encabezado no es esa primitiva con
+inputs vacios, es otro contenedor — se reemplazo por uno propio. La pantalla ahora **manda la altura**
+(`height: 100%` sobre el area de contenido del shell, que ya tiene altura definida), con `min-height: 0`
+en la pantalla y en la grilla: sin eso un hijo flex se niega a achicarse por debajo de su contenido y
+devuelve el desbordamiento a la pagina — **exactamente el bug que una vez escondio el boton Save del
+modal**. Resultado: la unica barra de scroll de la pantalla es la del documento, y el marco mas alto
+ademas dibuja una pagina mas grande.
+
+**(b) La tarjeta deja de ser metadatos.** Rodolfo lo planteo bien: cada pixel paga alquiler, y una lista
+de "acceso / idioma / tamano de archivo" era un basurero de metadatos. Se evaluaron sus tres propuestas y
+**gano el gancho al asistente**, por una razon medible ademas de conceptual:
+- **Quick Links quedo BLOQUEADO por falta de datos, no por diseno** — y es importante decirlo porque era la
+  mejor idea para RevOps. Un link a una seccion de un PDF necesita `#page=N`, **numero de PAGINA**, y no
+  hay forma de leer el PDF hoy (falta `pdftoppm`/poppler y pdfjs se desinstalo en el rollback). Ademas se
+  verifico que las secciones citadas (5 Rate tables, 6 aceleradores, 4 Plan and Rules) **son las de
+  `docs/Wasnie_Configuration_Guide.md`, no una estructura confirmada del PDF**. Con un mapeo
+  seccion->pagina se construye en minutos: Chrome si honra `#page=N`.
+- **Edition/gobernanza tambien quedo fuera por lo mismo:** no se sabe la edicion real del documento, y
+  ponerle "2026" a una politica vigente sin verificarlo es justo la clase de dato que una auditoria no
+  perdona.
+- **El gancho al asistente si se puede construir entero y verificable hoy**, y es lo que mas rinde: el
+  manual es estatico, general y **solo en ingles**; el asistente responde sobre los planes de ESE tenant,
+  con sus datos, en el idioma del lector. Poner la entrega justo donde alguien no encuentra la respuesta es
+  el momento en que mas vale.
+
+`AssistantStore` es root-provided, asi que el boton abre el mismo panel que vive en el shell.
+**Gateado por `entitled() === true`, igual que el trigger del topbar: se OCULTA, no se deshabilita**
+(Spec 5b.6) — un usuario sin asiento nunca ve un boton que daria 403. "Abrir en pestana nueva" queda como
+accion secundaria. La nota de idioma, que antes vivia en el subtitulo eliminado, **se conserva dentro del
+cuerpo de la tarjeta**, asi que no se perdio al sacar el encabezado.
+
+**Tests:** el spec nuevo cubre las dos mitades de la regla RBAC — sin entitlement **no existe** el boton en
+el DOM, con entitlement aparece y `askAssistant()` abre el panel. Visor **7 specs**; front **794 verdes de
+797**. i18n EN/ES/PL reemplazado **por texto** (bloque `MANUAL` completo): 33 inserciones, cero
+reformateos. `ng build --configuration production` **exit 0**.
+
+**★ CUARTO AJUSTE — foto en la tarjeta, y el fondo blanco (con su limite dicho).**
+
+**(a) La imagen.** Rodolfo paso una URL de Unsplash. **Se descargo y se sirve desde nuestro propio origen**
+(`WasnieUi/public/manual-cover.jpg`) en vez de enlazar el CDN: un `<img>` remoto haria que el navegador de
+CADA lector le pegue a `images.unsplash.com` en cada visita, entregandole su IP y su referrer a un tercero
+— el mismo criterio por el que KaTeX viene de npm y por el que el worker de PDF.js se empaquetaba en vez
+de bajarse. Ya hay precedente en el repo: `hubspot.png`, `brain.gif`, `eu.png` viven en `public/`.
+**Se bajo la variante `w=640` y no la `w=1228` que traia la URL: 47 KB contra 109 KB.** El slot mide
+~288 px, asi que 640 es 2x para pantallas retina y pesa menos de la mitad; servir 1228 px para ese hueco
+era tirar bytes. Licencia: Unsplash License (uso comercial libre, sin permiso, atribucion apreciada pero
+no requerida), anotada en el HTML junto al id de la foto. Va a sangre en el tope de la tarjeta —`ws-card`
+ya recorta con su propio radius— y `alt` vacio porque es decorativa: no dice nada que el titulo de al lado
+no diga. La foto (un teclado con una tecla **AI** encendida) coincide con lo que la tarjeta hace ahora, que
+es entregar al asistente.
+
+**(b) El fondo blanco, y la tercera vez que aparecen los grises.** Se pinto `--manual-paper: #ffffff`
+sobre el marco y su contenedor, blanco en los 3 temas. Es un literal **declarado a proposito**: ningun
+token sirve porque todos los de superficie estan TEMATIZADOS —se oscurecen con el tema, correcto para las
+superficies de Wasnie y falso para un documento— y agregar `--color-paper` es decision del design system
+(DESIGN_SYSTEM §10.3).
+
+**★ Y hay que ser claro con lo que ESTO alcanza:** pinta lo que es NUESTRO —la superficie del marco, que
+se ve antes de que el documento renderice y donde el visor embebido deje transparencia—. **NO puede
+repintar el gris que el visor de PDF del navegador dibuja adentro suyo** (la estera alrededor y entre
+paginas): es otro documento y ninguna hoja de estilo nuestra lo cruza. Con la columna acotada y la pagina
+ajustada a su ancho a ese gris casi no le queda donde aparecer; si sobrevive una banda entre paginas, esta
+es la razon y **CSS no es la palanca**.
+
+**Verificado:** la imagen llega al build (`dist/wasnie-ui/browser/manual-cover.jpg`, 47.609 bytes) y el dev
+server ya la sirve (**200, `image/jpeg`, 47.609 bytes**). Front **794 verdes de 797**, `ng build
+--configuration production` **exit 0**.
+
+**Tests:** los 5 specs del visor vuelven a los del mecanismo original (pasa por el servicio, 404 != error,
+error con reintento, revoke al destruir y antes de recargar). Front **792 verdes de 795**; los 3 rojos son
+los de KaTeX, preexistentes. `ng build --configuration production` **exit 0**.
+
+**PENDIENTE de Rodolfo (navegador):** abrir `/manual` y confirmar el PDF completo sin cortes ni blancos,
+sin margenes grises a los lados, y la nota de idioma en el subtitulo. La API no quedo corriendo: este WI no
+toco backend.
+
+## 2026-08-10 — El visor del manual renderizaba 2 de 44 paginas: render lazy por viewport
+
+**El defecto era mio, del WI anterior, y tenia DOS causas — las dos de diseno, no de PDF.js.** El bucle
+rasterizaba las 44 paginas de golpe y hacia dos cosas mal a la vez:
+
+1. **`catch { }` VACIO.** Cada fallo por pagina se tragaba sin decir nada. Por eso el bug no dejo ni un
+   mensaje en consola: **el sintoma no tenia evidencia porque yo la habia suprimido.** Es la peor parte de
+   todo esto, mas que las paginas en blanco.
+2. **Un `return` que abandonaba TODO EL RESTO del documento.** Ante cualquier interrupcion (un re-render
+   pedido en vuelo) el bucle salia y las paginas siguientes quedaban como canvas sin dimensiones. Una sola
+   interrupcion despues de la pagina 2 explica exactamente lo observado: 1 y 2 con 710x918, de la 3 a la 44
+   vacias.
+
+Y un tercer detalle que lo hacia probable: el umbral de re-render era de **8 px**, mas chico que una barra
+de scroll (~15 px). Aparecer la barra cambia el ancho disponible lo suficiente como para pedir otro
+re-render — "dibujo, aparece la barra, cambio el ancho, vuelvo a dibujar" persiguiendose la cola.
+
+**El arreglo — lazy por viewport, que ademas elimina la CLASE de fallo:**
+- **Cada slot reserva su tamano real ANTES de dibujar.** `aspectRatios()` pide a PDF.js solo el viewport de
+  cada pagina (metadata, cero rasterizado), asi que las 44 cajas quedan con su alto verdadero desde el
+  arranque y **el scroll no salta** mientras se van pintando.
+- **`IntersectionObserver` sobre el contenedor de scroll**, con `rootMargin: 150%` de buffer: una pagina se
+  rasteriza cuando se esta acercando, no cuando ya se la esta mirando.
+- **Una pagina no puede afectar a otra.** Cada `paint()` es independiente: se reclama antes del await (dos
+  callbacks en el mismo tick no la arrancan dos veces), y si falla se **loguea**, se marca el slot
+  (`data-failed`) y se libera para reintentar al volver a pasar. **Ningun `catch` vacio.**
+- Umbral de reflow a **32 px**, comodamente mayor que una barra de scroll; y `ResizeObserver` sobre el
+  contenedor en vez de `resize` de window — lo que importa es el ancho que reciben las paginas, que cambia
+  cuando se colapsa el sidebar sin que la ventana se mueva.
+- No se recicla lo ya pintado: para 44 paginas mantenerlas es correcto y reciclarlas seria over-engineering,
+  como pedia el WI.
+
+**★ Verificacion en motor de navegador real** (arnes temporal en Chrome Headless, borrado despues) — no es
+una captura, pero es medicion y no opinion:
+- **44 slots, `scrollHeight` = 26.528 px con `clientHeight` = 351**: las 44 reservaron su alto ANTES de
+  rasterizarse. Ahi se ve que el scroll ya esta completo de entrada.
+- **Cerca del tope se pintan solo las paginas 1 y 2** — las mismas dos del bug, pero ahora eso es el estado
+  CORRECTO y no el final.
+- **Tras hacer scroll al final: 1, 2, 43, 44 — la ultima pagina pintada es la 44 de 44.** Es exactamente lo
+  que antes quedaba en blanco para siempre.
+
+**Tests:** 8 specs del visor (5 -> 8), y los nuevos apuntan a las dos propiedades cuya ausencia causo el
+defecto: **cada pagina recibe un slot dimensionado** (el alto sale de la proporcion real del documento, no
+de un supuesto) y **una pagina que falla no toca a las demas** (la 4 dibuja aunque la 3 reviente, la 3 queda
+marcada y el error SE REPORTA). Mas: no se dibuja dos veces, y el documento se libera al destruir. Front
+**795 verdes de 798**; los 3 rojos son los de KaTeX, preexistentes — con la observacion honesta de que ese
+archivo es **flaky**: en una corrida aparecio un cuarto rojo (la formula INLINE) que no reaparecio en las
+tres siguientes. `ng build --configuration production` **exit 0**; inicial **828,93 kB** sin cambios y
+pdfjs sigue confinado al chunk lazy `manual-component` (438,74 kB / 109,66 kB transferidos).
+
+**PENDIENTE de Rodolfo (navegador):** capturas de paginas del medio y del final con el PDF real de 44
+paginas. Lo medido arriba prueba que el mecanismo dispara y que la 44 se pinta; lo que no puedo ver sin ojos
+es el contenido dibujado.
+
+## 2026-08-10 — El manual se dibuja con PDF.js: visor propio, no el del navegador
+
+**El problema:** el `<iframe>` sobre el blob entregaba la aplicacion de PDF DEL NAVEGADOR — pagina chica
+perdida en un campo gris, scroll despegado del documento, cero control de escala. En monitores grandes era
+casi ilegible. **El problema era el RENDERER, no el contenedor:** ningun CSS alrededor de un visor ajeno
+cambia lo que ese visor dibuja adentro.
+
+**PASO 0:** Angular **20.3** con el builder `@angular/build:application`; `pdfjs-dist` **no estaba**
+instalado; `katex` sienta el precedente de "libreria desde npm, nunca CDN". Instalado **pdfjs-dist 6.2.108**,
+que tiene **cero dependencias** (los numeros de `npm audit` son el estado preexistente del arbol, no algo
+que trajo esta libreria).
+
+**Lo que se uso — y lo que NO.** Solo el nucleo de render: `getDocument` y `page.render`. **Nada de la
+interfaz de PDF.js**: ni su toolbar, ni su sidebar, ni su barra de busqueda, ni sus grises. Embeber eso
+seria meter el chrome de otro producto adentro de Wasnie, que es justo el look que esta pantalla existe
+para evitar. El papel, su sombra, la separacion entre paginas, el texto de carga y el estado vacio son de
+Wasnie, con tokens de Wasnie, siguiendo los 3 temas.
+
+**★ El worker es LOCAL, no un CDN.** PDF.js parsea en un worker y por defecto lo baja de una URL publica.
+El manual se sirve detras del login precisamente para que no viaje a un tercero; traer de otro servidor el
+codigo que lo lee desharia eso en silencio. El worker se copia de `node_modules` en el build
+(`angular.json` -> `assets/pdfjs/pdf.worker.min.mjs`) y se sirve desde este origen. Misma regla que KaTeX.
+
+**★ La seguridad no se toco.** Los bytes siguen llegando como blob autenticado por `ManualApiService`, y a
+PDF.js se le pasan **esos BYTES, nunca una URL**. Hay un test que lo fija (`args[0] instanceof
+ArrayBuffer`): si alguien algun dia le pasa una URL, se pone rojo.
+
+**★ Y NO hay "fit to width".** El ancho de pagina es una MEDIDA DE LECTURA fija (tope 880 px), asi que un
+monitor mas ancho da mas margen alrededor — nunca letra mas grande. El canvas se dimensiona en pixeles de
+DISPOSITIVO y se muestra en pixeles CSS (dpr acotado a 2): sin eso la pagina se dibuja a un tercio de la
+densidad real de la pantalla, que es el look "fotocopia borrosa".
+
+**★ BUG REAL ENCONTRADO Y ARREGLADO EN EL CAMINO.** La primera version hacia `await Promise.resolve()`
+antes de dibujar, confiando en que Angular ya hubiera creado los `<canvas>` del `@for`. **A veces
+funcionaba.** Cuando no, el render no encontraba canvases, no se quejaba, y el manual salia **en blanco sin
+un solo error**. Lo destapo el test (`renderPage` llamado 0 veces) y se arreglo con `afterNextRender`, que
+corre cuando el DOM existe de verdad en vez de adivinar el timing.
+
+**Dos cosas marcadas para decision de Rodolfo, no resueltas por mi cuenta:**
+1. **El texto ya no se puede seleccionar ni buscar con Ctrl+F.** Es el costo real de dibujar a canvas, y el
+   embed nativo si lo permitia. Recuperarlo es agregar la capa de texto de PDF.js — un WI aparte, porque
+   arrastra la hoja de estilos de la libreria, que es lo que esta pantalla busca mantener afuera.
+2. **Un literal declarado: `--manual-paper: #ffffff`.** Una pagina PDF se dibuja sobre TRANSPARENCIA, asi
+   que sin una hoja opaca el lienzo oscuro se filtra por los margenes en los dos temas oscuros y el manual
+   se ve roto. **Ningun token sirve, y eso es el punto:** todos los tokens de superficie estan TEMATIZADOS
+   — se oscurecen con el tema, que es correcto para las superficies de Wasnie y falso para el papel. Esto
+   no es una superficie de la app, es el material del documento, y es blanco en los 3 temas por la misma
+   razon por la que es blanco impreso. Agregar un `--color-paper` es decision del design system
+   (DESIGN_SYSTEM §10.3), no algo para improvisar; queda acotado al componente y con nombre para poder
+   encontrarlo.
+
+Tambien, juicio a la vista: **el documento NO va dentro de una `ws-card`**. Una tarjeta ahi seria una
+superficie detras del papel — caja dentro de caja otra vez. Cada PAGINA es su propia superficie (hoja
+blanca con la elevacion y el radius de la tarjeta) sobre el lienzo de la app, y el scroll pertenece a la
+columna, asi que corre contra el documento. Los estados de carga, vacio y error si siguen dentro de
+`ws-card`.
+
+**★ Presupuesto de bundle — lo que mas riesgo tenia y salio bien:** `/manual` es lazy, asi que **pdfjs cayo
+entero en el chunk `manual-component` (436,92 kB / 109 kB transferidos)** y el **inicial quedo en 828,93 kB
+contra 828,40 kB de antes: +0,5 kB**. El warning de presupuesto inicial es el preexistente de KaTeX, no de
+esto.
+
+**Tests:** 5 specs del visor **reescritos al mecanismo nuevo** (el objeto URL ya no existe): pasa por el
+servicio, PDF.js recibe bytes, 404 != error, PDF corrupto -> error con reintento, y el documento se
+**libera** al destruir (PDF.js deja un worker vivo: una referencia soltada es un hilo perdido por visita).
+Front **795 (792 verdes)**; los 3 rojos son los de KaTeX, preexistentes. `ng build --configuration
+production` **exit 0**.
+
+**Detalle operativo:** `ng serve` lee los globs de assets **al arrancar**, asi que el dev server que estaba
+corriendo devuelve 404 en `assets/pdfjs/pdf.worker.min.mjs` — **hay que reiniciarlo**. En el build de
+produccion el worker esta copiado y verificado.
+
+**PENDIENTE de Rodolfo (navegador):** la captura en pantalla ancha — tamano legible, centrado, multipagina
+con scroll propio, fondo integrado y hoja con sombra.
+
+## 2026-08-10 — El visor del manual deja de ser una caja dentro de otra
+
+**El problema:** el marco ocupaba el 100% del ancho de la columna, pero una pagina impresa tiene
+proporcion FIJA. Lo que sobra no lo puede llenar el documento, asi que lo pinta el visor del navegador con
+su gris — que no es ni el lienzo de la app ni el papel. El ojo lee una tercera caja entre los dos, con la
+barra de scroll varada en su borde derecho.
+
+**PASO 0 — tokens confirmados, no supuestos:** `--shadow-card` **sigue sin existir** en el proyecto (la
+`ws-card` usa `--shadow-md`, y las sombras SI estan tematizadas por los 3 temas). Tampoco existe
+`--color-bg-page` que menciona CLAUDE.md §5.3: el lienzo real de la app es `--color-base`
+(`app-shell.component.scss`). No hay token de "medida" de ancho: `ws-page-layout` fija sus columnas con px
+crudos (800/1200/1440), asi que un px crudo para el ancho del documento sigue el precedente y no inventa
+nada.
+
+**Los tres cambios:**
+1. **Ancho maximo + centrado.** `.manual__sheet` con `max-width: 850px; margin-inline: auto`. 850 es un
+   TECHO, no el ancho: A4 al 100% son ~794 px CSS, y esto deja lugar para la pagina mas la barra del visor
+   sin crecer hacia lienzo vacio en un monitor ancho. La `ws-card` sigue aportando radius, borde y sombra
+   — no se duplico ninguno de los tres.
+2. **Fondo integrado.** El fondo del marco pasa de `--color-bg-surface-sunken` (un pozo oscuro dentro de
+   una tarjeta clara) a `--color-base`, el lienzo de la app, por variable y no por hex, asi que sigue al
+   tema activo.
+3. **★ El contenedor toma la forma del papel; el papel NUNCA se estira al contenedor.** `aspect-ratio:
+   1 / 1.4142` sobre el marco, con la altura mandando y el ancho derivado. Al zoom por defecto del visor
+   la pagina entra completa, o sea que su ancho renderizado depende de la ALTURA del marco — dandole al
+   marco la proporcion del papel, la pagina lo llena y el gris no tiene donde aparecer.
+
+**★ Lo que NO se hizo, y quedo escrito en el codigo para que nadie lo "arregle" despues:** no se agrego
+`zoom=page-width` al fragmento de la URL. Cerraria el hueco de un plumazo y dejaria la tipografia enorme e
+ilegible en un monitor grande. Hay un comentario en el `.ts` y otro en el `.scss` diciendo exactamente eso.
+
+**Un dato que conviene tener claro:** el TAMANO con el que se dibuja la pagina no cambio. Ya estaba
+gobernado por la altura del marco (`min(78vh, …)`), y sigue igual — lo unico que cambio es que el marco
+ahora TERMINA donde termina la pagina. El tope de altura subio de 900 a 1000 px, que en pantallas altas da
+un poco mas de documento.
+
+Ademas la pagina pasa de `maxWidth="wide"` (1440) a `"narrow"` (800): una columna de dashboard alrededor de
+un documento solo agrega lienzo vacio y deja el encabezado varado lejos de la hoja que titula.
+
+**Supuesto declarado:** A4 vertical (1:√2). Un manual en US Letter es ~9% mas ancho de proporcion, asi que
+dejaria una banda fina arriba y abajo en vez de uno ancha a los costados — el modo de fallo es chico en
+ambos casos.
+
+**★ CORRECCION EN LA MISMA SESION — el manual se LINKEA desde `docs/`, ya no hay carpeta de drop.**
+Mientras se hacia este WI, Rodolfo renombro `docs\Wasnie_User_Handbook.pdf` a
+`docs\Wasnie_User_Manual.pdf` — mismo archivo, 692.101 bytes, y **ya estaba commiteado en el repo desde
+`b3bdc0f`**. Eso tira abajo la premisa del WI anterior ("el PDF real no va al repo si es grande o
+propietario"): son 676 KB y hace rato que estan versionados. Con el archivo EN el repo, el mecanismo
+correcto es el que la guia del asistente ya usaba — **linkearlo**, no copiarlo:
+
+- `Wasnie.Api.csproj` ahora linkea `..\..\..\docs\Wasnie_User_Manual.pdf` como
+  `Knowledge\Wasnie_User_Manual.pdf` en el output, igual que `Wasnie_Configuration_Guide.md` en
+  `Wasnie.Infrastructure.csproj`. Una sola copia: actualizar el manual es reemplazar ESE documento.
+- Se eliminaron la carpeta `WasnieApi\src\Wasnie.Api\Knowledge\` con su README y la regla de `.gitignore`
+  — describian un mecanismo que ya no existe, y andamio que contradice la realidad es peor que nada.
+- El comodin volvio a ser un include LITERAL, que aca es seguro **solo porque el archivo esta en el
+  repo**. Queda anotado en el `.csproj` y en `UserManualOptions`: si el manual algun dia sale del
+  repositorio, hay que volver al comodin sobre una carpeta gitignoreada, porque un include literal de un
+  archivo ausente rompe el build de todos.
+- Los `_comment` de `appsettings.json` y del template de Development se actualizaron al mecanismo nuevo.
+
+**★ Verificado contra la instancia de Rodolfo, que ya estaba corriendo:** `dotnet build` copio el PDF al
+output y **la API sirvio el manual REAL sin reiniciarse** — estado `available:true`, **200,
+`application/pdf`, 692.101 bytes, identicos al de `docs\`**, y anonimo sigue en **401 con 0 bytes**. Es la
+confirmacion en vivo de la cache de un solo lado: recuerda el acierto, nunca el fallo, asi que un manual
+que aparece se toma solo. (El `dotnet build` dio exit 1 por **bloqueo de DLL de esa misma instancia**, no
+por codigo; la copia del contenido ya habia ocurrido.)
+
+**Tests:** ninguno nuevo (SCSS/visual, politica de Rodolfo). Los 5 specs del visor **siguen verdes** — el
+`div` envolvente no rompio ninguno. Front **795 (792 verdes)**, `ng build --configuration production`
+limpio. Preexistentes y ajenos: los 3 rojos de `assistant-math.spec.ts` y el warning de bundle (KaTeX).
+
+**PENDIENTE de Rodolfo (navegador):** la captura en desktop ancho. Lo unico que no se puede medir sin ojos
+es el modo de zoom con el que el navegador abre ESE PDF: si abre en "ajustar a la pagina" el gris
+desaparece del todo; si abriera en otro modo, quedaria una banda y habria que ajustar la altura.
+
+## 2026-08-10 — El manual PDF sale de bin/: ubicacion estable en el SOURCE (y donde ponerlo)
+
+> **SUPERSEDIDO EN PARTE, EL MISMO DIA:** la carpeta de drop y la regla de .gitignore que describe esta entrada YA NO EXISTEN. El PDF resulto estar commiteado en docs/ desde 3bdc0f, asi que se linkea desde ahi. Lo que SIGUE valido: nunca en in/, y en produccion FilePath a una carpeta estable. Ver la entrada de mas arriba.
+
+**El problema:** el placeholder habia quedado en `bin/Debug/net8.0/Knowledge/`. `bin/` es **output del
+build**: se regenera, y `dotnet clean` lo borra. Un manual puesto ahi funciona hasta el dia en que
+silenciosamente deja de hacerlo, y nadie conecta su desaparicion con el clean que la causo.
+
+**PASO 0 — como leia la ruta:** no habia seccion `UserManual` en NINGUN appsettings, asi que `FilePath`
+estaba vacio y caia al default `Knowledge/Wasnie_User_Manual.pdf` **relativo a `AppContext.BaseDirectory`**
+— es decir, exactamente dentro de `bin/`. Confirmado leyendo `UserManualOptions` + `FileUserManualSource`.
+
+**El fix (dev):** carpeta nueva en el SOURCE, `WasnieApi/src/Wasnie.Api/Knowledge/`, y en el `.csproj`:
+`<Content Include="Knowledge\*.pdf" CopyToOutputDirectory="PreserveNewest" />`. Rodolfo pone el PDF UNA
+vez ahi y cada build lo lleva al output donde la API lo busca.
+
+**★ EL COMODIN ES EL TRUCO, no un detalle de estilo.** Un `<Content Include>` literal
+(`Knowledge\Wasnie_User_Manual.pdf`) **rompe el build de todo desarrollador que no tenga el archivo** — y
+no lo tiene ninguno, porque el PDF esta gitignoreado. Un comodin que no matchea nada es una lista de items
+vacia: el proyecto compila, la API arranca, y `/manual` dice "todavia no publicado", que es un estado que
+la pantalla ya maneja con honestidad. **Probado en runtime moviendo el PDF fuera: build con 0 errores,
+exit 0.**
+
+**El fix (prod):** el manual NO vive junto al binario. Una carpeta de deploy se reemplaza en cada release,
+y un manual adentro lo borraria un redeploy que nadie asociaria con haberlo perdido. Ahi se apunta
+`UserManual:FilePath` (o `UserManual__FilePath` como variable de entorno) a una **carpeta de datos estable
+fuera del directorio de deploy**. Absoluta se usa tal cual; relativa resuelve contra el base directory.
+Marcador puesto en `appsettings.Production.json` (que esta gitignoreado, asi que ademas quedo documentado
+en el README y en `appsettings.json` base, que si se commitea).
+
+**★ NO se uso R2/Cloudflare, a proposito.** Unos MB copiados al output no justifican separar el artefacto
+del deploy ni sumar un servicio; esa complejidad se paga con archivos grandes o con un ciclo de
+publicacion independiente, y no es el caso.
+
+**Lo que quedo escrito para que no haya que adivinar:**
+- `WasnieApi/src/Wasnie.Api/Knowledge/README.md` — que archivo va, con que nombre, por que no en `bin/`,
+  como se configura prod, y que reemplazar el PDF en un server corriendo requiere reinicio (la cache
+  recuerda el acierto) mientras que un manual **ausente que aparece** se toma sin reiniciar.
+- `.gitignore`: `WasnieApi/src/Wasnie.Api/Knowledge/*.pdf` — **la carpeta se trackea (el README), el PDF
+  no**. Verificado: `git status --untracked-files=all` sobre esa carpeta lista SOLO el README.
+- `appsettings.json` (commiteado), `appsettings.Development.template.json` y `appsettings.Production.json`
+  ganan la seccion `UserManual` con `_comment` explicativo — el patron `_comment` ya existia en el
+  template para Groq.
+- Se corrigio el comentario de `UserManualOptions`, que decia que un `Content Include` de un archivo
+  ausente rompe el build **y por eso** la ubicacion era configuracion. Con comodin eso ya no aplica, y
+  dejar la justificacion vieja habria sido una razon falsa defendiendo una decision correcta.
+
+**★ Verificacion runtime (los cuatro hechos, medidos):**
+1. PDF de prueba en el SOURCE -> `dotnet build` -> **aparece en el output** (700 bytes, timestamp nuevo).
+2. Servido: con token -> **200, `application/pdf`, 700 bytes, `%PDF-1.4`**; `status` -> `{"available":true}`.
+3. **Sin sesion sigue siendo 401 con 0 bytes** en ambos endpoints — la barrera no se toco.
+4. `dotnet clean` -> **la copia del output desaparece, la del SOURCE sobrevive**; `dotnet build` la
+   restaura. Que es exactamente el problema que este WI arregla, demostrado en vez de afirmado.
+
+**Limpieza:** el placeholder de 700 bytes se borro de las DOS ubicaciones (source y output). Un PDF falso
+que se sirve con exito es peor que el estado vacio honesto: parece que el manual esta publicado.
+
+**Tests:** backend unit **1358 -> 1358**, 0 rojos (no habia que agregar: el cambio es `.csproj`,
+`.gitignore` y JSON de configuracion). `dotnet build` de la solucion limpio.
+
+**★ LA LINEA PARA RODOLFO:** copiar el manual a
+`WasnieApi/src/Wasnie.Api/Knowledge/Wasnie_User_Manual.pdf` y compilar — nada mas. En prod, dejarlo en una
+carpeta de datos estable y apuntar `UserManual__FilePath` a su ruta absoluta.
+
+## 2026-08-10 — Manual de usuario en PDF, servido detras del login (y el link del asistente, resuelto)
+
+**La honestidad tecnica primero, porque define el diseno.** Un PDF que el navegador dibuja es un PDF que
+el navegador puede guardar. No hay visor, cabecera ni boton escondido que lo cambie, y **nada en el
+codigo ni en la UI promete lo contrario**. Lo que SI se garantiza es lo unico garantizable: los bytes
+viven en UNA direccion, esa direccion exige un token valido de Wasnie, y **no existe ninguna URL publica**
+que se pueda reenviar, indexar o filtrar. Quien tiene el archivo tuvo antes una sesion.
+
+**PASO 0 — patrones confirmados antes de escribir nada:**
+- Guards: `planGuard` + `subscriptionGuard` es el par estandar de toda ruta autenticada (`app.routes.ts`);
+  `planGuard` ya cubre no-autenticado -> `/auth/login`.
+- Servir bytes: `File(export.Bytes, ...)` en Credits/Payouts/PayRuns/Transactions.
+- **★ EL HECHO QUE DECIDE EL VISOR:** el token es un JWT en `localStorage` que un interceptor pone como
+  **cabecera**. El navegador NO corre interceptores para `iframe`/`embed`/`object`, asi que un
+  `<iframe src="/api/manual/pdf">` llegaria SIN token y el endpoint lo rechazaria — con razon. Por eso el
+  visor baja el PDF como **blob** por `HttpClient` (mismo patron que el export de payouts) y lo muestra
+  con un object URL. No es estilo: es la unica forma de que el documento este de verdad detras del login.
+
+**Decisiones de Rodolfo (preguntadas, no asumidas):** (1) **proxy autenticado en la API**, no signed URL
+de Cloudflare — una URL firmada, aunque dure 5 minutos, ES un link que funciona fuera de la app; (2) el
+PDF **todavia no existe** -> stub honesto; (3) **cualquier sesion valida + item en el sidebar**, sin
+permiso RBAC.
+
+**Backend:**
+- `IUserManualSource` (Application) + `FileUserManualSource` (Infrastructure) + `UserManualOptions`
+  (`UserManual:FilePath`, default `Knowledge/Wasnie_User_Manual.pdf` al lado del binario). **No se
+  "linkea" desde `docs/` como la guia del asistente**: ese archivo esta en el repo, este no, y un
+  `Content Include` de un archivo ausente rompe el build de todos.
+- **★ LA CACHE ES DE UN SOLO LADO, y es la decision que mas importa aca:** se cachea el ACIERTO, NO el
+  fallo. Si se cacheara el fallo, el operador copia el PDF al servidor, recarga, sigue viendo "no
+  disponible" y concluye razonablemente que la funcion esta rota. Hay test.
+- Archivo de 0 bytes = copia fallida, se trata como "no instalado" (si no, el visor sale en blanco y se
+  lee como "el manual esta vacio").
+- `ManualController`: `[Authorize]`, `GET /api/manual/status` (barato, para el estado vacio sin bajar
+  megas) y `GET /api/manual/pdf`. **Sin permiso RBAC a proposito:** el manual documenta el producto, no
+  tiene datos del tenant, y esconderlo detras de un permiso se lo ocultaria justo a quien menos derechos
+  tiene, que es quien mas lo necesita. **Inline, no attachment** (sin `fileName` en `File(...)`) — eso es
+  presentacion para que el visor lo dibuje, NO una barrera, y esta dicho asi en el codigo.
+
+**Front:** `/manual` (`planGuard` + `subscriptionGuard`, sin `hasPermissionGuard`), `ManualApiService`,
+`ManualComponent` con 4 estados — cargando / visor / **404 = "todavia no publicado"** (estado vacio
+calmo) / error con reintento. **404 y fallo son estados DISTINTOS**: una instalacion sin PDF es esperada,
+y colapsarlos le diria a todo el mundo que el producto esta roto. Object URL **revocado** al destruir y
+antes de recargar (si no, el documento entero queda en memoria mientras viva la pestana). `#toolbar=0`
+esta puesto como **friccion declarada**, no como control — algunos navegadores lo respetan, devtools
+ninguno. Item en el sidebar **sin `*hasPermission`** (el unico), i18n EN/ES/PL.
+
+**★ La dependencia del WI de errores queda CERRADA.** `AssistantPrompt.ManualGuidance` ya no dice "no hay
+direccion": ahora manda `[User manual](/manual)`. **Es una ruta INTERNA y eso es el punto** — mandar al
+usuario al PDF directo significaria publicar una URL que funciona fuera de la sesion, que es exactamente
+lo que este diseno rechaza. `/manual` se agrego tambien a `docs/UINavigationMap.json`, pero la constante
+lo dice explicito porque el escenario 2B tambien corre en el `NoSourcePrompt`, **que a proposito viaja
+SIN el mapa**.
+
+**★ Verificacion runtime (API real en :5091; PDF de prueba de 700 bytes generado y marcado para borrar):**
+- **Sin sesion:** `GET /api/manual/status` y `GET /api/manual/pdf` -> **401, Content-Length: 0**. Token
+  basura -> **401**. Cero bytes servidos.
+- **Con token valido:** `status` -> `{"available":true}`; `pdf` -> **200, `Content-Type: application/pdf`,
+  700 bytes, SIN `Content-Disposition`** (inline), cuerpo empezando en `%PDF-1.4`.
+- **Sin manual instalado** (segunda instancia en :5092 con `UserManual__FilePath` a una ruta inexistente):
+  `status` -> `{"available":false}`; `pdf` -> **404** con
+  `{"message":"The user manual is not available on this installation."}`.
+- **El link del asistente, modelo real, dos idiomas:** *"¿Donde configuro un acelerador?"* ->
+  "...consulta el manual de usuario de Wasnie, que contiene la informacion completa sobre como hacerlo:
+  **[User manual](/manual)**"; *"How do I export the payroll file?"* -> "...Please refer to the Wasnie
+  User Manual for the exact steps: **[User manual](/manual)**". El mapa contiene `/manual`.
+- **PENDIENTE de Rodolfo (navegador):** los dos puntos visuales — usuario logueado abre `/manual` y ve el
+  PDF, y el link del chat lleva ahi. La API quedo corriendo en :5091 con el PDF de prueba puesto.
+
+**Tests:** backend unit **1352 -> 1358** (6: manual ausente, manual presente, **aparecido despues del
+arranque sin reiniciar**, archivo de 0 bytes, ruta por defecto, y que el asistente linkee `/manual` y
+NUNCA un `http`). Front **790 -> 795** (5: fetch por el servicio, 404 != error, error con reintento,
+revoke al destruir, revoke antes de recargar). `ng build --configuration production` limpio.
+
+**Preexistentes, ajenos a este WI:** 3 rojos de `assistant-math.spec.ts` (KaTeX, commit 61ac72c) y el
+warning de bundle (828 kB vs 650 kB, tambien KaTeX).
+
+**Deuda anotada:** el PDF de prueba en
+`WasnieApi/src/Wasnie.Api/bin/Debug/net8.0/Knowledge/Wasnie_User_Manual.pdf` es un placeholder de 700
+bytes generado para verificar — **borrarlo y poner el manual real ahi** (o apuntar `UserManual:FilePath`
+a donde viva).
+
+## 2026-08-10 — El asistente clasifica POR QUE no sabe (3 respuestas, ninguna es "consulta al administrador")
+
+**El problema:** ante cualquier hueco el asistente terminaba en *"check with your administrator"*. Esa
+frase se equivoca de lector: el usuario del chat **ES** el administrador de su entorno Wasnie — el que
+configura los planes, las reglas y los payees. Mandarlo a si mismo es redundante, y sobre todo es una
+forma de no contestar que suena servicial.
+
+**PASO 0 — donde estaba.** `AssistantPrompt.ConfinementRules`, regla 2 ("SAY WHEN YOU DO NOT KNOW"),
+terminaba en *"and suggest they check with their administrator"*. Habia tres redirects mas al mismo
+sitio: `FallbackPrompt` (guia ilegible), `NoSourcePrompt` (el router no devolvio nada) y el
+*"an administrator must fix it"* de la regla 13 (`NoCommissionUnsupportedCombination`). Los cuatro
+salian.
+
+**El arreglo no es una frase mejor, es una MATRIZ.** "No se" colapsaba tres cosas distintas con tres
+respuestas correctas distintas. La regla 2 pasa a ser `AssistantPrompt.IgnoranceRules` y obliga al
+modelo a clasificar su propia ignorancia ANTES de responder:
+- **2A limite de dominio** — proyecciones de ventas, cifras futuras, RRHH, headcount, estrategia
+  comercial, legal/fiscal. Da el limite ("trabajo sobre transacciones ya procesadas y reglas
+  configuradas") y **NO** ofrece documentacion ni manual: ninguno responde eso, y mandar a leer algo
+  que no puede ayudar es peor que el limite honesto. Cierra ofreciendo lo que SI puede hacer.
+- **2B como se usa el producto** — pregunta real de Wasnie sin fuente en contexto. Dice que no puede
+  navegar ni cambiar ajustes, y remite al **Wasnie User Manual**. Prohibido reconstruir los pasos: una
+  secuencia de pantallas plausible es la misma invencion que una feature plausible.
+- **2C la busqueda no encontro nada** — `NotFoundOrNotVisible`. El culpable casi nunca es la
+  plataforma: es un typo, un nombre acortado o el id equivocado. Pide el nombre exacto o el id, y si la
+  herramienta listo lo que SI existe, muestra la lista.
+
+**Dos decisiones que valen mas que el texto:**
+- **Numeradas 2A/2B/2C, no 2/3/4.** Las reglas 6, 9, 13 y 16 se citan POR NUMERO desde las reglas de
+  datos y de tokens; renumerar para hacer sitio habria roto esas referencias cruzadas en silencio.
+- **2C se reconcilia con la regla 9 EXPLICITAMENTE**, por la misma razon que la 17 se reconcilia con la
+  6: la 9 dice "relata el no-encontrado y PARA", y la 2C pide decir algo mas. Se escribio la frontera en
+  el prompt en vez de dejar que la arbitre el modelo — pedir un nombre corregido es una pregunta sobre
+  SU input; sugerir que el registro fue anulado o sigue procesando es una afirmacion sobre un registro
+  que no puede ver, y esa sigue prohibida.
+
+**La dependencia abierta (marcada, no improvisada).** El manual del escenario 2B todavia no tiene URL
+publicada — la trae el WI del PDF. `AssistantPrompt.ManualGuidance` por eso **nombra** el manual y
+**prohibe** el link. No se dejo un `{MANUAL_URL}`: un placeholder asi se le imprime tal cual al usuario
+la primera vez que el modelo lo cita, y una direccion adivinada seria exactamente la URL inventada que
+la regla 6 existe para frenar. Nombrar un documento real sin link es la misma degradacion correcta que
+la regla 6 ya define para una pantalla sin ruta. **Cuando aterrice el WI del PDF se cambia esa constante
+y nada mas** — 2B y el `NoSourcePrompt` la comparten.
+
+Ademas, el `Reminder` final (lo ultimo que el modelo lee antes de la pregunta) ahora repite la RAMA, no
+solo la negativa: era justo la instruccion que se resolvia en "consulta al administrador", y repetir la
+version colapsada en la posicion de mas peso la habria traido de vuelta.
+
+**★ Verificacion runtime (arnes temporal contra el modelo REAL de OpenRouter + guia y mapa reales;
+borrado despues). Las tres respuestas literales:**
+- *"¿Cual es la proyeccion de ventas para Q4?"* (router: **ninguna** seccion) -> "Lo siento, no dispongo
+  de informacion sobre proyecciones de ventas. Trabajo con las transacciones que Wasnie ya ha procesado
+  y con las reglas de compensacion configuradas. Si necesita ayuda con esos aspectos, estare encantado
+  de asistir." — **sin link, sin manual, sin administrador.**
+- *"¿Donde configuro un acelerador?"* (router: s8) -> "No dispongo de la informacion necesaria para
+  indicarle los pasos exactos para configurar un acelerador, ya que esa funcionalidad no esta cubierta
+  en la documentacion que tengo a mano. Le recomiendo consultar el **Wasnie User Manual** (...). El
+  manual esta disponible dentro del portal de Wasnie despues de iniciar sesion." — **manual nombrado,
+  cero URL inventada.**
+- *"Explicame el plan XYZ que no existe"* (con `{"outcome":"NotFoundOrNotVisible","found":false,...}`)
+  -> "No he podido encontrar ningun plan llamado **XYZ** en tu entorno. Por favor, verifica que el
+  nombre este escrito correctamente o proporcioname el nombre exacto o el identificador del plan para
+  que pueda buscarlo de nuevo." — **pide correccion, no escala.**
+- **i18n comprobado:** las dos primeras preguntadas en ingles se contestan en ingles, con la misma
+  clasificacion ("...my focus is on the transactions and compensation rules already processed in
+  Wasnie" / "...please refer to the **Wasnie User Manual**"). El idioma no esta hardcodeado.
+
+**Tests:** unit **1352 -> 1352**, 0 rojos. No se toco ningun test: el unico archivo modificado es
+`AssistantPrompt.cs` y lo que cambio es texto de prompt. Los asserts existentes de
+`AssistantConfinementTests` / `AssistantRoutingTests` ("SAY WHEN YOU DO NOT KNOW", "NEVER invent a
+feature", "Do NOT invent a feature", la posicion del `Reminder`) siguen verdes a proposito — se
+conservaron esas frases al reescribir.
+
+## 2026-08-09 — Loader de PASOS reales en el chat (progreso por fase en el stream)
+
+**El problema:** el loader del asistente era UNA frase fija ("Processing your request… looking things
+up") durante todo el turno. Un turno que consulta la guia y ademas lee un registro puede tardar varios
+segundos, y el usuario no tenia forma de distinguir "trabajando" de "colgado".
+
+**La decision de diseno (Rodolfo):** los pasos reflejan FASES REALES del backend, no una animacion. El
+backend REPORTA lo que hizo; no narra una secuencia fija. Una pregunta que no toca la base NO muestra
+"buscando en la base".
+
+**Backend — evento `progress`, aditivo:**
+- `AssistantStreamEvent` gana `Phase` + `State` y el tipo `"progress"` (`{type, phase, state}`), con
+  `OfPhaseStart` / `OfPhaseDone`. No lleva respuesta, ni fila persistida, ni fallo: **un cliente que no
+  lo entienda sigue funcionando igual** (test explicito, front y back).
+- `AssistantPhase`: `understanding`, `reading_docs`, `searching_data`, `generating`. Son
+  IDENTIFICADORES, no frases — el navegador traduce, igual que con los `errorKey`.
+- Cada fase se emite SOLO si ese trabajo ocurre: `understanding` solo si hay router o herramientas,
+  `reading_docs` solo si el router devolvio secciones, `searching_data` solo si el dispatcher eligio de
+  verdad una herramienta. **Un paso que FALLA no recibe `done`** — el frame de error termina el turno.
+- `AssistantToolRunner` se partio en `SelectAsync` (decision, sin tocar datos) + `ExecuteAsync`
+  (lectura), porque "buscando en tus datos" solo sirve si se anuncia ANTES de buscar y solo en los turnos
+  donde se busca. `RunAsync` sigue existiendo como composicion para el camino NO streaming
+  (`PostMessageHandler`), que no tiene a quien reportarle. `AssistantSectionRouter.CanRoute` y
+  `AssistantToolRunner.HasTools` responden "esto va a pasar de verdad?".
+
+**Front — lista de pasos:**
+- `AssistantStore.progressSteps` (append-only, solo desde el servidor; nada se predice). Se limpia al
+  empezar el turno siguiente, y en `done`/`error` — dejar un checklist a medio tildar encima de la
+  tarjeta de fallo mostraria "hasta donde llego" como si fuera un resultado.
+- El panel muestra la lista **desde 3 pasos**; con 0-2 cae al loader clasico de puntos, en el mismo
+  lugar y con el mismo peso visual. Dos pasos (entender + responder) es lo que hace CUALQUIER turno: un
+  checklist que aparece, tilda dos veces y desaparece en cada pregunta es movimiento sin informacion.
+- Paso en curso = anillo girando (CSS propio con tokens, respeta `prefers-reduced-motion`); paso
+  terminado = check en `--color-success` y el texto se va a terciario (el ojo debe ir al paso que falta,
+  no al que ya esta). **Sin libreria externa** — mismo precedente que los puntos de "escribiendo".
+- Una fase DESCONOCIDA se muestra igual, con etiqueta neutra ("Working…"): esconderla haria parecer que
+  el panel se colgo justo durante el trabajo del que le avisaron.
+- i18n EN/ES/PL completo (`ASSISTANT.PHASE.*`, 5 claves x 3 idiomas).
+
+**★ Verificacion runtime (arnes temporal, modelo REAL de OpenRouter + guia real de 21 secciones,
+borrado despues). Tres secuencias observadas, distintas entre si:**
+- "dame la razon de la transaccion TERM-CC-10" → understanding start/done, reading_docs start/done,
+  **searching_data start/done**, generating start/done, done (41 deltas).
+- "que es un plan de comisiones" → understanding, reading_docs, generating (**sin** searching_data; 61 deltas).
+- "what is the weather in Madrid today" → understanding, generating (**sin** reading_docs ni
+  searching_data — el router no devolvio secciones; 28 deltas).
+
+**Tests:** backend **1347 → 1352** (5 nuevos: secuencia completa con lectura de registro, turno sin
+lookup, pregunta que la guia no cubre, paso fallido sin `done`, y ningun frame de progreso lleva una
+frase). Front **781 → 790** (4 de store + 5 de render, incluida la compatibilidad sin frames `progress`).
+Frontend `ng build --configuration production` limpio.
+
+**Preexistente, NO de este WI:** 3 rojos en `assistant-math.spec.ts` (KaTeX, commit 61ac72c) y el
+warning de bundle (828 kB vs 650 kB, tambien de KaTeX). Ninguno de los dos toca archivos de este WI.
+
+## 2026-08-06 — DIAGNOSTICO: el turno 2 decia "plan no encontrado" tras explicarlo en el turno 1
+
+**El sintoma:** turno 1 "explicame el plan Q3 2026 — Plan Comercial EMEA (Test Integral)" -> lo explica
+entero, tres reglas, sin degeneracion. Turno 2 "tengo una transaccion por 149000 por 200 laptops, cuantos
+creditos genera?" -> "no se encontro ningun plan llamado Q3 2026 — Plan Comercial EMEA (Test Integral)".
+Dos mensajes despues de describirlo.
+
+**★ LA EVIDENCIA (log temporal del dispatcher, ya removido):**
+```
+turno 1: tool=get_plan_rules args={"planName":"Q3 2026 — Plan Comercial EMEA (Test Integral)"}
+turno 2: tool=get_plan_rules args={"planName": null}
+```
+**No mando un nombre recortado ni alterado: mando NULL.** La hipotesis 1 del WI (nombre alterado) queda
+descartada, y con ella toda idea de "mas normalizacion" — **no hay nombre que normalizar**.
+
+**Causa raiz, y es ESTRUCTURAL, no estocastica:** `AssistantToolRunner` armaba la llamada de seleccion
+con `[system(instrucciones), user(pregunta)]` y nada mas. **El dispatcher nunca vio la conversacion.** El
+turno 2 no nombra ningun plan — porque una persona no repite el titulo que uso hace una frase — asi que
+el dispatcher no tenia de donde sacarlo. Todo seguimiento estaba roto por diseno, no solo este caso:
+"y ese?", "cuanto paga?", "y la transaccion de la que hablabamos" — ninguno podia resolverse jamas.
+
+**Hipotesis descartadas con evidencia:** (2) binario viejo — build limpio y el turno 1 resolvio el
+em-dash, o sea que la normalizacion estaba viva; (3) el fix de normalizacion cubre el caso — lo cubre,
+pero el turno 2 no manda nombre.
+
+**Nota sobre lo que vio Rodolfo:** en el repro, con `planName: null` el tool devuelve `PlanNameRequired`
+y el asistente pregunta correctamente "a cual de tus planes?". Que el 20b lo redactara como "no se
+encontro el plan X" era el modelo de GENERACION (que si tiene la historia, y por eso sabia el nombre)
+redactando mal un resultado correcto. La causa de fondo es la misma: el dispatcher no tenia el nombre.
+
+**El fix — el dispatcher ve la conversacion.** `RunAsync(question, history, ct)`: instrucciones, luego
+los ultimos **4 mensajes** truncados a **600 caracteres** cada uno, y **la pregunta al final** para que
+decida sobre ELLA y trate lo anterior como contexto. Cuatro mensajes son dos intercambios: suficiente
+para que "este plan" tenga referente, corto para que un clasificador no se ponga a contestar el turno
+viejo. El truncado importa porque las respuestas del asistente son tablas de 3.000 caracteres y lo que
+el dispatcher necesita de ellas son los NOMBRES, no las tablas — y esta llamada esta en el camino
+critico de cada turno. Las instrucciones ahora dicen explicitamente que resuelva referencias desde el
+contexto copiando el nombre EXACTO y completo, y que un seguimiento no es un tema nuevo.
+
+**Por que NO se implemento "recordar el ultimo plan resuelto"** (la hipotesis principal del WI): habria
+arreglado este caso y ninguno de los otros. El agujero no era "falta memoria del plan", era "el
+dispatcher esta ciego"; darle la conversacion arregla la clase entera con menos estado y sin una
+segunda fuente de verdad que mantener sincronizada.
+
+**Aislamiento intacto, y por construccion:** el contexto es solo para ELEGIR la herramienta. El tool
+sigue recibiendo exactamente los argumentos que el modelo genero (hay test), y sigue resolviendo el plan
+por nombre a traves de `ListPlansQuery` + `GetPlanByIdQuery` con la identidad del que pregunta — o sea
+que **se re-valida en cada uso**. No se recuerda ningun id, no se saltea ningun permiso, y la historia
+que se lee es la de la conversacion propia (`OwnedConversations` ya la habia filtrado).
+
+**Tests:** el dispatcher recibe los turnos previos; las instrucciones le dicen para que; la pregunta
+actual no viaja DOS veces (los dos handlers difieren en si la anexan a la historia — el runner lo
+normaliza); solo viajan los turnos recientes y truncados; un primer mensaje sin historia sigue
+funcionando; y el contexto NO cambia lo que recibe el tool. **Mutacion:** volver el dispatcher a ver
+solo la pregunta -> 2 rojos. Unit **1341 -> 1347**, integracion **753**.
+
+**★ Verificacion en runtime, la conversacion del reporte, 5 corridas:** el turno 2 encuentra el plan y
+calcula, **5 de 5**. Ejemplo real: *"149 000 × 0.06 = 8.940 €; spiff 2 % = 2.980 € -> tope 250 €;
+acelerador 9 % = 13.410 € -> tope 1.000 €; **total 11.190 €**"*. Nueve invocaciones del tool en la
+tanda, **todas `Found`**, cero `PlanNameRequired`.
+
+## 2026-08-06 — Modelo de generacion mayor + red de seguridad anti-degeneracion
+
+**El disparador:** el asistente escupio en pantalla "valor mandatorio mandatorio mandatorio..." cientos
+de veces al explicar un plan de tres reglas. En un producto que dice cuanto cobra la gente, eso es
+inaceptable aunque pase 1 de cada 6 veces.
+
+**PARTE 1 — El modelo de generacion, separado del router.**
+*Paso 0:* los tres llamados (router, dispatcher de tools, generacion) compartian un unico
+`Settings.Model`. Ahora son dos campos: `Model` (router + dispatcher, clasificacion pura, nadie lee su
+salida) y **`GenerationModel`** (el unico texto que un usuario lee). `BuildRequest` recibe el modelo
+como parametro para que cada call site declare cual usa. **Sin ruptura al desplegar:** si
+`GenerationModel` viene vacio, la generacion usa el `Model` de siempre — hay test.
+
+*Candidatos, con precios REALES del catalogo de OpenRouter (`GET /api/v1/models`), no de memoria:*
+| modelo | ctx | $/M in | $/M out |
+|---|---|---|---|
+| openai/gpt-oss-20b (actual) | 131k | 0,03 | 0,13 |
+| **openai/gpt-oss-120b (elegido)** | 131k | **0,037** | **0,17** |
+| meta-llama/llama-3.3-70b-instruct | 131k | 0,10 | 0,32 |
+| openai/gpt-4o-mini | 128k | 0,15 | 0,60 |
+
+**Elegido `openai/gpt-oss-120b`:** 6x los parametros por **+23% de input y +31% de output** — decimas de
+milesima de dolar por turno — y **misma familia**, asi que los prompts afinados contra el 20b siguen
+valiendo (cambiar de familia habria hecho imposible atribuir cualquier cambio de conducta). Mismo
+soporte de `tools` y `response_format`, mismo contexto. **No habia trade-off real que delegar.**
+
+**PARTE 2 — `DegenerationGuard`, el cinturon.** Subir el modelo es el arreglo; esto es lo que vuelve la
+promesa incondicional, porque el colapso por repeticion es propiedad de los modelos de lenguaje en
+general y ningun prompt lo elimina (el de la regla 12c lo redujo, no lo quito). Vigila la respuesta
+mientras se escribe: **12 repeticiones consecutivas de una misma palabra**, o **20.000 caracteres**. El
+umbral no es arbitrario — la prosa no repite una palabra 12 veces seguidas, y la respuesta legitima mas
+larga medida fue de ~5.300 caracteres. La palabra es la unidad, no el fragmento: el proveedor parte
+"mandatorio" en "man"+"dator"+"io", asi que se acumula el parcial entre fragmentos.
+
+**Al detectarlo usa el camino de fallo que YA existia**, no uno nuevo: el fragmento NO se reenvia, se
+emite el evento de error, el usuario ve la tarjeta de reintento, y **no se persiste nada** (la fila del
+asistente solo se escribe tras un cierre limpio). Compartido por los DOS caminos de respuesta
+(streaming y no-streaming) por la misma razon que `AssistantPrompt`. Se loguea el motivo **sin la
+palabra repetida** — es texto del usuario sobre su propio plan.
+
+**Limite honesto del guardrail:** en streaming, lo que llego antes del corte YA esta en pantalla. Es
+inherente, no un bug — el umbral es lo que lo acota: una docena de repeticiones en vez de trescientas.
+
+**Tests:** el guard corta el colapso real, corta cerca del limite (no cientos de palabras despues),
+cuenta palabras partidas entre fragmentos, tiene backstop por largo, y **no corta respuestas
+legitimas** (una tabla markdown real con celdas "no" repetidas, "No, no, no", "| — | — | — |"). Mas dos
+tests de handler: una degeneracion inyectada -> **evento de error + <20 fragmentos reenviados + nada
+persistido**; una respuesta normal -> intacta. Y tres tests de que el stream lleva el modelo de
+generacion mientras router y dispatcher llevan el chico — verificado **sobre el body HTTP**, no sobre el
+objeto de opciones. **Mutaciones:** N=1000 -> no detecta el colapso (1 rojo); N=2 -> corta respuestas
+legitimas (3 rojos). Unit **1323 -> 1341**, integracion **753**.
+
+**★ Verificacion en runtime, protocolo de repeticion, 12 corridas con gpt-oss-120b:**
+**0 degeneraciones**, **0 cortes del guardrail**, y **11 de 12 explican las tres reglas completas**
+(1, 2 y 3, incluida la de Units).
+
+**Dos observaciones honestas:**
+1. **1 de 12 no invoco la herramienta** (respuesta de 368 chars sin datos del plan): eso es el
+   *dispatcher de tools*, que **por diseño de este WI sigue en el modelo chico**. Si molesta, subirlo es
+   cambiar `Model` — pero es clasificacion y su fallo es "no busca datos", no "escribe basura".
+2. **Latencia: no hay conclusion limpia con 4 muestras por lado.** 20b: 15,5 / 32,8 / 34,7 / **108,9**s.
+   120b: 28,7 / 52,7 / 53,0 / 65,4s. La mediana del 120b es mayor (~53s vs ~34s) pero **su peor caso fue
+   mejor que el peor caso del 20b**; la varianza del proveedor domina la diferencia. Coste estimado por
+   turno: fracciones de milesima de dolar en ambos.
+
+## 2026-08-06 — DIAGNOSTICO: GetPlanRules explicaba 2 de 3 reglas (la Units salia "no disponible")
+
+**La pregunta que separaba las dos causas — respondida con el JSON crudo en la mano.** Se volco el
+payload EXACTO del tool para el plan del incidente, sembrando las tres reglas copiadas fila por fila de
+la BD del tenant que lo reporto. **La regla #3 VIAJA COMPLETA:**
+`{"ruleName":"\"Spiff por Volumen de Unidades\" (Flat sobre Units)","sortOrder":3,"triggerCondition":
+"Unconditional","measurementType":"Units","measurementBase":"TransactionQuantity","rateTable":
+{"type":"Flat","semanticBehavior":"CurrencyAmountPerUnit","rawValue":5}}`. No falta un campo. **No es
+serializacion: es el MODELO.**
+
+**Y el fallo es peor que "omite una regla".** Reproducido en runtime con los nombres de regla REALES
+(que llevan comillas sueltas y acentos), 1 de cada 6 respuestas: gpt-oss-20b **degenera en un bucle de
+repeticion** en la regla #1 — *"valor mandatorio mandatorio mandatorio mandatorio..."* durante cientos de
+palabras — y nunca llega a la #3. El resto de esa misma respuesta tambien viene corrompido ("modulo" por
+modifier, "4 % para un rendimiento < 20 000 %-FA"). No es que la regla Units sea especial: es la ultima,
+y el modelo se rompe antes de llegar.
+
+**Dos arreglos reales, y una decision que no es mia:**
+1. **Regla 12c del prompt:** contar las reglas, decir cuantas hay, cubrirlas TODAS en orden de
+   `sortOrder`, y **nunca** escribir que la configuracion de una regla no esta disponible — si no sabe
+   redactarla, que imprima los valores crudos. Se nombra explicitamente que una regla en Units no es una
+   regla incompleta.
+2. **Encoder legible** (`UnsafeRelaxedJsonEscaping`) en el payload del tool. El encoder por defecto
+   escapa todo lo no-ASCII para seguridad HTML, asi que un plan en espanol llegaba al modelo como
+   `Comisión Base Revenue"`. **Honestidad sobre su peso: medido, era el 2,3% del payload
+   (60 caracteres de 2.593) — es una mejora de legibilidad, NO era la causa.** Seguro aca porque el
+   destino unico del payload es el prompt: nunca HTML, nunca una URL.
+
+**Medicion antes/despues, mismo protocolo (misma pregunta, nombres reales, conversaciones nuevas):**
+antes **5 de 6** mencionaban la regla 3 y hubo **1 degeneracion**; despues **12 de 12** la mencionan y
+**0 degeneraciones**. **Lo que esto NO prueba:** con esas muestras no se puede afirmar que la
+degeneracion este eliminada — es una propiedad del modelo, no del backend, y ningun test de backend
+puede obligar a un modelo a cumplir su palabra.
+
+**★ LA DECISION QUE QUEDA PARA RODOLFO: el modelo de generacion.** Un plan de 3 reglas ya empuja a
+gpt-oss-20b a romperse. La configuracion vive en `appsettings.Development.json` -> `OpenRouter:Model`
+(hoy `openai/gpt-oss-20b`) y subirlo solo para la generacion es un cambio de una linea, con impacto en
+costo y latencia — por eso no se toco. La evidencia para decidir esta arriba.
+
+**Test de regresion nuevo** (`PlanRulesPayloadCompletenessTests`): siembra el plan del incidente con sus
+tres reglas y afirma campo por campo que las tres viajan y que la de Units esta completa
+(`measurementBase`, `semanticBehavior`, `rawValue`, `triggerCondition`, `sortOrder`), mas un test de que
+el payload va en texto legible y no en secuencias de escape. Queda porque Units es la unica medicion que
+cambia la base y es la que se perdio. Unit **1321 -> 1323**.
+
+**Hallazgo lateral en los datos del plan de prueba (NO tocado, es dato del tenant):** la regla #2 tiene
+los tramos de attainment cargados como **importes absolutos** (0-20.000, 20.000-50.000, 50.000-100.000)
+donde el motor espera **fracciones de cuota** (1.00 = 100%). Tal como esta, el bracket que contiene
+cualquier attainment normal es el primero y paga 4% de todo. El DTO ya lo nombra
+`fromAttainmentFraction` y el prompt ensena que 1.00 es el 100%, asi que el asistente tiene con que
+detectarlo — pero el plan esta mal configurado. En un plan real eso es dinero.
+
+## 2026-08-06 — DIAGNOSTICO: GetPlanRules decia "no existe" de un plan Active y visible
+
+**Sintoma:** "Me puedes explicar el plan Q3 2026 — Plan Comercial EMEA (Test Integral)" -> "no se pudo
+localizar el plan / no tienes permisos", con el plan Active, v1, 3 reglas, visible en la UI.
+
+**Las 5 hipotesis, resueltas con evidencia (no por descarte):**
+1. **Versionado — REFUTADA.** Una sola fila en `CompensationPlans` con ese nombre, v1.
+2. **Tenant — REFUTADA.** `AspNetUserClaims`: `fillocj.rc@gmail.com` tiene
+   `tenant_id = 61d4d35b-f4d4-48ea-a1d5-08dfabff5a74`, que es exactamente el `TenantId` del plan. El chat
+   corre bajo el tenant dueño; no era aislamiento. (Nota: el id de la captura, `98d36903-...`, no existe
+   en la BD; el plan real es `df4e0d96-96cc-4897-b797-888c918ba352`.)
+3. **Estado — REFUTADA.** Active, y ni `ListPlansHandler` ni `GetPlanByIdHandler` filtran por estado
+   cuando no se pide.
+4. **Binario stale — REFUTADA POR TIMESTAMPS.** El proceso corriendo arranco 11:55:15 y cargo
+   `Wasnie.Application.dll` con fecha 11:40:04 — posterior al fix de normalizacion. La normalizacion SI
+   estaba viva.
+5. **★ EL STRING — CONFIRMADA, Y MEDIDA.** Se replico la llamada de seleccion de tool contra el
+   proveedor (mismo `SelectionInstructions`, mismos schemas, mismo modelo) **8 veces**: en **5** mando el
+   nombre completo y en **3 recorto el prefijo del trimestre**, mandando `Plan Comercial EMEA (Test
+   Integral)`. El match exacto rechazaba esas 3 — correctamente segun la regla, y **falsamente de cara al
+   usuario**, que estaba mirando el plan en pantalla. Estocastico: por eso a veces andaba.
+
+**El fix, en tres capas (defensa en profundidad):**
+1. **Causa raiz:** la `description` del argumento `planName` ahora exige copiar el titulo COMPLETO,
+   nombrando los dos casos que el modelo se come (prefijo tipo "Q3 2026 - " y parentesis final).
+2. **Red de seguridad — `PlanNameMatch.IsPartialNameOf`:** si no hay match exacto, se buscan candidatos
+   por **secuencia de palabras COMPLETAS** (ambos lados se padean con espacios, asi que " emea " no
+   entra en " emea_overlay "). Simetrico, porque tanto el modelo como el usuario recortan.
+3. **Que se hace con los candidatos:** 0 -> **rechazo puro, sin cambios** (es el camino sobre el que se
+   apoya la regla 3, y no dice nada nuevo). 2+ nombres distintos -> `PlanNameRequired` con esos
+   candidatos, sin mostrar ninguna tasa. **1 -> se resuelve Y SE DECLARA**, con un token nuevo
+   `matchedBy: PartialNameSingleCandidate` y la **regla 12b** del prompt, que obliga al modelo a decir en
+   su PRIMERA frase que el nombre no coincidia exacto y cual plan esta describiendo.
+
+**Por que resolver un candidato unico no es adivinar:** con un solo candidato no existe "el plan
+equivocado" que responder; y lo que hacia peligroso substituir un plan por otro era hacerlo EN SILENCIO
+— `matchedBy` lo vuelve imposible. Los candidatos se cuentan por NOMBRE, no por fila, porque un plan
+clonado son dos filas con el mismo titulo y preguntar "¿cual de estos dos?" con dos titulos identicos es
+una pregunta sin respuesta.
+
+**★ UN TEST EXISTENTE CAMBIO A PROPOSITO — decision para Rodolfo.**
+`An_exact_name_is_required_so_one_plan_cannot_answer_for_another` exigia rechazo plano para "EMEA"
+cuando solo existe "EMEA Overlay". La preocupacion era correcta, el remedio demasiado romo: decirle "no
+existe" a alguien que mira el unico plan que podia significar ES el incidente de este WI con otro
+disfraz. Ahora se llama `One_plan_never_answers_for_another_WITHOUT_SAYING_SO` y exige que se resuelva
+**declarando** `PartialNameSingleCandidate`. Si preferis el rechazo plano, es una linea.
+
+**Lo que NO cambio:** "Q3" con `Q3_Enterprise`/`Q3_SMB` sigue dando rechazo (un prefijo dentro de un
+token no es una palabra); un nombre sin candidatos sigue dando el rechazo de una sola frase, sin lista;
+y el aislamiento tiene un test dedicado NUEVO porque el fix vuelve a aflojar la comparacion.
+
+**Tests (mutation-proven, 3 mutaciones):** quitar el limite de palabra (Contains crudo) -> 2 rojos, entre
+ellos "Q3" adivinando `Q3_Enterprise`; resolver el primero de varios candidatos -> 1 rojo; `matchedBy`
+siempre `ExactName` (resolver sin declararlo) -> **5 rojos**. Unit **1303 -> 1321**, integracion **753**
+sin cambios.
+
+**★ Verificacion en runtime** (plan sembrado con el nombre EXACTO de la captura, em-dash y parentesis
+incluidos, 3 reglas):
+1. La pregunta literal de la captura, **5 de 5 veces la encuentra** (antes fallaba ~37%), y lista las
+   **tres** reglas: "Comision base", "Acelerador Enterprise", "Spiff producto nuevo".
+2. Con el nombre recortado que mandaba el modelo -> *"El plan que has solicitado coincide con el plan
+   **Q3 2026 — Plan Comercial EMEA (Test Integral)**"* y lo explica. El log confirma `resolved a partial
+   plan name`.
+3. "Programa de Incentivos LATAM" -> sigue rechazando (`Cause: NotFound`), sin lista.
+
+**Nota de proceso:** habia una instancia de la app corriendo que no era mia (PID 16476) bloqueando el
+DLL; se pidio permiso antes de pararla, y hubo que volver a levantarla para verificar.
+
+## 2026-08-06 — GetPlanRules: normalizacion tipografica del planName (el plan que "dejo de existir")
+
+**El defecto reportado:** el asistente explico "Q3 2026 - Plan Comercial" y dos mensajes despues dijo
+que ese plan no existia. No habia cambiado nada: al reescribir el nombre dentro del JSON de su SEGUNDA
+llamada, el modelo escribio un EM-DASH donde el nombre guardado tiene un guion normal. El `==` estricto
+dijo que no, el tool devolvio su rechazo, y el modelo lo relato obedientemente — una negacion segura
+de un registro que acababa de describir. **El error fue el rigor, no el modelo:** exactitud
+maquina-a-maquina es correcta cuando los dos extremos son maquinas; aca uno es un LLM reescribiendo
+las palabras de una persona, y eso sustituye guiones, agrega espacios y cambia mayusculas.
+
+**Paso 0 — la mitad del fix que era facil pasar por alto.** Normalizar la comparacion no sirve de nada
+si la fila nunca llega a la comparacion: `ListPlansHandler` narrowea en SQL con
+`Name.ToLower().Contains(search)`, asi que pasarle el nombre crudo con em-dash **devuelve CERO filas** y
+la lista de candidatos queda vacia antes de cualquier match en memoria. El bug estaba en los DOS pasos.
+
+**El fix — `PlanNameMatch` (capa de Aplicacion), normalizacion identica en ambos lados:**
+1. `Normalize`: familia de guiones -> `-` (hyphen, non-breaking hyphen, figure dash, en, em, horizontal
+   bar, minus). El WI nombraba em y en; se incluyo la familia completa porque es LA MISMA sustitucion y
+   cada uno es un mapeo 1:1 que no toca la exactitud. Espacios: `char.IsWhiteSpace` (no comparacion con
+   `' '`) porque los espacios exoticos son tan reales como los guiones — a este modelo ya se lo vio
+   emitiendo U+202F en su prosa; se colapsan a uno y se recortan los extremos.
+2. `AreSame`: normaliza **los dos lados** y compara con `OrdinalIgnoreCase`. Normalizar solo el request
+   arreglaria al modelo y rompería al tenant que pego el titulo desde un documento.
+3. `NarrowingKey`: la corrida mas larga sin guion ni espacio — la parte del nombre que la normalizacion
+   no puede alterar en ninguno de los dos lados. " q3 2026 — plan comercial " -> `comercial`, que
+   encuentra la fila guardada sean cuales sean los separadores. **Esto NO convierte el lookup en
+   substring:** el fragmento solo decide que filas se TRAEN; `AreSame` sigue teniendo que aceptar el
+   nombre entero. Esa separacion ya existia (el filtro SQL siempre fue narrowing, nunca el match).
+
+**Impacto en indices: NINGUNO, y se verifico.** `Contains` compila a `LIKE '%...%'`, que es
+non-sargable: la consulta ya era un scan sobre los planes del tenant y un fragmento mas corto no cambia
+la clase de plan. Trae algunas filas mas, que el match exacto filtra.
+
+**Sigue siendo match EXACTO:** "Q3_Enterprise" vs "Q3_SMB" siguen distintos, "Q3" solo no encuentra
+nada, "Plan-A" != "PlanA" (el guion se PLIEGA, no se borra), y un typo dentro de una palabra
+("Comercia") no matchea — eso es un error de escritura, no tipografia. Y "no encontrado" sigue siendo
+**business result** (`NotFoundOrNotVisible` + el mismo mensaje de rechazo), no `Failed`.
+
+**Aislamiento:** se agrego un test dedicado porque el fix AFLOJA una comparacion, y una comparacion mas
+floja es justo donde el aislamiento se rompe. Lo que protege la fila es el filtro de tenant, no el rigor
+del nombre: un nombre que AHORA si matchearia sigue sin encontrar nada desde otro tenant, con el rechazo
+indistinguible byte a byte.
+
+**Tests (mutation-proven, 3 mutaciones):** volver el narrowing key al nombre crudo -> **4 rojos** (prueba
+que la mitad SQL es portante); volver a `==` estricto -> 16 rojos; convertirlo en `StartsWith` -> 5
+rojos, incluidos los de colision Q3_Enterprise/Q3_SMB. Unit **1273 -> 1303**, integracion **753** sin
+cambios, ambos en verde.
+
+**Verificacion en runtime (plan real "Q3 2026 - Plan Comercial", flat 0.06 + cap 300 EUR):**
+1. Turno 1 con guion normal -> lo explica.
+2. **Turno 2 con em-dash, el caso reportado** -> *"Si, el plan Q3 2026 – Plan Comercial existe y esta
+   activo. El limite maximo (cap) para cada transaccion es 300 EUR."* Antes: "no existe".
+3. Nombre destrozado entero (" q3 2026 — plan comercial ", minusculas + padding + em-dash) en
+   conversacion NUEVA, sin historia donde apoyarse: **7 de 7 invocaciones del tool -> Found**. Con log de
+   diagnostico temporal se confirmo que el modelo manda literalmente `q3 2026 — plan comercial`, que
+   normaliza a `q3 2026 - plan comercial` y narrowea por `comercial`.
+4. "Q4 2026 — Plan Comercial" y "Q3" a secas -> siguen dando el rechazo. No adivina.
+
+**Dos observaciones honestas del runtime:** (a) antes de instrumentar se vio UN `NotFound` con el nombre
+destrozado que **no se pudo reproducir en 7 intentos posteriores**; lo mas probable es una generacion en
+la que el modelo mando un nombre distinto (p.ej. solo "plan comercial"), que es un NotFound correcto —
+queda anotado sin explicacion cerrada. (b) Los fallos intermitentes del endpoint son
+`ChatCompletionException: The chat model timed out` del proveedor, no del match, y llegan como fallo
+ruidoso con tarjeta de reintento — el diseño funcionando.
+
+**Hueco adyacente NO tocado (misma clase, decision de Rodolfo):** el apostrofo tipografico (' vs ')
+falla igual que fallaba el em-dash. Un plan llamado "Rudy's Plan" no se encontraria si el modelo escribe
+la comilla curva. Es una linea en el mismo mapa de caracteres, pero ampliar la normalizacion cambia que
+cuenta como igual, asi que no se hizo sin pedirlo. Mismo caso para los acentos.
+
+## 2026-08-06 — GetPlanRules: la segunda herramienta del asistente (leer las reglas REALES de un plan)
+
+**Qué resuelve:** el copiloto adivinaba configuraciones cruzando el manual — inventó un modo de tasa
+"Linear" que no existe, explicó Units como si fuera un porcentaje, y en un cálculo con acelerador +
+cap aplicó el acelerador y se olvidó del cap. Ahora LEE la configuración real del plan y explica sobre
+datos deterministas.
+
+**Paso 0 — el enum salió del código, no de la cabeza.** El mapeo RateTableType x Measurement se derivó
+de `CommissionCalculator` + `CreditAllocationService` y vive en `PlanRuleSemantics` (Application),
+porque el motor es `internal` en Infrastructure y no se puede referenciar. Un espejo que se desincroniza
+sería peor que no tenerlo, así que los tests **ejecutan el calculador REAL** y comprueban que su
+aritmética es la que el token promete. Tokens (enum CERRADO, cualquier combinación sin token lanza):
+`FractionalMultiplierOfBase`, `CurrencyAmountPerUnit`, `FractionalRatePerRevenueBracket`,
+`FractionalMultiplierFromAttainmentBracket`, `FractionalRateSplitAtQuotaBoundary`,
+`NoCommissionUnsupportedCombination` (Units + tabla no-Flat: el dominio lo rechaza al guardar y el
+motor acredita CERO — es un estado real que una regla guardada puede tener).
+
+**`measurementBase` es un token aparte, y es el que sorprende.** `MeasurementType` tiene cinco miembros
+y el motor ramifica en UNO: `Units` va por cantidad y **todo lo demás — Revenue, Margin, Attainment,
+Custom — usa el importe de la transacción**. Una regla etiquetada "Margin" se calcula sobre importe
+bruto. Reportar solo la etiqueta habría dejado al modelo describir un cálculo de margen que nadie
+implementó.
+
+**Tres hechos que el modelo no podía inferir y ahora viajan en el DTO:**
+1. `calculationOrder` = rate → modifier → cap → floor. Era el paso que improvisaba.
+2. **Un cap que el motor NO aplica.** Solo `PerTransaction` se honra; `PerPeriod` y `Total` se guardan y
+   se saltan, igual que un cap en moneda distinta a la del plan. Decirle a alguien "tenés un cap de
+   €500" cuando nada lo aplica es peor que no decir nada → token `NotEnforcedScopeNotImplemented` /
+   `NotEnforcedCurrencyMismatch`.
+3. **`ApplyModifier` NUNCA evalúa `Modifier.Trigger`.** Un acelerador "condicional" aplica siempre →
+   `ConditionsIgnoredModifierAlwaysApplies`. Y una condición sobre un campo que no está en
+   `TriggerFieldCatalog` hace que la regla no matchee JAMÁS → `UnknownFieldRuleNeverMatches`, que suele
+   ser la respuesta a "¿por qué no me pagaron?".
+
+**Los 3 no-negociables, intactos:** read-only vía dominio (`ListPlansQuery` + `GetPlanByIdQuery`, sin
+DbContext en el archivo); aislamiento por el filtro de tenant + `Plans.Read`; y rechazo indistinguible
+— "no existe" y "no es tuyo" devuelven el MISMO payload byte a byte (el test lo compara entero). Un
+error TÉCNICO en cambio lanza: `AssistantToolOutcome=Failed` → tarjeta de reintento, nunca disfrazado
+de "no encontré" (la lección del bug estocástico).
+
+**Un cuarto resultado, que no es rechazo:** si el usuario no nombra plan y hay varios visibles, el tool
+devuelve `PlanNameRequired` con la lista de nombres para que el asistente pregunte cuál. Reportarlo como
+"no encontrado" le diría a alguien con tres planes que no tiene ninguno.
+
+**Integración que casi se pasa por alto:** el `SelectionInstructions` del runner decía "si la pregunta
+es sobre cómo funciona el producto, NO llames a ninguna tool" — que es exactamente como se clasifica
+"¿cómo paga mi plan?". La herramienta habría quedado registrada y sin invocarse nunca. La distinción se
+reescribió: ya no es registro-vs-explicación sino **datos de ESTE tenant vs comportamiento del
+producto**.
+
+**GDPR:** el DTO no lleva ni un campo de payee (hay un test que barre el JSON buscando `payee`,
+`fullName`, `email`, `employeeCode`, `assignment`). La configuración de un plan no es dato personal y
+así queda.
+
+**Tests (mutation-proven, 4 mutaciones probadas):** quitar el filtro de tenant → rojo el de aislamiento;
+mapear Units a `FractionalMultiplierOfBase` → rojo el del token; devolver `[]` en vez de lanzar ante
+query rota → rojo el del fallo ruidoso; agregar un token al enum sin enseñarlo al prompt → rojo el de
+cobertura (recorre los enums por reflexión, incluidos los privados del tool). Unit **1241 → 1273**,
+integración **753** sin cambios, ambos en verde.
+
+**★ Verificación en runtime contra el modelo real** (tenant nuevo y aislado `wi-plan-rules-verify`, dos
+planes reales creados por API):
+1. *"How is the Full Payout Plan configured?"* → cita la config real: Flat **1.00 → 100%**, cap **200
+   EUR por transacción**, trigger Unconditional, sin modifier ni floor. Antes inventaba.
+2. *Estrés:* venta de 10.000 EUR sobre el plan Flat 0.08 + accelerator 1.5 + cap 500 → **800 × 1,5 =
+   1.200 → cap 500**, paso a paso y en el orden correcto. Este es el que fallaba.
+3. *"What rules does my plan have?"* (sin nombrar) → lista los dos planes y pregunta cuál.
+4. *Aislamiento:* preguntado por "Claude Code Test Plan" — que existe DE VERDAD en otro tenant — el
+   asistente da el rechazo indistinguible y no filtra ni una tasa.
+
+**Defecto que encontró la verificación y se corrigió:** el modelo imprimía los identificadores internos
+al usuario ("FractionalMultiplierOfBase", "enforcement = EnforcedPerTransaction"). Eso rompe el motivo
+mismo de los tokens: un identificador CamelCase en inglés no se traduce al ES/PL. Se agregó la **regla
+18** ("los tokens son para vos, no para el usuario"). Tras el arreglo la prosa quedó limpia ("Flat, 1.00
+→ 100 % of the transaction amount"), aunque **gpt-oss-20b sigue filtrando el token del cap en la tabla
+una de cada dos veces** — cumplimiento parcial de un modelo chico, no un fallo del contrato. Anotado.
+
+**Estado del entorno de verificación:** quedó en la DB de dev el tenant `wi-plan-rules-verify`
+(+ `wi-plan-rules-runtime`, huérfano y sin confirmar) con dos planes de prueba y `Tenants.Tier` subido a
+3 para poder crear el segundo plan. Se puede borrar cuando se quiera; queda para reproducir.
+
+**Fuera de alcance (siguientes piezas):** balance del payee, attainment, pay runs, clawbacks. Escribir o
+modificar planes: nunca — el tool es read-only por contrato de la interfaz.
+
+## 2026-08-05 — Columna "Paid on" en la lista de Payouts
+
+**Paso 0:** `PaidAt` **ya viajaba** en el DTO de la lista (`PayoutListItemDto` + `ListPayoutsHandler`,
+agregados en el WI de PaidAt) — no hizo falta tocar el backend. Lo que faltaba era el campo en el modelo
+del front y la columna en la tabla. El patrón de fechas de la lista es el pipe `dateFormat`, que ya
+maneja tanto `DateOnly` (`2026-07-01`) como ISO con hora, y devuelve cadena vacía ante null.
+
+**El cambio:** columna **Paid on** entre Status y Actions. Fecha con `dateFormat`; si el payout no está
+pagado, un guion largo atenuado (`--color-text-tertiary`) en vez de celda en blanco, para que se lea
+"no tiene fecha de pago" y no "falta el dato". i18n EN/ES/PL (`PAYOUTS.COL_PAID_ON`:
+Paid on / Fecha de pago / Data wypłaty).
+
+**Detalle fácil de pasar por alto:** las filas de skeleton y de vacío tenían `colspan="7"` fijo; con la
+columna nueva quedaron en 8. Sin eso, el estado vacío y el de carga se rompen al ancho de la tabla.
+
+**★ Verificado en runtime, el caso exacto del WI:** entrando con la ventana de pago de agosto
+(`status=Paid&payFrom=2026-08-01&payTo=2026-08-05`), la fila **TERM-CC-01** muestra
+**Period "Sep 1, 2026 → Sep 30, 2026"** y **Paid on "Aug 4, 2026"**. El matcheo ahora se explica solo:
+el período es de septiembre, pero el dinero salió el 4 de agosto. Cabecera resultante:
+`Payee | Plan | Period | Total | Status | Paid on | Actions`.
+Con `status=Calculated`, las 10 filas muestran **—** en la columna, como corresponde.
+
+**Punto 4 del WI (ordenable): NO APLICA.** Esta lista no tiene headers ordenables — no existe `setSort`
+ni handler de clic en `<th>`; el `sortBy` del store es fijo (`calculatedAt`). Hacerla ordenable sería
+agregar la interacción a toda la tabla, que excede "solo la columna". El backend tampoco tiene caso
+`paidat` en su `switch` de orden. **Queda anotado por si Rodolfo lo quiere.**
+
+**★ Hallazgo lateral, NO tocado:** el **export a Excel** arma su propio `PayoutExportRow` y **no incluye
+`PaidAt`** (lleva PeriodStart/End, Status, CalculatedAt, UpdatedAt). Quien exporte una lista filtrada por
+fecha de pago recibe filas sin la fecha que explica el filtro — el mismo problema que este WI arregla en
+pantalla, pero en el archivo que va a nómina. Es un WI aparte.
+
+**Tests:** frontend **767** (sin cambio neto; se agregó `paidAt` a las dos fixtures de `PayoutListItem`,
+que el compilador exigió). No agregué test de DOM para la columna: el spec de esta lista usa template
+stubbeado, así que montar el render real sería desproporcionado para un binding de una celda.
+`ng build --configuration production` limpio.
+
+**Entorno:** el API en :5091 ya estaba corriendo y **no lo levanté yo** (mi intento salió con "address
+already in use"), así que lo dejé como estaba.
+
+## 2026-08-05 — Tarjeta de payouts → lista vacía: NO REPRODUCE + drill-down de las barras
+
+**★ El bug reportado NO se reproduce.** Probé el clic en la tarjeta desde los SEIS filtros contra el API
+real. En todos, la lista trae exactamente lo que la tarjeta promete:
+
+| Filtro | Tarjeta | Link | Lista |
+|---|---|---|---|
+| This Month | €500 | `status=Paid, payFrom=2026-08-01, payTo=2026-08-05` | 1 de 1 |
+| Last Month | €4.939,41 | `…payFrom=2026-07-01, payTo=2026-07-31` | 5 de 5 |
+| This Quarter | €5.439,41 | `…payFrom=2026-07-01, payTo=2026-08-05` | 6 de 6 |
+| Last Quarter | €181.715,99 | `…payFrom=2026-04-01, payTo=2026-06-30` | 32 |
+| YTD | €187.155,40 | `…payFrom=2026-01-01, payTo=2026-08-05` | 38 |
+| **Last Year** | **—** | `…payFrom=2025-01-01, payTo=2025-12-31` | **vacía (correcto: no hubo pagos en 2025)** |
+
+**La invariante tarjeta↔lista sigue intacta:** las 5 filas de julio suman
+1.000+1.000+1.000+1.000+939,41 = **€4.939,41**, idéntico al céntimo.
+
+**Hipótesis descartadas con evidencia:** el WI del pacing NO tocó el link (sigue emitiendo
+`period+status=Paid+payFrom+payTo`); la lista SÍ aplica la ventana (la request lleva
+`status=Paid&paidFrom&paidTo` y el resultado cambia con ella); los query params NO se pisan al cargar.
+
+**★ Único caso legítimamente vacío: Last Year**, donde la tarjeta muestra "—", no un número. Es la
+hipótesis más probable de lo que viste. **Falta que Rodolfo confirme desde qué filtro lo vio** — si fue
+desde otro, hace falta el dato para volver a buscarlo.
+
+**Trampa propia que vale anotar:** mi primer intento cliqueó la tarjeta equivocada — el selector agarraba
+el primer `<a href*="/payouts">`, que es "Pending Approval" (`status=Calculated`), no la de payouts. Casi
+reporto un falso positivo por eso.
+
+**★ ADEMÁS — drill-down de las barras (implementado):**
+- `ws-hbar-chart` expone `barClick` (output) usando `onClick` de Chart.js; `onHover` pone
+  `cursor: pointer` solo sobre una barra. El primitivo NO conoce el Router — sigue siendo agnóstico.
+- **UNA sola definición del link:** `payoutsLinkParamsFor(from, to)`. La tarjeta y ambas barras pasan por
+  ahí, así que no pueden divergir. Hay un test que compara el resultado de las dos rutas.
+- **Las ventanas vienen del backend** (`currentFrom/To`, `priorFrom/To` nuevos en `DashboardTrendBandDto`),
+  no se recalculan en el browser: `PeriodHelper` es la única fuente de verdad de qué cubre un período y
+  una segunda implementación derivaría.
+
+**Estado de verificación del drill-down — honesto:**
+- ✅ El handler funciona **en la app corriendo**: invocarlo con la barra "June 2026" navegó a
+  `/payouts?status=Paid&payFrom=2026-06-01&payTo=2026-06-30`.
+- ✅ En la instancia viva de Chart.js están registrados `onClick` y `onHover`, y el output `barClick`
+  existe; los chunks servidos contienen el código.
+- ❌ **NO pude verificar el clic físico sobre la barra.** A mitad de sesión el navegador dejó de entregar
+  clics: puse un overlay `position:fixed;inset:0` cubriendo TODO el viewport y **no recibió ninguno** de
+  dos clics en coordenadas distintas. Es falla del tooling, no del producto — pero **no lo doy por
+  verificado**. Queda pendiente probarlo a mano.
+
+**Tests:** frontend **759 → 767** (+8): tres que fijan el contrato del link de la tarjeta (que lleve
+`status=Paid`+`payFrom`+`payTo`, que NUNCA use `pFrom/pTo`, y que la ventana coincida con el período
+mostrado) y cinco de drill-down (barra prior → su ventana, barra current → la suya, que use la MISMA
+definición que la tarjeta, sin banda no navega, ventana sin límites no navega).
+Backend **1241**, prod build limpio.
+
+**Entorno:** el API que levanté quedó detenido y el puerto 5091 cerrado.
+
+## 2026-08-05 — Widget de payouts: esqueleto visual INMUTABLE (tendencia y progreso, un solo componente)
+
+**Solo presentación.** La lógica tendencia/progreso no se tocó: el backend sigue emitiendo
+`ChangePercent = null` + `Direction = "pacing"` para en-curso, y su `%` normal para cerrados.
+
+**Paso 0 — las dos ramas que había:**
+- Progreso (en curso): una `.attainment-bar` de una sola línea, **sin eje X**, dentro de un
+  `.trend-card__pacing`, y su propio `<span>` de badge.
+- Tendencia (cerrado): `ws-hbar-chart` con **dos barras** (gris = anterior, azul = evaluado) y eje X, y
+  otro `<span>` de badge.
+
+Al cambiar de filtro desaparecía el eje, dos barras colapsaban a una y saltaba la tipografía.
+
+**Cómo se unificó:** `ws-hbar-chart` **ya hacía exactamente lo que el WI pide para ambos estados** — dos
+barras horizontales, gris arriba / azul abajo, misma escala y eje X anclado abajo. Y `trendBarPoints`
+ya produce `[prior, current]`, que para pacing es `[total del período anterior, pagado hasta ahora]`.
+Así que la unificación fue **borrar** la rama de progreso, no construir nada nuevo:
+
+- **Un solo `.trend-card__chart` con `ws-hbar-chart`** para ambos estados. `.attainment-bar` y el estilo
+  `.trend-card__pacing` quedaron muertos y se eliminaron.
+- **Un solo `<span>` de badge**, con clases y texto condicionales. Antes eran dos `<span>` en ramas
+  separadas: **cualquier edición futura de uno los habría desalineado en silencio**. Ahora es
+  imposible por construcción.
+- **Un solo `.trend-card__prior`** de pie. `TREND_PRIOR` pasó de `"Prior"` a `"Prior: {{period}}"` para
+  que ambos estados usen la misma interpolación (no se usaba en ningún otro lado).
+- La diferencia entre estados vive en seis helpers del componente (`badgeIsPositive`, `badgeIsNegative`,
+  `badgeShowsArrow`, `badgeText`, `badgeParams`, `footerLabel`), no en el template.
+
+**★ Verificación en runtime — medida, no a ojo.** Se midió la tarjeta en un estado, se cambió el filtro
+y se volvió a medir, comparando posiciones relativas y estilos computados:
+
+```
+geometryDifferences: []
+```
+
+| | Progreso (This Month) | Tendencia (Last Month) |
+|---|---|---|
+| Tarjeta | 526x224 | 526x224 |
+| Gráfico | `0,72 526x100` | `0,72 526x100` |
+| Canvas | `0,72 526x100` | `0,72 526x100` |
+| Pie | `0,192 526x32` | `0,192 526x32` |
+| Badge | `h=24px pad=3px 10px 3px 8px fs=12px fw=800` | idéntico |
+| Pie (label/monto) | `11px/400` · `13px/600` | idéntico |
+| Barra de una línea | no | no |
+
+**Lo único que cambia**, como pide el WI: fondo del badge (`rgb(10,14,21)` neutro vs
+`rgba(163,45,45,0.2)` rojo), su texto (`10% of baseline` vs `-97.3%`) y el texto del pie
+(`July 2026 total €4.94K` vs `Prior: June 2026 €181.72K`). En pantalla, ambos estados muestran las dos
+barras (gris arriba, azul abajo) con el eje X abajo — 0/2.0K/4.0K/6.0K en progreso, 0/50K/100K/150K/200K
+en tendencia.
+
+**★ Decisión que conviene revisar:** el WI dice "gris para progreso, rojo/verde para tendencia". Dejé el
+badge de progreso **verde cuando se supera la línea base** (≥100%), porque el WI anterior estableció
+explícitamente que superarla se muestra como positivo. No afecta la geometría (solo color), pero
+contradice la letra de este WI — **si Rodolfo lo prefiere siempre gris, es cambiar una condición.**
+
+**Tests:** frontend **755 → 759**. Se reemplazaron los specs de la barra de progreso (que ya no existe,
+`pacingFillWidth` se eliminó) por specs de polimorfismo: que en pacing **nunca** haya badge negativo ni
+flecha (recorriendo 0/10/99.9/100/150/null), que el verde aparezca solo al superar la base, los textos
+de badge y pie por estado, y que el gráfico se arme igual en ambos.
+`ng build --configuration production` limpio.
+
+**Entorno:** el API de dev en :5091 **ya estaba corriendo y no lo levanté yo** (mi intento salió con
+"address already in use"), así que lo dejé como estaba.
+
+## 2026-08-05 — Períodos EN CURSO: PACING contra el total anterior, no rebanada
+
+**Decisión de Rodolfo.** La rebanada era matemáticamente honesta pero comercialmente inútil: en B2B los
+pagos se concentran al final del período, así que los primeros días daban €0 vs €0. Ahora un período en
+curso se mide contra el **total del período anterior completo**, como línea base.
+
+**Paso 0:**
+- La banda la arma `BuildTrendBandAsync` a partir de `PayoutsInPeriodRawAsync(actual)` y
+  `(prior)`, y emitía `{currency, current, prior, changePercent, direction}`.
+- En-curso vs cerrado ya se derivaba de `to == hoy`; se expuso como `PeriodHelper.IsRunningPeriod`.
+
+**El cambio — la ventana se unifica, lo que cambia es la PRESENTACIÓN:**
+- `ComputePriorPeriodRange` devuelve ahora **siempre el período anterior completo**, en curso o cerrado.
+  Toda la lógica de rebanada + clamp desapareció (era un caso particular que ya no aplica), y con ella
+  `GetTrendLabels`/`FormatRange`: como el prior vuelve a ser un período entero, los nombres de período son
+  exactos otra vez y "July 2026 = €4.939,41" coincide con lo que muestra Last Month.
+- `IsRunningPeriod` decide **solo la presentación**. Para en-curso: `ChangePercent = null`,
+  `Direction = "pacing"`, y `PacingPercent = actual/total_anterior*100`.
+  **★ Que `ChangePercent` sea null para en-curso es la garantía estructural** de que ninguna capa
+  posterior pueda derivar una flecha roja de caída de un período que simplemente no terminó.
+- Los períodos **CERRADOS no se tocaron**: mismo `%`, mismo `up/down/neutral`, mismo gráfico de dos barras.
+
+**Front:**
+- Rama de pacing separada en el template. Barra de progreso **reusando `.attainment-bar`**, que ya existe
+  en este mismo componente para Avg Quota Attainment — así "progreso contra una línea base" se ve igual en
+  toda la pantalla, sin primitiva nueva ni estilos inventados.
+- Fill clampeado a 100% para que no se escape del track, pero el pill sigue diciendo el valor real
+  (150% si se superó). **Superar la línea base se muestra como positivo**, nunca como exceso a corregir.
+- Sin línea base (total anterior = 0) → `PacingPercent` null y se muestra el estado "New" existente, en
+  vez de dividir por cero.
+- i18n EN/ES/PL: `BAND_PACING`, `PACING_CHIP`, `PACING_PILL`, `PACING_BASELINE`, `PACING_METRIC`.
+
+**★ Verificación en runtime (API :5091 + dev server), valores reales observados:**
+
+| Filtro | isPacing | Actual | Línea base | Lo que muestra |
+|---|---|---|---|---|
+| This Month | true | €500 | €4.939,41 (todo julio) | "10% of baseline", barra al 10%, **sin flecha ni rojo** |
+| This Quarter | true | €5.439,41 | €181.715,99 (todo Q2) | pacing 2,99% |
+| YTD | true | €187.155,40 | €0 | sin línea base → "New" |
+| **Last Month** | false | €4.939,41 | €181.715,99 | **−97,3% en rojo, con flecha — intacto** |
+| Last Quarter | false | €181.715,99 | €0 | neutral — intacto |
+
+En pantalla, This Month: banda **"PROGRESS"**, chip **"July 2026 total as baseline"**, tarjeta
+**"Paid so far · August 2026 · EUR €500"**, pill **"10% of baseline"** y pie **"July 2026 total €4,94K"**.
+Last Month conserva banda "Trend", chip "July 2026 vs June 2026", pill `-97.3%` con clase
+`trend-card__delta-pill--down` y el gráfico de dos barras.
+
+**★ Trampa evitada:** el dev server marcó `TS2345` — `trendIcon` aceptaba solo `'up'|'down'|'neutral'` y
+ahora existe `'pacing'`. **`ng test` había pasado igual**; el overlay del navegador mostraba la build
+anterior, así que la pantalla parecía correcta con el código roto. Se corrigió la firma (y `trendIcon`
+dibuja plano ante `'pacing'`, de modo que ni una llamada perdida podría pintar subida o bajada) y se
+reverificó con `ng build --configuration production` en verde antes de mirar la pantalla otra vez.
+
+**Tests:** unit **1241** (se reescribió `PeriodHelperTrendInvariantTests` a la regla nueva —ventana única
++ clasificación en-curso/cerrado— y se actualizaron 8 tests que fijaban la rebanada; nuevos tests de
+handler: pacing contra el total, que en curso **nunca** emita `ChangePercent`, superar la base >100%, sin
+línea base, y que un período cerrado conserve su `%`). Frontend **748 → 755** (+7 de los helpers de
+pacing, incluido que un punto de pacing no pueda clasificarse como caída). Prod build limpio.
+
+**Entorno:** el API de dev quedó **detenido** y el puerto 5091 cerrado.
+
+## 2026-08-05 — Filtro de fechas del dashboard: de barra segmentada a dropdown (WsSelect)
+
+**Solo presentación.** Cero cambios en `PeriodHelper`, en la query o en el cálculo de tendencia. El
+dropdown llama exactamente al mismo `onPeriodChange()` que llamaba la barra; el store sigue siendo dueño
+del período y de la recarga.
+
+**Paso 0:**
+- Filtro actual: `<ws-segmented-control [value] (valueChange)>` en el slot `actions` del page-layout,
+  con `periodOptions: SegOption[]` y `onPeriodChange()`.
+- **`WsSelect` es un ControlValueAccessor**: NO tiene par `[value]`/`(valueChange)`. En todo el repo se
+  usa con `formControlName` (assignments, credits, category-mappings). Así que el binding va por un
+  `FormControl` + `valueChanges` → `onPeriodChange()`, que es el patrón establecido, no uno nuevo.
+- Su trigger ya renderiza `selectedOption().label | translate`, así que el valor seleccionado se ve
+  siempre — que es justo lo que el WI pide.
+- `SegOption {label, value}` es estructuralmente compatible con `SelectOption`; se retipó a
+  `SelectOption[]` y **se reusaron las claves y labels i18n existentes** (`DASHBOARD.PERIOD_*`).
+  Única clave nueva: `PERIOD_LABEL` (Period / Período / Okres) para el label del select.
+
+**Dos ajustes que salieron de mirar, no de suponer:**
+1. Al abrir el dropdown, la opción seleccionada mostraba **"This Mo…"**: el panel se dimensiona al ancho
+   del trigger, y el ícono de check del estado seleccionado se comía el texto. Resuelto con
+   `min-width: 160px` en `.period-select` — **el mismo valor que ya usa la lista de créditos** para sus
+   selects de filtro, así que es precedente del repo, no un número inventado. `ws-select` tiene
+   `:host { display: block }`, así que aplica directo sin wrapper.
+2. Verificado que no quedaran estilos ni imports muertos del segmented-control (queda solo una mención en
+   un comentario). El primitivo sigue en uso en payouts, pay-runs y detalle de payee — no se tocó.
+
+**★ Verificación en runtime (API en :5091 + dev server):**
+- El trigger muestra "This Month" con borde y fondo sólidos — affordance real, frente a los 6 textos
+  flotantes con recuadro semitransparente de antes.
+- Abierto: las 6 opciones legibles, la seleccionada resaltada y con check.
+- Seleccionando "Last Month": el dropdown se cierra, el trigger pasa a "Last Month" y **Payouts muestra
+  €4.939,41**, exactamente la cifra ya verificada por API para ese período. Los datos recargan igual; el
+  backend no cambió.
+
+**★ Ancho — comparación directa con la misma prueba de umbral del WI anterior:**
+
+| | Control | Header desborda desde |
+|---|---|---|
+| Antes (barra) | **553 px** | por debajo de ~640 px |
+| Ahora (select) | **160 px** | por debajo de **320 px** |
+
+A **375 px el header NO desborda** (apila, alto 72 px). Criterio de aceptación cumplido.
+
+**⚠️ Hallazgo aparte, PREEXISTENTE y fuera de este WI:** probando en un iframe de 375 px (viewport real,
+las media queries evalúan de verdad) se ve que **el app-shell no colapsa la sidebar en ancho de teléfono**:
+la sidebar sigue ocupando ~195 px de 371, y **todo** el contenido —título, tarjetas, no solo el filtro—
+queda comprimido con scroll horizontal dentro del shell. El filtro dejó de ser el que rompe (pasó de 553
+a 160 px), pero **la página a 375 px sigue sin ser usable por una razón que este WI no toca**. Es un WI
+propio de responsive del shell, y no lo improvisé.
+
+**Presupuesto:** `dashboard.component.scss` pasa de 14,27 kB a 14,30 kB (+30 bytes por la regla nueva).
+Ya estaba por encima del presupuesto de 14 kB antes de este cambio; lo empeora marginalmente y no hay
+estilo muerto que compensar. Se reporta, no se esconde.
+
+**Tests:** frontend **745 → 748** (+3: que elegir una opción llegue al store, que el control arranque en
+el período vigente, y que todos los valores del menú sean períodos que el store acepta).
+`ng build --configuration production` limpio.
+
 ## 2026-08-05 — Integración en verde: arreglado un test time-bomb (no era regresión)
 
 Con Docker arriba se pudo correr por fin la suite de integración que había quedado pendiente.

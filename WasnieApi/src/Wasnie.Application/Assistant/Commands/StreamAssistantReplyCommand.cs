@@ -37,11 +37,21 @@ public sealed record StreamAssistantReplyCommand(Guid ConversationId, string Con
 /// A TRANSLATION KEY, never a sentence and never the provider's own words — the client renders it in
 /// the reader's language, and a vendor error string can carry request ids or prompt fragments.
 /// </param>
+/// <param name="Phase">
+/// Which step of the turn this frame is about. Only on <see cref="Progress"/> frames. An identifier from
+/// <see cref="AssistantPhase"/>, NOT a sentence: the client owns the wording and translates it, exactly
+/// as it does for <paramref name="ErrorKey"/>.
+/// </param>
+/// <param name="State">
+/// <see cref="PhaseStart"/> or <see cref="PhaseDone"/>. Only on <see cref="Progress"/> frames.
+/// </param>
 public sealed record AssistantStreamEvent(
     string Type,
     string? Delta = null,
     AssistantMessageDto? Message = null,
-    string? ErrorKey = null)
+    string? ErrorKey = null,
+    string? Phase = null,
+    string? State = null)
 {
     /// <summary>The user's turn, already persisted. Sent first so the client can replace its optimistic copy.</summary>
     public const string UserTurn = "user";
@@ -55,6 +65,22 @@ public sealed record AssistantStreamEvent(
     /// <summary>The answer could not be produced. NOTHING was persisted for the assistant.</summary>
     public const string Error = "error";
 
+    /// <summary>
+    /// A step of the turn started or finished. Carries <see cref="Phase"/> and <see cref="State"/>.
+    ///
+    /// ★ PURELY ADDITIVE, and that is a requirement rather than a nicety. A client that has never heard
+    /// of this frame must keep working: it carries no answer, no stored row and no failure, so ignoring
+    /// it loses nothing — the existing switch simply falls through. The old panel and the new one can be
+    /// served by the same backend.
+    /// </summary>
+    public const string Progress = "progress";
+
+    /// <summary>The step began.</summary>
+    public const string PhaseStart = "start";
+
+    /// <summary>The step finished. A step that FAILED never gets one — the error frame ends the turn.</summary>
+    public const string PhaseDone = "done";
+
     public static AssistantStreamEvent OfUser(AssistantMessageDto message) => new(UserTurn, Message: message);
 
     public static AssistantStreamEvent OfFragment(string delta) => new(Fragment, Delta: delta);
@@ -62,4 +88,44 @@ public sealed record AssistantStreamEvent(
     public static AssistantStreamEvent OfDone(AssistantMessageDto message) => new(Done, Message: message);
 
     public static AssistantStreamEvent OfError(string errorKey) => new(Error, ErrorKey: errorKey);
+
+    public static AssistantStreamEvent OfPhaseStart(string phase) =>
+        new(Progress, Phase: phase, State: PhaseStart);
+
+    public static AssistantStreamEvent OfPhaseDone(string phase) =>
+        new(Progress, Phase: phase, State: PhaseDone);
+}
+
+/// <summary>
+/// The steps a turn is made of — the ones that REALLY happen, which is the whole point of this list.
+///
+/// ★ THE BACKEND REPORTS, IT DOES NOT NARRATE. Every one of these names a piece of work the handler
+/// actually performs, and it is emitted only on the turns where that work is performed. A question the
+/// documentation answers emits no <see cref="SearchingData"/>, because nothing was searched; a question
+/// nothing in the guide covers emits no <see cref="ReadingDocs"/>, because nothing was read. The
+/// sequence is therefore DIFFERENT from turn to turn, and that difference is the information.
+///
+/// This is the same rule the panel's old waiting text obeyed by saying nothing specific: never claim a
+/// stage that cannot be verified. What changed is not the rule — it is that the backend, unlike the
+/// browser, actually knows.
+/// </summary>
+public static class AssistantPhase
+{
+    /// <summary>
+    /// Working out what the question needs: which parts of the guide, and whether a lookup is required.
+    ///
+    /// Covers BOTH classifier calls — the section router and the lookup dispatcher — because they are
+    /// one thing to the person waiting, and splitting them would show two steps for a decision they
+    /// never asked to watch being made.
+    /// </summary>
+    public const string Understanding = "understanding";
+
+    /// <summary>Pulling the routed sections of the product guide into the prompt.</summary>
+    public const string ReadingDocs = "reading_docs";
+
+    /// <summary>Reading this tenant's own records, through the read-only tool the dispatcher chose.</summary>
+    public const string SearchingData = "searching_data";
+
+    /// <summary>Writing the answer.</summary>
+    public const string Generating = "generating";
 }

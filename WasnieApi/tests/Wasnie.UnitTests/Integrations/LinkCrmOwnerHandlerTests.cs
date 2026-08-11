@@ -47,7 +47,8 @@ public sealed class LinkCrmOwnerHandlerTests
         var dealSource = Substitute.For<ICrmDealSource>();
         dealSource.SourceName.Returns(Source);
 
-        var handler = new LinkCrmOwnerHandler(db, tenantCtx, currentUser, clock, guid, authz, dealSource);
+        var handler = new LinkCrmOwnerHandler(db, tenantCtx, currentUser, clock, guid, authz,
+            new Wasnie.UnitTests.TestDoubles.FakePaidPlanGate(), dealSource);
         return new Harness { Db = db, Handler = handler, DealSource = dealSource, TenantId = tenantId };
     }
 

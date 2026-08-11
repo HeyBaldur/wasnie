@@ -5,6 +5,7 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Integrations.Crm;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Integrations.HubSpot;
 using Wasnie.Infrastructure.Identity;
 
@@ -38,6 +39,24 @@ public sealed class HubSpotTenantSyncJob(
     {
         // MUST set the tenant before any DB access — ApplicationDbContext.CurrentTenantId is lazy per-query.
         tenantCtx.SetTenant(tenantId);
+
+        // Second line of defence behind the orchestrator's filter, and not redundant: jobs are SCHEDULED
+        // with a stagger of up to hours, so a tenant that was paid at fan-out time can be on Free by the
+        // time its job actually runs. Checked before the connection is even read — nothing outbound
+        // happens for a tenant whose plan no longer includes this.
+        var tier = await db.Tenants
+            .IgnoreQueryFilters()
+            .Where(t => t.Id == tenantId)
+            .Select(t => (Tier?)t.Tier)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tier is null || !TierFeatures.IncludesPaidFeatures(tier.Value))
+        {
+            logger.LogInformation(
+                "HubSpot auto-sync skipped tenant {TenantId}: tier {Tier} does not include the integration.",
+                tenantId, tier);
+            return;
+        }
 
         var connection = await db.HubSpotConnections
             .IgnoreQueryFilters()

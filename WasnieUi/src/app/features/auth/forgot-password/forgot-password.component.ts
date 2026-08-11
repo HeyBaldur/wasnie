@@ -4,11 +4,21 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
+import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
 
 @Component({
   selector: 'app-forgot-password',
   standalone: true,
-  imports: [ReactiveFormsModule, TranslatePipe, RouterLink, WsInputComponent, WsButtonComponent],
+  imports: [
+    ReactiveFormsModule,
+    TranslatePipe,
+    RouterLink,
+    ThemeToggleComponent,
+    IconComponent,
+    WsInputComponent,
+    WsButtonComponent,
+  ],
   templateUrl: './forgot-password.component.html',
   styleUrl: './forgot-password.component.scss',
 })

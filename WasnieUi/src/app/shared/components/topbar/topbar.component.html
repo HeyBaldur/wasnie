@@ -61,6 +61,39 @@
       </button>
     }
 
+    <!--
+      The user manual, beside the user rather than in the sidebar: it is help, not a destination in the
+      product's navigation, and it sat oddly among Subscription / Integrations / Settings.
+
+      No permission gate — the manual documents the product, holds no tenant data, and hiding it would
+      keep the instructions from the users with the fewest rights, who need them most. Icon-only, so it
+      stays quiet next to the plan badge and the assistant.
+    -->
+    <!--
+      ★ A TOPBAR BUTTON, NOT `ws-button`, AND THE REASON IS THE SHAPE. It has to be the round 32px control
+      the avatar beside it already is; `ws-button` carries the design system's own radius and padding, and
+      forcing a circle onto it would mean reaching into a shared primitive with ::ng-deep to override
+      exactly the rules that make it consistent everywhere else. The topbar already styles its own
+      controls this way — the avatar and the plan badges are plain buttons — so this follows the file's
+      own precedent instead of bending a component from outside.
+
+      Keeps the secondary treatment asked for: bordered and neutral, not filled.
+    -->
+    <button
+      type="button"
+      class="topbar__manual-btn"
+      routerLink="/manual"
+      [title]="'NAV.MANUAL' | translate"
+    >
+      <app-icon name="info-circle" [size]="18" />
+      <!--
+        The accessible name. An icon-only button has none otherwise, and `aria-label` would have to sit on
+        this element anyway — projected text is what a screen reader reads out, and `title` covers the
+        sighted tooltip.
+      -->
+      <span class="topbar__sr-only">{{ 'NAV.MANUAL' | translate }}</span>
+    </button>
+
     <div class="topbar__avatar-wrapper">
       <button class="topbar__avatar-btn" (click)="toggleDropdown($event)">
         <span class="topbar__avatar">{{ userInitial() }}</span>

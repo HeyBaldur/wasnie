@@ -19,14 +19,17 @@ import { Router } from '@angular/router';
 import {
   AssistantMessage,
   internalRouteOf,
+  isCancelledReply,
   isPlaceholderReply,
   isUntitled,
+  phaseLabelKey,
 } from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
 import { WsConfirmationModalComponent } from '../../../shared/ui';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
+import { AssistantMathDirective } from '../pipes/assistant-math.directive';
 
 /**
  * The assistant's slide-over panel: right side, opens and closes over the app.
@@ -53,6 +56,7 @@ import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
     WsConfirmationModalComponent,
     IconComponent,
     AssistantMarkdownPipe,
+    AssistantMathDirective,
   ],
   templateUrl: './assistant-panel.component.html',
   styleUrl: './assistant-panel.component.scss',
@@ -76,6 +80,26 @@ export class AssistantPanelComponent {
    * doing that. What IS true at every moment: work is in progress and it may take a few seconds.
    */
   readonly waitingLong = signal(false);
+
+  /**
+   * How many reported steps make a list worth showing instead of the plain loader.
+   *
+   * Three, because two is the floor: every turn understands the question and then writes an answer, so
+   * a two-item list is what "nothing special happened" looks like — and a checklist that appears on
+   * every request, ticks twice and disappears is movement without information. At three the list is
+   * telling the user something they could not have assumed: the guide was consulted, or their records
+   * were read.
+   */
+  private static readonly MIN_STEPS_TO_LIST = 3;
+
+  /** True when this turn reported enough distinct work to be worth listing. */
+  readonly showSteps = computed(
+    () => this.store.progressSteps().length >= AssistantPanelComponent.MIN_STEPS_TO_LIST);
+
+  /** The translation key for a reported phase — see `phaseLabelKey` for the unknown-phase rule. */
+  phaseLabel(phase: string): string {
+    return phaseLabelKey(phase);
+  }
 
   /**
    * How long the answer may take before the wait is explained.
@@ -219,6 +243,15 @@ export class AssistantPanelComponent {
   }
 
   /**
+   * True when the row is an answer the user stopped, so the template says where it stops.
+   *
+   * Read from the STORED row — see `isCancelledReply`. Nothing about the click is remembered here.
+   */
+  isCancelled(message: AssistantMessage): boolean {
+    return isCancelledReply(message);
+  }
+
+  /**
    * ★ THE LINK INTERCEPTOR — what makes the assistant's guidance usable rather than destructive.
    *
    * The assistant now answers "how do I create a plan?" with steps and a link to `/plans/new`. Rendered
@@ -272,6 +305,14 @@ export class AssistantPanelComponent {
 
   onDraftChange(value: string): void {
     this.draft.set(value);
+  }
+
+  /**
+   * Stops the answer being written. See the store — the words already on screen are KEPT, and the
+   * composer is usable again immediately, which is the whole reason someone presses this.
+   */
+  async cancel(): Promise<void> {
+    await this.store.cancel();
   }
 
   /** Re-answers the last failed question. See the store — it does NOT re-send the message. */

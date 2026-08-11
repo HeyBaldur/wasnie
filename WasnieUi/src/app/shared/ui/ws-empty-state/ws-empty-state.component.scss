@@ -26,6 +26,40 @@
     width: 120px;
     height: 120px;
   }
+
+  // ── Video variant ───────────────────────────────────────────────────────────────────────────────
+  // A clip is the ARTWORK, not a monochrome glyph, so none of the rules above apply to it: the
+  // tertiary-grey tint and the 0.85 opacity that make the SVGs recede would just make it look broken,
+  // and the 160×120 icon box is far too small to read a 1280×720 frame in.
+  //
+  // It is framed like a real media object — surface, hairline border, radius and a lifted shadow —
+  // so it reads as a deliberate piece of the page instead of a bare <video> dropped on the canvas.
+  // The 16/9 ratio is declared rather than a fixed height: the box follows the clip's own shape, so
+  // a future clip of another size cannot letterbox itself inside a hardcoded rectangle.
+  &--video {
+    width: min(100%, 640px);
+    height: auto;
+    aspect-ratio: 16 / 9;
+    opacity: 1;
+    color: inherit;
+    margin-bottom: var(--space-4);
+    background: var(--color-bg-surface-sunken);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    // Clips the video's own corners to the frame's radius in Safari, which ignores `overflow: hidden`
+    // on a transformed/composited child like a playing <video>.
+    isolation: isolate;
+
+    // Only the HOST is reachable from here: the <video> inside ws-video carries that component's
+    // encapsulation attribute, so how the frame is filled is ws-video's own `fit` input, not a rule
+    // written here that would silently do nothing.
+    ws-video {
+      width: 100%;
+      height: 100%;
+    }
+  }
 }
 
 .ws-es__icon-wrap {
@@ -51,6 +85,25 @@
   color: var(--color-text-secondary);
   max-width: 380px;
   line-height: 1.5;
+}
+
+.ws-es__desc--rich {
+  // Nothing projected → no node at all, so the paragraph collapses instead of leaving a gap between
+  // the title and the buttons.
+  &:empty {
+    display: none;
+  }
+
+  a {
+    color: var(--color-brand);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      opacity: 0.8;
+    }
+  }
 }
 
 .ws-es__actions {

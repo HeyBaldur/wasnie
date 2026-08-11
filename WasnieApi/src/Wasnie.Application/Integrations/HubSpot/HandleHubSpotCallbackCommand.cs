@@ -7,6 +7,7 @@ using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Integrations.HubSpot;
 
@@ -52,6 +53,27 @@ public sealed class HandleHubSpotCallbackHandler(
 
         // One-time use: consume the state immediately so a replay can't reuse it.
         state.MarkUsed(now);
+
+        // ★ The plan is re-checked HERE, not only at /connect, and it cannot use IPaidPlanGate: this
+        // flow is anonymous, so there is no ambient tenant to ask about — the tenant comes from the
+        // state row. The window this closes is real: a tenant can start the OAuth flow on a paid plan
+        // and land back here after downgrading (or after the subscription lapses mid-handshake). Without
+        // this, that returns with live tokens the sync would then refuse to use, leaving credentials
+        // stored for a workspace that is not entitled to them.
+        var tier = await db.Tenants
+            .IgnoreQueryFilters()
+            .Where(t => t.Id == state.TenantId)
+            .Select(t => (Tier?)t.Tier)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tier is null || !TierFeatures.IncludesPaidFeatures(tier.Value))
+        {
+            logger.LogWarning(
+                "HubSpot callback refused for tenant {TenantId}: tier {Tier} does not include the integration.",
+                state.TenantId, tier);
+            await db.SaveChangesAsync(cancellationToken); // persist state consumption
+            return Result<Unit>.Failure("The HubSpot integration is not included in your current plan.");
+        }
 
         HubSpotTokenResult tokens;
         try

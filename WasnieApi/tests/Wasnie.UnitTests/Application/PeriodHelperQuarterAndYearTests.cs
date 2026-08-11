@@ -111,37 +111,30 @@ public sealed class PeriodHelperQuarterAndYearTests
     // ── prior-period comparisons ──────────────────────────────────────────────
 
     [Fact]
-    public void ThisQuarter_ComparesAgainstTheSameElapsedSliceOfThePreviousQuarter()
+    public void ThisQuarter_PacesAgainstTheWholePreviousQuarter()
     {
-        // 15 days into Q3 (1–15 July). The comparison must be 1–15 April, not the whole of Q2 —
-        // otherwise every quarter opens by reporting a collapse against a full previous quarter.
+        // 15 days into Q3. The baseline is ALL of Q2 — the total the quarter is pacing towards — and it
+        // is presented as pacing, never as a change percentage.
         var (from, to) = PeriodHelper.ComputePriorPeriodRange("this-quarter", new DateOnly(2026, 7, 15));
 
         from.Should().Be(new DateOnly(2026, 4, 1));
-        to.Should().Be(new DateOnly(2026, 4, 15));
+        to.Should().Be(new DateOnly(2026, 6, 30));
     }
 
     [Fact]
-    public void ThisQuarter_PriorSlice_IsClampedToTheShorterPreviousQuarter()
+    public void ThisQuarter_BaselineIsTheSameWhateverDayOfTheQuarterItIs()
     {
-        // Q2 2026 (Apr–Jun) is 91 days; Q1 2026 is 90. On the 91st day of Q2 the naive offset would
-        // land on 1 April — inside Q2 itself — and the "previous quarter" total would include days
-        // from the current one.
-        var lastDayOfQ2 = new DateOnly(2026, 6, 30);
+        // A whole-period baseline does not move as the quarter runs, so the target stays fixed and the
+        // pacing percentage only ever grows. Quarter lengths differ (Q1 90/91, Q3 and Q4 92) — with a
+        // whole-period baseline that no longer needs any clamping.
+        var firstDay = PeriodHelper.ComputePriorPeriodRange("this-quarter", new DateOnly(2026, 7, 1));
+        var midway = PeriodHelper.ComputePriorPeriodRange("this-quarter", new DateOnly(2026, 8, 15));
+        var lastDay = PeriodHelper.ComputePriorPeriodRange("this-quarter", new DateOnly(2026, 9, 30));
 
-        var (from, to) = PeriodHelper.ComputePriorPeriodRange("this-quarter", lastDayOfQ2);
-
-        from.Should().Be(new DateOnly(2026, 1, 1));
-        to.Should().Be(new DateOnly(2026, 3, 31), "clamped to the end of Q1, never spilling into Q2");
-    }
-
-    [Fact]
-    public void ThisQuarter_OnTheFirstDay_ComparesAgainstASingleDay()
-    {
-        var (from, to) = PeriodHelper.ComputePriorPeriodRange("this-quarter", new DateOnly(2026, 7, 1));
-
-        from.Should().Be(new DateOnly(2026, 4, 1));
-        to.Should().Be(new DateOnly(2026, 4, 1), "zero days elapsed → the first day of the prior quarter");
+        firstDay.Should().Be(midway);
+        midway.Should().Be(lastDay);
+        firstDay.From.Should().Be(new DateOnly(2026, 4, 1));
+        firstDay.To.Should().Be(new DateOnly(2026, 6, 30));
     }
 
     [Fact]
@@ -166,9 +159,9 @@ public sealed class PeriodHelperQuarterAndYearTests
     [Fact]
     public void Ytd_OnALeapDay_DoesNotThrow()
     {
-        // 29 February has no counterpart in a common year, and reconstructing that calendar date threw,
-        // so the dashboard failed to load for anyone opening it on a leap day. Elapsed-day arithmetic
-        // cannot build an invalid date, so the crash is now structurally impossible.
+        // 29 February has no counterpart in a common year, and reconstructing that calendar date threw —
+        // the dashboard failed to load for anyone opening it on a leap day. The baseline is now built
+        // from whole-period bounds, so there is no per-day date to reconstruct and nothing that can throw.
         var leapDay = new DateOnly(2028, 2, 29);
 
         var act = () => PeriodHelper.ComputePriorPeriodRange("ytd", leapDay);
@@ -176,10 +169,7 @@ public sealed class PeriodHelperQuarterAndYearTests
         act.Should().NotThrow();
         var (from, to) = PeriodHelper.ComputePriorPeriodRange("ytd", leapDay);
         from.Should().Be(new DateOnly(2027, 1, 1));
-        // 60 days of 2028 against 60 days of 2027. Under the universal elapsed-days rule the counterpart
-        // of 29 February is 1 March, not 28 February: a leap year genuinely has one more day by that
-        // point, and pacing compares equal amounts of time, not equal calendar labels.
-        to.Should().Be(new DateOnly(2027, 3, 1), "the same number of elapsed days, not the same date");
+        to.Should().Be(new DateOnly(2027, 12, 31), "the whole of the previous year, as the baseline");
     }
 
     // ── labels ────────────────────────────────────────────────────────────────

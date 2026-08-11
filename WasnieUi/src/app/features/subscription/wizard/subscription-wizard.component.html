@@ -3,14 +3,12 @@
   <header class="wizard-header">
     <div class="wizard-header__brand">
       <div class="wizard-header__monogram">
-        <img src="wasnie_logo.png" alt="Wasnie" />
+        <img src="wasnie_logo.png" alt="Incentra" />
       </div>
       <span class="wizard-header__name">{{ 'APP.NAME' | translate }}</span>
     </div>
 
     <div class="wizard-header__right">
-      <span class="wizard-header__step">{{ 'ONBOARDING.STEP_LABEL' | translate }}</span>
-      <span class="wizard-header__divider" aria-hidden="true"></span>
       <ws-button variant="ghost" size="sm" (click)="signOut()">
         {{ 'AUTH.LOGOUT' | translate }}
       </ws-button>
@@ -98,16 +96,11 @@
           <div class="pt-corner"></div>
           @for (plan of plans(); track plan.tier) {
             <div class="pt-header"
-                 [class.pt-header--featured]="plan.tier === 'Growth'"
-                 [class.pt-header--disabled]="isPaid(plan)">
+                 [class.pt-header--featured]="plan.tier === 'Growth'">
               <div class="pt-header__badge">
                 @if (plan.tier === 'Growth') {
                   <ws-badge variant="info" size="sm">
                     {{ 'ONBOARDING.POPULAR' | translate }}
-                  </ws-badge>
-                } @else if (isPaid(plan)) {
-                  <ws-badge variant="neutral" size="sm">
-                    {{ 'ONBOARDING.COMING_SOON' | translate }}
                   </ws-badge>
                 }
               </div>
@@ -136,6 +129,30 @@
           @for (plan of plans(); track plan.tier) {
             <div class="pt-cell" [class.pt-cell--featured]="plan.tier === 'Growth'">
               {{ maxPlansDisplay(plan) }}
+            </div>
+          }
+
+          <!-- ── Feature row: AI assistant (paid plans only) ─────────────── -->
+          <div class="pt-label pt-label--stripe">{{ 'ONBOARDING.COL_ASSISTANT' | translate }}</div>
+          @for (plan of plans(); track plan.tier) {
+            <div class="pt-cell pt-cell--stripe" [class.pt-cell--featured]="plan.tier === 'Growth'">
+              @if (isPaid(plan)) {
+                <span class="pt-cell__yes">✓ {{ 'ONBOARDING.INCLUDED' | translate }}</span>
+              } @else {
+                <span class="pt-cell__no">{{ 'ONBOARDING.NOT_INCLUDED' | translate }}</span>
+              }
+            </div>
+          }
+
+          <!-- ── Feature row: HubSpot integration (paid plans only) ──────── -->
+          <div class="pt-label">{{ 'ONBOARDING.COL_HUBSPOT' | translate }}</div>
+          @for (plan of plans(); track plan.tier) {
+            <div class="pt-cell" [class.pt-cell--featured]="plan.tier === 'Growth'">
+              @if (isPaid(plan)) {
+                <span class="pt-cell__yes">✓ {{ 'ONBOARDING.INCLUDED' | translate }}</span>
+              } @else {
+                <span class="pt-cell__no">{{ 'ONBOARDING.NOT_INCLUDED' | translate }}</span>
+              }
             </div>
           }
 

@@ -330,7 +330,7 @@ public sealed class AssistantRoutingTests
         system.Should().Contain("ONLY SOURCE OF TRUTH");
         system.Should().Contain("SAY WHEN YOU DO NOT KNOW");
         system.Should().Contain("NEVER invent a feature");
-        system.Should().Contain("STAY ON WASNIE");
+        system.Should().Contain("STAY ON INCENTRA");
         system.Should().Contain("YOU EXPLAIN, YOU DO NOT ACT");
         system.Should().Contain("Remember: answer only from the documentation");
     }

@@ -1,5 +1,9 @@
 <div class="ws-es">
-  @if (illustrationHtml()) {
+  @if (video()) {
+    <div class="ws-es__illustration ws-es__illustration--video">
+      <ws-video [src]="video()" [poster]="videoPoster()" />
+    </div>
+  } @else if (illustrationHtml()) {
     <div class="ws-es__illustration" [innerHTML]="illustrationHtml()"></div>
   } @else if (icon()) {
     <div class="ws-es__icon-wrap">
@@ -11,6 +15,14 @@
   @if (descKey()) {
     <p class="ws-es__desc">{{ descKey() | translate }}</p>
   }
+
+  <!--
+    Escape hatch for a description that contains real links or emphasis. Projected rather than passed
+    as a string and rendered with [innerHTML]: an <a routerLink> in here is a genuine router link that
+    the app navigates without a page reload, and no translated text is ever handed to the sanitiser.
+    Renders nothing (and takes no space — see the `:empty` rule) when the caller projects nothing.
+  -->
+  <p class="ws-es__desc ws-es__desc--rich"><ng-content select="[slot=desc]" /></p>
 
   <div class="ws-es__actions">
     @if (actionKey() && actionRoute()) {

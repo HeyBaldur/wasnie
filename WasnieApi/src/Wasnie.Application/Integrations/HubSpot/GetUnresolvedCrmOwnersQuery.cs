@@ -19,6 +19,7 @@ public sealed class GetUnresolvedCrmOwnersHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     ICrmDealSource dealSource)
     : IRequestHandler<GetUnresolvedCrmOwnersQuery, Result<UnresolvedCrmOwnersDto>>
 {
@@ -26,6 +27,10 @@ public sealed class GetUnresolvedCrmOwnersHandler(
         GetUnresolvedCrmOwnersQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         var source = dealSource.SourceName;
 

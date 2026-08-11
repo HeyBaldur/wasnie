@@ -487,3 +487,15 @@
   }
 
 }
+
+// "Paid on" — the payment date that explains why a row matches a payment-date filter.
+.payouts-list__paid-on {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+// Not paid yet: a muted dash rather than a blank cell, so an empty value reads as "no payment date"
+// instead of "data missing".
+.payouts-list__paid-on--none {
+  color: var(--color-text-tertiary);
+}

@@ -17,7 +17,11 @@ public sealed record HubSpotConnectionStatusDto(
     // Phase 3: when the automatic polling sync last ran successfully for this tenant. Null = never auto-synced.
     DateTimeOffset? LastSyncedAt = null,
     // WI-CRM-CATEGORY: the HubSpot property the tenant declared feeds Category. Null = not configured.
-    string? CategoryPropertyName = null);
+    string? CategoryPropertyName = null,
+    // True when the tenant is on Free: every operation below is refused and the auto-sync skips them.
+    // Status still reports the truth — a tenant that connected while paying and then downgraded reads
+    // "Connected" AND RequiresUpgrade, which is exactly the frozen state the UI has to explain.
+    bool RequiresUpgrade = false);
 
 /// <summary>Result of the verification "ping" — non-secret account info proving the token works.</summary>
 public sealed record HubSpotPingResultDto(

@@ -52,6 +52,16 @@ public sealed class AssistantSectionRouter(
         "Return ONLY a JSON object of the form {\"sections\": [\"s3\", \"s17\"]}. No prose, no explanation.";
 
     /// <summary>
+    /// Whether routing will actually happen, or whether <see cref="RouteAsync"/> will return empty
+    /// without asking anything.
+    ///
+    /// Asked by the streaming handler before it announces the "understanding" step: with no guide
+    /// loaded there is nothing to route, and reporting a step that nobody performed is precisely what
+    /// these events must never do.
+    /// </summary>
+    public bool CanRoute => knowledge.IsAvailable && knowledge.Sections.Count > 0;
+
+    /// <summary>
     /// The ids the question needs. An EMPTY list is a real answer — "nothing here covers this" — and
     /// the caller must treat it as such rather than as a failure.
     /// </summary>

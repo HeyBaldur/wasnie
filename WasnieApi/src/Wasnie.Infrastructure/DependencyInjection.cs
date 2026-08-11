@@ -25,7 +25,9 @@ using Wasnie.Infrastructure.Services.HubSpot;
 using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Infrastructure.Integrations.Groq;
 using Wasnie.Infrastructure.Integrations.OpenRouter;
+using Wasnie.Application.Manual;
 using Wasnie.Infrastructure.Services.Assistant;
+using Wasnie.Infrastructure.Services.Manual;
 using Wasnie.Infrastructure.Services.Imports;
 
 namespace Wasnie.Infrastructure;
@@ -69,6 +71,7 @@ public static class DependencyInjection
         // services because it is answered the same way — and kept separate from them because it is an
         // entitlement (per user, headed for per-seat billing), not a role permission.
         services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
+        services.AddScoped<IPaidPlanGate, PaidPlanGate>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -154,6 +157,13 @@ public static class DependencyInjection
         // reason and separate from the knowledge base because it is a separate artefact with its own
         // lifecycle — see IUiNavigationMap.
         services.AddSingleton<IUiNavigationMap, FileUiNavigationMap>();
+        // The user manual PDF, served ONLY behind the API's authentication — there is no public URL for
+        // it anywhere. Bound without ValidateOnStart for the usual reason: an installation that has not
+        // received the manual yet must still start, and the screen says so instead of the API refusing
+        // to run. Singleton because it caches the bytes after the first successful read.
+        services.AddOptions<UserManualOptions>()
+            .Bind(configuration.GetSection(UserManualOptions.SectionName));
+        services.AddSingleton<IUserManualSource, FileUserManualSource>();
         // Step one of the two-step answer: picks the sections a question needs. Scoped because it
         // depends on the scoped provider; it holds no state of its own.
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantSectionRouter>();
@@ -162,6 +172,7 @@ public static class DependencyInjection
         // the tenant filter and the permission guards see the real caller. A singleton here would be a
         // tool holding somebody else's identity.
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetTransactionTool>();
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPlanRulesTool>();
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();

@@ -131,15 +131,34 @@ public sealed record DashboardPeriodBandDto(
 public sealed record DashboardTrendBandDto(
     string CurrentPeriodLabel,
     string PriorPeriodLabel,
-    IReadOnlyList<DashboardTrendPointDto> CommissionTrend);
+    IReadOnlyList<DashboardTrendPointDto> CommissionTrend,
+    // True when the selected period is still RUNNING. The band then reports PACING — how far the period
+    // has got against the previous period's total — instead of a change percentage. Both cases compare
+    // against the same window; only the presentation differs.
+    bool IsPacing = false,
+    // The exact windows the two bars represent, so the UI can drill from either bar down to the payouts
+    // that make it up. Sent from here rather than recomputed in the browser: PeriodHelper is the single
+    // source of truth for what a period covers, and a second implementation would drift from it.
+    DateOnly? CurrentFrom = null,
+    DateOnly? CurrentTo = null,
+    DateOnly? PriorFrom = null,
+    DateOnly? PriorTo = null);
 
-// One row per currency: current amount, prior amount, % change
+// One row per currency: current amount, prior amount, and either a % change (closed period) or a pacing
+// percentage (running period) — never both.
 public sealed record DashboardTrendPointDto(
     string Currency,
     decimal CurrentAmount,
     decimal PriorAmount,
-    decimal? ChangePercent,   // null if prior = 0 (no meaningful base)
-    string Direction);        // "up" | "down" | "neutral"
+    decimal? ChangePercent,   // null if prior = 0 (no meaningful base) — ALWAYS null while pacing
+    string Direction,         // "up" | "down" | "neutral" | "pacing"
+    // Running periods only: CurrentAmount as a percentage of the previous period's TOTAL. Can exceed 100
+    // once the baseline is beaten, which is a good outcome and is rendered as such. Null when the
+    // previous period total is zero, since there is no baseline to pace against.
+    //
+    // Deliberately NOT a change percentage: €500 of August against all €4,939 of July is -89.9%, and
+    // showing that as a red down arrow every first of the month reads as a collapse that never happened.
+    decimal? PacingPercent = null);
 
 // ── Activity feed ───────────────────────────────────────────────────────────
 

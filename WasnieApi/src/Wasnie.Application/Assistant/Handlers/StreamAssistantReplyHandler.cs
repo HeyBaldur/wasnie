@@ -2,6 +2,7 @@
 using System.Text;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Application.Assistant.Commands;
@@ -40,7 +41,8 @@ public sealed class StreamAssistantReplyHandler(
     IUiNavigationMap navigation,
     AssistantSectionRouter router,
     AssistantToolRunner toolRunner,
-    IOptions<GroqOptions> options)
+    IOptions<GroqOptions> options,
+    ILogger<StreamAssistantReplyHandler> logger)
     : IStreamRequestHandler<StreamAssistantReplyCommand, AssistantStreamEvent>
 {
     public async IAsyncEnumerable<AssistantStreamEvent> Handle(
@@ -86,9 +88,20 @@ public sealed class StreamAssistantReplyHandler(
                 yield break;
             }
 
-            // The failed attempt persisted no assistant row (see below), so the next slot is still the
-            // one the first attempt would have used.
-            nextSequence = userMessage.Sequence;
+            // ★ THE ANSWER GOES AFTER EVERYTHING THAT IS ALREADY STORED, which is not the same thing as
+            // "after the question" any more.
+            //
+            // A FAILED turn stored no assistant row, so the last message IS the question and this is
+            // exactly the slot the first attempt would have used — unchanged behaviour.
+            //
+            // A CANCELLED turn did store one: the partial answer the user watched arrive and chose to
+            // stop. Reusing the question's slot would write the new answer on top of a sequence that is
+            // taken, and (ConversationId, Sequence) is a UNIQUE index — the retry would not produce a
+            // wrong thread, it would produce a failed save. So the retry APPENDS: the stopped attempt
+            // stays where it is, still marked, and the new answer lands after it. That is also the
+            // honest shape of what happened — the user has both the fragment they stopped and the
+            // answer they asked for again.
+            nextSequence = history[^1].Sequence;
         }
         else
         {
@@ -146,6 +159,24 @@ public sealed class StreamAssistantReplyHandler(
             yield break;
         }
 
+        // ★ THE STEPS THE USER WATCHES, AND WHY THEY ARE EMITTED FROM HERE.
+        //
+        // The panel used to show one fixed sentence for however long the turn took, because the browser
+        // genuinely does not know what is happening — and inventing a stage on a stopwatch would be the
+        // one place in this feature that asserts something it cannot verify. This handler DOES know. So
+        // the steps are reported from the only place that can report them honestly, and each one is
+        // emitted only on the turns where that work really occurs: a documentation question never
+        // announces a database search, and a turn with no guide loaded never announces reading one.
+        //
+        // Every `progress` frame is ADDITIVE. It carries no answer, no stored row and no failure, so a
+        // client that ignores the type behaves exactly as it did before this existed.
+        var classifies = router.CanRoute || toolRunner.HasTools;
+
+        if (classifies)
+        {
+            yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.Understanding);
+        }
+
         // ── Step 1: which sections does this question need? ──────────────────
         // A small call against the table of contents only. Its result decides what step 2 carries.
         // Failing here is the same class of failure as failing to answer, and reaches the user the
@@ -171,12 +202,12 @@ public sealed class StreamAssistantReplyHandler(
             yield break;
         }
 
-        // Empty is a real answer, not a miss: the prompt below becomes the no-source one, which tells
-        // the user plainly that the documentation does not cover this.
-        var routed = knowledge.TextFor(sectionIds);
-
-        // ── Step 1.5: does this question need a RECORD, not just the documentation? ──
+        // ── Step 1.5, first half: does this question need a RECORD, not just the documentation? ──
         // Read-only, through the domain, with this user's identity — see GetTransactionTool.
+        //
+        // ★ THE DECISION IS TAKEN BEFORE THE STEP IS ANNOUNCED, which is why the runner is now two
+        // calls. "Searching your records" is only worth showing before the search and only on the turns
+        // where a search happens; both need the choice to be visible before the read.
         //
         // ★ A LOOKUP THAT COULD NOT RUN ENDS THE TURN. It used to degrade to "answer without live
         // data", and the model did not treat the absence as an absence: asked about a named
@@ -184,17 +215,62 @@ public sealed class StreamAssistantReplyHandler(
         // row it never queried and that they can see on their own screen. The user now gets the
         // warning card and the retry button, both of which are true, instead of a confident wrong
         // answer that looks exactly like a correct refusal.
-        var lookup = await toolRunner.RunAsync(question, cancellationToken);
+        var selection = await toolRunner.SelectAsync(question, history, cancellationToken);
 
-        if (lookup.DidFail)
+        // Both classifier calls are behind us: the one step the user was shown is genuinely finished.
+        // A FAILED decision gets no `done` — the error frame below is what ends that turn.
+        if (classifies && !selection.DidFail)
+        {
+            yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.Understanding);
+        }
+
+        if (selection.DidFail)
         {
             // Nothing was written for the assistant, so there is nothing to undo — the question stays
             // in the thread and Retry re-answers it.
-            yield return AssistantStreamEvent.OfError(lookup.FailureReasonKey!);
+            yield return AssistantStreamEvent.OfError(selection.FailureReasonKey!);
             yield break;
         }
 
-        var toolData = lookup.Data;
+        // Empty is a real answer, not a miss: the prompt below becomes the no-source one, which tells
+        // the user plainly that the documentation does not cover this. And that is exactly why the step
+        // is announced only when sections were found — "consulting the documentation" over an empty
+        // routing result would describe a consultation that did not take place.
+        var consultsDocs = sectionIds.Count > 0;
+
+        if (consultsDocs)
+        {
+            yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.ReadingDocs);
+        }
+
+        var routed = knowledge.TextFor(sectionIds);
+
+        if (consultsDocs)
+        {
+            yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.ReadingDocs);
+        }
+
+        // ── Step 1.5, second half: run what was chosen, if anything was. ──
+        var toolData = string.Empty;
+
+        if (selection.WillRead)
+        {
+            yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.SearchingData);
+
+            var lookup = await toolRunner.ExecuteAsync(selection, cancellationToken);
+
+            if (lookup.DidFail)
+            {
+                // No `done` for a step that failed, and no answer either: the error frame is the end of
+                // this turn. The question stays in the thread and Retry re-answers it.
+                yield return AssistantStreamEvent.OfError(lookup.FailureReasonKey!);
+                yield break;
+            }
+
+            yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.SearchingData);
+
+            toolData = lookup.Data;
+        }
 
         // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
         // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.
@@ -202,6 +278,14 @@ public sealed class StreamAssistantReplyHandler(
             history, options.Value.MaxHistoryMessages, routed, knowledge.IsAvailable,
             navigation.PromptBlock, toolData);
         var answer = new StringBuilder();
+
+        // ★ THE BELT. Raising the generation model is the fix for the repetition collapse; this is what
+        // guarantees the user never reads one anyway. See DegenerationGuard.
+        var guard = new DegenerationGuard();
+
+        // The last step, and the only one that is always present: something is always written, even if
+        // the turn needed neither the guide nor a record.
+        yield return AssistantStreamEvent.OfPhaseStart(AssistantPhase.Generating);
 
         // The enumerator is stepped by hand so a provider failure can be caught: `yield return` is not
         // allowed inside a try/catch that has a catch clause, and wrapping the whole loop would mean
@@ -227,7 +311,8 @@ public sealed class StreamAssistantReplyHandler(
             }
             catch (OperationCanceledException)
             {
-                // The user closed the panel or navigated away. There is nobody left to tell.
+                // The client is gone: Stop was pressed, the panel was closed, the tab navigated away.
+                // Nobody is listening to this stream any more — see below for what is written.
                 abandoned = true;
             }
             catch (Exception)
@@ -239,6 +324,39 @@ public sealed class StreamAssistantReplyHandler(
 
             if (abandoned)
             {
+                // ★ THE ONE PLACE SOMETHING PARTIAL IS STORED, AND WHY IT IS NOT A HOLE IN THAT RULE.
+                //
+                // "Nothing partial is ever stored" exists so the user never finds a reply that stops
+                // mid-sentence and reads it as the assistant's finished opinion. A cancellation is the
+                // case where the partial answer is not an accident: the user WATCHED these words
+                // arrive and then chose to stop them. Dropping them would erase what was on their
+                // screen a moment ago and leave the thread claiming their question was never answered
+                // — offering a retry for a turn they deliberately ended.
+                //
+                // So it is kept, and it is kept MARKED: the row carries `Cancelled`, which is what
+                // stops it from ever passing for a finished answer here or in any client. That mark is
+                // the whole reason storing it is safe.
+                //
+                // ★ NOTHING IS WRITTEN WHEN NOTHING WAS WRITTEN YET. Cancelling during the classifier
+                // or the lookup leaves an empty builder, and an empty row is not a shorter answer —
+                // it is a blank bubble. That turn stays unanswered, which is exactly what it is, and
+                // the existing retry path covers it.
+                //
+                // ★ THE SAVE USES `CancellationToken.None` ON PURPOSE. The request's token is ALREADY
+                // cancelled — that is how we got here — so passing it would abort the write that this
+                // whole branch exists to perform, and the answer the user watched would be lost to the
+                // very click meant to preserve it. The work is deliberately small and bounded: one
+                // insert of text already in memory, no provider call (that connection is what just
+                // ended).
+                var interrupted = answer.ToString().Trim();
+
+                if (interrupted.Length > 0)
+                {
+                    await PersistAssistantAsync(
+                        conversation.Id, interrupted, nextSequence + 1, clock.UtcNowOffset,
+                        CancellationToken.None, AssistantMessageStatus.Cancelled);
+                }
+
                 yield break;
             }
 
@@ -255,8 +373,29 @@ public sealed class StreamAssistantReplyHandler(
                 break;
             }
 
+            if (guard.Observe(fragment))
+            {
+                // ★ A COLLAPSE IS A TECHNICAL FAILURE, and it takes the path technical failures already
+                // take: the fragment is NOT forwarded, nothing is persisted (the assistant row is only
+                // written after a clean finish), and the user gets the warning card with Retry. "Try
+                // again" is true; a wall of repeated words is not something anyone can act on.
+                logger.LogError(
+                    "The assistant's answer degenerated and was cut off: {Reason}.", guard.Reason);
+                yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+                yield break;
+            }
+
             answer.Append(fragment);
             yield return AssistantStreamEvent.OfFragment(fragment);
+        }
+
+        if (guard.Finish())
+        {
+            // The run ended on the last word, with no trailing punctuation to close it.
+            logger.LogError(
+                "The assistant's answer degenerated and was cut off: {Reason}.", guard.Reason);
+            yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+            yield break;
         }
 
         var text = answer.ToString().Trim();
@@ -272,11 +411,21 @@ public sealed class StreamAssistantReplyHandler(
         var assistantMessage = await PersistAssistantAsync(
             conversation.Id, text, nextSequence + 1, clock.UtcNowOffset, cancellationToken);
 
+        // Closes the last step for symmetry — every start this handler emits has exactly one matching
+        // done, or an error frame in its place. The panel has long since swapped the steps for the
+        // answer by now; the invariant is for whatever reads this stream next.
+        yield return AssistantStreamEvent.OfPhaseDone(AssistantPhase.Generating);
         yield return AssistantStreamEvent.OfDone(AssistantMapper.ToDto(assistantMessage));
     }
 
+    /// <param name="status">
+    /// <see cref="AssistantMessageStatus.Cancelled"/> only for the interrupted branch above — every
+    /// other caller is storing an answer that finished.
+    /// </param>
     private async Task<AssistantMessage> PersistAssistantAsync(
-        Guid conversationId, string content, int sequence, DateTimeOffset now, CancellationToken cancellationToken)
+        Guid conversationId, string content, int sequence, DateTimeOffset now,
+        CancellationToken cancellationToken,
+        AssistantMessageStatus status = AssistantMessageStatus.Complete)
     {
         // Truncated rather than rejected: a model that overruns the column has still written something
         // the user watched arrive, and refusing to store it would erase what they just read.
@@ -286,7 +435,7 @@ public sealed class StreamAssistantReplyHandler(
 
         var message = AssistantMessage.Create(
             guid.NewGuid(), conversationId, tenantContext.TenantId,
-            AssistantMessageRole.Assistant, stored, sequence, now);
+            AssistantMessageRole.Assistant, stored, sequence, now, payload: null, status: status);
 
         db.AssistantMessages.Add(message);
         await db.SaveChangesAsync(cancellationToken);

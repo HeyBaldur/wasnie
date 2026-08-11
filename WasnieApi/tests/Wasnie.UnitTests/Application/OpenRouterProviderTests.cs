@@ -257,7 +257,7 @@ public sealed class OpenRouterProviderTests
 
         await provider.CompleteJsonAsync([new ChatMessage(ChatMessage.UserRole, "x")], CancellationToken.None);
 
-        transport.Request!.Headers.GetValues("X-Title").Should().Contain("Wasnie");
+        transport.Request!.Headers.GetValues("X-Title").Should().Contain("Incentra");
         transport.Request.Headers.GetValues("HTTP-Referer").Should().NotBeEmpty();
         // A product name and a public URL — nothing about the user, nothing about the key.
         transport.Request.Headers.GetValues("X-Title").Should().NotContain(v => v.Contains("sk-or"));

@@ -5,11 +5,12 @@ import { IconComponent } from '../icon/icon.component';
 import { AssistantTriggerComponent } from '../../../features/assistant/trigger/assistant-trigger.component';
 import { Router } from '@angular/router';
 import { SubscriptionService } from '../../../features/subscription/services/subscription.service';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent],
+  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent, RouterLink],
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })

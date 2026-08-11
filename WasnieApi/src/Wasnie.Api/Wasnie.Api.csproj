@@ -33,4 +33,30 @@
     <UserSecretsId>wasnie-api-1f4c9a72-6d3b-4e51-9c88-2a7f5b0e6d14</UserSecretsId>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      The user manual, LINKED from `docs/` rather than copied — the same mechanism, and for the same
+      reason, as `Wasnie_Configuration_Guide.md` in Wasnie.Infrastructure.csproj: this is the file the
+      team publishes, so updating the manual is replacing that document and rebuilding. A second copy
+      under this project would drift, and a manual that disagrees with the published one is worse than
+      no manual.
+
+      ★ WHY NOT `bin/`: the manual's default location is `Knowledge/` inside the OUTPUT directory, which
+      is generated and which `dotnet clean` deletes. A PDF dropped straight there works until the day it
+      silently does not, and nothing connects its disappearance to the clean that caused it. Linking from
+      source means every build puts it back.
+
+      ★ A LITERAL PATH IS SAFE HERE ONLY BECAUSE THE FILE IS IN THE REPOSITORY. If the manual ever moves
+      out of `docs/` — too large to version, or licensed separately — this include starts failing the
+      build for everyone who does not have it, and it must become a wildcard (`Knowledge\*.pdf` beside a
+      gitignored drop folder) rather than a literal.
+
+      In production the manual generally lives OUTSIDE the deployment folder so a redeploy cannot wipe
+      it; point `UserManual:FilePath` at it there.
+    -->
+    <Content Include="..\..\..\docs\Wasnie_User_Manual.pdf"
+             Link="Knowledge\Wasnie_User_Manual.pdf"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

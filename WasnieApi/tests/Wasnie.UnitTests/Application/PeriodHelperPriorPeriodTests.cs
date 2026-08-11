@@ -10,21 +10,21 @@ public sealed class PeriodHelperPriorPeriodTests
     // ── ComputePriorPeriodRange ─────────────────────────────────────────────
 
     [Fact]
-    public void ThisMonth_PriorPeriod_IsTheEquivalentSliceOfLastMonth()
+    public void ThisMonth_PriorPeriod_IsTheWholeOfLastMonth()
     {
-        // Today is 10 June, so nine days have elapsed. The comparison is 1-10 May, NOT all of May:
-        // a running month measured against a full previous month reports a collapse that never happened.
+        // The baseline a running month paces towards is the previous month's TOTAL. It is presented as
+        // pacing, never as a change percentage — see PeriodHelperTrendInvariantTests.
         var (from, to) = PeriodHelper.ComputePriorPeriodRange("this-month", Today);
         from.Should().Be(new DateOnly(2026, 5, 1));
-        to.Should().Be(new DateOnly(2026, 5, 10));
+        to.Should().Be(new DateOnly(2026, 5, 31));
     }
 
     [Fact]
-    public void ActiveAlias_PriorPeriod_IsTheEquivalentSliceOfLastMonth()
+    public void ActiveAlias_PriorPeriod_IsTheWholeOfLastMonth()
     {
         var (from, to) = PeriodHelper.ComputePriorPeriodRange("active", Today);
         from.Should().Be(new DateOnly(2026, 5, 1));
-        to.Should().Be(new DateOnly(2026, 5, 10));
+        to.Should().Be(new DateOnly(2026, 5, 31));
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class PeriodHelperPriorPeriodTests
     {
         var (from, to) = PeriodHelper.ComputePriorPeriodRange(null, Today);
         from.Should().Be(new DateOnly(2026, 5, 1));
-        to.Should().Be(new DateOnly(2026, 5, 10));
+        to.Should().Be(new DateOnly(2026, 5, 31));
     }
 
     [Fact]
@@ -44,11 +44,12 @@ public sealed class PeriodHelperPriorPeriodTests
     }
 
     [Fact]
-    public void Ytd_PriorPeriod_IsSameRangeLastYear()
+    public void Ytd_PriorPeriod_IsTheWholeOfLastYear()
     {
+        // YTD paces against last year's full total, the same way this-month paces against last month's.
         var (from, to) = PeriodHelper.ComputePriorPeriodRange("ytd", Today);
         from.Should().Be(new DateOnly(2025, 1, 1));
-        to.Should().Be(new DateOnly(2025, 6, 10));
+        to.Should().Be(new DateOnly(2025, 12, 31));
     }
 
     [Fact]
@@ -62,11 +63,11 @@ public sealed class PeriodHelperPriorPeriodTests
     [Fact]
     public void ThisMonth_OnJanuary_PriorIsDecemberPreviousYear()
     {
-        // The year rollover still resolves to December, and the slice rule still applies inside it.
+        // The year rollover resolves to the whole of December.
         var jan10 = new DateOnly(2026, 1, 10);
         var (from, to) = PeriodHelper.ComputePriorPeriodRange("this-month", jan10);
         from.Should().Be(new DateOnly(2025, 12, 1));
-        to.Should().Be(new DateOnly(2025, 12, 10));
+        to.Should().Be(new DateOnly(2025, 12, 31));
     }
 
     // ── GetPeriodLabel ──────────────────────────────────────────────────────

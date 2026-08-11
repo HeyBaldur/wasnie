@@ -2,11 +2,11 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { DashboardComponent } from './dashboard.component';
 import { DashboardStore } from './store/dashboard.store';
-import { DashboardSummary, DashboardTrendPoint } from './models/dashboard.models';
+import { DashboardSummary, DashboardTrendBand, DashboardTrendPoint } from './models/dashboard.models';
 
 // ── DashboardComponent helpers ────────────────────────────────────────────────
 
@@ -66,6 +66,118 @@ describe('DashboardComponent helpers', () => {
   });
 
   // ── Trend edge-case tests ───────────────────────────────────────────────────
+
+  // ── Polymorphic card: one skeleton, two states ─────────────────────────────
+  // The card renders ONE structure for both trend and progress — same chart, same axis, same badge
+  // geometry, same footer. Only text and colour differ, and these helpers are where that lives.
+  describe('badge and footer polymorphism', () => {
+    const pacingPoint = (pacingPercent: number | null): DashboardTrendPoint => ({
+      currency: 'EUR', currentAmount: 500, priorAmount: 4939,
+      changePercent: null, direction: 'pacing', pacingPercent,
+    });
+    const closedPoint = (
+      changePercent: number | null,
+      direction: DashboardTrendPoint['direction'],
+    ): DashboardTrendPoint => ({
+      currency: 'EUR', currentAmount: 4939, priorAmount: 181715,
+      changePercent, direction,
+    });
+
+    // buildMockSummary only overrides the action band and leaves trendBand null, so the band is set
+    // explicitly here — isPacing is exactly what the helpers under test read.
+    const setPacing = (isPacing: boolean) => {
+      const summary = buildMockSummary();
+      summary.trendBand = {
+        currentPeriodLabel: 'August 2026',
+        priorPeriodLabel: 'July 2026',
+        commissionTrend: [],
+        isPacing,
+        currentFrom: '2026-08-01',
+        currentTo: '2026-08-05',
+        priorFrom: '2026-07-01',
+        priorTo: '2026-07-31',
+      };
+      component.store.summary.set(summary);
+    };
+
+    it('reports a baseline when the previous period had a total', () => {
+      expect(component.hasPacingBase(pacingPoint(10.12))).toBeTrue();
+    });
+
+    it('reports no baseline when the previous total was zero', () => {
+      expect(component.hasPacingBase(pacingPoint(null))).toBeFalse();
+    });
+
+    it('rounds the pacing percentage for display', () => {
+      expect(component.pacingPercent(pacingPoint(10.12))).toBe(10);
+      expect(component.pacingPercent(pacingPoint(10.62))).toBe(11);
+    });
+
+    it('treats reaching the baseline as exceeded (a positive outcome)', () => {
+      expect(component.pacingExceeded(pacingPoint(100))).toBeTrue();
+      expect(component.pacingExceeded(pacingPoint(99.9))).toBeFalse();
+    });
+
+    // ★ THE GUARD: a running period can never render the red badge or the arrow.
+    it('never shows a negative badge or an arrow while pacing', () => {
+      setPacing(true);
+      for (const pct of [0, 10, 99.9, 100, 150, null]) {
+        const p = pacingPoint(pct);
+        expect(component.badgeIsNegative(p)).withContext(`pacing ${pct}`).toBeFalse();
+        expect(component.badgeShowsArrow(p)).withContext(`pacing ${pct}`).toBeFalse();
+      }
+    });
+
+    it('shows a positive badge while pacing only once the baseline is beaten', () => {
+      setPacing(true);
+      expect(component.badgeIsPositive(pacingPoint(99))).toBeFalse();
+      expect(component.badgeIsPositive(pacingPoint(120))).toBeTrue();
+      expect(component.badgeIsPositive(pacingPoint(null))).toBeFalse();
+    });
+
+    it('uses the pacing badge text when there is a baseline, "New" when there is none', () => {
+      setPacing(true);
+      expect(component.badgeText(pacingPoint(10))).toBe('DASHBOARD.PACING_PILL');
+      expect(component.badgeParams(pacingPoint(10))).toEqual({ percent: 10 });
+      expect(component.badgeText(pacingPoint(null))).toBe('DASHBOARD.TREND_NO_BASE');
+      expect(component.badgeParams(pacingPoint(null))).toEqual({});
+    });
+
+    it('keeps the arrow and the red badge for a CLOSED period', () => {
+      setPacing(false);
+      const down = closedPoint(-97.3, 'down');
+      expect(component.badgeIsNegative(down)).toBeTrue();
+      expect(component.badgeShowsArrow(down)).toBeTrue();
+      expect(component.badgeText(down)).toBe('-97.3%');
+
+      const up = closedPoint(12.5, 'up');
+      expect(component.badgeIsPositive(up)).toBeTrue();
+    });
+
+    it('falls back to "New" for a closed period with no usable base', () => {
+      setPacing(false);
+      const noBase = closedPoint(null, 'neutral');
+      expect(component.badgeText(noBase)).toBe('DASHBOARD.TREND_NO_BASE');
+      expect(component.badgeShowsArrow(noBase)).toBeFalse();
+    });
+
+    it('switches only the footer WORDING between the two states', () => {
+      setPacing(true);
+      expect(component.footerLabel()).toBe('DASHBOARD.PACING_BASELINE');
+      setPacing(false);
+      expect(component.footerLabel()).toBe('DASHBOARD.TREND_PRIOR');
+    });
+
+    // The chart is the same call in both states — that is what keeps the axis and bars from moving.
+    it('builds the same two-bar structure for both states', () => {
+      const bars = component.trendBarPoints(pacingPoint(10), 'August 2026', 'July 2026');
+      expect(bars.length).toBe(2);
+      expect(bars[0].label).toBe('July 2026');
+      expect(bars[0].isCurrent).toBeFalsy();
+      expect(bars[1].label).toBe('August 2026');
+      expect(bars[1].isCurrent).toBeTrue();
+    });
+  });
 
   describe('trendIsNoBase', () => {
     const makePoint = (changePercent: number | null, priorAmount = 100): DashboardTrendPoint => ({
@@ -358,6 +470,25 @@ describe('DashboardComponent helpers', () => {
       expect(component.periodOptions.map(o => o.value)).not.toContain('all-time');
     });
 
+    // The filter is a WsSelect (a ControlValueAccessor), so the period travels through a FormControl
+    // rather than a [value]/(valueChange) pair. These pin the two directions of that wiring: picking an
+    // option must reach the store, and the control must show the period already in effect.
+    it('selecting an option in the period control updates the store', () => {
+      component.periodControl.setValue('this-quarter');
+      expect(component.store.period()).toBe('this-quarter');
+    });
+
+    it('the period control starts on the store\'s current period', () => {
+      expect(component.periodControl.value).toBe(component.store.period());
+    });
+
+    it('every option value is a period the store accepts', () => {
+      for (const opt of component.periodOptions) {
+        component.periodControl.setValue(String(opt.value));
+        expect(component.store.period()).toBe(String(opt.value));
+      }
+    });
+
     it('offers month, quarter and year filters', () => {
       expect(component.periodOptions.map(o => o.value)).toEqual([
         'this-month', 'last-month', 'this-quarter', 'last-quarter', 'ytd', 'last-year',
@@ -367,7 +498,7 @@ describe('DashboardComponent helpers', () => {
     it('every quick filter has a translated label and resolves to a date range', () => {
       for (const opt of component.periodOptions) {
         expect(opt.label).toMatch(/^DASHBOARD\.PERIOD_/);
-        const { from, to } = component._periodDates(opt.value);
+        const { from, to } = component._periodDates(String(opt.value));
         expect(from).not.toBeNull();
         expect(to).not.toBeNull();
       }
@@ -471,9 +602,110 @@ describe('DashboardComponent helpers', () => {
       expect(p['pTo']).toBeUndefined();
     });
 
+    // ★ The card→list contract, pinned. The list total must equal the card figure, which only holds if
+    // the link carries the PAYMENT window plus Status=Paid. A silent loss of any of these three is the
+    // difference between a list that matches the number clicked and one that does not.
+    it('carries exactly the three params the list needs to match the card', () => {
+      component.store.setPeriod('last-month');
+      const p = component.payoutsLinkParams();
+
+      expect(p['status']).toBe('Paid');
+      expect(p['payFrom']).toBeDefined();
+      expect(p['payTo']).toBeDefined();
+    });
+
+    it('never links by compensation period, which would not match the card total', () => {
+      for (const period of ['this-month', 'last-month', 'this-quarter', 'last-quarter', 'ytd', 'last-year']) {
+        component.store.setPeriod(period);
+        const p = component.payoutsLinkParams();
+        expect(p['pFrom']).withContext(period).toBeUndefined();
+        expect(p['pTo']).withContext(period).toBeUndefined();
+        expect(p['status']).withContext(period).toBe('Paid');
+      }
+    });
+
+    it('the payment window matches the period the card is showing', () => {
+      component.store.setPeriod('last-month');
+      const { from, to } = component._periodDates('last-month');
+      const p = component.payoutsLinkParams();
+
+      expect(p['payFrom']).toBe(from!);
+      expect(p['payTo']).toBe(to!);
+    });
+
     it('restricts the destination list to Paid payouts', () => {
       component.store.setPeriod('last-month');
       expect(component.payoutsLinkParams()['status']).toBe('Paid');
+    });
+  });
+
+  // ── Chart bar drill-down ───────────────────────────────────────────────────
+  // Every figure on screen must be traceable to the rows behind it. Card and bars share ONE link
+  // definition, so they cannot point at different things.
+  describe('onTrendBarClick', () => {
+    let navigateSpy: jasmine.Spy;
+
+    const bandWith = (over: Partial<DashboardTrendBand> = {}): DashboardTrendBand => ({
+      currentPeriodLabel: 'August 2026',
+      priorPeriodLabel: 'July 2026',
+      commissionTrend: [],
+      isPacing: true,
+      currentFrom: '2026-08-01',
+      currentTo: '2026-08-05',
+      priorFrom: '2026-07-01',
+      priorTo: '2026-07-31',
+      ...over,
+    });
+
+    const setBand = (band: DashboardTrendBand | null) => {
+      const summary = buildMockSummary();
+      summary.trendBand = band;
+      component.store.summary.set(summary);
+    };
+
+    beforeEach(() => {
+      navigateSpy = spyOn(TestBed.inject(Router), 'navigate').and.resolveTo(true);
+    });
+
+    it('drills the PRIOR bar down to the prior window', () => {
+      setBand(bandWith());
+      component.onTrendBarClick({ label: 'July 2026', value: 4939, currency: 'EUR' });
+
+      expect(navigateSpy).toHaveBeenCalledWith(['/payouts'], {
+        queryParams: { status: 'Paid', payFrom: '2026-07-01', payTo: '2026-07-31' },
+      });
+    });
+
+    it('drills the CURRENT bar down to the current window', () => {
+      setBand(bandWith());
+      component.onTrendBarClick({ label: 'August 2026', value: 500, currency: 'EUR', isCurrent: true });
+
+      expect(navigateSpy).toHaveBeenCalledWith(['/payouts'], {
+        queryParams: { status: 'Paid', payFrom: '2026-08-01', payTo: '2026-08-05' },
+      });
+    });
+
+    it('uses the same link definition as the card', () => {
+      // If these ever diverge, a bar and the card above it would open different lists.
+      setBand(bandWith());
+      component.onTrendBarClick({ label: 'August 2026', value: 500, currency: 'EUR', isCurrent: true });
+
+      const fromBar = navigateSpy.calls.mostRecent().args[1].queryParams;
+      const fromHelper = component.payoutsLinkParamsFor('2026-08-01', '2026-08-05');
+      expect(fromBar).toEqual(fromHelper);
+    });
+
+    it('does nothing when there is no trend band', () => {
+      setBand(null);
+      component.onTrendBarClick({ label: 'x', value: 1, currency: 'EUR', isCurrent: true });
+      expect(navigateSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not navigate on an unbounded window', () => {
+      // Opening the whole table is not a drill-down.
+      setBand(bandWith({ priorFrom: null, priorTo: null }));
+      component.onTrendBarClick({ label: 'x', value: 1, currency: 'EUR' });
+      expect(navigateSpy).not.toHaveBeenCalled();
     });
   });
 

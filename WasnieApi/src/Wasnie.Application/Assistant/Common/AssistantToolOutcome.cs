@@ -1,3 +1,5 @@
+using Wasnie.Application.Assistant.Abstractions;
+
 namespace Wasnie.Application.Assistant.Common;
 
 /// <summary>
@@ -42,6 +44,37 @@ public sealed record AssistantToolOutcome(string Data, string? FailureReasonKey)
     public static AssistantToolOutcome Failed(string reasonKey) => new(string.Empty, reasonKey);
 
     public bool DidFail => FailureReasonKey is not null;
+}
+
+/// <summary>
+/// What the dispatcher DECIDED, before anything was read.
+///
+/// ★ IT EXISTS SO THE USER CAN BE TOLD IN ADVANCE. The streaming handler announces "searching your
+/// records" as a step, and a step is only worth showing if it appears BEFORE the work and only on the
+/// turns where the work actually happens. Both need the decision and the read to be separable, which
+/// they were not while the runner did them in one call.
+///
+/// The three cases mirror <see cref="AssistantToolOutcome"/>'s, minus the payload: no lookup wanted, a
+/// lookup to run, or a dispatcher that could not be reached.
+/// </summary>
+/// <param name="Tool">The chosen tool, or null when none was chosen.</param>
+/// <param name="ArgumentsJson">The model's arguments for it. Null unless a tool was chosen.</param>
+/// <param name="FailureReasonKey">A translation key when the DECISION could not be made. Never an answer.</param>
+public sealed record AssistantToolSelection(
+    IAssistantTool? Tool, string? ArgumentsJson, string? FailureReasonKey)
+{
+    /// <summary>No lookup: no tools registered, the dispatcher declined, or it named something unreal.</summary>
+    public static readonly AssistantToolSelection None = new(null, null, null);
+
+    public static AssistantToolSelection Of(IAssistantTool tool, string argumentsJson) =>
+        new(tool, argumentsJson, null);
+
+    public static AssistantToolSelection Failed(string reasonKey) => new(null, null, reasonKey);
+
+    public bool DidFail => FailureReasonKey is not null;
+
+    /// <summary>True when this turn is really going to read the tenant's data. What the step reports.</summary>
+    public bool WillRead => Tool is not null;
 }
 
 /// <summary>

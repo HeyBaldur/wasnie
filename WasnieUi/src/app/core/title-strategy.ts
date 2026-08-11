@@ -4,11 +4,11 @@ import { RouterStateSnapshot, TitleStrategy } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
 /** Brand suffix shown on every tab, and the standalone title when a route has none. */
-const BRAND = 'Wasnie | ICM & SPM';
+const BRAND = 'Incentra | ICM & SPM';
 
 /**
  * Resolves a route's `title` as an i18n key, translates it, and renders the
- * document title as `<Page> | Wasnie`. Falls back to the brand when a route has
+ * document title as `<Page> | Incentra`. Falls back to the brand when a route has
  * no title or the key is missing, and re-applies on language change.
  */
 @Injectable({ providedIn: 'root' })
@@ -34,6 +34,6 @@ export class TranslatedTitleStrategy extends TitleStrategy {
     }
     const translated = this.translate.instant(this.currentKey);
     const page = translated && translated !== this.currentKey ? translated : null;
-    this.title.setTitle(page ? `${page} | Wasnie` : BRAND);
+    this.title.setTitle(page ? `${page} | Incentra` : BRAND);
   }
 }

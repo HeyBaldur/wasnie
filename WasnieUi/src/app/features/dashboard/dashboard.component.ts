@@ -1,6 +1,8 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
@@ -17,7 +19,7 @@ import {
   WsCardComponent,
   WsBadgeComponent,
   WsPageLayoutComponent,
-  WsSegmentedControlComponent,
+  WsSelectComponent,
   WsStatCardComponent,
   WsGaugeComponent,
   WsBarChartComponent,
@@ -25,7 +27,7 @@ import {
   WsHBarChartComponent,
   WsButtonComponent,
   WsConfirmationModalComponent,
-  type SegOption,
+  type SelectOption,
   type CardAccent,
   type BarChartPoint,
 } from '../../shared/ui';
@@ -46,7 +48,8 @@ import {
     WsCardComponent,
     WsBadgeComponent,
     WsPageLayoutComponent,
-    WsSegmentedControlComponent,
+    ReactiveFormsModule,
+    WsSelectComponent,
     WsStatCardComponent,
     WsGaugeComponent,
     WsBarChartComponent,
@@ -62,6 +65,7 @@ export class DashboardComponent {
   readonly store = inject(DashboardStore);
   private readonly transactionsApi = inject(TransactionsApiService);
   private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
 
   /**
    * Departed payees whose account is still open. It rides on its own endpoint rather than the
@@ -74,8 +78,23 @@ export class DashboardComponent {
    */
   readonly terminated = inject(TerminatedAccountsStore);
 
+  private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * The period filter's control. WsSelect is a ControlValueAccessor — it has no [value]/(valueChange)
+   * pair — so the binding goes through a FormControl, which is how every other WsSelect in the app is
+   * driven. Seeded from the store so the control shows the period already in effect.
+   */
+  readonly periodControl = new FormControl<string>(this.store.period(), { nonNullable: true });
+
   constructor() {
     void this.terminated.load();
+
+    // Selecting an option routes to the SAME handler the segmented control called. No period logic
+    // moved into this component: the store still owns the period and the reload.
+    this.periodControl.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(value => this.onPeriodChange(value));
   }
 
   // The deal-lost alert the admin is confirming a revert for (drives the confirmation modal), and whether
@@ -116,20 +135,46 @@ export class DashboardComponent {
   // data shown on arrival matches exactly what the dashboard card displays.
 
   /**
-   * The payouts card is CASH FLOW: money that actually left in this period. So it links to the payouts
-   * list filtered the same way the card sums — by PAYMENT date (payFrom/payTo) and Status=Paid — not by
-   * the compensation period (pFrom/pTo), which is a different question and would open a list whose total
-   * does not match the number the user just clicked. With these params the list adds up to the card's
-   * figure to the cent, per currency.
+   * THE ONE definition of a payouts deep-link. The card and both chart bars go through it, so a card and
+   * the bar beside it can never point at different things.
+   *
+   * The payouts card is CASH FLOW: money that actually left in a window. So it filters the list the same
+   * way the card sums — by PAYMENT date (payFrom/payTo) and Status=Paid — not by the compensation period
+   * (pFrom/pTo), which is a different question and would open a list whose total does not match the
+   * number that was clicked. With these params the list adds up to the figure shown, to the cent.
    */
-  readonly payoutsLinkParams = computed(() => {
-    const key = this.store.period();
-    const { from, to } = this._periodDates(key);
-    const p: Record<string, string> = { period: key, status: 'Paid' };
+  payoutsLinkParamsFor(from: string | null, to: string | null): Record<string, string> {
+    const p: Record<string, string> = { status: 'Paid' };
     if (from) p['payFrom'] = from;
     if (to) p['payTo'] = to;
     return p;
+  }
+
+  readonly payoutsLinkParams = computed<Record<string, string>>(() => {
+    const key = this.store.period();
+    const { from, to } = this._periodDates(key);
+    return { period: key, ...this.payoutsLinkParamsFor(from, to) };
   });
+
+  /**
+   * Drill-down: clicking a bar opens the payouts that make up exactly that bar — the prior bar its own
+   * window, the current bar the period on screen. Windows come from the trend band (computed by
+   * PeriodHelper), never recomputed here, so the bar and the list cannot disagree.
+   */
+  onTrendBarClick(point: BarChartPoint): void {
+    const band = this.store.trendBand();
+    if (!band) return;
+
+    const [from, to] = point.isCurrent
+      ? [band.currentFrom, band.currentTo]
+      : [band.priorFrom, band.priorTo];
+
+    if (!from && !to) return;   // an unbounded window would open the whole table, not a drill-down
+
+    void this.router.navigate(['/payouts'], {
+      queryParams: this.payoutsLinkParamsFor(from, to),
+    });
+  }
 
   readonly transactionsLinkParams = computed(() => {
     const { from, to } = this._periodDates(this.store.period());
@@ -209,7 +254,7 @@ export class DashboardComponent {
    * years run under different plans into one number) and an unbounded scan that degrades as data grows.
    * The default is 'this-month' (see DashboardStore), so removing it does not orphan the initial state.
    */
-  readonly periodOptions: SegOption[] = [
+  readonly periodOptions: SelectOption[] = [
     { value: 'this-month', label: 'DASHBOARD.PERIOD_THIS_MONTH' },
     { value: 'last-month', label: 'DASHBOARD.PERIOD_LAST_MONTH' },
     { value: 'this-quarter', label: 'DASHBOARD.PERIOD_THIS_QUARTER' },
@@ -230,13 +275,89 @@ export class DashboardComponent {
     return totals.length > 0 ? 'warning' : 'none';
   }
 
-  trendIcon(direction: 'up' | 'down' | 'neutral'): string {
-    return direction === 'neutral' ? 'trend-neutral' : 'trend-up';
+  /**
+   * Arrow for a CLOSED period's change. "pacing" never reaches here — the template routes running
+   * periods to the progress bar — but it is accepted and drawn flat so a stray call can never render a
+   * running period as a rise or a fall.
+   */
+  trendIcon(direction: DashboardTrendPoint['direction']): string {
+    return direction === 'up' || direction === 'down' ? 'trend-up' : 'trend-neutral';
   }
 
   /** True when the change% is either null (prior=0) or absurdly large (near-zero prior). */
   trendIsNoBase(point: DashboardTrendPoint): boolean {
     return point.changePercent === null || Math.abs(point.changePercent) > 500;
+  }
+
+  // ── Pacing (running periods) ───────────────────────────────────────────────
+  // A running period is NOT shown as a change percentage. Five days of August against the whole of July
+  // is -89.9%, and a red collapse arrow every first of the month is exactly what these helpers exist to
+  // prevent. Instead: how far the period has got against the previous period's total.
+
+  /** True when there is a baseline to pace against (previous period total > 0). */
+  hasPacingBase(point: DashboardTrendPoint): boolean {
+    return point.pacingPercent !== null && point.pacingPercent !== undefined;
+  }
+
+  /** Whole-number pacing percentage, e.g. 10 for "10% of last month's total". */
+  pacingPercent(point: DashboardTrendPoint): number {
+    return Math.round(point.pacingPercent ?? 0);
+  }
+
+  /** The baseline has been matched or beaten — rendered as a positive outcome, never as a shortfall. */
+  pacingExceeded(point: DashboardTrendPoint): boolean {
+    return (point.pacingPercent ?? 0) >= 100;
+  }
+
+  // ── One badge, one footer, both states ─────────────────────────────────────
+  // The card is a single skeleton: same box, same chart, same axis, same badge geometry, same footer.
+  // Only text and colour change between trend and progress, and these helpers are where that difference
+  // lives — so the two states cannot drift apart structurally when either one is edited.
+
+  private get isPacing(): boolean {
+    return this.store.trendBand()?.isPacing ?? false;
+  }
+
+  /** Green badge: a real rise for a closed period, or a beaten baseline while pacing. */
+  badgeIsPositive(point: DashboardTrendPoint): boolean {
+    return this.isPacing
+      ? this.hasPacingBase(point) && this.pacingExceeded(point)
+      : point.direction === 'up' && !this.trendIsNoBase(point);
+  }
+
+  /**
+   * Red badge — only ever for a CLOSED period. A running period can never reach this: it has not
+   * finished, so there is nothing to be down against.
+   */
+  badgeIsNegative(point: DashboardTrendPoint): boolean {
+    return !this.isPacing && point.direction === 'down' && !this.trendIsNoBase(point);
+  }
+
+  /** The arrow belongs to a change percentage; progress has no direction to point in. */
+  badgeShowsArrow(point: DashboardTrendPoint): boolean {
+    return !this.isPacing && !this.trendIsNoBase(point);
+  }
+
+  /** Translation key for the badge text. */
+  badgeText(point: DashboardTrendPoint): string {
+    if (this.isPacing) {
+      return this.hasPacingBase(point) ? 'DASHBOARD.PACING_PILL' : 'DASHBOARD.TREND_NO_BASE';
+    }
+    // Closed periods with no usable base fall back to the same "New" label, so the badge never shows a
+    // meaningless percentage. trendChangeFormatted is already pre-formatted, hence the literal key.
+    return this.trendIsNoBase(point) ? 'DASHBOARD.TREND_NO_BASE' : this.trendChangeFormatted(point);
+  }
+
+  /** Interpolation params for the badge key (empty when the "key" is already formatted text). */
+  badgeParams(point: DashboardTrendPoint): Record<string, unknown> {
+    return this.isPacing && this.hasPacingBase(point)
+      ? { percent: this.pacingPercent(point) }
+      : {};
+  }
+
+  /** Footer wording: "Prior: June 2026" for a closed period, "July 2026 total" for a baseline. */
+  footerLabel(): string {
+    return this.isPacing ? 'DASHBOARD.PACING_BASELINE' : 'DASHBOARD.TREND_PRIOR';
   }
 
   /** Safe formatted change % — only call when trendIsNoBase() returns false. */

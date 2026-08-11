@@ -58,19 +58,6 @@
   gap: var(--space-3);
 }
 
-.wizard-header__step {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.wizard-header__divider {
-  width: 1px;
-  height: 16px;
-  background: var(--color-border-default);
-  flex-shrink: 0;
-}
-
 // ── Body ────────────────────────────────────────────────────────────────────
 
 .wizard-body {
@@ -343,9 +330,6 @@
     margin-top: -1px;
   }
 
-  &--disabled {
-    opacity: 0.72;
-  }
 }
 
 .pt-header__badge {
@@ -426,6 +410,21 @@
   }
 }
 
+// Yes/no cells (AI assistant row). The "no" is muted rather than red: a Free plan
+// lacking a paid feature is not an error state.
+.pt-cell__yes {
+  color: var(--color-success);
+  font-size: var(--font-size-13);
+  white-space: nowrap;
+}
+
+.pt-cell__no {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 // ── CTA row ───────────────────────────────────────────────────────────────────
 
 .pt-cta {
@@ -458,5 +457,6 @@
 
   &--card {
     color: var(--color-text-tertiary);
+    font-weight: 500;
   }
 }

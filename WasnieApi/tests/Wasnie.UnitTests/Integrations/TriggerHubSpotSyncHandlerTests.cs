@@ -24,7 +24,8 @@ public sealed class TriggerHubSpotSyncHandlerTests
             new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(dbName).Options,
             tenantCtx, Substitute.For<MediatR.IPublisher>());
         var scheduler = Substitute.For<ICrmSyncScheduler>();
-        var handler = new TriggerHubSpotSyncHandler(db, tenantCtx, Substitute.For<IAuthorizationService>(), scheduler);
+        var handler = new TriggerHubSpotSyncHandler(db, tenantCtx, Substitute.For<IAuthorizationService>(),
+            new Wasnie.UnitTests.TestDoubles.FakePaidPlanGate(), scheduler);
         return (db, handler, scheduler);
     }
 

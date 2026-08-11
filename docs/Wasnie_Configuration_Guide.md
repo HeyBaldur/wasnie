@@ -1,13 +1,13 @@
-# Wasnie — Configuration Guide
+# Incentra — Configuration Guide
 
-**What this is:** a walkthrough of how Wasnie is configured and how it calculates, with worked
+**What this is:** a walkthrough of how Incentra is configured and how it calculates, with worked
 numbers and what appears on screen at each step.
 
 **Who it's for:** two readers at once —
 - **Operators / owner** — a reference for how the system actually behaves.
 - **New customers** — a first-use guide, in the order you'd really do it.
 
-**Verified against the code on 2026-07-30.** Every statement about Wasnie's behaviour in this
+**Verified against the code on 2026-07-30.** Every statement about Incentra's behaviour in this
 document was checked by reading the source, not from memory, and cites `file:line` so you can
 re-check it. (The 2026-07-27 pass reconciled the trigger, plan-attribution, transaction-lifecycle and
 deal-lost/recovery sections. The 2026-07-30 pass documented the **clawback subsystem, termination /
@@ -27,7 +27,7 @@ reflects what the code does and says so explicitly.
 
 ## Coverage checklist (this document is written in passes)
 
-Documenting every area of Wasnie against the real code is more than one sitting. This checklist is
+Documenting every area of Incentra against the real code is more than one sitting. This checklist is
 the resume point: each pass takes the next unticked area, documents it **completely** — what it is,
 how to configure it, use cases (happy path + edges) with concrete numbers, validations/errors, and
 permissions — and ticks it here. Areas already covered by the older narrative sections are marked
@@ -64,9 +64,9 @@ are reading front to back.
 
 Two kinds of content appear here, and they are never mixed:
 
-> ✅ **In Wasnie** — implemented and verified. Safe to rely on and to demo.
+> ✅ **In Incentra** — implemented and verified. Safe to rely on and to demo.
 
-> 📚 **Industry concept — NOT implemented in Wasnie.** Context only. Do not present as a feature.
+> 📚 **Industry concept — NOT implemented in Incentra.** Context only. Do not present as a feature.
 
 Everything is ✅ unless explicitly marked 📚. A consolidated list of the 📚 items is in
 [section 13](#13-industry-concepts-not-implemented).
@@ -277,7 +277,7 @@ Three types, all selectable.
 
 > ### ⚠️ RATE INPUT FORMAT — read this before configuring any rate
 >
-> **Every `Rate` field in Wasnie is entered as a DECIMAL FRACTION, never as a whole percentage.**
+> **Every `Rate` field in Incentra is entered as a DECIMAL FRACTION, never as a whole percentage.**
 >
 > | You want | You enter |
 > |---|---|
@@ -299,7 +299,7 @@ Three types, all selectable.
 >
 > **Two different fractions, and neither needs converting.** §5.3's `AttainmentFrom` / `AttainmentTo`
 > are fractions of the QUOTA (`1.0` = 100% of quota) — a different quantity from the Rate, expressed in
-> the same decimal convention. There is nowhere in Wasnie where a rate or a threshold is typed as a
+> the same decimal convention. There is nowhere in Incentra where a rate or a threshold is typed as a
 > whole percentage, so there is no conversion to remember and no place to get it backwards.
 >
 > **One exception, and it is not a percentage at all:** when a rule's Measurement is **Units**, the Flat
@@ -434,7 +434,7 @@ against real data. The same revenue under a whole-amount policy would be €19,4
 
 > ⚠️ **Neither setting pays "the high rate on everything, retroactively."** If a customer says
 > *"once they beat quota, the accelerated rate applies to all their revenue for the period"*, that
-> is a third policy Wasnie does **not** implement in either toggle state. ON is excess-only; OFF is
+> is a third policy Incentra does **not** implement in either toggle state. ON is excess-only; OFF is
 > per-transaction bracket lookup with no retroactive re-rating. Confirm which they mean before
 > answering.
 
@@ -471,7 +471,7 @@ Units quotas it sums `Quantity` instead (`QuotaAttainmentService.cs:83-104,143-1
 > path is correct; the caveat matters for backfills and corrections.
 
 > 📚 **Weighted averages — NOT implemented.** Some comp designs blend attainment across
-> sub-periods using weighted averages. Wasnie has no weighting anywhere; the word does not appear
+> sub-periods using weighted averages. Incentra has no weighting anywhere; the word does not appear
 > in the source. Attainment is always a single division over one quota period.
 
 ---
@@ -594,7 +594,7 @@ The pay run does not recalculate attainment.
 
 > 📚 **Draws, true-ups and pay-period reconciliation — NOT implemented.** Measuring on one cadence
 > and paying on another usually comes with recoverable/non-recoverable draws and a true-up at
-> period end. Wasnie has none of these. There is no advance, no recovery, no reconciliation step.
+> period end. Incentra has none of these. There is no advance, no recovery, no reconciliation step.
 
 > 📚 **Named frequency (monthly / quarterly / annual) — effectively NOT implemented.** A
 > `PlanPeriodType` enum exists on Plan, but it is optional, read by nothing, exposed by no DTO or
@@ -699,7 +699,7 @@ computed commission →  Credit.CreditedAmount   →  PayoutLine.CommissionAmoun
 
 ## 13. Industry concepts NOT implemented
 
-These come up in sales-comp conversations. None exists in Wasnie today. Listed so nobody
+These come up in sales-comp conversations. None exists in Incentra today. Listed so nobody
 accidentally presents them as features.
 
 | 📚 Concept | Status |
@@ -748,7 +748,7 @@ Collected from the verification passes — real behaviours, not bugs to work aro
 
 ## 15. Clawback
 
-**What it is.** The way Wasnie corrects a commission that has **already been paid**. It never edits
+**What it is.** The way Incentra corrects a commission that has **already been paid**. It never edits
 the original payment: it records a **debt** against the payee and collects that debt from future
 pay runs. Everything is append-only — the transaction, its credits and the payout that paid it are
 left exactly as they were, because rewriting the history of a payment that really happened is the
@@ -870,7 +870,7 @@ transaction is not `Paid` (`:79-82`). Money that never left the company is corre
 the commission, not by inventing a debt.
 
 **Edge — the CRM gave no loss date.** Nothing is generated; the deal-lost alert stays open for a
-human. Inventing a date would charge the salesperson for Wasnie's own sync latency.
+human. Inventing a date would charge the salesperson for Incentra's own sync latency.
 
 ### 15.4 Netting inside a pay run
 
@@ -884,7 +884,7 @@ not reduce anyone's debt.
   (`PayeeSettlementCalculator.cs:7-13`).
 - Withholding order is deterministic — by plan id, then payout id (`:62`) — so two runs over the same
   data always withhold from the same payouts in the same sequence.
-- Cross-currency is refused, not converted: Wasnie holds no exchange rates (`:46-49`).
+- Cross-currency is refused, not converted: Incentra holds no exchange rates (`:46-49`).
 - Everything the settlement writes lands in the **same `SaveChanges`** as `Credit.Consume()`. That
   atomicity is what stops a credit being consumed while its settlement is lost, or the reverse.
 
@@ -941,11 +941,11 @@ real chance to recover it.
 `GET /api/payees/ledger/terminated-with-balance`. It lists every terminated payee whose balance is
 **≠ 0**, deepest debt first (`ListTerminatedPayeesWithBalanceHandler.cs:37-50`).
 
-> ✅ **A positive balance appears too.** Money Wasnie still owes someone who has left is exactly as
+> ✅ **A positive balance appears too.** Money Incentra still owes someone who has left is exactly as
 > unfinished as money they owe. Hiding it would be the same mistake in the other direction.
 
 > ✅ **One row per (payee, currency).** Someone owing EUR and owed USD legitimately appears twice —
-> Wasnie holds no exchange rates and must never show a single blended figure.
+> Incentra holds no exchange rates and must never show a single blended figure.
 
 **Edge — the dashboard says so first.** The count also appears in *Requires action* on the dashboard,
 split into **To pay** (positive balances) and **To recover** (negative), linking to the same screen.
@@ -961,9 +961,9 @@ off" money the company **owes**, which is not a write-off, it is not paying some
 
 | Balance | Type | Meaning | Amount rule |
 |---|---|---|---|
-| Negative (they owe) | **ExternalSettlementCredit** | Recovered outside Wasnie — typically deducted from the final paycheck by payroll | **Partial allowed** |
+| Negative (they owe) | **ExternalSettlementCredit** | Recovered outside Incentra — typically deducted from the final paycheck by payroll | **Partial allowed** |
 | Negative (they owe) | **WriteOffCredit** | The company absorbed the loss; the debt is uncollectable | **Partial allowed** |
-| Positive (we owe) | **FinalSettlementDebit** | Treasury paid the departed payee what they were owed, outside Wasnie | **Must equal the balance exactly** |
+| Positive (we owe) | **FinalSettlementDebit** | Treasury paid the departed payee what they were owed, outside Incentra | **Must equal the balance exactly** |
 
 Two credits and not one generic "closing credit", because *"how much we recovered through HR"* and
 *"how much we ate"* are different facts about the business, and a CFO must be able to total each
@@ -978,7 +978,7 @@ without mining free text.
 >   account is still orphaned, and the entry has not done the one job its name claims
 >   (`FinalSettlementMustEqualBalance`).
 >
-> Wasnie does not orchestrate instalments; that is an ERP's accounts payable. **A closing is total, or
+> Incentra does not orchestrate instalments; that is an ERP's accounts payable. **A closing is total, or
 > it is not a closing.** Because the amount is typed by a person, the form fills it in from the live
 > balance and **locks the field** — but the guarantee is the domain rule, not the read-only input: the
 > API rejects a wrong amount with **400** whatever the browser did.
@@ -1009,10 +1009,10 @@ the field editable, and says so.
 **Nothing is ever deleted.** A closing entry sits *next to* the debit that created the debt; both
 stay visible and the ledger sums to zero.
 
-### 16.5 Where Wasnie stops
+### 16.5 Where Incentra stops
 
-Wasnie **freezes and records**; it does not collect. Deducting from a final paycheck, sending to
-collections or pursuing legally happens in HR / finance / legal with data Wasnie does not hold. The
+Incentra **freezes and records**; it does not collect. Deducting from a final paycheck, sending to
+collections or pursuing legally happens in HR / finance / legal with data Incentra does not hold. The
 app's job is to make the open account impossible to overlook and to store the decision finance made.
 
 ### 16.6 Permissions
@@ -1076,7 +1076,7 @@ and the sign/colour of the amount — colour alone is not a distinction a colour
 | Column | Notes |
 |---|---|
 | Source | **System** (the engine wrote it) or **Manual** (a person did, with actor and justification) |
-| Date | When Wasnie **booked** the entry |
+| Date | When Incentra **booked** the entry |
 | Deal lost on | When the deal actually died in the CRM — a **typed** field, not a phrase inside the justification; em dash when no CRM event caused the entry |
 | Type | See the table below |
 | Detail | The justification, plus the author for manual entries |
@@ -1093,7 +1093,7 @@ positive amount is unrepresentable:
 | `ManualBonusCredit` | + | Human |
 | `DataCorrectionDebit` | − | Human — bad data inflated a payment |
 | `DataCorrectionCredit` | + | Human — neutralising an entry a **technical** fault produced |
-| `ExternalSettlementCredit` | + | Human — debt recovered outside Wasnie |
+| `ExternalSettlementCredit` | + | Human — debt recovered outside Incentra |
 | `WriteOffCredit` | + | Human — the company absorbed the loss |
 | `FinalSettlementDebit` | − | Human — cash paid to a departed payee |
 

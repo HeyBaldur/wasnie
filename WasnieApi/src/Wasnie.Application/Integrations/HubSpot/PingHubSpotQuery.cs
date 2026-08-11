@@ -15,6 +15,7 @@ public sealed record PingHubSpotQuery : IRequest<Result<HubSpotPingResultDto>>;
 public sealed class PingHubSpotHandler(
     ITenantContext tenantContext,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     IHubSpotTokenProvider tokenProvider,
     IHubSpotOAuthClient client)
     : IRequestHandler<PingHubSpotQuery, Result<HubSpotPingResultDto>>
@@ -22,6 +23,10 @@ public sealed class PingHubSpotHandler(
     public async Task<Result<HubSpotPingResultDto>> Handle(PingHubSpotQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         var accessToken = await tokenProvider.GetValidAccessTokenAsync(tenantContext.TenantId, cancellationToken);
         if (accessToken is null)

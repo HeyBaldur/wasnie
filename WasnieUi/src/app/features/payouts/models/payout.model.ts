@@ -12,6 +12,11 @@ export interface PayoutListItem {
   totalCommissionAmount: number;
   totalCommissionCurrency: string;
   status: PayoutStatus;
+  /**
+   * When the money actually left. Null unless status is Paid — the list is filtered by this when arriving
+   * from the dashboard's cash-flow card, so the column has to be visible for that match to make sense.
+   */
+  paidAt: string | null;
   calculatedAt: string;
   calculatedBy: string;
   updatedAt: string;

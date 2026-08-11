@@ -35,11 +35,14 @@
               }
             ],
             "styles": [
+              "node_modules/katex/dist/katex.min.css",
               "src/styles.scss"
             ],
             "stylePreprocessorOptions": {
               "sass": {
-                "silenceDeprecations": ["import"]
+                "silenceDeprecations": [
+                  "import"
+                ]
               }
             }
           },

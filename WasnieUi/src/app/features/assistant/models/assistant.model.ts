@@ -1,6 +1,16 @@
 export type AssistantMessageRole = 'User' | 'Assistant';
 
 /**
+ * How a stored turn ENDED.
+ *
+ * `Cancelled` means the user stopped the answer while it was being written: the words that had already
+ * arrived are stored — they were on screen and deleting them would erase what the user read — and this
+ * is what stops them from passing for a finished reply. It comes from the SERVER on every read, which
+ * is why a cancellation is still marked after a reload.
+ */
+export type AssistantMessageStatus = 'Complete' | 'Cancelled';
+
+/**
  * One turn.
  *
  * `payload` is ALWAYS null in this piece. It is in the contract from day one because later pieces
@@ -15,6 +25,13 @@ export interface AssistantMessage {
   payload: string | null;
   sequence: number;
   createdAt: string;
+
+  /**
+   * How the turn ended. Optional in the type only so a response from a backend older than this field
+   * still parses; absent is read as `Complete` by {@link isCancelledReply}, which is what every turn
+   * written before cancelling existed actually was.
+   */
+  status?: AssistantMessageStatus;
 }
 
 export interface AssistantConversationSummary {
@@ -50,6 +67,12 @@ export interface AssistantExchange {
 
 export interface AssistantEntitlement {
   enabled: boolean;
+  /**
+   * True when the user holds the seat but the WORKSPACE is on Free — the one refusal the UI shows
+   * instead of hiding, because upgrading is something this user can actually go and do. Every other
+   * "no" stays invisible: offering an upgrade to someone a bigger plan would not help is a lie.
+   */
+  requiresUpgrade: boolean;
 }
 
 /**
@@ -59,10 +82,49 @@ export interface AssistantEntitlement {
  * backend translates provider failures into keys precisely so nothing operational reaches the reader.
  */
 export interface AssistantStreamEvent {
-  type: 'user' | 'delta' | 'done' | 'error';
+  type: 'user' | 'delta' | 'done' | 'error' | 'progress';
   delta?: string;
   message?: AssistantMessage;
   errorKey?: string;
+
+  /**
+   * Which step of the turn a `progress` frame is about — an IDENTIFIER, never a sentence, translated
+   * here for the same reason `errorKey` is: the reader gets their own language.
+   */
+  phase?: string;
+
+  /** `'start'` or `'done'` on a `progress` frame. */
+  state?: string;
+}
+
+/**
+ * One step of the turn, as the panel renders it.
+ *
+ * ★ THE LIST IS BUILT FROM WHAT THE SERVER REPORTS, NEVER FROM A SCRIPT. The backend emits a step only
+ * when it really performs that work, so a documentation question shows no database search and a
+ * question the guide does not cover shows no documentation step. Pre-seeding the list with the steps a
+ * turn "usually" takes would put a tick beside work nobody did — and this panel's whole design is that
+ * it never claims what it cannot verify.
+ */
+export interface AssistantProgressStep {
+  phase: string;
+  done: boolean;
+}
+
+/** The steps this client has wording for. Anything else is still shown, under a neutral label. */
+const KNOWN_PHASES = new Set(['understanding', 'reading_docs', 'searching_data', 'generating']);
+
+/**
+ * The translation key for a phase.
+ *
+ * ★ AN UNKNOWN PHASE IS RENDERED, NOT DROPPED. A newer backend may report a step this build has never
+ * heard of; showing it as "Working…" is honest — something IS happening — while hiding it would make
+ * the panel look stalled during the very step it was told about.
+ */
+export function phaseLabelKey(phase: string): string {
+  return KNOWN_PHASES.has(phase)
+    ? `ASSISTANT.PHASE.${phase.toUpperCase()}`
+    : 'ASSISTANT.PHASE.WORKING';
 }
 
 /**
@@ -90,6 +152,17 @@ export function isUntitled(title: string | null | undefined): boolean {
 
 export function isPlaceholderReply(message: AssistantMessage): boolean {
   return message.role === 'Assistant' && message.content === ASSISTANT_NOT_CONNECTED;
+}
+
+/**
+ * True when this row is an answer the user stopped mid-write.
+ *
+ * ★ READ FROM THE ROW, NEVER FROM SESSION MEMORY. That is the whole reason the status is stored: the
+ * notice under a cancelled answer must be there for someone who reopens the conversation tomorrow, in
+ * a browser that never saw the click.
+ */
+export function isCancelledReply(message: AssistantMessage): boolean {
+  return message.role === 'Assistant' && message.status === 'Cancelled';
 }
 
 /**

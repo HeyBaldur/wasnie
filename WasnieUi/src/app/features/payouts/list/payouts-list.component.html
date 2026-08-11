@@ -221,6 +221,10 @@
             <th>{{ 'PAYOUTS.COL_PERIOD' | translate }}</th>
             <th class="payouts-list__col-right">{{ 'PAYOUTS.COL_TOTAL' | translate }}</th>
             <th>{{ 'PAYOUTS.COL_STATUS' | translate }}</th>
+            <!-- Paid on: without it, arriving here from the dashboard's cash-flow card is baffling — a row
+                 whose Period reads September legitimately matches an August payment window, and the only
+                 thing that explains the match is the payment date. -->
+            <th>{{ 'PAYOUTS.COL_PAID_ON' | translate }}</th>
             <th>{{ 'PAYOUTS.COL_ACTIONS' | translate }}</th>
           </tr>
         </thead>
@@ -228,12 +232,12 @@
           @if (store.loading()) {
             @for (row of skeletonRows; track row) {
               <tr class="payouts-list__skeleton-row">
-                <td colspan="7"><div class="ws-skeleton ws-skeleton--line"></div></td>
+                <td colspan="8"><div class="ws-skeleton ws-skeleton--line"></div></td>
               </tr>
             }
           } @else if (store.items().length === 0) {
             <tr>
-              <td colspan="7">
+              <td colspan="8">
                 <ws-table-empty
                   [messageKey]="store.hasActiveFilters() ? 'PAYOUTS.EMPTY_FILTER' : 'PAYOUTS.EMPTY_TITLE'"
                 />
@@ -268,6 +272,13 @@
                   <ws-badge [variant]="statusBadge(payout.status)">
                     {{ statusLabel(payout.status) | translate }}
                   </ws-badge>
+                </td>
+                <td class="payouts-list__paid-on">
+                  @if (payout.paidAt) {
+                    {{ payout.paidAt | dateFormat }}
+                  } @else {
+                    <span class="payouts-list__paid-on--none">—</span>
+                  }
                 </td>
                 <td class="payouts-list__actions">
                   <ws-button

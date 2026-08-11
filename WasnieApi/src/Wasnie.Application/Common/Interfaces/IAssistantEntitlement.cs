@@ -21,6 +21,14 @@ public interface IAssistantEntitlement
     Task<bool> IsEnabledAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// True when the ONLY thing between this user and the assistant is the tenant's plan — they hold
+    /// the seat, the workspace is on Free. This is the one case where the client should render a
+    /// LOCKED entry point with an upgrade path rather than hiding it: the user is not overstepping
+    /// anything, they are looking at something they can buy. Never throws.
+    /// </summary>
+    Task<bool> RequiresPaidPlanAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Throws <see cref="Common.Exceptions.ForbiddenException"/> when the current principal is not
     /// entitled. Every assistant command and query calls this first.
     /// </summary>

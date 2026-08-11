@@ -1,0 +1,116 @@
+<app-shell>
+  <!--
+    ★ NO PAGE HEADER, ON PURPOSE. `ws-page-layout` always draws its title block, so a headerless screen is
+    not that primitive with an empty input — it is a different container. The tab already says where you
+    are, and a title above the document costs exactly the vertical space that made the whole page scroll.
+  -->
+  <div class="manual__screen">
+    @switch (state()) {
+      @case ('loading') {
+        <ws-card>
+          <p class="manual__message">{{ 'COMMON.LOADING' | translate }}</p>
+        </ws-card>
+      }
+
+      @case ('ready') {
+        <div class="manual__layout">
+          <!--
+            ★ THE MANUAL IS NOW A WASNIE SCREEN, NOT AN EMBEDDED VIEWER. It is the app's own HTML, so there
+            is no foreign viewer painting grey around it, the three themes apply, the text is selectable
+            and the browser's own Ctrl+F searches it — none of which an embedded PDF allowed.
+
+            [innerHTML] with a plain string runs Angular's sanitiser; nothing here is trusted by hand.
+          -->
+          <article
+            class="manual__doc ws-scroll-thin"
+            #doc
+            [innerHTML]="html()"
+            (click)="onDocumentClick($event)"
+          ></article>
+
+          <aside class="manual__aside ws-scroll-thin">
+            <ws-card padding="none">
+              <!--
+                Served from our own origin, not from Unsplash: hot-linking would make every reader's
+                browser call a third party on each visit, handing it their IP and referrer — the same
+                reason KaTeX comes from npm. Source: images.unsplash.com/photo-1718241905916-1f9786324de9
+                (Unsplash License: free commercial use, attribution appreciated, not required).
+                Decorative, so alt is empty.
+              -->
+              <img class="manual__aside-cover" src="manual-cover.jpg" alt="" />
+
+              <div class="manual__aside-card">
+                <h2 class="manual__aside-title">{{ 'MANUAL.SHORTCUTS_TITLE' | translate }}</h2>
+                <p class="manual__aside-body">{{ 'MANUAL.SHORTCUTS_BODY' | translate }}</p>
+
+                <!--
+                  ★ EVERY CHAPTER, READ OUT OF THE DOCUMENT. Not a list in the code: a hand-written menu of
+                  four entries described a guide that has nineteen, and it would have described the wrong
+                  ones the moment the markdown changed — which it will, because the markdown is the source
+                  of truth and is edited by hand. Add a section and it appears here; rename one and the
+                  label follows; delete one and it goes.
+                -->
+                @if (chapters().length) {
+                  <nav class="manual__shortcuts">
+                    @for (heading of chapters(); track heading.id) {
+                      <!-- `title` so a chapter clipped to one line is still readable on hover. -->
+                      <button
+                        type="button"
+                        class="manual__shortcut"
+                        [title]="heading.text"
+                        (click)="jumpTo(heading.id)"
+                      >
+                        {{ heading.text }}
+                      </button>
+                    }
+                  </nav>
+                }
+
+                <div class="manual__aside-actions">
+                  <!--
+                    ★ HIDDEN, NOT DISABLED (Spec 5b.6), on the same entitlement the topbar trigger uses.
+                    The shortcuts answer "where is it written"; the assistant answers "what does it mean
+                    for MY plan", in the reader's language — the manual is English-only.
+                  -->
+                  @if (assistant.entitled() === true) {
+                    <ws-button variant="primary" (click)="askAssistant()">
+                      {{ 'MANUAL.ASK_ASSISTANT' | translate }}
+                    </ws-button>
+                  }
+
+                  <button type="button" class="manual__link" (click)="openPdf()">
+                    {{ 'MANUAL.OPEN_PDF' | translate }}
+                  </button>
+
+                  <!--
+                    Re-opens the first-run welcome video. Deliberately does NOT touch the "seen" flag:
+                    watching it again is not starting over, and setting the flag here would rob a user
+                    who lands on the manual first of the automatic showing they never got.
+                  -->
+                  <button type="button" class="manual__link" (click)="welcome.openManually()">
+                    {{ 'MANUAL.VIEW_FLOW' | translate }}
+                  </button>
+                </div>
+              </div>
+            </ws-card>
+          </aside>
+        </div>
+      }
+
+      @case ('unavailable') {
+        <ws-card>
+          <ws-empty-state icon="file-text" titleKey="MANUAL.EMPTY_TITLE" descKey="MANUAL.EMPTY_DESC" />
+        </ws-card>
+      }
+
+      @case ('error') {
+        <ws-card>
+          <div class="manual__message">
+            <p>{{ 'MANUAL.LOAD_ERROR' | translate }}</p>
+            <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+          </div>
+        </ws-card>
+      }
+    }
+  </div>
+</app-shell>

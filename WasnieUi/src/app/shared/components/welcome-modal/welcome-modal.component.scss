@@ -1,0 +1,113 @@
+@reference "../../../../styles.scss";
+
+// Header sits in the modal's [slot=header], so it owns its own spacing rather than inheriting the
+// title/description block ws-modal draws when you pass `title`.
+.welcome__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.welcome__title {
+  margin: 0;
+  font-size: var(--font-size-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+.welcome__subtitle {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// The video is the point of the modal, so it gets the full body width and a dark bed: an unstarted
+// <video> paints its own black letterbox, and a light surface behind it would show as a bright halo.
+.welcome__video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  // Token, not #000: the clip is 16/9 and so is this frame, so there is no letterbox to hide — and a
+  // hardcoded black would be the one non-token colour in the modal.
+  background: var(--color-bg-surface-sunken);
+}
+
+// Only the HOST is reachable from here — the <video> inside ws-video carries that component's
+// encapsulation attribute, so how it fills the frame is ws-video's `fit` input, not a rule written
+// here that would silently match nothing.
+.welcome__video ws-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.welcome__lead {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-14);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.welcome__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.welcome__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.welcome__item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-subtle);
+  color: var(--color-brand);
+}
+
+.welcome__item-body {
+  min-width: 0;
+}
+
+.welcome__item-title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.welcome__item-desc {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.welcome__footer {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}

@@ -79,7 +79,7 @@ public sealed class PayeeBalance : AggregateRoot
         if (entry.Amount.Currency != Currency)
             throw new DomainException(
                 $"Cannot apply a {entry.Amount.Currency} entry to the {Currency} balance of payee {PayeeId}. " +
-                "Balances are per currency because Wasnie holds no exchange rates.");
+                "Balances are per currency because Incentra holds no exchange rates.");
 
         // A final settlement EXISTS to EXTINGUISH the account so it leaves the orphan-account queue.
         // Two things follow, and both are invariants rather than validations:

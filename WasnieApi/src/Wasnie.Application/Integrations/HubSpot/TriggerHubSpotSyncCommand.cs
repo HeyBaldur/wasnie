@@ -19,12 +19,17 @@ public sealed class TriggerHubSpotSyncHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     ICrmSyncScheduler scheduler)
     : IRequestHandler<TriggerHubSpotSyncCommand, Result<Unit>>
 {
     public async Task<Result<Unit>> Handle(TriggerHubSpotSyncCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         var tenantId = tenantContext.TenantId;
         var connection = await db.HubSpotConnections

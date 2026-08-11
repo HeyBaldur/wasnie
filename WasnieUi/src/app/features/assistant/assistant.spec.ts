@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { AssistantStore } from './state/assistant.store';
 import { AssistantApiService } from './services/assistant.api.service';
 import { AssistantPanelComponent } from './panel/assistant-panel.component';
@@ -13,6 +13,7 @@ import {
   ASSISTANT_NOT_CONNECTED,
   AssistantConversation,
   AssistantExchange,
+  AssistantMessage,
   AssistantStreamEvent,
   isPlaceholderReply,
 } from './models/assistant.model';
@@ -52,7 +53,7 @@ function apiSpy(): jasmine.SpyObj<AssistantApiService> {
     'getEntitlement', 'listConversations', 'getConversation', 'startConversation',
     'postMessage', 'streamMessage', 'renameConversation', 'deleteConversation',
   ]);
-  api.getEntitlement.and.returnValue(of({ enabled: true }));
+  api.getEntitlement.and.returnValue(of({ enabled: true, requiresUpgrade: false }));
   api.listConversations.and.returnValue(of([]));
   api.startConversation.and.returnValue(of(CONVERSATION));
   api.getConversation.and.returnValue(of(CONVERSATION));
@@ -202,6 +203,84 @@ describe('AssistantStore', () => {
     expect(store.errorKey()).toBeNull();
   });
 
+  // ── ★ The steps of a turn ──────────────────────────────────────────────────
+
+  it('★ builds the step list from the frames the server sent, and ticks each one on its done', async () => {
+    // ★ NOTHING IS PREDICTED. The list is exactly what arrived, in the order it arrived, and a step is
+    // green because the server said so — not because the next one started or a timer expired.
+    // ★ OBSERVED FROM INSIDE THE STREAM, not by racing microtasks from outside. A `for await` resumes
+    // the generator only after it has handled the frame it was given, so the line below runs at a
+    // precisely known moment: the search has been announced and nothing else has arrived yet. That is
+    // the state the loader actually renders, and it is the only one worth asserting.
+    let midTurn: { phase: string; done: boolean }[] = [];
+
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      (async function* () {
+        yield { type: 'user', message: exchange(content).userMessage } as AssistantStreamEvent;
+        yield { type: 'progress', phase: 'understanding', state: 'start' } as AssistantStreamEvent;
+        yield { type: 'progress', phase: 'understanding', state: 'done' } as AssistantStreamEvent;
+        yield { type: 'progress', phase: 'searching_data', state: 'start' } as AssistantStreamEvent;
+        midTurn = store.progressSteps();
+        yield { type: 'progress', phase: 'searching_data', state: 'done' } as AssistantStreamEvent;
+        yield { type: 'delta', delta: 'Answer.' } as AssistantStreamEvent;
+        yield {
+          type: 'done',
+          message: { ...exchange(content).assistantMessage, content: 'Answer.' },
+        } as AssistantStreamEvent;
+      })());
+
+    await store.startConversation();
+    await store.send('what happened with TERM-CC-10?');
+
+    // One finished step and one still running — in the order the server announced them.
+    expect(midTurn).toEqual([
+      { phase: 'understanding', done: true },
+      { phase: 'searching_data', done: false },
+    ]);
+
+    // The answer landed: the steps go with the loader rather than staying as a finished checklist.
+    expect(store.progressSteps()).toEqual([]);
+    expect(store.messages().map((m) => m.content)).toEqual(['what happened with TERM-CC-10?', 'Answer.']);
+  });
+
+  it('★ a stream with NO progress frames still answers — the events are additive', async () => {
+    // The compatibility guarantee, from the client side: the default fake in this file sends `user`,
+    // deltas and `done` and nothing else. Nothing may depend on a progress frame having arrived.
+    await store.startConversation();
+    await store.send('hello');
+
+    expect(store.progressSteps()).toEqual([]);
+    expect(store.messages().map((m) => m.content)).toEqual(['hello', 'A real answer.']);
+    expect(store.errorKey()).toBeNull();
+  });
+
+  it('★ a failed turn clears the steps instead of leaving a half-ticked list above the error', async () => {
+    // How far it got is not an outcome. Nothing was persisted, and the only thing to do is retry.
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'progress', phase: 'understanding', state: 'start' },
+        { type: 'progress', phase: 'understanding', state: 'done' },
+        { type: 'progress', phase: 'searching_data', state: 'start' },
+        { type: 'error', errorKey: 'ASSISTANT.ERROR_UNAVAILABLE' },
+      ]));
+
+    await store.startConversation();
+    await store.send('a question');
+
+    expect(store.progressSteps()).toEqual([]);
+    expect(store.errorKey()).toBe('ASSISTANT.ERROR_UNAVAILABLE');
+  });
+
+  it("clears the previous turn's steps when the next one starts", async () => {
+    store.progressSteps.set([{ phase: 'searching_data', done: true }]);
+
+    await store.startConversation();
+    await store.send('a new question');
+
+    expect(store.progressSteps()).toEqual([]);
+  });
+
   it('treats a failed entitlement check as NO access, never as yes', async () => {
     // Guessing generously here would only render a button that 403s on first use.
     api.getEntitlement.and.returnValue(throwError(() => new Error('network')));
@@ -216,15 +295,16 @@ describe('AssistantTriggerComponent — hide, do not disable', () => {
   let fixture: ComponentFixture<AssistantTriggerComponent>;
   let api: jasmine.SpyObj<AssistantApiService>;
 
-  async function setup(enabled: boolean) {
+  async function setup(enabled: boolean, requiresUpgrade = false) {
     api = apiSpy();
-    api.getEntitlement.and.returnValue(of({ enabled }));
+    api.getEntitlement.and.returnValue(of({ enabled, requiresUpgrade }));
 
     await TestBed.configureTestingModule({
       imports: [AssistantTriggerComponent, TranslateModule.forRoot()],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         { provide: AssistantApiService, useValue: api },
       ],
     }).compileComponents();
@@ -245,6 +325,30 @@ describe('AssistantTriggerComponent — hide, do not disable', () => {
 
     const button = fixture.nativeElement.querySelector('button');
     expect(button).toBeNull('a forbidden action is hidden, never shown disabled');
+  });
+
+  // ── The billing refusal is the ONE that gets shown ──────────────────────────────────────────────
+
+  it('★ renders a LOCKED link to the plans when the only thing missing is a paid plan', async () => {
+    // The seat is held; the workspace is on Free. Hiding here would hide something the user can buy,
+    // so this refusal — and only this one — is visible and leads somewhere.
+    await setup(false, true);
+
+    expect(fixture.nativeElement.querySelector('button'))
+      .toBeNull('still not a live trigger — the assistant cannot be opened');
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a');
+    expect(link).toBeTruthy('the locked entry point is rendered');
+    expect(link.getAttribute('href')).toBe('/subscription', 'clicking it goes where the plan is bought');
+  });
+
+  it('shows nothing at all when there is no seat, whatever the plan says', async () => {
+    // Belt and braces on the backend contract: an upsell must never be shown to someone a bigger plan
+    // would not help. If these two flags ever disagree, the absence of a seat wins.
+    await setup(false, false);
+
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a')).toBeNull();
   });
 
   it('renders nothing while the entitlement is still unknown', async () => {
@@ -310,6 +414,97 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     const text: string = fixture.nativeElement.querySelector('[data-testid="assistant-messages"]').textContent;
     expect(text).not.toContain(ASSISTANT_NOT_CONNECTED);
     expect(text).toContain('a question');
+  });
+
+  // ── ★ The loader: real steps, or the plain one ─────────────────────────────
+
+  /** Puts the panel in the state it is in while an answer is being worked on. */
+  function waiting(steps: { phase: string; done: boolean }[]) {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    // '' is "the request is out and nothing has come back" — the only state the loader renders in.
+    store.streamingReply.set('');
+    store.progressSteps.set(steps);
+    fixture.detectChanges();
+  }
+
+  it('★ renders one item per reported step, and marks the finished ones done', () => {
+    waiting([
+      { phase: 'understanding', done: true },
+      { phase: 'reading_docs', done: true },
+      { phase: 'searching_data', done: false },
+    ]);
+
+    const list = fixture.nativeElement.querySelector('[data-testid="assistant-steps"]');
+    expect(list).withContext('a turn that reported real work shows what it did').toBeTruthy();
+
+    const items = Array.from(list.querySelectorAll('li')) as HTMLElement[];
+    expect(items.map((i) => i.getAttribute('data-phase')))
+      .toEqual(['understanding', 'reading_docs', 'searching_data']);
+    // ★ Finished steps carry the tick; the one still running carries the spinner. Getting this
+    // backwards would show a green mark beside work that has not happened.
+    expect(items.map((i) => i.getAttribute('data-state')))
+      .toEqual(['done', 'done', 'running']);
+    expect(items[0].querySelector('app-icon')).withContext('a done step shows the check').toBeTruthy();
+    expect(items[2].querySelector('.assistant-steps__spinner'))
+      .withContext('a running step shows the spinner').toBeTruthy();
+
+    // The plain loader is NOT also on screen — one statement about the wait, not two.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeNull();
+  });
+
+  it('★ falls back to the plain loader when the turn reported no steps — old backend included', () => {
+    // The compatibility branch, and the simple-question branch: a stream without progress frames must
+    // look exactly like it did before they existed.
+    waiting([]);
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeTruthy();
+  });
+
+  it('does not turn two steps into a checklist', () => {
+    // Understand, then answer — what every turn does. A two-line list that appears, ticks and vanishes
+    // on every single request is movement without information, so the plain loader stands in.
+    waiting([
+      { phase: 'understanding', done: true },
+      { phase: 'generating', done: false },
+    ]);
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]')).toBeTruthy();
+  });
+
+  it('★ never prints a raw phase identifier, and shows an unknown phase rather than hiding it', () => {
+    // Phases are identifiers translated here, exactly like the error keys. A newer backend reporting a
+    // step this build has never heard of must still show something honest — hiding it would make the
+    // panel look stalled during the very work it was told about.
+    waiting([
+      { phase: 'understanding', done: true },
+      { phase: 'searching_data', done: true },
+      { phase: 'something_new', done: false },
+    ]);
+
+    const text: string = fixture.nativeElement.querySelector('[data-testid="assistant-steps"]').textContent;
+    expect(text).not.toContain('searching_data');
+    expect(text).not.toContain('something_new');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="assistant-steps"] li').length).toBe(3);
+  });
+
+  it('★ the steps disappear the moment the answer starts arriving', () => {
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+    store.progressSteps.set([
+      { phase: 'understanding', done: true },
+      { phase: 'reading_docs', done: true },
+      { phase: 'generating', done: false },
+    ]);
+    // The first fragment landed: the bubble now holds the answer, not the wait.
+    store.streamingReply.set('The answer begins');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]').textContent)
+      .toContain('The answer begins');
   });
 
   it('★ the composer is the multi-line primitive, and sending still works through it', async () => {
@@ -1484,7 +1679,8 @@ describe('AssistantPanelComponent — the retry renders the typing bubble', () =
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]'))
       .withContext('the typing bubble is the feedback the button owes the user').toBeTruthy();
-    expect(fixture.nativeElement.querySelector('.assistant-msg__typing')).toBeTruthy();
+    // The waiting mark — the assistant's avatar, which took the three dots' place.
+    expect(fixture.nativeElement.querySelector('.assistant-msg__avatar')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
   });
 });
@@ -1826,17 +2022,18 @@ describe('AssistantPanelComponent — the closing animation', () => {
   });
 
   it('a child animation finishing does NOT close the panel', () => {
-    // ★ `animationend` BUBBLES, and this panel contains other animations — the typing dots among them.
-    // Closing on "an animation ended somewhere in here" would make the panel shut itself while the
-    // assistant was typing.
+    // ★ `animationend` BUBBLES, and this panel contains other animations — the step spinner among
+    // them. Closing on "an animation ended somewhere in here" would make the panel shut itself while
+    // the assistant was still working.
     reducedMotion(false);
     component.close();
 
-    component.onCloseAnimationEnd(new AnimationEvent('animationend', { animationName: 'assistant-typing' }));
+    component.onCloseAnimationEnd(
+      new AnimationEvent('animationend', { animationName: 'assistant-step-spin' }));
     fixture.detectChanges();
 
     expect(component.closing())
-      .withContext('the typing dots must not rip the panel out mid-animation').toBeTrue();
+      .withContext('a step spinner must not rip the panel out mid-animation').toBeTrue();
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-panel"]')).toBeTruthy();
   });
 
@@ -1915,14 +2112,14 @@ describe('AssistantPanelComponent — the waiting message', () => {
     fixture.detectChanges();
   }
 
-  it('shows the honest base message beside the dots, immediately', () => {
+  it('shows the honest base message beside the assistant mark, immediately', () => {
     startWaiting();
 
     const waiting: HTMLElement = fixture.nativeElement.querySelector('[data-testid="assistant-waiting"]');
     expect(waiting).toBeTruthy();
     expect(waiting.textContent).toContain('PROCESSING');
-    // ★ The dots are ACCOMPANIED, not replaced.
-    expect(waiting.querySelector('.assistant-msg__typing')).toBeTruthy();
+    // ★ The mark is ACCOMPANIED, not replaced. (It used to be three dots; it is now the avatar.)
+    expect(waiting.querySelector('.assistant-msg__avatar')).toBeTruthy();
     // The long-wait line has not earned its place yet.
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-waiting-long"]')).toBeNull();
   });
@@ -1982,4 +2179,552 @@ describe('AssistantPanelComponent — the waiting message', () => {
 
     expect(component.waitingLong()).toBeFalse();
   }));
+});
+
+/**
+ * STOPPING an answer that is being written.
+ *
+ * ★ WHAT THESE PIN. Stop is not Send in a different costume, and a cancellation is not a failure: the
+ * words that arrived are KEPT and marked, the thread is not reported as waiting on anything, and the
+ * composer is usable the instant the button is pressed — which is the entire reason anyone presses it.
+ */
+describe('AssistantStore — stopping an answer', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  /** The turn the SERVER stores for a stopped answer: the partial text, marked. */
+  const CANCELLED_ROW: AssistantMessage = {
+    id: 'm-bot', role: 'Assistant', content: 'A real', payload: null, sequence: 1,
+    createdAt: '2026-08-06T09:00:00Z', status: 'Cancelled',
+  };
+
+  /**
+   * Frames, and then a stream that never ends on its own — exactly what the browser is holding when
+   * the user reaches for Stop. It ends the only way that one does: the signal fires.
+   */
+  async function* untilAborted(
+    list: AssistantStreamEvent[], signal: AbortSignal | undefined,
+  ): AsyncGenerator<AssistantStreamEvent> {
+    for (const frame of list) {
+      yield frame;
+    }
+
+    await new Promise<void>((_resolve, reject) => {
+      const fail = () => reject(new DOMException('Aborted', 'AbortError'));
+      // No signal reached the API — the test would hang forever, so fail it loudly instead.
+      if (!signal || signal.aborted) {
+        fail();
+        return;
+      }
+      signal.addEventListener('abort', fail);
+    });
+  }
+
+  /** Lets the pending microtasks run so the frames already yielded reach the store. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  /** The conversation as the server holds it once the stopped answer has been written. */
+  const withCancelledRow = () => ({
+    ...CONVERSATION,
+    messages: [exchange('a long question').userMessage, CANCELLED_ROW],
+  });
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  /**
+   * Sends a question and stops with a fragment already on screen.
+   *
+   * ★ THE SEND IN FLIGHT COMES BACK WRAPPED, and it has to. Returning it bare from an async function
+   * makes it a promise-of-a-promise, and `await` collapses those: the caller would sit waiting for the
+   * very request this helper exists to leave hanging.
+   */
+  async function sendAndReachHalfway(): Promise<{ sending: Promise<void> }> {
+    api.streamMessage.and.callFake((
+      _id: string, content: string, _token: string | null, signal?: AbortSignal) =>
+      untilAborted([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'delta', delta: 'A real ' },
+      ], signal));
+
+    await store.startConversation();
+    const sending = store.send('a long question');
+    await settle();
+    return { sending };
+  }
+
+  it('★ keeps the words that arrived, as the row the SERVER stored for them', async () => {
+    const { sending } = await sendAndReachHalfway();
+
+    expect(store.sending()).withContext('the answer is still being written').toBeTrue();
+    expect(store.streamingReply()).toBe('A real ');
+
+    api.getConversation.and.returnValue(of(withCancelledRow()));
+
+    await store.cancel();
+    await sending;
+
+    // The partial answer is a STORED turn now, not a bubble this browser is remembering.
+    expect(store.messages().length).toBe(2);
+    expect(store.messages()[1].status).toBe('Cancelled');
+    expect(store.messages()[1].content).toBe('A real');
+    expect(store.streamingReply()).withContext('the stored row replaced it').toBeNull();
+  });
+
+  it('★ shows the cancelled turn AT THE CLICK, before the server has been asked anything', async () => {
+    const { sending } = await sendAndReachHalfway();
+
+    // ★ THE BUG THIS PINS. The first version froze the partial and waited for the stored row to read
+    // back — and that read loses the race, because the server writes it while the aborted request
+    // unwinds. Both asks returned a thread with no cancelled turn, the frozen text was cleared as
+    // "it never existed", and the answer VANISHED on the click meant to preserve it. Only a refresh
+    // brought it back.
+    //
+    // The server never answers in this test: `getConversation` hangs forever, which is the strongest
+    // possible version of losing that race.
+    api.getConversation.and.returnValue(NEVER);
+
+    const cancelling = store.cancel();
+    await settle();
+
+    expect(store.messages().length).withContext('the stopped answer is in the thread').toBe(2);
+    expect(store.messages()[1].status).toBe('Cancelled');
+    expect(store.messages()[1].content).toBe('A real');
+    expect(store.streamingReply()).withContext('no bubble left mid-stream').toBeNull();
+    expect(store.sending()).withContext('the composer is free at the click').toBeFalse();
+
+    // And it is not taken away again when the server never confirms it.
+    expect(store.messages().length).toBe(2);
+
+    await sending;
+    void cancelling;
+  });
+
+  it('replaces the stand-in with the server row once it lands', async () => {
+    const { sending } = await sendAndReachHalfway();
+    api.getConversation.and.returnValue(of(withCancelledRow()));
+
+    await store.cancel();
+    await sending;
+
+    // Same words, but now the authoritative row: the server's id, not the local placeholder.
+    expect(store.messages()[1].id).toBe('m-bot');
+    expect(store.messages()[1].id).not.toBe('pending-cancelled');
+    expect(store.messages()[1].status).toBe('Cancelled');
+  });
+
+  it('★ is not a failure: no error, no retry offered', async () => {
+    const { sending } = await sendAndReachHalfway();
+    api.getConversation.and.returnValue(of(withCancelledRow()));
+
+    await store.cancel();
+    await sending;
+
+    // Aborting the fetch throws exactly like a dead connection. Telling the user the assistant could
+    // not answer would blame them for a fault, and offer to re-run a turn they deliberately ended.
+    expect(store.errorKey()).toBeNull();
+    expect(store.retryable()).toBeNull();
+  });
+
+  it('★ frees the composer immediately — that is the whole point of the button', async () => {
+    const { sending } = await sendAndReachHalfway();
+    api.getConversation.and.returnValue(of(withCancelledRow()));
+
+    await store.cancel();
+    await sending;
+
+    expect(store.sending()).toBeFalse();
+    expect(store.progressSteps()).toEqual([]);
+
+    // And a new question really does go out, rather than being swallowed by the guard on `sending`.
+    api.streamMessage.and.callFake((_id: string, content: string) =>
+      frames([
+        { type: 'user', message: exchange(content).userMessage },
+        { type: 'done', message: { ...exchange(content).assistantMessage, content: 'Another answer.' } },
+      ]));
+
+    await store.send('something else entirely');
+
+    expect(api.streamMessage.calls.mostRecent().args[1]).toBe('something else entirely');
+  });
+
+  it('stores nothing when it is stopped before the first word', async () => {
+    api.streamMessage.and.callFake((
+      _id: string, content: string, _token: string | null, signal?: AbortSignal) =>
+      untilAborted([{ type: 'user', message: exchange(content).userMessage }], signal));
+
+    await store.startConversation();
+    const sending = store.send('a long question');
+    await settle();
+
+    api.getConversation.calls.reset();
+    await store.cancel();
+    await sending;
+
+    // Nothing was written, so there is no row to read back — an empty bubble is not a shorter answer.
+    expect(api.getConversation).not.toHaveBeenCalled();
+    expect(store.streamingReply()).toBeNull();
+    expect(store.errorKey()).toBeNull();
+  });
+
+  it('does nothing at all when there is no answer in flight', async () => {
+    await store.startConversation();
+
+    await store.cancel();
+
+    expect(store.sending()).toBeFalse();
+    expect(store.errorKey()).toBeNull();
+  });
+
+  it('★ hands the abort signal to the API — that is what stops the model generating', async () => {
+    const { sending } = await sendAndReachHalfway();
+
+    const signal = api.streamMessage.calls.mostRecent().args[3] as AbortSignal;
+    expect(signal).withContext('without it there is nothing to abort').toBeTruthy();
+    expect(signal.aborted).toBeFalse();
+
+    api.getConversation.and.returnValue(of(withCancelledRow()));
+
+    await store.cancel();
+    await sending;
+
+    // The server sees this as the connection going: it drops the call to the model — no more tokens
+    // paid for words nobody will read — and writes what had arrived.
+    expect(signal.aborted).toBeTrue();
+  });
+});
+
+describe('AssistantPanelComponent — the stop button and the cancelled turn', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+    store.isOpen.set(true);
+    store.conversation.set(CONVERSATION);
+  });
+
+  const stop = () => fixture.nativeElement.querySelector('[data-testid="assistant-cancel"]');
+  const send = () => fixture.nativeElement.querySelector('[data-testid="assistant-send"]');
+
+  /** Renders a thread whose last answer carries the given status, as the server would return it. */
+  function renderReply(status?: 'Complete' | 'Cancelled'): void {
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'explain accelerators',
+          payload: null, sequence: 0, createdAt: '',
+        },
+        {
+          id: 'm2', role: 'Assistant', content: 'Accelerators pay', payload: null, sequence: 1,
+          createdAt: '', status,
+        },
+      ],
+    });
+    fixture.detectChanges();
+  }
+
+  const notice = () =>
+    fixture.nativeElement.querySelector('[data-testid="assistant-cancelled-notice"]');
+
+  it('★ appears only while an answer is being written, beside a send button that never changes', () => {
+    fixture.detectChanges();
+    expect(stop()).withContext('nothing to stop').toBeNull();
+    expect(send()).withContext('send is always there').toBeTruthy();
+
+    store.sending.set(true);
+    fixture.detectChanges();
+
+    expect(stop()).withContext('an answer is in flight').toBeTruthy();
+    expect(send()).withContext('send is NOT transformed into stop — they are opposites').toBeTruthy();
+
+    store.sending.set(false);
+    fixture.detectChanges();
+
+    expect(stop()).withContext('it leaves when the answer does').toBeNull();
+  });
+
+  it('is hidden rather than shown disabled', () => {
+    // A disabled control is a promise about a moment that has not arrived. There is nothing to stop.
+    fixture.detectChanges();
+
+    expect(stop()).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-cancel"][disabled]')).toBeNull();
+  });
+
+  it('asks the store to stop when it is clicked', () => {
+    const cancel = spyOn(store, 'cancel').and.resolveTo();
+    store.sending.set(true);
+    fixture.detectChanges();
+
+    (stop().querySelector('button') as HTMLElement | null)?.click();
+
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('★ marks a cancelled turn from the STORED row, so a reload still shows it', () => {
+    // Nothing in this test ever pressed the button: the conversation arrives from the server exactly
+    // as it would after a refresh, and the notice must be there anyway.
+    renderReply('Cancelled');
+
+    expect(notice()).withContext('an answer that stops mid-sentence must say who ended it').toBeTruthy();
+    expect(notice().textContent).toContain('CANCELLED_NOTICE');
+
+    // The words the user watched arrive are still on screen — cancelling does not delete the turn.
+    expect(fixture.nativeElement.textContent).toContain('Accelerators pay');
+
+    // And it is NOT the failure card: there is nothing here to retry.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-failed-alert"]')).toBeNull();
+  });
+
+  it('leaves a completed answer unmarked', () => {
+    renderReply('Complete');
+
+    expect(notice()).toBeNull();
+  });
+
+  it('treats a row from a backend that predates the field as complete', () => {
+    // Every turn written before cancelling existed did run to its end; marking them all as stopped
+    // would rewrite the history of the whole product.
+    renderReply(undefined);
+
+    expect(notice()).toBeNull();
+  });
+
+  it('the notice uses design system tokens, not invented values', () => {
+    renderReply('Cancelled');
+
+    const tertiary = getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-text-tertiary').trim();
+    expect(tertiary).withContext('the token must actually be defined').not.toBe('');
+
+    const styles = getComputedStyle(notice());
+    expect(parseFloat(styles.fontSize)).toBeGreaterThan(0);
+    expect(parseFloat(styles.borderTopWidth)).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * TRY AGAIN, on an answer the user stopped.
+ *
+ * ★ IT IS THE FAILURE CARD'S RETRY, NOT A SECOND ONE. Same button, same `store.retry()`, same `isRetry`
+ * request — so the question is re-answered rather than typed into the thread twice. What is different is
+ * only where it appears and what it sits under.
+ */
+describe('AssistantStore — try again after a stopped answer', () => {
+  let store: AssistantStore;
+  let api: jasmine.SpyObj<AssistantApiService>;
+
+  const QUESTION: AssistantMessage = {
+    id: 'm1', role: 'User', content: 'explain accelerators', payload: null, sequence: 0, createdAt: '',
+  };
+
+  const STOPPED: AssistantMessage = {
+    id: 'm2', role: 'Assistant', content: 'Accelerators pay', payload: null, sequence: 1,
+    createdAt: '', status: 'Cancelled',
+  };
+
+  beforeEach(() => {
+    api = apiSpy();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: api },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+    store.conversation.set({ ...CONVERSATION, messages: [QUESTION, STOPPED] });
+  });
+
+  it('★ re-answers the stored question instead of sending it again', async () => {
+    api.streamMessage.and.callFake(() =>
+      frames([
+        { type: 'delta', delta: 'Accelerators pay above quota.' },
+        {
+          type: 'done',
+          message: {
+            id: 'm3', role: 'Assistant', content: 'Accelerators pay above quota.', payload: null,
+            sequence: 2, createdAt: '', status: 'Complete',
+          },
+        },
+      ]));
+
+    await store.retry();
+
+    // ★ isRetry — the flag that stops the thread duplicating the user's own words. There is no `user`
+    // frame in the replay above for exactly that reason: the server has nothing new to echo.
+    expect(api.streamMessage.calls.mostRecent().args[4]).toBeTrue();
+    expect(api.streamMessage.calls.mostRecent().args[1]).toBe('explain accelerators');
+
+    // The stopped fragment survives, and the fresh answer lands after it.
+    expect(store.messages().length).toBe(3);
+    expect(store.messages()[1].status).toBe('Cancelled');
+    expect(store.messages()[2].content).toBe('Accelerators pay above quota.');
+  });
+
+  it('offers the retry only while the stopped answer is the LAST turn', () => {
+    expect(store.retryableCancelled()).not.toBeNull();
+    expect(store.retryableCancelled()!.content).toBe('explain accelerators');
+
+    // Asked past: retrying re-answers the LAST question, so an offer here would re-answer a different
+    // message than the one it sits beside.
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        QUESTION,
+        STOPPED,
+        { id: 'm3', role: 'User', content: 'something else', payload: null, sequence: 2, createdAt: '' },
+        {
+          id: 'm4', role: 'Assistant', content: 'An answer.', payload: null, sequence: 3,
+          createdAt: '', status: 'Complete',
+        },
+      ],
+    });
+
+    expect(store.retryableCancelled()).toBeNull();
+  });
+
+  it('offers nothing while an answer is already in flight', () => {
+    store.sending.set(true);
+
+    expect(store.retryableCancelled()).toBeNull();
+  });
+
+  it('★ does NOT raise the failure card — a stopped turn is not a failed one', () => {
+    // The two offers must never both be live: `retryable` needs the thread to be waiting on an answer,
+    // and a cancelled reply IS a stored answer.
+    expect(store.retryable()).toBeNull();
+    expect(store.retryableCancelled()).not.toBeNull();
+  });
+});
+
+describe('AssistantPanelComponent — try again beside the cancelled notice', () => {
+  let fixture: ComponentFixture<AssistantPanelComponent>;
+  let store: AssistantStore;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: AssistantApiService, useValue: apiSpy() },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantPanelComponent);
+    store = TestBed.inject(AssistantStore);
+    store.isOpen.set(true);
+  });
+
+  const retryButton = () =>
+    fixture.nativeElement.querySelector('[data-testid="assistant-cancelled-retry"]');
+
+  function renderStoppedTurn(trailing: AssistantMessage[] = []): void {
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'explain accelerators', payload: null, sequence: 0,
+          createdAt: '',
+        },
+        {
+          id: 'm2', role: 'Assistant', content: 'Accelerators pay', payload: null, sequence: 1,
+          createdAt: '', status: 'Cancelled',
+        },
+        ...trailing,
+      ],
+    });
+    fixture.detectChanges();
+  }
+
+  it('★ sits inside the notice, to the right of it', () => {
+    renderStoppedTurn();
+
+    const notice = fixture.nativeElement.querySelector('[data-testid="assistant-cancelled-notice"]');
+
+    expect(retryButton()).withContext('a stopped answer needs a way back to a real one').toBeTruthy();
+    expect(notice.contains(retryButton()))
+      .withContext('the way out belongs to the note that explains the state').toBeTrue();
+    expect(notice.textContent).toContain('RETRY');
+  });
+
+  it('runs the SAME retry as the failure card', () => {
+    const retry = spyOn(store, 'retry').and.resolveTo();
+    renderStoppedTurn();
+
+    (retryButton().querySelector('button') as HTMLElement | null)?.click();
+
+    expect(retry).toHaveBeenCalled();
+  });
+
+  it('is absent on an older cancelled turn the user has asked past', () => {
+    renderStoppedTurn([
+      { id: 'm3', role: 'User', content: 'something else', payload: null, sequence: 2, createdAt: '' },
+      {
+        id: 'm4', role: 'Assistant', content: 'An answer.', payload: null, sequence: 3,
+        createdAt: '', status: 'Complete',
+      },
+    ]);
+
+    // The notice stays — that turn WAS cancelled, and that does not stop being true.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-cancelled-notice"]')).toBeTruthy();
+    expect(retryButton()).withContext('it would re-answer a different question').toBeNull();
+  });
+
+  it('disappears while the retry it started is running', () => {
+    renderStoppedTurn();
+    expect(retryButton()).toBeTruthy();
+
+    store.sending.set(true);
+    fixture.detectChanges();
+
+    // Otherwise it sits there inviting a second retry of the request already in flight.
+    expect(retryButton()).toBeNull();
+  });
+});
+
+describe('Assistant i18n — stopping an answer speaks every language', () => {
+  // ★ RETRY IS THE FAILURE CARD'S OWN KEY, REUSED. The stopped turn's button says the same thing for
+  // the same reason, and inventing a second key would be two strings to keep saying it identically in
+  // three languages. It is asserted here because this notice now depends on it too.
+  const KEYS = ['CANCEL', 'CANCELLED_NOTICE', 'RETRY'];
+
+  it('★ EN, ES and PL all carry every key, each in its own words', () => {
+    for (const language of ['en', 'es', 'pl']) {
+      for (const key of KEYS) {
+        const value = ASSISTANT_BUNDLES[language][key];
+        expect(value).withContext(`${language}.ASSISTANT.${key} is missing`).toBeTruthy();
+        expect((value ?? '').trim().length).toBeGreaterThan(0);
+      }
+    }
+
+    for (const key of KEYS) {
+      expect(ASSISTANT_BUNDLES['es'][key]).not.toBe(ASSISTANT_BUNDLES['en'][key]);
+      expect(ASSISTANT_BUNDLES['pl'][key]).not.toBe(ASSISTANT_BUNDLES['en'][key]);
+    }
+  });
 });

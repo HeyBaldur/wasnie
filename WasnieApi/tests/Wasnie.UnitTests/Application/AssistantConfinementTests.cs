@@ -139,7 +139,7 @@ public sealed class AssistantConfinementTests
         system.Should().Contain("SAY WHEN YOU DO NOT KNOW");
         system.Should().Contain("NEVER invent a feature");
         // …and decline what is not about Wasnie.
-        system.Should().Contain("STAY ON WASNIE");
+        system.Should().Contain("STAY ON INCENTRA");
 
         // The 2a framing survives: it explains, it does not act — the same promise the on-screen
         // disclaimer makes, so the two cannot contradict each other.

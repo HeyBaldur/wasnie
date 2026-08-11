@@ -8,6 +8,8 @@ using Wasnie.Application.Integrations.Crm.Drift;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.ValueObjects;
+using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Entities;
 using Wasnie.Domain.Integrations.HubSpot;
 using Wasnie.Infrastructure.BackgroundJobs;
 using Wasnie.Infrastructure.Identity;
@@ -68,8 +70,20 @@ public sealed class HubSpotTenantSyncJobTests
         return new Harness { Db = db, Job = job, DealSource = dealSource, TenantId = tenantId };
     }
 
-    private static void SeedConnection(ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status)
+    // The job refuses to sync a tenant whose plan does not include the integration, so the harness has
+    // to state the plan: a connection with no tenant row behind it is skipped before any CRM call.
+    private static void SeedTenant(ApplicationDbContext db, Guid tenantId, Tier tier = Tier.Growth)
     {
+        var tenant = Tenant.Create($"T{tenantId:N}", $"t-{tenantId:N}", tenantId, ConnectedAt);
+        tenant.SetTier(tier);
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+    }
+
+    private static void SeedConnection(
+        ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status, Tier tier = Tier.Growth)
+    {
+        SeedTenant(db, tenantId, tier);
         var c = HubSpotConnection.Create(
             Guid.NewGuid(), tenantId, 42, "enc-access", "enc-refresh",
             ConnectedAt.AddHours(1), "owner", ConnectedAt);
@@ -101,6 +115,29 @@ public sealed class HubSpotTenantSyncJobTests
 
     private static CrmDeal Deal(string id, decimal amount, DateOnly close) =>
         new(id, "Deal", amount, "USD", close, "O1");
+
+    // ── The plan gate, checked before anything outbound happens ──────────────────────────────────
+
+    [Fact]
+    public async Task A_job_for_a_tenant_that_downgraded_after_it_was_scheduled_touches_nothing()
+    {
+        // Not redundant with the orchestrator's filter: jobs are staggered by up to hours, so the plan
+        // can change between fan-out and execution. The CRM must not be called at all in that window.
+        var tenantId = Guid.NewGuid();
+        var h = BuildHarness(nameof(A_job_for_a_tenant_that_downgraded_after_it_was_scheduled_touches_nothing), tenantId);
+        SeedConnection(h.Db, tenantId, HubSpotConnectionStatus.Connected, Tier.Free);
+        SeedPayee(h.Db, tenantId, "alice@example.com");
+        SetupSource(h.DealSource, tenantId, new[] { Deal("101", 5000m, new DateOnly(2026, 6, 1)) });
+
+        await h.Job.SyncTenantAsync(tenantId, default);
+
+        await h.DealSource.DidNotReceiveWithAnyArgs()
+            .GetClosedWonDealsModifiedSinceAsync(default, default, default);
+        h.Db.CompensationTransactions.IgnoreQueryFilters().Should().BeEmpty();
+
+        var connection = await h.Db.HubSpotConnections.IgnoreQueryFilters().SingleAsync();
+        connection.LastSyncedAt.Should().BeNull("a refused run must not advance the checkpoint either");
+    }
 
     // ── New deal via polling → transaction created; checkpoint advances ───────────────────────────
 

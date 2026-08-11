@@ -61,12 +61,26 @@
          nothing must fall through to the table's filtered-empty row, not claim the tenant is empty. -->
     @if (!store.loading() && store.pagedAssignments().length === 0 && !store.listParams().search && store.listParams().status === null && store.payeeId() === null) {
       <ws-empty-state
-        illustration="assignments-empty"
+        video="/videos/assignment.mp4"
         titleKey="ASSIGNMENTS.EMPTY_TITLE"
-        descKey="ASSIGNMENTS.EMPTY_DESCRIPTION"
         actionKey="ASSIGNMENTS.EMPTY_ACTION"
         actionRoute="new"
-      />
+      >
+        <!--
+          An assignment is nothing but the link between a payee and a plan, so with neither in place
+          the create form is two empty dropdowns. Same fragment-per-language approach as the quotas
+          empty state: Polish declines both nouns, and differently than it does there ("planem" in the
+          instrumental here, "planu" in the genitive over there) — which is exactly why the link labels
+          are their own keys instead of placeholders in one sentence.
+        -->
+        <span slot="desc">
+          {{ 'ASSIGNMENTS.EMPTY_PREREQ_BEFORE' | translate }}
+          <a routerLink="/payees">{{ 'ASSIGNMENTS.EMPTY_PREREQ_PAYEE' | translate }}</a>
+          {{ 'ASSIGNMENTS.EMPTY_PREREQ_BETWEEN' | translate }}
+          <a routerLink="/plans">{{ 'ASSIGNMENTS.EMPTY_PREREQ_PLAN' | translate }}</a>
+          {{ 'ASSIGNMENTS.EMPTY_PREREQ_AFTER' | translate }}
+        </span>
+      </ws-empty-state>
     } @else {
       <ws-table>
         <table>

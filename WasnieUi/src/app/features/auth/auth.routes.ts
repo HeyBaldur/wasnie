@@ -23,6 +23,9 @@ export const authRoutes: Routes = [
   },
   {
     path: 'forgot-password',
+    // Without this the page inherits the parent `auth` route's title and the tab reads
+    // "Sign in | Incentra" on the recovery screen.
+    title: 'FORGOT_PASSWORD.TITLE',
     canActivate: [noAuthGuard],
     loadComponent: () =>
       import('./forgot-password/forgot-password.component').then(

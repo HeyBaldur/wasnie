@@ -10,7 +10,7 @@ public static class SwaggerExtensions
         {
             options.SwaggerDoc("v1", new OpenApiInfo
             {
-                Title = "Wasnie API",
+                Title = "Incentra API",
                 Version = "v1",
                 Description = "Sales Performance Management Platform"
             });

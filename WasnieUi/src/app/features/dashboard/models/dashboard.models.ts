@@ -104,14 +104,30 @@ export interface DashboardTrendPoint {
   currency: string;
   currentAmount: number;
   priorAmount: number;
+  /** Change vs the prior period. ALWAYS null while pacing — a running period has no "change". */
   changePercent: number | null;
-  direction: 'up' | 'down' | 'neutral';
+  direction: 'up' | 'down' | 'neutral' | 'pacing';
+  /**
+   * Running periods only: currentAmount as a percentage of the previous period's TOTAL. May exceed 100
+   * once the baseline is beaten. Null when the previous total is zero (nothing to pace against).
+   */
+  pacingPercent?: number | null;
 }
 
 export interface DashboardTrendBand {
   currentPeriodLabel: string;
   priorPeriodLabel: string;
   commissionTrend: DashboardTrendPoint[];
+  /** True when the selected period is still running: show pacing progress, never a change percentage. */
+  isPacing: boolean;
+  /**
+   * The exact windows the two bars cover, so a click on either can drill down to the payouts behind it.
+   * Supplied by the backend — PeriodHelper is the single source of truth for what a period covers.
+   */
+  currentFrom: string | null;
+  currentTo: string | null;
+  priorFrom: string | null;
+  priorTo: string | null;
 }
 
 export interface DashboardActivityItem {

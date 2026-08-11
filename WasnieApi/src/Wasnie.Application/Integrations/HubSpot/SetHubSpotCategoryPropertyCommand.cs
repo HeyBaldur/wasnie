@@ -21,6 +21,7 @@ public sealed class SetHubSpotCategoryPropertyHandler(
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     IAuditService auditService,
     IClock clock)
     : IRequestHandler<SetHubSpotCategoryPropertyCommand, Result<Unit>>
@@ -28,6 +29,10 @@ public sealed class SetHubSpotCategoryPropertyHandler(
     public async Task<Result<Unit>> Handle(SetHubSpotCategoryPropertyCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         var connection = await db.HubSpotConnections
             .FirstOrDefaultAsync(c => c.TenantId == tenantContext.TenantId, cancellationToken);
