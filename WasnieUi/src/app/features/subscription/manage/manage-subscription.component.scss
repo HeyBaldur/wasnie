@@ -297,13 +297,17 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  min-width: 480px;
+  // 160px label column + 3 plan columns that stay legible; below this the wrapper scrolls instead of
+  // squeezing the cells. Mirrors the onboarding pricing table's 160px + min-width budget.
+  min-width: 520px;
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
 .plan-comparison__corner {
-  width: 130px;
+  // Sets the label column for the whole table (table-layout: fixed). 130px predated the capability
+  // rows, whose labels are two words long — matches the onboarding table's label column.
+  width: 160px;
   background: var(--color-bg-surface-raised);
   border-bottom: 1px solid var(--color-border-default);
 }
@@ -371,7 +375,9 @@
   font-weight: 400;
   color: var(--color-text-secondary);
   border-top: 1px solid var(--color-border-subtle);
-  white-space: nowrap;
+  // NOT nowrap: the column is fixed-width, so a label longer than it would overflow the table rather
+  // than widen it — "HubSpot integration" (and its longer ES/PL translations) wraps to a second line.
+  overflow-wrap: break-word;
 }
 
 .plan-comparison__cell {
@@ -386,6 +392,14 @@
   &--current {
     background: var(--color-success-bg);
   }
+}
+
+// Included-capability mark. Matches the onboarding pricing table so the two comparisons read as the
+// same document — a user upgrading here saw exactly this row when they first chose a plan.
+.plan-comparison__yes {
+  color: var(--color-success);
+  font-size: var(--font-size-13);
+  white-space: nowrap;
 }
 
 // ── CTA row ───────────────────────────────────────────────────────────────────

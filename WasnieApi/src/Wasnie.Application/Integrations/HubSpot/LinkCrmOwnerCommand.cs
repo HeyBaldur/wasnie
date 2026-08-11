@@ -41,6 +41,7 @@ public sealed class LinkCrmOwnerHandler(
     IClock clock,
     IGuidGenerator guid,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     ICrmDealSource dealSource)
     : IRequestHandler<LinkCrmOwnerCommand, Result<LinkCrmOwnerResultDto>>
 {
@@ -48,6 +49,10 @@ public sealed class LinkCrmOwnerHandler(
         LinkCrmOwnerCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         if (string.IsNullOrWhiteSpace(request.OwnerId))
             return Result<LinkCrmOwnerResultDto>.Failure("Owner id is required.");

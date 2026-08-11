@@ -73,7 +73,8 @@ public sealed class HubSpotDriftPolicyTests
             new Wasnie.UnitTests.TestDoubles.FakeTransactionEnrichmentService());
 
         var handler = new ImportHubSpotDealsHandler(
-            tenantCtx, currentUser, clock, authz, dealSource, reconciler);
+            tenantCtx, currentUser, clock, authz,
+            new Wasnie.UnitTests.TestDoubles.FakePaidPlanGate(), dealSource, reconciler);
 
         return new Harness
         {

@@ -9,6 +9,8 @@ using NSubstitute;
 using NSubstitute.Core;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Entities;
 using Wasnie.Domain.Integrations.HubSpot;
 using Wasnie.Infrastructure.BackgroundJobs;
 using Wasnie.Infrastructure.Identity;
@@ -33,8 +35,20 @@ public sealed class HubSpotSyncOrchestratorTests
             tenantCtx, Substitute.For<MediatR.IPublisher>());
     }
 
-    private static void SeedConnection(ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status)
+    // The orchestrator now joins connections against the tenant's TIER, so a connection with no tenant
+    // row behind it is (correctly) skipped. Every seeded tenant is paid unless a test says otherwise.
+    private static void SeedTenant(ApplicationDbContext db, Guid tenantId, Tier tier = Tier.Growth)
     {
+        var tenant = Tenant.Create($"T{tenantId:N}", $"t-{tenantId:N}", tenantId, ConnectedAt);
+        tenant.SetTier(tier);
+        db.Tenants.Add(tenant);
+        db.SaveChanges();
+    }
+
+    private static void SeedConnection(
+        ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status, Tier tier = Tier.Growth)
+    {
+        SeedTenant(db, tenantId, tier);
         var c = HubSpotConnection.Create(
             Guid.NewGuid(), tenantId, 1, "a", "r", ConnectedAt.AddHours(1), "owner", ConnectedAt);
         if (status == HubSpotConnectionStatus.NeedsReconnect)
@@ -51,6 +65,34 @@ public sealed class HubSpotSyncOrchestratorTests
 
     private static List<ICall> CreateCalls(IBackgroundJobClient client) =>
         client.ReceivedCalls().Where(c => c.GetMethodInfo().Name == nameof(IBackgroundJobClient.Create)).ToList();
+
+    [Fact]
+    public async Task A_connected_tenant_on_Free_is_never_scheduled_and_keeps_its_connection()
+    {
+        // ★ The loop that spends money. A tenant that connected HubSpot while paying and then
+        // downgraded must stop costing us outbound calls every hour — without anyone logging in, and
+        // without their stored connection being destroyed (they get it back by upgrading).
+        var db = NewDb(nameof(A_connected_tenant_on_Free_is_never_scheduled_and_keeps_its_connection));
+        var paid = Guid.NewGuid();
+        var downgraded = Guid.NewGuid();
+        SeedConnection(db, paid, HubSpotConnectionStatus.Connected);
+        SeedConnection(db, downgraded, HubSpotConnectionStatus.Connected, Tier.Free);
+
+        var client = Substitute.For<IBackgroundJobClient>();
+        await NewOrchestrator(db, client, new HubSpotSyncOptions { Enabled = true, TenantStaggerSeconds = 5 })
+            .RunAsync(default);
+
+        var scheduled = CreateCalls(client)
+            .Select(c => (Guid)((Job)c.GetArguments()[0]!).Args[0]!)
+            .ToList();
+
+        scheduled.Should().ContainSingle().Which.Should().Be(paid);
+        scheduled.Should().NotContain(downgraded, "Free tenants are dropped before a job is even created");
+
+        db.HubSpotConnections.IgnoreQueryFilters()
+            .Should().Contain(c => c.TenantId == downgraded && c.Status == HubSpotConnectionStatus.Connected,
+                "frozen, not deleted — the row survives the downgrade");
+    }
 
     [Fact]
     public async Task Schedules_one_staggered_job_per_connected_tenant_and_skips_the_rest()

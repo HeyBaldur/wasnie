@@ -1,0 +1,20 @@
+@reference "../../../../styles.scss";
+
+/**
+ * The locked entry point. Deliberately the OPPOSITE of the live trigger's pink/orange gradient: a flat
+ * sunken surface with muted text, so at a glance it reads as "not yours yet" rather than as a button
+ * that failed to load. It still lifts on hover, because it IS clickable — it goes to the plans.
+ */
+.assistant-trigger--locked {
+  background-color: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+
+  &:hover {
+    background-color: var(--color-bg-surface);
+    border-color: var(--color-brand);
+    color: var(--color-brand);
+  }
+}

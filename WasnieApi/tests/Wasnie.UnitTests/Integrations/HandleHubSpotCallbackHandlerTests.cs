@@ -8,6 +8,8 @@ using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
 using Wasnie.Application.Integrations.HubSpot;
+using Wasnie.Domain.Authorization;
+using Wasnie.Domain.Entities;
 using Wasnie.Domain.Integrations.HubSpot;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.Infrastructure.Services.HubSpot;
@@ -63,8 +65,22 @@ public sealed class HandleHubSpotCallbackHandlerTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    // The callback re-checks the plan from the STATE's tenant (it is anonymous — there is no ambient
+    // tenant), so the handshake only completes for a tenant whose row says it is paid.
+    private void SeedTenant(Tier tier = Tier.Growth)
+    {
+        if (_db.Tenants.IgnoreQueryFilters().Any(t => t.Id == TenantId))
+            return;
+
+        var tenant = Tenant.Create("Acme", $"acme-{TenantId:N}", TenantId, Now);
+        tenant.SetTier(tier);
+        _db.Tenants.Add(tenant);
+        _db.SaveChanges();
+    }
+
     private Guid SeedState(DateTimeOffset? now = null)
     {
+        SeedTenant();
         var state = HubSpotOAuthState.Create(
             Guid.NewGuid(), TenantId, "user-1", now ?? Now, TimeSpan.FromMinutes(10));
         _db.HubSpotOAuthStates.Add(state);

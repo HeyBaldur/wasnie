@@ -67,6 +67,12 @@ export interface AssistantExchange {
 
 export interface AssistantEntitlement {
   enabled: boolean;
+  /**
+   * True when the user holds the seat but the WORKSPACE is on Free — the one refusal the UI shows
+   * instead of hiding, because upgrading is something this user can actually go and do. Every other
+   * "no" stays invisible: offering an upgrade to someone a bigger plan would not help is a lie.
+   */
+  requiresUpgrade: boolean;
 }
 
 /**

@@ -53,7 +53,7 @@ function apiSpy(): jasmine.SpyObj<AssistantApiService> {
     'getEntitlement', 'listConversations', 'getConversation', 'startConversation',
     'postMessage', 'streamMessage', 'renameConversation', 'deleteConversation',
   ]);
-  api.getEntitlement.and.returnValue(of({ enabled: true }));
+  api.getEntitlement.and.returnValue(of({ enabled: true, requiresUpgrade: false }));
   api.listConversations.and.returnValue(of([]));
   api.startConversation.and.returnValue(of(CONVERSATION));
   api.getConversation.and.returnValue(of(CONVERSATION));
@@ -295,15 +295,16 @@ describe('AssistantTriggerComponent — hide, do not disable', () => {
   let fixture: ComponentFixture<AssistantTriggerComponent>;
   let api: jasmine.SpyObj<AssistantApiService>;
 
-  async function setup(enabled: boolean) {
+  async function setup(enabled: boolean, requiresUpgrade = false) {
     api = apiSpy();
-    api.getEntitlement.and.returnValue(of({ enabled }));
+    api.getEntitlement.and.returnValue(of({ enabled, requiresUpgrade }));
 
     await TestBed.configureTestingModule({
       imports: [AssistantTriggerComponent, TranslateModule.forRoot()],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         { provide: AssistantApiService, useValue: api },
       ],
     }).compileComponents();
@@ -324,6 +325,30 @@ describe('AssistantTriggerComponent — hide, do not disable', () => {
 
     const button = fixture.nativeElement.querySelector('button');
     expect(button).toBeNull('a forbidden action is hidden, never shown disabled');
+  });
+
+  // ── The billing refusal is the ONE that gets shown ──────────────────────────────────────────────
+
+  it('★ renders a LOCKED link to the plans when the only thing missing is a paid plan', async () => {
+    // The seat is held; the workspace is on Free. Hiding here would hide something the user can buy,
+    // so this refusal — and only this one — is visible and leads somewhere.
+    await setup(false, true);
+
+    expect(fixture.nativeElement.querySelector('button'))
+      .toBeNull('still not a live trigger — the assistant cannot be opened');
+
+    const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a');
+    expect(link).toBeTruthy('the locked entry point is rendered');
+    expect(link.getAttribute('href')).toBe('/subscription', 'clicking it goes where the plan is bought');
+  });
+
+  it('shows nothing at all when there is no seat, whatever the plan says', async () => {
+    // Belt and braces on the backend contract: an upsell must never be shown to someone a bigger plan
+    // would not help. If these two flags ever disagree, the absence of a seat wins.
+    await setup(false, false);
+
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a')).toBeNull();
   });
 
   it('renders nothing while the entitlement is still unknown', async () => {

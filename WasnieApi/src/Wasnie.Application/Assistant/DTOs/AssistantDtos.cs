@@ -63,7 +63,13 @@ public sealed record AssistantExchangeDto(
     AssistantMessageDto AssistantMessage);
 
 /// <summary>
-/// Whether the current user may use the assistant. A single boolean on purpose: the client hides or
-/// shows the entry point and has no business knowing WHY — role today, paid seat tomorrow.
+/// Whether the current user may use the assistant, and — when they may not — whether that is
+/// something they can fix by paying.
+///
+/// The second flag is NOT the client learning "why" for its own sake: it is the difference between
+/// two different UIs. <c>Enabled=false, RequiresUpgrade=false</c> means the person has no seat and the
+/// entry point is HIDDEN (a permission the client must not advertise). <c>RequiresUpgrade=true</c>
+/// means the workspace is on Free and the entry point is LOCKED with a link to the plans, because an
+/// upgrade is a thing this user can actually go and do. Every other reason stays behind the boolean.
 /// </summary>
-public sealed record AssistantEntitlementDto(bool Enabled);
+public sealed record AssistantEntitlementDto(bool Enabled, bool RequiresUpgrade);

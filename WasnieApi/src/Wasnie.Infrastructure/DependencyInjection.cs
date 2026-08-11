@@ -71,6 +71,7 @@ public static class DependencyInjection
         // services because it is answered the same way — and kept separate from them because it is an
         // entitlement (per user, headed for per-seat billing), not a role permission.
         services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
+        services.AddScoped<IPaidPlanGate, PaidPlanGate>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();

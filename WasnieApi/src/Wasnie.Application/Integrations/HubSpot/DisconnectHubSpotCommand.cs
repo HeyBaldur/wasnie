@@ -9,7 +9,14 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Integrations.HubSpot;
 
-/// <summary>Disconnects the tenant's HubSpot connection: clears stored tokens, keeps the row for audit.</summary>
+/// <summary>
+/// Disconnects the tenant's HubSpot connection: clears stored tokens, keeps the row for audit.
+///
+/// ★ DELIBERATELY NOT behind the paid-plan gate, unlike every other operation here. A tenant that
+/// downgraded to Free still holds encrypted HubSpot tokens in our database; refusing to let them
+/// revoke those would mean billing state deciding whether someone may delete their own credentials.
+/// Every gated operation SPENDS (outbound CRM calls, sync, storage) — this one only ever gives back.
+/// </summary>
 public sealed record DisconnectHubSpotCommand : IRequest<Result<Unit>>;
 
 public sealed class DisconnectHubSpotHandler(

@@ -25,7 +25,13 @@
             <div class="int-card__logo">
               <img src="/hubspot.png" [alt]="'INTEGRATIONS.HUBSPOT.NAME' | translate" />
             </div>
-            <ws-badge [variant]="statusBadgeVariant()">{{ statusLabelKey() | translate }}</ws-badge>
+            @if (requiresUpgrade()) {
+              <!-- The plan badge REPLACES the connection status: on Free the connection state is not
+                   the useful fact, "you cannot use this" is. The frozen case still says both, below. -->
+              <ws-badge variant="neutral">{{ 'INTEGRATIONS.PAID_PLAN_BADGE' | translate }}</ws-badge>
+            } @else {
+              <ws-badge [variant]="statusBadgeVariant()">{{ statusLabelKey() | translate }}</ws-badge>
+            }
           </div>
 
           <!-- Title + description -->
@@ -38,6 +44,25 @@
 
           <!-- Footer: revealed detail/notice (by state) + actions -->
           <div class="int-card__footer">
+            <!--
+              Free workspace → the integration is withheld, and the card says so before anything else.
+              Two different sentences on purpose: a tenant that never connected is being SOLD this,
+              while one that connected before downgrading needs to know their connection still exists
+              and simply stopped syncing (nothing was deleted, upgrading resumes it).
+            -->
+            @if (requiresUpgrade()) {
+              <div class="int-card__notice int-card__notice--locked">
+                <app-icon name="lock" [size]="16" />
+                <p>
+                  @if (isFrozen()) {
+                    {{ 'INTEGRATIONS.FROZEN_NOTE' | translate }}
+                  } @else {
+                    {{ 'INTEGRATIONS.PAID_PLAN_NOTE' | translate }}
+                  }
+                </p>
+              </div>
+            }
+
             <!-- Connected → reveal account detail within the same card -->
             @if (isConnected()) {
               <dl class="int-card__detail">
@@ -79,8 +104,10 @@
               <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.DISCONNECTED_NOTE' | translate }}</p>
             }
 
-            <!-- Deal sync (Phase 2): preview, import, and the owner mapping queue -->
-            @if (isConnected()) {
+            <!-- Deal sync (Phase 2): preview, import, and the owner mapping queue.
+                 Every button here spends an outbound HubSpot call, so the plan gates the whole block —
+                 the API refuses them anyway and a clickable 403 is worse than an absent control. -->
+            @if (isConnected() && !requiresUpgrade()) {
               <div class="int-card__sync">
                 <span class="int-card__sync-label">{{ 'INTEGRATIONS.HUBSPOT.SYNC.TITLE' | translate }}</span>
                 <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.SYNC.DESC' | translate }}</p>
@@ -114,7 +141,7 @@
             }
 
             <!-- WI-CRM-CATEGORY: declare which HubSpot property feeds the transaction Category -->
-            @if (isConnected()) {
+            @if (isConnected() && !requiresUpgrade()) {
               <div class="int-card__category">
                 <span class="int-card__sync-label">{{ 'INTEGRATIONS.HUBSPOT.CATEGORY.TITLE' | translate }}</span>
                 <p class="int-card__muted">{{ 'INTEGRATIONS.HUBSPOT.CATEGORY.HELP' | translate }}</p>
@@ -150,25 +177,36 @@
             }
 
             <div class="int-card__actions">
-              @if (neverConnected() || isDisconnected()) {
+              <!-- The upgrade CTA takes the primary slot the Connect button would have had: on Free
+                   that IS the next step, and it is the only action on this card that can succeed. -->
+              @if (requiresUpgrade()) {
+                <ws-button variant="primary" routerLink="/subscription">
+                  {{ 'INTEGRATIONS.VIEW_PLANS' | translate }}
+                </ws-button>
+              }
+
+              @if ((neverConnected() || isDisconnected()) && !requiresUpgrade()) {
                 <ws-button variant="primary" [loading]="connecting()" [disabled]="connecting()" (click)="connect()">
                   {{ 'INTEGRATIONS.HUBSPOT.CONNECT' | translate }}
                 </ws-button>
               }
 
-              @if (needsReconnect()) {
+              @if (needsReconnect() && !requiresUpgrade()) {
                 <ws-button variant="primary" [loading]="connecting()" [disabled]="connecting()" (click)="connect()">
                   <app-icon name="refresh" [size]="14" />
                   {{ 'INTEGRATIONS.HUBSPOT.RECONNECT' | translate }}
                 </ws-button>
               }
 
-              @if (isConnected()) {
+              @if (isConnected() && !requiresUpgrade()) {
                 <ws-button variant="secondary" [loading]="testing()" [disabled]="testing()" (click)="test()">
                   {{ 'INTEGRATIONS.HUBSPOT.TEST' | translate }}
                 </ws-button>
               }
 
+              <!-- Disconnect stays available on Free BY DESIGN: it is the one action that does not
+                   spend anything, and refusing it would mean billing state deciding whether a tenant
+                   may revoke their own stored HubSpot credentials. The API allows it for the same reason. -->
               @if (isConnected() || needsReconnect()) {
                 <ws-button variant="ghost" [loading]="disconnecting()" [disabled]="disconnecting()" (click)="requestDisconnect()">
                   {{ 'INTEGRATIONS.HUBSPOT.DISCONNECT' | translate }}

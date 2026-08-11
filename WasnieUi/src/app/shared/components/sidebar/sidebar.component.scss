@@ -57,11 +57,43 @@
   width: 28px;
   height: 28px;
   color: var(--color-sidebar-muted);
-  transition: background-color 150ms ease, color 150ms ease;
+  border: 1px solid transparent;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 
   &:hover {
     background-color: var(--color-sidebar-hover-bg);
     color: var(--color-sidebar-text);
+  }
+}
+
+// ─── Collapsed header ─────────────────────────────────────────────────────────
+// At 64px the header cannot fit logo (32px) + toggle (28px) + padding side by side:
+// the toggle landed on top of the logo and got clipped by the sidebar's overflow,
+// making it a tiny, ambiguous click target. Collapsed, the two stack vertically and
+// the toggle gets a visible resting outline so it reads as a button, not an artifact.
+.sidebar--collapsed {
+  .sidebar__header {
+    @apply flex-col justify-center;
+    height: auto;
+    padding: 10px 0 8px;
+    gap: 8px;
+  }
+
+  .sidebar__brand {
+    @apply justify-center w-full;
+  }
+
+  .sidebar__toggle {
+    width: 40px;
+    height: 28px;
+    color: var(--color-sidebar-text);
+    background-color: var(--color-sidebar-hover-bg);
+    border-color: var(--color-sidebar-border);
+
+    &:hover {
+      background-color: var(--color-sidebar-active-bg);
+      color: var(--color-sidebar-active-text);
+    }
   }
 }
 

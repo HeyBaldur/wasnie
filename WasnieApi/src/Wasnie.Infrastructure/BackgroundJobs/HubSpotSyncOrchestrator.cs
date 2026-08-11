@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Integrations.HubSpot;
 
 namespace Wasnie.Infrastructure.BackgroundJobs;
@@ -35,11 +36,29 @@ public sealed class HubSpotSyncOrchestrator(
             return;
         }
 
-        var tenantIds = await db.HubSpotConnections
+        var connectedTenantIds = await db.HubSpotConnections
             .IgnoreQueryFilters()
             .Where(c => c.Status == HubSpotConnectionStatus.Connected)
             .Select(c => c.TenantId)
             .ToListAsync(cancellationToken);
+
+        // ★ Free tenants are dropped HERE, before any job is scheduled — not inside the per-tenant job.
+        // This is the loop that actually spends: a downgraded tenant left in this list would keep
+        // pulling HubSpot every hour forever, whether or not anyone ever logs in again. Their
+        // connection row survives untouched (frozen, not deleted) and rejoins the fan-out the moment
+        // they upgrade.
+        var paidTenantIds = await db.Tenants
+            .IgnoreQueryFilters()
+            .Where(t => connectedTenantIds.Contains(t.Id) && t.Tier != Tier.Free)
+            .Select(t => t.Id)
+            .ToListAsync(cancellationToken);
+
+        var skipped = connectedTenantIds.Count - paidTenantIds.Count;
+        if (skipped > 0)
+            logger.LogInformation(
+                "HubSpot auto-sync: skipped {Skipped} connected tenant(s) on the Free plan.", skipped);
+
+        var tenantIds = paidTenantIds;
 
         if (tenantIds.Count == 0)
         {

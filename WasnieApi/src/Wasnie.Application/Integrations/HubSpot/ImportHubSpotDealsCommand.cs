@@ -35,6 +35,7 @@ public sealed class ImportHubSpotDealsHandler(
     ICurrentUserService currentUser,
     IClock clock,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     ICrmDealSource dealSource,
     ICrmDealReconciler reconciler)
     : IRequestHandler<ImportHubSpotDealsCommand, Result<HubSpotImportResultDto>>
@@ -43,6 +44,10 @@ public sealed class ImportHubSpotDealsHandler(
         ImportHubSpotDealsCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         var tenantId = tenantContext.TenantId;
         var source = dealSource.SourceName;

@@ -12,7 +12,8 @@ public sealed record GetHubSpotStatusQuery : IRequest<Result<HubSpotConnectionSt
 public sealed class GetHubSpotStatusHandler(
     IApplicationDbContext db,
     ITenantContext tenantContext,
-    IAuthorizationService authorizationService)
+    IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate)
     : IRequestHandler<GetHubSpotStatusQuery, Result<HubSpotConnectionStatusDto>>
 {
     public async Task<Result<HubSpotConnectionStatusDto>> Handle(
@@ -20,14 +21,19 @@ public sealed class GetHubSpotStatusHandler(
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
 
+        // ★ The ONLY HubSpot endpoint a Free tenant may still call, and on purpose: it reads our own
+        // database, spends nothing on HubSpot, and is what the UI needs to render the locked card. A
+        // 403 here would leave the page unable to say WHY it is locked.
+        var requiresUpgrade = !await paidPlanGate.IsOnPaidPlanAsync(cancellationToken);
+
         var c = await db.HubSpotConnections
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TenantId == tenantContext.TenantId, cancellationToken);
 
         // No row = never connected.
         if (c is null)
-            return Result<HubSpotConnectionStatusDto>.Success(
-                new HubSpotConnectionStatusDto("NeverConnected", null, null, null, null, null));
+            return Result<HubSpotConnectionStatusDto>.Success(new HubSpotConnectionStatusDto(
+                "NeverConnected", null, null, null, null, null, RequiresUpgrade: requiresUpgrade));
 
         var disconnected = c.Status == Domain.Integrations.HubSpot.HubSpotConnectionStatus.Disconnected;
         return Result<HubSpotConnectionStatusDto>.Success(new HubSpotConnectionStatusDto(
@@ -38,6 +44,7 @@ public sealed class GetHubSpotStatusHandler(
             ConnectedBy: c.ConnectedBy,
             DisconnectedAt: c.DisconnectedAt,
             LastSyncedAt: disconnected ? null : c.LastSyncedAt,
-            CategoryPropertyName: c.CategoryPropertyName));
+            CategoryPropertyName: c.CategoryPropertyName,
+            RequiresUpgrade: requiresUpgrade));
     }
 }

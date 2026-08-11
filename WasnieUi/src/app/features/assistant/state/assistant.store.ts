@@ -26,6 +26,12 @@ export class AssistantStore {
   // button the user is not entitled to.
   readonly entitled = signal<boolean | null>(null);
 
+  /**
+   * True when the assistant is withheld ONLY because the workspace is on Free. Drives the locked
+   * entry point; stays false for every other refusal, which keeps rendering nothing at all.
+   */
+  readonly requiresUpgrade = signal(false);
+
   // ── Panel ─────────────────────────────────────────────────────────────────
   readonly isOpen = signal(false);
   readonly historyOpen = signal(false);
@@ -64,10 +70,13 @@ export class AssistantStore {
     try {
       const result = await firstValueFrom(this.api.getEntitlement());
       this.entitled.set(result.enabled);
+      this.requiresUpgrade.set(result.requiresUpgrade === true);
     } catch {
       // A failed check means "no button", never "assume yes". The backend gates every call anyway,
-      // so guessing generously here would only produce a button that 403s.
+      // so guessing generously here would only produce a button that 403s. The upsell is suppressed
+      // too: we do not know the plan, and inventing an upgrade prompt is worse than showing nothing.
       this.entitled.set(false);
+      this.requiresUpgrade.set(false);
     }
   }
 

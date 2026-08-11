@@ -16,6 +16,12 @@ export interface HubSpotConnectionStatus {
   lastSyncedAt: string | null;
   /** WI-CRM-CATEGORY: the HubSpot property the tenant declared feeds Category. Null = not configured. */
   categoryPropertyName: string | null;
+  /**
+   * True when the workspace is on Free: every HubSpot operation is refused by the API and the hourly
+   * auto-sync skips this tenant. Orthogonal to `status` — a tenant that connected while paying and
+   * then downgraded reports "Connected" AND this flag, which is the frozen state the card explains.
+   */
+  requiresUpgrade: boolean;
 }
 
 export interface HubSpotConnectResult {

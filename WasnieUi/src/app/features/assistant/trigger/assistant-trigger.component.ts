@@ -1,4 +1,5 @@
 import { Component, inject, OnInit } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AssistantStore } from '../state/assistant.store';
 
@@ -19,8 +20,9 @@ import { AssistantStore } from '../state/assistant.store';
 @Component({
   selector: 'app-assistant-trigger',
   standalone: true,
-  imports: [TranslateModule],
+  imports: [TranslateModule, RouterLink],
   templateUrl: './assistant-trigger.component.html',
+  styleUrl: './assistant-trigger.component.scss',
 })
 export class AssistantTriggerComponent implements OnInit {
   readonly store = inject(AssistantStore);

@@ -88,18 +88,23 @@ describe('SubscriptionWizardComponent', () => {
     expect(text).toContain('Scale');
   });
 
-  // ── Free plan is actionable ─────────────────────────────────────────────────
+  // ── Every plan is selectable ────────────────────────────────────────────────
 
-  it('only paid plan headers have the --disabled modifier class', () => {
-    const disabledHeaders = fixture.nativeElement.querySelectorAll('.pt-header--disabled');
-    expect(disabledHeaders.length).toBe(3);
+  // Paid plans used to render dimmed with a "Coming soon" badge while their CTA was
+  // live — the header said unavailable, the button said buy. They ship, so no header
+  // is dimmed and no plan is announced as upcoming.
+  it('renders no dimmed plan header and no "coming soon" badge', () => {
+    expect(fixture.nativeElement.querySelectorAll('.pt-header--disabled').length).toBe(0);
+    expect((fixture.nativeElement.textContent as string).toLowerCase()).not.toContain('coming soon');
   });
 
-  // ── Paid plans are disabled ─────────────────────────────────────────────────
+  // ── AI assistant is a paid-plan differentiator ──────────────────────────────
 
-  it('three paid plan headers have --disabled modifier class', () => {
-    const disabledHeaders = fixture.nativeElement.querySelectorAll('.pt-header--disabled');
-    expect(disabledHeaders.length).toBe(3);
+  // Two paid-only rows (AI assistant, HubSpot): 3 included cells each, and one
+  // "not included" each on the Free column.
+  it('marks the paid-only rows included on the 3 paid plans and excluded on Free', () => {
+    expect(fixture.nativeElement.querySelectorAll('.pt-cell__yes').length).toBe(6);
+    expect(fixture.nativeElement.querySelectorAll('.pt-cell__no').length).toBe(2);
   });
 
   // ── Helper methods ─────────────────────────────────────────────────────────

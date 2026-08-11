@@ -56,6 +56,22 @@ public sealed class ExceptionHandlingMiddleware(
                 upgradePath = "/account/subscription",
             }));
         }
+        // Same 403 as a permission denial, different discriminator: the client shows a locked control
+        // with an upgrade path here, where ForbiddenException makes it hide the control entirely.
+        catch (PaidPlanRequiredException ex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                error = "PaidPlanRequired",
+                message = ex.Message,
+                feature = ex.Feature,
+                tier = ex.CurrentTier,
+                upgradeTier = ex.UpgradeTier,
+                upgradePath = "/subscription",
+            }));
+        }
         catch (DomainException ex)
         {
             await WriteErrorResponse(context, HttpStatusCode.UnprocessableEntity, ex.Message, null);

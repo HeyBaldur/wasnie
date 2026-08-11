@@ -75,6 +75,17 @@ export class IntegrationsComponent implements OnInit {
   readonly isDisconnected = computed(() => this.currentStatus() === 'Disconnected');
   readonly neverConnected = computed(() => this.currentStatus() === 'NeverConnected');
 
+  /**
+   * The workspace is on Free, so every HubSpot action is refused server-side. Drives the locked card:
+   * the actions are withheld and an upgrade path is offered instead of letting the user click into a
+   * guaranteed 403. Defaults to false while the status is still loading — the card renders unlocked
+   * for an instant rather than accusing a paying tenant of being on Free.
+   */
+  readonly requiresUpgrade = computed(() => this.status()?.requiresUpgrade === true);
+
+  /** Connected before the downgrade: the connection is intact but frozen until they upgrade. */
+  readonly isFrozen = computed(() => this.requiresUpgrade() && (this.isConnected() || this.needsReconnect()));
+
   readonly statusBadgeVariant = computed<BadgeVariant>(() => {
     switch (this.currentStatus()) {
       case 'Connected': return 'success';

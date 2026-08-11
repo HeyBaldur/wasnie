@@ -4,6 +4,74 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-11 — El asistente de IA y HubSpot dejan de ser gratis: gate de plan de punta a punta
+
+**El problema.** La tabla de precios de `/onboarding/plan` ya anunciaba el asistente de IA y la
+integracion con HubSpot como funciones de pago, pero **el codigo las regalaba**. El asistente miraba
+el ROL (`AssistantEntitlement`: `role == TenantAdmin`) y nunca el tier, asi que cualquier admin de un
+workspace Free tenia el copiloto entero con gpt-oss-120b. HubSpot no miraba nada: `TierLimits` solo
+limita payees y planes, no capacidades, y el orquestador horario abanicaba un job por CADA tenant
+conectado sin preguntar por el plan — o sea, un tenant que conecto pagando y despues bajo a Free
+seguia consumiendo API saliente para siempre, sin que nadie iniciara sesion.
+
+**Dos decisiones de producto de Rodolfo antes de escribir codigo:**
+1. **Bloqueado + CTA de upgrade, no oculto.** Choca con la letra de CLAUDE.md 5.8 ("RBAC = ocultar,
+   no deshabilitar") y se hizo a proposito: esa regla es sobre PERMISOS (lo que el usuario nunca va a
+   poder hacer), y esto es FACTURACION (lo que si puede tener si paga). Ocultarlo mataba el upsell que
+   la propia tabla de precios acababa de prometer.
+2. **Congelar, no borrar.** Un tenant que baja a Free conserva su conexion de HubSpot cifrada; el job
+   deja de sincronizarla y la API la rechaza, pero al volver a un plan de pago revive sin re-autorizar
+   ni remapear owners. Nada destructivo.
+
+**El gate vive en UN lugar por capa.** `TierFeatures.IncludesPaidFeatures(tier)` (Domain) es la unica
+definicion de "que planes incluyen lo caro", expresada como `!= Free` y NO como lista de planes de
+pago: un tier nuevo queda incluido por defecto, porque el modo de fallo de la lista blanca es
+silencioso (se vende con asistente y despues se niega en runtime). Encima va `IPaidPlanGate`
+(Application) con su implementacion `PaidPlanGate` (Infrastructure), que lee el tier de la **base de
+datos, nunca del JWT** — un claim seguiria negandole el asistente a quien acaba de pagar y, peor,
+seguiria REGALANDO el sync a quien acaba de bajar, mientras viva el token.
+
+**Superficies cerradas (7):**
+- **Asistente:** un solo cambio dentro de `AssistantEntitlement`, que ahora exige asiento **Y** plan.
+  Los 7 handlers ya llamaban `RequireAsync()`, asi que ninguno se toco.
+- **HubSpot, 8 handlers** (`connect`, `category-property`, `ping`, `deals/preview`, `deals/import`,
+  `deals/sync-now`, `owners/unresolved`, `owners/link`): `RequirePaidPlanAsync` despues del permiso.
+- **Callback OAuth anonimo:** re-chequea el tier desde el tenant del `state` (no hay tenant ambiente).
+  Cierra una ventana real: empezar el OAuth pagando y volver ya en Free dejaba tokens vivos guardados.
+- **Orquestador horario:** filtra los Free ANTES de crear el job. Es el bucle que gasta.
+- **Job por tenant:** vuelve a chequear, porque el stagger puede ser de horas y el plan cambia en el medio.
+- **`GET /status`:** el UNICO endpoint que un Free sigue pudiendo llamar — lee nuestra propia DB, no
+  gasta nada de HubSpot, y es lo que la UI necesita para explicar POR QUE esta bloqueado. Devuelve
+  `requiresUpgrade`.
+- **`disconnect`:** deliberadamente SIN gate. Es la unica operacion que no gasta, y negarsela seria
+  dejar que el estado de facturacion decida si alguien puede revocar sus propias credenciales.
+
+**Dos negativas distintas, dos UIs distintas.** `ForbiddenException` (no tenes autoridad) -> se
+esconde. `PaidPlanRequiredException` (no esta en tu plan) -> se muestra bloqueado con camino de
+compra. Mismo 403, distinto discriminador. Por eso `AssistantEntitlementDto` gano `RequiresUpgrade`:
+sin asiento no se ofrece upgrade **nunca**, porque un plan mas caro no le daria el asistente a esa
+persona y ofrecerselo seria mentir.
+
+**Frontend.** El trigger del topbar pasa a un link plano y apagado hacia `/subscription` cuando el
+unico impedimento es el plan (nunca cuando falta el asiento). La tarjeta de `/integrations` cambia el
+badge de conexion por "Plan de pago", muestra un aviso distinto si nunca conecto (venta) o si esta
+congelado (tranquilizar: no se borro nada), oculta los bloques de sync/categoria y deja Disconnect.
+Claves nuevas en EN/ES/PL.
+
+**Verificacion.** Backend unit **1367 -> 1378 en verde** (tests nuevos: el gate lee de la DB y un
+downgrade pega en la llamada siguiente; tenant sin resolver y tenant inexistente = negacion; Free
+conectado nunca se agenda y conserva la fila; job de un tenant degradado no toca el CRM ni mueve el
+checkpoint; asistente con las dos puertas por separado). Front **811 -> 813**, con los 3 rojos
+preexistentes de KaTeX. `dotnet build` y `ng build --configuration production` limpios.
+
+**9 tests existentes se pusieron rojos y eso fue la senal correcta:** sus harnesses nunca sembraban
+fila `Tenant`, asi que el gate los leia como "plan desconocido" y refusaba. Se les agrego un tenant
+pago explicito.
+
+**Queda abierto (decision de negocio, no tecnica):** el asiento del asistente sigue siendo el rol
+TenantAdmin. En un tenant de pago, un CompManager sigue sin asistente y no ve nada — correcto segun el
+diseno per-seat, pero conviene confirmar que es lo que se quiere vender.
+
 ## 2026-08-10 — Rebranding a Incentra (incentra.work): SOLO lo visible al usuario
 
 Decision de negocio de Rodolfo (compro `incentra.work`). **La regla dura del WI: cambiar SOLO lo que el

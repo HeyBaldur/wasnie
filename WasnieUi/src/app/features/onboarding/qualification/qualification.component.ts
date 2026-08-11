@@ -66,7 +66,9 @@ export class QualificationComponent {
   readonly form = this.fb.nonNullable.group({
     country:          ['', Validators.required],
     phoneNumber:      ['', [Validators.required, (c: AbstractControl) => this.validatePhone(c)]],
-    howHeardAboutUs:  ['', Validators.required],
+    // Attribution is marketing, not compliance: optional so it never blocks qualification.
+    // The backend column is nullable and unvalidated, so an empty string is accepted.
+    howHeardAboutUs:  [''],
     salesVolumeRange: ['', Validators.required],
     currentSystem:    ['', Validators.required],
     legalAccepted:    [false, Validators.requiredTrue],

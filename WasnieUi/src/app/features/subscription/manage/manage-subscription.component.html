@@ -231,6 +231,29 @@
                     </td>
                   }
                 </tr>
+                <!--
+                  The two metered capabilities. Every column here is a PAID plan (upgradePlans drops
+                  Free), so both rows are included across the board — that is the point: what you gain
+                  by leaving Free, stated in the same table where you leave it.
+                -->
+                <tr>
+                  <td class="plan-comparison__label">{{ 'ONBOARDING.COL_ASSISTANT' | translate }}</td>
+                  @for (plan of upgradePlans; track plan.tier) {
+                    <td class="plan-comparison__cell"
+                        [class.plan-comparison__cell--current]="plan.isCurrentPlan">
+                      <span class="plan-comparison__yes">✓ {{ 'ONBOARDING.INCLUDED' | translate }}</span>
+                    </td>
+                  }
+                </tr>
+                <tr>
+                  <td class="plan-comparison__label">{{ 'ONBOARDING.COL_HUBSPOT' | translate }}</td>
+                  @for (plan of upgradePlans; track plan.tier) {
+                    <td class="plan-comparison__cell"
+                        [class.plan-comparison__cell--current]="plan.isCurrentPlan">
+                      <span class="plan-comparison__yes">✓ {{ 'ONBOARDING.INCLUDED' | translate }}</span>
+                    </td>
+                  }
+                </tr>
                 <tr>
                   <td class="plan-comparison__cta-label"></td>
                   @for (plan of upgradePlans; track plan.tier) {

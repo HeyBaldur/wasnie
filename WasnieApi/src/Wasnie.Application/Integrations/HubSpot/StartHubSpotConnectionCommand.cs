@@ -18,6 +18,7 @@ public sealed class StartHubSpotConnectionHandler(
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
     IAuthorizationService authorizationService,
+    IPaidPlanGate paidPlanGate,
     IClock clock,
     IGuidGenerator guid,
     IOptions<HubSpotOptions> options)
@@ -29,6 +30,10 @@ public sealed class StartHubSpotConnectionHandler(
         StartHubSpotConnectionCommand request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.IntegrationsManage, cancellationToken);
+        // Metered capability: the plan is checked after the permission, so an admin on Free is
+        // told the truth ("not in your plan") instead of a bare Forbidden. Frozen, not deleted —
+        // a downgraded tenant keeps its stored connection and resumes on upgrade.
+        await paidPlanGate.RequirePaidPlanAsync("The HubSpot integration", cancellationToken);
 
         if (!_opts.IsConfigured)
             return Result<HubSpotConnectResultDto>.Failure(
