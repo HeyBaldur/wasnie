@@ -59,9 +59,9 @@ public sealed class OpenRouterOptions
     /// Sent as OpenRouter's optional attribution headers (`HTTP-Referer`, `X-Title`). They identify the
     /// calling application on OpenRouter's own dashboards; they carry no secret and no user data.
     /// </summary>
-    public string AppName { get; init; } = "Wasnie";
+    public string AppName { get; init; } = "Incentra";
 
-    public string AppUrl { get; init; } = "https://wasnie.com";
+    public string AppUrl { get; init; } = "https://incentra.work";
 
     /// <summary>Same meaning as <see cref="GroqOptions.MaxHistoryMessages"/> — kept per provider so a
     /// cheaper endpoint can afford a longer thread without editing the other one.</summary>

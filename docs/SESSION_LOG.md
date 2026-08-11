@@ -4,6 +4,87 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-10 — Rebranding a Incentra (incentra.work): SOLO lo visible al usuario
+
+Decision de negocio de Rodolfo (compro `incentra.work`). **La regla dura del WI: cambiar SOLO lo que el
+usuario VE.** El codigo sigue llamandose Wasnie — namespaces, clases, models, tablas, migraciones,
+nombres de archivo y el nombre interno del proyecto quedaron INTACTOS. "Wasnie" como identificador
+interno es invisible para el cliente; renombrarlo seria riesgo puro (cientos de archivos, snapshot de
+EF, referencias rotas) sin ningun beneficio.
+
+### El diagnostico primero, el cambio despues
+
+Se clasifico CADA aparicion de "Wasnie" en VISIBLE vs INTERNO antes de tocar nada. De ~5.500
+apariciones en el repo, **solo ~40 eran visibles**. El resto son namespaces, `using`, el snapshot de EF
+y 24 Designer.cs de migraciones (~80 refs c/u), comentarios de codigo y nombres de tests.
+
+### Lo que cambio (visible)
+
+- **i18n EN/ES/PL** — 18 strings x 3 idiomas. Ya existia la clave de marca `APP.NAME`; se dejo como
+  punto unico y se aprovecho para los dos literales que NO la usaban.
+- **Metadatos del navegador** — `index.html` `<title>` y `TranslatedTitleStrategy.BRAND`
+  (`Incentra | ICM & SPM`, y el sufijo `<Page> | Incentra`).
+- **Templates** — 8 `alt="Wasnie"` -> `alt="Incentra"`; y los dos literales sueltos
+  (`qualification`, `subscription-reactivation`) ahora leen `{{ 'APP.NAME' | translate }}` en vez de
+  tener el nombre hardcodeado.
+- **System prompt del asistente** (`AssistantPrompt.cs`, ~30 refs + `AssistantToolRunner`) — el
+  asistente se presenta como Incentra y la regla de confinamiento es `STAY ON INCENTRA`.
+- **Plantillas de email** (`EmailTemplates.cs`) — asuntos y cuerpos EN/ES/PL, el header y el footer
+  (`© 2025 Incentra · incentra.work`).
+- **Config de dominio** — `FrontendBaseUrl` -> `https://app.incentra.work`; `FromAddress` ->
+  `Incentra <...>`; `ResendOptions` default -> `Incentra <noreply@incentra.work>`; los mailtos del
+  perfil -> `support@incentra.work` / `privacy@incentra.work`; `REACTIVATION_GDPR_EMAIL` idem.
+- **El manual** — `docs/Wasnie_Configuration_Guide.md` es lo que RENDERIZA la pantalla `/manual` (y es
+  la base de conocimiento del asistente), asi que su prosa se rebrandeo. El i18n de `/manual` ya estaba
+  limpio. El PDF real lo regenera Rodolfo.
+- **Swagger** (`Incentra API v1`) y el **PDF de payouts** (`Sales Performance Management — Incentra`).
+
+### * TRES SUPERFICIES VISIBLES QUE NO ESTABAN EN LA LISTA DEL WI
+
+El barrido las destapo y son las que un rebrand a medias deja rotas por meses:
+
+1. **El issuer de 2FA** (`GetTwoFactorSetupHandler`) — es el nombre que Google Authenticator muestra
+   en la pantalla del telefono. Ahora dice Incentra. Los ya enrolados siguen viendo Wasnie: la etiqueta
+   se graba en el momento del enrolamiento y no se puede reescribir desde el server. No es un bug.
+2. **Dos mensajes de `DomainException`** ("...because Wasnie holds no exchange rates") — se confirmo en
+   `ExceptionHandlingMiddleware` que el `.Message` viaja al cliente como 422, o sea el usuario los LEE.
+3. **El header `X-Title`/`AppUrl` de OpenRouter** — es atribucion de marca en los dashboards del
+   proveedor.
+
+### El polaco no admitia reemplazo literal
+
+"Wasnie" era indeclinable; **"Incentra" termina en -a y cae en el paradigma femenino polaco**, asi que
+dejarlo en nominativo daba frases agramaticales ("skonfigurowac Incentra", "o Incentra?"). Se declino
+donde correspondia (`Incentrę` / `Incentry` / `w Incentrze`) en i18n y en los emails. Ingles: un
+articulo corregido ("a Incentra" -> "an Incentra"). Espanol no necesito nada.
+
+### Lo que se dejo en Wasnie A PROPOSITO
+
+`wasnie_logo.png` (nombre de archivo — la IMAGEN ya no tiene ninguna "W": es una marca de barras con
+flecha, sirve tal cual para Incentra), las claves de `localStorage`/`sessionStorage`
+(`wasnie.theme`, `wasnie_session`, `wasnie_lang`, ...) — cambiarlas desloguea a todo el mundo y resetea
+preferencias; JWT `Issuer`/`Audience` — cambiarlos **invalida todos los tokens vivos**; la policy CORS
+`WasnieUi`; `WasnieDb`; `logs/wasnie-.log`; los nombres en disco del manual y de la guia; y todos los
+comentarios de codigo.
+
+### Verificacion
+
+`dotnet build` limpio (0 errores; el build a `bin/` normal choca con la API corriendo que bloquea los
+DLLs — se compilo a un `BaseOutputPath` temporal). Unit **1367 -> 1367 en verde**: 4 asserts de marca
+actualizados (`STAY ON WASNIE` x2, `X-Title`, `OtpauthUri`). `ng build --configuration production`
+limpio. Front 810-811/814 — **los 4 rojos son todos del suite de KaTeX/maths, preexistentes** y su
+numero varia entre corridas (flaky), ninguno de marca. Runtime en `localhost:4200`: title
+`Sign in | Incentra` y `Zaloguj się | Incentra`, footer `© 2025 Incentra`, **cero "Wasnie" en el DOM**
+en EN y PL.
+
+### Pendiente para Rodolfo (NO es codigo)
+
+Los buzones `support@incentra.work` y `privacy@incentra.work` **tienen que existir** — hoy la app ya
+apunta ahi. Idem el dominio verificado en Resend si se quiere salir del sender de sandbox
+(`onboarding@resend.dev`, que quedo igual), y `app.incentra.work` apuntando al front. Y regenerar
+`docs/Wasnie_User_Manual.pdf` con la marca nueva (el nombre de descarga que ve el navegador ya dice
+`Incentra_User_Manual.pdf`; el nombre en disco sigue siendo el viejo, a proposito).
+
 ## 2026-08-10 — FIX: al cancelar, el mensaje desaparecia hasta refrescar
 
 Reportado por Rodolfo probando el WI anterior: *"presiono cancelar, lo hace, pero el mensaje desaparece,

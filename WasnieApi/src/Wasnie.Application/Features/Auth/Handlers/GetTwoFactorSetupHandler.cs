@@ -25,7 +25,7 @@ public sealed class GetTwoFactorSetupHandler(
             return Result<TwoFactorSetupDto>.Failure("Could not generate 2FA secret.");
 
         var email = currentUser.Email ?? userId;
-        var otpauthUri = BuildOtpAuthUri("Wasnie", email, rawSecret);
+        var otpauthUri = BuildOtpAuthUri("Incentra", email, rawSecret);
 
         return Result<TwoFactorSetupDto>.Success(new TwoFactorSetupDto(rawSecret, otpauthUri));
     }

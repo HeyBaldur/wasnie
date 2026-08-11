@@ -51,5 +51,5 @@ public sealed class UserManualOptions
     /// The name the browser sees if it saves the file. Presentation only — it is NOT a barrier and is
     /// not treated as one.
     /// </summary>
-    public string FileName { get; init; } = "Wasnie_User_Manual.pdf";
+    public string FileName { get; init; } = "Incentra_User_Manual.pdf";
 }

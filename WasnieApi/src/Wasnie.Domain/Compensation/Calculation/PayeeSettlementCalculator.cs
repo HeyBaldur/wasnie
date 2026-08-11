@@ -46,7 +46,7 @@ public static class PayeeSettlementCalculator
             if (p.Gross.Currency != currency)
                 throw new DomainException(
                     $"Cannot settle a {p.Gross.Currency} payout against a {currency} balance — " +
-                    "settlement is per currency because Wasnie holds no exchange rates.");
+                    "settlement is per currency because Incentra holds no exchange rates.");
             if (p.Gross.Amount < 0m)
                 throw new DomainException("A payout gross amount must not be negative.");
             if (p.CapPercent is < 0m or > 100m)

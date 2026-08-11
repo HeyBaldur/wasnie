@@ -262,7 +262,7 @@ public sealed class AssistantToolRunner(
     /// documentation.
     /// </summary>
     public const string SelectionInstructions =
-        "You are a lookup dispatcher inside Wasnie, a sales-commission product. You do NOT answer " +
+        "You are a lookup dispatcher inside Incentra, a sales-commission product. You do NOT answer " +
         "questions and you do NOT write prose.\n" +
         "\n" +
         "Decide whether answering the user's message requires reading THIS TENANT'S OWN DATA — a " +

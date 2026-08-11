@@ -41,7 +41,7 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
             {
                 col.Item().Text("Compensation Statement")
                     .FontSize(20).SemiBold().FontColor(Colors.Black);
-                col.Item().Text("Sales Performance Management — Wasnie")
+                col.Item().Text("Sales Performance Management — Incentra")
                     .FontSize(10).FontColor(Colors.Grey.Darken2);
             });
         });

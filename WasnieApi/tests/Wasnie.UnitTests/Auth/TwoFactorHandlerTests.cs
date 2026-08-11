@@ -89,7 +89,7 @@ public sealed class TwoFactorHandlerTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value!.Secret.Should().Be("ABCD EFGH IJKL MNOP");
         result.Value!.OtpauthUri.Should().StartWith("otpauth://totp/");
-        result.Value!.OtpauthUri.Should().Contain("Wasnie");
+        result.Value!.OtpauthUri.Should().Contain("Incentra");
         result.Value!.OtpauthUri.Should().Contain("ABCD EFGH IJKL MNOP");
     }
 

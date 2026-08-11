@@ -152,11 +152,11 @@ export class ManageProfileComponent implements OnInit {
   }
 
   contactSupport(): void {
-    window.location.href = 'mailto:support@wasnie.com';
+    window.location.href = 'mailto:support@incentra.work';
   }
 
   contactPrivacy(): void {
-    window.location.href = 'mailto:privacy@wasnie.io';
+    window.location.href = 'mailto:privacy@incentra.work';
   }
 
   requestEmailChange(): void {
