@@ -1,0 +1,52 @@
+<ws-modal
+  size="xl"
+  [isOpen]="welcome.isOpen()"
+  (closed)="welcome.close()"
+>
+  <div slot="header" class="welcome__header">
+    <h2 class="welcome__title">{{ 'WELCOME.TITLE' | translate }}</h2>
+    <p class="welcome__subtitle">{{ 'WELCOME.SUBTITLE' | translate }}</p>
+  </div>
+
+  <!--
+    ws-video, the same primitive the empty states use: silent, chrome-less, autoplaying and looping.
+    Labelled rather than decorative here — unlike an empty-state loop, this clip carries the tour, so
+    it is announced to assistive technology instead of being hidden from it.
+  -->
+  <div class="welcome__video">
+    <ws-video
+      src="/videos/icm.mp4"
+      fit="contain"
+      [playFallback]="true"
+      [ariaLabel]="'WELCOME.VIDEO_LABEL' | translate"
+    />
+  </div>
+
+  <p class="welcome__lead">{{ 'WELCOME.LEAD' | translate }}</p>
+
+  <ul class="welcome__list">
+    @for (item of capabilities; track item.titleKey) {
+      <li class="welcome__item">
+        <span class="welcome__item-icon" aria-hidden="true">
+          <app-icon [name]="item.icon" [size]="16" />
+        </span>
+        <div class="welcome__item-body">
+          <p class="welcome__item-title">{{ item.titleKey | translate }}</p>
+          <p class="welcome__item-desc">{{ item.descKey | translate }}</p>
+        </div>
+      </li>
+    }
+  </ul>
+
+  <div slot="footer" class="welcome__footer">
+    <!--
+      ★ ONE BUTTON, AND IT ONLY CLOSES. The assistant is described in the list above as something the
+      product does, never as a control here: the modal is identical for every tenant, and the assistant
+      is not part of the Free plan — a "Open the assistant" button would 403 for exactly the users most
+      likely to be seeing this screen for the first time.
+    -->
+    <ws-button variant="primary" (click)="welcome.close()">
+      {{ 'WELCOME.START' | translate }}
+    </ws-button>
+  </div>
+</ws-modal>

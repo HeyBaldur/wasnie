@@ -4,6 +4,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { TranslatePipe } from '@ngx-translate/core';
 import { IconComponent } from '../../components/icon/icon.component';
 import { WsButtonComponent } from '../ws-button/ws-button.component';
+import { WsVideoComponent } from '../ws-video/ws-video.component';
 
 const ILLUSTRATIONS: Record<string, string> = {
   'plans-empty': `
@@ -71,7 +72,7 @@ const ILLUSTRATIONS: Record<string, string> = {
 @Component({
   selector: 'ws-empty-state',
   standalone: true,
-  imports: [TranslatePipe, IconComponent, RouterLink, WsButtonComponent],
+  imports: [TranslatePipe, IconComponent, RouterLink, WsButtonComponent, WsVideoComponent],
   templateUrl: './ws-empty-state.component.html',
   styleUrl: './ws-empty-state.component.scss',
 })
@@ -79,6 +80,13 @@ export class WsEmptyStateComponent {
   private readonly sanitizer = inject(DomSanitizer);
 
   readonly illustration = input('');
+  /**
+   * A looping clip used INSTEAD of `illustration`/`icon`, e.g. "/videos/quotas.mp4". Takes precedence
+   * over both: a screen that has a clip has no use for the static fallback underneath it.
+   */
+  readonly video = input('');
+  /** Still frame for the clip — what reduced-motion users see in place of the animation. */
+  readonly videoPoster = input('');
   readonly icon = input('');
   readonly titleKey = input.required<string>();
   readonly descKey = input('');

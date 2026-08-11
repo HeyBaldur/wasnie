@@ -10,6 +10,8 @@ import { SubscriptionStateService } from '../../../features/subscription/service
 import { PastDueBannerComponent } from '../../../features/subscription/past-due-banner/past-due-banner.component';
 import { TwoFaReminderComponent } from '../two-fa-reminder/two-fa-reminder.component';
 import { AssistantPanelComponent } from '../../../features/assistant/panel/assistant-panel.component';
+import { WelcomeModalComponent } from '../welcome-modal/welcome-modal.component';
+import { WelcomeService } from '../../../core/services/welcome.service';
 
 @Component({
   selector: 'app-shell',
@@ -22,6 +24,7 @@ import { AssistantPanelComponent } from '../../../features/assistant/panel/assis
     PastDueBannerComponent,
     TwoFaReminderComponent,
     AssistantPanelComponent,
+    WelcomeModalComponent,
     TranslateModule,
   ],
   templateUrl: './app-shell.component.html',
@@ -31,10 +34,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly sidebarState = inject(SidebarStateService);
   readonly inactivity = inject(InactivityService);
   readonly subState = inject(SubscriptionStateService);
+  private readonly welcome = inject(WelcomeService);
 
   ngOnInit(): void {
     this.inactivity.start();
     this.subState.load();
+    // First authenticated screen this browser has ever rendered → the product tour. Hooked here and
+    // not in a route guard because the shell is the one place every signed-in page passes through,
+    // and the onboarding screens (which do not use the shell) must not be interrupted by it.
+    this.welcome.openIfFirstVisit();
   }
 
   ngOnDestroy(): void {

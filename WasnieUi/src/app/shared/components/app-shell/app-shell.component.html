@@ -17,6 +17,10 @@
 <ws-toast-container />
 <app-two-fa-reminder />
 
+<!-- Shell-level like the assistant panel: it is opened from here on first visit AND re-opened
+     from the /manual screen, so it cannot live inside either route. -->
+<app-welcome-modal />
+
 <ws-confirmation-modal
   [isOpen]="inactivity.warningOpen()"
   [title]="'SESSION.WARNING_TITLE' | translate"

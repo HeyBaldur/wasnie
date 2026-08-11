@@ -280,9 +280,16 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-3);
+  // Tight, because the two text links below are ONE group ("other ways to read this") and 12px read
+  // as three unrelated items. The assistant button buys its own separation back with a margin, so it
+  // still sits apart as the primary action.
+  gap: var(--space-1);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-subtle);
+
+  ws-button {
+    margin-bottom: var(--space-2);
+  }
 }
 
 .manual__link {
@@ -291,6 +298,9 @@
   background: none;
   cursor: pointer;
   font-size: var(--font-size-13);
+  // Matches the weight the app gives every real <a> (styles.scss): these are <button>s that read as
+  // links, and a <button> inherits none of that.
+  font-weight: 600;
   color: var(--color-brand);
 
   &:hover {

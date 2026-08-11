@@ -25,12 +25,25 @@
 
     @if (!store.loading() && store.pagedQuotas().length === 0 && !store.listParams().search && store.listParams().status === null) {
       <ws-empty-state
-        illustration="quotas-empty"
+        video="/videos/quotas.mp4"
         titleKey="QUOTAS.EMPTY_TITLE"
-        descKey="QUOTAS.EMPTY_DESCRIPTION"
         actionKey="QUOTAS.EMPTY_ACTION"
         actionRoute="new"
-      />
+      >
+        <!--
+          A quota cannot exist on its own: it hangs off a plan and is assigned to a payee, so someone
+          landing here with neither would hit a form with two empty dropdowns. The sentence names the
+          order and links straight to both screens. Built from fragments rather than one string with
+          markup so each language keeps its own wording — Polish needs both nouns in the accusative.
+        -->
+        <span slot="desc">
+          {{ 'QUOTAS.EMPTY_PREREQ_BEFORE' | translate }}
+          <a routerLink="/plans">{{ 'QUOTAS.EMPTY_PREREQ_PLAN' | translate }}</a>
+          {{ 'QUOTAS.EMPTY_PREREQ_BETWEEN' | translate }}
+          <a routerLink="/payees">{{ 'QUOTAS.EMPTY_PREREQ_PAYEE' | translate }}</a>
+          {{ 'QUOTAS.EMPTY_PREREQ_AFTER' | translate }}
+        </span>
+      </ws-empty-state>
     } @else {
       <ws-table>
         <table>

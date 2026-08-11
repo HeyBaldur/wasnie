@@ -18,6 +18,7 @@ import { WsCardComponent, WsButtonComponent, WsEmptyStateComponent } from '../..
 import { ManualApiService } from './services/manual.api.service';
 import { ManualHeading } from './models/manual.model';
 import { AssistantStore } from '../assistant/state/assistant.store';
+import { WelcomeService } from '../../core/services/welcome.service';
 
 type ManualState = 'loading' | 'ready' | 'unavailable' | 'error';
 
@@ -57,6 +58,8 @@ export class ManualComponent implements OnInit {
 
   /** Root-provided, so a button here opens the panel that lives in the shell. */
   readonly assistant = inject(AssistantStore);
+  // The modal itself is rendered by the app shell; this only flips the shared signal.
+  readonly welcome = inject(WelcomeService);
 
   private readonly docRef = viewChild<ElementRef<HTMLElement>>('doc');
 
