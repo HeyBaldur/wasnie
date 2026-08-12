@@ -391,6 +391,7 @@
     "REFRESH": "Actualizar",
     "LOADING": "Cargando...",
     "PLAY_VIDEO": "Reproducir video",
+    "PAUSE_VIDEO": "Pausar video",
     "UNASSIGNED": "Sin asignar",
     "SAVE": "Guardar",
     "CANCEL": "Cancelar",

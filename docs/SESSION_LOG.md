@@ -4,6 +4,275 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-12 — Poster del video de bienvenida: 4.6 MB en cada apertura pasan a 11.8 KB
+
+**El problema que quedaba abierto.** Con `[autoplay]="false"` el marco quedaba vacio hasta que el clip
+entero terminaba de bajar (~8s en el server de desarrollo), y el parche para eso era `preload="auto"`:
+o sea 4.6 MB descargados en CADA apertura del modal, incluso para el que nunca aprieta Play. Rodolfo
+pidio cerrarlo con un poster.
+
+**El poster.** `public/videos/icm-poster.webp`, **11.8 KB**, 1280x720 — extraido del propio clip:
+
+    ffmpeg -ss 2.5 -i icm.mp4 -frames:v 1 -c:v libwebp -quality 88 icm-poster.webp
+
+**★ NO ES EL FOTOGRAMA CERO, Y ESO ES DELIBERADO.** El clip abre con un fundido de ~1 segundo, asi que
+sus primeros cuadros son una tarjeta a medio dibujar (se probo el de 0.1s: se ve lavado, comunica
+"roto", no "mirame"). El de 2.5s es el primer paso del tour ya compuesto: titulo, los tres campos
+llenos, la barra de acento completa y el encabezado de la linea de tiempo. La reproduccion sigue
+empezando en 0, que es como se comporta cualquier reproductor — el fundido es la entrada del clip, no
+un glitch. WebP porque son 11.8 KB contra 24.8 KB del JPEG equivalente, visualmente identicos.
+
+**★ LA REGLA DE `preload` AHORA TIENE TRES CASOS, Y SOLO UNO ES CARO.** El hecho del que todo depende:
+`metadata` NO trae imagen — trae duracion y dimensiones, `readyState` se queda en 1, y pintar un
+cuadro necesita 2.
+- Autoreproduciendo (decoracion): `metadata`. Va a bajar sus datos igual.
+- Reproductor CON poster: `metadata`. El poster ES la imagen; el clip espera a que lo pidan.
+- Reproductor SIN poster: `auto`, porque bajarlo es entonces la UNICA forma de tener algo en pantalla.
+  Es el caso caro, y darle un poster al caller es como se sale de el.
+
+El fragmento `#t=0.1` (que existia para forzar el primer cuadro) queda como suplente: se omite cuando
+hay poster de verdad, que es mejor en todo — cuesta kilobytes, es un cuadro ELEGIDO en vez de lo que
+haya en 0.1s, y no necesita descargar nada del clip.
+
+**★ Y COMO AHORA SE PUEDE ESPERAR AL APRETAR PLAY, HAY ESTADO DE CARGA.** Ese era el unico riesgo real
+de volver a `metadata`: en una conexion lenta el usuario aprieta Play y ve un poster quieto sin nada
+pasando, concluye que el boton no anda y lo aprieta otra vez — que lo PAUSA. Ahora, si al pedir
+reproduccion `readyState < 3` (o si el elemento emite `waiting`), el disco se queda visible y muestra
+el spinner del set (`loader`), exactamente lo que hace el control nativo. Se chequea `readyState` y no
+solo `waiting` porque un clip que nunca se bajo puede sentarse sobre el pedido un rato antes de emitir
+nada. El spinner gira TAMBIEN con `prefers-reduced-motion`: un indicador de carga es feedback, no
+decoracion, y un spinner congelado se lee como un cuelgue.
+
+**Dato verificado, no supuesto:** `icm.mp4` **ya tiene faststart** — el atomo `moov` esta en el byte 32
+(se comprobo leyendo el archivo). Por eso `metadata` cuesta un range request chico y al apretar Play
+arranca en streaming en vez de esperar los 4.6 MB. **Comprimir el clip no es urgente** y NO se toco el
+asset: es 1280x720 h264 a 1.26 Mbps, 30s, que para 4.6 MB es razonable. Queda como opcion de Rodolfo,
+no como deuda.
+
+**Verificado en runtime:** modal abierto → `preload=metadata`, `readyState=0` (cero bytes de video
+bajados), `src` SIN fragmento, poster pintado al instante con el boton encima. Maquina de estados
+completa: reposo → triangulo, "Play video", sin animacion; Play sobre un clip solo-metadata →
+`--playing --buffering`, disco visible, spinner girando; evento `playing` → glifo de pausa, sin
+spinner; evento `waiting` → vuelve el spinner; `pause` → vuelve el triangulo y se limpia todo.
+`ng build --configuration production` limpio. Front **823 = 820 verdes + los 3 rojos preexistentes de
+KaTeX**.
+
+**Sin commits** (regla vigente). Archivo nuevo en el arbol: `WasnieUi/public/videos/icm-poster.webp`.
+
+## 2026-08-12 — El control del video pasa a ser play/pausa de verdad (persistente, como el nativo)
+
+**El reporte de Rodolfo, dos sintomas de la misma causa.** "Puedo darle play pero no pausa" y "en
+algunos casos el boton desaparece por completo y no hay forma de darle play otra vez". Los dos salian
+de la misma linea: la condicion del boton era `!playing && (…)`, o sea el control se DESMONTABA en
+cuanto el clip arrancaba. Treinta segundos de video sin pausa, sin nada para clickear — y si el
+`ended` no llegaba nunca (modal cerrado y reabierto, o un navegador que no lo dispara) tampoco volvia
+el play. **Un control que desaparece mientras corre lo que controla no es un control.**
+
+**El arreglo.** `showControl()` ya no mira `playing`: una vez que el clip es reproductor
+(`autoplay=false`, o el fallback de movimiento reducido) el boton esta montado SIEMPRE. Lo unico que
+cambia es el GLIFO: `play` cuando esta detenido, `pause` cuando corre — mas el `aria-label`, que
+alterna entre `COMMON.PLAY_VIDEO` y `COMMON.PAUSE_VIDEO` (clave nueva, EN/ES/PL completas).
+
+**Se comporta como el control nativo, en tres puntos concretos.**
+1. **El area clickeable es TODA la imagen**, no solo el disco: el `<button>` cubre el clip entero y el
+   disco es un `<span>` centrado adentro. Clickear en cualquier parte del video alterna, igual que el
+   reproductor del navegador.
+2. **El disco se aparta mientras corre y vuelve al acercarse**: con `--playing` la OPACIDAD DEL DISCO
+   baja a 0, pero el boton sigue ahi a tamano completo — por eso el click sigue funcionando en toda la
+   imagen aunque no se vea nada, y el glifo de pausa aparece apenas llega el puntero o el foco
+   (`:hover` / `:focus-visible`).
+3. **Al terminar, rebobina**: si el clip llego al final, el siguiente click vuelve a 0 en vez de
+   quedarse mirando el ultimo cuadro.
+
+**★ `toggle()` le pregunta al ELEMENTO, no a la senal.** `playing` se actualiza DESDE los eventos del
+media, o sea es un reporte de lo que paso, no la fuente de verdad. Decidir desde ahi dejaria que los
+dos se desincronicen ante cualquier cambio que no originemos nosotros — el navegador pausando una
+pestana en segundo plano, una reproduccion rechazada, el clip llegando al final entre un render y un
+click.
+
+**El icono `pause` se agrego al set** (`player-pause` de Tabler, los dos paths exactos), al lado de
+`play`. Viven en el mismo control, asi que se dibujan con el mismo peso optico y ninguno se cambia por
+un parecido de otro set. El `translateX(1px)` que compensa el centro de masa del triangulo se aplica
+SOLO al play: las barras de pausa son simetricas y no se mueven.
+
+**★ Nota de verificacion, para que nadie persiga un fantasma.** Durante la prueba el video arrancaba y
+se pausaba solo al instante (`play` → `playing` → `pause`, `currentTime` congelado). No es del codigo:
+`document.visibilityState` era `hidden` — la ventana del navegador estaba en segundo plano y Chrome
+pausa la reproduccion ahi. Se confirmo creando un `<video>` pelado a mano en la misma pagina: hace
+exactamente lo mismo. Se instrumento `HTMLMediaElement.prototype.pause` y el setter de `src`: **cero
+llamadas desde JS**, o sea la pausa la hacia el navegador. El contrato de la UI se verifico entonces
+con los eventos reales del elemento (`play` / `pause` / `ended`), que es lo que el componente escucha.
+
+**Verificado:** detenido → triangulo, "Play video", disco visible; reproduciendo → dos barras (los
+paths exactos de Tabler), "Pause video", clase `--playing`, y el boton SIGUE MONTADO; sin hover el
+disco baja a opacidad 0 mientras el area de click sigue siendo la imagen completa (898x505, identica
+al video); al pausar y al terminar vuelve el triangulo. `ng build --configuration production` limpio.
+Front **823 = 820 verdes + los 3 rojos preexistentes de KaTeX**.
+
+**Sin commits** (regla vigente).
+
+## 2026-08-12 — El video de bienvenida deja de arrancar solo: `ws-video` pasa a ser tambien un reproductor
+
+**Lo pedido.** En el modal de bienvenida el video ya no arranca automaticamente: se queda quieto con un
+boton de play REDONDO, AZUL (colores de la plataforma) y centrado, y arranca cuando el usuario lo
+aprieta. El glifo es el `player-play` de Tabler que paso Rodolfo.
+
+**Donde se hizo, y por que ahi.** No en el modal: en el primitivo `ws-video`, con un input nuevo
+`autoplay` (default `true`, o sea nada cambia para quien ya lo usaba). El modal solo pasa
+`[autoplay]="false"`. Meter un `<video>` a mano en el modal habria sido la otra opcion y viola
+CLAUDE.md 5.4 — y ademas habria duplicado las tres cosas que `ws-video` ya resuelve bien (muted como
+PROPIEDAD y no solo atributo, `prefers-reduced-motion`, el fallback de autoplay rechazado).
+
+**El primitivo tenia dos razones para estar detenido y ahora comparten UN boton.** Antes el unico
+boton era el fallback de reduced-motion (`playFallback`), una pastilla con la palabra "Play video".
+Ahora la condicion es "no esta reproduciendo Y alguien tiene derecho a arrancarlo", que cubre los dos
+casos. **Un primitivo con dos afordancias de play distintas segun POR QUE esta detenido es un
+primitivo en el que nadie confia.** Como el modal era el unico que usaba `playFallback` (los empty
+states no lo pasan), el cambio de aspecto no toca ninguna otra pantalla; y en el modal `playFallback`
+se quito porque quedo redundante: con `autoplay=false` el boton ya esta ahi para todos.
+
+**El boton.** Disco de `--space-16` (64px), `--radius-full`, fondo `--color-brand`, glifo
+`--color-brand-contrast`, `--shadow-lg`; hover a `--color-brand-hover` con un `scale(1.06)`;
+`:focus-visible` con `--shadow-focus`. Centrado con `inset: 0` + `margin: auto` — sin `transform`, asi
+el escalado del hover no tiene que deshacer nada. Es icon-only, asi que la etiqueta viaja en
+`aria-label` (`COMMON.PLAY_VIDEO`, que ya existia en EN/ES/PL). El glifo tiene `translateX(1px)`: el
+triangulo ocupa x 7→20 en una caja de 24, o sea su masa cae a la izquierda del centro geometrico y un
+disco perfectamente centrado se ve descentrado.
+
+**El icono se agrego al SET, no al componente.** `'play'` entro en `icon.component.ts` con el path
+exacto de Tabler. `ws-video` tenia un `<svg>` pegado inline con otro triangulo distinto: eso se
+elimino. Un icono pegado dentro de un componente es invisible para cualquier otra pantalla que lo
+necesite.
+
+**★ Dos cosas que costaron y que van a volver a morder si alguien las toca.**
+
+1. **El primer fotograma no se pinta solo, y hacen falta LAS DOS mitades.** Un `<video>` pausado sin
+   poster tiene derecho a no pintar nada — y eso era exactamente lo que pasaba: el boton flotando
+   sobre un rectangulo negro. (a) Al `src` se le agrega el fragmento `#t=0.1` para que el navegador
+   BUSQUE ese instante y lo muestre (se omite si el clip autoreproduce, si el caller paso `poster`, o
+   si ya escribio su propio fragmento). (b) `preload` pasa a ser `auto` cuando NO hay autoplay:
+   `metadata` trae duracion y dimensiones y NINGUNA imagen — `readyState` se queda en 1 y para pintar
+   un cuadro hace falta 2. Los clips decorativos siguen en `metadata` porque autoreproducen y bajan
+   sus datos igual. Nota de runtime: `icm.mp4` pesa **4.6 MB** y tarda ~8s en el server de desarrollo
+   antes de que aparezca el cuadro; si molesta, la solucion correcta es un `poster` (que el primitivo
+   ya soporta) o comprimir el clip — no volver a `metadata`.
+2. **Nada de backticks dentro del bloque `styles: [\`…\`]` de un componente inline.** Un comentario CSS
+   con backticks cierra el template literal y el compilador tira un
+   `FatalDiagnosticError 1010: Failed to resolve styles at position 1` que no nombra ningun archivo.
+   Costo una compilacion entera de diagnostico; quedo una nota en el propio bloque.
+
+**Tambien:** con `autoplay=false` el clip **no loopea** (juega una vez — el que eligio verlo no eligio
+verlo para siempre) y al terminar el boton vuelve, que es lo que convierte un ultimo cuadro muerto en
+un "verlo de nuevo". Y el listener de `prefers-reduced-motion` al APAGARSE ya no arranca cualquier
+video: solo los que debian correr solos; un reproductor que el usuario no apreto se queda quieto.
+
+**Verificacion.** Runtime: modal abierto, `autoplay=false`, `loop=false`, `src` con `#t=0.1`,
+`preload=auto`, primer cuadro pintado, boton redondo azul en el centro exacto; click → reproduce
+(`paused=false`, `muted=true`) y el boton desaparece. `ng build --configuration production` limpio.
+Front **823 = 820 verdes + los 3 rojos preexistentes de KaTeX**, sin cambios.
+
+**Sin commits** (regla vigente).
+
+## 2026-08-12 — POC: sistema de elevacion por tarjetas + ergonomia de lectura, en UNA pantalla (`/manual`)
+
+**Que es esto.** Una prueba de concepto, no un refactor de la app. El objetivo era validar el lenguaje
+de tarjetas (card-based UI, estilo Asana/Stripe) en UNA sola pantalla antes de decidir si se
+generaliza. Solo frontend, sin librerias externas, sin tests nuevos (es visual).
+
+**La eleccion de la pantalla, con datos.** Se auditaron las candidatas antes de elegir: casi toda la
+app YA envuelve su contenido en `ws-card` (integrations 6 tarjetas, subscription 6, profile 12), asi
+que el sintoma que describia el WI — "texto suelto sobre el fondo base" — casi no existe. La unica
+pantalla que era un muro de texto real es `/manual`: 19 capitulos de prosa dentro de UN solo
+contenedor scrolleable. Rodolfo confirmo esa eleccion.
+
+**★ La regla critica del WI se cumplio: los colores son de Incentra, no del CSS del asesor.** El CSS
+entregado por el asesor traia `#0B1120 / #1E293B / #334155 / #38BDF8`, que son los defaults de
+Tailwind (slate/sky) y NO nuestra paleta. Se tradujo su ESTRUCTURA a nuestros tokens y no entro ni un
+hex suelto: fondo `--color-bg-base` (#0b0f17 en dark), superficie `--color-bg-surface` (#161c28),
+acento `--color-brand` (#5aa0e0), acento tenue `--color-brand-subtle` — que ya existia justamente
+para esto, asi que tampoco se invento una opacidad.
+
+**`--shadow-card` no se creo, y no hizo falta.** El WI lo daba por conocido-inexistente y autorizaba
+definirlo. No se definio: la tarjeta de capitulo copia la receta de `ws-card` token por token
+(`--color-bg-surface` + `--color-border-subtle` + `--radius-xl` + `--shadow-md` + padding
+`--space-6 / --space-8`). No PUEDE ser un `<ws-card>` de verdad porque estos elementos vienen de
+`[innerHTML]`, donde Angular no renderiza componentes; copiar la receta es lo que hace que un capitulo
+se vea como cualquier otra tarjeta de la app. Queda anotado que **CLAUDE.md 5.2 nombra `--shadow-card`
+y el stylesheet nunca lo definio** — deuda del documento, no del codigo.
+
+**Los tres cambios.**
+
+1. **Una tarjeta por capitulo (elevacion).** El scroller dejo de ser la tarjeta. Antes era el lenguaje
+   de tarjetas aplicado UNA vez y despues abandonado: una tarjeta gigante con diecinueve capitulos
+   adentro, todos texto plano sobre la misma superficie. Ahora la columna es transparente (se ve el
+   fondo de la app) y cada `h2` abre su propia tarjeta elevada. El corte se hace en `sectionize()`,
+   recorriendo los nodos de primer nivel del HTML parseado — **no** con un renderer de `marked`, que
+   emite tokens de a uno y nunca aprende donde TERMINA un capitulo (tendria que abrir un `<section>` en
+   un heading y cerrarlo en el siguiente, o sea emitir HTML desbalanceado y confiar en que el parser lo
+   repare).
+
+2. **Ancho de lectura — esta vez implementado.** El archivo viejo AFIRMABA en un comentario que el
+   texto estaba "capped at a reading measure" y no capeaba absolutamente nada: en monitor ancho un
+   parrafo corria ~160 caracteres por linea. Ahora `max-width: 72ch` (en `ch`, asi sigue al tamano de
+   fuente en vez de congelar pixeles) y **solo sobre prosa**: tablas y bloques de codigo se quedan a
+   ancho completo, porque son datos que se leen escaneando y meterlos en 72 caracteres les daria scroll
+   horizontal a los dos.
+
+3. **Anclas visuales.** Insignia con el numero del capitulo en acento tenue; los 3 apartados sin
+   numerar de la guia ("Coverage checklist", "How to read this document", "Maintenance") reciben un
+   icono en el MISMO slot de 32px, asi todas las tarjetas abren sobre el mismo eje. Punto de acento en
+   cada `h3`. Los terminos que la guia escribe en backticks (`SplitAtQuota`, `ClawbackDebit`, `PaidAt`)
+   eran chips grises indistinguibles de la prosa gris: ahora van tenidos con el acento, que es lo que
+   convierte el vocabulario en algo escaneable. Y el blockquote paso de "parrafo en un gris apenas
+   distinto" a callout con borde de acento sobre superficie hundida.
+
+**★ Dos invariantes que se respetaron y son MUY faciles de romper si alguien toca esto.**
+
+- **El `textContent` de cada `h2` quedo identico byte a byte.** Los ids salen de
+  `slugify(el.textContent)` y la guia esta llena de referencias cruzadas escritas a mano
+  (`[4.5](#45-plan-lifecycle-and-assignments)`) que apuntan a esos slugs. Mover el "1." adentro de una
+  insignia lo mantiene DENTRO del heading y en el mismo orden, asi que la concatenacion no cambia. Por
+  eso el punto se **oculta con `display: none` en vez de borrarse** (el CSS es invisible para
+  `textContent`), y por eso la insignia de los apartados sin numero es un `<span>` VACIO.
+- **El sanitizador de Angular sigue siendo el que renderiza.** Solo se introducen `<section>` y
+  `<span class>`, que sobreviven. Un `<svg>` inline NO habria sobrevivido — no esta en su lista blanca
+  de elementos, habria desaparecido en silencio — y esa es la segunda razon por la que el icono es una
+  `mask` de CSS: una mask ademas toma su color de `background-color`, o sea de un TOKEN, y sigue los
+  tres temas. No se agrego ningun `bypassSecurityTrust…`.
+
+**Un defecto real, encontrado en la verificacion y arreglado.** A ~375px un chip de codigo con un
+identificador largo (`ListTerminatedPayeesWithBalanceHandler.cs:37-52` — 327px sin un solo espacio
+donde cortar) no rompia y empujaba su tarjeta 10px, dandole scroll horizontal al documento entero. Se
+confirmo por medicion que lo introducia este cambio (el padding de la tarjeta reduce el ancho
+disponible y destapa el piso de min-content) y se arreglo con `overflow-wrap: anywhere` en el `code`
+inline — `anywhere` y no `break-word`, porque el token no tiene espacios y solo cortar a mitad de
+palabra ayuda.
+
+**`jumpTo()` ahora ancla la TARJETA**, no el heading, cuando el heading es el primer hijo de su
+tarjeta: saltar al heading dejaba el borde superior de la tarjeta (borde, radio y todo) justo arriba
+del viewport, y una tarjeta cortada al ras se lee como bug de render.
+
+**Verificacion.** Runtime en `/manual` con la app corriendo: capitulos como tarjetas elevadas, medida
+de lectura comoda, insignias/iconos en los encabezados, terminos con acento tenue. Probado en los
+**tres temas** (dark, light, soft) — todo por variable, cero hex fijos — y a ancho angosto, donde las
+tarjetas conservan la elevacion, ceden padding y las tablas anchas scrollean dentro de si mismas sin
+desbordar. `ng build --configuration production` limpio (los warnings son preexistentes: presupuesto
+de bundle, `dashboard.component.scss`, `qrcode` CJS, NG8113 de otros componentes).
+**Tests front: 823 total, 820 verdes + 3 rojos** — los mismos 3 preexistentes de KaTeX
+(`assistant maths`), sin relacion con este cambio. Sin specs nuevos: el WI es visual.
+
+**Observacion para la decision de generalizar.** En tema **light** la elevacion se apoya SOLO en borde
+y sombra, porque el shell pinta `--color-base` (#ffffff) y la superficie de tarjeta tambien es
+#ffffff. Es el mismo trade que ya hace cada `ws-card` de la app — no lo introduce este POC — pero el
+token de canvas (`--color-bg-canvas`, #f6f8fb) EXISTE y no se usa como fondo de pagina. Si el lenguaje
+de tarjetas se generaliza, cambiar el fondo del shell a canvas es la decision de una linea que lo haria
+leer mucho mejor en light. **No se toco** — esta fuera del alcance de un POC de una pantalla y afecta
+a toda la app.
+
+**Siguiente (si el POC convence).** Generalizar a las demas pantallas text-heavy, en un WI aparte.
+
+**Sin commits** (regla vigente): el arbol queda modificado para que lo revise Rodolfo.
+
 ## 2026-08-11 — El asistente de IA y HubSpot dejan de ser gratis: gate de plan de punta a punta
 
 **El problema.** La tabla de precios de `/onboarding/plan` ya anunciaba el asistente de IA y la

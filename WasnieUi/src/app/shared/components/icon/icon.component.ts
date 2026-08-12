@@ -118,6 +118,13 @@ const ICONS: Record<string, string> = {
     '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   'server':
     '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+  // Tabler's `player-play`. Added to the set rather than inlined in `ws-video`, which is what it
+  // replaced: an icon pasted into a component is invisible to every other screen that needs it.
+  'play': '<path d="M7 4v16l13 -8l-13 -8"/>',
+  // Tabler's `player-pause`. Its partner: the two live on the same control, so they are drawn to the
+  // same optical weight and neither may be swapped for a look-alike from another set.
+  'pause':
+    '<path d="M6 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12"/><path d="M14 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12"/>',
 };
 
 @Component({

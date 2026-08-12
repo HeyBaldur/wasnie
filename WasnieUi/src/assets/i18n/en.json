@@ -391,6 +391,7 @@
     "REFRESH": "Refresh",
     "LOADING": "Loading...",
     "PLAY_VIDEO": "Play video",
+    "PAUSE_VIDEO": "Pause video",
     "UNASSIGNED": "Unassigned",
     "SAVE": "Save",
     "CANCEL": "Cancel",
