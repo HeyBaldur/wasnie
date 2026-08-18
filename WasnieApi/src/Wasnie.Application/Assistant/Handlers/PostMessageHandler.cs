@@ -88,7 +88,10 @@ public sealed class PostMessageHandler(
         {
             assistantMessage = AssistantMessage.Create(
                 guid.NewGuid(), conversation.Id, tenantContext.TenantId,
-                AssistantMessageRole.Assistant, reply.Value!, lastSequence + 2, now);
+                AssistantMessageRole.Assistant, reply.Value!.Text, lastSequence + 2, now,
+                // ★ THE IDS THIS TURN RESOLVED, RIDING ON THE TURN — see ResolvedEntityContext for why
+                // the answer text cannot carry them and why nothing else survives to the next request.
+                payload: reply.Value!.ResolvedPayload);
         }
         catch (Wasnie.Domain.Exceptions.DomainException ex)
         {
@@ -110,16 +113,26 @@ public sealed class PostMessageHandler(
     }
 
     /// <summary>
+    /// The answer, plus the identifiers the turn's lookup resolved.
+    ///
+    /// ★ THE PAYLOAD TRAVELS WITH THE TEXT rather than being recomputed by the caller, because the tool
+    /// result it is extracted from lives only inside this method. Handing back the text alone is what
+    /// made the ids unreachable in the first place.
+    /// </summary>
+    private sealed record ComposedReply(string Text, string? ResolvedPayload);
+
+    /// <summary>
     /// The answer, collected. Same provider and same prompt as the streaming handler — the collecting
     /// is the only difference between the two paths.
     /// </summary>
-    private async Task<Result<string>> ComposeReplyAsync(
+    private async Task<Result<ComposedReply>> ComposeReplyAsync(
         Guid conversationId, AssistantMessage userMessage, CancellationToken cancellationToken)
     {
         // No key configured → the stand-in, exactly as before a model existed.
         if (!provider.IsConfigured)
         {
-            return Result<string>.Success(AssistantMessage.NotConnectedPlaceholder);
+            return Result<ComposedReply>.Success(
+                new ComposedReply(AssistantMessage.NotConnectedPlaceholder, null));
         }
 
         var history = await db.AssistantMessages
@@ -140,10 +153,14 @@ public sealed class PostMessageHandler(
 
         if (lookup.DidFail)
         {
-            return Result<string>.Failure(lookup.FailureReasonKey!);
+            return Result<ComposedReply>.Failure(lookup.FailureReasonKey!);
         }
 
         var toolData = lookup.Data;
+
+        // Extracted BEFORE the generation call, because that call is the one allowed to fail: the ids
+        // are a fact about the lookup and do not depend on whether the model finished a sentence.
+        var resolvedPayload = ResolvedEntityContext.PayloadFor(toolData);
 
         // Same prompt as the streaming path, navigation map and live data included — two paths that
         // answer differently is the drift this codebase keeps refusing.
@@ -162,7 +179,7 @@ public sealed class PostMessageHandler(
             {
                 if (guard.Observe(fragment))
                 {
-                    return Result<string>.Failure(ChatCompletionException.Unavailable);
+                    return Result<ComposedReply>.Failure(ChatCompletionException.Unavailable);
                 }
 
                 answer.Append(fragment);
@@ -170,22 +187,24 @@ public sealed class PostMessageHandler(
 
             if (guard.Finish())
             {
-                return Result<string>.Failure(ChatCompletionException.Unavailable);
+                return Result<ComposedReply>.Failure(ChatCompletionException.Unavailable);
             }
         }
         catch (ChatCompletionException ex)
         {
             // The translation KEY, never the provider's own words — see IChatCompletionProvider.
-            return Result<string>.Failure(ex.ReasonKey);
+            return Result<ComposedReply>.Failure(ex.ReasonKey);
         }
 
         var text = answer.ToString().Trim();
 
         // An empty completion is a failure in a success's clothes; storing it renders a blank bubble.
         return text.Length == 0
-            ? Result<string>.Failure(ChatCompletionException.Unavailable)
-            : Result<string>.Success(text.Length > AssistantMessage.MaxContentLength
-                ? text[..AssistantMessage.MaxContentLength]
-                : text);
+            ? Result<ComposedReply>.Failure(ChatCompletionException.Unavailable)
+            : Result<ComposedReply>.Success(new ComposedReply(
+                text.Length > AssistantMessage.MaxContentLength
+                    ? text[..AssistantMessage.MaxContentLength]
+                    : text,
+                resolvedPayload));
     }
 }

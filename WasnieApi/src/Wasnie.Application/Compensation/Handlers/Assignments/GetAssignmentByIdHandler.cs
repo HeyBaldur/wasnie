@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Authorization;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Assignments;
@@ -8,7 +9,10 @@ using Wasnie.Domain.Common.Results;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
-public sealed class GetAssignmentByIdHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
+public sealed class GetAssignmentByIdHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<GetAssignmentByIdQuery, Result<PlanAssignmentDto>>
 {
     public async Task<Result<PlanAssignmentDto>> Handle(GetAssignmentByIdQuery request, CancellationToken cancellationToken)
@@ -37,8 +41,14 @@ public sealed class GetAssignmentByIdHandler(IApplicationDbContext db, IAuthoriz
                 x.Assignment.CreatedAt))
             .FirstOrDefaultAsync(cancellationToken);
 
-        return result is null
-            ? Result<PlanAssignmentDto>.Failure("Assignment not found.")
-            : Result<PlanAssignmentDto>.Success(result);
+        if (result is null)
+            return Result<PlanAssignmentDto>.Failure(PayeeAccessDenied.AssignmentMessage);
+
+        // Same shape as GetQuotaById: the owner is only known after the row is loaded, so the guard
+        // runs on the DTO's PayeeId and answers with the endpoint's own not-found sentence.
+        if (!await payeeAccessGuard.CanReadAsync(result.PayeeId, cancellationToken))
+            return Result<PlanAssignmentDto>.Failure(PayeeAccessDenied.AssignmentMessage);
+
+        return Result<PlanAssignmentDto>.Success(result);
     }
 }

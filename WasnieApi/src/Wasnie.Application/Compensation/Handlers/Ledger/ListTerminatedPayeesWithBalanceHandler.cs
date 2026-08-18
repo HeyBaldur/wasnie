@@ -23,13 +23,30 @@ namespace Wasnie.Application.Compensation.Handlers.Ledger;
 /// </summary>
 public sealed class ListTerminatedPayeesWithBalanceHandler(
     IApplicationDbContext db,
-    IAuthorizationService authorizationService)
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<ListTerminatedPayeesWithBalanceQuery, Result<IReadOnlyList<TerminatedPayeeBalanceDto>>>
 {
     public async Task<Result<IReadOnlyList<TerminatedPayeeBalanceDto>>> Handle(
         ListTerminatedPayeesWithBalanceQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.LedgerRead, cancellationToken);
+
+        // ★ A LIST CANNOT BE PROTECTED BY A PER-RESOURCE CHECK — IT HAS TO BE FILTERED. This endpoint
+        // takes no payee id: it IS the list of which payees to look at, which made it the widest leak
+        // of the three. Every departed colleague's outstanding debt, in one call, to anyone holding
+        // Ledger.Read (Rep included).
+        //
+        // FILTERED, NOT REFUSED. Trimming the rows to what the caller may see is both the safe answer
+        // and the useful one: a manager legitimately sees a departed report here, and a wholesale 403
+        // would take that away to no benefit. For a Rep the visible set is their own payee, so the
+        // list is empty or their own closed account — nothing about anyone else, and no way to tell
+        // an empty result from a tenant with no orphan accounts at all.
+        var visibility = await payeeAccessGuard.GetVisibilityAsync(cancellationToken);
+
+        // Null = no filter (supervisory role). An ARRAY rather than the set itself so EF translates the
+        // membership test into a plain IN (...) instead of tripping over IReadOnlySet at query time.
+        var visibleIds = visibility.IsUnrestricted ? null : visibility.PayeeIds.ToArray();
 
         // A balance row exists per (payee, currency), so a payee owing EUR and owed USD legitimately
         // appears twice — one open account per currency, because Wasnie holds no exchange rates and
@@ -38,6 +55,7 @@ public sealed class ListTerminatedPayeesWithBalanceHandler(
             from b in db.PayeeBalances
             join p in db.Payees on b.PayeeId equals p.Id
             where p.Status == PayeeStatus.Terminated && b.Balance.Amount != 0m
+                  && (visibleIds == null || visibleIds.Contains(b.PayeeId))
             orderby b.Balance.Amount   // deepest debt first: the largest exposure is the first thing seen
             select new TerminatedPayeeBalanceDto(
                 p.Id,

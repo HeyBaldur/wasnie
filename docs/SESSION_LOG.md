@@ -4,6 +4,279 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-13 (5) — Referencias recurrentes: el ID viaja en el payload, el backend sigue STATELESS
+
+**El defecto.** Turno 1 resuelve un payee o un plan y lo explica; turno 2 lo refiere implicitamente ("ese
+plan", "de que son esos 26.655"); el modelo RETIPEA el nombre de memoria, le erra (recorte, guion U+2011)
+y la tool contesta "no encontrado" sobre la entidad que acaba de explicar. Fail-closed correcto, pero
+rompe la conversacion.
+
+**★ NO SE ARREGLA CON ESTADO EN EL BACKEND.** Anclar "la ultima entidad resuelta" del lado del servidor es
+una maquina de estados fragil encima de un modelo que YA lee el contexto — y falla en el caso que mas
+importa: "balance de A" → "y el de B" → "compara A con B" deja un ancla sobreescribible con UN solo id.
+El historial ya tiene todo; lo que faltaba era el identificador dentro de el.
+
+**Dos cambios quirurgicos:**
+1. **El id viaja en el payload** de `get_payee_balance` (`payeeId`, primer campo) y `get_plan_rules`
+   (`planId`). Queda en la transcripcion que el modelo relee.
+2. **Ambas tools ACEPTAN el id como argumento** — sin esto la regla seria inaplicable. Cuando llega un id
+   no hay resolucion de nombre en absoluto: no hay nada que pueda salir mal.
+3. **Regla de hierro en el prompt** (10b y 10c): prohibido volver a buscar por nombre algo ya consultado
+   en la sesion; se extrae el id del historial. Y 10c dice explicitamente que se pueden usar VARIOS ids
+   de turnos distintos, que es lo que habilita las comparativas.
+
+**★ EL ID COMPRA PRECISION, NUNCA ACCESO** — y hay un test por tool que lo fija. El `PayeeAccessGuard`
+corre sobre el id que llega, y el filtro de tenant sobre el plan: un id levantado de cualquier lado
+(otro tenant, otra conversacion, inventado) recibe el MISMO rechazo indistinguible que uno inexistente.
+Saltear la resolucion por nombre no saltea ninguna otra cosa.
+
+**Se revirtio una decision propia, con su razon.** El payload del balance excluia el `payeeId` por
+minimizacion de datos ("un id no sirve en una frase") y habia un test que lo afirmaba. Era cierto de la
+FRASE y falso de la CONVERSACION. Un GUID no es dato personal: identifica una fila, no significa nada y no
+sirve fuera de un tenant para el que ya estas autorizado. El email y el codigo de empleado siguen fuera,
+porque esos si son sobre la persona.
+
+**Verificado en runtime, cuatro escenarios, conversaciones reales:**
+1. Balance por nombre → pregunta implicita sobre el mismo payee → responde del MISMO payee (antes: "no
+   encontrado"). Con cambio de periodo (`ytd`) vuelve a llamar la tool y acierta.
+2. **Comparativa:** "balance de Rudolph" → "y el de Adrian Dominguez" → "comparame los dos: quien tiene
+   mas pendiente" → *"Rudolph tiene mas... 26.655,00 EUR frente a 609,53 EUR, lo que representa 26.045,48
+   EUR mas"*. Dos entidades vivas en la misma conversacion, que es lo que el ancla del backend no podia.
+3. Entidad nueva por nombre → la busca normalmente.
+4. Plan: "como paga el plan Q3 2026 - Plan HubSpot E2E?" → "ese plan tiene clawback? volve a consultarlo"
+   → responde del mismo plan.
+
+**Residuo conocido:** en el turno que contesta SIN llamar la tool (interpretando un numero del historial)
+el modelo volvio a imprimir nombres de campo (`netPendingPayout`, `awaitingPayment`). La regla 18/20 pega
+cuando hay payload fresco y afloja cuando razona sobre el historial. No es un error de cifras.
+
+Unit 1406→1412 (los 6 nuevos son de las dos tools). Integracion 783, sin cambios — este WI no agrego
+tests de integracion. Nota: una corrida de integracion dio 6 rojos en suites NO relacionadas
+(serializacion, jobs, idempotencia); pasan aisladas y la corrida limpia siguiente dio 783/783 — flake de
+entorno, no regresion. Sin commit.
+
+## 2026-08-13 (4) — Patron FACHADA: `LedgerSummary.Read`, para no darle la nomina a los Reps
+
+El resumen de balance exigia `Ledger.Read` + `Payouts.Read`, y Rep/Manager no tienen el segundo: la
+herramienta quedaba **100% bloqueada justo para los roles a los que el Falso Cero mas les duele**.
+
+**El camino obvio era el equivocado.** Dar `Payouts.Read` a Rep/Manager y confiar en el `PayeeAccessGuard`
+como embudo abre las filas crudas de payouts, las pantallas de pay-runs y las queries de solape — la
+superficie de nomina entera — y despues CADA una de esas necesita su propio filtro para sostener la linea.
+Permiso amplio + parches perifericos es una fuga con fecha: el primer endpoint que alguien agregue sin el
+filtro la abre.
+
+**★ EL PERMISO SE ACOTA A LA FORMA DE LA RESPUESTA, NO A LAS TABLAS DE ATRAS.** `LedgerSummary.Read`
+autoriza a RECIBIR un balance terminado de UN payee. No da acceso a `CompensationPayout`, ni a un pay run,
+ni a una exportacion. El cruce ocurre dentro del handler, que lee sus fuentes con la autoridad de la
+aplicacion. Y eso elimina la clase de error entera: no hay superficie periferica que olvidar filtrar,
+porque el permiso nunca abrio ninguna.
+
+**Que es "la autoridad de la aplicacion", concretamente:** `IApplicationDbContext` no lleva autorizacion
+por usuario — lleva el filtro de TENANT. Leer payouts ahi esta acotado al tenant y al payee, y a nada mas.
+Los derechos del usuario los aplican los dos chequeos al tope de `Handle`. No se saltea nada; la
+autorizacion simplemente vive en un solo lugar legible.
+
+**Las dos capas conviven y ahora la segunda es la que carga el peso.** El permiso dice QUE podes recibir;
+el guard dice DE QUIEN. Con Rep y Manager sosteniendo `LedgerSummaryRead`, el guard dejo de ser defensa en
+profundidad y paso a ser **el unico** control entre un rep y el balance de un colega — hay test para eso, y
+el rechazo sigue siendo el mismo 404 indistinguible.
+
+**Roles:** los cuatro reciben `LedgerSummaryRead`. **Ninguno gana `Payouts.Read`** (sigue en TenantAdmin y
+CompManager). Los otros 8 handlers que exigen `Payouts.Read` (payouts crudos, pay-runs, overlaps) no se
+tocaron.
+
+**Mutacion de las DOS mitades a la vez** — quitarle `LedgerSummaryRead` al Rep y darle `Payouts.Read` en su
+lugar (el Camino 1 rechazado): **4 rojos**, incluido el que verifica que la nomina cruda sigue cerrada.
+
+**Verificado en runtime** con un Rep real (payee vinculado temporalmente en la DB de desarrollo, revertido
+despues — hoy hay 0 payees vinculados, como estaba):
+- `GET /ledger/summary` de su propio payee → **200** con el cruce completo (ganado 18.741,51 €, pagado
+  12.159,94 €, deuda 0, neto 6.581,57 €, EUR y GBP separados).
+- El MISMO rep contra `/api/payouts`, `/api/pay-runs` y `/api/payouts/{id}` → **403, 403, 403**.
+- El MISMO rep pidiendo el balance de otro payee del tenant → **404 "Payee not found."**
+
+**★ HALLAZGO PARA EL SIGUIENTE WI:** la fachada desbloquea la API y la tool para Rep/Manager, pero el CHAT
+sigue siendo admin-only por otra razon — el asiento del asistente (`AssistantEntitlement.HasSeat()`,
+Infrastructure/Identity/AssistantEntitlement.cs:51) devuelve true SOLO para TenantAdmin, con el comentario
+"Tomorrow: this line reads the seat". Un Rep vinculado recibe `entitlement: false` y 403 al abrir una
+conversacion. O sea que para que un vendedor consulte su balance POR CHAT faltan dos cosas mas: la UI de
+vinculacion y la decision del asiento.
+
+Unit 1405→1406, integracion 780→783. Sin commit.
+
+## 2026-08-13 (3) — Tool #3 del asistente: el balance de un payee, y la muerte del Falso Cero
+
+**El bug que esta pieza existe para impedir NO es una alucinacion: es la lectura CORRECTA del numero
+equivocado.** El ledger registra SOLO deuda. Un rep que gano 10.000 sin clawback tiene saldo de ledger
+exactamente 0,00 — y un asistente que lee ese campo y responde "tu balance es 0" ha leido un campo real
+con precision y le ha dicho a un vendedor que no le viene nada. Por eso el DTO cruza dos fuentes o no
+existe: `GetPayeeLedgerSummaryQuery` suma payouts (devengado) y lee `PayeeBalance` (deuda) en una sola
+respuesta, y clasifica el resultado en un TOKEN (`BalanceSemantic`) para que el modelo nunca tenga que
+deducir QUE CERO esta mirando.
+
+**★ La asimetria periodo/ahora es el hallazgo del Paso 0.** El ledger **no tiene dimension de periodo**
+(un asiento tiene fecha contable y fecha del evento; el saldo es un total corriente). "Cuanto debia en
+marzo" no es una pregunta que los datos puedan responder, y filtrar entries por `CreatedAt` daria una
+cifra que PARECE de periodo y no lo es. Asi que el DTO separa: `earnedCommissionsInPeriod` /
+`paidOutInPeriod` / `disputedInPeriod` son de la ventana; `awaitingPaymentAllTime`, `outstandingDebt` y
+`netPendingPayout` son AL DIA DE HOY. Y por eso **el neto NO es `earned − debt`** como decia el WI: eso
+restaria una deuda viva de un devengado de ventana y daria un numero que no es cierto en ningun momento
+del tiempo. Es `awaitingPayment − debt`.
+
+**Tres predicados distintos, cada uno el que ya usa el producto:** devengado = interseccion de periodo
+(el filtro de la pantalla de payouts); caja = contencion sobre `PaidAt` (la tarjeta de tesoreria del
+dashboard, nunca `Period.End`); pendiente = Calculated+Approved sin filtro de ventana, porque plata
+ganada el trimestre pasado y sin pagar sigue debiendose hoy. Disputed queda FUERA de "ganado" y se
+reporta aparte: meterlo adentro afirma una conclusion que el negocio no tomo, y omitirlo pierde plata
+que alguien esta discutiendo.
+
+**★ Exige LOS DOS permisos (Ledger.Read + Payouts.Read) y eso es una decision, no un descuido.** Con solo
+Ledger.Read se podria devolver la mitad-deuda — el Falso Cero llegando por el sistema de permisos en vez
+de por los datos. Si no se puede contar la verdad entera, no se cuenta la mitad. Consecuencia: hoy es una
+capacidad de finanzas (TenantAdmin/CompManager); **un Rep no puede consultar ni su propio balance**, y hay
+un test que fija esa limitacion a proposito.
+
+**★ TRES BUGS ENCONTRADOS EN LA VERIFICACION RUNTIME, NINGUNO VISIBLE EN LOS TESTS:**
+1. El modelo imprimia el token interno (`EarningsAndNoDebt`) y despues los nombres de campo entre
+   parentesis. La regla 18 ya lo prohibia en general; hizo falta nombrarlos uno por uno con un ejemplo
+   contrastivo — que es lo unico que este modelo de 20B obedece.
+2. Saltaba de 78k ganados a 26,6k netos sin explicar. Regla 19b: si difieren, decir POR QUE en la misma
+   frase (ya pagado + deuda).
+3. **El peor: la tool devolvio `Cause: Found` con el balance completo y el modelo respondio "no encontre
+   ningun payee".** Le pidieron por CODIGO (NB-2001), recibio un payload con el NOMBRE (Adrián Domínguez
+   #2), y concluyo que era otra persona. Una persona real con plata real reportada como inexistente,
+   desde una busqueda EXITOSA. Es el mismo fallo que `GetPlanRulesTool` ya habia resuelto con `matchedBy`,
+   asi que se resolvio igual: el payload dice POR QUE ese registro es la respuesta, y la regla 19a manda
+   abrir con el nombre completo en vez de dudar del propio resultado.
+
+Ademas, el modelo reescribio `NB-2001` con un **guion no separable (U+2011)** — el mismo bug de tipografia
+que documenta `PlanNameMatch`. Se reusa esa clase (no se reescribe) para normalizar y matchear nombres y
+codigos de payee; tres casos nuevos en un Theory lo fijan.
+
+**Verificado en runtime contra la DB de desarrollo y datos reales**, con un token de admin firmado con el
+secreto de dev. Adrián Domínguez #2 (saldo de ledger 0,0000): el asistente responde ganado 18.741,51 €,
+ya pagado 12.159,94 €, deuda 0, **neto pendiente 6.581,57 €**, y EUR/GBP en filas separadas sin sumarlas.
+Nunca dice "tu balance es 0".
+
+Endpoint nuevo `GET /api/payees/{id}/ledger/summary` — expuesto para que el cruce se ejercite por el MISMO
+pipeline que todo lo demas (auth, permisos, guard), no solo en proceso para el asistente.
+
+Mutacion probada en los dos mecanismos: colapsar la clasificacion a "el ledger es el balance" pone en rojo
+el test del Falso Cero en AMBAS capas; desactivar el guard pone en rojo el de aislamiento. Unit 1392→1405,
+integracion 771→780. Sin commit.
+
+## 2026-08-13 (2) — Se sella el resto de la superficie payee-scoped: cuotas, attainment y asignaciones
+
+Segunda mitad del cierre BOLA/IDOR. El WI anterior cerro el DINERO (ledger + dashboard) y dejo estos
+afuera a proposito. Filtran otra moneda del mismo secreto: una cuota es el TARGET de comision de un
+colega, el attainment es su desempeño contra ese target, y una asignacion es la forma de su compensacion.
+Ocho endpoints cerrados con el MISMO `PayeeAccessGuard`, sin tocarlo.
+
+**Dos cosas que el inventario encontro y el WI no listaba:**
+
+**★ `GET /api/quotas` era la fuga mas ancha de este lote — y no recibe payeeId.** Esta paginado y
+**busca por nombre**: un Rep no necesitaba ni adivinar un id, `?search=` le devolvia el target de
+cualquiera. Mismo patron que `terminated-with-balance`: una lista no se protege con un chequeo por
+recurso, se FILTRA. Hay un test que ataca justamente por `search=` y no por id.
+
+**★ `quotas/{id}` y `assignments/{id}` esquivan cualquier chequeo por ruta.** El caller nombra una CUOTA,
+no un payee: el dueño recien se conoce cuando la fila esta cargada. Un guard puesto sobre el `payeeId` de
+la URL habria pasado de largo por estos dos. El chequeo corre sobre el `PayeeId` del recurso ya leido.
+
+**★ DOS FORMAS DE RECHAZO, A PROPOSITO.** Cada endpoint tiene que ser indistinguible de SU PROPIO
+not-found, no de una convencion del proyecto:
+- listas por payee → un payee inexistente ya devuelve PAGINA VACIA, asi que el rechazo es pagina vacia;
+- por-id (cuota, asignacion) → ya devuelven 404, asi que el rechazo es el mismo 404 y el mismo mensaje.
+
+Elegir una sola forma para ambos habria hecho el rechazo legible: una pagina vacia donde se esperaba un
+404 dice "este id existe", que es exactamente lo que se esta negando. Por eso `PayeeAccessDenied` gano
+`QuotaMessage` y `AssignmentMessage` — el rechazo IMPERSONA el not-found del endpoint que lo emite.
+
+**Decision de producto (Rodolfo): el organigrama queda ABIERTO.** `ListPayees` y `GetPayeeById` devuelven
+identidad y estructura — nombre, codigo, email, rol, manager, fechas, estado, cantidad de asignaciones —
+y **cero importes**. Cerrarlos romperia el buscador de payees y el organigrama sin cerrar ninguna fuga
+financiera. Distincion que vale la pena escribir: ver NOMBRES es legitimo, ver DINERO no.
+
+**Fuera de alcance por permisos, no por olvido:** credits, payouts y transactions exigen `CreditsRead` /
+`PayoutsRead` / `TransactionsRead`, que ni Rep ni Manager tienen. Inalcanzables para el rol que nos
+preocupa; si algun dia un rol nuevo recibe esos permisos, necesitan el guard antes.
+
+**Tests: 10 de integracion nuevos, probados por mutacion.** Se mutaron los DOS mecanismos a la vez (el
+chequeo por recurso en `ListQuotasByPayee` y el filtro de lista en `ListQuotas`): **4 rojos**. Contra SQL
+real. Se agrego `FakePayeeAccessGuard` para los dos suites que construyen handlers a mano y NO miden
+autorizacion (defaults de paginado, SQL emitido) — su default es "ve todo" y el comentario dice por que
+eso es seguro: el guard real esta cubierto por sus propios tests.
+
+Unit 1392 (sin cambios), integracion 761→771, ambas verdes. Sin commit.
+
+## 2026-08-13 — BOLA/IDOR cerrado: el ledger deja de estar abierto a cualquier payee del tenant
+
+**La vulnerabilidad.** `Ledger.Read` lo tienen los CUATRO roles, Rep incluido — a proposito, porque ver
+por que te bajo el pago es el diferenciador del producto. Pero era el UNICO chequeo sobre
+`/api/payees/{id}/ledger/statement`: el permiso responde por el VERBO, nunca por el OBJETO. Cualquier Rep
+podia sustituir el id en la URL y leer el saldo de un colega. La UI lo disimulaba (no habia link), asi que
+el agujero existia exclusivamente al nivel de un request hecho a mano — que es justo el nivel donde ocurre
+el ataque, y donde ningun test de handler mira.
+
+**Lo que no existia y hubo que crear: el sujeto.** No habia vinculo Usuario→Payee en el dominio. "Este
+payee es tuyo" era literalmente inexpresable, por eso el chequeo faltaba en vez de estar mal escrito.
+`Payee.UserId` (string, la clave de `IdentityUser`, comparada crudo contra `ClaimTypes.NameIdentifier` —
+un Guid obligaria a parsear el claim, y un parse que falla en una ruta de autorizacion falla ABIERTO
+demasiado facil). Migracion B25, columna nullable, indice unico filtrado `(TenantId, UserId)`.
+
+**★ NULL ES EL ESTADO CERRADO, NO EL ABIERTO.** Un payee sin vincular no es de nadie: ni Rep ni Manager lo
+alcanzan, solo los roles de supervision. Es el estado de TODOS los payees justo despues de la migracion
+(se decidio no hacer backfill), y la direccion opuesta — "sin vincular = visible" — es exactamente la
+forma del agujero que esto cierra.
+
+**Las reglas, y por que cada una.** `PayeeAccessGuard`:
+- TenantAdmin / CompManager → todo el tenant. Corren pay runs y cierran cuentas huerfanas; restringirlos
+  no cerraria nada, romperia el producto.
+- Manager → su propio payee + sus reportes DIRECTOS (via `Payee.ManagerId`). La tabla de permisos ya decia
+  que un manager necesita `Ledger.Read` "para explicarle un pago reducido a su rep", asi que el alcance
+  correcto son sus reps, no la empresa. **NO recursivo**: un walk transitivo le daria a un mando medio
+  toda la organizacion debajo suyo — el mismo exceso, entrando por otra puerta.
+- Rep → el suyo, y solo si esta vinculado.
+- **Cualquier otra cosa → nada.** Un borrador dejaba caer el rol desconocido en la rama de Rep ("solo lo
+  suyo" suena inofensivo) y **un test lo agarro**: significa que un rol agregado el año que viene adquiere
+  acceso a plata de payees porque nadie edito este archivo. Ahora cada rol esta nombrado o no ve nada.
+
+**★ EL RECHAZO ES INDISTINGUIBLE, HASTA EL STATUS CODE.** "No existe" y "no es tuyo" devuelven el MISMO
+404 y el MISMO cuerpo (`PayeeAccessDenied.Message`, UNA constante — dos literales que hoy coinciden se
+separan la primera vez que alguien mejora la redaccion de uno, y la fuga vuelve sin que falle ningun test).
+Un 403 confirmaria que el payee existe igual de fuerte que un mensaje distinto. `entries` tuvo que GANAR un
+caso de not-found para esto: respondia 200 + [] a un payee inexistente, asi que rechazar con error a uno
+ajeno habria reconstruido el oraculo de enumeracion mientras se cerraba el agujero.
+
+**★ UNA LISTA NO SE PROTEGE CON UN CHEQUEO POR RECURSO — SE FILTRA.** `terminated-with-balance` no recibe
+payeeId: ES la lista de a quien mirar, y devolvia la deuda de cada ex-empleado a cualquiera con
+`Ledger.Read`. Era la fuga mas ancha de las tres y el WI no la anticipaba. Se filtra por visibilidad en vez
+de negarla entera: finance sigue teniendo su cola de trabajo, el manager ve a su reporte que se fue, y el
+Rep no puede distinguir "lista vacia" de "tenant sin cuentas huerfanas".
+
+**Alcance.** Los 3 endpoints de ledger + el dashboard del payee (`GetPayeeDashboardHandler`, que reporta 12
+meses de INGRESOS de una persona con nombre y apellido — mismo agujero con otro permiso, `Quotas.Read`).
+Quotas/assignments/`GetPayeeById` quedan para un WI aparte, con el guard ya construido y reusable.
+
+**Tests: 27 unit + 10 integracion, probados por mutacion.** Quitando el enforcement del statement, **5
+tests de integracion se ponen rojos**. El primer intento de esa prueba de mutacion dio un falso verde: el
+build fallaba (parametro sin leer = error) y `--no-build` corrio el binario viejo — la trampa exacta que
+CLAUDE.md §4 nombra. La mutacion valida deja la llamada y descarta el resultado. Integracion contra SQL
+real por Testcontainers, no solo in-memory: el indice unico filtrado y el query filter de tenant son
+comportamiento de base de datos, y EF InMemory ignora los indices filtrados.
+
+**Dos tests preexistentes se pusieron rojos y estaba bien que asi fuera.** `A_rep_can_read_a_statement_
+transparency_is_the_point` y `A_rep_sees_their_own_churn_debt` afirmaban "un rep ve LO SUYO" pero sembraban
+un payee de nadie: pasaban por la razon equivocada, porque el endpoint servia cualquiera. Se les agrego el
+vinculo; la afirmacion no cambio, ahora significa lo que el nombre dice.
+
+**Consecuencia que hay que saber:** hasta que alguien vincule payees, un Rep no ve NADA en ledger ni en su
+dashboard (404 con `LEDGER.LOAD_ERROR`, sin romperse). Es el precio elegido del fail-closed. Falta un WI de
+UI/endpoint para vincular usuario↔payee.
+
+Unit 1365→1392, integracion 753→761 (2 skipped preexistentes), ambas en verde. Sin commit.
+
 ## 2026-08-12 — Poster del video de bienvenida: 4.6 MB en cada apertura pasan a 11.8 KB
 
 **El problema que quedaba abierto.** Con `[autoplay]="false"` el marco quedaba vacio hasta que el clip

@@ -299,11 +299,150 @@ public static class AssistantPrompt
         "not visible to you, say that part is not available to this user rather than inventing it or " +
         "reporting it as zero.\n" +
         "\n" +
+        // ★ 10b USED TO ORDER THIS MODEL TO "pass THAT id to the tool", AND IT WAS ADDRESSED TO THE
+        // WRONG READER. This prompt composes the ANSWER; it never calls a tool and has no argument to
+        // put an id in. The instruction now lives in AssistantToolRunner.IdentifierRules, which the
+        // DISPATCHER reads — the one component that does fill in arguments. See ResolvedEntityContext
+        // for the channel that makes it possible at all.
+        //
+        // What remains here is the half that WAS always this model's business: the ids are internal and
+        // must never reach the page. Rule 18 says it for tokens and field names; it is repeated here
+        // because ids now travel on every lookup and an id printed in a sentence is the one leak this
+        // whole mechanism could introduce.
+        "10b. THE IDS IN THE DATA ARE NOT FOR THE USER. Every lookup carries internal identifiers " +
+        "(payeeId, planId). They are how the system finds a record again, they mean nothing to a reader, " +
+        "and printing one is the same mistake as printing a token name — NEVER put an id in your answer, " +
+        "not in brackets, not as a reference, not \"(id: 3f2a…)\". Refer to people and plans by their " +
+        "NAMES, which is what the payload gives them to you for.\n" +
+        "\n" +
         "11. YOU LOOKED IT UP, YOU DID NOT CHANGE IT. This lookup is read-only. You cannot create, " +
         "edit, void, recalculate or pay anything, and you must never imply otherwise. If the user asks " +
         "you to change what you just read, explain where THEY can do it.\n" +
         "\n" +
-        PlanRuleTokenRules;
+        PlanRuleTokenRules +
+        "\n" +
+        "\n" +
+        BalanceTokenRules +
+        "\n" +
+        "\n" +
+        PayeePlansTokenRules;
+
+    /// <summary>
+    /// ★★ THE DICTIONARY FOR THE BALANCE LOOKUP — AND THE RULE THAT PREVENTS THE FALSE ZERO.
+    ///
+    /// The failure this exists to stop is not a hallucination; it is a CORRECT reading of the wrong
+    /// number. Incentra's ledger records only what a payee OWES, so a rep who earned 10,000 with no
+    /// clawback has an outstanding debt of exactly 0.00 — and a model that reports "your balance is 0"
+    /// has read a real field accurately and told a salesperson they are owed nothing.
+    ///
+    /// The backend already crosses the two sources and ships a token saying which story the numbers
+    /// tell, so rule 19 is deliberately written as an instruction about WHICH FIELD IS THE ANSWER rather
+    /// than as advice to be careful. "Be careful with zeros" is not something a small model can act on;
+    /// "outstandingDebt is never the answer to how much am I owed" is.
+    ///
+    /// ★ RULE 21 EXISTS BECAUSE THE NEXT QUESTION IS PREDICTABLE. Somebody told they owe money asks why,
+    /// and the tool that answers that (clawback forensics) does not exist yet. The model must point at
+    /// the ledger screen rather than invent the cause from the amount.
+    /// </summary>
+    public const string BalanceTokenRules =
+        "19. A BALANCE HAS THREE NUMBERS AND YOU MUST GIVE ALL THREE. earnedCommissions is what the " +
+        "payee EARNED from their sales in the period. outstandingDebt is what they OWE the company from " +
+        "clawbacks or adjustments. netPendingPayout is what they can actually expect to RECEIVE. " +
+        "outstandingDebt is a DEBT, and it is NEVER the answer to \"what is my balance\" or \"how much " +
+        "am I owed\" — an outstandingDebt of 0 means the payee owes NOTHING, which is good news, and it " +
+        "never means they are paid nothing. If you report a zero without saying which of the three " +
+        "numbers it is, you have told somebody they have no money coming.\n" +
+        "\n" +
+        "19a. IF found IS TRUE, YOU FOUND THE PAYEE — NEVER ANSWER THAT YOU DID NOT. matchedBy says how: " +
+        "\"ExactName\" means the name is exactly the one asked for. \"EmployeeCode\" means the user gave " +
+        "a CODE, so the name in the answer is one they did not type — that is the SAME person, not a " +
+        "mismatch: open with their full name (\"NB-2001 corresponde a Ana García\") and then answer " +
+        "normally. \"PartialNameSingleCandidate\" means no exact name matched and this was the only " +
+        "possible payee: say so in your FIRST sentence, give the full name, then answer. Telling the " +
+        "user nothing was found when found is true reports a real person's real money as non-existent.\n" +
+        "\n" +
+        "19b. IF earnedCommissions AND netPendingPayout DIFFER, SAY WHY IN THE SAME BREATH. The gap is " +
+        "alreadyPaidOut (money already received) plus outstandingDebt (money owed back) — never leave " +
+        "the user to work out why they earned one figure and are receiving a smaller one. Give the " +
+        "subtraction in plain text.\n" +
+        "\n" +
+        "20. interpretation SAYS WHICH STORY THE NUMBERS TELL. It is an INTERNAL TOKEN: use it to choose " +
+        "your wording and NEVER print it, exactly as rule 18 requires. Do NOT write \"según la " +
+        "interpretación EarningsAndNoDebt\", \"the interpretation is EarningsAndNoDebt\", or the token " +
+        "in quotation marks — write what it MEANS: \"no tiene ninguna deuda pendiente\". The user must " +
+        "never see the word EarningsAndNoDebt, EarningsWithDebt, DebtOnly, DebtExceedsPending or " +
+        "NothingRecorded in your answer. The SAME ban covers the field names: do not print " +
+        "earnedCommissions, outstandingDebt, netPendingPayout, awaitingPayment or alreadyPaidOut, and " +
+        "do not put them in brackets after your own wording — write \"comisiones ganadas: 78.298,24\", " +
+        "NEVER \"comisiones ganadas (earnedCommissions): 78.298,24\". Never work the story out " +
+        "yourself:\n" +
+        "- EarningsAndNoDebt: they earned money and owe nothing. Lead with what they are owed " +
+        "(netPendingPayout) and say explicitly that there is no debt. NEVER say \"your balance is 0\".\n" +
+        "- EarningsWithDebt: they earned money and owe some of it back. Give all three numbers and show " +
+        "the subtraction in plain text.\n" +
+        "- DebtOnly: they owe money and have nothing pending to net it against. Say so directly.\n" +
+        "- DebtExceedsPending: the debt is larger than everything pending, so netPendingPayout is " +
+        "NEGATIVE. Say plainly that the remainder carries over to future periods — never present a " +
+        "negative figure as money they will receive.\n" +
+        "- NothingRecorded: no payouts and no debt in that currency. This is the ONE case where " +
+        "\"nothing to report\" is a true answer.\n" +
+        "\n" +
+        "21. THE OTHER BALANCE FIELDS, EXACTLY AS DEFINED. alreadyPaidOut is cash that has already left " +
+        "the company in that period — it is NOT still coming. awaitingPayment is everything earned and " +
+        "not yet paid, across ALL periods, not just the one asked about; say so when you use it. " +
+        "disputed is money under dispute and is deliberately NOT counted in earnedCommissions — mention " +
+        "it whenever it is present. Each currency is a SEPARATE answer: never add two currencies " +
+        "together, because Incentra holds no exchange rates. If the user asks WHY there is a debt, say " +
+        "that the reason for each movement is on the payee's Ledger screen — do not guess the cause " +
+        "from the amount.";
+
+    /// <summary>
+    /// ★ THE DICTIONARY FOR THE PAYEE-PLANS LOOKUP — which plans a person is assigned to.
+    ///
+    /// ★ RULE 22b IS THE ONE THAT MATTERS, and it is written the way it is because the backend genuinely
+    /// CANNOT resolve the ambiguity. <c>ListAssignmentsByPayeeHandler</c> answers a resource-guard denial
+    /// with an EMPTY PAGE rather than an error — deliberately, because an error would confirm the payee
+    /// exists. The consequence is that zero rows means "has no assignments" OR "you may not see them",
+    /// and nothing downstream can tell which. A model left to phrase that will pick the confident
+    /// reading, and "Ana is not assigned to any plan" said about a payee whose assignments are merely
+    /// hidden is a false statement about somebody's compensation. So the instruction is not "be careful"
+    /// — it is a sentence that is TRUE under both readings.
+    ///
+    /// ★ AND IT KEEPS THE TOOL'S SINGLE RESPONSIBILITY HONEST AT THE PROMPT LAYER. The payload carries
+    /// no rate and no amount, so rule 22c forbids the model supplying them from the plan's name or from
+    /// an earlier turn — an assignment answered with a rate invented for the occasion would be exactly
+    /// the failure get_plan_rules was built to end, arriving through the tool next door.
+    /// </summary>
+    public const string PayeePlansTokenRules =
+        "22. PAYEE PLANS: THE outcome FIELD SAYS WHICH ANSWER YOU HAVE. \"PayeePlans\" means the person's " +
+        "real assignments are below — list them from there. \"NoAssignmentsOrNotVisible\" is rule 22b. " +
+        "\"NotFoundOrNotVisible\" is the refusal of rule 9: relay it, then follow scenario 2C and ask for " +
+        "the exact name or employee code. As in rule 19a, if found is true you FOUND the person — " +
+        "matchedBy tells you how, and \"EmployeeCode\" or \"PartialNameSingleCandidate\" means the name " +
+        "in the answer is not the one the user typed: open with their full name and then answer.\n" +
+        "\n" +
+        "22a. GIVE EVERY ASSIGNMENT, WITH ITS PERIOD AND ITS STATUS. Say how many there are and cover " +
+        "each: the plan's name, the dates it runs between, and whether it is active. A payee on two plans " +
+        "whose answer names one is a wrong answer about how they are paid. If assignmentCount is smaller " +
+        "than totalAssignments, say plainly that you are showing the first ones and not all of them. When " +
+        "includedEnded is false, what you are listing is the CURRENT assignments — say so, and offer to " +
+        "look at past ones too rather than implying these are all that ever existed.\n" +
+        "\n" +
+        "22b. AN EMPTY RESULT DOES NOT MEAN \"THIS PERSON HAS NO PLAN\", AND YOU MUST NOT SAY THAT IT " +
+        "DOES. When outcome is \"NoAssignmentsOrNotVisible\" the lookup returned no rows, and that has " +
+        "two possible causes which the system cannot tell apart: the payee really has no assignment, or " +
+        "this user is not allowed to see it. Say what is TRUE of both — that you cannot see any " +
+        "assignment for them — and never the confident version. Do NOT write \"they are not assigned to " +
+        "any plan\", \"they have no plan\" or \"their plan was removed\": the first two assert the cause " +
+        "you were not given, and the third is the speculation rule 9 forbids. When includedEnded is " +
+        "false, offer to look again including past assignments.\n" +
+        "\n" +
+        "22c. THIS LOOKUP CONTAINS NO MONEY AND YOU MUST NOT SUPPLY ANY. It says WHICH plans a person is " +
+        "on, never what they pay or what the person earned. Do not state a rate, a commission or a " +
+        "balance from it, do not infer one from a plan's name, and do not carry a figure over from an " +
+        "earlier answer as if this lookup confirmed it. If the user then asks how one of those plans " +
+        "pays, or what the person has earned, say you can look that up — it is a different lookup and it " +
+        "happens on the next turn.";
 
     /// <summary>
     /// ★ THE DICTIONARY FOR THE PLAN-RULES LOOKUP. Its payload is deliberately language-neutral tokens

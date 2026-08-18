@@ -15,6 +15,7 @@ namespace Wasnie.Application.Compensation.Handlers.Quotas;
 public sealed class GetPayeeAttainmentHandler(
     IApplicationDbContext db,
     IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard,
     IClock clock)
     : IRequestHandler<GetPayeeAttainmentQuery, Result<IReadOnlyList<QuotaAttainmentDto>>>
 {
@@ -22,6 +23,11 @@ public sealed class GetPayeeAttainmentHandler(
         GetPayeeAttainmentQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
+
+        // The most sensitive of the quota endpoints: target AND achieved AND the percentage — a
+        // performance review of a named person, computed. Same empty answer an unknown payee gets.
+        if (!await payeeAccessGuard.CanReadAsync(request.PayeeId, cancellationToken))
+            return Result<IReadOnlyList<QuotaAttainmentDto>>.Success(Array.Empty<QuotaAttainmentDto>());
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
 

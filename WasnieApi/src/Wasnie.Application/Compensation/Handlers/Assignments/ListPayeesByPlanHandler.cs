@@ -11,7 +11,10 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
-public sealed class ListPayeesByPlanHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
+public sealed class ListPayeesByPlanHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<ListPayeesByPlanQuery, Result<PagedResult<PlanAssignmentDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -24,8 +27,14 @@ public sealed class ListPayeesByPlanHandler(IApplicationDbContext db, IAuthoriza
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
 
+        // "Who else is on this plan" — a roster of colleagues, so it is filtered like the other lists.
+        // For a rep it collapses to whether THEY are on the plan, which is all they ever needed.
+        var visibility = await payeeAccessGuard.GetVisibilityAsync(cancellationToken);
+        var visibleIds = visibility.IsUnrestricted ? null : visibility.PayeeIds.ToArray();
+
         var joined = db.PlanAssignments
             .Where(a => a.PlanId == request.PlanId)
+            .Where(a => visibleIds == null || visibleIds.Contains(a.PayeeId))
             .Join(
                 db.CompensationPlans,
                 a => a.PlanId,

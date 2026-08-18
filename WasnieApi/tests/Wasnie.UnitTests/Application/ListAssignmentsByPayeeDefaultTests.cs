@@ -63,8 +63,11 @@ public sealed class ListAssignmentsByPayeeDefaultTests
 
         db.SaveChanges();
 
+        // This suite is about the DEFAULT STATUS FILTER, not about who may read the payee — so the guard
+        // answers like finance. The guard itself is pinned by PayeeAccessGuardTests.
         var handler = new ListAssignmentsByPayeeHandler(
-            db, Substitute.For<IAuthorizationService>(), new FakeClock(Now));
+            db, Substitute.For<IAuthorizationService>(), FakePayeeAccessGuard.SeesEverything(),
+            new FakeClock(Now));
 
         return new Harness(handler, payee.Id);
     }

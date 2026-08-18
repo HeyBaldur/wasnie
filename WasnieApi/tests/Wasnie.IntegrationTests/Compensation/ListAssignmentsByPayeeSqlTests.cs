@@ -1,6 +1,7 @@
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Authorization;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
@@ -58,7 +59,19 @@ public sealed class ListAssignmentsByPayeeSqlTests(PayoutEngineFixture fixture, 
             new FixedTenant(tenantId), new NoOpPublisher());
 
     private ListAssignmentsByPayeeHandler Handler(ApplicationDbContext db) =>
-        new(db, new AllowAll(), new FakeClock(Now.UtcDateTime));
+        // This suite asserts the SQL the handler emits (one round trip, filtered and paged in the
+        // database). Authorisation is not what it measures, so the guard answers like finance; the real
+        // guard is exercised over HTTP in PayeeScopedEndpointAuthorizationTests.
+        new(db, new AllowAll(), new SeesEveryPayee(), new FakeClock(Now.UtcDateTime));
+
+    private sealed class SeesEveryPayee : IPayeeAccessGuard
+    {
+        public Task<PayeeVisibility> GetVisibilityAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(PayeeVisibility.Everything);
+
+        public Task<bool> CanReadAsync(Guid payeeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+    }
 
     /// <summary>Payee with two assignments: one expired (2025) and one current (2026).</summary>
     private async Task<Guid> SeedAsync(Guid tenantId)

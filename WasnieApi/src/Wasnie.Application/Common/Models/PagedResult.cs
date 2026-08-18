@@ -15,4 +15,19 @@ public sealed class PagedResult<T>
     /// advanced filtering (e.g. Transactions). Null for all other endpoints.
     /// </summary>
     public int? UnfilteredTotal { get; init; }
+
+    /// <summary>
+    /// A page with nothing on it, echoing the caller's paging parameters.
+    ///
+    /// Used by the payee-scoped list endpoints when the caller may not see the payee: an empty page is
+    /// already what an unknown payee produces, so answering with it keeps "not yours" and "no such
+    /// payee" indistinguishable (see PayeeAccessDenied for why that matters).
+    /// </summary>
+    public static PagedResult<T> Empty(int page, int pageSize) => new()
+    {
+        Items = [],
+        TotalCount = 0,
+        Page = page,
+        PageSize = pageSize,
+    };
 }

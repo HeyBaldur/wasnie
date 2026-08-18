@@ -272,6 +272,12 @@ public sealed class StreamAssistantReplyHandler(
             toolData = lookup.Data;
         }
 
+        // ★ EXTRACTED HERE, WHERE THE PAYLOAD STILL EXISTS. Everything below can fail, be stopped, or
+        // degenerate; the ids are a fact about the lookup that already succeeded and do not depend on
+        // any of it. See ResolvedEntityContext — this is the one line that keeps them alive past the
+        // end of the request.
+        var resolvedPayload = ResolvedEntityContext.PayloadFor(toolData);
+
         // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
         // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.
         var prompt = AssistantPrompt.Build(
@@ -352,9 +358,14 @@ public sealed class StreamAssistantReplyHandler(
 
                 if (interrupted.Length > 0)
                 {
+                    // ★ THE STOPPED TURN KEEPS ITS IDS. The user stopped the PROSE; the lookup behind it
+                    // ran to completion and really did resolve a payee. Dropping the context here would
+                    // mean the next question after a Stop quietly falls back to retyping the name — the
+                    // exact failure this channel exists to end, reappearing on the one path where the
+                    // user has already shown they are in a hurry.
                     await PersistAssistantAsync(
                         conversation.Id, interrupted, nextSequence + 1, clock.UtcNowOffset,
-                        CancellationToken.None, AssistantMessageStatus.Cancelled);
+                        CancellationToken.None, AssistantMessageStatus.Cancelled, resolvedPayload);
                 }
 
                 yield break;
@@ -409,7 +420,8 @@ public sealed class StreamAssistantReplyHandler(
         }
 
         var assistantMessage = await PersistAssistantAsync(
-            conversation.Id, text, nextSequence + 1, clock.UtcNowOffset, cancellationToken);
+            conversation.Id, text, nextSequence + 1, clock.UtcNowOffset, cancellationToken,
+            resolvedPayload: resolvedPayload);
 
         // Closes the last step for symmetry — every start this handler emits has exactly one matching
         // done, or an error frame in its place. The panel has long since swapped the steps for the
@@ -422,10 +434,17 @@ public sealed class StreamAssistantReplyHandler(
     /// <see cref="AssistantMessageStatus.Cancelled"/> only for the interrupted branch above — every
     /// other caller is storing an answer that finished.
     /// </param>
+    /// <param name="resolvedPayload">
+    /// The identifiers this turn's lookup resolved, serialised — null on every turn that looked nothing
+    /// up. See <see cref="ResolvedEntityContext"/>: this column is the ONLY thing that carries an id to
+    /// the next turn, because the answer text is forbidden from mentioning one and the tool payload is
+    /// discarded when the request ends.
+    /// </param>
     private async Task<AssistantMessage> PersistAssistantAsync(
         Guid conversationId, string content, int sequence, DateTimeOffset now,
         CancellationToken cancellationToken,
-        AssistantMessageStatus status = AssistantMessageStatus.Complete)
+        AssistantMessageStatus status = AssistantMessageStatus.Complete,
+        string? resolvedPayload = null)
     {
         // Truncated rather than rejected: a model that overruns the column has still written something
         // the user watched arrive, and refusing to store it would erase what they just read.
@@ -435,7 +454,8 @@ public sealed class StreamAssistantReplyHandler(
 
         var message = AssistantMessage.Create(
             guid.NewGuid(), conversationId, tenantContext.TenantId,
-            AssistantMessageRole.Assistant, stored, sequence, now, payload: null, status: status);
+            AssistantMessageRole.Assistant, stored, sequence, now,
+            payload: resolvedPayload, status: status);
 
         db.AssistantMessages.Add(message);
         await db.SaveChangesAsync(cancellationToken);

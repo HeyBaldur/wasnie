@@ -74,6 +74,10 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
         {
           "type": "object",
           "properties": {
+            "planId": {
+              "type": "string",
+              "description": "The plan's id, copied EXACTLY from an earlier answer in this conversation. Always prefer this over planName when the plan has already been looked up in this session — retyping a title from memory is what produces 'no such plan' for a plan you just explained."
+            },
             "planName": {
               "type": "string",
               "description": "The plan's COMPLETE name, copied verbatim from the user's message. Copy the WHOLE title including any leading period or quarter (for example 'Q3 2026 - ') and any trailing parenthetical (for example '(Test Integral)'). Do NOT shorten it, do not drop a prefix or a suffix, and do not tidy it up. Omit this argument entirely if the user did not name a plan."
@@ -103,6 +107,52 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
     public async Task<string> RunAsync(string argumentsJson, CancellationToken cancellationToken)
     {
         var planName = ReadPlanName(argumentsJson);
+        var planId = ReadPlanId(argumentsJson);
+
+        // ── The id path: the plan was already looked up in this conversation ──
+        //
+        // ★ THE NAME IS A GUESS THE MODEL RETYPES; THE ID IS A FACT IT COPIES. This tool's whole history
+        // is names arriving slightly wrong — an em-dash for a hyphen, a dropped quarter prefix — and a
+        // user being told a plan they were looking at does not exist. PlanNameMatch made those survivable;
+        // the id makes them not happen at all on the second and third turn.
+        //
+        // Authorisation is untouched: GetPlanByIdQuery enforces Plans.Read and the tenant query filter,
+        // so an id from another tenant comes back empty and takes the SAME refusal as a plan that never
+        // existed. The id buys precision, never access.
+        if (planId is { } id)
+        {
+            try
+            {
+                var byId = await sender.Send(new GetPlanByIdQuery(id), cancellationToken);
+
+                if (!byId.IsSuccess || byId.Value is null)
+                {
+                    // A stale or foreign id is a BUSINESS result — the plan is gone or was never
+                    // theirs — so it refuses rather than raising. Unlike the id-from-our-own-list case
+                    // below, this id came from the model's memory and may legitimately be wrong.
+                    LogCause(AssistantToolCause.NotFound);
+                    return Refusal();
+                }
+
+                // The other versions of the same plan, so the answer keeps the shape the name path
+                // produces. Narrowed by the AUTHORITATIVE name from the row, never by the model's.
+                var siblings = await ListVisiblePlansAsync(byId.Value.Name, cancellationToken);
+                var otherVersions = siblings
+                    .Where(p => p.Id != id && PlanNameMatch.AreSame(p.Name, byId.Value.Name))
+                    .OrderByDescending(p => p.Version)
+                    .Select(p => new PlanVersion(p.Version, p.Status))
+                    .ToList();
+
+                LogCause(AssistantToolCause.Found);
+                return JsonSerializer.Serialize(
+                    Describe(byId.Value, otherVersions, matchedExactly: true), Json);
+            }
+            catch (ForbiddenException)
+            {
+                LogCause(AssistantToolCause.NotPermitted);
+                return Refusal();
+            }
+        }
 
         IReadOnlyList<PlanSummaryDto> visiblePlans;
         try
@@ -305,6 +355,26 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
         return new PlanMatch(chosen, others);
     }
 
+    /// <summary>
+    /// The plan id, when the model copied one out of the conversation. An unparseable value degrades to
+    /// null so the name path still runs — a malformed id must not cost the user their answer.
+    /// </summary>
+    private Guid? ReadPlanId(string argumentsJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            return document.RootElement.TryGetProperty("planId", out var value)
+                   && Guid.TryParse(value.GetString(), out var parsed)
+                ? parsed
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null; // Already logged by ReadPlanName, which parses the same document.
+        }
+    }
+
     private string? ReadPlanName(string argumentsJson)
     {
         try
@@ -346,6 +416,11 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
             MatchedBy: matchedExactly
                 ? nameof(NameMatchToken.ExactName)
                 : nameof(NameMatchToken.PartialNameSingleCandidate),
+            // ★ THE ID TRAVELS SO THE NEXT TURN DOES NOT HAVE TO REMEMBER THE TITLE. It lands in the
+            // transcript the model re-reads, and "that plan" two questions later becomes a copied
+            // identifier instead of a retyped name. Not PII: a plan is configuration, and its name —
+            // which a person chose — was already here.
+            PlanId: plan.Id,
             PlanName: plan.Name,
             PlanVersion: plan.Version,
             PlanStatus: plan.Status,
@@ -549,6 +624,7 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
         string Outcome,
         bool Found,
         string MatchedBy,
+        Guid PlanId,
         string PlanName,
         int PlanVersion,
         string PlanStatus,

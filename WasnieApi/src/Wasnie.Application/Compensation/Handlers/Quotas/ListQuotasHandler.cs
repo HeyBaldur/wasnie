@@ -10,7 +10,10 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
-public sealed class ListQuotasHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
+public sealed class ListQuotasHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<ListQuotasQuery, Result<PagedResult<QuotaSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -21,6 +24,15 @@ public sealed class ListQuotasHandler(IApplicationDbContext db, IAuthorizationSe
         await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
         var p = request.Pagination;
         var query = db.Quotas.AsQueryable();
+
+        // ★ THE WIDEST OF THE QUOTA LEAKS, AND IT TAKES NO PAYEE ID AT ALL. This list is paged AND
+        // searchable by name, so a rep did not even need an id to work with: `?search=` returned any
+        // colleague's commission target. Filtered by visibility for the same reason
+        // terminated-with-balance is — a list cannot be protected by a per-resource check.
+        var visibility = await payeeAccessGuard.GetVisibilityAsync(cancellationToken);
+        var visibleIds = visibility.IsUnrestricted ? null : visibility.PayeeIds.ToArray();
+        if (visibleIds is not null)
+            query = query.Where(x => visibleIds.Contains(x.PayeeId));
 
         // Filters
         if (!string.IsNullOrWhiteSpace(p.Status) &&
