@@ -203,7 +203,7 @@
     "PAY_GROUP": "Finanse",
     "ADMIN": "Ustawienia",
     "SUBSCRIPTION": "Subskrypcja",
-    "INTEGRATIONS": "Integracje",
+    "INTEGRATIONS": "Konektor CRM HubSpot",
     "IMPORT_TRANSACTIONS": "Importuj transakcje",
     "MANUAL": "Podręcznik użytkownika",
     "PROFILE": "Profil"
@@ -268,9 +268,9 @@
     "PAID_PLAN_NOTE": "Integracje z CRM są dostępne od planu Starter. Przejdź na plan wyższy, aby połączyć HubSpot i automatycznie synchronizować wygrane transakcje.",
     "FROZEN_NOTE": "Twoje połączenie z HubSpot jest zapisane, ale wstrzymane: automatyczna synchronizacja nie działa w planie darmowym. Przejdź na plan płatny, aby ją wznowić — nic nie zostało usunięte i nie trzeba łączyć się ponownie.",
     "VIEW_PLANS": "Zobacz plany",
-    "TITLE": "Integracje",
-    "SUBTITLE": "Połącz Incentrę z innymi narzędziami",
-    "LOAD_ERROR": "Nie udało się załadować integracji.",
+    "TITLE": "Konektor CRM HubSpot",
+    "SUBTITLE": "Połącz swój CRM HubSpot, aby wygrane transakcje trafiały do Incentry",
+    "LOAD_ERROR": "Nie udało się załadować połączenia z HubSpot.",
     "HUBSPOT": {
       "NAME": "HubSpot",
       "DESC": "Połącz swój CRM HubSpot, aby dane sprzedażowe płynęły do Incentry.",
@@ -342,6 +342,36 @@
         "TOAST_LINKED": "Właściciel powiązany. Przyszłe transakcje będą przypisywane automatycznie.",
         "TOAST_LINKED_REASSIGNED": "Właściciel powiązany, a istniejące transakcje ponownie przypisane."
       }
+    },
+    "TUTORIAL": {
+      "TITLE": "Jak połączyć HubSpot",
+      "INTRO": "Incentra łączy się z HubSpot przez OAuth 2.0, używając własnej aplikacji. Połączenie zatwierdzasz w samym HubSpot — Incentra nigdy nie prosi o Twoje hasło do HubSpot i nigdy niczego w HubSpot nie zapisuje.",
+      "PREREQ_TITLE": "Zanim zaczniesz",
+      "PREREQ_PLAN": "Płatny plan Incentry. Konektor HubSpot nie jest dostępny w planie Free — w darmowej przestrzeni połączenia nie da się nawet rozpocząć.",
+      "PREREQ_PERMISSION": "Uprawnienie „Zarządzanie integracjami” w Incentrze. Nie każdy użytkownik może połączyć CRM.",
+      "PREREQ_HUBSPOT": "W HubSpot użytkownik będący Super administratorem lub mający uprawnienie \"App Marketplace Access\", z dostępem do danych odczytywanych przez aplikację. Bez tego HubSpot w ogóle nie pokaże ekranu zatwierdzenia.",
+      "STEP_1_TITLE": "Sprawdź powyższe wymagania",
+      "STEP_1_BODY": "Potwierdź swój plan i uprawnienie w Incentrze oraz upewnij się, że jesteś zalogowany na koncie HubSpot, które faktycznie chcesz połączyć.",
+      "STEP_2_TITLE": "Naciśnij Połącz",
+      "STEP_2_BODY": "Użyj przycisku Połącz na tej stronie. Incentra przekieruje Cię do HubSpot, aby autoryzować połączenie.",
+      "STEP_2_WARNING": "Masz około 10 minut na dokończenie. Link połączenia wygasa — jeśli potrwa to dłużej, wróć i naciśnij Połącz ponownie.",
+      "STEP_3_TITLE": "Zatwierdź uprawnienia w HubSpot",
+      "STEP_3_BODY": "HubSpot pokaże dokładnie, o co prosi Incentra: cztery uprawnienia, wszystkie tylko do odczytu.",
+      "SCOPE_DEALS": "Odczyt transakcji (deals)",
+      "SCOPE_OWNERS": "Odczyt właścicieli (owners)",
+      "SCOPE_SCHEMAS": "Odczyt schematu transakcji",
+      "SCOPE_LINE_ITEMS": "Odczyt pozycji każdej transakcji",
+      "READ_ONLY_NOTE": "Incentra tylko odczytuje. Nigdy nie tworzy, nie edytuje ani nie usuwa niczego w HubSpot.",
+      "STEP_4_TITLE": "Gotowe — połączono",
+      "STEP_4_BODY": "HubSpot odsyła Cię do Incentry, a ta strona pokazuje aktywne połączenie.",
+      "AFTER_TITLE": "Po połączeniu",
+      "AFTER_SYNC_TITLE": "Transakcje trafiają automatycznie",
+      "AFTER_SYNC_BODY": "Incentra synchronizuje się automatycznie co godzinę i pobiera wygrane transakcje (closed-won) jako transakcje w systemie. \"Sync now\" pobiera je od razu, jeśli nie chcesz czekać; \"Preview deals\" i \"Import deals\" to skróty, a nie wymagane kroki.",
+      "AFTER_OWNERS_TITLE": "Mapowanie właścicieli — opcjonalne i częściowo automatyczne",
+      "AFTER_OWNERS_BODY": "Incentra próbuje dopasować właściciela każdej transakcji do odbiorcy po adresie e-mail. Transakcja, której właściciel nie pasuje do nikogo, i tak trafia do systemu — ale bez odbiorcy nie wypłaca nikomu prowizji. Mapowanie nie jest wymagane do synchronizacji; jest wymagane, aby transakcja zamieniła się w prowizję.",
+      "AFTER_CATEGORY_TITLE": "Kategoria produktu — opcjonalna, domyślnie wyłączona",
+      "AFTER_CATEGORY_BODY": "Wybierz, która właściwość HubSpot wypełnia kategorię transakcji. Pozostawienie pustego pola wyłącza tę funkcję.",
+      "REVOKE_NOTE": "Możesz odłączyć konto w każdej chwili na tej stronie. Odłączenie unieważnia zapisane poświadczenia; transakcje już zaimportowane do Incentry pozostają."
     }
   },
   "EMPTY_STATE": {

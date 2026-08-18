@@ -203,7 +203,7 @@
     "PAY_GROUP": "Financials",
     "ADMIN": "Settings",
     "SUBSCRIPTION": "Subscription",
-    "INTEGRATIONS": "Integrations",
+    "INTEGRATIONS": "HubSpot CRM Connector",
     "IMPORT_TRANSACTIONS": "Import transactions",
     "MANUAL": "User manual",
     "PROFILE": "Profile"
@@ -268,9 +268,9 @@
     "PAID_PLAN_NOTE": "CRM integrations are included from the Starter plan up. Upgrade to connect HubSpot and sync your closed-won deals automatically.",
     "FROZEN_NOTE": "Your HubSpot connection is saved but paused: automatic syncing stops on the Free plan. Upgrade to resume it — nothing was deleted and you will not need to reconnect.",
     "VIEW_PLANS": "View plans",
-    "TITLE": "Integrations",
-    "SUBTITLE": "Connect Incentra to your other tools",
-    "LOAD_ERROR": "Could not load your integrations.",
+    "TITLE": "HubSpot CRM Connector",
+    "SUBTITLE": "Connect your HubSpot CRM so closed-won deals flow into Incentra",
+    "LOAD_ERROR": "Could not load your HubSpot connection.",
     "HUBSPOT": {
       "NAME": "HubSpot",
       "DESC": "Connect your HubSpot CRM so sales data flows into Incentra.",
@@ -342,6 +342,36 @@
         "TOAST_LINKED": "Owner linked. Future deals will be assigned automatically.",
         "TOAST_LINKED_REASSIGNED": "Owner linked and existing transactions reassigned."
       }
+    },
+    "TUTORIAL": {
+      "TITLE": "How to connect HubSpot",
+      "INTRO": "Incentra connects to HubSpot with OAuth 2.0, using its own app. You approve the connection inside HubSpot — Incentra never asks for your HubSpot password, and it never writes anything back to HubSpot.",
+      "PREREQ_TITLE": "Before you start",
+      "PREREQ_PLAN": "A paid Incentra plan. The HubSpot connector is not included in Free — on a Free workspace the connection cannot even be started.",
+      "PREREQ_PERMISSION": "The \"Manage integrations\" permission in Incentra. Not every user can connect a CRM.",
+      "PREREQ_HUBSPOT": "In HubSpot, a user who is a Super Admin or has the \"App Marketplace Access\" permission, with access to the data the app reads. Without it HubSpot never shows the approval screen.",
+      "STEP_1_TITLE": "Check the requirements above",
+      "STEP_1_BODY": "Confirm your Incentra plan and permission, and make sure you are signed in to the HubSpot account you actually want to connect.",
+      "STEP_2_TITLE": "Press Connect",
+      "STEP_2_BODY": "Use the Connect button on this page. Incentra sends you to HubSpot to authorise the connection.",
+      "STEP_2_WARNING": "You have about 10 minutes to finish. The connection link expires — if you take longer, come back and press Connect again.",
+      "STEP_3_TITLE": "Approve the permissions in HubSpot",
+      "STEP_3_BODY": "HubSpot shows you exactly what Incentra is asking for: four permissions, all read-only.",
+      "SCOPE_DEALS": "Read deals",
+      "SCOPE_OWNERS": "Read owners",
+      "SCOPE_SCHEMAS": "Read the deal schema",
+      "SCOPE_LINE_ITEMS": "Read each deal's line items",
+      "READ_ONLY_NOTE": "Incentra only reads. It never creates, edits or deletes anything in HubSpot.",
+      "STEP_4_TITLE": "You are connected",
+      "STEP_4_BODY": "HubSpot returns you to Incentra and this page shows the connection as active.",
+      "AFTER_TITLE": "After connecting",
+      "AFTER_SYNC_TITLE": "Deals arrive on their own",
+      "AFTER_SYNC_BODY": "Incentra syncs automatically every hour and brings closed-won deals in as transactions. \"Sync now\" fetches them immediately if you would rather not wait; \"Preview deals\" and \"Import deals\" are shortcuts, not required steps.",
+      "AFTER_OWNERS_TITLE": "Owner mapping — optional, and partly automatic",
+      "AFTER_OWNERS_BODY": "Incentra tries to match each deal's HubSpot owner to a payee by email. A deal whose owner matches nobody still arrives as a transaction — but with no payee it pays commission to nobody. Mapping is not required to sync; it is required for a deal to turn into commission.",
+      "AFTER_CATEGORY_TITLE": "Product category — optional, off by default",
+      "AFTER_CATEGORY_BODY": "Choose which HubSpot property fills a transaction's category. Leave it empty and the feature stays off.",
+      "REVOKE_NOTE": "You can disconnect at any time from this page. Disconnecting revokes the stored credentials; the transactions already imported into Incentra stay."
     }
   },
   "EMPTY_STATE": {
