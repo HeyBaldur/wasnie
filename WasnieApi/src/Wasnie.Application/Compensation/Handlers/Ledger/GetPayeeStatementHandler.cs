@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Authorization;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Ledger;
@@ -18,13 +19,22 @@ namespace Wasnie.Application.Compensation.Handlers.Ledger;
 /// </summary>
 public sealed class GetPayeeStatementHandler(
     IApplicationDbContext db,
-    IAuthorizationService authorizationService)
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<GetPayeeStatementQuery, Result<IReadOnlyList<PayeeStatementDto>>>
 {
     public async Task<Result<IReadOnlyList<PayeeStatementDto>>> Handle(
         GetPayeeStatementQuery request, CancellationToken cancellationToken)
     {
+        // TWO checks, and both are load-bearing. The permission says this ROLE may read ledgers; the
+        // guard says this USER may read THIS payee's. Ledger.Read is held by every role including Rep,
+        // so on its own it authorised reading anybody's pay (BOLA/IDOR).
         await authorizationService.RequireAsync(Permission.LedgerRead, cancellationToken);
+
+        // ★ ORDER MATTERS: the access check runs BEFORE the payee is looked up, so no branch can
+        // observe the difference between "no such payee" and "not yours" — see PayeeAccessDenied.
+        if (!await payeeAccessGuard.CanReadAsync(request.PayeeId, cancellationToken))
+            return Result<IReadOnlyList<PayeeStatementDto>>.Failure(PayeeAccessDenied.Message);
 
         var payee = await db.Payees
             .Where(p => p.Id == request.PayeeId)
@@ -32,7 +42,7 @@ public sealed class GetPayeeStatementHandler(
             .FirstOrDefaultAsync(cancellationToken);
 
         if (payee is null)
-            return Result<IReadOnlyList<PayeeStatementDto>>.Failure("Payee not found.");
+            return Result<IReadOnlyList<PayeeStatementDto>>.Failure(PayeeAccessDenied.Message);
 
         var balances = await db.PayeeBalances
             .Where(b => b.PayeeId == request.PayeeId)

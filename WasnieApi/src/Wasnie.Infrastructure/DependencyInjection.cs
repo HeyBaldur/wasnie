@@ -173,6 +173,8 @@ public static class DependencyInjection
         // tool holding somebody else's identity.
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetTransactionTool>();
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPlanRulesTool>();
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPayeeLedgerSummaryTool>();
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPayeePlansTool>();
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
@@ -182,6 +184,11 @@ public static class DependencyInjection
         services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmDealSource, HubSpotCrmDealSource>();
         services.AddScoped<Wasnie.Application.Integrations.Crm.ICrmOwnerResolver,
             Wasnie.Infrastructure.Services.Crm.CrmOwnerResolver>();
+
+        // Resource-level authorisation for payee data (BOLA/IDOR guard). SCOPED and never singleton:
+        // it caches "which payees may I see" for the duration of ONE request, and that answer belongs
+        // to one principal. A singleton would serve the first caller's visibility to everybody after.
+        services.AddScoped<IPayeeAccessGuard, Wasnie.Application.Authorization.PayeeAccessGuard>();
 
         services.AddMemoryCache();
         services.AddScoped<IAuditDispatcher, SyncAuditDispatcher>();

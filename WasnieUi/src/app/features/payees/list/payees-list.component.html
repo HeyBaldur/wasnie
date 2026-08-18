@@ -77,7 +77,14 @@
                     <div class="payee-identity">
                       <span class="payee-avatar">{{ initialsFor(payee.fullName) }}</span>
                       <div class="payee-identity__text">
-                        <span class="payee-name">{{ payee.fullName }}</span>
+                        <span class="payee-name-row">
+                          <span class="payee-name">{{ payee.fullName }}</span>
+                          <ws-copy-button
+                            [value]="payee.fullName"
+                            label="COMMON.COPY_NAME"
+                            [size]="14"
+                          />
+                        </span>
                         <span class="payee-code">{{ payee.employeeCode }}</span>
                       </div>
                     </div>

@@ -93,7 +93,9 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetDashboard(Guid payeeId, [FromQuery] string period = "this-month", CancellationToken cancellationToken = default)
     {
         var result = await mediator.Send(new GetPayeeDashboardQuery(payeeId, period), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+        // NotFound rather than BadRequest for the same reason as the ledger endpoints: this query's
+        // only failure is "no such payee, or not yours", and the two must look identical.
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
     [HttpGet("{payeeId:guid}/credits")]

@@ -95,6 +95,17 @@ public enum AssistantToolCause
     /// <summary>No record matches. A correct answer.</summary>
     NotFound,
 
+    /// <summary>
+    /// SEVERAL payees answer to the name, so none was read. Also a correct answer — and a distinct one.
+    ///
+    /// ★ IT IS SEPARATE FROM <see cref="NotFound"/> FOR THE LOG'S SAKE, not only the user's. When two
+    /// people called Anna Schmidt both came back as "NotFound", the telemetry said a payee could not be
+    /// found — and the investigation that followed went looking for a status filter excluding terminated
+    /// employees, which does not exist and never did. A cause that misreports the reason sends the next
+    /// reader down the same wrong path.
+    /// </summary>
+    AmbiguousPayee,
+
     /// <summary>The record may exist, but this user may not read it. Also a correct answer.</summary>
     NotPermitted,
 

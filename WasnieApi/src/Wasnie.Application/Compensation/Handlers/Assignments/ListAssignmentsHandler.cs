@@ -10,7 +10,10 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Assignments;
 
-public sealed class ListAssignmentsHandler(IApplicationDbContext db, IAuthorizationService authorizationService)
+public sealed class ListAssignmentsHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard)
     : IRequestHandler<ListAssignmentsQuery, Result<PagedResult<PlanAssignmentSummaryDto>>>
 {
     private static readonly HashSet<string> AllowedSortFields =
@@ -23,6 +26,13 @@ public sealed class ListAssignmentsHandler(IApplicationDbContext db, IAuthorizat
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
         var query = db.PlanAssignments.AsQueryable();
+
+        // Filtered, not refused — the tenant-wide assignment list is a legitimate screen for finance,
+        // and for a rep it collapses to their own row.
+        var visibility = await payeeAccessGuard.GetVisibilityAsync(cancellationToken);
+        var visibleIds = visibility.IsUnrestricted ? null : visibility.PayeeIds.ToArray();
+        if (visibleIds is not null)
+            query = query.Where(x => visibleIds.Contains(x.PayeeId));
 
         // Filters
         if (!string.IsNullOrWhiteSpace(p.Status) &&

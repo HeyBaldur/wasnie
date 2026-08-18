@@ -45,9 +45,14 @@
 
 /* ── The document ────────────────────────────────────────────────────────────
  *
- * ★ MEASURE, NOT WIDTH. The column can be wide; the TEXT is capped at a reading measure, because a line
- * that runs the width of a monitor is the thing that makes long documents unreadable. This is the same
- * problem the PDF had, solved where it can actually be solved now that we own the rendering.
+ * ★ THE SCROLLER IS NO LONGER THE CARD. It used to be one card holding nineteen chapters, which is the
+ * card language applied once and then abandoned: everything inside it was still a flat wall of text on a
+ * single surface. The column is now transparent — the app's own background shows through — and each
+ * chapter is its own elevated card (`.manual__chapter`). Elevation is what tells a reader where a unit of
+ * meaning starts and stops; a scrollbar cannot.
+ *
+ * Horizontal padding is kept so the cards' shadows are not clipped: `overflow-y: auto` forces the
+ * horizontal axis to `auto` too, so anything painted outside the box would be cut off at the edge.
  */
 .manual__doc {
   min-height: 0;
@@ -58,11 +63,7 @@
      chapter ("Maintenance", nine lines from the end) moved nothing at all when the reader was already at
      the bottom, which reads as a broken link. Reserving a screen of room below the document means EVERY
      chapter can land at the top, so every entry in the menu does the same visible thing. */
-  padding: var(--space-6) var(--space-8) 70vh;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
+  padding: var(--space-1) var(--space-2) 70vh;
   color: var(--color-text-secondary);
   font-size: var(--font-size-14);
   line-height: 1.65;
@@ -84,8 +85,56 @@
  * mean post-processing the HTML for nothing.
  */
 :host ::ng-deep .manual__doc {
-  > :first-child {
-    margin-top: 0;
+  /* ── One chapter, one card ─────────────────────────────────────────────────
+   *
+   * ★ THIS IS THE `ws-card` RECIPE, COPIED RATHER THAN INVENTED: surface, hairline border, `--radius-xl`,
+   * `--shadow-md`, `--space-6 / --space-8` padding — exactly what `ws-card` (default variant, pad-lg)
+   * paints. It cannot BE a `<ws-card>`: these elements come from `[innerHTML]`, where Angular renders no
+   * components. Matching the recipe token for token is what keeps a chapter looking like every other card
+   * in the app, and it means `--shadow-card` (which does not exist — CLAUDE.md 5.2 names it, the
+   * stylesheet never defined it) did not have to be invented here either.
+   *
+   * The elevation reads differently per theme, and that is the system working, not a gap: in dark the
+   * surface is a full step lighter than the page (#161c28 on #0b0f17); in light both are white and the
+   * border plus shadow carry it — the same trade every card in the app already makes. */
+  .manual__chapter {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+    padding: var(--space-6) var(--space-8);
+    margin-bottom: var(--space-5);
+    /* So a floated or margin-collapsing first child cannot escape the card's padding. */
+    display: flow-root;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  /* ── Reading measure ───────────────────────────────────────────────────────
+   *
+   * ★ MEASURE, NOT WIDTH — AND THIS TIME IT IS ACTUALLY IMPLEMENTED. The old file claimed the text was
+   * "capped at a reading measure" in a comment and then capped nothing: on a wide monitor a paragraph ran
+   * the full column, ~160 characters a line, which is the single biggest reason a long document stops
+   * being readable — the eye loses the return sweep and re-reads the line it just finished.
+   *
+   * `ch` is the width of a "0" in the current font, so this tracks the font size instead of freezing a
+   * pixel count. Applied to PROSE only: tables and code blocks are data, they are read by scanning, not
+   * by line, and squeezing them into 72 characters would force horizontal scrolling on both. */
+  p,
+  ul,
+  ol,
+  blockquote,
+  h1,
+  h2,
+  h3,
+  h4 {
+    max-width: 72ch;
   }
 
   h1,
@@ -99,20 +148,39 @@
   }
 
   h1 {
-    font-size: var(--font-size-24);
-    margin: var(--space-6) 0 var(--space-4);
+    font-size: var(--font-size-28);
+    margin: 0 0 var(--space-4);
+    letter-spacing: -0.01em;
   }
 
+  /* ★ NO MORE `border-top`. A rule drawn above every chapter was a separator invented because there was
+     nothing else to separate chapters WITH. The gap between two cards says it better and says it in the
+     same language as the rest of the app. */
   h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     font-size: var(--font-size-20);
-    margin: var(--space-8) 0 var(--space-3);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--color-border-subtle);
+    margin: 0 0 var(--space-5);
   }
 
   h3 {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
     font-size: var(--font-size-16);
     margin: var(--space-6) 0 var(--space-2);
+
+    /* The sub-section marker: the smallest possible anchor, on the same left axis as the chapter badge
+       above it, so the eye can tell a chapter from a section without reading either. */
+    &::before {
+      content: '';
+      flex: none;
+      width: var(--space-2);
+      height: var(--space-2);
+      border-radius: var(--radius-full);
+      background: var(--color-brand);
+    }
   }
 
   h4 {
@@ -144,12 +212,26 @@
     color: var(--color-brand);
   }
 
+  /* ── Key terms as badges, not just bold ────────────────────────────────────
+   *
+   * The guide writes every domain term the reader has to recognise — `SplitAtQuota`, `ClawbackDebit`,
+   * `PaidAt` — in backticks. They were grey chips, indistinguishable from the surrounding grey prose.
+   * Tinting them with the brand accent turns the vocabulary into something scannable: you can find the
+   * term you came for without reading the paragraph around it. `--color-brand-subtle` already exists for
+   * exactly this (a 12% accent wash in dark, 8–10% in the light themes), so no opacity was invented. */
   code {
     font-family: var(--font-mono, monospace);
     font-size: var(--font-size-12);
-    background: var(--color-bg-surface-sunken);
+    background: var(--color-brand-subtle);
+    color: var(--color-brand);
     border-radius: var(--radius-sm);
     padding: 2px 6px;
+    /* ★ THE ONE THING A NARROW SCREEN CANNOT SURVIVE WITHOUT. The guide cites source files inline —
+       `ListTerminatedPayeesWithBalanceHandler.cs:37-52` is 327px of unbreakable text — and a chip that
+       refuses to wrap pushes its whole card sideways, which is how a single identifier gives the entire
+       document a horizontal scrollbar at 375px. `anywhere`, not `break-word`: the token has no spaces to
+       break at, so only breaking mid-token can help. */
+    overflow-wrap: anywhere;
   }
 
   pre {
@@ -160,17 +242,27 @@
     overflow-x: auto;
     margin: 0 0 var(--space-4);
 
+    /* A whole block is not a term: inside `pre` the chip treatment would tint the entire example. */
     code {
       background: none;
+      color: inherit;
       padding: 0;
     }
   }
 
+  /* A quote in this document is always an aside — "note that…". Given the accent edge and a sunken well
+     it stops being a paragraph in a slightly different grey and becomes something you can skip or seek. */
   blockquote {
     margin: 0 0 var(--space-4);
-    padding-left: var(--space-4);
-    border-left: 3px solid var(--color-border-default);
-    color: var(--color-text-tertiary);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg-surface-sunken);
+    border-left: 3px solid var(--color-brand);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    color: var(--color-text-secondary);
+
+    > :last-child {
+      margin-bottom: 0;
+    }
   }
 
   /* Wide tables scroll inside themselves rather than stretching the column. */
@@ -200,6 +292,68 @@
     border: 0;
     border-top: 1px solid var(--color-border-subtle);
     margin: var(--space-6) 0;
+  }
+
+  /* ── The chapter badge ─────────────────────────────────────────────────────
+   *
+   * Written into the heading by `sectionize()`. Numbered chapters show their number; the document's
+   * unnumbered housekeeping sections show an icon in the same 32px slot, so every card opens on the same
+   * left axis whichever kind it is. */
+  .manual__chapter-num {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--space-8);
+    height: var(--space-8);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--color-brand-subtle);
+    color: var(--color-brand);
+    font-size: var(--font-size-13);
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  /* ★ PRESENT FOR `textContent`, INVISIBLE TO THE READER. The dot after the chapter number has to stay
+     inside the heading or the slug changes and the guide's own cross-references break (see
+     `sectionize()`); `display: none` hides it from the badge without hiding it from the DOM. */
+  .manual__chapter-dot {
+    display: none;
+  }
+
+  /* ★ THE ICON IS A MASK, NOT MARKUP, FOR TWO REASONS. Angular's sanitiser strips `<svg>` out of
+     `[innerHTML]` — it is not on its element allow-list — so an inline icon would silently vanish; and a
+     mask takes its colour from `background-color`, which means the glyph is painted with a TOKEN and
+     follows all three themes. The data URI carries geometry only (it is the `document-text` entry from
+     the design system's own icon set, same viewBox and stroke width); the `%23000` in it is the mask's
+     alpha channel, never a colour anyone sees. */
+  .manual__chapter-num--icon {
+    &::before {
+      content: '';
+      width: var(--space-5);
+      height: var(--space-5);
+      background-color: var(--color-brand);
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3v4a1 1 0 0 0 1 1h4'/%3E%3Cpath d='M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z'/%3E%3Cpath d='M9 9l1 0'/%3E%3Cpath d='M9 13l6 0'/%3E%3Cpath d='M9 17l6 0'/%3E%3C/svg%3E")
+        center / contain no-repeat;
+    }
+  }
+}
+
+/* ── Narrow screens ──────────────────────────────────────────────────────────
+ *
+ * At ~375px the generous card padding is most of the line: eight spaces of gutter on each side leaves
+ * roughly thirty characters to read on. The cards keep their elevation and give back the horizontal
+ * room. */
+@media (max-width: 640px) {
+  .manual__doc {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  :host ::ng-deep .manual__doc .manual__chapter {
+    padding: var(--space-5) var(--space-4);
+    border-radius: var(--radius-lg);
   }
 }
 

@@ -217,6 +217,119 @@
           </div>
         </ws-card>
 
+        <!--
+          ★ THE TUTORIAL IS INFORMATION, NOT A SECOND WAY TO CONNECT. There is exactly one control on
+          Incentra's side of this — the Connect button in the card beside it — and everything after that
+          happens on HubSpot's own screens. A "Start here" button repeating Connect would be two
+          controls for one action, and the reader would have to work out whether they differ.
+
+          ★★ EVERY CLAIM BELOW WAS CHECKED AGAINST THE SERVER, AND THE FIRST DRAFT OF THIS TUTORIAL WAS
+          NOT. It was written from HubSpot's generic marketplace-install documentation and got the flow
+          wrong in several places: it named no scopes (there are four, fixed in our own app's config),
+          it omitted the two conditions that actually stop most people (a paid plan and
+          Integrations.Manage — both refused before the browser ever leaves Incentra), it said nothing
+          about the authorisation link expiring after 10 minutes, and it implied deals need a manual
+          import when a background job brings them in hourly on its own.
+
+          The copy now tracks these, and each has a line of server code behind it:
+            paid plan          StartHubSpotConnectionCommand.cs:36  RequirePaidPlanAsync
+            permission         StartHubSpotConnectionCommand.cs:32  Permission.IntegrationsManage
+            10-minute link     HubSpotOptions.cs:103                StateTtlMinutes
+            four read scopes   HubSpotOptions.cs:33                 Scopes
+            hourly sync        HubSpotSyncOptions.cs:23             CronExpression "0 * * * *"
+            unmapped owner     CrmDealReconciler.cs:161,172         payeeId null → still ingested
+
+          ↳ If any of those change on the server, this copy is now WRONG rather than merely vague. The
+            text lives entirely in INTEGRATIONS.TUTORIAL in the three i18n bundles, and the spec pins
+            the load-bearing facts so the drift shows up as a red test.
+        -->
+        <ws-card class="int-tutorial">
+          <h2 class="int-tutorial__title">{{ 'INTEGRATIONS.TUTORIAL.TITLE' | translate }}</h2>
+          <p class="int-tutorial__intro">{{ 'INTEGRATIONS.TUTORIAL.INTRO' | translate }}</p>
+
+          <!--
+            The prerequisite is a callout rather than step zero because it is the one thing that makes
+            the whole flow fail, and it fails LATE — on HubSpot's screen, after the user has already
+            left Incentra. Told beforehand it costs a sentence; found out afterwards it reads as the
+            connector being broken.
+          -->
+          <!--
+            THREE ways this fails, and TWO of them are on Incentra's side — which is why they are listed
+            before the steps rather than left to be discovered. A Free workspace and a user without
+            Integrations.Manage are both refused before the browser ever reaches HubSpot; the third is
+            HubSpot's own install requirement.
+          -->
+          <div class="int-tutorial__prereq">
+            <app-icon name="alert-triangle" [size]="16" />
+            <div>
+              <p class="int-tutorial__prereq-title">
+                {{ 'INTEGRATIONS.TUTORIAL.PREREQ_TITLE' | translate }}
+              </p>
+              <ul class="int-tutorial__prereq-list">
+                <li>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_PLAN' | translate }}</li>
+                <li>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_PERMISSION' | translate }}</li>
+                <li>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_HUBSPOT' | translate }}</li>
+              </ul>
+            </div>
+          </div>
+
+          <ol class="int-tutorial__steps">
+            @for (step of tutorialSteps; track step.key) {
+              <li class="int-tutorial__step">
+                <span class="int-tutorial__step-num" aria-hidden="true">{{ $index + 1 }}</span>
+                <div class="int-tutorial__step-text">
+                  <p class="int-tutorial__step-title">
+                    {{ 'INTEGRATIONS.TUTORIAL.STEP_' + step.key + '_TITLE' | translate }}
+                  </p>
+                  <p>{{ 'INTEGRATIONS.TUTORIAL.STEP_' + step.key + '_BODY' | translate }}</p>
+
+                  <!-- The OAuth link's 10-minute life. It expires silently, on HubSpot's side. -->
+                  @if (step.warning) {
+                    <p class="int-tutorial__step-warning">
+                      <app-icon name="clock" [size]="14" />
+                      {{ 'INTEGRATIONS.TUTORIAL.STEP_2_WARNING' | translate }}
+                    </p>
+                  }
+
+                  <!-- The four permissions HubSpot will ask to grant. All read. -->
+                  @if (step.scopes) {
+                    <ul class="int-tutorial__scopes">
+                      @for (scope of tutorialScopes; track scope) {
+                        <li>
+                          <app-icon name="eye" [size]="13" />
+                          {{ 'INTEGRATIONS.TUTORIAL.SCOPE_' + scope | translate }}
+                        </li>
+                      }
+                    </ul>
+                    <p class="int-tutorial__readonly">
+                      {{ 'INTEGRATIONS.TUTORIAL.READ_ONLY_NOTE' | translate }}
+                    </p>
+                  }
+                </div>
+              </li>
+            }
+          </ol>
+
+          <h3 class="int-tutorial__subtitle">{{ 'INTEGRATIONS.TUTORIAL.AFTER_TITLE' | translate }}</h3>
+
+          <p class="int-tutorial__after-title">
+            {{ 'INTEGRATIONS.TUTORIAL.AFTER_SYNC_TITLE' | translate }}
+          </p>
+          <p>{{ 'INTEGRATIONS.TUTORIAL.AFTER_SYNC_BODY' | translate }}</p>
+
+          <p class="int-tutorial__after-title">
+            {{ 'INTEGRATIONS.TUTORIAL.AFTER_OWNERS_TITLE' | translate }}
+          </p>
+          <p>{{ 'INTEGRATIONS.TUTORIAL.AFTER_OWNERS_BODY' | translate }}</p>
+
+          <p class="int-tutorial__after-title">
+            {{ 'INTEGRATIONS.TUTORIAL.AFTER_CATEGORY_TITLE' | translate }}
+          </p>
+          <p>{{ 'INTEGRATIONS.TUTORIAL.AFTER_CATEGORY_BODY' | translate }}</p>
+
+          <p class="int-tutorial__note">{{ 'INTEGRATIONS.TUTORIAL.REVOKE_NOTE' | translate }}</p>
+        </ws-card>
+
       </div>
     }
 

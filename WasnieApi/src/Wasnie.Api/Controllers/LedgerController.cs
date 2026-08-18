@@ -24,12 +24,30 @@ public sealed class LedgerController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
+    // GET /api/payees/{payeeId}/ledger/summary?period=all-time
+    //
+    // Earnings AND debt in one answer. Exposed as a real endpoint rather than left as an in-process
+    // query for the assistant alone, so the crossing can be exercised over the SAME pipeline everything
+    // else is: authentication, permissions and the resource guard, in the order the attacker meets them.
+    // NotFound on failure, for the indistinguishability reason above.
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetSummary(
+        Guid payeeId, [FromQuery] string period = "all-time", CancellationToken cancellationToken = default)
+    {
+        var result = await mediator.Send(new GetPayeeLedgerSummaryQuery(payeeId, period), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
     // GET /api/payees/{payeeId}/ledger/entries
+    //
+    // NotFound, not BadRequest: the only failure this query produces is "no such payee, or not yours",
+    // and the two must be indistinguishable down to the status code (PayeeAccessDenied). A 403 here
+    // would confirm the payee exists just as loudly as a different message would.
     [HttpGet("entries")]
     public async Task<IActionResult> ListEntries(Guid payeeId, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new ListPayeeLedgerEntriesQuery(payeeId), cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
     // GET /api/payees/ledger/terminated-with-balance — the work queue for finance: people who have

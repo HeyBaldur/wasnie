@@ -821,6 +821,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ManagerId");
@@ -835,6 +839,11 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "FullName");
 
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Payees_Tenant_UserId")
+                        .HasFilter("[UserId] IS NOT NULL");
 
                     b.ToTable("Payees", (string)null);
                 });

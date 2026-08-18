@@ -288,6 +288,44 @@ Inputs: `variant` (neutral | brand | success | warning | danger | info) · `size
 <ws-badge variant="success" [dot]="true">Active</ws-badge>
 ```
 
+### WsCopyButton `<ws-copy-button>`
+Icon-only button that puts a value on the clipboard and flips to a tick for 2s.  
+Inputs: `value` (required — the text copied; blank disables the button) · `label` (i18n key for the
+accessible name and the idle tooltip, default `COMMON.COPY`) · `tooltip` (raw, already-resolved text
+for the idle tooltip — use it for ids and other untranslatable values) · `size` (icon px, default 13)
+
+```html
+<!-- a plan id: the tooltip shows the id itself, so it is passed raw -->
+<ws-copy-button [value]="plan.id" [tooltip]="plan.id" label="COMMON.COPY_ID" />
+
+<!-- a name in a table cell -->
+<ws-copy-button [value]="payee.fullName" label="COMMON.COPY_NAME" [size]="14" />
+```
+
+**Never hand-roll a copy button.** It swallows the click (`stopPropagation`), which clickable
+`routerLink` rows require, and it stays un-ticked when the clipboard is denied instead of claiming a
+success that did not happen. Both are easy to forget and neither is visible until it breaks.
+
+In a table, fade it in on row hover rather than showing it on every row: an icon pinned to every
+cell of a dense table competes with the values it exists to serve.
+
+```scss
+td ws-copy-button { opacity: 0; transition: opacity var(--transition-fast); }
+tr:hover td ws-copy-button, td ws-copy-button:focus-within { opacity: 1; }
+```
+
+**Place it in the text flow, not in a flex row beside the text.** The button is `inline-flex`; give
+it `margin-left: var(--space-1)` and `vertical-align: middle` and put it directly after the value's
+closing tag. It then behaves like a trailing character — it follows the last line of a value that
+wraps, and the column's original layout is untouched.
+
+Wrapping the value and the button in a `display: flex` row is the mistake that was made first and it
+is worth naming: it turns the value, any trailing detail and the button into siblings competing for
+the cell's width. In the transactions table that pushed the employee code `(CEO-001)` to the far
+right of the column and wrapped long references early. Reach for a flex row **only** when the value
+must truncate with an ellipsis (`truncate` needs a block-level box) — see `.payee-name-row` in
+`payees-list.component.scss`. Everywhere else, inline.
+
 ### WsModal `<ws-modal>`
 Two-way: `[(isOpen)]`. Slots: body (default) · `[slot=footer]`  
 Inputs: `title` (required for proper heading styling) · `description` · `size` (sm | md | lg | xl) · `closable` · `closeOnBackdrop`  

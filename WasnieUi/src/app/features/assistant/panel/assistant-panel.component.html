@@ -129,9 +129,15 @@
           cannot do.
 
           ★ NOTHING HERE OFFERS A CAPABILITY THE ASSISTANT LACKS. The visual references for a screen
-          like this carry suggested-prompt chips, "Add attachment" and "Use image"; none of those exist
-          here and several never will. The style is borrowed; the promises are not. Same rule the
-          composer already lives under, and there is a test for both.
+          like this carry "Add attachment" and "Use image"; neither exists here and neither ever will.
+          The style is borrowed; the promises are not. Same rule the composer already lives under, and
+          there is a test for both.
+
+          ★ THE SUGGESTED PROMPTS BELOW ARE NOT AN EXCEPTION TO THAT RULE — they are an application of
+          it. The references carry chips for whatever sounds impressive; these four carry exactly the
+          four questions the four server-side tools can answer, and the mapping is asserted in a test.
+          A chip promising something the engine cannot do would be worse than no chip at all, because
+          the user finds out by clicking it.
 
           ★ THE READ-ONLY NOTE IS NOT SMALL PRINT. It is the guarantee that makes the assistant safe to
           hand a finance team, so it carries the weight of a statement rather than the grey of a
@@ -157,6 +163,28 @@
           <p class="assistant-welcome__readonly" data-testid="assistant-welcome-readonly">
             {{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}
           </p>
+
+          <!--
+            ★ FOUR EXAMPLES, ONE PER TOOL THE SERVER ACTUALLY REGISTERS. The rule above did not get
+            relaxed to allow these; they were written to satisfy it. See starter-prompts.ts — the tool
+            each one reaches is declared there and a test checks the list against the real four.
+
+            ★ THEY FILL THE COMPOSER, THEY DO NOT SEND IT. Each sentence has a hole in it, and asking
+            about a payee called "[payee name]" would find nobody. The click drops the text in the box
+            with the placeholder selected; the user types the real name over it and sends.
+          -->
+          <div class="assistant-welcome__starters" data-testid="assistant-starters">
+            @for (starter of starters; track starter.promptKey) {
+              <ws-button
+                variant="secondary"
+                size="sm"
+                (click)="useStarter(starter)"
+                [attr.data-testid]="starter.testId"
+              >
+                {{ starter.labelKey | translate }}
+              </ws-button>
+            }
+          </div>
         </div>
       } @else {
         @for (message of store.messages(); track message.id) {

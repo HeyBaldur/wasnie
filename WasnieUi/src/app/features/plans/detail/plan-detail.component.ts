@@ -30,7 +30,7 @@ import {
   WsTableComponent,
   WsEmptyStateComponent,
   WsConfirmationModalComponent,
-  WsTooltipDirective,
+  WsCopyButtonComponent,
   WsPaginationComponent,
   type BadgeVariant,
 } from '../../../shared/ui';
@@ -53,7 +53,7 @@ type Tab = 'rules' | 'versions' | 'assignments' | 'clawback';
     WsTableComponent,
     WsEmptyStateComponent,
     WsConfirmationModalComponent,
-    WsTooltipDirective,
+    WsCopyButtonComponent,
     WsPaginationComponent,
     ProcessPendingComponent,
     HasPermissionDirective,
@@ -82,7 +82,6 @@ export class PlanDetailComponent implements OnInit {
 
   readonly activeTab = signal<Tab>('rules');
   readonly planId = this.route.snapshot.paramMap.get('planId')!;
-  readonly idCopied = signal(false);
   readonly planAssignmentsResult = signal<PagedResult<Assignment> | null>(null);
   readonly assignmentsLoading = signal(false);
   readonly assignmentsPage = signal(1);
@@ -171,13 +170,6 @@ export class PlanDetailComponent implements OnInit {
 
   goToNewRule(): void {
     this.router.navigate(['rules', 'new'], { relativeTo: this.route });
-  }
-
-  copyPlanId(id: string): void {
-    navigator.clipboard.writeText(id).then(() => {
-      this.idCopied.set(true);
-      setTimeout(() => this.idCopied.set(false), 2000);
-    });
   }
 
   onActivate(): void {

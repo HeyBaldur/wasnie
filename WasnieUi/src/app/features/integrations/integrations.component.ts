@@ -19,6 +19,13 @@ import { RelativeTimePipe } from '../../shared/pipes/relative-time.pipe';
 import { HubSpotApiService } from './services/hubspot.api.service';
 import { HubSpotConnectionStatus, HubSpotStatus } from './models/hubspot.model';
 
+/** One numbered step of the connection tutorial. See `tutorialSteps` for what the flags mean. */
+interface TutorialStep {
+  readonly key: string;
+  readonly warning?: boolean;
+  readonly scopes?: boolean;
+}
+
 @Component({
   selector: 'app-integrations',
   standalone: true,
@@ -44,6 +51,41 @@ export class IntegrationsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+
+  /**
+   * The connection tutorial's steps.
+   *
+   * ★ A LIST RATHER THAN FOUR HAND-WRITTEN BLOCKS, so the numbering in the markup is derived from the
+   * position instead of typed four times — a renumbering done by hand across three languages and one
+   * template is a renumbering that ends up disagreeing with itself.
+   *
+   * Two steps carry more than a title and a sentence, and the flags say which:
+   *
+   * ★ `warning` (step 2) is the OAuth state's 10-minute TTL (HubSpotOptions.StateTtlMinutes). It earns a
+   *   callout because it fails silently and late: the user is on HubSpot's screen by then, and a link
+   *   that quietly expired reads as the connector being broken rather than as "press Connect again".
+   *
+   * ★ `scopes` (step 3) lists the four permissions HubSpot will ask to grant. Naming them is safe HERE
+   *   and only here: they are OUR app's, fixed in server config
+   *   (HubSpotOptions.Scopes — crm.objects.deals.read, crm.objects.owners.read, crm.schemas.deals.read,
+   *   crm.objects.line_items.read), not a marketplace listing that can change under us. A test pins the
+   *   count so a fifth scope added on the server cannot leave this page quietly claiming four.
+   *
+   * The steps are INFORMATION ONLY: nothing here triggers anything. Incentra's whole side of connecting
+   * is the Connect button in the card, and every other step happens on HubSpot's own screens.
+   */
+  readonly tutorialSteps: readonly TutorialStep[] = [
+    { key: '1' },
+    { key: '2', warning: true },
+    { key: '3', scopes: true },
+    { key: '4' },
+  ];
+
+  /**
+   * The four read-only permissions, as key suffixes, in the order HubSpot's own consent screen groups
+   * them: the objects first, then the schema, then the line items hanging off a deal.
+   */
+  readonly tutorialScopes = ['DEALS', 'OWNERS', 'SCHEMAS', 'LINE_ITEMS'] as const;
 
   readonly loading = signal(true);
   readonly loadError = signal(false);

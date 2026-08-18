@@ -16,6 +16,8 @@ public sealed class PayeeConfiguration : IEntityTypeConfiguration<Payee>
         builder.Property(p => p.EmployeeCode).IsRequired().HasMaxLength(50);
         builder.Property(p => p.Email).HasMaxLength(255);
         builder.Property(p => p.Role).HasMaxLength(100);
+        // 450 = the ASP.NET Identity key length, so the column can hold any IdentityUser.Id verbatim.
+        builder.Property(p => p.UserId).HasMaxLength(450);
         builder.Property(p => p.ManagerId);
         builder.Property(p => p.HireDate);
         builder.Property(p => p.TerminationDate);
@@ -34,6 +36,15 @@ public sealed class PayeeConfiguration : IEntityTypeConfiguration<Payee>
             .HasFilter("[Email] IS NOT NULL");
 
         builder.HasIndex(p => p.ManagerId);
+
+        // The authorisation lookup runs on EVERY read of a payee's ledger, so it gets its own index.
+        // Filtered because unlinked payees are never looked up by user — and a plain unique index would
+        // collide on all of them. Unique: one user owns at most one payee per tenant, which is what
+        // makes "my balance" a single answer instead of a list.
+        builder.HasIndex(p => new { p.TenantId, p.UserId })
+            .IsUnique()
+            .HasFilter("[UserId] IS NOT NULL")
+            .HasDatabaseName("UX_Payees_Tenant_UserId");
         builder.HasIndex(p => new { p.TenantId, p.Status });
         builder.HasIndex(p => new { p.TenantId, p.FullName });
 

@@ -38,7 +38,11 @@ namespace Wasnie.Application.Compensation.Handlers.Assignments;
 /// expired — the caller never asked for that and was never told. Which slice of history to
 /// show is a presentation decision and belongs to the client.
 /// </summary>
-public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService, IClock clock)
+public sealed class ListAssignmentsByPayeeHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard,
+    IClock clock)
     : IRequestHandler<ListAssignmentsByPayeeQuery, Result<PagedResult<PlanAssignmentDto>>>
 {
     /// <summary>Explicit opt-in to return every status.</summary>
@@ -50,6 +54,11 @@ public sealed class ListAssignmentsByPayeeHandler(IApplicationDbContext db, IAut
     {
         await authorizationService.RequireAsync(Permission.AssignmentsRead, cancellationToken);
         var p = request.Pagination;
+
+        // Which plan a colleague is on, on what terms and since when. No amount in the DTO, but it is
+        // the STRUCTURE of someone else's compensation, and it is one join away from their rates.
+        if (!await payeeAccessGuard.CanReadAsync(request.PayeeId, cancellationToken))
+            return Result<PagedResult<PlanAssignmentDto>>.Success(PagedResult<PlanAssignmentDto>.Empty(p.Page, p.PageSize));
 
         // Everything below composes onto ONE IQueryable that is materialised exactly once, at the
         // end, already filtered, sorted and paged. It used to load every assignment of the payee and

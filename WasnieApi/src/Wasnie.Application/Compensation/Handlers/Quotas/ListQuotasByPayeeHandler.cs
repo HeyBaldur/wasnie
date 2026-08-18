@@ -12,13 +12,27 @@ using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Quotas;
 
-public sealed class ListQuotasByPayeeHandler(IApplicationDbContext db, IAuthorizationService authorizationService, IClock clock)
+public sealed class ListQuotasByPayeeHandler(
+    IApplicationDbContext db,
+    IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard,
+    IClock clock)
     : IRequestHandler<ListQuotasByPayeeQuery, Result<PagedResult<QuotaSummaryDto>>>
 {
     public async Task<Result<PagedResult<QuotaSummaryDto>>> Handle(ListQuotasByPayeeQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
         var p = request.Pagination;
+
+        // A quota is the payee's commission TARGET — an amount in a currency, i.e. money. Quotas.Read is
+        // held by Rep and Manager, so the permission alone let anyone read any colleague's number.
+        //
+        // ★ AN EMPTY PAGE, NOT AN ERROR — because that is ALREADY the answer for a payee who does not
+        // exist. Matching it is what makes the refusal indistinguishable here; returning a failure
+        // instead would tell the caller "this id is real", which is the enumeration oracle the ledger
+        // endpoints had to be reshaped to avoid.
+        if (!await payeeAccessGuard.CanReadAsync(request.PayeeId, cancellationToken))
+            return Result<PagedResult<QuotaSummaryDto>>.Success(PagedResult<QuotaSummaryDto>.Empty(p.Page, p.PageSize));
 
         // Load all quotas for this payee in one go — typically few per payee.
         // DateOnly comparisons on owned DateRange (Period.Start/End) don't translate in SQL,

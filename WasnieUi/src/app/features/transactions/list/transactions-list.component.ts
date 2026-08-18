@@ -31,6 +31,7 @@ import {
   WsPaginationComponent,
   WsModalComponent,
   WsInputComponent,
+  WsCopyButtonComponent,
   type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
@@ -59,6 +60,7 @@ import {
     WsPaginationComponent,
     WsModalComponent,
     WsInputComponent,
+    WsCopyButtonComponent,
     AssignPayeeModalComponent,
     ReassignPayeeModalComponent,
     VoidTransactionModalComponent,

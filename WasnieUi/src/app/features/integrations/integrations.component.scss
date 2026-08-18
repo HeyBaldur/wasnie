@@ -6,14 +6,218 @@
   margin: 0 0 var(--space-3);
 }
 
-/* Directory grid — ready to grow as more integrations are added.
-   Tiles cap at ~max-w-sm (384px) so a single card never stretches across a wide screen;
-   collapses to full width on mobile. */
+/* ★ NO LONGER A DIRECTORY GRID, AND THAT IS THE POINT OF THE REDESIGN.
+ *
+ * This was `repeat(auto-fill, … 384px)` — a tile wall waiting for a second and third integration to
+ * arrive and fill it. They are not coming: HubSpot is the only connector and the page is now named
+ * after it. What the auto-fill actually produced was one 384px card against two thirds of an empty
+ * screen, which reads as a page that failed to load rather than a page with one integration.
+ *
+ * Two columns instead: the connection card keeps its width (its internal layout was built for it and
+ * is untouched), and the tutorial takes the space that was empty. Below 1100px they stack — the same
+ * breakpoint the manual uses, so the two screens fold at the same size. */
 .integrations-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 384px));
+  grid-template-columns: minmax(320px, 384px) minmax(0, 1fr);
   gap: var(--space-5);
-  justify-content: start;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .integrations-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── The connection tutorial ───────────────────────────────────────────
+ *
+ * ★ IT IS A REAL `ws-card`, NOT THE MANUAL'S HAND-BUILT COPY. The manual paints the card recipe by
+ * hand (surface + border + radius + shadow) because its chapters arrive through `[innerHTML]`, where
+ * Angular renders no components. Here the markup is the component's own, so the primitive itself can be
+ * used — same surface language as /manual, without duplicating a recipe that would then have to be
+ * kept in step with `ws-card` by hand.
+ *
+ * ★ THE MEASURE CAPS THE PROSE, NOT THE CARD — and getting that backwards is what left a gap down the
+ * right of this page. `max-width` on `.int-tutorial` caps the CARD, so the surface itself stopped at
+ * ~72 characters and the column it was given ran on empty beside it: the same hole the tile grid used
+ * to leave, moved a few hundred pixels right. The card fills its column; the paragraphs inside are what
+ * get the reading measure, exactly as the manual does it (there the chapter cards fill the column and
+ * `p, ul, ol, h1…` carry the cap).
+ *
+ * ★ AND HERE THE PROSE NEEDS NO CAP OF ITS OWN EITHER. The manual caps because its column grows with
+ * the monitor — on a 2560px screen a paragraph would run ~160 characters and the eye loses the return
+ * sweep. This column cannot: `ws-page-layout` (standard) holds the whole page to 1200px, so after the
+ * connection card and the gap the tutorial tops out around 105 characters however wide the browser is.
+ * A second cap inside a column that is already bounded just re-opens the gap this fix closed, one card
+ * further in. If the page is ever moved to `maxWidth="wide"`, put a measure back on the paragraphs. */
+.int-tutorial {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  line-height: 1.65;
+
+  p {
+    margin: 0 0 var(--space-3);
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+.int-tutorial__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-18);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.int-tutorial__subtitle {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.int-tutorial__intro {
+  margin-bottom: var(--space-4);
+}
+
+/* The prerequisite. Warning-toned because it is the thing that makes the flow fail, and it fails on
+   HubSpot's screen after the user has already left Incentra. */
+.int-tutorial__prereq {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+
+  app-icon {
+    color: var(--color-warning);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.int-tutorial__prereq-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+/* Three separate conditions, so three bullets rather than one paragraph: a reader checking whether
+   they qualify scans a list and cannot scan a sentence. */
+.int-tutorial__prereq-list {
+  margin: 0;
+  padding-left: var(--space-4);
+  list-style: disc;
+
+  li + li {
+    margin-top: var(--space-2);
+  }
+}
+
+/* The authorisation link's 10-minute life. Toned like the prerequisite it belongs to, because it is
+   the same class of fact: something that fails on HubSpot's side, after the user has left. */
+.int-tutorial__step-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-13);
+  color: var(--color-warning);
+
+  app-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+}
+
+/* The four permissions. Listed as read operations, with the eye repeated on every row: the fact that
+   matters to whoever approves this is that not one of them writes. */
+.int-tutorial__scopes {
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    font-size: var(--font-size-13);
+    color: var(--color-text-primary);
+  }
+
+  app-icon {
+    color: var(--color-text-tertiary);
+    flex-shrink: 0;
+  }
+}
+
+.int-tutorial__readonly {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* The sub-headings under "After connecting". A paragraph rather than a heading element: they label a
+   sentence each, and three more levels of heading in a card this size is structure for its own sake. */
+.int-tutorial__after-title {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* The numbers are painted, so the list carries no marker of its own. */
+.int-tutorial__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.int-tutorial__step {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.int-tutorial__step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.int-tutorial__step-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.int-tutorial__step-text p:last-child {
+  margin-bottom: 0;
+}
+
+.int-tutorial__note {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
 }
 
 /* Reference layout adapted to Wasnie dark tokens:

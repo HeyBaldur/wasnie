@@ -37,7 +37,7 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
     private sealed record Seed(Guid PayeeId, Guid PlanId, Guid TxId);
 
     /// <summary>A payee with a PAID commission of 1,000 under a plan with a 90-day maturation window.</summary>
-    private async Task<Seed> SeedPaidCommissionAsync(string code)
+    private async Task<Seed> SeedPaidCommissionAsync(string code, string? ownerUserId = null)
     {
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -45,6 +45,8 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
 
         var payee = Payee.Create(tenantId, $"Payee {code}", code, $"{code}@test.com",
             new DateOnly(2020, 1, 1), "test", Guid.NewGuid(), Now);
+        // Ownership matters only for the rep-transparency test; every other test here reads as finance.
+        if (ownerUserId is not null) payee.LinkToUser(ownerUserId, "test", Now);
         db.Payees.Add(payee);
 
         var plan = Plan.Create(tenantId, $"Plan {code}", "desc",
@@ -158,8 +160,11 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
     [Fact]
     public async Task A_rep_sees_their_own_churn_debt_and_the_reason_for_it()
     {
-        // Transparency is the product decision: the person whose pay shrank can read why.
-        var seed = await SeedPaidCommissionAsync("E2E-REP");
+        // Transparency is the product decision: the person whose pay shrank can read why. Since the
+        // BOLA fix that sentence has a subject — "the person" is now expressed as Payee.UserId, and the
+        // rep reads this statement because it is THEIRS, not because the endpoint served anybody.
+        var repUser = $"user-{Guid.NewGuid():N}";
+        var seed = await SeedPaidCommissionAsync("E2E-REP", repUser);
 
         using (var scope = fixture.Factory.Services.CreateScope())
         {
@@ -168,7 +173,7 @@ public sealed class ChurnClawbackEndToEndTests(TestDatabaseFixture fixture)
                     TestConstants.TenantA, seed.TxId, ClosedWonOn.AddDays(45), "9100"));
         }
 
-        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "Rep");
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, repUser, "Rep");
 
         var response = await client.GetAsync($"/api/payees/{seed.PayeeId}/ledger/statement");
 

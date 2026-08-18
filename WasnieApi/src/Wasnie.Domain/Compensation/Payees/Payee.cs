@@ -9,6 +9,26 @@ public sealed class Payee : BaseAuditableEntity
     public string EmployeeCode { get; private set; } = string.Empty;
     public string? Email { get; private set; }
     public string? Role { get; private set; }
+
+    /// <summary>
+    /// The identity-system user who OWNS this payee — the person whose money this is.
+    ///
+    /// Null means "not linked yet", and that is a deliberate, permanent possibility rather than a
+    /// migration artefact: a payee is a compensation record, not an account. Contractors paid through
+    /// the system who never log in, and people imported before they are provisioned, legitimately have
+    /// no user.
+    ///
+    /// ★ NULL IS THE CLOSED STATE, NOT THE OPEN ONE. Authorisation reads this field to answer "is this
+    /// payee yours" (see PayeeAccessGuard). An unlinked payee therefore belongs to NOBODY: no Rep and
+    /// no Manager can reach it, only the supervisory roles. The opposite default — unlinked means
+    /// visible — is the shape of the BOLA hole this field exists to close.
+    ///
+    /// A string because ASP.NET Identity's key is a string (<c>IdentityUser</c>), and it is compared
+    /// against <c>ClaimTypes.NameIdentifier</c> straight off the token. Storing it as a Guid would mean
+    /// parsing the claim, and a parse failure on an authorisation path fails OPEN far too easily.
+    /// </summary>
+    public string? UserId { get; private set; }
+
     public Guid? ManagerId { get; private set; }
     public DateOnly? HireDate { get; private set; }
     public DateOnly? TerminationDate { get; private set; }
@@ -115,6 +135,37 @@ public sealed class Payee : BaseAuditableEntity
             throw new DomainException("A payee cannot be their own manager.");
 
         ManagerId = managerId;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    /// <summary>
+    /// Links this payee to the identity-system user who owns it.
+    ///
+    /// Its own method, and deliberately NOT a parameter of <see cref="Update"/>: Update is a full
+    /// replace whose optional parameters default to null, so a caller that forgot to re-supply the
+    /// user id would silently UNLINK the payee — and an unlink is a change of who owns money. Ownership
+    /// moves only when somebody asks for it to move.
+    /// </summary>
+    public void LinkToUser(string userId, string updatedBy, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new DomainException("A user id is required to link a payee to a user.");
+
+        UserId = userId.Trim();
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    /// <summary>
+    /// Breaks the link. The payee stops being reachable by any Rep or Manager and falls back to the
+    /// supervisory roles — the fail-closed direction, which is why unlinking needs no extra guard.
+    /// </summary>
+    public void UnlinkFromUser(string updatedBy, DateTimeOffset now)
+    {
+        if (UserId is null) return;
+
+        UserId = null;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

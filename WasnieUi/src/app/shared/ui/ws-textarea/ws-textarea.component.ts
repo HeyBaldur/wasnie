@@ -167,6 +167,39 @@ export class WsTextareaComponent implements ControlValueAccessor {
     this.submitted.emit(this.value());
   }
 
+  /**
+   * Put text in the box, focus it, and optionally select part of it.
+   *
+   * ★ WHY AN IMPERATIVE METHOD RATHER THAN JUST SETTING THE MODEL. A consumer that fills the box from
+   * a button — the assistant's starter prompts — needs three things to happen together: the text
+   * present, the caret inside, and the part the user must replace already selected so they type over
+   * it. Only the first of those is state; the other two are DOM verbs with no signal to express them.
+   * Setting the bound model alone also lands a step late: the value reaches the element through
+   * `writeValue` on the next change detection, so a selection range computed straight after the model
+   * update would address text the element does not have yet. This does both halves in one go.
+   *
+   * ★ IT DOES NOT EMIT. The caller supplied the text, so it already knows; re-announcing it would send
+   * the same string back through `valueChange` and, in a consumer that binds both ways, write the model
+   * it just wrote. The caller keeps its own state and calls this for the box.
+   *
+   * Omit the range to leave the caret at the end, which is the ordinary "continue typing" case.
+   */
+  fill(text: string, selectionStart?: number, selectionEnd?: number): void {
+    this.value.set(text);
+
+    const el = this.textarea()?.nativeElement;
+    if (!el) {
+      return;
+    }
+
+    el.value = text;
+    this.resize();
+    el.focus();
+
+    const start = selectionStart ?? text.length;
+    el.setSelectionRange(start, selectionEnd ?? start);
+  }
+
   onFocus(): void {
     this.isFocused.set(true);
   }

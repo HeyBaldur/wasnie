@@ -170,6 +170,72 @@ public sealed class AssistantGetPlanRulesToolTests
         return JsonDocument.Parse(json).RootElement;
     }
 
+    private static async Task<JsonElement> RunByIdAsync(Harness h, Guid planId)
+    {
+        var json = await h.Tool.RunAsync($$"""{"planId":"{{planId}}"}""", CancellationToken.None);
+        return JsonDocument.Parse(json).RootElement;
+    }
+
+    // ── Recurring references: the id, not the name ────────────────────────────
+
+    /// <summary>
+    /// ★ THE SECOND TURN'S FIX. This tool's whole history is names arriving slightly wrong — an em-dash
+    /// for a hyphen, a dropped quarter prefix — and a user being told a plan they were looking at does
+    /// not exist. The payload now carries the plan's id so the next question copies an identifier
+    /// instead of retyping a title.
+    /// </summary>
+    [Fact]
+    public async Task The_payload_carries_the_plan_id_so_a_later_turn_can_reuse_it()
+    {
+        var tenant = Guid.NewGuid();
+        var h = Build(nameof(The_payload_carries_the_plan_id_so_a_later_turn_can_reuse_it),
+            tenant, Permission.PlansRead);
+        var plan = Seed(h.Db, tenant, "Q3 2026 — Plan Comercial EMEA", p => FlatRevenueRule(p));
+
+        var payload = await RunAsync(h, "Q3 2026 — Plan Comercial EMEA");
+
+        payload.GetProperty("planId").GetGuid().Should().Be(plan.Id);
+    }
+
+    [Fact]
+    public async Task An_id_resolves_the_plan_without_matching_a_name()
+    {
+        var tenant = Guid.NewGuid();
+        var h = Build(nameof(An_id_resolves_the_plan_without_matching_a_name),
+            tenant, Permission.PlansRead);
+        var plan = Seed(h.Db, tenant, "Q3 2026 — Plan Comercial EMEA", p => FlatRevenueRule(p));
+
+        var payload = await RunByIdAsync(h, plan.Id);
+
+        payload.GetProperty("found").GetBoolean().Should().BeTrue();
+        payload.GetProperty("planName").GetString().Should().Be("Q3 2026 — Plan Comercial EMEA");
+        payload.GetProperty("matchedBy").GetString().Should().Be("ExactName");
+        payload.GetProperty("rules").GetArrayLength().Should().BeGreaterThan(0);
+    }
+
+    /// <summary>
+    /// ★ THE ID BUYS PRECISION, NEVER ACCESS. Another tenant's plan id takes the SAME refusal as an id
+    /// that never existed — the tenant query filter inside GetPlanByIdQuery decides, not this tool.
+    /// </summary>
+    [Fact]
+    public async Task An_id_from_another_tenant_is_refused_exactly_like_an_unknown_one()
+    {
+        const string db = nameof(An_id_from_another_tenant_is_refused_exactly_like_an_unknown_one);
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        var owner = Build(db, tenantA, Permission.PlansRead);
+        var plan = Seed(owner.Db, tenantA, "Tenant A Plan", p => FlatRevenueRule(p));
+
+        var outsider = Build(db, tenantB, Permission.PlansRead);
+
+        var foreign = await RunByIdAsync(outsider, plan.Id);
+        var imaginary = await RunByIdAsync(outsider, Guid.NewGuid());
+
+        foreign.GetRawText().Should().Be(imaginary.GetRawText());
+        foreign.GetProperty("found").GetBoolean().Should().BeFalse();
+    }
+
     // ── Rule 1 — the lookup goes through the domain ───────────────────────────
 
     [Fact]

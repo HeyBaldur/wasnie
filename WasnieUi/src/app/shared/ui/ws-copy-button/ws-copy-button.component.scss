@@ -1,0 +1,36 @@
+:host {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.ws-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+
+  &:hover:not(:disabled) {
+    color: var(--color-text-secondary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  // The tick is the confirmation, so it is the one state that earns a colour.
+  &--copied {
+    color: var(--color-success);
+  }
+}

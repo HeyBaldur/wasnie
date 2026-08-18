@@ -9,15 +9,35 @@
   </div>
 
   <!--
-    ws-video, the same primitive the empty states use: silent, chrome-less, autoplaying and looping.
-    Labelled rather than decorative here — unlike an empty-state loop, this clip carries the tour, so
-    it is announced to assistive technology instead of being hidden from it.
+    ws-video, the same primitive the empty states use — but here it is a PLAYER, not scenery.
+
+    ★ `[autoplay]="false"`, ON PURPOSE. An empty state's clip is an illustration that happens to move;
+    this one is the product tour, and a tour that starts talking the instant a modal appears is
+    something you interrupt rather than watch. The viewer presses Play, and it plays once.
+
+    That also makes `playFallback` redundant here and it was dropped: the button is now on screen for
+    everybody, so there is no separate reduced-motion path to opt into.
+
+    ★ THE POSTER IS NOT DECORATION — IT IS WHAT THE 4.6 MB BUYS BACK. Without it the frame sat empty
+    until the whole clip had downloaded, and the fix for that was making the browser download it
+    eagerly on every open, whether or not anyone pressed Play. An 11.8 KB still shows the tour
+    instantly and lets the video wait to be asked for.
+
+    ★ AND IT IS NOT FRAME ZERO, ON PURPOSE. The clip opens on a one-second fade, so its first frames
+    are a half-drawn card — a cover that says "broken", not "watch me". This is 2.5s in: the first
+    step of the tour fully composed. Playback still starts at 0, the way every player behaves.
+    Regenerate with:
+      ffmpeg -ss 2.5 -i icm.mp4 -frames:v 1 -c:v libwebp -quality 88 icm-poster.webp
+
+    Labelled rather than decorative — unlike an empty-state loop, this clip carries the tour, so it is
+    announced to assistive technology instead of being hidden from it.
   -->
   <div class="welcome__video">
     <ws-video
       src="/videos/icm.mp4"
+      poster="/videos/icm-poster.webp"
       fit="contain"
-      [playFallback]="true"
+      [autoplay]="false"
       [ariaLabel]="'WELCOME.VIDEO_LABEL' | translate"
     />
   </div>

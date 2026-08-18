@@ -49,6 +49,28 @@ public static class Permission
     public const string LedgerRead = "Ledger.Read";
     public const string LedgerAdjust = "Ledger.Adjust";
 
+    /// <summary>
+    /// The right to receive a FINISHED balance — earned, owed, net — and nothing else.
+    ///
+    /// ★ A FACADE PERMISSION, AND THE ALTERNATIVE IS WHY IT EXISTS. The balance summary has to cross the
+    /// ledger with the payouts, or it reports a rep's 0.00 debt as their balance and tells them they are
+    /// owed nothing (see PayeeLedgerSummaryDto). The obvious way to let a rep see their own balance is to
+    /// grant them <see cref="PayoutsRead"/> and rely on the resource guard to funnel them — and that is
+    /// the wrong trade: Payouts.Read opens the raw payout rows, the pay-run screens and the overlap
+    /// queries, i.e. the whole payroll surface, and every one of those then needs its own filter to hold
+    /// the line. Broad grant plus peripheral patching is a leak on a schedule.
+    ///
+    /// So the permission is scoped to the SHAPE OF THE ANSWER instead of to the tables behind it. The
+    /// holder may receive a computed summary of one payee; they gain no access whatsoever to
+    /// CompensationPayout, to a pay run, or to an export. The crossing happens inside the handler, which
+    /// reads its sources with the application's own authority — the user never touches them.
+    ///
+    /// ★ IT AUTHORISES A SHAPE, NEVER A PERSON. Which payee a holder may summarise is a different
+    /// question, answered by PayeeAccessGuard. Both apply, always: permission says WHAT you may receive,
+    /// the guard says WHOSE.
+    /// </summary>
+    public const string LedgerSummaryRead = "LedgerSummary.Read";
+
     // Enrichment lookup table (product → category). Routes money by deciding a rule's category filter,
     // so managed by the same roles that edit plans.
     public const string CategoryMappingsRead = "CategoryMappings.Read";

@@ -1,6 +1,7 @@
 using System.Globalization;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Authorization;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
@@ -21,6 +22,7 @@ namespace Wasnie.Application.Compensation.Handlers.Payees;
 public sealed class GetPayeeDashboardHandler(
     IApplicationDbContext db,
     IAuthorizationService authorizationService,
+    IPayeeAccessGuard payeeAccessGuard,
     IClock clock)
     : IRequestHandler<GetPayeeDashboardQuery, Result<PayeeDashboardDto>>
 {
@@ -28,6 +30,14 @@ public sealed class GetPayeeDashboardHandler(
         GetPayeeDashboardQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.QuotasRead, cancellationToken);
+
+        // Guarded like the ledger even though the permission is Quotas.Read: the sales-trend card below
+        // reports twelve months of a named person's REVENUE, and attainment says how they are doing
+        // against their target. Quotas.Read is held by Rep and Manager, so without this any rep could
+        // pull any colleague's numbers by id — the same BOLA hole as the statement endpoint, wearing a
+        // different permission.
+        if (!await payeeAccessGuard.CanReadAsync(request.PayeeId, cancellationToken))
+            return Result<PayeeDashboardDto>.Failure(PayeeAccessDenied.Message);
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
         var payeeId = request.PayeeId;

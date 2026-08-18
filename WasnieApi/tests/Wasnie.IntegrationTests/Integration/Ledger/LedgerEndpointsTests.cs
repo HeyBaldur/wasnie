@@ -26,13 +26,19 @@ public sealed class LedgerEndpointsTests(TestDatabaseFixture fixture)
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 28, 12, 0, 0, TimeSpan.Zero);
 
-    private async Task<Guid> SeedPayeeAsync(string code)
+    /// <param name="ownerUserId">
+    /// The identity user this payee belongs to, or null for an unlinked one. Only the tests that assert
+    /// a rep reads their OWN data need it — everything else here runs as a supervisory role, for which
+    /// ownership is irrelevant.
+    /// </param>
+    private async Task<Guid> SeedPayeeAsync(string code, string? ownerUserId = null)
     {
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var payee = Payee.Create(TestConstants.TenantA, $"Payee {code}", code, $"{code}@test.com",
             new DateOnly(2020, 1, 1), "test", Guid.NewGuid(), Now);
+        if (ownerUserId is not null) payee.LinkToUser(ownerUserId, "test", Now);
         db.Payees.Add(payee);
         await db.SaveChangesAsync();
         return payee.Id;
@@ -195,12 +201,20 @@ public sealed class LedgerEndpointsTests(TestDatabaseFixture fixture)
 
     // ══ Read access and DTO serialisation ════════════════════════════════════
 
+    /// <summary>
+    /// ★ THIS TEST'S SETUP CHANGED WITH THE BOLA FIX, ITS CLAIM DID NOT. It always meant "a rep may see
+    /// THEIR OWN balance", but until Payee.UserId existed there was no way to say whose payee it was —
+    /// so it seeded an unowned payee and passed for the wrong reason: the endpoint served ANY payee to
+    /// any rep. The link is now established explicitly, which is what makes the assertion mean what the
+    /// name says. See PayeeResourceAuthorizationTests for the other half (a foreign payee is refused).
+    /// </summary>
     [Fact]
     public async Task A_rep_can_read_a_statement_transparency_is_the_point()
     {
-        var payeeId = await SeedPayeeAsync("READ-REP");
+        var repUser = $"user-{Guid.NewGuid():N}";
+        var payeeId = await SeedPayeeAsync("READ-REP", repUser);
         await SeedBalanceAsync(payeeId, 800m);
-        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "Rep");
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, repUser, "Rep");
 
         var response = await client.GetAsync($"/api/payees/{payeeId}/ledger/statement");
 

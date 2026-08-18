@@ -1687,6 +1687,7 @@ describe('AssistantPanelComponent — the retry renders the typing bubble', () =
 
 import enTranslations from '../../../assets/i18n/en.json';
 import esTranslations from '../../../assets/i18n/es.json';
+import { STARTER_PROMPTS, placeholderRange } from './panel/starter-prompts';
 import plTranslations from '../../../assets/i18n/pl.json';
 
 /** The shipped ASSISTANT sections, keyed by language. */
@@ -1763,20 +1764,126 @@ describe('AssistantPanelComponent — the welcome', () => {
   });
 
   it('★ offers NOTHING the assistant cannot do', () => {
-    // The visual references for a screen like this carry suggested-prompt chips, "Add attachment" and
-    // "Use image". This assistant does none of them. The style was borrowed; the promises were not —
-    // the same rule the composer already lives under, and the same reason: a control that does nothing
-    // is a promise the engine cannot keep.
+    // The visual references for a screen like this carry "Add attachment" and "Use image". This
+    // assistant does neither. The style was borrowed; the promises were not — the same rule the
+    // composer lives under, and the same reason: a control that does nothing is a promise the engine
+    // cannot keep.
+    //
+    // ★ THIS TEST USED TO ASSERT ZERO BUTTONS, and the suggested prompts are why it no longer can.
+    // The rule it was defending was never "no buttons" — it was "nothing offered that the engine
+    // cannot do". So the count is gone and the RULE is asserted instead: every button in the welcome
+    // is a starter prompt, and the companion test below ties each starter to a real server tool.
     const welcome = openEmpty();
 
-    expect(welcome.querySelectorAll('button').length).withContext('no chips, no actions').toBe(0);
     expect(welcome.querySelector('input')).toBeNull();
     expect(welcome.querySelector('input[type="file"]')).toBeNull();
+
+    const buttons = Array.from(welcome.querySelectorAll('button')) as HTMLButtonElement[];
+    expect(buttons.length).withContext('only the starter prompts').toBe(STARTER_PROMPTS.length);
 
     const text = (welcome.textContent ?? '').toLowerCase();
     for (const word of ['attach', 'image', 'upload', 'file', 'voice', 'search']) {
       expect(text).withContext(`the welcome must not mention "${word}"`).not.toContain(word);
     }
+  });
+
+  // ══ THE STARTER PROMPTS ════════════════════════════════════════════════════
+
+  /**
+   * ★★ THE LIST THIS SUITE DEFENDS. These are the tools the SERVER registers
+   * (Wasnie.Infrastructure/DependencyInjection.cs) — the complete set of things the assistant can look
+   * up. A starter naming anything outside it is a question the engine cannot answer, offered by the
+   * product itself, and the user finds out by clicking.
+   */
+  const REAL_TOOLS = [
+    'get_payee_ledger_summary',
+    'get_payee_plans',
+    'get_transaction',
+    'get_plan_rules',
+  ];
+
+  it('★ every starter maps to a tool the server actually registers', () => {
+    for (const starter of STARTER_PROMPTS) {
+      expect(REAL_TOOLS)
+        .withContext(`"${starter.labelKey}" promises ${starter.tool}, which does not exist`)
+        .toContain(starter.tool);
+    }
+  });
+
+  it('clicking a starter FILLS the composer and does not send', () => {
+    translate.setTranslation('en', {
+      ASSISTANT: { STARTER_BALANCE_PROMPT: 'What is the balance of [payee name]?' },
+    });
+    translate.use('en');
+    openEmpty();
+
+    const button: HTMLButtonElement =
+      fixture.nativeElement.querySelector('[data-testid="assistant-starter-balance"]');
+    button.click();
+    fixture.detectChanges();
+
+    const textarea: HTMLTextAreaElement =
+      fixture.nativeElement.querySelector('[data-testid="assistant-composer"] textarea');
+
+    expect(textarea.value).toBe('What is the balance of [payee name]?');
+    expect(fixture.componentInstance.draft()).toBe('What is the balance of [payee name]?');
+
+    // ★ NOTHING WAS SENT. A sentence with a hole in it, sent on click, asks for a payee literally
+    // called "[payee name]" — the user's first impression would be the assistant finding nobody.
+    expect(store.messages().length).toBe(0);
+  });
+
+  it('the placeholder is left SELECTED so the next keystroke replaces it', () => {
+    const prompt = 'What is the balance of [payee name]?';
+    translate.setTranslation('en', { ASSISTANT: { STARTER_BALANCE_PROMPT: prompt } });
+    translate.use('en');
+    openEmpty();
+
+    fixture.nativeElement
+      .querySelector('[data-testid="assistant-starter-balance"]')
+      .click();
+    fixture.detectChanges();
+
+    const textarea: HTMLTextAreaElement =
+      fixture.nativeElement.querySelector('[data-testid="assistant-composer"] textarea');
+
+    expect(textarea.selectionStart).toBe(prompt.indexOf('['));
+    expect(textarea.selectionEnd).toBe(prompt.indexOf(']') + 1);
+    expect(document.activeElement).withContext('the caret is in the composer').toBe(textarea);
+  });
+
+  it('fills in the language in use, not always in English', () => {
+    translate.setTranslation('es', {
+      ASSISTANT: { STARTER_BALANCE_PROMPT: '¿Cuál es el balance de [nombre del payee]?' },
+    });
+    translate.use('es');
+    openEmpty();
+
+    fixture.nativeElement
+      .querySelector('[data-testid="assistant-starter-balance"]')
+      .click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.draft()).toBe('¿Cuál es el balance de [nombre del payee]?');
+  });
+
+  it('the starters are part of the EMPTY state and leave once the thread has turns', () => {
+    expect(openEmpty().querySelector('[data-testid="assistant-starters"]')).toBeTruthy();
+
+    store.conversation.set({
+      ...CONVERSATION,
+      messages: [
+        {
+          id: 'm1', role: 'User', content: 'hola',
+          payload: null, sequence: 0, createdAt: '2026-08-12T09:00:00Z',
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    // They live inside the welcome, so they go when it goes — and come back on a new conversation,
+    // because a new conversation is an empty one.
+    expect(fixture.nativeElement.querySelector('[data-testid="assistant-starters"]')).toBeNull();
   });
 
   it('the read-only promise carries WEIGHT, not small-print styling', () => {
@@ -1902,6 +2009,64 @@ describe('Assistant i18n — the welcome exists in every language', () => {
     expect(ASSISTANT_BUNDLES['en']['WELCOME_READ_ONLY']).toContain('read-only');
     expect(ASSISTANT_BUNDLES['es']['WELCOME_READ_ONLY']).toContain('solo lectura');
     expect(ASSISTANT_BUNDLES['pl']['WELCOME_READ_ONLY']).toContain('tylko do odczytu');
+  });
+
+  it('★ every starter has a label AND a prompt in EN, ES and PL', () => {
+    for (const language of ['en', 'es', 'pl']) {
+      for (const starter of STARTER_PROMPTS) {
+        for (const key of [starter.labelKey, starter.promptKey]) {
+          const bare = key.replace('ASSISTANT.', '');
+          expect(ASSISTANT_BUNDLES[language][bare])
+            .withContext(`${language} is missing ${bare}`)
+            .toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it('the filled-in sentence is real in each language, not English left behind', () => {
+    for (const starter of STARTER_PROMPTS) {
+      const bare = starter.promptKey.replace('ASSISTANT.', '');
+
+      // A key copied across from English passes a presence check and fails the user.
+      expect(ASSISTANT_BUNDLES['es'][bare]).not.toBe(ASSISTANT_BUNDLES['en'][bare]);
+      expect(ASSISTANT_BUNDLES['pl'][bare]).not.toBe(ASSISTANT_BUNDLES['en'][bare]);
+    }
+  });
+
+  it('★ every translated sentence keeps the placeholder the composer selects', () => {
+    // The selection is derived from the brackets rather than from a per-language offset, so a
+    // translation that dropped them would silently leave the user with a caret at the end and a
+    // literal "[payee name]" to delete by hand.
+    for (const language of ['en', 'es', 'pl']) {
+      for (const starter of STARTER_PROMPTS) {
+        const sentence = ASSISTANT_BUNDLES[language][starter.promptKey.replace('ASSISTANT.', '')];
+        const range = placeholderRange(sentence);
+
+        expect(range.end)
+          .withContext(`${language} ${starter.promptKey} lost its [placeholder]`)
+          .toBeGreaterThan(range.start);
+      }
+    }
+  });
+});
+
+describe('placeholderRange — which part of the sentence gets selected', () => {
+  it('selects the bracketed placeholder, brackets included', () => {
+    const text = 'What is the balance of [payee name]?';
+
+    expect(placeholderRange(text)).toEqual({ start: 23, end: 35 });
+    expect(text.slice(23, 35)).toBe('[payee name]');
+  });
+
+  it('puts the caret at the END when there is no placeholder', () => {
+    // Not {0,0}: selecting nothing at position zero would put the caret before the sentence, and the
+    // user's first keystroke would land in front of the question instead of after it.
+    expect(placeholderRange('Hola')).toEqual({ start: 4, end: 4 });
+  });
+
+  it('ignores an unclosed bracket rather than selecting the rest of the sentence', () => {
+    expect(placeholderRange('balance of [payee')).toEqual({ start: 17, end: 17 });
   });
 });
 

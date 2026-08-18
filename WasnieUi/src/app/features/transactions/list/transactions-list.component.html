@@ -152,7 +152,11 @@
                       class="col-ref__number col-ref__link"
                       [routerLink]="['/transactions', tx.id]"
                       [title]="'TRANSACTIONS.OPEN_DETAIL' | translate"
-                    >{{ tx.referenceNumber }}</a>
+                    >{{ tx.referenceNumber }}</a><ws-copy-button
+                      [value]="tx.referenceNumber"
+                      label="COMMON.COPY_REFERENCE"
+                      [size]="14"
+                    />
                     @if (tx.description) {
                       <span class="col-ref__description" [title]="tx.description">{{ tx.description }}</span>
                     }
@@ -186,7 +190,11 @@
                       }
                       @if (tx.payeeEmployeeCode) {
                         <span class="col-code">({{ tx.payeeEmployeeCode }})</span>
-                      }
+                      }<ws-copy-button
+                        [value]="tx.payeeName"
+                        label="COMMON.COPY_NAME"
+                        [size]="14"
+                      />
                     } @else {
                       <span class="col-unassigned">{{ 'TRANSACTIONS.UNASSIGNED' | translate }}</span>
                     }

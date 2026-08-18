@@ -233,10 +233,29 @@ public sealed class AssistantToolRunner(
             usable = usable.Skip(usable.Count - MaxContextMessages).ToList();
         }
 
-        var messages = new List<ChatMessage>(usable.Count + 2)
+        var messages = new List<ChatMessage>(usable.Count + 3)
         {
             new(ChatMessage.SystemRole, SelectionInstructions),
         };
+
+        // ★★ THE RESOLVED-ENTITY CONTEXT, AND IT IS BUILT FROM THE **WHOLE** THREAD.
+        //
+        // Note what it is NOT derived from: `usable`, the four truncated messages below. Those are
+        // capped so the classifier decides about the current question instead of re-litigating an old
+        // one, and truncated because it needs the names in a reply and not its tables. Neither limit
+        // should reach the ids — an id is two dozen characters, it cannot be "mostly" right, and a payee
+        // resolved six turns ago is exactly the one a comparison reaches back for. So the context is
+        // taken from `history` in full while the transcript stays short.
+        //
+        // Placed BEFORE the turns on purpose: it is reference data the dispatcher looks things up in,
+        // not a thing that was said. Put after them it would be the most recent "message" in the thread
+        // and the classifier would start deciding about it.
+        var resolved = ResolvedEntityContext.PromptBlock(ResolvedEntityContext.From(history));
+
+        if (resolved.Length > 0)
+        {
+            messages.Add(new ChatMessage(ChatMessage.SystemRole, resolved));
+        }
 
         messages.AddRange(usable.Select(m => new ChatMessage(
             m.Role == AssistantMessageRole.Assistant ? ChatMessage.AssistantRole : ChatMessage.UserRole,
@@ -274,6 +293,14 @@ public sealed class AssistantToolRunner(
         "commission came out the way it did. Questions about the user's OWN plan count even when no " +
         "plan is named — call the plan tool without a name and it will ask which one.\n" +
         "\n" +
+        "★ A QUESTION ABOUT A PERSON IS NOT A QUESTION ABOUT A PLAN, and the two have DIFFERENT tools. " +
+        "\"What plans is Ana on\", \"which plan is she assigned to\", \"does he have a plan\", \"since " +
+        "when is she on it\" are about a PAYEE's assignments: call the payee-plans tool with the payee. " +
+        "\"How does the EMEA plan pay\", \"what are its rules\", \"what is the rate\" are about a PLAN's " +
+        "configuration: call the plan-rules tool with the plan. NEVER pass a PERSON'S NAME as a plan " +
+        "name — no plan is called \"Ana García\", the lookup will refuse, and the user will be told the " +
+        "person does not exist one turn after you described them.\n" +
+        "\n" +
         "Call NO tool when the message is about what a term means, how the product works in general, or " +
         "how to perform an action in the interface. The documentation answers those and a lookup would " +
         "return nothing useful.\n" +
@@ -284,6 +311,48 @@ public sealed class AssistantToolRunner(
         "without naming it, pass that plan's name — copied EXACTLY as it appeared earlier, in full. A " +
         "follow-up question is not a new subject.\n" +
         "\n" +
-        "Never guess an identifier that appears nowhere — not in the last message and not in the " +
-        "context. Never call a tool just in case.";
+        IdentifierRules +
+        "\n" +
+        "Never guess an identifier that appears nowhere — not in the last message, not in the context " +
+        "and not in the resolved-entity block. Never call a tool just in case.";
+
+    /// <summary>
+    /// ★★ THE IRON RULE — AND IT IS HERE, IN THE DISPATCHER'S PROMPT, BECAUSE THAT IS THE ONLY PLACE IT
+    /// CAN DO ANYTHING.
+    ///
+    /// It used to live in <c>AssistantPrompt.DataRules</c> as rules 10b/10c, addressed to the model that
+    /// composes the ANSWER — a model that never calls a tool and has no arguments to fill in. It was a
+    /// correct instruction delivered to the wrong reader, and it had no effect on any lookup. Worse, it
+    /// LOOKED like the fix, so the real gap (no channel, see ResolvedEntityContext) stayed invisible
+    /// while the continuity bug kept reproducing.
+    ///
+    /// ★ TRANSVERSAL BETWEEN TOOLS, WHICH IS THE WHOLE POINT. A payee's id is the same id for their
+    /// balance, their assignments and anything added later, and the rule is written about the ENTITY
+    /// rather than about the tool that resolved it. The reproduced failure was precisely a jump between
+    /// tools: turn 1 resolved Ana through the balance lookup, turn 2 asked about her plans, and the
+    /// dispatcher — with no rule spanning the two — went back to typing her name.
+    ///
+    /// ★ AND IT PERMITS MORE THAN ONE. "Never look up a name twice" written carelessly reads as "use THE
+    /// id", which quietly forbids comparisons: two payees resolved in two turns are two entries, and
+    /// answering about one of them is not the question that was asked.
+    /// </summary>
+    public const string IdentifierRules =
+        "RESOLVED ENTITIES. You may be given a block listing payees and plans that have ALREADY been " +
+        "looked up in this conversation, each with its id and its canonical name, most recent first.\n" +
+        "\n" +
+        "- IF THE MESSAGE REFERS TO ONE OF THEM, PASS ITS id AS THE TOOL ARGUMENT (payeeId, planId) AND " +
+        "DO NOT PASS THE NAME. This includes implicit references — \"and his plans?\", \"what about her " +
+        "balance?\", \"that plan\", \"the same person\" — which almost always mean the FIRST entry of " +
+        "the matching kind, because it is the one the previous turn was about.\n" +
+        "- IT IS FORBIDDEN TO SEARCH BY NAME FOR AN ENTITY THAT IS ALREADY IN THAT BLOCK. Retyping a " +
+        "name from memory is how a person the assistant just described comes back as \"not found\".\n" +
+        "- THE ID CROSSES TOOLS. A payee has ONE id whatever question is asked about them: if the " +
+        "balance lookup resolved them, pass that same id to the assignments lookup, and the other way " +
+        "round. It does not matter which tool put the entity in the block.\n" +
+        "- SEVERAL ENTITIES CAN BE THERE AT ONCE, and you are not limited to the first. \"Compare her " +
+        "with Bruno\" means matching each name to its own entry and using each id. Match by name to " +
+        "decide WHICH entry a sentence means.\n" +
+        "- SEARCH BY NAME ONLY for something that is NOT in the block: a new payee or plan named for the " +
+        "first time in this conversation.\n" +
+        "\n";
 }

@@ -1,0 +1,12 @@
+<button
+  class="ws-copy-button"
+  type="button"
+  [class.ws-copy-button--copied]="copied()"
+  [disabled]="disabled()"
+  [wsTooltip]="copied() ? ('COMMON.COPIED' | translate) : (tooltip() ?? (label() | translate))"
+  tooltipPlacement="bottom"
+  [attr.aria-label]="label() | translate"
+  (click)="copy($event)"
+>
+  <app-icon [name]="copied() ? 'check-circle' : 'copy'" [size]="size()" />
+</button>

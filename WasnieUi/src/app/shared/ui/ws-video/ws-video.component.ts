@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
+import { IconComponent } from '../../components/icon/icon.component';
 
 /**
  * A silent, looping, chrome-less video — the moving equivalent of an illustration.
@@ -29,6 +30,12 @@ import { TranslatePipe } from '@ngx-translate/core';
  * opt-in precisely so decorative loops do not sprout a button inviting people to play scenery. And
  * when it is used, the clip plays ONCE: they consented to watch it, not to have it repeat forever.
  *
+ * ★ AND `[autoplay]="false"` TURNS THE WHOLE THING INTO A PLAYER, for the case where the clip is not
+ * scenery at all but something a person sits down and watches. It holds the first frame, puts the
+ * Play button in the middle and waits — the same "you consented to watch it" rule as above, so it
+ * plays once rather than looping. The two paths deliberately share ONE button: a primitive with two
+ * different play affordances depending on why it is not playing would be a primitive nobody trusts.
+ *
  * ★ MUTED IS LOAD-BEARING, not just polite: browsers refuse to autoplay a video with sound, so an
  * unmuted clip here would silently never start. `muted` is set as a DOM PROPERTY in code as well as
  * an attribute, because Angular templates do not reliably reflect the attribute to the property.
@@ -36,38 +43,48 @@ import { TranslatePipe } from '@ngx-translate/core';
 @Component({
   selector: 'ws-video',
   standalone: true,
-  imports: [TranslatePipe],
+  imports: [TranslatePipe, IconComponent],
   template: `
     <video
       #video
       class="ws-video__el"
       [style.object-fit]="fit()"
-      [src]="src()"
+      [src]="resolvedSrc()"
       [poster]="poster() || null"
       [attr.aria-label]="ariaLabel() || null"
       [attr.aria-hidden]="ariaLabel() ? null : 'true'"
       [attr.role]="ariaLabel() ? 'img' : null"
-      [loop]="!reducedMotion()"
+      [loop]="shouldAutoplay()"
       [muted]="true"
       [controls]="false"
-      [autoplay]="!reducedMotion()"
+      [autoplay]="shouldAutoplay()"
       playsinline
       disablepictureinpicture
-      preload="metadata"
+      [attr.preload]="preload()"
       tabindex="-1"
-      (play)="playing.set(true)"
-      (pause)="playing.set(false)"
-      (ended)="playing.set(false)"
+      (play)="onPlay()"
+      (playing)="buffering.set(false)"
+      (waiting)="buffering.set(true)"
+      (pause)="onStop()"
+      (ended)="onStop()"
     ></video>
 
-    @if (showPlayButton()) {
-      <button type="button" class="ws-video__play" (click)="play()">
-        <span class="ws-video__play-icon" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
+    @if (showControl()) {
+      <button
+        type="button"
+        class="ws-video__control"
+        [class.ws-video__control--playing]="playing()"
+        [class.ws-video__control--buffering]="buffering()"
+        [attr.aria-label]="(playing() ? 'COMMON.PAUSE_VIDEO' : 'COMMON.PLAY_VIDEO') | translate"
+        (click)="toggle()"
+      >
+        <span class="ws-video__disc">
+          @if (buffering()) {
+            <app-icon name="loader" [size]="30" />
+          } @else {
+            <app-icon [name]="playing() ? 'pause' : 'play'" [size]="30" />
+          }
         </span>
-        <span class="ws-video__play-label">{{ 'COMMON.PLAY_VIDEO' | translate }}</span>
       </button>
     }
   `,
@@ -85,40 +102,103 @@ import { TranslatePipe } from '@ngx-translate/core';
         height: 100%;
       }
 
-      /* Centred over the still frame — the only affordance these users get, so it is a real labelled
-         button and not a bare glyph. */
-      .ws-video__play {
+      /* ★ THE CONTROL IS THE WHOLE CLIP, NOT JUST THE DISC — that is what makes it behave like the
+         native one. Clicking anywhere on the picture toggles playback, and because the button is
+         always mounted while the clip is a player, there is no state in which the viewer is left
+         watching something they cannot stop. The earlier version unmounted the button on play: a
+         thirty-second clip with no way to pause it and nothing to click.
+
+         NOTE: no backticks in these comments — this whole block is a template literal, and one would
+         close it. */
+      .ws-video__control {
         position: absolute;
         inset: 0;
-        margin: auto;
-        width: fit-content;
-        height: fit-content;
+        width: 100%;
+        height: 100%;
         display: flex;
         align-items: center;
-        gap: var(--space-2);
-        padding: var(--space-2) var(--space-4);
-        border: 1px solid var(--color-border-default);
-        border-radius: var(--radius-full);
-        background: var(--color-bg-surface);
-        color: var(--color-text-primary);
-        font-size: var(--font-size-13);
-        font-weight: 600;
-        line-height: 1.2;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        background: none;
         cursor: pointer;
-        box-shadow: var(--shadow-md);
-        transition: background-color 150ms ease, border-color 150ms ease;
       }
 
-      .ws-video__play:hover {
-        background: var(--color-bg-surface-raised);
-        border-color: var(--color-brand);
-        color: var(--color-brand);
-      }
-
-      .ws-video__play-icon {
+      /* The disc: centred by the flex container above, so it needs no offsets of its own. */
+      .ws-video__disc {
         display: flex;
         align-items: center;
-        color: var(--color-brand);
+        justify-content: center;
+        width: var(--space-16);
+        height: var(--space-16);
+        border-radius: var(--radius-full);
+        background: var(--color-brand);
+        color: var(--color-brand-contrast);
+        box-shadow: var(--shadow-lg);
+        transition:
+          opacity var(--transition-normal),
+          background-color var(--transition-base),
+          transform var(--transition-base);
+      }
+
+      /* ★ IT GETS OUT OF THE WAY WHILE THE CLIP RUNS, AND COMES BACK ON APPROACH — again the native
+         behaviour. Fading the DISC and not the button is deliberate: the click target stays the full
+         picture the whole time, so a viewer who just wants to pause can hit anywhere, and the pause
+         glyph appears the moment the pointer or the keyboard arrives. */
+      .ws-video__control--playing .ws-video__disc {
+        opacity: 0;
+      }
+
+      /* ★ EXCEPT WHILE IT IS FETCHING. Pressing Play on a clip that has only loaded its metadata is
+         the one moment where hiding the control would be a lie: nothing is moving yet, and a viewer
+         staring at a still poster with no indicator concludes the button is broken and presses it
+         again — which pauses it. The spinner is the answer the native control gives, and this rule is
+         what keeps it on screen to give it. */
+      .ws-video__control--buffering .ws-video__disc {
+        opacity: 1;
+      }
+
+      /* A loading indicator is feedback, not decoration, which is why it still turns under
+         prefers-reduced-motion: it is the one moving thing those viewers are meant to see, and a
+         frozen spinner reads as a hang. */
+      .ws-video__control--buffering app-icon {
+        animation: ws-video-spin 900ms linear infinite;
+      }
+
+      @keyframes ws-video-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .ws-video__control:hover .ws-video__disc,
+      .ws-video__control:focus-visible .ws-video__disc {
+        opacity: 1;
+        background: var(--color-brand-hover);
+        transform: scale(1.06);
+      }
+
+      .ws-video__control:active .ws-video__disc {
+        transform: scale(1);
+      }
+
+      .ws-video__control:focus-visible {
+        outline: none;
+      }
+
+      .ws-video__control:focus-visible .ws-video__disc {
+        box-shadow: var(--shadow-lg), var(--shadow-focus);
+      }
+
+      /* The play triangle's mass sits left of the glyph's own centre (it spans x 7→20 in a 24 box), so
+         a disc that is mathematically centred still reads as off-centre. One pixel puts it right — and
+         only for the triangle: the pause bars are symmetrical and must not move. */
+      .ws-video__disc app-icon {
+        display: block;
+      }
+
+      .ws-video__control:not(.ws-video__control--playing) .ws-video__disc app-icon {
+        transform: translateX(1px);
       }
     `,
   ],
@@ -127,7 +207,14 @@ export class WsVideoComponent implements OnDestroy {
   /** Path to the clip, e.g. "/videos/quotas.mp4" (files live in `public/videos`). */
   readonly src = input.required<string>();
 
-  /** Still frame shown before playback — and what reduced-motion users see until they press Play. */
+  /**
+   * Still frame shown before playback — what reduced-motion users see until they press Play, and what
+   * a player shows while its clip has not been asked for.
+   *
+   * ★ WORTH SUPPLYING FOR ANY PLAYER, and not for looks: it is what lets `preload` stay at `metadata`
+   * (see below), so the megabytes are spent by the people who press Play rather than by everyone who
+   * opens the screen.
+   */
   readonly poster = input('');
 
   /**
@@ -152,9 +239,19 @@ export class WsVideoComponent implements OnDestroy {
    */
   readonly playFallback = input(false);
 
+  /**
+   * Set to false when the clip is something a person WATCHES rather than scenery that moves behind
+   * the content. It holds the first frame, shows the Play button and starts only when pressed — and
+   * then plays once, because a clip somebody chose to watch has an end.
+   */
+  readonly autoplay = input(true);
+
   @ViewChild('video') private videoRef?: ElementRef<HTMLVideoElement>;
 
   protected readonly playing = signal(false);
+
+  /** Playback was asked for but no picture is moving yet — the clip is fetching. */
+  protected readonly buffering = signal(false);
 
   private readonly motionQuery: MediaQueryList | null =
     typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -162,8 +259,55 @@ export class WsVideoComponent implements OnDestroy {
   /** A signal, not a constant: the preference can be switched mid-session and must take effect now. */
   protected readonly reducedMotion = signal(this.motionQuery?.matches ?? false);
 
-  protected readonly showPlayButton = computed(
-    () => this.playFallback() && this.reducedMotion() && !this.playing()
+  /** Autoplay is the caller's intent AND the viewer's preference — either one can veto it. */
+  protected readonly shouldAutoplay = computed(() => this.autoplay() && !this.reducedMotion());
+
+  /**
+   * How much of the clip to fetch before anyone asks for it. There are three cases and only one of
+   * them is expensive.
+   *
+   * ★ `metadata` FETCHES NO PICTURE — that is the fact the whole thing turns on. It gets duration and
+   * dimensions, `readyState` stops at 1, and painting a frame needs 2. So:
+   *
+   * - Autoplaying (decoration): `metadata`. It is about to stream anyway.
+   * - A player WITH a poster: `metadata`. The poster is the picture; the clip can wait until Play is
+   *   pressed, which is the difference between a modal costing 12 KB and costing 4.6 MB for viewers
+   *   who never press it.
+   * - A player with NO poster: `auto`, because downloading it is then the ONLY way to have anything
+   *   on screen. This is the expensive case, and giving the caller a poster is how to leave it.
+   */
+  protected readonly preload = computed<'metadata' | 'auto'>(() =>
+    this.shouldAutoplay() || this.poster() ? 'metadata' : 'auto'
+  );
+
+  /**
+   * ★ THE `#t=` FRAGMENT IS THE POSTER'S UNDERSTUDY. A paused video with no poster is entitled to
+   * paint nothing, and the modal's black rectangle with a Play button floating on it was exactly
+   * that. The fragment asks the browser to seek to 0.1s and show that frame instead — which only
+   * works together with the `auto` above, since a frame has to be downloaded before it can be shown.
+   *
+   * Skipped when the clip autoplays (it is about to paint regardless), when the caller supplied a
+   * real poster (better in every way: it costs kilobytes, it can be a chosen frame rather than
+   * whatever happens to be at 0.1s, and it needs no download of the clip at all), and when the caller
+   * already wrote their own fragment.
+   */
+  protected readonly resolvedSrc = computed(() => {
+    const src = this.src();
+    const needsFrame = !this.autoplay() && !this.poster() && !src.includes('#');
+    return needsFrame ? `${src}#t=0.1` : src;
+  });
+
+  /**
+   * Whether this clip is something the viewer drives — a player — rather than scenery.
+   *
+   * ★ IT DOES NOT DEPEND ON `playing`, AND THAT IS THE WHOLE FIX. It used to, so the control vanished
+   * the instant the clip started: thirty seconds of video with no pause, nothing to click, and if the
+   * end was never reached (modal closed and reopened, a browser that fires no `ended`) no way back to
+   * Play either. A control that disappears while the thing it controls is running is not a control.
+   * Once the clip is a player it stays a player; only the GLYPH changes.
+   */
+  protected readonly showControl = computed(
+    () => !this.autoplay() || (this.playFallback() && this.reducedMotion())
   );
 
   private readonly onMotionPreferenceChange = (event: MediaQueryListEvent): void => {
@@ -176,7 +320,9 @@ export class WsVideoComponent implements OnDestroy {
     if (event.matches) {
       el.pause();
       el.currentTime = 0;
-    } else {
+    } else if (this.autoplay()) {
+      // Turning it OFF only restarts clips that were meant to run on their own; a player the viewer
+      // has not pressed must stay where it is.
       this.tryPlay(el);
     }
   };
@@ -192,15 +338,51 @@ export class WsVideoComponent implements OnDestroy {
         const el = this.videoRef?.nativeElement;
         if (!el) return;
         el.muted = true;
-        if (!this.reducedMotion()) this.tryPlay(el);
+        if (this.shouldAutoplay()) this.tryPlay(el);
       });
     });
   }
 
-  /** The Play button. Only reachable when the fallback is enabled and motion is reduced. */
-  play(): void {
+  /**
+   * Playback was requested.
+   *
+   * `readyState < HAVE_FUTURE_DATA` means the browser cannot yet draw the next frame, so this is a
+   * request that will have to wait — which is exactly when the spinner belongs. Checked here rather
+   * than relying on `waiting` alone, because a clip that has never been fetched (a player preloading
+   * only its metadata, which is the whole point of having a poster) can sit on the request for a
+   * while before it fires anything at all.
+   */
+  protected onPlay(): void {
+    this.playing.set(true);
+    const el = this.videoRef?.nativeElement;
+    if (el && el.readyState < 3) this.buffering.set(true);
+  }
+
+  /** Paused or finished: nothing is playing and nothing is being waited for. */
+  protected onStop(): void {
+    this.playing.set(false);
+    this.buffering.set(false);
+  }
+
+  /**
+   * The control: play when stopped, pause when running — the same contract as the native button.
+   *
+   * ★ IT ASKS THE ELEMENT, NOT THE SIGNAL. `playing` is updated FROM the media events, so it is a
+   * report of what happened, not the source of truth; deciding from it would let the two disagree
+   * after any state change we did not originate (a browser pausing a backgrounded tab, playback
+   * refused, the clip reaching its end between a render and a click).
+   */
+  toggle(): void {
     const el = this.videoRef?.nativeElement;
     if (!el) return;
+
+    if (!el.paused && !el.ended) {
+      el.pause();
+      return;
+    }
+
+    // A clip that ran to the end restarts rather than sitting on its last frame doing nothing.
+    if (el.ended) el.currentTime = 0;
     el.muted = true;
     this.tryPlay(el);
   }

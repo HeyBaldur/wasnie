@@ -113,7 +113,7 @@ export class ManualComponent implements OnInit {
 
     this.api.getContent().subscribe({
       next: content => {
-        this.html.set(this.marked.parse(content.markdown, { async: false }) as string);
+        this.html.set(this.sectionize(this.marked.parse(content.markdown, { async: false }) as string));
         this.state.set('ready');
         afterNextRender(() => this.indexHeadings(), { injector: this.injector });
       },
@@ -123,6 +123,88 @@ export class ManualComponent implements OnInit {
         this.state.set(err.status === 404 ? 'unavailable' : 'error');
       },
     });
+  }
+
+  /**
+   * Cuts the flat markdown output into one CARD PER CHAPTER.
+   *
+   * ★ WHY THE DOM AND NOT A `marked` RENDERER. A renderer emits tokens one at a time and never learns
+   * where a chapter ENDS — it would have to open a `<section>` on one heading and close it on the next,
+   * which means emitting unbalanced HTML and hoping the parser repairs it. Grouping after the fact is the
+   * same work stated honestly: walk the top-level nodes once, start a new section at every `h2`.
+   *
+   * ★ EVERYTHING STAYS SANITISER-SAFE. Only `<section>` and `<span>` with a `class` are introduced — all
+   * of it survives Angular's sanitiser, which is still the thing that renders this ([innerHTML] with a
+   * plain string). No `bypassSecurityTrust…` was needed and none was added.
+   *
+   * ★ AND THE HEADING'S `textContent` IS LEFT BYTE-FOR-BYTE IDENTICAL. That is not a detail: the ids come
+   * from `slugify(el.textContent)`, and the guide's own hand-written links (`[4.5](#45-plan-lifecycle…)`)
+   * point at those slugs. Moving "1." into a badge span keeps it inside the heading, in the same order, so
+   * the concatenation the slug is built from does not change. The dot is HIDDEN with `display: none`
+   * rather than removed for exactly this reason — CSS is invisible to `textContent`.
+   */
+  private sectionize(html: string): string {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const out = doc.createElement('div');
+    let current: HTMLElement | null = null;
+
+    const open = (modifier: string): HTMLElement => {
+      const section = doc.createElement('section');
+      section.className = modifier ? `manual__chapter manual__chapter--${modifier}` : 'manual__chapter';
+      out.appendChild(section);
+      return section;
+    };
+
+    // `Array.from` first: appending a node MOVES it out of `body.childNodes`, so iterating the live list
+    // would skip every second child.
+    for (const node of Array.from(doc.body.childNodes)) {
+      if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'H2') {
+        current = open('');
+        this.decorateChapterHeading(node as HTMLElement, doc);
+      } else if (!current) {
+        // The title and whatever precedes the first chapter — its own card, so nothing is left loose on
+        // the page background.
+        current = open('lead');
+      }
+      current.appendChild(node);
+    }
+
+    return out.innerHTML;
+  }
+
+  /**
+   * Gives a chapter heading its visual anchor.
+   *
+   * The guide numbers the chapters a reader navigates ("1." … "18.") and leaves its own housekeeping
+   * unnumbered ("Coverage checklist", "Maintenance") — the same convention the shortcut menu already
+   * reads. Numbered chapters get the number as a badge; the housekeeping sections get an icon in the same
+   * slot, so every card opens on the same geometry.
+   */
+  private decorateChapterHeading(heading: HTMLElement, doc: Document): void {
+    const match = /^(\d+)(\.)/.exec(heading.textContent ?? '');
+    const badge = doc.createElement('span');
+
+    if (match) {
+      badge.className = 'manual__chapter-num';
+      badge.appendChild(doc.createTextNode(match[1]));
+
+      const dot = doc.createElement('span');
+      dot.className = 'manual__chapter-dot';
+      dot.appendChild(doc.createTextNode(match[2]));
+      badge.appendChild(dot);
+
+      // Remove only the characters the badge now carries, from the text node that held them.
+      const first = heading.firstChild;
+      if (first?.nodeType === Node.TEXT_NODE) {
+        first.textContent = (first.textContent ?? '').slice(match[0].length);
+      }
+    } else {
+      // Empty on purpose: the icon is a CSS mask, so it adds nothing to `textContent` and cannot disturb
+      // the slug.
+      badge.className = 'manual__chapter-num manual__chapter-num--icon';
+    }
+
+    heading.insertBefore(badge, heading.firstChild);
   }
 
   /**
@@ -202,7 +284,16 @@ export class ManualComponent implements OnInit {
       return;
     }
 
-    const top = target.getBoundingClientRect().top - host.getBoundingClientRect().top + host.scrollTop;
+    // ★ A CHAPTER HEADING OPENS ITS CARD, so scrolling to the heading itself would park the card's top
+    // edge — border, radius and all — just above the viewport, and a card sliced off at the top reads as
+    // a rendering bug. When the heading is the first thing in its card, the card is what we scroll to.
+    const parent = target.parentElement;
+    const anchor =
+      parent?.classList.contains('manual__chapter') && target === parent.firstElementChild
+        ? parent
+        : target;
+
+    const top = anchor.getBoundingClientRect().top - host.getBoundingClientRect().top + host.scrollTop;
     host.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' });
   }
 
