@@ -25,6 +25,7 @@ import {
   WsEmptyStateComponent,
   WsConfirmationModalComponent,
   WsPaginationComponent,
+  WsCopyButtonComponent,
   type SegOption,
   type BadgeVariant,
 } from '../../../shared/ui';
@@ -51,6 +52,7 @@ import {
     WsEmptyStateComponent,
     WsConfirmationModalComponent,
     WsPaginationComponent,
+    WsCopyButtonComponent,
   ],
   templateUrl: './payees-list.component.html',
   styleUrl: './payees-list.component.scss',

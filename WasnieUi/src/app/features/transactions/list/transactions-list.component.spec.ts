@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { WsCopyButtonComponent } from '../../../shared/ui';
 import { TranslateModule } from '@ngx-translate/core';
 import { TransactionsListComponent } from './transactions-list.component';
 import { TransactionsStore } from '../state/transactions.store';
@@ -162,6 +164,72 @@ describe('TransactionsListComponent', () => {
       .withContext('the payee name should be a link to the payee detail')
       .not.toBeNull();
     expect(payeeLink?.textContent).toContain('Anna Kowalska');
+  });
+
+  // The primitive's own behaviour (clipboard, tick, swallowed click) is covered in
+  // ws-copy-button.component.spec.ts. What this asserts is the WIRING: that each of the two copy
+  // buttons in a row is handed the right value — a reference button that copies the payee's name is
+  // exactly the kind of mix-up a template swap introduces silently.
+  it('gives the row a copy button for the reference and one for the payee name', () => {
+    const tx = {
+      id: 'tx-3',
+      tenantId: 'tenant-1',
+      referenceNumber: 'REF-777',
+      payeeId: 'payee-uuid-1234',
+      amount: 500,
+      currency: 'EUR',
+      transactionDate: '2025-01-15',
+      ingestedAt: '2025-01-01T00:00:00Z',
+      source: TransactionSource.Manual,
+      status: TransactionStatus.Pending,
+      payeeName: 'Anna Kowalska',
+      payeeEmployeeCode: 'EMP001',
+      quantity: 1,
+    };
+
+    TestBed.overrideProvider(TransactionsStore, {
+      useValue: makeStoreMock({ transactions: signal([tx]) }),
+    });
+
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    fixture.detectChanges();
+
+    const values = fixture.debugElement
+      .queryAll(By.directive(WsCopyButtonComponent))
+      .map((el) => (el.componentInstance as WsCopyButtonComponent).value());
+
+    expect(values).toEqual(['REF-777', 'Anna Kowalska']);
+  });
+
+  it('offers no payee copy button when the transaction is unassigned', () => {
+    const tx = {
+      id: 'tx-4',
+      tenantId: 'tenant-1',
+      referenceNumber: 'REF-888',
+      payeeId: null,
+      amount: 200,
+      currency: 'EUR',
+      transactionDate: '2025-02-01',
+      ingestedAt: '2025-02-01T00:00:00Z',
+      source: TransactionSource.Manual,
+      status: TransactionStatus.Pending,
+      payeeName: null,
+      quantity: 1,
+    };
+
+    TestBed.overrideProvider(TransactionsStore, {
+      useValue: makeStoreMock({ transactions: signal([tx]) }),
+    });
+
+    const fixture = TestBed.createComponent(TransactionsListComponent);
+    fixture.detectChanges();
+
+    const values = fixture.debugElement
+      .queryAll(By.directive(WsCopyButtonComponent))
+      .map((el) => (el.componentInstance as WsCopyButtonComponent).value());
+
+    // Only the reference. Copying the word "Unassigned" is not a thing anyone wants.
+    expect(values).toEqual(['REF-888']);
   });
 
   it('renders "Unassigned" (i18n key resolved) when payeeName is null — never shows raw GUID', () => {

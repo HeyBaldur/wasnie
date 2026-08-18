@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AssistantStore } from '../state/assistant.store';
 import { Router } from '@angular/router';
 import {
@@ -30,6 +30,7 @@ import { WsConfirmationModalComponent } from '../../../shared/ui';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
 import { AssistantMathDirective } from '../pipes/assistant-math.directive';
+import { STARTER_PROMPTS, StarterPrompt, placeholderRange } from './starter-prompts';
 
 /**
  * The assistant's slide-over panel: right side, opens and closes over the app.
@@ -64,6 +65,7 @@ import { AssistantMathDirective } from '../pipes/assistant-math.directive';
 export class AssistantPanelComponent {
   readonly store = inject(AssistantStore);
   private readonly injector = inject(Injector);
+  private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -115,6 +117,16 @@ export class AssistantPanelComponent {
   readonly canSend = computed(() => this.draft().trim().length > 0 && !this.store.sending());
 
   private readonly messagesEl = viewChild<ElementRef<HTMLElement>>('messages');
+
+  /** The composer, so a starter prompt can put its text in it and select the placeholder. */
+  private readonly composer = viewChild(WsTextareaComponent);
+
+  /**
+   * The example questions under the welcome. Shown only while the conversation is empty — the
+   * same condition the welcome itself uses, so they leave together the moment there is anything
+   * to read, and come back on a new conversation because that is an empty one again.
+   */
+  readonly starters: readonly StarterPrompt[] = STARTER_PROMPTS;
 
   /**
    * How close to the bottom still counts as "following the conversation", in px. Generous enough to
@@ -305,6 +317,31 @@ export class AssistantPanelComponent {
 
   onDraftChange(value: string): void {
     this.draft.set(value);
+  }
+
+  /**
+   * A starter prompt was clicked: put its sentence in the composer, ready to be completed.
+   *
+   * ★ IT FILLS, IT DOES NOT SEND — and that is the whole design of the feature. Every one of these
+   * sentences has a hole in it ("[payee name]"), so sending on click would ask the assistant for a
+   * payee literally called "[payee name]", find nobody, and teach the user in one click that the thing
+   * does not work.
+   *
+   * ★ THE PLACEHOLDER IS LEFT SELECTED so the next keystroke replaces it. Dropping the caret at the
+   * end instead would leave the user to find the brackets, delete them, and type inside — three
+   * fiddly steps in the exact moment the feature exists to make easy.
+   *
+   * The draft signal is set as well as the box, rather than relying on the textarea to announce it:
+   * `canSend()` and `send()` read the signal, and a composer whose visible text cannot be sent would
+   * be a worse bug than the one being fixed.
+   */
+  useStarter(starter: StarterPrompt): void {
+    const text = this.translate.instant(starter.promptKey);
+
+    this.draft.set(text);
+
+    const { start, end } = placeholderRange(text);
+    this.composer()?.fill(text, start, end);
   }
 
   /**

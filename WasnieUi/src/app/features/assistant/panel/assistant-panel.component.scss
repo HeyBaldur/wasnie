@@ -714,6 +714,15 @@
   color: var(--color-text-secondary);
 }
 
+// The example questions. They WRAP rather than scroll: four short labels in three languages are not
+// the same four widths, and a row that scrolls sideways hides the last suggestion on exactly the
+// screens where a suggestion is most wanted.
+.assistant-welcome__starters {
+  @apply flex flex-wrap items-center justify-center;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
 // ── The failed-turn alert ───────────────────────────────────────────────────
 //
 // ★ LOCAL CSS, NOT A NEW SHARED PRIMITIVE. The design system has no `ws-alert`, and adding one is a

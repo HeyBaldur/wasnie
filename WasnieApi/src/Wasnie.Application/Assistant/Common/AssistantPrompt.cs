@@ -325,7 +325,10 @@ public static class AssistantPrompt
         BalanceTokenRules +
         "\n" +
         "\n" +
-        PayeePlansTokenRules;
+        PayeePlansTokenRules +
+        "\n" +
+        "\n" +
+        AmbiguousPayeeRules;
 
     /// <summary>
     /// ★★ THE DICTIONARY FOR THE BALANCE LOOKUP — AND THE RULE THAT PREVENTS THE FALSE ZERO.
@@ -413,6 +416,46 @@ public static class AssistantPrompt
     /// an earlier turn — an assignment answered with a rate invented for the occasion would be exactly
     /// the failure get_plan_rules was built to end, arriving through the tool next door.
     /// </summary>
+    /// <summary>
+    /// ★★ THE RULE FOR "WHICH ANNA SCHMIDT?" — AND IT IS ONE RULE FOR BOTH PAYEE TOOLS.
+    ///
+    /// The balance lookup and the assignments lookup resolve a payee through the same resolver and emit
+    /// the SAME ambiguity payload, so they are taught once. Two rules would be two things to keep in
+    /// step, and the failure of letting them drift is the assistant asking "which Anna?" for a balance
+    /// and claiming she does not exist for her plans, in the same conversation.
+    ///
+    /// ★ THE ONE THING THIS RULE HAS TO DEFEAT is the model reading <c>found: false</c> and reaching for
+    /// rule 9's "not found". It is stated in those words — several people were found, that is WHY there
+    /// is no answer — because the model has already been observed relaying a refusal it was handed
+    /// rather than reading the payload that came with it.
+    ///
+    /// ★ AND IT ASKS FOR THE EMPLOYEE CODE, NOT THE FULL NAME. Scenario 2C's usual request — "give me
+    /// the exact name" — is exactly the thing that cannot work here: the user already gave the exact
+    /// name and it belongs to two people. The code is the only answer that resolves, and the resolver
+    /// matches it directly.
+    /// </summary>
+    public const string AmbiguousPayeeRules =
+        "23. \"AmbiguousPayee\" MEANS SEVERAL PEOPLE HAVE THAT NAME — IT DOES NOT MEAN NOBODY WAS " +
+        "FOUND. When outcome is \"AmbiguousPayee\", every person in candidates EXISTS in the user's " +
+        "environment. found is false only because the lookup would not choose between them, so nothing " +
+        "was read for anyone. You must NEVER answer this with \"no encontré\", \"no existe\", \"no hay " +
+        "registro\" or any wording that suggests the person is missing — the user is very probably " +
+        "looking at one of these people on their screen right now, and telling them the record does not " +
+        "exist is the single worst thing you can say.\n" +
+        "\n" +
+        "23a. LIST THEM AND ASK WHICH. Say how many people share the name, then give EACH one from " +
+        "candidates with their employee code and their employment status — \"Anna Schmidt (EPO9006, " +
+        "terminada)\" and \"Anna Schmidt (EMP406, activa)\". The STATUS matters: the user is usually " +
+        "asking about the person who left, and it is often the only way they can tell the two apart. " +
+        "Then ask them to reply with the EMPLOYEE CODE of the one they mean. Do not ask for the exact " +
+        "name — they already gave it and it belongs to more than one person. Translate the status into " +
+        "the conversation's language; never print the raw token.\n" +
+        "\n" +
+        "23b. NEVER CHOOSE FOR THEM, AND NEVER ANSWER PARTIALLY. Do not pick the active one, the " +
+        "terminated one, the first one, or the one that seems more likely. Do not answer about all of " +
+        "them at once. Do not guess from an earlier turn. You have no figures for any of these people — " +
+        "the payload deliberately carries none — so any number you produced here would be invented.\n";
+
     public const string PayeePlansTokenRules =
         "22. PAYEE PLANS: THE outcome FIELD SAYS WHICH ANSWER YOU HAVE. \"PayeePlans\" means the person's " +
         "real assignments are below — list them from there. \"NoAssignmentsOrNotVisible\" is rule 22b. " +

@@ -156,12 +156,11 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
         }
 
         // ── Name → id ────────────────────────────────────────────────────────
-        PayeeDto? payee;
-        PayeeMatch match;
+        PayeeResolution resolution;
 
         try
         {
-            (payee, match) = await PayeeResolver.ResolveAsync(sender, payeeName!, cancellationToken);
+            resolution = await PayeeResolver.ResolveAsync(sender, payeeName!, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
@@ -177,14 +176,24 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
             return Refusal();
         }
 
-        if (payee is null)
+        // ★ The same ambiguity, the same payload, the same rule in the prompt — see the balance tool and
+        // PayeeAmbiguity. Two people called Anna Schmidt are two people whichever question is asked
+        // about them, and the two tools must not disagree about that on adjacent turns.
+        if (resolution.Match == PayeeMatch.Ambiguous)
+        {
+            LogCause(AssistantToolCause.AmbiguousPayee);
+            return PayeeAmbiguity.Payload(payeeName!, resolution.Candidates);
+        }
+
+        if (resolution.Payee is null)
         {
             LogCause(AssistantToolCause.NotFound);
             return Refusal();
         }
 
         return await DescribeAsync(
-            payee.Id, payee.FullName, match, includeEnded, cancellationToken);
+            resolution.Payee.Id, resolution.Payee.FullName, resolution.Match, includeEnded,
+            cancellationToken);
     }
 
     /// <summary>

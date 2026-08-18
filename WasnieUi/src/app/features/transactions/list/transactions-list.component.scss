@@ -54,8 +54,31 @@
   }
 }
 
+/* Inline, not block: the copy button that follows has to sit on the same line as the reference,
+   and the description/product lines below are block elements that break the line on their own. */
 .col-ref__number {
-  display: block;
+  display: inline;
+}
+
+/* ★ THE COPY BUTTONS BELONG TO THE TEXT, NOT BESIDE IT. The first version wrapped each value and
+   its button in a flex row, which made the name, the employee code and the button three siblings
+   competing for the cell's width: "(CEO-001)" was shoved to the far right of the column and the
+   name wrapped early to make room. Inline flow keeps the button behaving like a trailing character
+   of the reference or the name — it follows the last line wherever the text ends, and the original
+   column layout is untouched.
+
+   It fades in with the row: an icon pinned to every cell of a dense table competes with the values
+   it exists to serve. */
+td ws-copy-button {
+  margin-left: var(--space-1);
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+tr:hover td ws-copy-button,
+td ws-copy-button:focus-within {
+  opacity: 1;
 }
 
 /* Reference is a link to the transaction detail (mirrors the payee link pattern in this table). */

@@ -120,8 +120,7 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         // 18 forbids an id ever appearing there. <see cref="ResolvedEntityContext"/> is the channel that
         // makes the sentence true — this turn's payeeId is stored on the turn and handed to the
         // dispatcher next time. Without it this branch was reachable only if the USER typed a GUID.
-        PayeeDto? payee;
-        PayeeMatch match;
+        PayeeResolution resolution;
 
         if (payeeId is { } id)
         {
@@ -133,7 +132,7 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         // ── Name → id ────────────────────────────────────────────────────────
         try
         {
-            (payee, match) = await PayeeResolver.ResolveAsync(sender, payeeName!, cancellationToken);
+            resolution = await PayeeResolver.ResolveAsync(sender, payeeName!, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
@@ -149,13 +148,25 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
             return Refusal();
         }
 
-        if (payee is null)
+        // ★ SEVERAL PEOPLE, NOT NO PEOPLE — and until this branch existed the two were the same answer.
+        // The resolver has always refused to choose between two payees sharing a name, correctly; the
+        // refusal simply arrived as null and was relayed as "no payee with that name was found" about
+        // somebody the user could see on their own screen. Nothing is read for anyone here: the user is
+        // handed the candidates and asked which.
+        if (resolution.Match == PayeeMatch.Ambiguous)
+        {
+            LogCause(AssistantToolCause.AmbiguousPayee);
+            return PayeeAmbiguity.Payload(payeeName!, resolution.Candidates);
+        }
+
+        if (resolution.Payee is null)
         {
             LogCause(AssistantToolCause.NotFound);
             return Refusal();
         }
 
-        return await SummariseAsync(payee.Id, match, period, cancellationToken);
+        return await SummariseAsync(
+            resolution.Payee.Id, resolution.Match, period, cancellationToken);
     }
 
     /// <summary>

@@ -57,16 +57,7 @@
             {{ 'PLANS.STATUS_' + plan.status.toUpperCase() | translate }}
           </ws-badge>
           <span class="version-chip">v{{ plan.version }}</span>
-          <button
-            class="plan-id-btn"
-            type="button"
-            [wsTooltip]="idCopied() ? ('COMMON.COPIED' | translate) : plan.id"
-            tooltipPlacement="bottom"
-            (click)="copyPlanId(plan.id)"
-            [attr.aria-label]="'COMMON.COPY_ID' | translate"
-          >
-            <app-icon [name]="idCopied() ? 'check-circle' : 'info'" [size]="13" />
-          </button>
+          <ws-copy-button [value]="plan.id" [tooltip]="plan.id" label="COMMON.COPY_ID" />
         </div>
         <div class="plan-detail__meta-chips">
           <span class="meta-chip">

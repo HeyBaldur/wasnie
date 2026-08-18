@@ -43,6 +43,22 @@
   @apply flex flex-col min-w-0;
 }
 
+// The copy button rides beside the name and only appears on hover: a permanent icon on every row
+// turns the column into a field of glyphs and competes with the name it is meant to serve.
+.payee-name-row {
+  @apply flex items-center gap-1 min-w-0;
+
+  ws-copy-button {
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+}
+
+tr:hover .payee-name-row ws-copy-button,
+.payee-name-row ws-copy-button:focus-within {
+  opacity: 1;
+}
+
 .payee-name {
   font-size: var(--font-size-14);
   font-weight: 500;
