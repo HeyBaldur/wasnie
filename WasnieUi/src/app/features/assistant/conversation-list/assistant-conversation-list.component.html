@@ -1,0 +1,129 @@
+@if (visibleCount() === 0) {
+  <p class="assistant-clist__empty">
+    {{ (query() ? 'ASSISTANT.NO_MATCHES' : 'ASSISTANT.NO_CONVERSATIONS') | translate }}
+  </p>
+} @else {
+  <!--
+    ★ SEARCHING FLATTENS THE LIST. Time bands answer "when did I have that conversation"; a search
+    answers "where is the one about X", and the bands then split six results across four headings and
+    make the answer harder to see. The grouping comes back the moment the box is cleared.
+  -->
+  @for (group of groups(); track group.key) {
+    @if (grouped() && !query()) {
+      <h3 class="assistant-clist__band">{{ group.labelKey | translate }}</h3>
+    }
+
+    @for (item of group.items; track item.id) {
+      @if (renamingId() === item.id) {
+        <!--
+          Inline rename. A `prompt()` would have been fewer lines and is forbidden here for the reason
+          this app forbids every browser dialog: it is not the product's language, it cannot be styled,
+          and it blocks everything. Enter commits, Escape abandons, and clicking away abandons too.
+
+          ★ focusout, NOT blur — and this is the whole bug, not a preference. `blur` does not BUBBLE, and
+          ws-input exposes no blur output, so a `(blur)` bound on this host element never fired at all:
+          clicking elsewhere closed the menu and left the rename box sitting there, orphaned, with no way
+          out but Enter or Escape. `focusout` is the bubbling twin and actually reaches the host.
+        -->
+        <div class="assistant-clist__rename" data-rename-box data-testid="assistant-rename">
+          <!--
+            ★ [autofocus] IS PART OF THE CANCEL, not a convenience. A box that never held focus can
+            never LOSE it, so `focusout` never fired and clicking elsewhere left this sitting here
+            orphaned — reproduced 2026-08-18. Taking the caret on open is what gives the click-away
+            something to fire on, and it is also what the user expects after pressing Rename.
+          -->
+          <ws-input
+            [autofocus]="true"
+            [ngModel]="renameDraft()"
+            (valueChange)="renameDraft.set($event)"
+            (keydown.enter)="commitRename()"
+            (keydown.escape)="cancelRename()"
+            (focusout)="cancelRename()"
+            placeholder="ASSISTANT.RENAME_PLACEHOLDER"
+            data-testid="assistant-rename-input"
+          />
+        </div>
+      } @else {
+        <!--
+          ★ A ROW, NOT A BUTTON. It used to BE the button, which forced the rename and delete controls
+          to be `<span role="button">` — a button inside a button is invalid HTML that browsers silently
+          un-nest, and it is why the pencil ended up loose under the title instead of beside it. The row
+          is a plain element now: the title is the button, and the menu is its sibling.
+        -->
+        <div
+          class="assistant-clist__row"
+          [class.assistant-clist__row--active]="item.id === store.conversation()?.id"
+          data-testid="assistant-history-item"
+        >
+          <button
+            type="button"
+            class="assistant-clist__open"
+            (click)="select.emit(item.id)"
+            [title]="isUntitled(item.title) ? ('ASSISTANT.UNTITLED' | translate) : item.title"
+          >
+            <!--
+              ★ THE TITLE, AND NOTHING ELSE. The row used to carry the message count and a timestamp
+              under it as well; with the list now cut into time bands, the date is said once per band
+              instead of once per row, and the count was never something anyone chose a conversation by.
+            -->
+            <span class="assistant-clist__item-title">
+              @if (isUntitled(item.title)) {
+                {{ 'ASSISTANT.UNTITLED' | translate }}
+              } @else {
+                {{ item.title }}
+              }
+            </span>
+          </button>
+
+          <!--
+            ★ HIDDEN UNTIL THE ROW IS POINTED AT. Two permanent icons on every row turned the list into
+            a grid of controls where the titles were supposed to be. They are still reachable without a
+            mouse: the trigger is a real button, so it appears on keyboard focus too.
+          -->
+          <ws-popover class="assistant-clist__menu" placement="bottom-end">
+            <button
+              slot="trigger"
+              type="button"
+              class="assistant-clist__menu-trigger"
+              [attr.aria-label]="'ASSISTANT.CONVERSATION_ACTIONS' | translate"
+              data-testid="assistant-item-menu"
+            >
+              <app-icon name="more-vertical" [size]="14" />
+            </button>
+
+            <button
+              type="button"
+              class="assistant-clist__menu-item"
+              (click)="startRename(item.id, item.title, $event)"
+              data-testid="assistant-rename-start"
+            >
+              <app-icon name="edit" [size]="14" />
+              {{ 'ASSISTANT.RENAME' | translate }}
+            </button>
+
+            <button
+              type="button"
+              class="assistant-clist__menu-item assistant-clist__menu-item--danger"
+              (click)="askDelete(item.id, $event)"
+              data-testid="assistant-item-delete"
+            >
+              <app-icon name="trash" [size]="14" />
+              {{ 'ASSISTANT.DELETE' | translate }}
+            </button>
+          </ws-popover>
+        </div>
+      }
+    }
+  }
+}
+
+<ws-confirmation-modal
+  [isOpen]="pendingDeleteId() !== null"
+  [title]="'ASSISTANT.DELETE_TITLE' | translate"
+  [message]="'ASSISTANT.DELETE_MESSAGE' | translate"
+  [confirmLabel]="'ASSISTANT.DELETE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  (confirmed)="confirmDelete()"
+  (cancelled)="cancelDelete()"
+/>

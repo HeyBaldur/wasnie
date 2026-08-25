@@ -2075,6 +2075,20 @@
     "RETRY": "Try again",
     "DELETE": "Delete",
     "DELETE_TITLE": "Delete this conversation?",
-    "DELETE_MESSAGE": "The conversation and all of its messages will be permanently deleted."
+    "DELETE_MESSAGE": "The conversation and all of its messages will be permanently deleted.",
+    "EXPAND": "Expand conversation",
+    "RENAME": "Rename",
+    "RENAME_PLACEHOLDER": "Conversation name",
+    "NOT_FOUND_TITLE": "Conversation not found",
+    "NOT_FOUND_DESC": "It may have been deleted, or the link may belong to someone else.",
+    "LOCKED_PAGE_DESC": "The assistant is not included in your current plan.",
+    "SEARCH_PLACEHOLDER": "Search conversations",
+    "NO_MATCHES": "No conversations match your search.",
+    "CONVERSATION_ACTIONS": "Conversation actions",
+    "GROUP_TODAY": "Today",
+    "GROUP_YESTERDAY": "Yesterday",
+    "GROUP_LAST_7": "Previous 7 days",
+    "GROUP_OLDER": "Older",
+    "JUMP_TO_LATEST": "Jump to the latest message"
   }
 }

@@ -7,7 +7,9 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { NEVER, of, throwError } from 'rxjs';
 import { AssistantStore } from './state/assistant.store';
 import { AssistantApiService } from './services/assistant.api.service';
+import { By } from '@angular/platform-browser';
 import { AssistantPanelComponent } from './panel/assistant-panel.component';
+import { AssistantConversationComponent } from './conversation/assistant-conversation.component';
 import { AssistantTriggerComponent } from './trigger/assistant-trigger.component';
 import {
   ASSISTANT_NOT_CONNECTED,
@@ -575,8 +577,17 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
   // with the right behaviour — and that it does so AFTER the render, not during the effect (which is
   // the mistake that makes a scroll-to-bottom "work sometimes").
 
+  // The scroll now belongs to the CONVERSATION component, which the panel renders as a child — the
+  // drawer is chrome around it. The suite still drives the panel, because that is what a user opens,
+  // so the spy has to reach through to the child that actually owns the behaviour.
+  // The scroll now belongs to the CONVERSATION component, which the panel renders as a child — the
+  // drawer is chrome around it. The suite still drives the panel, because that is what a user opens.
+  //
+  // ★ THE PROTOTYPE, NOT AN INSTANCE. The panel renders nothing until it is open, so at the moment
+  // these tests install the spy there is no child to install it on; spying on the class covers the
+  // instance that is created a few lines later, which is the one that does the scrolling.
   function scrollSpy() {
-    return spyOn(fixture.componentInstance, 'scrollToBottom');
+    return spyOn(AssistantConversationComponent.prototype, 'scrollToBottom');
   }
 
   /** afterNextRender hooks run on the application tick, not on a bare detectChanges(). */
@@ -888,9 +899,13 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
       .toContain('¿Cómo creo un plan?');
   });
 
-  it('keeps title, meta and delete in every history row after the compacting', () => {
-    // The row was compacted (padding/gap) so more threads fit on screen. Spacing is Rodolfo's call, but
-    // the three parts of the row are not — this is what catches a "compact" that dropped one of them.
+  // ★ THE ROW'S CONTRACT CHANGED, AND THIS TEST CHANGED WITH IT — deliberately, not because it was in
+  // the way. It used to assert title + meta + a permanent delete icon. The rail redesign says a row
+  // shows ONE thing at rest, its title, and keeps rename and delete behind a menu that appears on
+  // hover: two permanent icons per row turned the list into a grid of controls where the titles were
+  // meant to be, and a loose pencil under each title was the visible symptom. What still has to hold
+  // is that no row loses its title and no row loses its way to those actions.
+  it('every row shows its title, with the actions behind a menu rather than loose icons', () => {
     store.isOpen.set(true);
     store.historyOpen.set(true);
     store.conversations.set([
@@ -903,13 +918,28 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     expect(rows.length).toBe(2);
 
     for (const row of rows) {
-      expect(row.querySelector('.assistant-history__item-title')).toBeTruthy();
-      expect(row.querySelector('.assistant-history__item-meta')).toBeTruthy();
-      expect(row.querySelector('.assistant-history__item-delete')).toBeTruthy();
+      expect(row.querySelector('.assistant-clist__item-title')).toBeTruthy();
+      expect(row.querySelector('[data-testid="assistant-item-menu"]')).toBeTruthy();
     }
 
-    expect(rows[0].querySelector('.assistant-history__item-title').textContent).toContain('Primera');
-    expect(rows[0].querySelector('.assistant-history__item-meta').textContent).toContain('4');
+    expect(rows[0].querySelector('.assistant-clist__item-title').textContent).toContain('Primera');
+  });
+
+  // The pencil that started this: it must not be sitting in the row any more.
+  it('★ no rename or delete control sits loose in the row', () => {
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversations.set([
+      { id: 'c1', title: 'Primera', createdAt: '', updatedAt: '2026-08-03T10:00:00Z', messageCount: 4 },
+    ]);
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="assistant-history-item"]');
+
+    expect(row.querySelector('[data-testid="assistant-rename-start"]'))
+      .withContext('rename belongs in the menu, not in the row').toBeNull();
+    expect(row.querySelector('[data-testid="assistant-item-delete"]'))
+      .withContext('delete belongs in the menu, not in the row').toBeNull();
   });
 
   it('identifies a placeholder reply only for the assistant role', () => {
@@ -1704,14 +1734,14 @@ const ASSISTANT_BUNDLES: Record<string, Record<string, string>> = {
  * reply with a placeholder". True in piece 1; a lie since the model was connected. Copy that describes
  * a previous version of the product is worse than no copy — the reader believes it and stops asking.
  */
-describe('AssistantPanelComponent — the welcome', () => {
-  let fixture: ComponentFixture<AssistantPanelComponent>;
+describe('AssistantConversationComponent — the welcome', () => {
+  let fixture: ComponentFixture<AssistantConversationComponent>;
   let store: AssistantStore;
   let translate: TranslateService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      imports: [AssistantConversationComponent, TranslateModule.forRoot()],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -1720,7 +1750,7 @@ describe('AssistantPanelComponent — the welcome', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AssistantPanelComponent);
+    fixture = TestBed.createComponent(AssistantConversationComponent);
     store = TestBed.inject(AssistantStore);
     translate = TestBed.inject(TranslateService);
   });
@@ -2245,9 +2275,9 @@ describe('AssistantPanelComponent — the closing animation', () => {
  * starts, it must be cancelled when the answer arrives, and it must not outlive the panel. Each of
  * those failing looks like "the assistant says it is still working after it answered".
  */
-describe('AssistantPanelComponent — the waiting message', () => {
-  let fixture: ComponentFixture<AssistantPanelComponent>;
-  let component: AssistantPanelComponent;
+describe('AssistantConversationComponent — the waiting message', () => {
+  let fixture: ComponentFixture<AssistantConversationComponent>;
+  let component: AssistantConversationComponent;
   let store: AssistantStore;
 
   /** Comfortably past the threshold; the exact value lives in the component, not here. */
@@ -2255,7 +2285,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      imports: [AssistantConversationComponent, TranslateModule.forRoot()],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -2264,7 +2294,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AssistantPanelComponent);
+    fixture = TestBed.createComponent(AssistantConversationComponent);
     component = fixture.componentInstance;
     store = TestBed.inject(AssistantStore);
     store.isOpen.set(true);

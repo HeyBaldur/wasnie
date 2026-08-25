@@ -4,6 +4,313 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-18 — El asistente sigue lo que escribe: auto-scroll durante el stream + botón redondo con fade
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** fix funcional de scroll + pulido del botón · **Sin commit**
+
+Los puntos 1 (caja con margen y borde suave) y 2 (rename huérfano) ya estaban resueltos en las dos entradas
+anteriores de hoy. Esta cubre el 3 —el importante— y el 4.
+
+### ★ Por qué la vista no seguía a la AI: el effect miraba la señal equivocada
+
+El effect de scroll dependía de `store.messages().length`. Y **`messages()` no cambia durante el stream**: la
+fila del asistente se agrega recién cuando la respuesta TERMINA y se persiste. Así que durante toda la
+escritura el effect no volvía a correr ni una vez — el texto crecía debajo del pliegue y el usuario tenía que
+perseguirlo a mano, o no lo veía nunca. Lo que sí cambia token a token es `streamingReply`, y era justo la
+señal que no se leía.
+
+**★ Y sigue instantáneo, nunca suave.** Un scroll `smooth` es una animación con duración, y el token
+siguiente llega antes de que termine: las animaciones se encolan y se pelean, y el texto termina dando
+tirones detrás del cursor en vez de seguirlo. `auto` por fragmento es lo que se lee como "la vista está
+siguiendo la escritura". Al abrir una conversación también es instantáneo; el `smooth` queda sólo para un
+turno que aterriza completo mientras mirás.
+
+**Las dos mitades de la regla, y ambas importan.** Sigue mientras el lector está pegado al fondo; **suelta en
+el momento en que sube a leer algo** y no lo arrastra de vuelta. Secuestrar la vista es peor que no seguir.
+Vuelve a engancharse solo cuando el lector regresa al fondo, a mano o con el botón. El umbral es el MISMO
+`NEAR_BOTTOM_PX` que usa el botón: dos umbrales distintos se contradirían de forma intermitente.
+
+### ★ Los tests se verificaron contra el bug, no sólo contra el código
+
+Después de equivocarme dos veces esta semana con el rename, no alcanzaba con que los tests pasaran: **quité el
+fix y comprobé que se pusieran rojos**. La primera pasada dio sólo 3 de 5 en rojo — dos pasaban igual, porque
+el scroll de MONTAJE (abrir una conversación salta al último mensaje, legítimamente) satisfacía el guard
+"scrolleó al menos una vez". Se limpia ese ruido en el `beforeEach`, y ahora **los 5 caen sin el fix y pasan
+con él**. Un test que no falla ante el bug que dice cubrir no cubre nada.
+
+### El botón, ahora profesional
+Redondo, `--color-brand` con la flecha en `--color-brand-contrast`, sombra `--shadow-md`, **centrado sobre el
+composer** en vez de estacionado en una esquina — pertenece a la columna de la conversación, y el ojo ya viene
+bajando por el medio. Es un `<button>` con estilos locales: el design system no tiene una acción flotante
+redonda y agregarla es una decisión aparte (DESIGN_SYSTEM §10.3); mismo criterio que el propio drawer y el
+menú de las filas.
+
+**★ El fade se desvanece hacia el fondo DEL HOST, no hacia un color fijo.** El panel del chat de la página es
+`--color-bg-surface` y el del drawer es `--color-bg-surface-raised`; un stop hardcodeado sería una banda gris
+visible en aquel de los dos para el que no se escribió — y uno negro estaría mal en los tres temas. El
+componente consume `--assistant-fade` y el drawer declara el suyo.
+
+**Tests:** +5 del auto-scroll (sigue cada fragmento, instantáneo y no animado, suelta al subir, re-engancha al
+volver, y el margen de "casi al fondo"). Front 968→973. Build de producción limpio.
+
+**Archivos:** `conversation` (ts/html/scss), `panel/assistant-panel.component.scss`, `assistant-page.spec.ts`,
+docs.
+
+## 2026-08-18 — El rename huérfano, de verdad esta vez: el input nunca recibía el foco
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** fix del bug reportado dos veces · **Sin commit**
+
+**Tenía razón Rodolfo: el fix anterior no alcanzaba.** Antes de tocar nada volví a reproducirlo en un harness,
+y el log dio tres datos:
+
+- **A** — el input de renombrar **abre sin foco** (`document.activeElement` = BODY).
+- **B** — `focusout` **sí funciona**: cuando hay foco y se pierde, cancela bien. El fix anterior era correcto.
+- **C** — el flujo real: nunca hubo foco → clic afuera → la caja **queda abierta**.
+
+**★ La causa: una caja que nunca tuvo el foco no puede PERDERLO.** Cambiar `blur` por `focusout` arregló el
+binding (ese sí burbujea), pero el evento no tenía cómo dispararse porque nadie enfocaba nunca el campo. El
+primer arreglo era necesario y no suficiente — y la lección es que arreglé el mecanismo sin comprobar que
+llegara a activarse.
+
+### Dos capas, porque una ya me falló acá
+
+**1. `[autofocus]` en el input.** Se agregó la capacidad a `ws-input` (`autofocus` + `focus()`), siguiendo el
+precedente de `WsTextarea.fill()`, que ya enfoca su elemento interno. Toma el cursor y **selecciona** lo que
+hay: un editor inline se abre para REEMPLAZAR un nombre mucho más seguido que para agregarle algo. Además es
+lo que uno espera después de apretar "Renombrar". El docstring dice explícitamente que no se use en un campo
+de formulario normal (robar el foco al cargar mueve al lector de pantalla y scrollea la página).
+
+**2. Un listener `document:click` que no depende del foco en absoluto.** Es la convención de la casa (hay ~10
+`@HostListener('document:click')` en el repo). Si algún navegador declina desenfocar en un clic particular,
+esto igual cierra la caja. Después de fallar una vez con un mecanismo que dependía del foco, una sola capa no
+alcanzaba.
+
+**★ Y el clic que ABRE la caja no puede cerrarla:** `startRename` corta la propagación, así que el evento que
+prende el modo rename no llega al listener que lo apaga — el bug clásico de listener-en-document + abrir-con-
+clic. Hay un test que lo fija.
+
+### Dos errores míos que el harness destapó
+- **El guard estaba invertido:** mi sustitución generó `if (!this.renamingId() !== null)`, que es **siempre
+  verdadero** — el handler salía antes de hacer nada. Sin el repro habría reportado "arreglado" con el listener
+  muerto.
+- **El primer test C no modelaba un clic real:** disparaba sobre `document`, que **no tiene `closest()`**.
+  Además de hacer fiel el test (los usuarios clickean ELEMENTOS), el handler quedó con `closest?.()`: un click
+  entregado en un target que no es Element haría throw y dejaría la caja abierta otra vez.
+
+**Tests:** +6 permanentes, escritos desde el repro y no desde la teoría: la caja toma el cursor al abrir, un
+clic real en otro lado la cierra sin guardar, un clic adentro la deja abierta, y el clic de apertura no la
+autocierra — en **los dos** lugares (encabezado y aside). El harness temporal se borró.
+
+Front 962→968. Build de producción limpio.
+
+**Archivos:** `shared/ui/ws-input` (ts/html), `conversation-list` (ts/html), `page` (ts/html),
+`assistant-page.spec.ts`, docs.
+
+## 2026-08-18 — Fixes de `/assistant`: el rename huérfano era `blur` que no burbujea, la caja del chat respira, y hay botón para volver al final
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** 3 fixes puntuales sobre la página · **Sin commit**
+
+### ★ El input de renombrar huérfano NO era un problema de manejo de foco: el handler nunca corría
+
+El markup tenía `(blur)="commitRename()"` sobre `<ws-input>`. Dos cosas se juntan ahí: **`blur` no
+burbujea**, y `ws-input` **no expone un output de blur** — el `(blur)` real vive en el `<input>` interno del
+componente. Así que el binding en el host **nunca se disparaba, ni una vez**. Por eso hacer clic afuera
+cerraba el menú y dejaba la caja de renombrar abierta sin salida más que Enter o Escape.
+
+El arreglo es `focusout`, que es el gemelo que sí burbujea y por lo tanto llega al host. **Y aprovechando
+que ahora sí corre, cambia a CANCELAR en vez de guardar**, que es lo que pidió Rodolfo y además es lo
+correcto: texto a medio tipear que se va solo y queda como nombre de la conversación sería un cambio que
+nadie pidió, en un campo sin deshacer. Enter es el acto deliberado; todo lo demás retrocede.
+
+**★ Y eso volvió load-bearing un detalle de orden que ya estaba escrito.** `commitRename` cierra la caja
+ANTES de guardar. Con `focusout` vivo, confirmar mueve el foco fuera del campo → dispara `focusout` →
+cancela. Si la caja siguiera abierta en ese momento, el cancel caería sobre un rename en vuelo. Cerrar
+primero lo vuelve un no-op. Hay un test que fija exactamente eso.
+
+Estaba en **dos implementaciones separadas** (el encabezado del chat y la lista del aside), no en una pieza
+compartida — se arreglaron las dos con el mismo comportamiento.
+
+### La caja del chat: el redondeo necesitaba contra qué redondearse
+
+Pegada al tope del área de contenido, las esquinas redondeadas de arriba no tenían contra qué curvarse —
+chocaban con el borde del viewport y se leían como una falla de render, no como una forma. Ahora el grid
+aporta el inset (arriba y a la derecha) y las dos cajas llevan el mismo margen abajo, así que se ve
+simétrica. **El borde es `--color-border-subtle`, no el default**: esta caja ya se separa del aside por
+tono, y un borde a peso completo devolvería justo el "dos paneles atornillados" que el rediseño sacó. Está
+para cerrar la forma, no para dividir la pantalla.
+
+### El botón de volver al final
+
+Flota entre el scroller y el composer, en un contenedor de **altura cero** con el botón sacado del flujo:
+aparecer y desaparecer así nunca reacomoda la conversación de abajo, que es lo que haría saltar una
+respuesta larga mientras se la lee. El contenedor no captura el puntero; sólo el botón.
+
+**★ Usa el MISMO margen de "cerca del fondo" que la regla de auto-scroll** (`NEAR_BOTTOM_PX`), no un
+umbral propio. Uno más estricto ofrecería llevar al usuario donde ya está; uno más flojo escondería el
+botón con contenido todavía abajo — y ambas fallas aparecerían de forma intermitente y sólo en algunos
+navegadores. Además `scrollToBottom` marca el estado al **empezar** el salto: un scroll suave reporta su
+posición durante varios frames, así que esperar al evento dejaría el botón arriba toda la animación.
+No es shown-then-disabled: al final no hay nada que ofrecer, así que el control se va.
+
+### Nota de deuda ampliada
+El intermitente de KaTeX **no es un solo test**: se registró como `draws an INLINE formula`, y en una de
+estas corridas cayó en cambio `★ leaves the surrounding markup physically untouched` mientras el primero
+pasaba. Es el cluster el que flapea. Se anotó en Deuda Técnica Urgente junto con la señal práctica: 4 rojos
+en vez de 3 = repetir la corrida antes de culpar al cambio.
+
+**Tests:** +10 (4 del rename que abandona en ambos lugares + el orden commit/cancel, 6 de la condición del
+botón). Front 952→962, verificado en 3 corridas seguidas.
+
+**Archivos:** `conversation` (ts/html/scss), `conversation-list` (ts/html), `page` (ts/html/scss),
+`assistant-page.spec.ts`, `en/es/pl.json`, docs.
+
+## 2026-08-18 — Rediseño de la página del asistente: la columna respira, el lápiz suelto se fue, y el chat deja de medir 1800px
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** rediseño de `/assistant` (SCSS + plantilla) + buscador y agrupación · **Sin commit**
+
+**Qué se hizo.** Los 6 puntos aprobados, sobre la página construida en el WI anterior. El drawer rápido no se
+tocó: todo lo nuevo entra por inputs que están apagados por defecto.
+
+### ★ El lápiz suelto no era un problema de espaciado: era HTML inválido
+
+La fila entera era **un `<button>`**. Eso obligaba a que renombrar y borrar fueran `<span role="button">`
+adentro — y **un botón dentro de otro botón es HTML inválido que los navegadores des-anidan solos**. Ése es el
+motivo real por el que el lápiz terminaba flotando debajo del título en vez de al lado: no lo movió el CSS, lo
+movió el parser. Ahora la fila es un contenedor, **el título es el botón**, y las acciones son sus hermanas
+dentro de un menú "…". El síntoma visual y el markup se arreglaron con el mismo cambio.
+
+### Las acciones se esconden, pero NO con `display: none`
+
+El menú vive en `opacity: 0` y vuelve con `:hover` **y con `:focus-within`**. Con `display:none` habría salido
+del orden de tabulación y quien navega con teclado se quedaba sin renombrar ni borrar. También sigue visible
+mientras su propio panel está abierto: si no, mover el mouse hacia el menú lo escondía justo cuando se iba a
+usar.
+
+### La fecha no se borró: se mudó
+
+Cada fila mostraba título + conteo de mensajes + fecha. Con la lista cortada en bandas temporales, **la fecha
+se dice una vez por banda en vez de una vez por fila**, y el conteo se fue porque nadie elige una conversación
+por cuántos mensajes tiene. La fila queda con una sola línea, truncada, y el título completo en el `title`.
+
+### Agrupación: días de CALENDARIO, no horas transcurridas
+
+`groupKeyFor` compara medianoches, no restas de 24h. Una conversación de las 23:50 tiene que ser "Ayer" a las
+00:10 de hoy aunque hayan pasado veinte minutos — y la de esta mañana sigue siendo "Hoy" a las 23:50 aunque
+falte poco para las 24h. Restar horas habría producido encabezados que el usuario puede desmentir con su propia
+memoria. Además: las fechas son **las del lector** (se parsea el instante UTC y se leen los getters locales), un
+timestamp futuro por desfase de reloj va a "Hoy" y no al fondo, y un timestamp ilegible hunde esa fila sola sin
+tirar la lista abajo.
+
+### Buscar aplana los grupos, a propósito
+
+Las bandas responden "cuándo tuve esa conversación"; el buscador responde "dónde está la de X". Mantener las
+bandas repartiría seis resultados entre cuatro encabezados y escondería la respuesta. **El filtro además ignora
+acentos** (`\p{Diacritic}` + el mapeo a mano de la `ł` polaca, que no lleva marca combinante): los títulos son
+tan seguido en español y polaco como en inglés, y quien tipea "comision" o "zwrot" desde un teclado sin acentos
+tiene que encontrar el hilo — si no, parece borrado. Es client-side porque el store ya tiene la lista entera:
+una vuelta al servidor por tecla devolvería el mismo conjunto, sólo que más tarde.
+
+### El ancho de lectura es un opt-in, no un default
+
+El scroller y la columna de texto son **dos cajas distintas**: la barra de scroll queda pegada al borde del
+panel (como en cualquier chat) y el TEXTO se limita a 76ch centrados. Una sola caja no puede ser las dos —
+limitar el scroller arrastraría la barra al medio de la pantalla. El cap va por input `[wide]` porque **el
+drawer mide 420px: ya ES la medida de lectura**, y darle un tope sería CSS muerto.
+
+### Lo demás
+Columna con `padding` propio y fondo hundido en vez de tarjeta con borde — el borde duro entre columna y chat
+hacía leer dos paneles atornillados en lugar de una pantalla. Fila activa con fondo que **no depende del
+hover** y título a peso completo. Encabezado del chat con el título + menú de esa conversación; **borrar desde
+ahí navega a `/assistant`**, porque quedarse en la URL del hilo recién borrado deja la página pidiendo algo que
+ya no existe y el próximo reload aterriza en "no encontrada" — el usuario borraría algo y recibiría un error
+sobre eso.
+
+**Un test se reescribió a propósito:** afirmaba "título + meta + ícono de borrar en cada fila", que es
+exactamente el diseño que este WI cambia. Se reemplazó por el contrato nuevo (cada fila tiene su título y su
+vía a las acciones) **más uno que vigila el arreglo**: ningún control de renombrar/borrar suelto en la fila.
+
+**Tests:** +28 (22 de bandas y filtrado como funciones puras, 6 del cableado del componente). Front 924→952.
+
+**Archivos:** `conversation-groups.ts` + spec (nuevos), `conversation-list` (ts/html/scss), `conversation`
+(ts/html/scss), `page` (ts/html/scss), `assistant.spec.ts`, `assistant-page.spec.ts`, `en/es/pl.json`, docs.
+
+## 2026-08-18 — El asistente con lugar para leer: /assistant/:conversationId + botón "Expandir" en el drawer
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** extracción de plantilla + ruta nueva + botón · **Sin commit** (lo hace Rodolfo)
+
+**Qué se hizo.** Ahora hay dos vistas del asistente y **una sola conversación**. El drawer queda igual para
+consultas al vuelo; la página nueva `/assistant/:conversationId` la muestra ancha, con la columna de
+conversaciones a la izquierda, dentro del layout de siempre (molde `/manual`).
+
+**★ Fue un refactor de PLANTILLA, no de estado, y eso lo decidió el diagnóstico previo.** El estado ya vivía
+en `assistant.store` (`providedIn:'root'`), así que no se tocó una línea del store: las dos vistas montan los
+mismos componentes y leen el mismo singleton. No hay nada que sincronizar entre ellas porque no hay dos
+conversaciones.
+
+### Lo extraído — dos componentes, no uno
+
+**`<app-assistant-conversation>`** se llevó la parte difícil: lista de mensajes, burbuja de streaming, pasos
+del turno, alertas de fallo y de turno cancelado, welcome + starter prompts, y el composer. Es el markup con
+Markdown + KaTeX + sanitizador + intercepción de links; **dos copias de eso divergen el primer día que alguien
+toca una**.
+
+**`<app-assistant-conversation-list>`** salió además, y no estaba en el pedido explícito. La razón: el drawer
+muestra la lista como un desplegable y la página como una columna fija — son dos **cajas** distintas alrededor
+de las **mismas filas**. Dejarla inline habría duplicado las filas, el borrado y su modal de confirmación, que
+es justo lo que la regla "no duplicar el markup" prohíbe. El componente no fija ancho ni posición: eso lo pone
+cada host.
+
+**★ La lista NO abre la conversación: emite `select`.** Los dos hosts tienen que reaccionar distinto — el
+drawer sólo la carga en el store, mientras que la página **además** tiene que poner el id en la URL. Si el
+componente llamara `openConversation` por su cuenta, le negaría eso a la página en silencio.
+
+### Por qué el id va en la URL
+
+Dentro de la SPA el store bastaría: expandir desde el drawer encuentra el hilo ya cargado. **Lo que necesita el
+id es la recarga**: en un F5 el store se recrea vacío, así que sin `:conversationId` un refresh dejaba al
+usuario en un chat en blanco con su conversación aparentemente perdida. Con el id, la URL sobrevive, se puede
+marcar y se puede pasar.
+
+**★ Y eso obligó a un chequeo que no es obvio.** `openConversation` **deja la conversación anterior en su
+lugar** cuando el request falla. Sin comparar ids después, un link a un hilo ajeno le habría mostrado al lector
+**su propio chat** — y habría parecido que el link funcionó. La página compara `conversation()?.id` contra el
+id pedido y recién ahí decide "no encontrada". Tampoco afirma POR QUÉ falló: el backend responde 404 igual para
+"no es tuya" y para "no existe" (a propósito, para que un id no se pueda sondear), así que la pantalla repite
+esa ambigüedad en vez de inventar una razón.
+
+**La página se suscribe a `paramMap`, no lo lee por snapshot.** Elegir otra conversación en la columna cambia
+sólo el PARÁMETRO de ruta, y Angular reutiliza el componente cuando eso pasa: un snapshot habría cargado el
+primer hilo y no habría reaccionado nunca más — la lista marcando una fila nueva sobre el chat viejo. Misma
+lección que el WI de reactividad de listas, aplicada de entrada esta vez.
+
+### Detalles con decisión
+
+- **El botón "Expandir" no abre una pestaña nueva.** Rutea dentro de la app; una pestaña nueva arrancaría una
+  segunda copia del app y empezaría el hilo de cero, que es lo contrario de lo que el botón promete. Cierra el
+  drawer al salir, para no dejar el slide-over encima de su propia versión a pantalla completa.
+- **Icono `maximize` agregado al registro de iconos.** No había ninguno de expandir. Se descartó `external-link`
+  justamente porque promete pestaña nueva. Es data del `IconComponent` existente, no una primitiva nueva.
+- **Rename inline, con `ws-input`.** Un `prompt()` habría sido más corto y está prohibido por la misma razón que
+  todos los diálogos del navegador. Enter confirma, Escape abandona, y salir del campo también confirma — un
+  clic afuera no es una orden de tirar lo tipeado. **Un hilo sin título arranca con la caja VACÍA**, no con la
+  etiqueta traducida: "Untitled" es un cartel, no un nombre, y confirmarlo lo guardaría como título.
+- **La página resuelve el entitlement ella misma, sin guard nuevo.** Una ruta se alcanza por bookmark o link
+  viejo, así que muestra el empty-state con el enlace a /subscription en vez de un chat vacío. Un guard que
+  redirigiera sobre una señal todavía cargando habría rebotado al usuario de su propio bookmark.
+- **El botón "Assistant" del topbar NO cambió** (sigue abriendo el drawer), como pedía el WI.
+
+### Tests
++17 nuevos en `assistant-page.spec.ts` (qué conversación carga la URL, el chequeo de id que evita mostrar el
+hilo equivocado, que sigue los cambios posteriores del parámetro, que expandir lleva el id y cierra el drawer, y
+el rename/borrado de la lista). Se retocó `assistant.spec.ts`: tres suites cuyo sujeto se mudó ahora apuntan a
+`AssistantConversationComponent`, las clases `.assistant-history__item-*` pasaron a `.assistant-clist__item-*`,
+y el spy de scroll va al **prototipo** — el panel no renderiza nada hasta abrirse, así que cuando esos tests
+instalan el spy todavía no hay instancia hija.
+
+**Archivos:** `conversation/` (nuevo, 3), `conversation-list/` (nuevo, 3), `page/` (nuevo, 3),
+`assistant-page.spec.ts` (nuevo), panel (ts/html/scss recortados), `assistant.spec.ts`, `icon.component.ts`,
+`app.routes.ts`, `en/es/pl.json`, `docs/PROJECT_STATUS.md`, `docs/SESSION_LOG.md`.
+
 ## 2026-08-18 — Reactividad de listas: la cura llega a las 6 pantallas restantes + los 2 detalles (cierre del bug transversal)
 
 **Rama:** AI-CHAT-ASSISTANT · **Tipo:** aplicar el patrón compartido del WI-1 · **Sin commit** (lo hace Rodolfo)

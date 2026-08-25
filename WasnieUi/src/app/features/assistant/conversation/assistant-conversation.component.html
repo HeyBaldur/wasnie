@@ -1,0 +1,396 @@
+<!-- ── Messages ───────────────────────────────────────────────────────── -->
+<!-- #messages is the scroll container the panel drives to the bottom — see the component's effect. -->
+<div #messages class="assistant-conversation__body ws-scroll-thin" (scroll)="onScroll()" data-testid="assistant-messages">
+  <!--
+    ★ THE SCROLLER AND THE COLUMN ARE TWO DIFFERENT BOXES. The scrollbar belongs to the full width of
+    the pane — pinned to its edge, the way every chat does it — while the TEXT is capped at a reading
+    measure and centred. One element cannot be both: capping the scroller would drag the scrollbar into
+    the middle of the page. In the drawer this wrapper has no max-width and is simply a plain block.
+  -->
+  <div class="assistant-conversation__stream">
+  @if (store.messages().length === 0) {
+    <!--
+      The welcome, in three levels: the greeting, what to ask, and the promise about what this
+      cannot do.
+
+      ★ NOTHING HERE OFFERS A CAPABILITY THE ASSISTANT LACKS. The visual references for a screen
+      like this carry "Add attachment" and "Use image"; neither exists here and neither ever will.
+      The style is borrowed; the promises are not. Same rule the composer already lives under, and
+      there is a test for both.
+
+      ★ THE SUGGESTED PROMPTS BELOW ARE NOT AN EXCEPTION TO THAT RULE — they are an application of
+      it. The references carry chips for whatever sounds impressive; these four carry exactly the
+      four questions the four server-side tools can answer, and the mapping is asserted in a test.
+      A chip promising something the engine cannot do would be worse than no chip at all, because
+      the user finds out by clicking it.
+
+      ★ THE READ-ONLY NOTE IS NOT SMALL PRINT. It is the guarantee that makes the assistant safe to
+      hand a finance team, so it carries the weight of a statement rather than the grey of a
+      footnote.
+    -->
+    <div class="assistant-welcome" data-testid="assistant-welcome">
+      <!--
+        The product's own mark, the same asset the sidebar and the sign-in pages use. Decorative
+        here — the greeting beside it already says which product this is — so it carries an empty
+        alt rather than making a screen reader announce "Incentra" twice.
+      -->
+      <img
+        src="wasnie_logo.png"
+        alt=""
+        aria-hidden="true"
+        class="assistant-welcome__logo"
+      />
+
+      <h2 class="assistant-welcome__greeting">{{ 'ASSISTANT.WELCOME_GREETING' | translate }}</h2>
+
+      <p class="assistant-welcome__subtitle">{{ 'ASSISTANT.WELCOME_SUBTITLE' | translate }}</p>
+
+      <p class="assistant-welcome__readonly" data-testid="assistant-welcome-readonly">
+        {{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}
+      </p>
+
+      <!--
+        ★ FOUR EXAMPLES, ONE PER TOOL THE SERVER ACTUALLY REGISTERS. The rule above did not get
+        relaxed to allow these; they were written to satisfy it. See starter-prompts.ts — the tool
+        each one reaches is declared there and a test checks the list against the real four.
+
+        ★ THEY FILL THE COMPOSER, THEY DO NOT SEND IT. Each sentence has a hole in it, and asking
+        about a payee called "[payee name]" would find nobody. The click drops the text in the box
+        with the placeholder selected; the user types the real name over it and sends.
+      -->
+      <div class="assistant-welcome__starters" data-testid="assistant-starters">
+        @for (starter of starters; track starter.promptKey) {
+          <ws-button
+            variant="secondary"
+            size="sm"
+            (click)="useStarter(starter)"
+            [attr.data-testid]="starter.testId"
+          >
+            {{ starter.labelKey | translate }}
+          </ws-button>
+        }
+      </div>
+    </div>
+  } @else {
+    @for (message of store.messages(); track message.id) {
+      <div
+        class="assistant-msg"
+        [class.assistant-msg--user]="message.role === 'User'"
+        [class.assistant-msg--assistant]="message.role === 'Assistant'"
+        [attr.data-role]="message.role"
+      >
+        <!--
+          The assistant's stand-in reply is stored as a language-neutral sentinel, so it is
+          TRANSLATED here rather than printed. Real answers (a later piece) print as they came.
+        -->
+        @if (isPlaceholder(message)) {
+          <span class="assistant-msg__placeholder">{{ 'ASSISTANT.PLACEHOLDER_REPLY' | translate }}</span>
+        } @else if (message.role === 'Assistant') {
+          <!--
+            ★ ONLY the assistant's words go through Markdown. The pipe escapes raw HTML and then
+            runs Angular's sanitiser over the result, so a model reply cannot introduce script.
+          -->
+          <!--
+            ★ The click handler is on the CONTAINER, not on the links: the anchors arrive through
+            [innerHTML] and there is no template to bind them individually. It routes internal
+            links through Angular instead of letting the browser reload the app — see
+            onMarkdownClick.
+          -->
+          <div
+            class="assistant-msg__markdown"
+            wsAssistantMath
+            (click)="onMarkdownClick($event)"
+            [innerHTML]="message.content | assistantMarkdown"
+          ></div>
+        } @else {
+          <!--
+            ★ The USER's message is printed verbatim. Interpreting their asterisks would be wrong
+            twice over: it is not what they typed, and it would make their own input a rendering
+            path — the shape every injection takes.
+          -->
+          <span class="assistant-msg__text">{{ message.content }}</span>
+        }
+
+        <!--
+          ★ WHERE THE ANSWER STOPS, AND WHY IT STOPS THERE. The words above are real — the user
+          watched them arrive and then pressed Stop — but an answer that ends mid-sentence with
+          nothing under it reads as the assistant's finished thought. This says who ended it.
+
+          ★ IT COMES FROM THE STORED ROW, not from anything this session remembers, which is why it
+          is still here for someone who reopens the conversation tomorrow.
+
+          Attenuated on purpose: this is not a failure and there is nothing to act on. The warning
+          card's weight belongs to the turn that went wrong, not to a decision the user made.
+        -->
+        @if (isCancelled(message)) {
+          <p class="assistant-msg__cancelled" data-testid="assistant-cancelled-notice">
+            <app-icon name="ban" [size]="13" />
+            <span class="assistant-msg__cancelled-text">
+              {{ 'ASSISTANT.CANCELLED_NOTICE' | translate }}
+            </span>
+
+            <!--
+              ★ THE SAME BUTTON AND THE SAME FLOW AS THE FAILURE CARD'S — same primitive, same
+              variant and size, same `store.retry()`, same `isRetry` request. The question is
+              already stored, so this re-answers it rather than typing it again; the stopped
+              fragment above is NOT deleted, the fresh answer lands after it.
+
+              ★ ONLY ON THE LAST TURN. Retrying re-answers the last stored question — see the store
+              — so on an older cancelled reply this button would re-answer a different message than
+              the one it sits beside.
+            -->
+            @if (store.retryableCancelled()) {
+              <ws-button
+                variant="secondary"
+                size="sm"
+                [disabled]="store.sending()"
+                (click)="retry()"
+                data-testid="assistant-cancelled-retry"
+              >
+                {{ 'ASSISTANT.RETRY' | translate }}
+              </ws-button>
+            }
+          </p>
+        }
+      </div>
+    }
+  }
+
+  <!--
+    The answer as it arrives, before it is a stored row. It renders in the same bubble shape as a
+    real reply so nothing shifts when the persisted message replaces it.
+  -->
+  @if (store.streamingReply() !== null) {
+    <div class="assistant-msg assistant-msg--assistant" data-testid="assistant-streaming">
+      @if (store.streamingReply()!.length > 0) {
+        <!--
+          Markdown is rendered WHILE it streams, from whatever has arrived. A half-written `**`
+          simply has not become bold yet and shows as the characters themselves; the next fragment
+          re-renders the whole string and it resolves. Nothing has to detect "the end".
+        -->
+        <!-- Same interception while it streams: a link is clickable the moment it renders. -->
+        <div
+          class="assistant-msg__markdown"
+          wsAssistantMath
+          (click)="onMarkdownClick($event)"
+          [innerHTML]="store.streamingReply() | assistantMarkdown"
+        ></div>
+      } @else {
+        <!--
+          ★ THE STEPS ARE THE SERVER'S, NOT A STORYBOARD. Each item exists because the backend
+          reported starting that work, and turns green because it reported finishing it. Nothing is
+          pre-seeded and nothing is timed on a stopwatch — a question the documentation answers
+          shows no database search, because none happened.
+
+          ★ TWO STEPS ARE NOT A CHECKLIST. A short turn (understand, then answer) reports two
+          phases, and a two-line list that appears and vanishes is more movement than information —
+          so below the threshold this degrades to the plain loader, in the same place and the same
+          type. The dots have not been replaced; they are what a simple turn still looks like.
+        -->
+        @if (showSteps()) {
+          <ul class="assistant-steps" role="status" data-testid="assistant-steps">
+            @for (step of store.progressSteps(); track step.phase) {
+              <li
+                class="assistant-steps__item"
+                [class.assistant-steps__item--done]="step.done"
+                [attr.data-phase]="step.phase"
+                [attr.data-state]="step.done ? 'done' : 'running'"
+              >
+                @if (step.done) {
+                  <app-icon name="check" [size]="14" class="assistant-steps__check" />
+                } @else {
+                  <span class="assistant-steps__spinner" aria-hidden="true"></span>
+                }
+                <span class="assistant-steps__label">{{ phaseLabel(step.phase) | translate }}</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <!--
+            ★ THE DOTS STAY; THE WORDS JOIN THEM. Three silent dots cannot tell "working" apart
+            from "hung", and this assistant can genuinely take several seconds.
+
+            ★ AND THE WORDS ARE TRUE AT EVERY MOMENT. No stage is named here: this is the branch for
+            turns that reported no steps at all — an older backend, or the instant before the first
+            one lands — and naming one would be the single place in this feature that asserts
+            something it cannot verify.
+          -->
+          <div class="assistant-msg__waiting" role="status" data-testid="assistant-waiting">
+            <!--
+              The assistant's own face while it thinks — an avatar, in the shape every chat uses for
+              one. It replaces the three dots: the dots said "something is happening", the mark says
+              WHO is doing it, which is the same information plus an identity.
+
+              ★ TWO IMAGES, ONE VISIBLE. The animated mark is a GIF, and a GIF cannot be paused from
+              CSS — so a reader who has asked for less motion gets the STILL assistant mark in the
+              same circle, swapped in stylesheet-side. Both are square and already served from the
+              app root, so neither crops badly and neither is a new asset.
+            -->
+            <span class="assistant-msg__avatar" aria-hidden="true">
+              <img class="assistant-msg__avatar-motion" src="/brain.gif" alt="" />
+              <img class="assistant-msg__avatar-still" src="wasnie_logo.png" alt="" />
+            </span>
+            <span class="assistant-msg__waiting-text">{{ 'ASSISTANT.PROCESSING' | translate }}</span>
+          </div>
+        }
+
+        @if (waitingLong()) {
+          <p class="assistant-msg__waiting-long" data-testid="assistant-waiting-long">
+            {{ 'ASSISTANT.PROCESSING_LONG' | translate }}
+          </p>
+        }
+      }
+    </div>
+  }
+
+  <!--
+    A translation KEY from the server, rendered here — the model vendor's own error text never
+    reaches this screen. Nothing was persisted for the assistant, so the question above stands
+    alone and the user can simply try again.
+  -->
+  <!--
+    ★ THE FAILED TURN, AND THE WAY OUT OF IT.
+
+    Driven by `retryable()`, which the SERVER decides: a thread ending on a question with no reply
+    is a question that failed. So this alert is still here after a refresh — the state it renders
+    was never in this browser.
+
+    NO DISMISS BUTTON, deliberately. Dismissing would throw away the only route back to an answer
+    and leave a question sitting in the thread with nothing under it and no way to act on it — the
+    exact state this WI exists to remove, reached by the user's own click. It goes away when it is
+    resolved: retry successfully, or ask something new.
+  -->
+  @if (store.retryable(); as failed) {
+    <div class="assistant-alert" role="alert" data-testid="assistant-failed-alert">
+      <app-icon name="alert-triangle" [size]="16" class="assistant-alert__icon" />
+
+      <div class="assistant-alert__body">
+        <p class="assistant-alert__title">{{ 'ASSISTANT.FAILED_TITLE' | translate }}</p>
+        <!--
+          The specific reason when this session watched it happen; the general one after a reload,
+          because the reason was never stored and claiming a specific one would be inventing it.
+        -->
+        <p class="assistant-alert__text" data-testid="assistant-error">
+          {{ (store.errorKey() ?? 'ASSISTANT.FAILED_DESC') | translate }}
+        </p>
+
+        <ws-button
+          variant="secondary"
+          size="sm"
+          [disabled]="store.sending()"
+          (click)="retry()"
+          data-testid="assistant-retry"
+        >
+          {{ 'ASSISTANT.RETRY' | translate }}
+        </ws-button>
+      </div>
+    </div>
+  }
+
+  @if (store.error()) {
+    <p class="assistant-conversation__error">{{ 'ASSISTANT.ERROR' | translate }}</p>
+  }
+  </div>
+</div>
+
+<!--
+  ★ JUMP TO THE NEWEST MESSAGE — and it only exists while there is somewhere to jump to. It is the other
+  half of the auto-scroll: the view follows the answer while you are at the bottom, and the moment you
+  scroll up to read something the following STOPS rather than dragging you back down. This is how you
+  get back when you are done.
+
+  ★ NOT SHOWN-THEN-DISABLED. At the bottom there is nothing to offer, so the control leaves rather than
+  sitting there greyed out promising a thing it cannot do — the same rule the Stop button follows.
+
+  A plain button, not ws-button: the design system has no round floating action, and adding one is a
+  separate decision (DESIGN_SYSTEM §10.3). Built locally from house tokens, exactly like the drawer
+  itself and the row menu beside it.
+-->
+@if (!atBottom()) {
+  <div class="assistant-conversation__jump">
+    <button
+      type="button"
+      class="assistant-conversation__jump-btn"
+      (click)="jumpToLatest()"
+      [title]="'ASSISTANT.JUMP_TO_LATEST' | translate"
+      [attr.aria-label]="'ASSISTANT.JUMP_TO_LATEST' | translate"
+      data-testid="assistant-jump-latest"
+    >
+      <app-icon name="arrow-down-to-line" [size]="16" />
+    </button>
+  </div>
+}
+
+<!-- ── Composer ───────────────────────────────────────────────────────── -->
+<!--
+  ★ WHAT IS DELIBERATELY ABSENT: no Search, no Deep Research, no Reason, no file upload, no
+  microphone. The visual reference carries them; this assistant does none of them, and several it
+  never will. A control that does nothing is a promise the engine cannot keep. The composer holds
+  exactly three things: the textarea, send, and the disclaimer.
+-->
+<footer class="assistant-conversation__composer">
+  <div class="assistant-composer" data-testid="assistant-composer-card">
+    <!--
+      Multi-line via the WsTextarea primitive: Enter sends, Shift+Enter breaks the line, the box
+      grows with the paragraph until it scrolls. The primitive is REUSED untouched — its own border
+      is neutralised from here so the card reads as one piece instead of a box inside a box.
+    -->
+    <ws-textarea
+      [placeholder]="'ASSISTANT.COMPOSER_PLACEHOLDER' | translate"
+      [ngModel]="draft()"
+      (valueChange)="onDraftChange($event)"
+      (submitted)="send()"
+      [submitOnEnter]="true"
+      [maxlength]="8000"
+      data-testid="assistant-composer"
+    />
+
+    <div class="assistant-composer__actions">
+      <!--
+        ★ STOP IS ITS OWN BUTTON, BESIDE SEND — send is not transformed into it. A control that
+        changes what it does under the cursor is a control you can press by accident: the user
+        aiming at Send for their next question would stop the answer instead, and the two actions
+        are opposites. Two buttons, each meaning one thing.
+
+        ★ AND IT ONLY EXISTS WHILE THERE IS SOMETHING TO STOP. Not shown-then-disabled: a disabled
+        button is a promise about a moment that has not arrived. It appears when the answer starts
+        and leaves when the answer does.
+      -->
+      @if (store.sending()) {
+        <ws-button
+          variant="secondary"
+          size="sm"
+          [iconOnly]="true"
+          (click)="cancel()"
+          [title]="'ASSISTANT.CANCEL' | translate"
+          [attr.aria-label]="'ASSISTANT.CANCEL' | translate"
+          data-testid="assistant-cancel"
+        >
+          <app-icon name="square" [size]="13" />
+        </ws-button>
+      }
+
+      <ws-button
+        variant="primary"
+        size="sm"
+        [iconOnly]="true"
+        [disabled]="!canSend()"
+        [loading]="store.sending()"
+        (click)="send()"
+        [title]="'ASSISTANT.SEND' | translate"
+        [attr.aria-label]="'ASSISTANT.SEND' | translate"
+        data-testid="assistant-send"
+      >
+        <app-icon name="arrow-up" [size]="15" />
+      </ws-button>
+    </div>
+
+    <!--
+      Always rendered — not collapsible, not first-run-only. It is a permanent guard rail: the
+      assistant reads and explains, it does not compute pay or change data, and it can be wrong.
+    -->
+    <p class="assistant-composer__disclaimer" data-testid="assistant-disclaimer">
+      {{ 'ASSISTANT.DISCLAIMER' | translate }}
+    </p>
+  </div>
+</footer>

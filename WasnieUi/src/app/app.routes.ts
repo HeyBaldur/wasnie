@@ -164,6 +164,27 @@ export const routes: Routes = [
       import('./features/manual/manual.component').then((m) => m.ManualComponent),
   },
   {
+    // The assistant with room to read. Same guard pair as /manual: a valid session and an active
+    // subscription are the gate, and the ENTITLEMENT (the assistant is not part of every plan) is
+    // answered by the page itself — there is no assistant guard, and a route that redirected on a
+    // signal still loading would bounce the user off their own bookmark.
+    //
+    // Two paths, one component: the bare route shows the welcome, and :conversationId is what lets a
+    // refresh come back to the same thread instead of an empty chat.
+    path: 'assistant',
+    title: 'ASSISTANT.TITLE',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/assistant/page/assistant-page.component').then((m) => m.AssistantPageComponent),
+  },
+  {
+    path: 'assistant/:conversationId',
+    title: 'ASSISTANT.TITLE',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/assistant/page/assistant-page.component').then((m) => m.AssistantPageComponent),
+  },
+  {
     path: 'forbidden',
     title: 'ERRORS.FORBIDDEN_TITLE',
     canActivate: [planGuard, subscriptionGuard],

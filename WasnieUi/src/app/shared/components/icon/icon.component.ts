@@ -62,6 +62,11 @@ const ICONS: Record<string, string> = {
   'chevron-up': '<path d="M6 15l6 -6l6 6"/>',
   'arrow-up': '<path d="M12 5l0 14"/><path d="M18 11l-6 -6"/><path d="M6 11l6 -6"/>',
   'circle': '<path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/>',
+  // Four corners pushing outward: "show this bigger, here" — used by the assistant drawer's Expand
+  // control. Deliberately NOT `external-link`, which promises a new browser tab; expanding routes
+  // inside the app and keeps the same live conversation.
+  'maximize':
+    '<path d="M4 9V5a1 1 0 0 1 1 -1h4"/><path d="M20 9V5a1 1 0 0 0 -1 -1h-4"/><path d="M4 15v4a1 1 0 0 0 1 1h4"/><path d="M20 15v4a1 1 0 0 1 -1 1h-4"/>',
   'square':
     '<path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/>',
   'check-square':

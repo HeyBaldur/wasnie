@@ -2075,6 +2075,20 @@
     "RETRY": "Reintentar",
     "DELETE": "Eliminar",
     "DELETE_TITLE": "¿Eliminar esta conversación?",
-    "DELETE_MESSAGE": "La conversación y todos sus mensajes se eliminarán de forma permanente."
+    "DELETE_MESSAGE": "La conversación y todos sus mensajes se eliminarán de forma permanente.",
+    "EXPAND": "Expandir conversación",
+    "RENAME": "Renombrar",
+    "RENAME_PLACEHOLDER": "Nombre de la conversación",
+    "NOT_FOUND_TITLE": "Conversación no encontrada",
+    "NOT_FOUND_DESC": "Puede que se haya eliminado, o que el enlace sea de otra persona.",
+    "LOCKED_PAGE_DESC": "El asistente no está incluido en tu plan actual.",
+    "SEARCH_PLACEHOLDER": "Buscar conversaciones",
+    "NO_MATCHES": "Ninguna conversación coincide con tu búsqueda.",
+    "CONVERSATION_ACTIONS": "Acciones de la conversación",
+    "GROUP_TODAY": "Hoy",
+    "GROUP_YESTERDAY": "Ayer",
+    "GROUP_LAST_7": "Últimos 7 días",
+    "GROUP_OLDER": "Más antiguas",
+    "JUMP_TO_LATEST": "Ir al último mensaje"
   }
 }

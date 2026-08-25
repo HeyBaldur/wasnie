@@ -1,0 +1,165 @@
+/**
+ * Two columns inside the content area: the conversations rail, then the chat.
+ *
+ * ★ HEIGHT IS THE WHOLE TRICK. The composer has to sit at the BOTTOM of the screen, which means every
+ * box from here down must be told how tall it is — a chat that grows with its content would push the
+ * composer below the fold and scroll the whole page instead of the message list. So this fills the
+ * content area and hands `min-height: 0` down the chain, the same rule that keeps the drawer's
+ * composer visible.
+ */
+.assistant-page {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--space-4);
+  // The shell's content area already carries its own padding, so this takes the viewport minus the
+  // chrome above it rather than 100%: 100% of an auto-height parent is not a height at all.
+  //
+  // The chat box now keeps its own inset (see below), so the grid gives that back here — otherwise the
+  // two margins would stack and the panes would end up shorter than the space they have.
+  height: calc(100vh - var(--space-20));
+  min-height: 0;
+  padding: var(--space-3) var(--space-3) 0 0;
+}
+
+/**
+ * ★ NO CARD, NO HARD DIVIDER. The rail used to be a bordered box beside another bordered box, which
+ * read as two panels bolted together rather than one screen. The reference products do the opposite:
+ * the rail is quieter than the chat and the boundary is a change of tone, not a line.
+ */
+.assistant-page__rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  background: var(--color-bg-surface-sunken);
+  border-radius: var(--radius-lg);
+  // The inset is the whole "it breathes" fix: rows now sit inside the rail instead of touching it.
+  padding: var(--space-3);
+  // Bottom only: the grid's padding already supplies the top, and both panes must share one baseline.
+  margin-bottom: var(--space-3);
+}
+
+.assistant-page__rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-1) var(--space-3);
+  flex-shrink: 0;
+}
+
+.assistant-page__rail-search {
+  flex-shrink: 0;
+  padding-bottom: var(--space-3);
+}
+
+.assistant-page__rail-title {
+  margin: 0;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.assistant-page__rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  // No padding of its own: the rail supplies the inset, and a second one here would push the rows off
+  // centre and shrink the already-narrow titles.
+}
+
+/**
+ * ★ IT NEEDS ROOM AROUND IT FOR THE ROUNDING TO READ AS ROUNDING. Flush against the top of the content
+ * area, the rounded top corners had nothing to be rounded AGAINST — the curve met the edge of the
+ * viewport and looked like a rendering fault rather than a shape. The inset comes from the grid's own
+ * padding (above), so the box is not fighting its neighbour for it.
+ *
+ * The border is a hairline in the SUBTLE token, not the default one: this box already separates itself
+ * from the rail by tone, and a full-strength border would put back exactly the "two panels bolted
+ * together" look the redesign took out. It is here to close the shape, not to divide the screen.
+ */
+.assistant-page__chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  // Matches the grid's top padding, so the box sits with equal air above and below rather than hanging
+  // from the top of the screen.
+  margin-bottom: var(--space-3);
+}
+
+// ── The active conversation's header ────────────────────────────────────────
+//
+// A thin strip, not a page header: it names the thread and holds its actions. The rule under it is the
+// one line this screen keeps, because the messages scroll UNDER it and without it the first turn slides
+// into the title.
+.assistant-page__chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.assistant-page__chat-title {
+  margin: 0;
+  min-width: 0;
+
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-page__chat-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: var(--space-2);
+}
+
+.assistant-page__menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+  }
+
+  &--danger {
+    color: var(--color-danger);
+  }
+}
+
+// The rail becomes a short strip above the chat rather than a squeezed column: below this width a
+// 280px rail leaves the answers — the reason someone came to the wide view — narrower than the drawer
+// they left.
+@media (max-width: 900px) {
+  .assistant-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .assistant-page__rail-list {
+    max-height: 180px;
+  }
+}

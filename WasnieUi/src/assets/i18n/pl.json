@@ -2075,6 +2075,20 @@
     "RETRY": "Spróbuj ponownie",
     "DELETE": "Usuń",
     "DELETE_TITLE": "Usunąć tę rozmowę?",
-    "DELETE_MESSAGE": "Rozmowa i wszystkie jej wiadomości zostaną trwale usunięte."
+    "DELETE_MESSAGE": "Rozmowa i wszystkie jej wiadomości zostaną trwale usunięte.",
+    "EXPAND": "Rozwiń rozmowę",
+    "RENAME": "Zmień nazwę",
+    "RENAME_PLACEHOLDER": "Nazwa rozmowy",
+    "NOT_FOUND_TITLE": "Nie znaleziono rozmowy",
+    "NOT_FOUND_DESC": "Mogła zostać usunięta lub link należy do kogoś innego.",
+    "LOCKED_PAGE_DESC": "Asystent nie jest częścią Twojego obecnego planu.",
+    "SEARCH_PLACEHOLDER": "Szukaj rozmów",
+    "NO_MATCHES": "Żadna rozmowa nie pasuje do wyszukiwania.",
+    "CONVERSATION_ACTIONS": "Akcje rozmowy",
+    "GROUP_TODAY": "Dzisiaj",
+    "GROUP_YESTERDAY": "Wczoraj",
+    "GROUP_LAST_7": "Ostatnie 7 dni",
+    "GROUP_OLDER": "Starsze",
+    "JUMP_TO_LATEST": "Przejdź do najnowszej wiadomości"
   }
 }

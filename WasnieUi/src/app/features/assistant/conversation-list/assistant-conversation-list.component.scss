@@ -1,0 +1,165 @@
+/**
+ * The conversation list: rows, time bands, rename, delete.
+ *
+ * ★ SHAPE-FREE ON PURPOSE. These rules are shared by the drawer's dropdown and the full page's left
+ * column. Nothing here sets a width, a position or a page background — the host box does, because that
+ * box is the only real difference between the two.
+ */
+:host {
+  display: block;
+}
+
+.assistant-clist__empty {
+  padding: var(--space-4) var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+// ── Time bands ──────────────────────────────────────────────────────────────
+//
+// The heading is small, quiet and sticky-free: it labels the rows under it and must never compete with
+// them for attention. The date left the rows to live here, once per band instead of once per row.
+.assistant-clist__band {
+  margin: var(--space-4) 0 var(--space-1);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+
+  // The first band sits right under the search box; the extra top margin would read as a gap.
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+// ── Rows ────────────────────────────────────────────────────────────────────
+//
+// ★ THE ROW IS A CONTAINER, THE TITLE IS THE BUTTON. It used to be one button holding everything, which
+// forced the rename and delete controls to be `<span role="button">` — a button inside a button is
+// invalid HTML that browsers silently un-nest, and that is what dropped the pencil out of line under
+// the title. Splitting them fixes the markup and the layout at once.
+.assistant-clist__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+
+  border-radius: var(--radius-md);
+  // Rows breathe: the gap between them is the row's own margin, so a hover highlight has room to be a
+  // rounded block rather than a band welded to its neighbours.
+  margin-bottom: 2px;
+
+  transition: background-color 120ms ease;
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+  }
+
+  // ★ THE OPEN CONVERSATION HAS TO BE OBVIOUS. A hover-weight tint was not enough to answer "which one
+  // am I reading?" at a glance, which is the question the rail exists to answer. The active row keeps
+  // its fill whether or not the pointer is anywhere near it, and its title goes to full-strength text.
+  &--active,
+  &--active:hover {
+    background-color: var(--color-bg-surface-sunken);
+  }
+
+  &--active .assistant-clist__item-title {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+}
+
+.assistant-clist__open {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  display: block;
+  text-align: left;
+  padding: var(--space-2);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+// One line, truncated. A wrapped title turns a scannable column into a wall of paragraphs, and the
+// full text is on the row's `title` attribute for anyone who needs it.
+.assistant-clist__item-title {
+  display: block;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// ── The row menu ────────────────────────────────────────────────────────────
+//
+// ★ HIDDEN UNTIL POINTED AT — but not `display: none`, which would take it out of the tab order and
+// strand keyboard users. It is transparent and comes back on hover, on keyboard focus anywhere inside
+// the row, and while its own panel is open (otherwise moving the pointer onto the menu would hide the
+// thing being used).
+.assistant-clist__menu {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.assistant-clist__row:hover .assistant-clist__menu,
+.assistant-clist__row:focus-within .assistant-clist__menu {
+  opacity: 1;
+}
+
+.assistant-clist__menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-1);
+
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--color-bg-surface-raised);
+    color: var(--color-text-primary);
+  }
+}
+
+.assistant-clist__menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+  }
+
+  &--danger {
+    color: var(--color-danger);
+  }
+}
+
+// The inline rename field takes the row's place, so it gets the row's own inset rather than sitting
+// flush against the container edge and shifting the list sideways while it is open.
+.assistant-clist__rename {
+  padding: 2px var(--space-1) var(--space-1);
+}
