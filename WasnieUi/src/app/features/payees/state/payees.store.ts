@@ -5,6 +5,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { PayeesApiService } from '../services/payees.api.service';
 import { Payee, PayeeStatus, CreatePayeeRequest, UpdatePayeeRequest } from '../models/payee.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 
 export interface PayeeListState {
   page: number;
@@ -57,6 +58,11 @@ export class PayeesStore {
   // pagedPayees = all items returned from server (already paged)
   readonly pagedPayees = computed(() => this.payees());
 
+  // Makes the last-REQUESTED load win rather than the last-ARRIVED one. Change the filter while a
+  // fetch is still in flight and two requests race; without this the slower, wider query can land
+  // last and overwrite the narrower one, leaving the list looking unfiltered until a manual reload.
+  private readonly _latest = new LatestRequestGuard();
+
   constructor() {
     effect(() => {
       // Trigger re-load whenever any pagination param changes
@@ -78,6 +84,7 @@ export class PayeesStore {
     status: PayeeStatus | null,
     search: string,
   ): Promise<void> {
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -90,14 +97,17 @@ export class PayeesStore {
         filters: status !== null ? { status: String(status) } : undefined,
       };
       const data = await firstValueFrom(this.api.getPayees(params));
+      if (this._latest.isStale(token)) return;   // superseded by a newer load — discard
       this.pagedResult.set(data);
       if (!search && status === null) {
         this.unfilteredTotal.set(data.totalCount);
       }
     } catch {
+      if (this._latest.isStale(token)) return;   // don't let a stale failure clobber a fresh result
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      // Only the newest request owns the spinner; a stale one finishing must not clear it.
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

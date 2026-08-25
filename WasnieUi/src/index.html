@@ -7,6 +7,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="512x512" href="wasnie_logo.png">
+
+  <!-- POC: Source Serif 4 is the display face for titles (token `--font-display`). `display=swap` so a
+       slow font never blanks a heading, and the token's serif fallback carries the first paint. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400..700&display=swap">
   <script>
     try {
       var m = localStorage.getItem('wasnie.theme');

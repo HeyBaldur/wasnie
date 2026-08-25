@@ -1,6 +1,7 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { ToastService } from '../../../shared/services/toast.service';
@@ -73,6 +74,7 @@ import {
 export class TransactionsListComponent implements OnInit {
   readonly store = inject(TransactionsStore);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly txApi = inject(TransactionsApiService);
   private readonly toast = inject(ToastService);
 
@@ -112,11 +114,16 @@ export class TransactionsListComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    // Restore filter from URL query params on load
-    const qp = this.route.snapshot.queryParams as Record<string, string>;
-    if (Object.keys(qp).length > 0) {
-      this.store.loadFromQueryParams(qp);
-    }
+    // SUBSCRIBE, don't snapshot. Angular reuses this component when a navigation changes only the
+    // query params, so a snapshot read here runs once and then goes stale. The `reset` branch matters
+    // just as much: TransactionsStore is a root singleton that outlives this component, so entering
+    // /transactions from the sidebar with no params used to keep the previous visit's filter applied
+    // under a URL that no longer mentioned it. Loop-safe: _syncUrl writes with history.replaceState,
+    // which the router does not observe, so re-applying cannot re-trigger itself.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      apply: qp => this.store.loadFromQueryParams(qp),
+      reset: () => this.store.clearFilters(),
+    });
   }
 
   onFilterChange(partial: Partial<TransactionFilter>): void {

@@ -781,6 +781,37 @@ describe('Action band payout card routing', () => {
       .withContext(`Expected one of: ${hrefs.join(', ')}`)
       .toBeTrue();
   });
+
+  // ── The card counts all-time; the link has to say so ───────────────────────
+  //
+  // The card's number comes from a query with NO date filter, but Pay Runs applies "this month"
+  // whenever the URL carries no `period`. Without this param the card promised 2 drafts and the list
+  // showed 0, because the real drafts sat in September and October. This is the whole fix: if the
+  // param is ever dropped again, the count and the list silently disagree once more.
+  it('"Draft Pay Runs" link carries period=all-time, so the list matches the all-time count', () => {
+    const allAs = fixture.debugElement.queryAll(By.css('a.stat-card'));
+    const payRuns = allAs
+      .map(a => (a.nativeElement as HTMLAnchorElement).href)
+      .find(h => h.includes('/pay-runs'));
+
+    expect(payRuns).withContext('no /pay-runs card link found').toBeDefined();
+    expect(payRuns).toContain('period=all-time');
+  });
+
+  // ── And the payout cards must NOT copy it ──────────────────────────────────
+  //
+  // Payouts solves the same problem the other way round: it applies its default period ONLY when the
+  // URL has no params at all, so arriving with `?status=…` already yields an all-time list. Adding a
+  // period here would be harmless-looking symmetry that pins a filter the destination never wanted.
+  it('payout cards deliberately send NO period — their screen already skips its default', () => {
+    const allAs = fixture.debugElement.queryAll(By.css('a.stat-card'));
+    const payouts = allAs
+      .map(a => (a.nativeElement as HTMLAnchorElement).href)
+      .filter(h => h.includes('/payouts'));
+
+    expect(payouts.length).withContext('no /payouts card links found').toBeGreaterThan(0);
+    payouts.forEach(h => expect(h).not.toContain('period='));
+  });
 });
 
 // ── Deal-lost alerts (revert only for Calculated; Paid is informational) ──────

@@ -1,5 +1,6 @@
 ﻿import { Component, DestroyRef, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -156,16 +157,48 @@ export class PayeeDetailComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    // Read period from URL; default is this-month
-    const p = this.route.snapshot.queryParamMap.get('period') as PeriodKey | null;
-    if (p === 'last-month' || p === 'ytd' || p === 'all-time') this.period.set(p);
+    // Two subscriptions, two different jobs — and the ORDER matters.
+    //
+    // This one owns the query params (?tab=, ?period=), which a snapshot read in ngOnInit would have
+    // frozen at first mount. It goes FIRST so that `period` is already correct when the initial load
+    // runs below: bound the other way round, arriving at ?period=ytd would fetch this-month, then
+    // immediately refetch — two round trips and a visible flash of the wrong numbers.
+    //
+    // Both handlers act ONLY on a real change, which is what makes this safe next to setPeriod():
+    // that method writes the URL with router.navigate, which the router DOES observe, so its own
+    // navigation echoes back here. Without the equality check the echo would re-run resetAndLoad and
+    // refetch the whole page a second time on every period click.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      apply: qp => this._applyUrlState(qp['tab'] as Tab | undefined),
+      reset: () => this._applyUrlState(undefined),
+    });
 
-    // paramMap emits immediately, so this covers the first render AND every later navigation
-    // between payees. Without it, clicking the manager link would change the URL but leave the
+    // paramMap emits immediately, so this covers the first render AND every later navigation between
+    // payees. Without it, clicking the manager link would change the URL but leave the
     // previously-loaded payee on screen, because Angular reuses the component.
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.initForCurrentPayee());
+  }
+
+  /** False until the first load has been kicked off, so the initial URL read does not double-fetch. */
+  private _loadStarted = false;
+
+  /** Applies ?tab= / ?period= from the URL, doing nothing when they already match what is shown. */
+  private _applyUrlState(requested: Tab | undefined): void {
+    const tabs: Tab[] = ['overview', 'profile', 'activity', 'ledger'];
+    const tab: Tab = requested && tabs.includes(requested) ? requested : 'overview';
+    if (tab !== this.activeTab()) this.activeTab.set(tab);
+
+    const p = this.route.snapshot.queryParamMap.get('period') as PeriodKey | null;
+    const period: PeriodKey =
+      p === 'last-month' || p === 'ytd' || p === 'all-time' ? p : 'this-month';
+    if (period !== this.period()) {
+      this.period.set(period);
+      // Before the first load there is nothing to reset — initForCurrentPayee is about to run and
+      // will fetch with the period just set. Reloading here would only duplicate that request.
+      if (this._loadStarted) this.resetAndLoad();
+    }
   }
 
   /// Mirrors the original init sequence (loadPayee + loadOverview, which loads the list cards in
@@ -182,6 +215,7 @@ export class PayeeDetailComponent implements OnInit {
     this.quotas.set([]); this.quotasPage.set(1); this.quotasTotal.set(0);
     this.credits.set([]); this.creditsPage.set(1); this.creditsTotal.set(0);
 
+    this._loadStarted = true;
     this.store.loadPayee(this.payeeId);
     this.loadOverview();
   }

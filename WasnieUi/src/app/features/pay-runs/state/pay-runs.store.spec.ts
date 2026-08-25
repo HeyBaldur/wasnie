@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { PayRunsStore, EMPTY_PAY_RUN_FILTER, PayRunFilter } from './pay-runs.store';
 import { PayRunsApiService } from '../services/pay-runs.api.service';
 import { PayRunListItem } from '../models/pay-run.model';
@@ -219,5 +219,69 @@ describe('PayRunsStore', () => {
     await store.reload();
 
     expect(store.loading()).toBeFalse();
+  });
+  // ── Stale-response guard (LatestRequestGuard) ─────────────────────────────
+  //
+  // The "I have to press F5" bug, at store level. Change the filter while a fetch is still in flight
+  // and two requests race. Before the guard, whichever the network returned LAST won: when the slow
+  // one was the older, wider query, the list showed every pay run under a Draft filter and stayed
+  // that way until a manual reload. Reproduced deterministically on 2026-08-18 (WI-1 Paso 0.2).
+  // ──────────────────────────────────────────────────────────────────────────
+  describe('stale-response guard', () => {
+    it('discards the older response when it arrives after the newer one', async () => {
+      const wide = new Subject<ReturnType<typeof makePaged>>();
+      const narrow = new Subject<ReturnType<typeof makePaged>>();
+      apiSpy.list.and.returnValues(wide.asObservable(), narrow.asObservable());
+
+      const wideLoad = store.reload();                       // request 1 — unfiltered, slow
+      const narrowLoad = store.reload();                     // request 2 — supersedes it
+
+      narrow.next(makePaged([makeRun('narrow')]));           // newer ARRIVES first
+      narrow.complete();
+      await narrowLoad;
+
+      wide.next(makePaged([makeRun('a'), makeRun('b')]));    // older ARRIVES last
+      wide.complete();
+      await wideLoad;
+
+      expect(store.items().map(r => r.id)).toEqual(['narrow']);
+    });
+
+    it('does not let a stale FAILURE clobber a fresh result', async () => {
+      const failing = new Subject<ReturnType<typeof makePaged>>();
+      const ok = new Subject<ReturnType<typeof makePaged>>();
+      apiSpy.list.and.returnValues(failing.asObservable(), ok.asObservable());
+
+      const failingLoad = store.reload();
+      const okLoad = store.reload();
+
+      ok.next(makePaged([makeRun('fresh')]));
+      ok.complete();
+      await okLoad;
+
+      failing.error(new Error('stale failure'));             // older request fails last
+      await failingLoad;
+
+      expect(store.error()).toBeNull();
+      expect(store.items().map(r => r.id)).toEqual(['fresh']);
+    });
+
+    it('a stale request finishing does not clear the spinner of the live one', async () => {
+      const stale = new Subject<ReturnType<typeof makePaged>>();
+      const live = new Subject<ReturnType<typeof makePaged>>();
+      apiSpy.list.and.returnValues(stale.asObservable(), live.asObservable());
+
+      const staleLoad = store.reload();
+      void store.reload();                                   // live request, still in flight
+
+      stale.next(makePaged([]));                             // stale one finishes first
+      stale.complete();
+      await staleLoad;
+
+      expect(store.loading()).toBeTrue();
+
+      live.next(makePaged([]));
+      live.complete();
+    });
   });
 });

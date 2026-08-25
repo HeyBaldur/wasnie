@@ -24,7 +24,7 @@
     color: var(--color-fg-muted);
     background: var(--color-surface-hover);
     border: 1px solid var(--color-bd-default);
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     padding: 1px 5px;
     pointer-events: none;
     letter-spacing: 0.02em;
@@ -44,7 +44,7 @@
   padding: 0 44px 0 34px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-bd-default);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--color-fg-primary);
   transition: border-color 150ms ease, box-shadow 150ms ease;
 
@@ -104,8 +104,11 @@
   justify-content: center;
   padding: 0 var(--space-4);
   height: 32px;
-  // Matches the tier badge next to it (Tailwind `rounded-lg` = 8px = --radius-md),
-  // so the two topbar pills read as one family instead of pill vs. rectangle.
+  // Matches the tier badge next to it, so the two topbar pills read as one family instead of pill
+  // vs. rectangle. The badge reaches the same 8px through the `rounded-md` utility — which is now
+  // literally this token, since the radius scale moved into `@theme` (see styles.scss). This note
+  // used to have to spell out that Tailwind's `rounded-lg` happened to equal our `--radius-md`;
+  // that coincidence was the bug, and there is nothing left to translate between.
   border-radius: var(--radius-md);
   font-size: var(--font-size-13);
   font-weight: 600;
@@ -129,7 +132,7 @@
 
 
 .topbar__icon-btn {
-  @apply flex items-center justify-center relative cursor-pointer rounded-lg;
+  @apply flex items-center justify-center relative cursor-pointer rounded-md;
   width: 34px;
   height: 34px;
   color: var(--color-fg-secondary);
@@ -200,7 +203,7 @@
   width: 220px;
   background-color: var(--color-surface-raised);
   border: 1px solid var(--color-bd-default);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 50;
   overflow: hidden;

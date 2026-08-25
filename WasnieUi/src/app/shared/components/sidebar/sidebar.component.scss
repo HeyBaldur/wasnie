@@ -28,7 +28,7 @@
 }
 
 .sidebar__brand-monogram {
-  @apply flex items-center justify-center shrink-0 text-sm font-bold rounded-lg;
+  @apply flex items-center justify-center shrink-0 text-sm font-bold rounded-md;
   width: 32px;
   height: 32px;
   position: relative;
@@ -49,11 +49,14 @@
 
 .sidebar__brand-name {
   @apply text-2xl font-semibold truncate;
+  /* The product name is a title, but it is a `<span>` and not a heading, so it opts into the display
+     face by hand — the global `h1..h4` rule in styles.scss cannot reach it. */
+  font-family: var(--font-display);
   color: var(--color-sidebar-active-text);
 }
 
 .sidebar__toggle {
-  @apply flex items-center justify-center shrink-0 rounded-md cursor-pointer;
+  @apply flex items-center justify-center shrink-0 rounded-sm cursor-pointer;
   width: 28px;
   height: 28px;
   color: var(--color-sidebar-muted);
@@ -157,7 +160,7 @@
   font-weight: 600;
   padding: 8px 12px 8px 13px;
   margin: 1px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--color-sidebar-text);
   transition: background-color 150ms ease, color 150ms ease;
   white-space: nowrap;
@@ -236,7 +239,7 @@
   font-weight: 600;
   padding: 8px 12px 8px 13px;
   margin: 1px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--color-sidebar-muted);
   transition: background-color 150ms ease, color 150ms ease;
   white-space: nowrap;

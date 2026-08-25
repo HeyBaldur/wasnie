@@ -2,20 +2,36 @@
 
 @theme {
   /* Layout utilities use Tailwind defaults — no color overrides needed */
-}
 
-/* ═══════════════════════════════════════════════════════════════════
-   DESIGN SYSTEM — LIGHT (default)
-   ═══════════════════════════════════════════════════════════════════ */
-:root {
-  /* ── Radii ── */
+  /* ── Radii ── ★★ THESE LIVE IN `@theme`, NOT IN `:root`, AND THAT IS THE WHOLE POINT.
+   *
+   * They used to sit in `:root` while this block stood empty, which meant the app carried TWO radius
+   * scales that never met: `var(--radius-md)` was ours (8px) and `rounded-md` was Tailwind's default
+   * (6px). Same names, different numbers. The collision was already being worked around by hand —
+   * topbar.component.scss carried a comment explaining that Tailwind's `rounded-lg` is 8px "= our
+   * --radius-md", which is the kind of note somebody writes right before someone else gets it wrong.
+   *
+   * In Tailwind v4 `@theme` IS a CSS-variable block, and `--radius-*` is the namespace the `rounded-*`
+   * utilities are generated from (node_modules/tailwindcss/theme.css:397-404). Declaring them here
+   * makes `rounded-md` and `var(--radius-md)` the same 8px BY CONSTRUCTION rather than by agreement.
+   * Nothing else had to change: every `var(--radius-*)` in the app keeps resolving, because `@theme`
+   * emits into `:root` as well.
+   *
+   * ★ THE SIX STEPS AND THEIR VALUES ARE UNCHANGED. Collapsing the scale is a separate decision with a
+   * different blast radius (sm and lg alone carry ~125 usages); this change is plumbing, not design. */
+  --radius-none: 0;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
   --radius-xl: 14px;
   --radius-full: 9999px;
+}
 
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM — LIGHT (default)
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
   /* ── Spacing (4px base) ── */
   --space-0: 0px;
   --space-1: 4px;
@@ -48,6 +64,14 @@
   --font-size-28: 28px;
   --font-size-32: 32px;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+  /* ── Font families ──
+   *
+   * `--font-sans` is the body face (unchanged, just tokenised so nothing hard-codes a stack any more).
+   * `--font-display` is the TITLE face — POC: Source Serif 4, loaded in index.html. The fallback chain is
+   * not decoration: it is what renders before the webfont arrives and what renders if it never does. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Source Serif 4', ui-serif, Georgia, 'Times New Roman', serif;
 
   /* ── Transitions ── */
   --transition-fast: 100ms ease;
@@ -327,15 +351,31 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
-    font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-size-14);
     line-height: 1.5;
     background-color: var(--color-bg-base);
     color: var(--color-text-primary);
+  }
+
+  /* ── Titles are set in the display face ──
+   *
+   * POC. One rule instead of a font-family per component: every title in the app is already a heading
+   * element — the page headers (`ws-page-header`, `ws-page-layout`), the auth and wizard screens, the
+   * chapter titles of the manual (rendered from markdown via `[innerHTML]`, which no component
+   * stylesheet can reach) and the HubSpot connector documentation. Touching the elements covers all of
+   * them at once and is a single line to revert if the POC is rejected.
+   *
+   * The one title that is NOT a heading element is the sidebar brand (a `<span>`); it opts in explicitly
+   * in the sidebar's own stylesheet.
+   *
+   * Living in `@layer base` is deliberate: any component that ever needs a sans title only has to say so,
+   * and its own (unlayered) rule wins without a specificity fight. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
   }
 
   a {

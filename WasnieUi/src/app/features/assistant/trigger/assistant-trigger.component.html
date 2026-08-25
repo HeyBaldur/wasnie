@@ -1,7 +1,7 @@
 @if (store.entitled() === true) {
   <button
     type="button"
-    class="text-white bg-gradient-to-br from-pink-500 to-orange-400 hover:bg-gradient-to-bl focus:ring-4 focus:outline-none focus:ring-pink-200 dark:focus:ring-pink-800 font-medium rounded-lg text-sm px-3 py-1.5 text-center leading-5 inline-flex items-center justify-center gap-1.5"
+    class="text-white bg-gradient-to-br from-pink-500 to-orange-400 hover:bg-gradient-to-bl focus:ring-4 focus:outline-none focus:ring-pink-200 dark:focus:ring-pink-800 font-medium rounded-md text-sm px-3 py-1.5 text-center leading-5 inline-flex items-center justify-center gap-1.5"
     (click)="open()"
     [attr.aria-label]="'ASSISTANT.OPEN' | translate"
     [title]="'ASSISTANT.OPEN' | translate"
@@ -34,7 +34,7 @@
   -->
   <a
     routerLink="/subscription"
-    class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium leading-5 no-underline assistant-trigger--locked"
+    class="inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium leading-5 no-underline assistant-trigger--locked"
     [attr.aria-label]="'ASSISTANT.LOCKED_ARIA' | translate"
     [title]="'ASSISTANT.LOCKED_TOOLTIP' | translate"
   >

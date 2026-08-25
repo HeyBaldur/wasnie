@@ -3,6 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { CreditsApiService } from '../services/credits.api.service';
 import { CreditListItem, CreditCounters, CreditByPayee } from '../models/credit.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 
 export type CreditStatus = 'Active' | 'Superseded' | 'All';
 
@@ -72,6 +73,11 @@ export class CreditsStore {
 
   readonly hasActiveFilters = computed(() => this.activeFilterCount() > 0);
 
+  // Makes the last-REQUESTED load win rather than the last-ARRIVED one. Change the filter while a
+  // fetch is still in flight and two requests race; without this the slower, wider query can land
+  // last and overwrite the narrower one, leaving the list looking unfiltered until a manual reload.
+  private readonly _latest = new LatestRequestGuard();
+
   constructor() {
     effect(() => {
       void this._loadList(
@@ -100,6 +106,7 @@ export class CreditsStore {
   private async _loadList(
     page: number, pageSize: number, sortBy: string, sortOrder: 'asc' | 'desc', f: CreditFilter
   ): Promise<void> {
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -109,11 +116,14 @@ export class CreditsStore {
         filters: Object.keys(filters).length > 0 ? filters : undefined,
       };
       const data = await firstValueFrom(this.api.list(params));
+      if (this._latest.isStale(token)) return;   // superseded by a newer load — discard
       this.pagedResult.set(data);
     } catch {
+      if (this._latest.isStale(token)) return;   // don't let a stale failure clobber a fresh result
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      // Only the newest request owns the spinner; a stale one finishing must not clear it.
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

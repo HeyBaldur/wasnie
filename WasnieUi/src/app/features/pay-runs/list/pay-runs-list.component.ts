@@ -13,8 +13,10 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
+import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
 import { PayRunsApiService } from '../services/pay-runs.api.service';
 import { PayRunsStore, PayRunFilter } from '../state/pay-runs.store';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { PayRunListItem, PayRunStatus, CalculatePayRunResult } from '../models/pay-run.model';
 import { WsDatePickerComponent as DatePickerRef } from '../../../shared/ui/ws-date-picker/ws-date-picker.component';
 import {
@@ -32,6 +34,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
   imports: [
     AppShellComponent, ReactiveFormsModule, TranslateModule,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
+    RefreshOnEnterDirective,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
     WsSelectComponent, WsDatePickerComponent, WsSegmentedControlComponent,
     WsPageLayoutComponent, WsTableComponent, WsTableEmptyComponent,
@@ -135,9 +138,22 @@ export class PayRunsListComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const qp = this.route.snapshot.queryParams as Record<string, string>;
+    // SUBSCRIBE, don't snapshot. Angular reuses this component when a navigation changes only the
+    // query params, so a snapshot read in ngOnInit runs once and then goes stale — arriving from the
+    // dashboard's "Draft Pay Runs" card left the previous filter applied until the user pressed
+    // reload. Loop-safe: this screen never writes filter params to the URL, so re-applying cannot
+    // re-trigger itself. See bindFiltersToUrl for the full audit.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      apply: qp => this._applyQueryParams(qp),
+      reset: () => this._applyDefaults(),
+    });
 
-    // Resolve initial status + period from URL params (e.g. ?status=Draft from dashboard)
+    this._wireFormSubscriptions();
+    this._wirePlanSelection();
+  }
+
+  /** Puts the URL's filter into the store and the form. Runs on entry AND on every later change. */
+  private _applyQueryParams(qp: Record<string, string>): void {
     const validStatuses: PayRunStatus[] = ['Draft', 'Approved', 'Paid'];
     const urlStatus = qp['status'] as PayRunStatus | undefined;
     const status: PayRunStatus | 'All' =
@@ -148,13 +164,23 @@ export class PayRunsListComponent implements OnInit {
     const periodKey: PeriodKey =
       urlPeriod && (validPeriods as string[]).includes(urlPeriod) ? urlPeriod : 'this-month';
 
+    this._setStatusAndPeriod(status, periodKey);
+  }
+
+  /**
+   * No params in the URL means the DEFAULT view, not whatever the last visit left behind — the store
+   * is a root singleton and outlives this component. Note this is NOT `clearFilters()`: this screen's
+   * default is `this-month`, so clearing would widen the list to all time.
+   */
+  private _applyDefaults(): void {
+    this._setStatusAndPeriod('All', 'this-month');
+  }
+
+  private _setStatusAndPeriod(status: PayRunStatus | 'All', periodKey: PeriodKey): void {
     this.activePeriod.set(periodKey);
     const { from, to } = this._computePeriodDates(periodKey);
     this.form.patchValue({ status, periodFrom: from, periodTo: to }, { emitEvent: false });
     this.store.setFilter({ status, periodFrom: from, periodTo: to });
-
-    this._wireFormSubscriptions();
-    this._wirePlanSelection();
   }
 
   private _wirePlanSelection(): void {

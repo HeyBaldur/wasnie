@@ -678,17 +678,11 @@
   line-height: 1.2;
   letter-spacing: -0.01em;
 
-  // ★ GRADIENT TEXT. The paint is clipped to the glyphs, which needs the text itself to be
-  // transparent — so `color` here is the fallback for anything that does not support the clip, NOT
-  // decoration. Getting that order wrong renders an invisible greeting.
+  // ★ PLAIN TEXT, NOT GRADIENT — and it must stay a TOKEN, never a literal white. This used to paint
+  // `--gradient-assistant` clipped to the glyphs. The token resolves per theme (near-black on light
+  // and soft, near-white on dark), so the greeting reads white where the user asked for white and
+  // stays legible on the two light themes. Hard-coding #fff here would render invisible text on them.
   color: var(--color-text-primary);
-  background: var(--gradient-assistant);
-  background-clip: text;
-  -webkit-background-clip: text;
-
-  @supports (background-clip: text) or (-webkit-background-clip: text) {
-    color: transparent;
-  }
 
   // The greeting is a question; long ones must wrap, never overflow the panel.
   text-wrap: balance;
@@ -718,7 +712,10 @@
 // the same four widths, and a row that scrolls sideways hides the last suggestion on exactly the
 // screens where a suggestion is most wanted.
 .assistant-welcome__starters {
-  @apply flex flex-wrap items-center justify-center;
+  // ★ LEFT-ALIGNED, not centred. Everything above — logo, greeting, subtitle, guarantee — sits on the
+  // same left edge, so centred buttons were the only block breaking that column and read as stray.
+  // Sharing that edge puts them back in the same reading column as the text they follow.
+  @apply flex flex-wrap items-center justify-start;
   gap: var(--space-2);
   margin-top: var(--space-5);
 }

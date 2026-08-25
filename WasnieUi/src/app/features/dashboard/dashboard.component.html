@@ -16,19 +16,35 @@
     />
 
     <!-- ── Banda 1: Requires action ──────────────────────────────────────── -->
-    <div class="band-hd">
+    <div class="band-hd band-hd--tight">
       <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_ACTION' | translate }}</span>
       @if (!store.loading() && pendingActionCount() > 0) {
         <ws-badge variant="warning" size="sm">{{ pendingActionCount() }}</ws-badge>
       }
     </div>
+    <!-- The period selector sits in this screen's header, so the reasonable assumption is that
+         everything below obeys it. This band does not: its counts are all-time on purpose. Said once
+         for the whole band rather than per card: the cards below ("Pending to Process by Plan",
+         "Attention") used to repeat this same sentence, and those copies were removed once this
+         header — which governs the whole block — carried it. One caveat, said once. -->
+    <p class="band-hd__scope">
+      <app-icon name="globe" [size]="11" />
+      {{ 'DASHBOARD.PENDING_BY_PLAN_SCOPE' | translate }}
+    </p>
 
     <div class="action-grid">
 
       <!-- Draft pay runs -->
       <ws-card variant="interactive" padding="md"
         [accent]="actionCardAccent(store.actionBand()?.draftPayRunsCount ?? 0)">
-        <a [routerLink]="['/pay-runs']" [queryParams]="{ status: 'Draft' }" class="stat-card">
+        <!-- ★ `period: 'all-time'` IS THE CONTRACT, NOT A DEFAULT. This count is deliberately all-time
+             (GetDashboardSummaryHandler.cs:77-78, the period-independent action band: a September draft
+             is actionable today), but Pay Runs lands on "this month" whenever the URL carries no
+             `period` (pay-runs-list.component.ts:147-153). Sending only the status made the card
+             promise 2 and the list show 0. The destination already reads this param — the link just
+             never sent it. Sibling cards do NOT need it: Payouts skips its default period whenever the
+             URL has params, and Terminated shares one store with its screen. -->
+        <a [routerLink]="['/pay-runs']" [queryParams]="{ status: 'Draft', period: 'all-time' }" class="stat-card">
           <div class="stat-card__hd">
             <div>
               <h3 class="stat-card__title">{{ 'DASHBOARD.PAYRUNS_DRAFT' | translate }}</h3>
@@ -253,10 +269,6 @@
         <div>
           <h3 class="stat-card__title">{{ 'DASHBOARD.PENDING_BY_PLAN' | translate }}</h3>
           <p class="pending-plan-card__sub">{{ 'DASHBOARD.PENDING_BY_PLAN_DESC' | translate }}</p>
-          <p class="pending-plan-card__scope">
-            <app-icon name="globe" [size]="11" />
-            {{ 'DASHBOARD.PENDING_BY_PLAN_SCOPE' | translate }}
-          </p>
         </div>
         @if (!store.loading() && (store.actionBand()?.pendingByPlanItems?.length ?? 0) > 0) {
           <ws-badge variant="warning" size="sm">
@@ -304,10 +316,6 @@
         <div>
           <h3 class="stat-card__title">{{ 'DASHBOARD.ATTENTION_TITLE' | translate }}</h3>
           <p class="pending-plan-card__sub">{{ 'DASHBOARD.ATTENTION_DESC' | translate }}</p>
-          <p class="pending-plan-card__scope">
-            <app-icon name="globe" [size]="11" />
-            {{ 'DASHBOARD.PENDING_BY_PLAN_SCOPE' | translate }}
-          </p>
         </div>
         @if (!store.loading() && hasAttentionItems()) {
           <ws-badge variant="warning" size="sm">{{ attentionBadgeTotal() }}</ws-badge>

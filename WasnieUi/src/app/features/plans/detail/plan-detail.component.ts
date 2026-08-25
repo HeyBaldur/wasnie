@@ -1,5 +1,6 @@
-﻿import { Component, computed, inject, OnInit, signal } from '@angular/core';
+﻿import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { firstValueFrom } from 'rxjs';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { TranslateModule } from '@ngx-translate/core';
@@ -63,6 +64,7 @@ type Tab = 'rules' | 'versions' | 'assignments' | 'clawback';
 })
 export class PlanDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
@@ -115,10 +117,20 @@ export class PlanDetailComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    const urlTab = this.route.snapshot.queryParams['tab'] as Tab | undefined;
-    if (urlTab && (['rules', 'versions', 'assignments'] as Tab[]).includes(urlTab)) {
-      this.setTab(urlTab);
-    }
+    // SUBSCRIBE, don't snapshot. Angular reuses this component when a navigation changes only the
+    // query params, so a snapshot read runs once and a later ?tab= change would leave the previous
+    // tab on screen. Only acts on a REAL change: setTab lazily loads the assignments tab, so
+    // re-applying the tab already showing would refetch for nothing.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      apply: qp => {
+        const urlTab = qp['tab'] as Tab | undefined;
+        const tab: Tab = urlTab && (['rules', 'versions', 'assignments'] as Tab[]).includes(urlTab)
+          ? urlTab : 'rules';
+        if (tab !== this.activeTab()) this.setTab(tab);
+      },
+      // No ?tab= means the default tab, not whatever the last visit left behind.
+      reset: () => { if (this.activeTab() !== 'rules') this.setTab('rules'); },
+    });
     this.store.loadPlan(this.planId).then(() => {
       const name = this.store.selectedPlan()?.name;
       if (name) this.store.loadVersions(name);

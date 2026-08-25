@@ -11,6 +11,20 @@
 
 .band-hd--mt { margin-top: var(--space-8); }
 
+// A band that carries a scope note underneath hands its bottom gap to the note, so the note reads as
+// part of the header instead of floating between the header and the cards.
+.band-hd--tight { margin-bottom: var(--space-1); }
+
+// The ONE scope caveat for the whole "Requires action" band. It used to be repeated inside the
+// "Pending to Process by Plan" and "Attention" cards; with the notice raised to the header that
+// governs the whole block, the two internal copies were noise and were removed.
+.band-hd__scope {
+  display: flex; align-items: center; gap: var(--space-1);
+  font-size: var(--font-size-11); color: var(--color-text-placeholder);
+  margin: 0 0 var(--space-4);
+  app-icon { flex-shrink: 0; }
+}
+
 .band-hd__lbl {
   font-size: var(--font-size-11);
   font-weight: 700;
@@ -130,6 +144,10 @@
 }
 
 .stat-card__value {
+  // POC: the headline figure of the four action cards is set in the display face, like the titles.
+  // `tabular-nums` stays below it and still matters: these numbers sit in a row of cards that reflow
+  // on load, and proportional figures make them shift as the values arrive.
+  font-family: var(--font-display);
   font-size: var(--font-size-32);
   font-weight: 700;
   color: var(--color-text-primary);
@@ -183,12 +201,6 @@
 
 .pending-plan-card { display: block; margin-bottom: var(--space-8); }
 .pending-plan-card__sub { font-size: var(--font-size-12); color: var(--color-text-tertiary); margin: var(--space-1) 0 0; }
-.pending-plan-card__scope {
-  display: flex; align-items: center; gap: var(--space-1);
-  font-size: var(--font-size-11); color: var(--color-text-placeholder);
-  margin: var(--space-2) 0 0;
-  app-icon { flex-shrink: 0; }
-}
 .pending-plan-card__list { max-height: 180px; overflow-y: auto; }
 // The attention list holds two-line rows (label + explanation) and can carry several groups at once
 // (unprocessable reasons + ambiguous attribution + drift alerts), so 180px showed barely three of them.

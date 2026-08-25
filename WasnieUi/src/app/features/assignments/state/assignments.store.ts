@@ -11,6 +11,7 @@ import {
   CreateAssignmentRequest,
 } from '../models/assignment.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 
 /** Flat filter params; `buildHttpParams` spreads these onto the query string. */
 function buildFilters(
@@ -97,6 +98,11 @@ export class AssignmentsStore {
   readonly pagedAssignments = computed(() => this.assignments());
   readonly filteredAssignments = computed(() => this.assignments());
 
+  // Makes the last-REQUESTED load win rather than the last-ARRIVED one. Change the filter while a
+  // fetch is still in flight and two requests race; without this the slower, wider query can land
+  // last and overwrite the narrower one, leaving the list looking unfiltered until a manual reload.
+  private readonly _latest = new LatestRequestGuard();
+
   constructor() {
     effect(() => {
       const p = this.page();
@@ -119,6 +125,7 @@ export class AssignmentsStore {
     search: string,
     payeeId: string | null,
   ): Promise<void> {
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -131,11 +138,14 @@ export class AssignmentsStore {
         filters: buildFilters(status, payeeId),
       };
       const data = await firstValueFrom(this.api.getAssignments(params));
+      if (this._latest.isStale(token)) return;   // superseded by a newer load — discard
       this.pagedResult.set(data);
     } catch {
+      if (this._latest.isStale(token)) return;   // don't let a stale failure clobber a fresh result
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      // Only the newest request owns the spinner; a stale one finishing must not clear it.
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 
@@ -157,8 +167,19 @@ export class AssignmentsStore {
    * already filtered — otherwise the user sees the full list flash before it narrows.
    */
   loadFromQueryParams(qp: Record<string, string>): void {
-    if (qp['payeeId']) this.payeeId.set(qp['payeeId']);
-    if (qp['status']) this.status.set(qp['status'] as AssignmentStatus);
+    // AUTHORITATIVE, not additive: absent means null, it does not mean "keep what was there". This
+    // runs on every query-param change now, so an additive read would accumulate — going from
+    // ?payeeId=X&status=Active to ?payeeId=Y would silently carry the status along. `search` is
+    // deliberately untouched: it is not carried in the URL, so the URL has no business clearing it.
+    this.payeeId.set(qp['payeeId'] ?? null);
+    this.status.set((qp['status'] as AssignmentStatus | undefined) ?? null);
+    this.page.set(1);
+  }
+
+  /** The default view: no deep-link filters. `search` is the user's own typing — left alone. */
+  clearUrlFilters(): void {
+    this.payeeId.set(null);
+    this.status.set(null);
     this.page.set(1);
   }
 
