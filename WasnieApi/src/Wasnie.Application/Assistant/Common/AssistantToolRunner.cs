@@ -301,6 +301,16 @@ public sealed class AssistantToolRunner(
         "name — no plan is called \"Ana García\", the lookup will refuse, and the user will be told the " +
         "person does not exist one turn after you described them.\n" +
         "\n" +
+        "★ AND THE MIRROR OF IT, WHICH IS THE ONE THAT ACTUALLY BIT. There is NO tool that lists " +
+        "the payees on a plan. The assignment tool runs PAYEE to PLANS and only that way. So when the " +
+        "user asks who is on a plan, how many payees a plan has, or whether a plan has anybody " +
+        "assigned, do NOT reach for the payee tools and do NOT feed them the plan’s name or the " +
+        "plan’s id: no person is called “Q3 EMEA Accelerator” and no person has a plan’s " +
+        "UUID, so the lookup will truthfully answer that nobody like that exists — about a plan the " +
+        "user is reading on their screen. Call NO tool for that question. The answering model has a " +
+        "rule for saying honestly that the capability does not exist yet; it cannot use that rule once " +
+        "you have handed it a real not-found.\n" +
+        "\n" +
         "Call NO tool when the message is about what a term means, how the product works in general, or " +
         "how to perform an action in the interface. The documentation answers those and a lookup would " +
         "return nothing useful.\n" +

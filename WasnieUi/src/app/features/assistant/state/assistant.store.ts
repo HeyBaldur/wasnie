@@ -368,6 +368,18 @@ export class AssistantStore {
   private readonly unsentFailure = signal<{ content: string } | null>(null);
 
   /**
+   * The words of a turn that never reached the server, or null when there are none.
+   *
+   * ★ EXPOSED SO THE COMPOSER CAN HAND THEM BACK, and deliberately NOT so the thread can show them.
+   * The user's turn belongs to the server — see the `user` frame — precisely so that a reload rebuilds
+   * the conversation with no help from this browser. Putting an unsent message into `messages` would
+   * create a second version of it that a refresh cannot find, which is the failure this design avoids.
+   * The composer is the honest place for it: the message is not IN the conversation, it is still
+   * something the user is about to say.
+   */
+  readonly unsentText = computed<string | null>(() => this.unsentFailure()?.content ?? null);
+
+  /**
    * What a Retry would re-run, or null when there is nothing to retry — which is what hides the alert.
    *
    * ★ THE SERVER'S ANSWER WINS, AND THAT IS WHAT SURVIVES THE REFRESH. `lastTurnUnanswered` is derived
@@ -383,6 +395,17 @@ export class AssistantStore {
       return null;
     }
 
+    // ★ THE EXACT RECORD BEATS THE INFERENCE, AND THAT ORDER IS THE SAFETY NET. `unsentFailure` holds
+    // the very words that failed to send; the branch below INFERS a question from the stored thread.
+    // Read the other way round — as it was — a lying `lastTurnUnanswered` shadowed the exact record
+    // and the retry re-answered a different, older question while the user's own message was lost.
+    // The flag is guarded now, but a local fact should never lose to a derivation regardless: if the
+    // two ever disagree again, the one that cannot be wrong is this one.
+    const unsent = this.unsentFailure();
+    if (unsent) {
+      return { content: unsent.content, wasPersisted: false };
+    }
+
     const conversation = this.conversation();
 
     if (conversation?.lastTurnUnanswered) {
@@ -396,8 +419,7 @@ export class AssistantStore {
       }
     }
 
-    const unsent = this.unsentFailure();
-    return unsent ? { content: unsent.content, wasPersisted: false } : null;
+    return null;
   });
 
   /**
@@ -510,7 +532,14 @@ export class AssistantStore {
             // NOW the thread is genuinely waiting on nothing — which is what the server will report
             // on the next read too. A stored question needs no local record beyond this flag; only
             // the turn that never arrived does.
-            this.markThreadUnanswered();
+            //
+            // ★ ONLY IF THE QUESTION WAS ACTUALLY STORED. Setting this unconditionally made the flag
+            // LIE: with nothing committed, the thread does not end on an unanswered question at all —
+            // it ends wherever it ended before this attempt. And a lying flag was not a cosmetic
+            // problem, because `retryable` trusts it: it went looking for the last stored User turn,
+            // found the PREVIOUS, already-answered question, and offered to retry that. The user
+            // watched their own message vanish and a second answer appear under the old one.
+            this.markThreadUnanswered(persisted);
             this.unsentFailure.set(persisted ? null : { content: trimmed });
             break;
         }
@@ -526,7 +555,9 @@ export class AssistantStore {
         this.streamingReply.set(null);
         this.progressSteps.set([]);
         this.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
-        this.markThreadUnanswered();
+        // Same guard as the error frame above, and it matters MORE here: a transport failure is the
+        // likeliest way for a turn to die before the server ever saw it.
+        this.markThreadUnanswered(persisted);
         this.unsentFailure.set(persisted ? null : { content: trimmed });
       }
     } finally {
@@ -576,9 +607,17 @@ export class AssistantStore {
   }
 
   /** Records that the thread is waiting on an answer that will not come. */
-  private markThreadUnanswered(): void {
+  /**
+   * Records that the thread now ends on a question nobody answered.
+   *
+   * ★ THE PARAMETER IS THE POINT. It takes `persisted` rather than being called only when true,
+   * because the caller reads better for it — and because a future error path that forgets the question
+   * is a call that has to say, out loud, which of the two situations it is in. `false` is not "do
+   * nothing by accident"; it is "the server holds no question, so the flag would be false anyway".
+   */
+  private markThreadUnanswered(persisted: boolean): void {
     const current = this.conversation();
-    if (current) {
+    if (current && persisted) {
       this.conversation.set({ ...current, lastTurnUnanswered: true });
     }
   }

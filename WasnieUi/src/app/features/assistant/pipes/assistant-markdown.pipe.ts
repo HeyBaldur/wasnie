@@ -235,11 +235,21 @@ export class AssistantMarkdownPipe implements PipeTransform {
    * They are reached HERE rather than in the stylesheet because this markup is generated: there is no
    * template to put a class on, and copying the utility's rules into the panel's SCSS would be a second
    * definition of the same scrollbar — the drift this codebase keeps refusing.
+   *
+   * ★ THE TABLE GETS A WRAPPER, AND THAT WRAPPER IS THE FIX FOR THE GAP ON THE RIGHT. Scrolling used to
+   * be bought by putting `display: block` on the <table> itself — and a block-level table shrinks to
+   * fit its CONTENT instead of filling its container, which is exactly the white space the reader saw
+   * beside a narrow table. The two requirements fight in one element and cannot both be met there: a
+   * table that fills the column must stay `display: table`, and something else has to do the
+   * scrolling. So the scroll moves out to a wrapper and the table goes back to being a table.
+   *
+   * Markdown cannot nest tables, so pairing every <table> with the next </table> needs no parser.
    */
   private static applyScrollbar(html: string): string {
     return html
       .replace(/<pre>/gi, '<pre class="ws-scroll-thin">')
-      .replace(/<table>/gi, '<table class="ws-scroll-thin">');
+      .replace(/<table>/gi, '<div class="ws-md-table ws-scroll-thin"><table>')
+      .replace(/<\/table>/gi, '</table></div>');
   }
 
   /**

@@ -4,6 +4,251 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-25 — Composer: el botón deja de ocupar una columna y pasa a flotar en la esquina
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** template + SCSS del composer compartido · **Sin commit** · Sin tests (visual puro)
+
+**El hueco muerto que viste.** El botón estaba en una fila flex al lado del campo, así que **reservaba una
+franja de ancho para toda su altura** — y como se apoya abajo, cada línea de arriba terminaba antes contra un
+vacío alto. Ahora el texto tiene el ancho completo y el botón está fuera del flujo, absoluto sobre la esquina
+inferior derecha.
+
+### ★ La razón por la que el respiro va ABAJO y no a la derecha (y por qué no es una preferencia)
+
+Un `<textarea>` real **no puede hacer que su texto fluya alrededor de un elemento flotante** — eso es una
+capacidad de `contenteditable`, y su padding se aplica igual a todas las líneas. Así que sólo hay dos maneras
+de que el botón no tape el texto:
+
+- **una COLUMNA reservada** → todas las líneas quedan cortas (el hueco muerto que reportaste), o
+- **una FRANJA reservada debajo** → todas las líneas llegan al borde derecho, y la caja crece un poco.
+
+Elegí la franja, que es además lo que hace la referencia. Son **32px** (el botón de 28 más 4 de aire), y
+**reemplazan** los 8px de padding inferior que el campo ya tenía, así que el costo real son 24px, no 32.
+
+### El número honesto del alto
+
+Estado de una línea: 8 arriba + 21 de línea + 32 de franja = **61px**, y `[minHeight]="60"` para que la caja
+vacía mida exactamente eso. Para comparar: el composer **original** de antes de estos dos WIs medía ~72px
+(campo de dos líneas + la banda del botón debajo); la versión en fila del WI anterior medía ~46px. **Esta
+queda en ~61: más baja que el original, más alta que la de ayer.** Ese es el precio de sacar la columna
+muerta, y lo digo explícito porque los puntos 2 y 4 del WI se tensionan entre sí: no se puede tener el ancho
+completo y el alto de la fila al mismo tiempo con un textarea nativo.
+
+El auto-grow no se tocó: la primitiva mide `scrollHeight`, y el padding es parte de `scrollHeight`, así que la
+caja se sigue dimensionando sola sin ningún cambio en `WsTextarea`.
+
+**Intacto:** disclaimer, Enter/Shift+Enter, disabled durante el streaming, envío, render.
+
+Build de producción limpio; suite 993 verdes sin cambios.
+
+**Archivos:** `conversation/assistant-conversation.component.{html,scss}`, docs.
+
+## 2026-08-25 — Composer del asistente: el botón de enviar entra al recuadro y la caja arranca en una línea
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** template + SCSS del composer compartido · **Sin commit** · Sin tests (visual puro, por preferencia de Rodolfo)
+
+**Qué cambió.** El botón de enviar vivía en su propia banda debajo del campo — una fila entera de alto en cada
+pantalla, y en una corta esa fila sale directo de la conversación. Ahora campo y botón comparten la misma fila
+dentro del recuadro, y el recuadro arranca en una línea.
+
+### ★ El alto inicial se pasa como input, no se pelea con CSS
+
+`WsTextarea` **calcula su altura en el componente** (`resize()` mide `scrollHeight` y aplica el valor entre
+`minHeight` y `maxHeight`). Un `min-height` puesto desde el SCSS del composer habría quedado deshecho en la
+siguiente tecla. La primitiva **ya expone `minHeight`/`maxHeight` como inputs**, así que el cambio es
+`[minHeight]="40"` y nada más: el auto-grow y el tope con scroll interno quedan intactos, tal como pedía el WI.
+El default de la primitiva (56px, dos líneas) sigue siendo el correcto para un campo de formulario; sólo este
+consumidor quiere una.
+
+### ★ `align-items: flex-end`, y no es un detalle
+
+La fila crece hacia arriba con el párrafo, así que el botón tiene que quedar junto a la **última** línea —
+donde está el cursor y donde ya está el ojo. Centrado se deslizaría hacia abajo con cada línea nueva; anclado
+arriba se alejaría del texto que se está escribiendo. Es la misma decisión que toma la referencia.
+
+**El campo lleva `min-width: 0`**: sin eso, una palabra larga sin cortes empuja el botón fuera del borde
+derecho en vez de envolverse. Y las acciones llevan `flex-shrink: 0`, para que el ancho lo ceda siempre el
+campo y nunca el botón — que es lo que evita que el texto se le monte encima.
+
+**El botón, redondo y del mismo azul que el de "ir al último mensaje".** Dos círculos de acento en la misma
+pantalla tienen que ser el mismo círculo; un enviar rectangular al lado de un jump redondo se lee como dos
+sistemas de diseño. Se hace con `::ng-deep` acotado a `.assistant-composer`, por la misma razón que ya está
+documentada tres reglas más arriba para neutralizar el borde del textarea: un flag `shape` en `WsButton`
+metería la preferencia de esta pantalla en todos los botones de la app.
+
+**Intacto, como pedía el WI:** el disclaimer, Enter/Shift+Enter, el disabled durante el streaming, el envío, el
+auto-grow y el render. Sólo layout.
+
+Build de producción limpio; suite 993 verdes sin cambios — no se rompió nada.
+
+**Archivos:** `conversation/assistant-conversation.component.html`, `conversation/assistant-conversation.component.scss`, docs.
+
+## 2026-08-25 — El mensaje que se perdía: el flag mentía y el retry re-contestaba la pregunta anterior
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** fix del store + composer compartido · **Sin commit**
+
+**El bug, en una línea:** nada borraba el mensaje. `markThreadUnanswered()` se llamaba aunque el server no
+hubiera guardado NADA, y eso ponía `lastTurnUnanswered = true` sobre un hilo que no terminaba en ninguna
+pregunta abierta. `retryable` le creía, buscaba el último turno `User` **almacenado** y encontraba la pregunta
+**anterior, ya contestada**. El retry la re-contestaba con `isRetry:true` — sin frame `user` — y el texto del
+usuario quedaba sin rastro, con dos respuestas de AI seguidas.
+
+### Las tres piezas
+
+**1. El guard.** `markThreadUnanswered(persisted)`: el flag sólo se levanta si el server efectivamente guardó
+la pregunta. Es la corrección de una afirmación falsa, no una optimización — el flag tiene que decir lo que
+el server diría en una recarga, y decía otra cosa.
+
+**2. El registro exacto le gana a la inferencia.** `retryable` ahora consulta `unsentFailure` **antes** que la
+rama derivada de `lastTurnUnanswered`. Un hecho local que no puede estar equivocado no debería perder nunca
+contra una deducción.
+
+**3. El texto vuelve al composer.** Cuando el turno muere antes de llegar al server, `send()` lo devuelve a la
+caja — **y sólo si la caja está vacía**, porque una respuesta puede tardar segundos y quien ya empezó a
+escribir la siguiente pregunta no puede perderla por un restore. `retry()` limpia la caja **sólo si contiene
+exactamente** lo que se está reintentando: si el usuario lo editó, ese texto es suyo.
+
+**Sin copia optimista en el hilo**, como decidiste. El turno de usuario sigue siendo del server, que es lo que
+permite que una recarga reconstruya el fallo sin memoria de sesión. Un mensaje sin enviar en `messages` sería
+una segunda versión que un refresh no encuentra.
+
+### ★ Dos cosas que descubrí verificando, no escribiendo
+
+**El primer rojo fue culpa de mi doble, no del producto.** Mi fake server respondía al reintento con un frame
+`done` sin el `user` delante — un server que no puede existir: un envío que no es retry **siempre** emite el
+`user` primero, porque ese frame ES cómo la pregunta entra al hilo. El test estaba describiendo una realidad
+imposible. Arreglado el doble, verde.
+
+**★ Y la pieza 2 no la cubría ningún test.** Al revertirla sola, los 13 tests seguían verdes: con el guard
+puesto, el flag ya nunca miente, así que la rama derivada nunca dispara mal. O sea que quedaba como defensa
+muerta que alguien iba a borrar por "redundante". **No es muerta:** el flag también llega del **server** en
+una recarga, describiendo un turno viejo que sí quedó sin responder — y un envío nuevo que muere sin llegar
+apila un registro local encima. Ahí los dos coexisten y nombran mensajes distintos; leído flag-primero, el
+retry re-contesta la vieja y pierde la nueva: el bug original por otra puerta. Le escribí sus dos tests, y
+ahora revertir la pieza 2 sí pone rojo.
+
+**Verificación de que los tests sirven:** revertí cada pieza por separado. Sin el guard → 2 rojos. Sin el
+orden → 2 rojos. Ninguno de los quince pasa por casualidad.
+
+**Tests:** +15. Front 978 → 993, build de producción limpio.
+
+**Archivos:** `state/assistant.store.ts`, `conversation/assistant-conversation.component.ts`,
+`assistant-failed-send.spec.ts` (nuevo), docs.
+
+## 2026-08-25 — Render del asistente: la tabla llena el ancho, y los 4 rojos de KaTeX resultaron ser defectos de TEST (suite 978/978)
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** un fix real de render + limpieza de tests · **Sin commit**
+
+### ★ Paso 0: dos de los tres defectos ya estaban arreglados
+
+El WI listaba tres. El mapeo dice otra cosa, y conviene que quede escrito para no volver a pedirlos:
+
+- **Defecto 2 (bugs de GFM): YA RESUELTO, y la causa no era marked.** `gfm: true` y `breaks: true` ya
+  estaban puestos. El `<br>` literal en celdas tiene su excepción de allowlist documentada
+  (`isAllowedRawHtml`), y el `* item` crudo y el `[texto](/plans)` crudo tienen su reparación con una
+  causa raíz mucho mejor que "falta configurar GFM": **el modelo separa los tokens ESTRUCTURALES con
+  espacios Unicode** (no-break, thin, etc.), y la gramática de Markdown está definida contra espacio
+  ASCII. `repairListMarkers` y `repairLinkSeams` lo arreglan sin tocar el parser. Ningún flag de marked
+  habría servido: nada estaba mal configurado, el texto simplemente no era Markdown todavía.
+- **Defecto 3 (KaTeX): YA CONSTRUIDO.** `katex` por npm (no CDN), `protectMath` levanta las fórmulas
+  antes de marked y del sanitizer, el directive las dibuja después. **Y no hay ninguna regla "no-latex"
+  que revertir** — busqué en todo el backend y el front: no existe.
+- **Defecto 1 (la tabla): REAL.** Ese sí.
+
+### El defecto real, y por qué era irresoluble en un solo elemento
+
+La tabla llevaba `display: block` para poder scrollear. **Y una tabla en `display: block` se encoge a su
+CONTENIDO en vez de llenar el contenedor** — ése es exactamente el hueco blanco a la derecha. Los dos
+requisitos se pelean dentro del mismo elemento y no pueden cumplirse ahí: una tabla que llena la columna
+tiene que seguir siendo `display: table`. Así que el scroll se mudó a un wrapper (`.ws-md-table`, puesto por
+el pipe porque este markup es generado y no hay plantilla donde colgar una clase) y la tabla volvió a ser
+tabla con `width: 100%`. Los bordes exteriores se mudaron al wrapper para que el redondeo recorte el fondo
+del header sin dibujar una segunda línea por dentro.
+
+### ★ Y de paso: los 4 rojos de KaTeX que vengo arrastrando como deuda eran defectos de TEST
+
+Los toqué porque este WI entra justo en esa cañería, y me venía reportando "3 rojos permanentes" turno tras
+turno sin mirarlos. KaTeX renderiza bien y siempre lo hizo:
+
+- El test de **XSS** exigía que el HTML no contuviera `onerror=`. Pero el payload vuelve **escapado**
+  (`&lt;img src=x onerror=…`): es texto inerte, y esos caracteres están legítimamente ahí. Las dos
+  aserciones fuertes del mismo test (no hay elemento `script` ni `img`) ya pasaban. Cambiada por una que
+  mira el DOM (`[onerror]` = null), que es más estricta, no menos.
+- El del **bloque** exigía que `textContent` no dijera `frac`. KaTeX **siempre** incrusta el TeX original en
+  `<annotation encoding="application/x-tex">` — así lo recuperan un lector de pantalla y un copy-paste — así
+  que no podía pasar nunca sobre matemática correcta. Ahora mira `.katex-html`, que es la rama visual.
+- El de **fórmula inválida** buscaba `.katex-error`, clase que KaTeX no usa en ese camino: con
+  `throwOnError:false` pinta la fuente en color de error, que es justo lo que el directive documenta.
+- **★ El intermitente tenía una explicación exacta y aburrida: siempre fallaba el PRIMER test de matemática
+  de la corrida.** El helper hacía `await import('katex')`, que resuelve apenas ESE handle está listo y no
+  dice nada de la promesa que el DIRECTIVE sigue esperando. El primero paga la carga del módulo y la
+  aserción corría antes del dibujo; los demás lo encontraban cacheado. Por eso el rojo "se movía" entre
+  tests y parecía aleatorio — no lo era. Ahora el helper espera el RESULTADO (que el token haya
+  desaparecido) en vez de un proxy, con bucle acotado para que una regresión real falle en vez de colgar.
+
+**Suite 973 → 978, y por primera vez sin un solo rojo**, verificado en dos corridas completas. La entrada de
+Deuda Técnica Urgente quedó cerrada con la causa real.
+
+**Archivos:** `assistant-markdown.pipe.ts`, `assistant-conversation.component.scss`,
+`assistant-markdown.pipe.spec.ts`, `assistant-math.spec.ts`, docs.
+
+## 2026-08-18 — El asistente admite "esa capacidad todavía no existe" en vez de negar un plan que el usuario está viendo
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** solo prompt (categoría nueva + inventario + baranda del dispatcher) · **Sin commit**
+
+**Qué pasaba, en una línea:** el modelo no inventaba nada. Le metía el identificador de un PLAN a las tools de
+PAYEE, recibía un `NotFound` **verdadero** (esa persona no existe), y la regla 9 + el escenario 2C hacían el
+resto: "no lo encontré, dame el nombre exacto o el id". El usuario daba el UUID y volvía a entrar como id de
+persona. Cuatro vueltas, sobre un plan que estaba mirando en pantalla.
+
+### ★ El hallazgo que cambió el fix: 2D sola no alcanzaba
+
+El WI pedía dos piezas (la categoría 2D y el inventario). **Con esas dos solas el bug seguía vivo**, y el Paso
+0 lo mostró: el modelo que ELIGE la tool y el que COMPONE la respuesta son dos llamadas distintas
+(`AssistantToolRunner.SelectAsync` vs `AssistantPrompt`). 2D vive en el segundo. Si el primero sigue
+mal-ruteando, el segundo recibe un `found:false` **legítimo** — y ahí la regla 9 y 2C son CORRECTAS. La
+respuesta honesta nunca llega a tener turno.
+
+Así que la baranda del dispatcher no era alcance extra: **sin ella, 2D es inalcanzable justo para el caso que
+la motivó.** Y ya existía la mitad: `SelectionInstructions` decía "NUNCA pases un NOMBRE DE PERSONA como
+nombre de plan" — la dirección inversa no estaba escrita. Ahora sí, y termina con "Call NO tool for that
+question", que es lo que le abre la puerta a 2D.
+
+### Las tres piezas
+
+**1. `CapabilityInventory`** — las cuatro búsquedas reales, **con su dirección**. Ese detalle es todo: "planes
+de un payee" y "payees de un plan" están a una palabra de distancia y sólo la primera existe. Un inventario
+con los nombres de las tools pero sin la dirección no habría evitado nada, porque la llamada mal-ruteada se
+veía perfectamente razonable. Dice explícitamente que no hay lookup al revés, ni para pay runs, payouts,
+quotas, clawbacks o imports, y que eso es 2D **y nunca 2C**.
+
+**2. Escenario 2D** — "la capacidad todavía no existe". Se pide disculpas, se dice que la función no está
+disponible por ahora (**no** que el dato no existe, **no** que no se encontró), y se ofrece lo que sí se
+puede. **Prohíbe explícitamente pedir el nombre exacto o el id**: ese es el movimiento de 2C, y acá es un
+círculo — no hay lookup a donde mandar el identificador. También prohíbe prometer fechas: "yet" es honesto
+sobre hoy, un roadmap es un compromiso que el asistente no puede tomar.
+
+**3. La baranda espejo en el dispatcher**, explicada arriba. El ejemplo quedó genérico ("Q3 EMEA
+Accelerator"): el nombre del plan de prueba de Rodolfo no tiene por qué vivir en el prompt del producto.
+
+**Se renumeró "exactly three" → "exactly four"** y el puntero "use 2A, 2B or 2C instead" → "…2C or 2D", porque
+la taxonomía declara su propio tamaño y el modelo elige de esa lista: dejarla en tres seguiría empujando "no
+puedo buscar eso" hacia el cajón más cercano, que es 2C.
+
+**Intacto a propósito:** la regla 3 (los refusals siguen indistinguibles entre "no existe" y "no es tuyo" —
+no fue el problema y aflojarla haría sondeables los ids), 2C completa (una búsqueda real que no encontró nada
+sigue pidiendo el nombre corregido), y ninguna tool nueva.
+
+**Tests:** +15 en `AssistantMissingCapabilityTests.cs`, incluidos dos que vigilan lo que NO debe cambiar (los
+refusals indistinguibles y que 2C siga pidiendo identificador) y uno que fija la baranda del dispatcher —
+el eslabón sin el cual todo lo demás es decorativo. Backend unit 1462→1477, verde.
+
+**Nota de build:** `dotnet build` de la solución falla con MSB3027 porque la API está corriendo (PID 24832) y
+bloquea los DLLs. No es un error de compilación — el proyecto compila con 0 errores CS y la suite corre. No
+maté el proceso porque es el de Rodolfo.
+
+**Archivos:** `AssistantPrompt.cs`, `AssistantToolRunner.cs`, `AssistantMissingCapabilityTests.cs` (nuevo), docs.
+
 ## 2026-08-18 — El asistente sigue lo que escribe: auto-scroll durante el stream + botón redondo con fade
 
 **Rama:** AI-CHAT-ASSISTANT · **Tipo:** fix funcional de scroll + pulido del botón · **Sin commit**

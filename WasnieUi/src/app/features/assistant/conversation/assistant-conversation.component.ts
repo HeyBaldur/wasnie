@@ -362,6 +362,23 @@ export class AssistantConversationComponent {
     void this.router.navigateByUrl(route);
   }
 
+  /**
+   * Sends the composer's contents — and takes them back if the server never received them.
+   *
+   * ★ THE BOX IS EMPTIED FIRST, AND THAT IS WHAT MAKES THE RESTORE NECESSARY. Clearing on send is
+   * right: the user watches their words leave, and a composer that still held them would invite a
+   * second copy of the same question. But when the turn dies BEFORE the server stores it, there is
+   * then nothing anywhere — not in the thread, because the user's turn comes from the server, and not
+   * in the box. The message the user typed is simply gone, which in a product about money is the last
+   * thing that may happen to something somebody wrote.
+   *
+   * ★ SO IT COMES BACK TO THE COMPOSER, NOT TO THE THREAD. Putting it into `messages` would be a local
+   * copy of a turn the server does not have — a second version that a refresh cannot find. In the box
+   * it is honest: this is not part of the conversation yet, it is still something you are about to say.
+   *
+   * ★ AND ONLY INTO AN EMPTY BOX. An answer can take several seconds, and someone who started typing
+   * their next question in the meantime must not have it overwritten by the restore.
+   */
   async send(): Promise<void> {
     if (!this.canSend()) {
       return;
@@ -369,6 +386,12 @@ export class AssistantConversationComponent {
     const text = this.draft();
     this.draft.set('');
     await this.store.send(text);
+
+    const unsent = this.store.unsentText();
+    if (unsent !== null && this.draft().trim().length === 0) {
+      this.draft.set(unsent);
+      this.composer()?.fill(unsent);
+    }
   }
 
   onDraftChange(value: string): void {
@@ -408,8 +431,22 @@ export class AssistantConversationComponent {
     await this.store.cancel();
   }
 
-  /** Re-answers the last failed question. See the store — it does NOT re-send the message. */
+  /**
+   * Re-answers the last failed question. See the store — for a STORED turn it does not re-send the
+   * message, because the question is already in the thread.
+   *
+   * ★ IT ALSO EMPTIES THE COMPOSER WHEN IT IS RETRYING WHAT THE COMPOSER IS HOLDING. A turn that never
+   * reached the server was handed back to the box by `send`, so both affordances now offer the same
+   * words — and pressing Retry would leave a copy sitting there, ready to be sent a second time.
+   * Cleared only when the box still holds EXACTLY what is being retried: if the user edited it, that
+   * text is theirs and Retry is not entitled to it.
+   */
   async retry(): Promise<void> {
+    const retried = this.store.unsentText();
     await this.store.retry();
+
+    if (retried !== null && this.draft() === retried) {
+      this.draft.set('');
+    }
   }
 }

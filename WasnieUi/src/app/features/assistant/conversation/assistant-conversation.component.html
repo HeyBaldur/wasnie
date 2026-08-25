@@ -331,58 +331,84 @@
 <footer class="assistant-conversation__composer">
   <div class="assistant-composer" data-testid="assistant-composer-card">
     <!--
-      Multi-line via the WsTextarea primitive: Enter sends, Shift+Enter breaks the line, the box
-      grows with the paragraph until it scrolls. The primitive is REUSED untouched — its own border
-      is neutralised from here so the card reads as one piece instead of a box inside a box.
+      ★ THE BUTTON FLOATS IN THE CORNER; IT DOES NOT OWN A COLUMN. Laid out as a flex row beside the
+      field, it reserved a strip of width for its whole height — and since it sits at the BOTTOM, every
+      line above it ended early against a tall empty gap. The text now spans the full width and the
+      button is positioned absolutely over the bottom-right (see the stylesheet).
+
+      ★ AND WHAT KEEPS THE LAST LINE OUT FROM UNDER IT IS PADDING AT THE BOTTOM, NOT AT THE RIGHT. A
+      real <textarea> cannot flow its text around a floating element — that is a contenteditable
+      capability, and its padding is uniform on every line. So the choice is a reserved COLUMN (every
+      line short, which is the gap being removed here) or a reserved STRIP under the text (every line
+      full width, the box a little taller). The strip is what the reference does too.
     -->
-    <ws-textarea
-      [placeholder]="'ASSISTANT.COMPOSER_PLACEHOLDER' | translate"
-      [ngModel]="draft()"
-      (valueChange)="onDraftChange($event)"
-      (submitted)="send()"
-      [submitOnEnter]="true"
-      [maxlength]="8000"
-      data-testid="assistant-composer"
-    />
-
-    <div class="assistant-composer__actions">
+    <div class="assistant-composer__row">
       <!--
-        ★ STOP IS ITS OWN BUTTON, BESIDE SEND — send is not transformed into it. A control that
-        changes what it does under the cursor is a control you can press by accident: the user
-        aiming at Send for their next question would stop the answer instead, and the two actions
-        are opposites. Two buttons, each meaning one thing.
+        Multi-line via the WsTextarea primitive: Enter sends, Shift+Enter breaks the line, the box
+        grows with the paragraph until it scrolls. The primitive is REUSED untouched — its own border
+        is neutralised from here so the card reads as one piece instead of a box inside a box.
 
-        ★ AND IT ONLY EXISTS WHILE THERE IS SOMETHING TO STOP. Not shown-then-disabled: a disabled
-        button is a promise about a moment that has not arrived. It appears when the answer starts
-        and leaves when the answer does.
+        ★ [minHeight] IS ONE LINE PLUS THE BUTTON'S STRIP. The primitive's own floor is two lines'
+        worth — a good default for a form field, too tall for a composer that is empty most of the
+        time. 62px is 8 top + one 21px line + the 34px strip the button occupies, so the empty state is
+        exactly as tall as it has to be and not a pixel more. Keep the two in step: raising the strip
+        in the stylesheet without raising this leaves the floor below the natural height, and the
+        clamp silently stops doing anything.
+
+        Passed as an INPUT rather than fought with CSS: the height is computed in the component
+        (`resize()` measures scrollHeight and clamps it), so a stylesheet override would be undone on
+        the next keystroke. The auto-grow and the max-height scroll are untouched.
       -->
-      @if (store.sending()) {
+      <ws-textarea
+        [minHeight]="62"
+        [placeholder]="'ASSISTANT.COMPOSER_PLACEHOLDER' | translate"
+        [ngModel]="draft()"
+        (valueChange)="onDraftChange($event)"
+        (submitted)="send()"
+        [submitOnEnter]="true"
+        [maxlength]="8000"
+        data-testid="assistant-composer"
+      />
+
+      <div class="assistant-composer__actions">
+        <!--
+          ★ STOP IS ITS OWN BUTTON, BESIDE SEND — send is not transformed into it. A control that
+          changes what it does under the cursor is a control you can press by accident: the user
+          aiming at Send for their next question would stop the answer instead, and the two actions
+          are opposites. Two buttons, each meaning one thing.
+
+          ★ AND IT ONLY EXISTS WHILE THERE IS SOMETHING TO STOP. Not shown-then-disabled: a disabled
+          button is a promise about a moment that has not arrived. It appears when the answer starts
+          and leaves when the answer does.
+        -->
+        @if (store.sending()) {
+          <ws-button
+            variant="secondary"
+            size="sm"
+            [iconOnly]="true"
+            (click)="cancel()"
+            [title]="'ASSISTANT.CANCEL' | translate"
+            [attr.aria-label]="'ASSISTANT.CANCEL' | translate"
+            data-testid="assistant-cancel"
+          >
+            <app-icon name="square" [size]="13" />
+          </ws-button>
+        }
+
         <ws-button
-          variant="secondary"
+          variant="primary"
           size="sm"
           [iconOnly]="true"
-          (click)="cancel()"
-          [title]="'ASSISTANT.CANCEL' | translate"
-          [attr.aria-label]="'ASSISTANT.CANCEL' | translate"
-          data-testid="assistant-cancel"
+          [disabled]="!canSend()"
+          [loading]="store.sending()"
+          (click)="send()"
+          [title]="'ASSISTANT.SEND' | translate"
+          [attr.aria-label]="'ASSISTANT.SEND' | translate"
+          data-testid="assistant-send"
         >
-          <app-icon name="square" [size]="13" />
+          <app-icon name="arrow-up" [size]="15" />
         </ws-button>
-      }
-
-      <ws-button
-        variant="primary"
-        size="sm"
-        [iconOnly]="true"
-        [disabled]="!canSend()"
-        [loading]="store.sending()"
-        (click)="send()"
-        [title]="'ASSISTANT.SEND' | translate"
-        [attr.aria-label]="'ASSISTANT.SEND' | translate"
-        data-testid="assistant-send"
-      >
-        <app-icon name="arrow-up" [size]="15" />
-      </ws-button>
+      </div>
     </div>
 
     <!--

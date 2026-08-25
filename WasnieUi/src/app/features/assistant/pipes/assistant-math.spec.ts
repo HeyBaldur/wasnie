@@ -115,7 +115,13 @@ describe('assistant maths', () => {
 
       expect(host.querySelector('script')).toBeNull();
       expect(host.querySelector('img')).toBeNull();
-      expect(html).not.toContain('onerror=');
+      // ★ ASSERT THE DOM, NOT THE STRING. The old check was `html` not containing "onerror=", and it
+      // failed on markup that is perfectly SAFE: the payload comes back as `&lt;img src=x onerror=…`,
+      // fully escaped, so those characters are visible TEXT and the substring is legitimately there.
+      // What actually matters is that no element carries the handler, which is what this asks.
+      expect(host.querySelector('[onerror]')).toBeNull();
+      // Belt and braces on the escaping itself: the tag never became a tag.
+      expect(html).toContain('&lt;img');
       // And the formula still left as a token, so nothing was lost to the escaping.
       expect(html).toContain(MathTokenMarker);
     });
@@ -154,6 +160,18 @@ describe('assistant maths', () => {
      * KaTeX is fetched on demand — it is a few hundred kilobytes and the panel lives in the app shell,
      * so a static import would put it in the bundle every user downloads before seeing a screen. The
      * test therefore has to await that chunk, exactly as the browser does.
+     *
+     * ★ AND IT HAS TO AWAIT THE DIRECTIVE'S IMPORT, NOT ITS OWN. This was the intermittent failure that
+     * sat in the tech-debt list for weeks: awaiting `import('katex')` here resolves as soon as THIS
+     * module handle is ready, which says nothing about the promise the DIRECTIVE is still waiting on.
+     * On the very first maths test of a run — the one that actually pays the module load — the
+     * assertion ran before the formula was drawn. Every later test found the module cached and passed,
+     * so the failure moved to whichever test happened to go first and looked random. It was not: it was
+     * always the first one.
+     *
+     * So the wait is on the OUTCOME instead of on a proxy for it — the token is gone once the directive
+     * has replaced it. `token still present` is the honest condition, and a bounded loop keeps a real
+     * regression from hanging the suite instead of failing it.
      */
     async function renderMaths(source: string): Promise<HTMLElement> {
       fixture.componentInstance.source = source;
@@ -161,7 +179,15 @@ describe('assistant maths', () => {
       await import('katex');
       await fixture.whenStable();
       fixture.detectChanges();
-      return fixture.componentInstance.el.nativeElement;
+
+      const host = fixture.componentInstance.el.nativeElement;
+
+      for (let attempt = 0; attempt < 50 && host.textContent?.includes('wsmath'); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        fixture.detectChanges();
+      }
+
+      return host;
     }
 
     it('★ draws a BLOCK formula as KaTeX markup instead of showing its source', async () => {
@@ -169,7 +195,12 @@ describe('assistant maths', () => {
 
       expect(host.querySelector('.katex')).not.toBeNull();
       expect(host.querySelector('.ws-math--block')).not.toBeNull();
-      expect(host.textContent).not.toContain('frac');
+      // ★ THE VISUAL BRANCH, NOT THE WHOLE NODE. KaTeX always embeds the original TeX in a MathML
+      // `<annotation encoding="application/x-tex">` — that is how a screen reader and a copy-paste get
+      // the source back, and it means `host.textContent` ALWAYS contains "frac" for this formula. The
+      // old assertion could therefore never pass, on correctly rendered maths. What the test means is
+      // "the reader sees a fraction, not backslash-frac", and that lives in `.katex-html`.
+      expect(host.querySelector('.katex-html')?.textContent).not.toContain('frac');
       expect(host.textContent).not.toContain(MathTokenMarker);
     });
 
@@ -197,7 +228,13 @@ describe('assistant maths', () => {
     it('★ a formula KaTeX cannot parse shows its source instead of taking the answer down', async () => {
       const host = await renderMaths(String.raw`\[ \noSuchMacro{1} \]`);
 
-      expect(host.querySelector('.katex-error')).not.toBeNull();
+      // ★ WHAT `throwOnError: false` ACTUALLY PRODUCES. The old assertion looked for a `.katex-error`
+      // class; KaTeX does not use one on this path. It renders the unparseable source IN THE ERROR
+      // COLOUR instead — `mathcolor="#cc0000"` — which is exactly the behaviour the directive
+      // documents and the behaviour that matters: the formula degrades to its own text and the answer
+      // survives. The test was asserting an internal of the library, not the contract.
+      expect(host.querySelector('.katex')).not.toBeNull();
+      expect(host.innerHTML).toContain('#cc0000');
       // The rest of the reply is still there — one bad formula is not a broken message.
       expect(host.textContent).toContain('noSuchMacro');
     });

@@ -213,20 +213,30 @@
     color: var(--color-text-secondary);
   }
 
-  // ★ Tables were asked for by name ("better as a table"), and they are the construction most likely
-  // to be wider than 420px. `display: block` is what lets the element scroll; the bubble does not
-  // stretch to fit it.
-  table {
-    display: block;
+  // ★ THE SCROLL LIVES ON THE WRAPPER, NOT ON THE TABLE — and that split is the whole fix for the gap
+  // on the right. Scrolling used to be bought with `display: block` on the <table>, but a block-level
+  // table shrinks to fit its CONTENT rather than filling its container, so a two-column answer sat
+  // narrow with white space beside it. The two requirements cannot both be met in one element: a table
+  // that fills the column has to stay `display: table`. So the wrapper scrolls and the table fills.
+  .ws-md-table {
     max-width: 100%;
     overflow-x: auto;
     margin: 0 0 var(--space-2);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-md);
-    border-collapse: collapse;
-    font-size: var(--font-size-12);
 
     &:last-child { margin-bottom: 0; }
+  }
+
+  table {
+    // 100% of the wrapper when the content fits — which is the ordinary case and the one that was
+    // wrong. When it does not fit, the cells push past it and the WRAPPER scrolls.
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-12);
+    // The border moved to the wrapper so the rounded corners can clip the header's fill; without this
+    // the table would draw a second line just inside the first.
+    border: none;
   }
 
   th, td {
@@ -245,6 +255,12 @@
     color: var(--color-text-primary);
     white-space: nowrap;
   }
+
+  // The outer edges belong to the wrapper now; a cell drawing its own would double them.
+  tr > :first-child { border-left: none; }
+  tr > :last-child { border-right: none; }
+  thead tr:first-child > * { border-top: none; }
+  tbody tr:last-child > * { border-bottom: none; }
 
   // Zebra striping: the cheapest way to keep the eye on one row across several columns.
   tbody tr:nth-child(even) { background: var(--color-bg-surface-sunken); }
@@ -637,12 +653,60 @@
   }
 }
 
+/**
+ * The field, full width, with the send button floating over its bottom-right corner.
+ *
+ * ★ WHY NOT A FLEX ROW. Laid out as `field | button`, the button reserved a column of width for its
+ * ENTIRE height — and it sits at the bottom, so every line above it stopped early against a tall empty
+ * gap on the right. The text has the whole width now and the button is taken out of the flow.
+ */
+.assistant-composer__row {
+  position: relative;
+}
+
+.assistant-composer__row ws-textarea {
+  display: block;
+  width: 100%;
+}
+
+/**
+ * ★ THE CLEARANCE IS AT THE BOTTOM, NOT AT THE RIGHT — and that is forced, not preferred. A real
+ * <textarea> cannot flow its text around a floating element (that is a contenteditable capability) and
+ * its padding applies to every line alike. So the button can be kept off the text in exactly two ways:
+ * a reserved COLUMN, which shortens every line — the gap this change removes — or a reserved STRIP
+ * below the text, which costs a little height once and lets every line run to the right edge.
+ *
+ * 34px = the 28px button plus 6px of air. It REPLACES the field's own 8px bottom padding rather than
+ * adding to it, so the strip costs 26px, not 34.
+ *
+ * The primitive measures `scrollHeight` to auto-grow, and padding is part of scrollHeight — so the box
+ * still sizes itself correctly with no change to WsTextarea.
+ */
+.assistant-composer ::ng-deep .ws-textarea__native {
+  padding-bottom: 34px;
+}
+
 .assistant-composer__actions {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-2);
-  padding: 0 var(--space-2) var(--space-2);
+}
+
+/**
+ * ★ ROUND, AND THE SAME BLUE AS THE JUMP BUTTON. Two accent circles on one screen have to be the same
+ * circle; a rounded-rectangle send beside a round "jump to latest" reads as two design systems.
+ *
+ * Reaching into the primitive with ::ng-deep rather than adding a `shape` input to WsButton, for the
+ * same reason the textarea's chrome is neutralised the same way just above: a flag on a shared control
+ * would bake this screen's preference into every button in the app. Scoped under .assistant-composer,
+ * so nothing else can inherit it.
+ */
+.assistant-composer ::ng-deep .ws-btn--icon-only {
+  border-radius: var(--radius-full);
 }
 
 .assistant-composer__disclaimer {

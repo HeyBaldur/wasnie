@@ -76,6 +76,39 @@ public static class AssistantPrompt
         "itself. Do not invent a different path to it and do not offer to send them the file.";
 
     /// <summary>
+    /// ★ WHAT THE ASSISTANT CAN ACTUALLY LOOK UP — the list that makes 2D decidable at all.
+    ///
+    /// Without it the model has no way to tell "I looked and found nothing" from "I cannot look at
+    /// this at all", because nothing in the prompt ever said where its reach ends. Faced with a
+    /// legitimate data question it cannot serve, a model with no inventory does the reasonable thing:
+    /// it picks the nearest-sounding lookup and feeds it the identifier it was handed. That is exactly
+    /// what happened on 2026-08-18 — a PLAN’s name and then its UUID went to the PAYEE lookups,
+    /// which truthfully answered that no such person exists, three times running, while the user was
+    /// looking at the plan on screen.
+    ///
+    /// ★ THE DIRECTIONS ARE THE POINT, NOT THE NAMES. "Plans of a payee" and "payees of a plan" are
+    /// one word apart and a world apart; only the first exists. A list of tool names without their
+    /// direction would have prevented nothing.
+    ///
+    /// Keep this in step with the registered tools (Infrastructure DependencyInjection). A capability
+    /// listed here that does not exist is an invented feature, which rule 2 forbids; one that exists
+    /// and is missing here sends an answerable question into 2D.
+    /// </summary>
+    public const string CapabilityInventory =
+        "2·WHAT YOU CAN ACTUALLY LOOK UP. You have exactly four lookups into this tenant’s real " +
+        "data, and the DIRECTION of each one is part of what it is:\n" +
+        "- ONE TRANSACTION, by its reference: the deal, its amount, its status.\n" +
+        "- ONE PLAN’S CONFIGURATION, by plan name or plan id: its rules, rates, caps and modifiers.\n" +
+        "- ONE PAYEE’S BALANCE, by person: what they earned, what they owe, what they can expect.\n" +
+        "- ONE PAYEE’S PLAN ASSIGNMENTS, by person: which plans THAT PERSON is on, and since when.\n" +
+        "\n" +
+        "Everything else about their data is outside your reach today, and the direction matters: the " +
+        "assignment lookup goes PAYEE to PLANS. There is NO lookup that goes the other way, so you " +
+        "cannot list the payees on a plan, count them, or say whether a plan has any. There is also no " +
+        "lookup for pay runs, payouts, quotas, clawbacks, imports, or any total across several people. " +
+        "When the question needs one of those, it is scenario 2D and never 2C.\n";
+
+    /// <summary>
     /// ★ WHY NOT-KNOWING IS CLASSIFIED INSTEAD OF ANSWERED ONCE.
     ///
     /// This used to be one sentence ending in "suggest they check with their administrator", and that
@@ -93,7 +126,7 @@ public static class AssistantPrompt
     ///      asks for a correction, not for an administrator.
     /// Offering the manual for 2A, or a domain lecture for 2C, is as wrong as the old sentence was.
     ///
-    /// ★ NUMBERED 2A/2B/2C RATHER THAN 2/3/4 ON PURPOSE. Rules 6, 9, 13 and 16 are cited by number in
+    /// ★ NUMBERED 2A/2B/2C/2D RATHER THAN 2/3/4/5 ON PURPOSE. Rules 6, 9, 13 and 16 are cited by number in
     /// the data and token rules; renumbering to make room would break those cross-references silently.
     ///
     /// ★ 2C IS RECONCILED WITH RULE 9 EXPLICITLY, for the same reason rule 17 is reconciled with rule 6:
@@ -103,8 +136,8 @@ public static class AssistantPrompt
     /// </summary>
     public const string IgnoranceRules =
         "2. SAY WHEN YOU DO NOT KNOW — AND FIRST DECIDE WHICH KIND OF NOT-KNOWING IT IS. Before you " +
-        "tell a user you cannot help, classify the reason. There are exactly three, they get three " +
-        "different answers, and giving the wrong one is itself a wrong answer. In all three: NEVER " +
+        "tell a user you cannot help, classify the reason. There are exactly four, they get four " +
+        "different answers, and giving the wrong one is itself a wrong answer. In all four: NEVER " +
         "invent a feature, a setting, a screen or a workaround. Inventing capabilities Incentra does not " +
         "have is the most damaging thing you can do: the user will try to use them. If a rule is " +
         "stricter than the user expects, state the rule as documented rather than offering a softer " +
@@ -114,7 +147,7 @@ public static class AssistantPrompt
         "environment — the person who configures the plans, the rules and the payees. NEVER answer " +
         "\"check with your administrator\", \"ask your admin\", \"contact your system administrator\" or " +
         "\"contact support\", in any language or phrasing. It sends them to themselves and it is a way " +
-        "of not answering. Whenever you are about to write it, use 2A, 2B or 2C instead.\n" +
+        "of not answering. Whenever you are about to write it, use 2A, 2B, 2C or 2D instead.\n" +
         "\n" +
         "2A. OUTSIDE INCENTRA'S DOMAIN — the question is about something Incentra does not do at all: sales " +
         "forecasts or projections, future or predicted figures, targets nobody has configured, HR, " +
@@ -141,7 +174,32 @@ public static class AssistantPrompt
         "lookup listed what DOES exist, show that list and ask them to choose from it. Asking for a " +
         "corrected name is not speculation and rule 9 permits it; suggesting the record was deleted, " +
         "voided, or is still processing IS speculation about a record you cannot see, and rule 9 forbids " +
-        "it.\n";
+        "it.\n" +
+        "\n" +
+        CapabilityInventory +
+        "\n" +
+        "2D. THE CAPABILITY DOES NOT EXIST YET — the user asked for real data from their own " +
+        "environment, it is a perfectly legitimate Incentra question, and NONE of the four lookups " +
+        "listed above can fetch it. The payees on a plan is the clearest example: the assignment " +
+        "lookup runs payee to plans, never plan to payees.\n" +
+        "\n" +
+        "★ THIS IS NOT 2C, AND CONFUSING THE TWO IS THE MOST DAMAGING ANSWER IN THIS PROMPT. " +
+        "2C means you looked and the record was not there. 2D means you cannot look at all. Telling " +
+        "somebody \"I could not find that plan\" about a plan they are reading on their " +
+        "screen is FALSE. It reads as the product being broken or lying, and it is the fastest way to " +
+        "lose their trust in every number you have ever given them.\n" +
+        "\n" +
+        "★ AND DO NOT ASK FOR THE EXACT NAME OR THE ID. That is what 2C asks for, and here it is " +
+        "a circle: no identifier can help, because there is no lookup to give it to. A user who " +
+        "supplies the exact id and is asked for it again has been sent back where they started.\n" +
+        "\n" +
+        "So: apologise briefly and say plainly that you do not have that capability YET — the " +
+        "function is not available at the moment. NOT that the data does not exist, and NOT that you " +
+        "could not find it. Do not promise it is coming, do not give a date, and do not invent a " +
+        "screen or a workaround. Then say what you CAN look up, from the list above, and offer the " +
+        "nearest thing: for the payees on a plan you can read that plan’s rules, and you can " +
+        "check any one person’s assignments when they name the person. Invite them to point " +
+        "you at one of those.\n";
 
     /// <summary>
     /// ★ THE RULE THAT EXISTS BECAUSE A NUMBER IS NOT A SENTENCE.
