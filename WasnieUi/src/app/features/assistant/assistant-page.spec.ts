@@ -758,3 +758,97 @@ describe('AssistantConversationComponent — the view follows the answer being w
     expect(scrolled.length).toBeGreaterThan(before);
   });
 });
+
+/**
+ * The composer's shape, measured for real.
+ *
+ * ★ THESE RUN IN CHROME, WHICH DOES LAYOUT — and that is the only reason they are worth writing. The
+ * decision comes from a hidden mirror element that is actually laid out and measured; in an environment
+ * that reports zero for every box (jsdom) the component deliberately answers "stacked" and a test there
+ * would be asserting the fail-safe, not the rule. So these use REAL text at the REAL width and let the
+ * browser wrap it, rather than stubbing heights — stubbed heights are what let four broken versions of
+ * this ship with a green suite.
+ */
+describe('AssistantConversationComponent — the composer changes shape', () => {
+  let fixture: ComponentFixture<AssistantConversationComponent>;
+
+  /** Long enough to wrap at any composer width this component is ever given. */
+  const LONG_TEXT = 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor '
+    + 'incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud '
+    + 'exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure.';
+
+  function layout(): string {
+    return fixture.componentInstance.composerLayout();
+  }
+
+  /** The card carries the shape as a data attribute — one element, read by descendant selectors. */
+  function stackedRow(): HTMLElement | null {
+    return fixture.nativeElement.querySelector('.assistant-composer[data-stacked="true"]');
+  }
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AssistantConversationComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: {} },
+        { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({})), queryParams: of({}) } },
+        { provide: Router, useValue: jasmine.createSpyObj('Router', ['navigate', 'navigateByUrl']) },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AssistantConversationComponent);
+    // The fixture needs a real width for the mirror to have a width to measure against.
+    (fixture.nativeElement as HTMLElement).style.width = '420px';
+    document.body.appendChild(fixture.nativeElement);
+    fixture.detectChanges();
+    TestBed.inject(ApplicationRef).tick();
+    await fixture.whenStable();
+  });
+
+  afterEach(() => (fixture.nativeElement as HTMLElement).remove());
+
+  it('★ stacks once the text needs a second line', () => {
+    fixture.componentInstance.onDraftChange(LONG_TEXT);
+    fixture.detectChanges();
+
+    expect(layout()).toBe('stacked');
+  });
+
+  // ★ The seam the pure rule cannot see: the class has to reach the element the stylesheet selects.
+  it('★ and the card actually carries the stacked attribute', () => {
+    fixture.componentInstance.onDraftChange(LONG_TEXT);
+    fixture.detectChanges();
+
+    expect(stackedRow()).not.toBeNull();
+  });
+
+  it('is a pill with a short line', () => {
+    fixture.componentInstance.onDraftChange('hola');
+    fixture.detectChanges();
+
+    expect(layout()).toBe('pill');
+    expect(stackedRow()).toBeNull();
+  });
+
+  it('returns to a pill when the text is cleared', () => {
+    fixture.componentInstance.onDraftChange(LONG_TEXT);
+    fixture.detectChanges();
+    expect(layout()).toBe('stacked');
+
+    fixture.componentInstance.onDraftChange('');
+    fixture.detectChanges();
+
+    expect(layout()).toBe('pill');
+  });
+
+  // ★ THE FAIL-SAFE. Before the view exists there is nothing to measure, and the answer must be the
+  // shape that cannot break text. A default of `pill` turns every failed measurement into the bug this
+  // composer shipped four times.
+  it('★ answers stacked when there is nothing to measure yet', () => {
+    const fresh = TestBed.createComponent(AssistantConversationComponent);
+
+    expect(fresh.componentInstance.composerLayout()).toBe('stacked');
+  });
+});

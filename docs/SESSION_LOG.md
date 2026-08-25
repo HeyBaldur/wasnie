@@ -4,6 +4,197 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-25 — Composer v6: grid de áreas nombradas y el estado en un atributo del contenedor
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** reemplazo del mecanismo de layout · **Sin commit**
+
+**El mecanismo, ahora.** El recuadro es un `display:grid` con `grid-template-columns: 1fr auto`. El campo es
+siempre `grid-area: primary`, los botones siempre `trailing`. **Entre los dos estados cambia una sola cosa: el
+string `grid-template-areas` del contenedor.** Ningún hijo se mueve, se re-renderiza ni cambia de clase.
+
+```
+normal    'primary trailing'
+apilado   'primary primary'
+          '.       trailing'
+```
+
+**★ Y el ancho completo sale solo, sin una sola cuenta.** En la plantilla apilada `primary` ocupa **las dos
+columnas**, así que el campo simplemente ES el ancho de la caja. Todas las versiones anteriores tenían que
+calcular, reservar o recuperar ese ancho — y cada una lo hizo mal de una forma distinta.
+
+**El estado vive en un atributo del card** (`[attr.data-stacked]`), no en una clase de la fila interna, y los
+hijos cuelgan de él por selector descendiente. Ésa es la mitad del problema que desaparece **por
+construcción**: no hay otro nodo donde pueda aterrizar ni nada que le gane por especificidad. En cuatro
+intentos nunca pudimos distinguir desde afuera "no computa el estado" de "la clase no aplica"; ahora la segunda
+no puede pasar.
+
+**Conservado de v5, sin tocar:** el espejo de medición y su ancho fijo al del estado normal, el centinela
+`\u200b`, el fallo seguro a apilado (incluido el valor inicial de la señal), `computeAutosize`,
+`composerMaxHeight`, el botón fuera del área que scrollea, la cadena flex y el fade `__jump`.
+
+### ★ Una corrección al §6 del WI, porque cambia qué cuenta como evidencia
+
+El WI dice que los tests corren en **jsdom, que no hace layout**. **En este proyecto no es así:** Karma está
+configurado con **ChromeHeadless**, un navegador real que sí hace layout. Lo verifiqué en el turno anterior y
+por eso reescribí los tests del composer para usar **texto real, al ancho real**, dejando que el navegador
+envuelva — y stackean de verdad. O sea que sí hay un test capaz de ver este defecto, y esa es la razón por la
+que existe.
+
+Dicho eso, **la conclusión operativa del §6 sigue en pie y la respeto**: reporto el delta como dato, no como
+prueba de que funciona. Un test de un componente montado en una fixture no es la pantalla, y las cuatro
+entregas anteriores enseñaron que la diferencia importa.
+
+**Suite 1011, sin cambios en el número** (el test de la costura pasó de mirar la clase a mirar el atributo).
+Build de producción limpio.
+
+**Archivos:** `conversation/assistant-conversation.component.{html,scss}`, `assistant-page.spec.ts`, docs.
+
+## 2026-08-25 — Composer v5: se dejó de medir el campo vivo y se pasó a un elemento espejo
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** reemplazo del mecanismo de medición · **Sin commit**
+
+**★ §3 del WI confirmado en el código, no asumido.** `WsTextareaComponent.resize()`
+(`ws-textarea.component.ts:230-244`) escribe un `style.height` explícito sobre el textarea. Desde ese momento
+su alto es un valor que alguien eligió, no el que el contenido pide — y preguntarle después "¿esto necesita
+una segunda línea?" devuelve el número que se acaba de escribir. Los tres fallos anteriores (medir el host en
+vez del campo, medir antes del layout, medir con el ancho forzado momentáneamente) son de la misma familia:
+**medir un elemento vivo, estilado y dimensionado por JS es frágil de más maneras de las que uno enumera por
+adelantado.** El punto del WI no era arreglar el cuarto, era dejar de medirlo.
+
+### El espejo
+
+Un `<div>` oculto fuera de pantalla, `aria-hidden`, sin foco, que **nunca** recibe un `height` — su alto es
+siempre el del contenido. Se le copian del campo real las propiedades que deciden dónde envuelve el texto
+(fuente completa, `line-height`, `letter-spacing`, padding, bordes, `box-sizing`, `word-break`), **y se le
+re-copian en cada medición**: un cambio de tema mueve la fuente y el padding, y una regla de medir calibrada
+al arrancar seguiría midiendo con las métricas del tema viejo el resto de la sesión.
+
+Su ancho es **siempre el de la píldora**, en las dos direcciones — de ahí sale el criterio monótono, ahora sin
+constreñir y soltar el campo real. El alto de una línea sale del **mismo espejo**, así que los dos números son
+siempre comparables, y se recalcula en cada medición en vez de aprenderse una vez (que fue el bug de v3).
+
+**El centinela no es decorativo:** se mide `texto + \u200b`, porque sin él el navegador colapsa la línea vacía
+final y un párrafo terminado en Enter mide una línea de menos — el composer se desapilaría justo al apretar
+Return.
+
+### ★ El fallo seguro invertido
+
+Si la medición no se puede tomar, la respuesta es **apilado**. Apilado nunca rompe el texto; la píldora sólo
+es correcta cuando *sabemos* que entra en una línea. Con el default anterior, cualquier fallo de medición se
+manifestaba como el bug que venimos persiguiendo, en silencio. Incluye el valor inicial de la señal, que
+arrancaba en `pill` — un test lo agarró.
+
+### ★ Los tests que había no probaban nada, y se reescribieron
+
+Los anteriores stubeaban `scrollHeight` sobre el host del textarea: con el mecanismo nuevo ese número ya no se
+lee, así que pasaban o fallaban por razones ajenas al producto. Peor: **alturas simuladas son exactamente lo
+que dejó pasar cuatro versiones rotas con la suite en verde.** Los nuevos usan **texto real, en Chrome real,
+al ancho real**, y dejan que el navegador envuelva. Karma corre en ChromeHeadless, que **sí** hace layout —
+esa es la única razón por la que vale la pena escribirlos.
+
+### §6 — la clase llega a donde tiene que llegar
+Recibe `assistant-composer__row--stacked` el elemento de `assistant-conversation.component.html:346-349`
+(`#composerRow`), y lo consume `assistant-conversation.component.scss:676-682` (`.assistant-composer__row` con
+su `&--stacked`). Mismo elemento. Ninguna otra hoja del proyecto toca `assistant-composer__row`, así que no
+hay nada que le gane por especificidad.
+
+**Suite 1010 → 1011.** Lo reporto como dato, **no como prueba de que funciona** (§2): el mecanismo se verifica
+en pantalla.
+
+**Archivos:** `conversation/composer-mirror.ts` (nuevo), `conversation/assistant-conversation.component.{ts,html}`,
+`assistant-page.spec.ts`, docs.
+
+## 2026-08-25 — Composer v4: la estructura ya era la pedida; nunca se activaba
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** corrección del cableado del composer · **Sin commit**
+
+**★ El §5 del WI pedía reproducir el DOM antes de escribir código, y eso cambió el diagnóstico.** La
+estructura de §3 **ya estaba construida y era correcta**: `.assistant-composer__row` es el recuadro, el
+textarea y la barra de acciones son sus dos hijos, y `--stacked` cambia únicamente `flex-direction: row →
+column`. Las cinco invariantes del estado B se cumplían en el markup. **El defecto no era la disposición: era
+que la clase `--stacked` no se aplicaba nunca.** Por eso se veía lado a lado en los dos estados, en drawer y
+página — que es exactamente el síntoma reportado.
+
+Eran **dos fallos míos de v3**, ambos silenciosos, y ninguno visible desde los tests unitarios de la regla pura
+(que seguían verdes mientras el composer no cambiaba de forma en pantalla):
+
+**1. El umbral nunca se aprendía.** El alto de una línea se medía "cuando el campo esté vacío", pero esa
+comprobación vivía dentro del update que corre en cada cambio — y ese update guarda el texto nuevo **primero**.
+En la primera tecla el campo ya no estaba vacío, ni en ninguna después. El umbral quedaba en `null`, la regla
+comparaba `contentHeight` contra sí mismo y devolvía `pill` para siempre. Ahora se mide una vez del campo
+vacío real con `afterNextRender`, antes de que se escriba nada.
+
+**2. ★ `viewChild` devolvía la instancia del componente, no el elemento.** `#composerField` está sobre
+`<ws-textarea>`, que es un COMPONENTE — y una referencia de plantilla sobre un componente resuelve a la
+INSTANCIA salvo que se declare `{ read: ElementRef }`. Sin eso, `.nativeElement` era `undefined` y
+`updateComposerLayout` tomaba su return temprano en **cada** llamada: no medía nada. Falla en silencio, que es
+por lo que sobrevivió a una suite verde.
+
+**Lo que encontró esto fue el test, no la lectura.** Escribí un test de la costura (¿cambia de forma de
+verdad?) esperando que pasara con el fix del umbral; se puso rojo igual y ahí apareció el `viewChild`. Los
+tests de la regla pura no podían verlo: la regla estaba bien, lo que fallaba era todo lo que la alimentaba.
+
+**Conservado sin tocar, según §1:** la decisión por medición al ancho angosto y sus dos tests de
+no-oscilación, `computeAutosize` y sus tests, `composerMaxHeight` (40% del panel, piso 140), la eliminación de
+la franja de 34px, el botón fuera del área que scrollea, la cadena flex y el fade `__jump`.
+
+**Tests:** +4 de la costura. Front 1006 → **1010**, build de producción limpio.
+
+**Archivos:** `conversation/assistant-conversation.component.ts`, `assistant-page.spec.ts`, docs.
+
+## 2026-08-25 — Composer adaptativo: píldora de una fila, y el botón baja cuando el texto desborda
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** composer del componente compartido (v3) · **Sin commit**
+
+**Por qué v3.** v1 puso el botón absoluto → el texto largo le pasaba por debajo. v2 pidió dos filas siempre →
+hueco muerto con una sola línea, y además asumía un fix estructural que **el Paso 0 demostró innecesario**.
+v3 hace que la forma siga al contenido: una fila mientras entre, dos cuando no.
+
+### ★ La trampa de oscilación, y cómo se evita de verdad
+
+Decidir "¿desborda?" contra el ancho ACTUAL parpadea para siempre en el borde: en píldora el campo es angosto
+(el botón le come lugar) → el texto envuelve → pasa a apilado → apilado es MÁS ancho → el mismo texto entra en
+una línea → vuelve a píldora → vuelve a envolver. Una línea exacta de texto y el usuario ve la caja temblar.
+
+**La medición se hace SIEMPRE al ancho de la píldora**, en las dos direcciones. Como estando apilado el campo
+es ancho, el componente lo **constriñe momentáneamente** al ancho angosto, lee `scrollHeight` y lo suelta: un
+reflow forzado sobre un elemento chico por tecla, a cambio de un criterio monótono que no puede oscilar. La
+decisión en sí quedó como función pura (`composer-layout.ts`), separada del código que toca el DOM.
+
+**El umbral se APRENDE, no se hardcodea:** el alto de una línea sale de medir el campo vacío real, porque
+padding, line-height y la franja vienen de tokens que un tema o un cambio de fuente pueden mover.
+
+### Lo que el Paso 0 evitó construir de nuevo
+
+- **`computeAutosize` ya era una función pura y testeada** (`ws-textarea.component.ts:34-48`): hace el clamp y
+  activa el scroll interno. El Paso 3 pedía tests de clamp que ya existían — no los dupliqué. Lo que sí faltaba
+  era **de qué** depende el tope, y eso es nuevo: `composerMaxHeight` toma el 40% del **panel** (no del
+  viewport — el drawer puede ser mucho más bajo que la página) con un piso de 140px, porque el 40% de un drawer
+  corto son dos líneas y un composer donde no entran dos frases es peor que uno que aprieta el hilo.
+- **La cadena flex ya estaba bien**, así que el borde inferior no se mueve al crecer **sin forzar nada**: el
+  composer es `flex-shrink:0` al pie de una columna correcta, la lista le devuelve el alto y la caja crece
+  hacia arriba. Sale del layout que ya estaba.
+
+**Se fue la franja inferior de 34px** que había puesto en v1/v2: existía para que la última línea no quedara
+bajo un botón absoluto. Con el botón en su propia fila no hay nada que esquivar, y reservar ese espacio dentro
+del campo era alto desperdiciado en todas las líneas.
+
+**El botón vive FUERA del campo que scrollea**: al llegar al tope el textarea scrollea internamente, y un botón
+adentro se iría con el texto justo cuando el usuario quiere enviar.
+
+### 0.3 — reportado, no tocado
+El fade de `.assistant-conversation__jump` (contenedor de altura 0 con un `::before` absoluto de 88px, visible
+sólo cuando no estás pegado al fondo) **se solapa con el borde superior del composer** en cualquier estado, no
+sólo en el apilado: pinta hacia arriba desde el límite entre la lista y el composer. Sigue siendo mi principal
+sospechoso de lo que leíste como "el composer tapa la conversación". Es de `WI-asistente-pagina-fixes`, así que
+sólo lo reporto.
+
+**Tests:** +13 (`composer-layout.spec.ts`), con dos dedicados a la no-oscilación. Front 993 → **1006**, build de
+producción limpio.
+
+**Archivos:** `conversation/composer-layout.ts` (nuevo), `conversation/composer-layout.spec.ts` (nuevo),
+`conversation/assistant-conversation.component.{ts,html,scss}`, docs.
+
 ## 2026-08-25 — Composer: el botón deja de ocupar una columna y pasa a flotar en la esquina
 
 **Rama:** AI-CHAT-ASSISTANT · **Tipo:** template + SCSS del composer compartido · **Sin commit** · Sin tests (visual puro)

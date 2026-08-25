@@ -660,13 +660,46 @@
  * ENTIRE height — and it sits at the bottom, so every line above it stopped early against a tall empty
  * gap on the right. The text has the whole width now and the button is taken out of the flow.
  */
+/**
+ * ★ A GRID OF NAMED AREAS, AND THE ONLY THING THAT CHANGES BETWEEN THE TWO SHAPES IS THE TEMPLATE.
+ *
+ * The children never move, never re-render, never change a class: the field is always `primary` and
+ * the buttons are always `trailing`. Switching shape rewrites one string on the container and the
+ * browser re-places them. That is the whole mechanism.
+ *
+ * ★ WHY THIS REPLACED "FLIP flex-direction ON AN INNER ROW". Four attempts failed and we could never
+ * tell from the outside which half was broken — the state not computing, or the modifier class not
+ * reaching the element the stylesheet selects. With one attribute on the card and everything hanging
+ * off it by descendant selector, the second half cannot happen: there is nowhere else for it to land.
+ *
+ * ★ AND THE FULL WIDTH FALLS OUT, with no width arithmetic anywhere. In the stacked template `primary`
+ * spans BOTH columns, so the field simply is the width of the box. Every earlier version had to
+ * compute, reserve or claw back that width, and each one got it wrong in a different way.
+ */
 .assistant-composer__row {
-  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'primary trailing';
+  // Centred so the button sits level with a single line of text — the pill's whole look.
+  align-items: center;
+  gap: var(--space-1);
+  padding-right: var(--space-2);
+}
+
+.assistant-composer[data-stacked='true'] .assistant-composer__row {
+  grid-template-areas:
+    'primary primary'
+    '.       trailing';
+  // The button belongs to the last row now; `end` keeps it on that row's baseline rather than
+  // stretched down its height.
+  align-items: end;
+  padding-right: 0;
 }
 
 .assistant-composer__row ws-textarea {
-  display: block;
-  width: 100%;
+  grid-area: primary;
+  // A long unbroken word must wrap rather than widen the column past the box.
+  min-width: 0;
 }
 
 /**
@@ -682,18 +715,51 @@
  * The primitive measures `scrollHeight` to auto-grow, and padding is part of scrollHeight — so the box
  * still sizes itself correctly with no change to WsTextarea.
  */
+/**
+ * ★ THE FIELD'S BOTTOM STRIP IS GONE, AND ON PURPOSE. It existed to keep the last line out from under
+ * an absolutely positioned button — the v1 shape. With the button on its own ROW there is nothing
+ * overlapping the text, so reserving space inside the field would be pure wasted height on every line.
+ */
 .assistant-composer ::ng-deep .ws-textarea__native {
-  padding-bottom: 34px;
+  padding-bottom: var(--space-2);
 }
 
+/**
+ * ★ OUTSIDE THE SCROLLING FIELD, IN BOTH SHAPES. At the height ceiling the textarea scrolls internally;
+ * a button living inside it would scroll away with the text at the exact moment the user wants to send.
+ * Being a grid AREA rather than a child of the field is what guarantees that.
+ */
 .assistant-composer__actions {
-  position: absolute;
-  right: var(--space-2);
-  bottom: var(--space-2);
-
+  grid-area: trailing;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.assistant-composer[data-stacked='true'] .assistant-composer__actions {
+  justify-content: flex-end;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+/**
+ * The shape change, softened — the radius and the height both move at once, and a jump between them
+ * reads as a glitch rather than a response.
+ *
+ * Nothing MOVES here, so there is no motion to remove for a reader who asked for less of it; the
+ * media query still turns it off, because "reduce" means the interface stops animating, not that it
+ * animates only the parts somebody judged harmless.
+ */
+.assistant-composer {
+  transition:
+    border-radius var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-composer {
+    transition: none;
+  }
 }
 
 /**

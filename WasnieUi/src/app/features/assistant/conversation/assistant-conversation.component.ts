@@ -31,6 +31,8 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
 import { AssistantMathDirective } from '../pipes/assistant-math.directive';
 import { STARTER_PROMPTS, StarterPrompt, placeholderRange } from './../panel/starter-prompts';
+import { ComposerLayout, composerLayoutFor, composerMaxHeight } from './composer-layout';
+import { ComposerMirror } from './composer-mirror';
 
 /**
  * The conversation itself, with no opinion about where it is shown.
@@ -96,6 +98,91 @@ export class AssistantConversationComponent {
   readonly wide = input(false);
 
   readonly draft = signal('');
+
+  /**
+   * Which shape the composer has right now — see composer-layout.ts for the rule.
+   *
+   * ★ IT STARTS STACKED, not as a pill, and that is the fail-safe rather than a preference. Until the
+   * mirror has measured something there is no reason to believe the text fits on one line, and the
+   * pill is the shape that breaks when that belief is wrong: the button ends up beside — or over —
+   * text that needed the width. Starting stacked costs at most one frame of an extra row before the
+   * first measurement lands.
+   */
+  readonly composerLayout = signal<ComposerLayout>('stacked');
+
+  /**
+   * The width the button takes away from the field in the PILL state, in px: the 28px control plus the
+   * row's gap. Used to measure the text against the NARROW width even while the composer is stacked —
+   * which is what stops the two states flip-flopping at the boundary. See composer-layout.ts.
+   */
+  private static readonly PILL_GUTTER_PX = 34;
+
+  private readonly mirror = new ComposerMirror();
+
+  /**
+   * Re-decides the shape from the mirror.
+   *
+   * ★ FAIL-SAFE IS STACKED, AND THAT IS THE OPPOSITE OF WHAT IT WAS. When the measurement cannot be
+   * taken — before the first layout, in a test environment that does no layout, a field not in the DOM
+   * yet — the answer is the STACKED shape. Stacked never breaks text: the field owns the whole width
+   * and nothing sits beside it. The pill is only correct when we KNOW the text fits on one line, and a
+   * default of pill turns every failed measurement into exactly the bug this composer kept shipping,
+   * silently. An unnecessary second row is a cosmetic cost; a button on top of the text is not.
+   */
+  private updateComposerLayout(): void {
+    const field = this.composerField()?.nativeElement as HTMLElement | undefined;
+    const row = this.composerRow()?.nativeElement as HTMLElement | undefined;
+
+    this.composerCeiling.set(
+      composerMaxHeight((this.host.nativeElement as HTMLElement).clientHeight));
+
+    if (!field || !row) {
+      this.composerLayout.set('stacked');
+      return;
+    }
+
+    const pillWidth = this.pillWidthOf(row);
+    const contentHeight = this.mirror.measure(field, this.draft(), pillWidth);
+    const singleLine = this.mirror.measureSingleLine(field, pillWidth);
+
+    if (contentHeight === null || singleLine === null) {
+      this.composerLayout.set('stacked');
+      return;
+    }
+
+    this.composerLayout.set(composerLayoutFor(contentHeight, singleLine));
+  }
+
+  /**
+   * The width the field has in the PILL — the row's inner width minus what the inline button takes.
+   *
+   * Derived from the ROW, not from the field: the field's own width is one of the two things that
+   * changes between the states, so measuring it would make the answer depend on the current answer.
+   */
+  private pillWidthOf(row: HTMLElement): number {
+    const style = window.getComputedStyle(row);
+    const inner = row.clientWidth
+      - Number.parseFloat(style.paddingLeft || '0')
+      - Number.parseFloat(style.paddingRight || '0');
+
+    return inner - AssistantConversationComponent.PILL_GUTTER_PX;
+  }
+
+  private readonly composerField = viewChild('composerField', { read: ElementRef });
+
+  private readonly composerRow = viewChild<ElementRef<HTMLElement>>('composerRow');
+
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  /**
+   * The composer's height ceiling, recomputed from the panel it is sitting in.
+   *
+   * ★ MEASURED FROM THE HOST, NOT FROM THE WINDOW. This component is 420px wide in the drawer and the
+   * width of the content area on the page, and the two can differ in height by hundreds of pixels. A
+   * ceiling read off the viewport would let the composer swallow a short drawer whole. See
+   * composerMaxHeight for the floor that keeps the rule usable on a small panel.
+   */
+  readonly composerCeiling = signal(composerMaxHeight(0));
 
   /**
    * True once the answer has been slow enough to be worth explaining.
@@ -240,7 +327,14 @@ export class AssistantConversationComponent {
       });
     });
 
-    this.destroyRef.onDestroy(() => this.stopLongWaitClock());
+    // ★ The one-line threshold, taken from the empty field before anything is typed — see
+    // `singleLineHeight` for what happened when this was left to the first keystroke.
+    afterNextRender(() => this.updateComposerLayout(), { injector: this.injector });
+
+    this.destroyRef.onDestroy(() => {
+      this.stopLongWaitClock();
+      this.mirror.destroy();
+    });
   }
 
   /** Stops the clock and takes the explanation back down. Safe to call when it was never started. */
@@ -385,17 +479,23 @@ export class AssistantConversationComponent {
     }
     const text = this.draft();
     this.draft.set('');
+    // The box is empty again, so it is a pill again — the shape follows the content, and sending is
+    // the one path that empties it without a keystroke to notice.
+    this.updateComposerLayout();
     await this.store.send(text);
 
     const unsent = this.store.unsentText();
     if (unsent !== null && this.draft().trim().length === 0) {
       this.draft.set(unsent);
       this.composer()?.fill(unsent);
+      // Restored text can be long enough to need the stacked shape; decide from it, not from empty.
+      this.updateComposerLayout();
     }
   }
 
   onDraftChange(value: string): void {
     this.draft.set(value);
+    this.updateComposerLayout();
   }
 
   /**
@@ -421,6 +521,7 @@ export class AssistantConversationComponent {
 
     const { start, end } = placeholderRange(text);
     this.composer()?.fill(text, start, end);
+    this.updateComposerLayout();
   }
 
   /**

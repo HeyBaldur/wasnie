@@ -329,7 +329,18 @@
   exactly three things: the textarea, send, and the disclaimer.
 -->
 <footer class="assistant-conversation__composer">
-  <div class="assistant-composer" data-testid="assistant-composer-card">
+  <!--
+    ★ ONE ATTRIBUTE, ON ONE ELEMENT, AND EVERY CHILD HANGS OFF IT. The shape used to be a modifier class
+    on the inner row, and across four attempts we could never tell from the outside whether the state
+    was failing to compute or the class was failing to apply. A single data attribute on the card, read
+    by descendant selectors, removes the second possibility by construction: there is nowhere else it
+    could land and nothing to lose a specificity contest to.
+  -->
+  <div
+    class="assistant-composer"
+    [attr.data-stacked]="composerLayout() === 'stacked'"
+    data-testid="assistant-composer-card"
+  >
     <!--
       ★ THE BUTTON FLOATS IN THE CORNER; IT DOES NOT OWN A COLUMN. Laid out as a flex row beside the
       field, it reserved a strip of width for its whole height — and since it sits at the BOTTOM, every
@@ -342,7 +353,7 @@
       line short, which is the gap being removed here) or a reserved STRIP under the text (every line
       full width, the box a little taller). The strip is what the reference does too.
     -->
-    <div class="assistant-composer__row">
+    <div #composerRow class="assistant-composer__row">
       <!--
         Multi-line via the WsTextarea primitive: Enter sends, Shift+Enter breaks the line, the box
         grows with the paragraph until it scrolls. The primitive is REUSED untouched — its own border
@@ -360,7 +371,9 @@
         the next keystroke. The auto-grow and the max-height scroll are untouched.
       -->
       <ws-textarea
+        #composerField
         [minHeight]="62"
+        [maxHeight]="composerCeiling()"
         [placeholder]="'ASSISTANT.COMPOSER_PLACEHOLDER' | translate"
         [ngModel]="draft()"
         (valueChange)="onDraftChange($event)"
