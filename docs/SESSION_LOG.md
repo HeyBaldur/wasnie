@@ -4,6 +4,259 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-18 — Reactividad de listas: la cura llega a las 6 pantallas restantes + los 2 detalles (cierre del bug transversal)
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** aplicar el patrón compartido del WI-1 · **Sin commit** (lo hace Rodolfo)
+
+**Qué se hizo.** El WI-1 construyó y probó la cura en Pay Runs y Transactions. Este WI la propaga: Credits,
+Assignments, Payees, Plans, Quotas + los detalles de plan y payee. Ninguna pieza nueva — `bindFiltersToUrl` y
+`LatestRequestGuard` tal cual. Con esto el bug transversal queda cerrado de punta a punta.
+
+**★ El `reset()` correcto por pantalla, que es donde estaba el riesgo.** La tentación era un `clearFilters()`
+para todas. Habría sido un bug nuevo en tres de ellas:
+- **Credits** sí: su default ES el filtro vacío. Clear.
+- **Assignments** NO: además de los filtros de URL tiene un `search` debounced que el usuario tipea y que
+  **no viaja en la URL**. Un clear ciego le borraba lo que estaba escribiendo. Se agregó `clearUrlFilters()`,
+  que suelta `payeeId` y `status` y **no toca `search`** — la URL no tiene autoridad sobre lo que no carga.
+- **Payees / Plans / Quotas** igual: `reset` = `setStatus(null)`, `search` intacto.
+
+**★ La precondición de Assignments, cumplida ANTES de atar.** `clearPayeeFilter` escribía la URL con
+`router.navigate`, que el router **sí** observa. Atarla al helper sin tocar eso habría hecho que su propia
+escritura le rebotara de vuelta por la suscripción, dejando a la URL mandar a mitad de interacción y borrando
+justo el `search` que la URL no representa. Se convirtió a `history.replaceState` primero (invisible al
+router), y recién después se ató. Es la misma convención que Transactions, Credits y Payouts.
+
+**★ Un segundo `router.navigate` que el WI no listaba: `payee-detail.setPeriod:199`.** Apareció al mapear.
+Ahí no se podía convertir a `replaceState` sin más, porque el método además dispara `resetAndLoad()`. La
+solución fue hacer el `apply` **idempotente**: compara contra lo que ya está en pantalla y sólo actúa si
+cambió de verdad. Así el eco de su propia navegación no hace nada, y un cambio externo (back, deep-link) sí
+recarga. Sin esa comparación, cada clic en el selector de período habría refetcheado la página entera dos
+veces.
+
+**★ Y el orden de las dos suscripciones de `payee-detail` importa.** Ahora la de query params va PRIMERO, para
+que `period` ya esté bien cuando corre la carga inicial que dispara `paramMap`. Al revés, llegar con
+`?period=ytd` pedía this-month, y enseguida volvía a pedir — dos viajes y un parpadeo con los números
+equivocados. Se agregó `_loadStarted` para que la primera lectura de la URL no dispare una recarga que todavía
+no tiene nada que recargar.
+
+**`loadFromQueryParams` de Assignments pasó de aditivo a AUTORITATIVO.** Antes hacía `if (qp['x']) set(...)`,
+lo cual estaba bien cuando corría una sola vez en `ngOnInit`. Ahora corre en cada cambio de URL, así que
+aditivo significa acumular: ir de `?payeeId=X&status=Active` a `?payeeId=Y` se llevaba el status puesto y
+mostraba una lista más angosta de lo que la URL promete. Ausente ahora significa null.
+
+**El guard en 5 stores más** (Credits, Assignments, Payees, Plans, Quotas), con las tres salidas guardadas
+igual que en el WI-1: dato, fallo viejo y spinner.
+
+**Fuera de alcance, confirmado en el mapeo:** **Category mappings** no lee filtros de la URL (no tiene
+`ngOnInit`), y ya tiene `refresh()` + `[refreshOnEnter]` — no hay nada que atar, así que se dejó como está en
+vez de forzarle el helper. Payouts, Pay Runs y Transactions intactos. Los snapshot legítimos
+(login/reset/confirm-email/integrations y todos los `paramMap.get('id')` de detalle) intactos.
+
+**Un test rojo que fue culpa del test, no del código:** `credits-list.component.spec` daba un `ActivatedRoute`
+falso con sólo `snapshot`. Al pasar el componente a suscribirse, el doble se quedó corto. Se le agregó
+`queryParams: of({})`.
+
+**Tests:** +35. 28 nuevos del contrato compartido (`url-filter-binding.spec`: las 7 pantallas × 4 casos —
+aplica el deep-link, re-aplica cuando la URL cambia con el componente montado, resetea al entrar sin params,
+resetea cuando una navegación posterior los saca) y 7 del store de Assignments (apply autoritativo,
+`clearUrlFilters` que respeta el search, y el guard descartando la respuesta vieja).
+
+**Archivos:** 5 stores (`credits`, `assignments`, `payees`, `plans`, `quotas`), 5 listas, `plan-detail`,
+`payee-detail`, `credits-list.component.spec`, `url-filter-binding.spec` (nuevo),
+`assignments.store.spec` (nuevo), `docs/PROJECT_STATUS.md`, `docs/SESSION_LOG.md`.
+
+## 2026-08-18 — Reactividad de listas: la cura compartida URL→filtro + guard de carrera, probada en Pay Runs y Transactions
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** infraestructura compartida de estado (front) + 2 pantallas piloto · **Sin commit** (lo hace Rodolfo)
+
+**El bug.** "La lista muestra data vieja o toda la data hasta que aprieto F5", en todas las pantallas, desde
+siempre. El diagnóstico previo lo acotó: el fetch **sí** es reactivo (cada store tiene un `effect()` colgado de
+la señal `filter()`); lo que no reacciona es el **filtro**. El corte está en la frontera URL→filtro, amplificado
+porque los stores son `providedIn: 'root'` — singletons que sobreviven a la navegación y conservan el filtro y
+el `pagedResult` de la visita anterior. Por eso el síntoma no es "vacío" sino "la data de antes".
+
+### ★ Paso 0: las dos incógnitas, cerradas con evidencia antes de construir
+
+**1) Auditoría del loop.** Suscribirse a `queryParams` sólo es seguro si la pantalla escribe la URL con
+`history.replaceState`, que el router NO observa. Resultado de auditar las 8 listas: Transactions, Credits y
+Payouts usan `replaceState` (seguras); Pay Runs, Payees, Plans y Quotas **no escriben filtros a la URL en
+absoluto** (seguras); y **`assignments-list:124` usa `router.navigate(...)`**, que el router SÍ observa — atarla
+sin convertir esa escritura primero dejaría que la URL pise el estado del store a mitad de interacción. Queda
+anotado en el docstring del helper como precondición para el WI-2.
+
+**2) La carrera, reproducida — y resultó NO ser la que estaba documentada.** Monté un harness temporal con el
+store real, el directive real y una API falsa que me dejaba elegir el orden de LLEGADA de cada respuesta. Tres
+escenarios, y el log dice:
+
+- **La carrera que afirmaba `transactions.store:206` no existe.** Ese comentario culpaba a `refreshOnEnter`
+  disparando con el filtro viejo mientras `ngOnInit` aplicaba el de la URL. **Falso:** el `ngOnInit` de un
+  componente corre ANTES que el de los directives de su plantilla, así que `refresh()` ya ve el filtro nuevo.
+  En el log, los dos requests de re-entrada llevan el filtro correcto. Lo que sí hay es un **doble fetch**
+  idéntico en cada re-entrada — desperdicio, no incorrección.
+- **La carrera REAL es otra:** cambiar el filtro con un fetch todavía en vuelo. El viejo (más ancho y más
+  lento) llega último y pisa al nuevo. `TransactionsStore` ya la sobrevivía por su contador inline.
+- **En `PayRunsStore` la reproduje fallando en verde:** request sin filtro en vuelo → el usuario pone
+  `status=Draft` → la respuesta sin filtrar llega última → **la lista muestra TODOS los pay runs bajo un filtro
+  Draft, hasta recargar a mano.** Ése es exactamente el síntoma de Rodolfo, determinista y a la vista.
+
+**★ La lección:** el guard era necesario, pero el comentario que lo justificaba señalaba el mecanismo
+equivocado. Si hubiera construido sobre esa teoría, habría blindado contra una carrera que no ocurre y dejado
+viva la que sí. Por eso el Paso 0 no era burocracia.
+
+### Lo construido
+
+**`shared/state/bind-filters-to-url.ts`** — hermano de `RefreshOnEnterDirective`: aquél mantiene la data
+fresca al re-entrar, éste mantiene el FILTRO correcto. Se suscribe a `route.queryParams` con
+`takeUntilDestroyed` y en cada emisión llama `apply(qp)` o `reset()`. Extraído de `payouts-list` (commit
+`4659367`), la única pantalla que ya lo tenía bien — no inventado.
+
+**★ `reset()` es un callback, no un `clearFilters()` fijo, y eso NO es sobre-ingeniería:** "sin params" no
+significa "sin filtro" en todas las pantallas. El default de Pay Runs es `this-month`; un clear ciego habría
+ensanchado la lista a todo el histórico — otra respuesta equivocada, no un arreglo. Cada pantalla declara su
+propio default.
+
+**`shared/state/latest-request-guard.ts`** — hace ganar al último request PEDIDO, no al último LLEGADO.
+Extraído del contador inline de Transactions. Guarda las **tres** salidas, no sólo la feliz: una respuesta vieja
+no pisa datos frescos, un **fallo** viejo no pinta un cartel de error sobre un resultado bueno, y un request
+obsoleto al terminar no apaga el spinner del que sigue vivo.
+
+### Los dos pilotos
+
+**Pay Runs** era el peor caso y acumulaba todo: leía la URL por snapshot, no tenía rama de default, **no tenía
+`refresh()` en el store** y su plantilla era un `<app-shell>` pelado — la única lista sin `[refreshOnEnter]`.
+Ahora tiene las cuatro cosas. El `period: 'all-time'` del WI anterior tapaba un síntoma de este agujero; ahora
+está la cañería.
+
+**Transactions** pasa a `bindFiltersToUrl` (con `reset` → `clearFilters()`, que es lo que faltaba para que
+entrar desde el sidebar sin params deje de arrastrar el filtro anterior) y su contador inline pasa a ser el
+guard compartido.
+
+**Corregido de paso:** el comentario de `pay-runs.store:30` llamaba a `_lastLoadedFilter` "same race-condition
+guard as PayoutsStore" — **no lo es**: nunca descarta una respuesta, sólo alimenta el export. Ahora dice qué es
+de verdad, y el guard real vive al lado.
+
+**Deliberadamente NO tocado:** Payouts (es la referencia sana), las otras 6 listas y los detalles con el mismo
+defecto (van al WI-2), y el doble fetch de re-entrada — es desperdicio medido, no incorrección, y arreglarlo
+exige cambiarle la semántica a `RouteRefreshTracker`, que es justo lo que sostiene a Payouts. El guard lo vuelve
+inofensivo.
+
+**Tests:** 14 nuevos de las piezas compartidas (7 del helper: re-aplica en cada cambio, resetea al entrar sin
+params, se desuscribe al destruir; 5 del guard) + 3 de regresión en `pay-runs.store.spec` que fijan la carrera
+reproducida en el Paso 0.
+
+**Archivos:** `shared/state/bind-filters-to-url.ts` (nuevo), `shared/state/latest-request-guard.ts` (nuevo),
+sus dos specs (nuevos), `pay-runs.store.ts`, `pay-runs.store.spec.ts`, `pay-runs-list.component.ts`,
+`pay-runs-list.component.html`, `transactions.store.ts`, `transactions-list.component.ts`,
+`docs/PROJECT_STATUS.md`, `docs/SESSION_LOG.md`.
+
+## 2026-08-18 — Cierre de la banda "Requires action": una sola voz para el aviso de alcance + el flaky de KaTeX queda por escrito
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** limpieza de copy (front) + registro de deuda (doc) · **Sin commit** (lo hace Rodolfo)
+
+**Qué se hizo.** El WI anterior elevó al encabezado de la banda "REQUIRES ACTION" el aviso de que sus
+conteos son all-time y no obedecen al selector de período de la pantalla. Reusó la clave existente
+`DASHBOARD.PENDING_BY_PLAN_SCOPE` — pero esa clave ya se pintaba DENTRO de dos tarjetas del mismo bloque
+("Pending to Process by Plan" y "Attention"), así que la misma frase quedó **tres veces en la misma
+pantalla**. Se borraron las dos internas (texto + ícono `globe`). El aviso vive ahora en un solo lugar: el
+encabezado, que es el que visualmente gobierna todo el bloque. Las tarjetas quedan enfocadas en lo suyo —
+plan + conteo.
+
+**★ Lo no obvio: por qué el borrado era seguro.** `.band-hd__scope` (el del encabezado) NO hereda de
+`.pending-plan-card__scope` — no hay `@extend` ni mixin compartido; es una **copia literal de la receta**,
+escrita así a propósito para que ambos avisos se leyeran idénticos. Ese detalle es justo lo que hizo que
+borrar el original no rompiera la copia. Si hubiera sido un `@extend`, este WI habría dejado el encabezado
+sin estilo y nadie lo habría notado hasta runtime. Se verificó ANTES de tocar nada, no después.
+
+**Lo que NO se tocó, a propósito:**
+- La clave i18n `DASHBOARD.PENDING_BY_PLAN_SCOPE` **sigue viva** en EN/ES/PL — la usa el encabezado. Borrarla
+  habría dejado el aviso que sí queremos mostrando la clave cruda.
+- La instancia del encabezado de la banda.
+- Ningún test afirmaba la presencia del micro-texto interno (`grep SCOPE` sobre el spec del dashboard = 0
+  resultados), así que no hubo specs que actualizar.
+
+Se actualizaron además los dos comentarios que describían el arreglo viejo (uno en el HTML, otro en el SCSS)
+y que ahora mentían: decían "en las MISMAS palabras ya usadas por las tarjetas de abajo", cuando abajo ya no
+hay palabras. Un comentario que describe un estado que dejó de existir es peor que no tener comentario.
+
+**★ Deuda registrada, NO arreglada: el flaky de KaTeX.** Se creó un apartado nuevo **"Deuda Técnica
+Urgente"** en `docs/PROJECT_STATUS.md` (antes no existía) y ahí quedó documentado el test intermitente
+`assistant maths … draws an INLINE formula`, que falla ~2 de cada 10 corridas sin que cambie una línea de
+código. **No es uno de los 3 rojos permanentes de KaTeX** que venimos arrastrando: esos fallan siempre y
+están contabilizados en cada conteo de tests. Éste es un cuarto caso, del mismo cluster pero de otra
+naturaleza. La urgencia no es el test: es que un pipeline no determinístico entrena al equipo a re-correr el
+CI hasta que "pase", que es exactamente el hábito por el que se cuela una regresión real. Se dejó por escrito
+con hipótesis (carrera entre el render asíncrono de KaTeX y la aserción) y con la instrucción explícita de
+atacarlo en un WI propio, corriendo el spec aislado en loop hasta reproducirlo — nunca "de paso".
+
+**Archivos:** `dashboard.component.html`, `dashboard.component.scss`, `docs/PROJECT_STATUS.md`,
+`docs/SESSION_LOG.md`.
+
+## 2026-08-18 — "Requires action": el link lleva el periodo del conteo + el aviso de que la banda ignora el filtro
+
+**El defecto.** La tarjeta "Draft Pay Runs" decia 2 y el clic aterrizaba en una lista vacia. Tres piezas
+correctas por separado que juntas mienten: el conteo es all-time A PROPOSITO
+(`GetDashboardSummaryHandler.cs:77-78`, banda period-independent — un draft de septiembre es accionable
+hoy); Pay Runs aterriza en "this-month" incondicionalmente si la URL no trae `?period=`
+(`pay-runs-list.component.ts:147-153`); y el link pasaba solo `status`. Los 4 drafts reales caen en
+sep/oct y may/jun: ninguno intersecta agosto.
+
+**★ EL FIX ES UN PARAMETRO, NO UNA REGLA NUEVA.** La pantalla destino YA sabe leer `period=all-time`
+(esta en `validPeriods`): la caneria existia y el link no la usaba. `dashboard.component.html` ahora manda
+`{ status: 'Draft', period: 'all-time' }`.
+
+**★ LAS OTRAS TRES TARJETAS DE LA BANDA NO NECESITAN NADA — VERIFICADO, NO ASUMIDO.** Payouts (pending
+approval y approved-unpaid) aplica su periodo por defecto SOLO en la rama `else`, cuando la URL no trae
+params (`payouts-list.component.ts:157-182`), asi que llegando con `?status=…` la lista ya es all-time; y
+`loadFromQueryParams` parte de `EMPTY_PAYOUT_FILTER`, o sea no inventa fechas. Terminated es
+estructuralmente inmune: la tarjeta y la pantalla comparten LA MISMA instancia de
+`TerminatedAccountsStore` (`providedIn: 'root'`), el conteo es `rows().length` de lo que la pantalla
+lista — no hay dos caminos que puedan divergir, y no hay `period` que inyectar.
+
+**★ HAY UN TEST QUE PROHIBE LA SIMETRIA.** Ademas del test que fija `period=all-time` en Pay Runs, hay uno
+que afirma que los links de Payouts NO llevan `period`. Sin el, "arreglar" las otras tarjetas por simetria
+parece una mejora y clava un filtro que el destino no queria.
+
+**El micro-texto.** El selector de periodo vive en el header de la pantalla, asi que la suposicion
+razonable es que todo lo de abajo lo obedece; esta banda no. Se reuso la clave EXISTENTE
+`DASHBOARD.PENDING_BY_PLAN_SCOPE` ("All periods · not affected by the date filter", ya en EN/ES/PL) con el
+mismo icono `globe` y la misma receta de estilo, una sola vez bajo el encabezado de la banda. Clave nueva
+NINGUNA, traduccion nueva NINGUNA.
+
+**Residuo que decide Rodolfo:** ahora la misma frase aparece 3 veces en el dashboard (la nueva de la banda
++ las dos que ya estaban dentro de las tarjetas de "Pending to Process by Plan"). Quitar las dos viejas
+queda FUERA de este WI a proposito — el WI pedia agregar, no borrar.
+
+**Verificacion.** `ng build --configuration production` limpio. Front 856 → 858 (2 tests nuevos, verdes en
+todas las corridas). Siguen los 3 rojos preexistentes de KaTeX **y se detecto un CUARTO intermitente en el
+mismo cluster** (`assistant maths … draws an INLINE formula`): aparecio en 2 de 10 corridas, no toca nada de
+este WI. Sin commit.
+
+## 2026-08-25 — NG0100 del banner de HubSpot: el culpable era el pipe `relativeTime`, no el banner
+
+**El sintoma.** Apenas se levanta la app, la consola escupe NG0100 una vez por segundo:
+`Previous value: '15 seconds ago'. Current value: '16 seconds ago'` senalando a
+`HubSpotSyncBannerComponent`. El banner no tiene nada roto — es el mensajero.
+
+**La causa.** `RelativeTimePipe` es `pure: false` (correcto: su salida depende de "ahora") y lee
+`new Date()` DENTRO de `transform`. En dev Angular corre una segunda pasada de verificacion
+inmediatamente despues de la primera; si el reloj cruzo un segundo entre ambas, el string cambia y
+Angular lo reporta como expresion inestable. No es un bug del banner ni del estado: es un valor
+que se mueve solo dentro de un mismo ciclo de deteccion de cambios.
+
+**★ EL ARREGLO NO ES `detectChanges()` NI QUITARLE LA IMPUREZA.** Hacerlo puro congela la etiqueta
+para siempre; forzar deteccion tapa el sintoma. Lo que hay que garantizar es que **todas las pasadas
+del MISMO ciclo vean el mismo string**. El pipe memoiza el resultado por `(value, locale)` durante
+una ventana de 1s: la pasada de verificacion (milisegundos despues) recibe el valor cacheado, y la
+etiqueta sigue refrescandose en ciclos posteriores como antes.
+
+**★ LA CACHE SE CLAVEA POR VALOR, NO SOLO POR TIEMPO.** Una misma instancia del pipe puede recibir
+timestamps distintos; sin la clave, un `@for` mostraria la fecha del vecino. Hay test que lo fija.
+
+**Alcance.** Solo el pipe (`WasnieUi/src/app/shared/pipes/relative-time.pipe.ts`); los dos consumidores
+(banner de sync y pagina de Integraciones) quedan intactos. Spec nueva con 6 casos, incluida la
+simulacion del cruce de segundo entre pasadas. Front 850 -> 856 verdes (los mismos 3 rojos
+preexistentes de KaTeX). `ng build --configuration production` limpio. Sin commit.
+
 ## 2026-08-13 (5) — Referencias recurrentes: el ID viaja en el payload, el backend sigue STATELESS
 
 **El defecto.** Turno 1 resuelve un payee o un plan y lo explica; turno 2 lo refiere implicitamente ("ese

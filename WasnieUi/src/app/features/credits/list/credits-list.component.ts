@@ -1,4 +1,5 @@
 import { Component, computed, inject, OnInit, signal, DestroyRef } from '@angular/core';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { DecimalPipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -136,12 +137,14 @@ export class CreditsListComponent implements OnInit {
     );
 
   ngOnInit(): void {
-    const qp = this.route.snapshot.queryParams as Record<string, string>;
-    if (Object.keys(qp).length > 0) {
-      this.store.loadFromQueryParams(qp);
-    }
+    // SUBSCRIBE, don't snapshot — see bindFiltersToUrl. Loop-safe: _syncUrl writes with
+    // history.replaceState, which the router does not observe.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      apply: qp => { this.store.loadFromQueryParams(qp); this._syncFormFromStore(); },
+      // This screen's default IS the empty filter, so a plain clear is the right default here.
+      reset: () => { this.store.clearFilters(); this._syncFormFromStore(); },
+    });
     // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
-    this._syncFormFromStore();
     this._wireFormSubscriptions();
   }
 

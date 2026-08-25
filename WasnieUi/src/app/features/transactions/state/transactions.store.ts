@@ -10,6 +10,7 @@ import {
   VoidTransactionRequest,
 } from '../models/transaction.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { RefreshableStore } from '../../../shared/state/refreshable-store';
 
 export interface TransactionFilter {
@@ -202,12 +203,13 @@ export class TransactionsStore implements RefreshableStore {
     return body;
   }
 
-  // Monotonic request counter. Two loads can legitimately be in flight at once — e.g. entering
-  // /transactions?ref=X fires refresh() from the refreshOnEnter directive (current filter) while
-  // ngOnInit applies the URL filter and re-triggers the effect (filtered). Without this guard the
-  // response that ARRIVES last wins rather than the one requested last, so the unfiltered result
-  // could overwrite the filtered one — the page then looked unfiltered until a manual reload.
-  private _loadSeq = 0;
+  // Makes the last-REQUESTED load win rather than the last-ARRIVED one: two loads are legitimately in
+  // flight whenever the filter changes while a fetch is still running, and without this the slower,
+  // wider query can overwrite the narrower one — the page then looks unfiltered until a manual reload.
+  // Was an inline counter here; now the shared guard, so every list store can carry the same
+  // protection. (The old comment blamed refreshOnEnter racing ngOnInit — that turned out not to be
+  // the trigger; see LatestRequestGuard for what the 2026-08-18 repro actually showed.)
+  private readonly _latest = new LatestRequestGuard();
 
   private async _loadInternal(
     page: number,
@@ -216,7 +218,7 @@ export class TransactionsStore implements RefreshableStore {
     sortOrder: 'asc' | 'desc',
     f: TransactionFilter,
   ): Promise<void> {
-    const seq = ++this._loadSeq;
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -230,15 +232,15 @@ export class TransactionsStore implements RefreshableStore {
         filters: Object.keys(filters).length > 0 ? filters : undefined,
       };
       const data = await firstValueFrom(this.api.list(params));
-      if (seq !== this._loadSeq) return;   // superseded by a newer load — discard
+      if (this._latest.isStale(token)) return;   // superseded by a newer load — discard
       this.pagedResult.set(data);
     } catch {
-      if (seq !== this._loadSeq) return;   // don't let a stale failure clobber a fresh result
+      if (this._latest.isStale(token)) return;   // don't let a stale failure clobber a fresh result
       this.error.set('ERRORS.GENERIC');
     } finally {
       // Only the newest request owns the spinner; a stale one finishing must not clear it while
       // the current load is still running.
-      if (seq === this._loadSeq) this.loading.set(false);
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

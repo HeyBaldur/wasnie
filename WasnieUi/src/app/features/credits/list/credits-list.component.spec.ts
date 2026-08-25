@@ -9,6 +9,7 @@ import { CreditsStore, EMPTY_CREDIT_FILTER } from '../state/credits.store';
 import { CreditsApiService } from '../services/credits.api.service';
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
+import { of } from 'rxjs';
 
 const credit = {
   id: 'cr-1', transactionId: 'tx-77', referenceNumber: 'HUBSPOT-9',
@@ -54,7 +55,8 @@ describe('CreditsListComponent — navigation links', () => {
         { provide: CreditsApiService, useValue: {} },
         { provide: PayeesApiService, useValue: {} },
         { provide: PlansApiService, useValue: {} },
-        { provide: ActivatedRoute, useValue: { snapshot: { queryParams: {} } } },
+        // queryParams, not just snapshot: the component subscribes to the URL now (bindFiltersToUrl).
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParams: {} }, queryParams: of({}) } },
       ],
     }).compileComponents();
   });

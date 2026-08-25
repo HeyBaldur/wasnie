@@ -1,4 +1,5 @@
-import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { TranslateModule } from '@ngx-translate/core';
@@ -60,6 +61,7 @@ export class PlansListComponent implements OnInit {
   readonly store = inject(PlansStore);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
   private readonly subState = inject(SubscriptionStateService);
   private readonly tierLimitModal = inject(TierLimitModalService);
@@ -120,10 +122,16 @@ export class PlansListComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const qp = this.route.snapshot.queryParams as Record<string, string>;
-    if (qp['status'] && ['Draft', 'Active', 'Archived'].includes(qp['status'])) {
-      this.store.setStatus(qp['status'] as PlanStatus);
-    }
+    // SUBSCRIBE, don't snapshot — see bindFiltersToUrl. Loop-safe: this screen never writes filter
+    // params to the URL, so re-applying cannot re-trigger itself.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      // Authoritative: an absent or bogus ?status= means "no status filter", not "keep the old one".
+      apply: qp => this.store.setStatus(
+        ['Draft', 'Active', 'Archived'].includes(qp['status']) ? (qp['status'] as PlanStatus) : null),
+      // This screen's default is the unfiltered list. `search` is not carried in the URL, so it is
+      // deliberately left alone.
+      reset: () => this.store.setStatus(null),
+    });
     // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
   }
 

@@ -1,4 +1,5 @@
-import { Component, HostListener, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
@@ -59,6 +60,7 @@ export class AssignmentsListComponent implements OnInit {
   readonly store = inject(AssignmentsStore);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
 
   readonly openMenuId = signal<string | null>(null);
@@ -110,22 +112,34 @@ export class AssignmentsListComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    // Deep-link from a payee's Assignments card ("View all") arrives pre-filtered.
-    const qp = this.route.snapshot.queryParams as Record<string, string>;
-    if (Object.keys(qp).length > 0) {
-      this.store.loadFromQueryParams(qp);
-    }
+    // Deep-link from a payee's Assignments card ("View all") arrives pre-filtered. SUBSCRIBE, don't
+    // snapshot — see bindFiltersToUrl. Loop-safe only because clearPayeeFilter was converted from
+    // router.navigate to history.replaceState in this same change.
+    bindFiltersToUrl(this.route, this.destroyRef, {
+      apply: qp => this.store.loadFromQueryParams(qp),
+      // Default = no deep-link filters. NOT a full clear: `search` is the user's own typing and is
+      // not carried in the URL, so the URL must not wipe it.
+      reset: () => this.store.clearUrlFilters(),
+    });
     // First load handled by the store's constructor effect; re-entry refresh by [refreshOnEnter].
   }
 
-  /** Drops the payee filter and strips it from the URL so a refresh doesn't bring it back. */
+  /**
+   * Drops the payee filter and strips it from the URL so a refresh doesn't bring it back.
+   *
+   * Writes with `history.replaceState`, NOT `router.navigate`. This screen now subscribes to
+   * `queryParams`, and the router observes its own navigations: a navigate here would echo straight
+   * back into that subscription, letting the URL re-assert itself as the authority mid-interaction
+   * and wipe state the URL does not carry — the debounced `search` the user had typed. replaceState
+   * is invisible to the router, so the write cannot re-trigger the read. Same convention as
+   * Transactions, Credits and Payouts.
+   */
   clearPayeeFilter(): void {
     this.store.clearPayeeFilter();
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { payeeId: null },
-      queryParamsHandling: 'merge',
-    });
+    const qp = new URLSearchParams(window.location.search);
+    qp.delete('payeeId');
+    const suffix = qp.toString() ? '?' + qp.toString() : '';
+    window.history.replaceState(null, '', window.location.pathname + suffix);
   }
 
   onSearch(value: string): void {

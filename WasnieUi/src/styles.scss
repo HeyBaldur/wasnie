@@ -65,6 +65,14 @@
   --font-size-32: 32px;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
 
+  /* ── Font families ──
+   *
+   * `--font-sans` is the body face (unchanged, just tokenised so nothing hard-codes a stack any more).
+   * `--font-display` is the TITLE face — POC: Source Serif 4, loaded in index.html. The fallback chain is
+   * not decoration: it is what renders before the webfont arrives and what renders if it never does. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Source Serif 4', ui-serif, Georgia, 'Times New Roman', serif;
+
   /* ── Transitions ── */
   --transition-fast: 100ms ease;
   --transition-base: 150ms ease;
@@ -343,15 +351,31 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
-    font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: var(--font-sans);
     font-size: var(--font-size-14);
     line-height: 1.5;
     background-color: var(--color-bg-base);
     color: var(--color-text-primary);
+  }
+
+  /* ── Titles are set in the display face ──
+   *
+   * POC. One rule instead of a font-family per component: every title in the app is already a heading
+   * element — the page headers (`ws-page-header`, `ws-page-layout`), the auth and wizard screens, the
+   * chapter titles of the manual (rendered from markdown via `[innerHTML]`, which no component
+   * stylesheet can reach) and the HubSpot connector documentation. Touching the elements covers all of
+   * them at once and is a single line to revert if the POC is rejected.
+   *
+   * The one title that is NOT a heading element is the sidebar brand (a `<span>`); it opts in explicitly
+   * in the sidebar's own stylesheet.
+   *
+   * Living in `@layer base` is deliberate: any component that ever needs a sans title only has to say so,
+   * and its own (unlayered) rule wins without a specificity fight. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
   }
 
   a {

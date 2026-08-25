@@ -49,6 +49,9 @@
 
 .sidebar__brand-name {
   @apply text-2xl font-semibold truncate;
+  /* The product name is a title, but it is a `<span>` and not a heading, so it opts into the display
+     face by hand — the global `h1..h4` rule in styles.scss cannot reach it. */
+  font-family: var(--font-display);
   color: var(--color-sidebar-active-text);
 }
 
