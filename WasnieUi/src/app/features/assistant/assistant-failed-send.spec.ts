@@ -22,6 +22,7 @@ import { AssistantStore } from './state/assistant.store';
 import { AssistantApiService } from './services/assistant.api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AssistantConversation, AssistantMessage, AssistantStreamEvent } from './models/assistant.model';
+import { draftKeyFor } from './state/draft-storage';
 
 function msg(id: string, role: 'User' | 'Assistant', content: string, sequence: number): AssistantMessage {
   return { id, role, content, payload: null, sequence, createdAt: '' } as unknown as AssistantMessage;
@@ -79,7 +80,13 @@ describe('A send that fails — the user\'s words are not lost', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AssistantApiService, useValue: api },
-        { provide: AuthService, useValue: { getAccessToken: () => 'token' } },
+        // The store composes its draft storage key from the tenant and the user, so a double that
+        // only answers getAccessToken is not the service any more.
+        { provide: AuthService, useValue: {
+          getAccessToken: () => 'token',
+          tenantId: () => 't1',
+          currentUser: () => ({ userId: 'u1' }),
+        } },
       ],
     });
 
@@ -311,5 +318,140 @@ describe('A send that fails — the user\'s words are not lost', () => {
 
       expect(store.unsentText()).toBeNull();
     });
+  });
+});
+
+/**
+ * Drafts belong to conversations, not to the composer.
+ *
+ * ★ THE BUG: the text lived in a signal on the COMPONENT, and Angular reuses that component when the
+ * conversation changes. Type in A, switch to B, and A's half-written question was sitting in B's box —
+ * one Enter away from being sent to the wrong thread.
+ */
+describe('Drafts are per conversation', () => {
+  let store: AssistantStore;
+
+  const NEW = AssistantStore.NEW_CONVERSATION_DRAFT;
+
+  function open(id: string): void {
+    store.conversation.set({
+      id, title: id, createdAt: '', updatedAt: '', lastTurnUnanswered: false, messages: [],
+    } as never);
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: {
+          listConversations: () => of([]),
+          deleteConversation: () => of(void 0),
+        } },
+        { provide: AuthService, useValue: {
+          getAccessToken: () => 'token', tenantId: () => 't1', currentUser: () => ({ userId: 'u1' }),
+        } },
+      ],
+    });
+    store = TestBed.inject(AssistantStore);
+  });
+
+  afterEach(() => sessionStorage.clear());
+
+  it('★ what is typed in A stays in A when the user moves to B', () => {
+    open('A');
+    store.setDraft('A', 'lo que escribí en A');
+
+    open('B');
+
+    expect(store.activeDraft()).withContext('B opens clean').toBe('');
+  });
+
+  it('★ and coming back to A returns it untouched', () => {
+    open('A');
+    store.setDraft('A', 'lo de A');
+    open('B');
+    store.setDraft('B', 'lo de B');
+
+    open('A');
+    expect(store.activeDraft()).toBe('lo de A');
+
+    open('B');
+    expect(store.activeDraft()).toBe('lo de B');
+  });
+
+  it('clearing A leaves B alone', () => {
+    open('A');
+    store.setDraft('A', 'lo de A');
+    store.setDraft('B', 'lo de B');
+
+    store.clearDraft('A');
+
+    open('A');
+    expect(store.activeDraft()).toBe('');
+    open('B');
+    expect(store.activeDraft()).toBe('lo de B');
+  });
+
+  // ★ "I had not sent it yet" is the whole point of a draft, and a thread with no id yet is still a
+  // thread. Without a key of its own this text had nowhere to live.
+  it('★ a conversation that does not exist yet keeps its own draft', () => {
+    store.conversation.set(null);
+    expect(store.activeDraftKey()).toBe(NEW);
+
+    store.setDraft(NEW, 'algo que todavía no mandé');
+    open('A');
+    expect(store.activeDraft()).toBe('');
+
+    store.conversation.set(null);
+    expect(store.activeDraft()).toBe('algo que todavía no mandé');
+  });
+
+  it('deleting a conversation forgets its draft, in memory and in storage', async () => {
+    open('A');
+    store.setDraft('A', 'lo de A');
+    await store.remove('A');
+
+    open('A');
+    expect(store.activeDraft()).toBe('');
+    expect(sessionStorage.getItem(draftKeyFor('t1', 'u1')) ?? '').not.toContain('lo de A');
+  });
+
+  // ★ A refresh is the event the backup exists for. A new store instance must rebuild the same map.
+  it('★ survives a reload', () => {
+    open('A');
+    store.setDraft('A', 'sobrevive al F5');
+
+    // A fresh page: a brand-new store seeded from the same storage.
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: {
+          listConversations: () => of([]),
+          deleteConversation: () => of(void 0),
+        } },
+        { provide: AuthService, useValue: {
+          getAccessToken: () => 'token', tenantId: () => 't1', currentUser: () => ({ userId: 'u1' }),
+        } },
+      ],
+    });
+    const reloaded = TestBed.inject(AssistantStore);
+    reloaded.conversation.set({
+      id: 'A', title: 'A', createdAt: '', updatedAt: '', lastTurnUnanswered: false, messages: [],
+    } as never);
+
+    expect(reloaded.activeDraft()).toBe('sobrevive al F5');
+  });
+
+  // ★ Storage failing is not a reason the composer stops working.
+  it('★ keeps working entirely in memory when storage throws', () => {
+    spyOn(Storage.prototype, 'setItem').and.throwError('denied');
+    open('A');
+
+    expect(() => store.setDraft('A', 'sigue andando')).not.toThrow();
+    expect(store.activeDraft()).toBe('sigue andando');
   });
 });

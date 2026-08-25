@@ -169,9 +169,7 @@
   padding: var(--space-2);
 }
 
-// The shared conversation fades its bottom edge into whatever it is sitting on. The drawer's panel is a
-// RAISED surface, so it has to say so — the component's own default is the ordinary one, which would
-// show as a grey band against this.
-app-assistant-conversation {
-  --assistant-fade: var(--color-bg-surface-raised);
-}
+// (The conversation used to be told what colour to fade into from here, because the panel was what
+// showed behind it. It paints its own canvas now, so there is nothing left for the drawer to declare —
+// and a stale declaration is worse than none: it kept the fade dissolving into this panel's colour
+// after the thing behind it had changed.)

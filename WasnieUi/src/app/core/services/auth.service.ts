@@ -83,6 +83,28 @@ export class AuthService {
     this._currentUser.set(null);
     localStorage.removeItem('wasnie_session');
     sessionStorage.removeItem('wasnie:confirm-email');
+    AuthService.clearFeatureDrafts();
+  }
+
+  /**
+   * Unsent text a feature was holding for this user.
+   *
+   * ★ SWEPT BY PREFIX, so this file needs to know nothing about which features keep drafts — the
+   * contract is the shape of the key, not an import. Reaching into the assistant from here would point
+   * a core service at a feature, which is the dependency direction the architecture forbids.
+   *
+   * ★ AND IT MATTERS EVEN THOUGH THE KEYS ALREADY CARRY THE USER. Those keys stop the NEXT user from
+   * READING this one's drafts; this stops them from still being there at all. Signing out on a shared
+   * machine should leave nothing behind, not merely something addressed to somebody else.
+   */
+  private static clearFeatureDrafts(): void {
+    try {
+      Object.keys(sessionStorage)
+        .filter((key) => key.startsWith('wasnie:draft:'))
+        .forEach((key) => sessionStorage.removeItem(key));
+    } catch {
+      // Storage being unavailable is not a reason a logout can fail.
+    }
   }
 
   /**

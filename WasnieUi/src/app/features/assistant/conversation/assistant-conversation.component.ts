@@ -26,6 +26,7 @@ import {
   phaseLabelKey,
 } from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
+import { WsPopoverComponent } from '../../../shared/ui';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { AssistantMarkdownPipe } from '../pipes/assistant-markdown.pipe';
@@ -33,6 +34,7 @@ import { AssistantMathDirective } from '../pipes/assistant-math.directive';
 import { STARTER_PROMPTS, StarterPrompt, placeholderRange } from './../panel/starter-prompts';
 import { ComposerLayout, composerLayoutFor, composerMaxHeight } from './composer-layout';
 import { ComposerMirror } from './composer-mirror';
+import { formatMessageTime, plainTextOf } from './message-meta';
 
 /**
  * The conversation itself, with no opinion about where it is shown.
@@ -60,6 +62,7 @@ import { ComposerMirror } from './composer-mirror';
     FormsModule,
     TranslateModule,
     WsButtonComponent,
+    WsPopoverComponent,
     WsTextareaComponent,
     IconComponent,
     AssistantMarkdownPipe,
@@ -97,7 +100,15 @@ export class AssistantConversationComponent {
    */
   readonly wide = input(false);
 
-  readonly draft = signal('');
+  /**
+   * What is in the composer — read from the store's per-conversation map, not held here.
+   *
+   * ★ THAT MOVE IS THE FIX. A signal on this component belonged to the COMPONENT, and Angular reuses
+   * the component when the conversation changes: text typed in one thread stayed in the box and was one
+   * Enter away from being sent to another. The drafts live with the conversations they belong to now,
+   * and this only reads the one on screen.
+   */
+  readonly draft = computed(() => this.store.activeDraft());
 
   /**
    * Which shape the composer has right now — see composer-layout.ts for the rule.
@@ -331,8 +342,17 @@ export class AssistantConversationComponent {
     // `singleLineHeight` for what happened when this was left to the first keystroke.
     afterNextRender(() => this.updateComposerLayout(), { injector: this.injector });
 
+    // ★ A DRAFT CAN ARRIVE WITHOUT A KEYSTROKE. Switching conversations and reloading the page both
+    // replace the composer's content with no input event to notice it, so the shape and the height
+    // would still describe the text that was there before — a six-line draft coming back as one line.
+    effect(() => {
+      this.draft();
+      untracked(() => this.updateComposerLayout());
+    });
+
     this.destroyRef.onDestroy(() => {
       this.stopLongWaitClock();
+      this.clearCopiedTimer();
       this.mirror.destroy();
     });
   }
@@ -473,20 +493,98 @@ export class AssistantConversationComponent {
    * ★ AND ONLY INTO AN EMPTY BOX. An answer can take several seconds, and someone who started typing
    * their next question in the meantime must not have it overwritten by the restore.
    */
+  // ── The bar under an answer: when it was sent, and copying it ─────────────
+
+  /** The message whose copy just succeeded, so its label can say so for a moment. */
+  readonly copiedId = signal<string | null>(null);
+
+  /** The message whose copy FAILED. Never silent: the user would believe they had it. */
+  readonly copyFailedId = signal<string | null>(null);
+
+  private copiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** How long "Copied" stays up. Long enough to read, short enough not to look stuck. */
+  private static readonly COPIED_FEEDBACK_MS = 2000;
+
+  /** The turn's timestamp, absolute and in the reader's language — see formatMessageTime. */
+  messageTime(iso: string): string {
+    return formatMessageTime(iso, this.translate.currentLang ?? this.translate.getDefaultLang() ?? 'en');
+  }
+
+  /**
+   * Copies the answer as the reader sees it: no `#`, no `**`, tables and lists laid out.
+   *
+   * Takes the RENDERED element rather than the stored string — see plainTextOf for why re-deriving it
+   * from the Markdown would eventually copy something that was never on screen.
+   */
+  async copyAnswer(messageId: string, event: Event): Promise<void> {
+    // ★ THE NODE IS FOUND FROM THE CLICK, NOT FROM A TEMPLATE REFERENCE. A `#ref` on the rendered div
+    // is scoped to the `@if` branch that declares it, and this bar sits OUTSIDE that branch — the
+    // reference is simply not in scope here, which the compiler says plainly. Walking up to the message
+    // and back down to its rendered body needs no scope at all and cannot pick the wrong message: the
+    // bar is inside the bubble it belongs to.
+    const bubble = (event.target as HTMLElement | null)?.closest?.('.assistant-msg');
+    const rendered = bubble?.querySelector<HTMLElement>('.assistant-msg__markdown') ?? null;
+
+    await this.copy(messageId, plainTextOf(rendered));
+  }
+
+  /** Copies the Markdown exactly as the model produced it — the stored string, untouched. */
+  async copyMarkdown(messageId: string, content: string): Promise<void> {
+    await this.copy(messageId, content);
+  }
+
+  /**
+   * ★ A FAILED COPY IS ANNOUNCED. The clipboard needs a secure context and the user's permission, and
+   * both can be missing. Swallowing the rejection leaves someone pasting yesterday's clipboard into an
+   * email believing it is the assistant's answer — the one outcome worse than not offering the button.
+   */
+  private async copy(messageId: string, text: string): Promise<void> {
+    this.clearCopiedTimer();
+    this.copyFailedId.set(null);
+
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copiedId.set(messageId);
+      this.copiedTimer = setTimeout(
+        () => this.copiedId.set(null), AssistantConversationComponent.COPIED_FEEDBACK_MS);
+    } catch {
+      this.copiedId.set(null);
+      this.copyFailedId.set(messageId);
+    }
+  }
+
+  private clearCopiedTimer(): void {
+    if (this.copiedTimer !== null) {
+      clearTimeout(this.copiedTimer);
+      this.copiedTimer = null;
+    }
+  }
+
   async send(): Promise<void> {
     if (!this.canSend()) {
       return;
     }
     const text = this.draft();
-    this.draft.set('');
+    // ★ THE KEY IS READ BEFORE THE SEND, NOT AFTER. A first send CREATES the conversation, so the
+    // active key changes from the new-conversation slot to a real id while the request is in flight.
+    // Captured afterwards, the restore below would file the failed text under whichever thread the key
+    // named by then — and the words would come back in the wrong composer, or in none.
+    const draftKey = this.store.activeDraftKey();
+
+    this.store.clearDraft(draftKey);
     // The box is empty again, so it is a pill again — the shape follows the content, and sending is
     // the one path that empties it without a keystroke to notice.
     this.updateComposerLayout();
     await this.store.send(text);
 
+    // ★ RESTORED AFTER THE CLEAR, NEVER BEFORE. The clear above is what empties the box on a normal
+    // send; if it ran after this, a turn that died before reaching the server would be handed back and
+    // then immediately wiped — the user would watch their message appear and vanish.
     const unsent = this.store.unsentText();
     if (unsent !== null && this.draft().trim().length === 0) {
-      this.draft.set(unsent);
+      const restoreKey = this.store.activeDraftKey();
+      this.store.setDraft(restoreKey, unsent);
       this.composer()?.fill(unsent);
       // Restored text can be long enough to need the stacked shape; decide from it, not from empty.
       this.updateComposerLayout();
@@ -494,7 +592,7 @@ export class AssistantConversationComponent {
   }
 
   onDraftChange(value: string): void {
-    this.draft.set(value);
+    this.store.setDraft(this.store.activeDraftKey(), value);
     this.updateComposerLayout();
   }
 
@@ -517,7 +615,7 @@ export class AssistantConversationComponent {
   useStarter(starter: StarterPrompt): void {
     const text = this.translate.instant(starter.promptKey);
 
-    this.draft.set(text);
+    this.store.setDraft(this.store.activeDraftKey(), text);
 
     const { start, end } = placeholderRange(text);
     this.composer()?.fill(text, start, end);
@@ -547,7 +645,7 @@ export class AssistantConversationComponent {
     await this.store.retry();
 
     if (retried !== null && this.draft() === retried) {
-      this.draft.set('');
+      this.store.clearDraft(this.store.activeDraftKey());
     }
   }
 }

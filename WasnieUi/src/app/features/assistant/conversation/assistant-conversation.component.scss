@@ -14,6 +14,19 @@
 :host {
   display: flex;
   flex-direction: column;
+
+  /**
+   * ★ THE CANVAS, ONE STEP BELOW THE CARDS THAT SIT ON IT — and it is the BACKGROUND that moved, not
+   * the composer. The composer card was painted on a background of the same surface level (identical
+   * variable on the page: `--color-bg-surface` both here and there), so the box the user types into had
+   * nothing to stand out from and did not read as a box at all.
+   *
+   * Fixed HERE, in the shared component, so the drawer and the page get it from one line. And fixed by
+   * REPOINTING this element at an existing token, never by editing a token's value: `--color-bg-surface`
+   * is worn by every card and by the conversation aside, so changing what it means would have fixed one
+   * panel and repainted half the application.
+   */
+  background: var(--color-bg-canvas);
   // min-height: 0 is load-bearing in a flex column: without it the host refuses to shrink and pushes
   // the composer out of view — the same bug that once hid Save/Cancel in ws-modal.
   min-height: 0;
@@ -592,6 +605,9 @@
 .assistant-alert__text {
   margin: 0;
   font-size: var(--font-size-13);
+  // Semi-bold: this paragraph is the one thing in the card the user has to read — it says the message
+  // survived. Regular weight let it sit as ordinary body text beside a bolder title that says less.
+  font-weight: 600;
   // The body reads on the surface's own text colour: warning-on-warning for a whole paragraph is
   // harder to read than it looks, and the title plus the icon already carry the severity.
   color: var(--color-text-primary);
@@ -807,10 +823,15 @@
    * by the composer's edge, and the button gets a ground to sit on so it reads as floating ABOVE the
    * conversation rather than printed into it.
    *
-   * ★ IT FADES TO THE HOST'S OWN BACKGROUND, not to a fixed colour. The page's chat pane is
-   * `--color-bg-surface` and the drawer's panel is `--color-bg-surface-raised`; a hard-coded stop would
-   * be a visible grey band in whichever of the two it was not written for — and a black one would be
-   * wrong in all three themes. The host sets `--assistant-fade`; this only consumes it.
+   * ★ IT FADES TO THE CANVAS THIS COMPONENT PAINTS — and that used to be a variable the HOST set,
+   * because the page's pane and the drawer's panel were different colours behind it. The moment this
+   * component started painting its own background, that indirection stopped describing anything: both
+   * hosts now have the same thing behind the fade, and the two declarations were free to drift from it.
+   * They did, immediately — the fallback still said `--color-bg-surface` and the drawer still said
+   * `raised`, so the gradient dissolved into a colour that was no longer there and left a pale band
+   * across the bottom of the conversation.
+   *
+   * One token, read from the same place the background comes from, so it cannot go stale again.
    */
   &::before {
     content: '';
@@ -822,7 +843,7 @@
     background: linear-gradient(
       to bottom,
       transparent,
-      var(--assistant-fade, var(--color-bg-surface)) 85%
+      var(--color-bg-canvas) 85%
     );
   }
 }
@@ -861,5 +882,114 @@
   &:focus-visible {
     outline: none;
     box-shadow: var(--shadow-md), var(--shadow-focus);
+  }
+}
+
+// ── The bar under an assistant message ──────────────────────────────────────
+//
+// Always visible. It was revealed on hover, which put the copy button out of reach on touch, made it
+// awkward to get to from the keyboard, and left it undiscoverable for anyone who never rested the
+// pointer on a message. A permanent bar also removes the whole class of reflow problems that hiding and
+// showing it created.
+.assistant-msg__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.assistant-msg__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-msg__meta-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+
+  padding: 2px var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+}
+
+.assistant-msg__meta-item {
+  display: block;
+  width: 100%;
+
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+  }
+}
+
+// Never silent: a copy that failed must say so, or the user pastes yesterday's clipboard believing it
+// is the answer.
+.assistant-msg__copy-failed {
+  color: var(--color-danger);
+}
+
+/**
+ * ★ THE RETRY BUTTON WEARS THE ALERT'S COLOUR, not the page's neutral grey.
+ *
+ * It was `secondary`, which reads as "an option someone might take" — and this is the only thing to do
+ * with a turn that failed. A grey button inside an amber card also belongs to neither: it looks like a
+ * control that happened to land there rather than the alert's own answer.
+ *
+ * ★ WARNING, STILL NOT DANGER. The card is deliberately warning — nothing is broken and nothing was
+ * lost, the question is stored and can be answered again — so the button is filled in the same amber.
+ * A red one would say the opposite of what the card says.
+ *
+ * ★ `--color-text-inverse` IS THE RIGHT PARTNER FOR `--color-warning`, and not by luck: the two flip
+ * together across the themes. Light and soft give a dark amber fill with near-white text; dark gives a
+ * bright amber fill with near-black text. A hard-coded white would be unreadable in exactly one theme.
+ *
+ * Scoped to `.assistant-alert`, so the twin button beside a CANCELLED reply keeps its quiet secondary
+ * look — that turn is a decision the user made, not a failure, and shouting about it would be wrong.
+ */
+.assistant-alert ::ng-deep .ws-btn {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: var(--color-text-inverse);
+
+  /**
+   * ★ THE HOVER HAS TO RE-DECLARE THE FILL, NOT JUST DIM IT — and forgetting that turned the button
+   * BLACK ON BLACK. `ws-btn--secondary` carries its own `:hover` rule setting
+   * `background: var(--color-bg-surface-sunken)`, so the amber above only ever applied at rest: the
+   * moment the pointer arrived, the primitive's grey won the background while the inverse text colour
+   * stayed. In the dark theme those are `#0a0e15` and `#0e1218` — the label simply disappeared.
+   *
+   * A `filter` could not have saved it either: it dims whatever colour is actually painted, and the
+   * colour actually painted was the primitive's, not this one's.
+   *
+   * The dimming is done by lowering the fill's own opacity against the card behind it, so there is
+   * still no second amber invented here.
+   */
+  &:hover:not(:disabled),
+  &:active:not(:disabled) {
+    background: color-mix(in srgb, var(--color-warning) 88%, transparent);
+    border-color: var(--color-warning);
+    color: var(--color-text-inverse);
   }
 }

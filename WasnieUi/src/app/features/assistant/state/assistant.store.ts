@@ -2,6 +2,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { AssistantApiService } from '../services/assistant.api.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { DraftMap, draftKeyFor, readDrafts, writeDrafts } from './draft-storage';
 import {
   AssistantConversation,
   AssistantConversationSummary,
@@ -66,6 +67,88 @@ export class AssistantStore {
   readonly messages = computed<AssistantMessage[]>(() => this.conversation()?.messages ?? []);
   readonly hasConversation = computed(() => this.conversation() !== null);
 
+  // ── Per-conversation drafts ───────────────────────────────────────────────
+
+  /**
+   * The key a draft is filed under when the conversation does not exist on the server yet.
+   *
+   * ★ A NEW CONVERSATION IS A CONVERSATION. Someone who types into an empty assistant, goes to read an
+   * old thread and comes back expects their words to be there — "I had not sent it yet" is the whole
+   * point of a draft. Without a key of its own that text had nowhere to live and was simply lost.
+   */
+  static readonly NEW_CONVERSATION_DRAFT = '__new__';
+
+  /**
+   * Every unsent draft, by conversation.
+   *
+   * ★ A MAP, NOT ONE STRING — that single string IS the bug. It belonged to whichever conversation was
+   * open last, so typing in A and switching to B showed A's half-written question sitting in B's
+   * composer, ready to be sent to the wrong thread.
+   *
+   * ★ AND MEMORY IS THE SOURCE OF TRUTH. sessionStorage is a backup that can fail; see draft-storage.
+   */
+  /**
+   * ★ SEEDED FROM STORAGE AT FIELD INITIALISATION, which happens exactly once: this store is
+   * `providedIn: 'root'`, so that is one restore per page load — precisely the event the backup exists
+   * for. Restoring from a component instead would re-read on every mount of the drawer and of the page,
+   * and the two would race to overwrite each other's map.
+   */
+  private readonly drafts = signal<DraftMap>(readDrafts(this.draftStorageKey()));
+
+  /** Which storage bucket this user's drafts belong in — tenant and user, see draftKeyFor. */
+  private draftStorageKey(): string {
+    return draftKeyFor(this.auth.tenantId(), this.auth.currentUser()?.userId ?? null);
+  }
+
+  /** The key the composer is reading and writing right now. */
+  readonly activeDraftKey = computed(
+    () => this.conversation()?.id ?? AssistantStore.NEW_CONVERSATION_DRAFT);
+
+  /** The draft for the conversation on screen, or empty. */
+  readonly activeDraft = computed(() => this.drafts()[this.activeDraftKey()] ?? '');
+
+  /** Restores the backup. Safe to call more than once; a failed read yields an empty map. */
+  loadDrafts(): void {
+    this.drafts.set(readDrafts(this.draftStorageKey()));
+  }
+
+  setDraft(conversationKey: string, text: string): void {
+    this.drafts.update(all => ({ ...all, [conversationKey]: text }));
+    this.persistDrafts();
+  }
+
+  clearDraft(conversationKey: string): void {
+    this.drafts.update(all => {
+      const { [conversationKey]: _removed, ...rest } = all;
+      return rest;
+    });
+    this.persistDrafts();
+  }
+
+  /**
+   * Moves a draft onto the id the server just assigned.
+   *
+   * ★ OTHERWISE IT IS ORPHANED. Text typed before the first send is filed under the new-conversation
+   * key; the moment the thread gets a real id, the composer starts reading that id instead — and the
+   * draft would still be sitting under a key nothing looks at any more, invisible and undeletable.
+   */
+  private migrateNewConversationDraft(conversationId: string): void {
+    const pending = this.drafts()[AssistantStore.NEW_CONVERSATION_DRAFT];
+    if (pending === undefined) {
+      return;
+    }
+
+    this.drafts.update(all => {
+      const { [AssistantStore.NEW_CONVERSATION_DRAFT]: _moved, ...rest } = all;
+      return { ...rest, [conversationId]: pending };
+    });
+    this.persistDrafts();
+  }
+
+  private persistDrafts(): void {
+    writeDrafts(this.draftStorageKey(), this.drafts());
+  }
+
   async loadEntitlement(): Promise<void> {
     try {
       const result = await firstValueFrom(this.api.getEntitlement());
@@ -115,6 +198,7 @@ export class AssistantStore {
     try {
       const created = await firstValueFrom(this.api.startConversation());
       this.conversation.set(created);
+      this.migrateNewConversationDraft(created.id);
       this.historyOpen.set(false);
       await this.loadConversations();
     } catch {
@@ -482,6 +566,9 @@ export class AssistantStore {
       if (!this.conversation()) {
         const created = await firstValueFrom(this.api.startConversation());
         this.conversation.set(created);
+        // The words being sent were typed before this thread had an id; the draft moves with them so a
+        // failure can hand them back under the key the composer is now reading.
+        this.migrateNewConversationDraft(created.id);
       }
 
       const conversationId = this.conversation()!.id;
@@ -662,6 +749,9 @@ export class AssistantStore {
   }
 
   async remove(conversationId: string): Promise<void> {
+    // The thread is gone; its unsent text has nothing to belong to.
+    this.clearDraft(conversationId);
+
     try {
       await firstValueFrom(this.api.deleteConversation(conversationId));
       if (this.conversation()?.id === conversationId) {

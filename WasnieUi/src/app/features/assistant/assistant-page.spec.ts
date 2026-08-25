@@ -769,6 +769,17 @@ describe('AssistantConversationComponent — the view follows the answer being w
  * browser wrap it, rather than stubbing heights — stubbed heights are what let four broken versions of
  * this ship with a green suite.
  */
+/**
+ * ★ DRAFTS OUTLIVE A FIXTURE, so they have to be cleared between specs.
+ *
+ * The assistant store is `providedIn: 'root'` and seeds its draft map from sessionStorage, which the
+ * TestBed does not reset — so text typed by one spec was still there for the next one, and a suite that
+ * passed alone failed inside the full run. That is the same class of mistake as a test that deletes the
+ * runner's own DOM: state created here has to be cleaned up here.
+ */
+beforeEach(() => sessionStorage.clear());
+afterEach(() => sessionStorage.clear());
+
 describe('AssistantConversationComponent — the composer changes shape', () => {
   let fixture: ComponentFixture<AssistantConversationComponent>;
 
@@ -850,5 +861,110 @@ describe('AssistantConversationComponent — the composer changes shape', () => 
     const fresh = TestBed.createComponent(AssistantConversationComponent);
 
     expect(fresh.componentInstance.composerLayout()).toBe('stacked');
+  });
+});
+
+/**
+ * The bar under an assistant message: who gets one, and what the two copies copy.
+ */
+describe('AssistantConversationComponent — the message bar', () => {
+  let fixture: ComponentFixture<AssistantConversationComponent>;
+  let store: AssistantStore;
+  let written: string[];
+
+  function msgRow(id: string, role: 'User' | 'Assistant', content: string, seq: number) {
+    return { id, role, content, payload: null, sequence: seq, createdAt: '2026-08-25T15:42:00.000Z' };
+  }
+
+  function bars(): NodeListOf<HTMLElement> {
+    return fixture.nativeElement.querySelectorAll('[data-testid="assistant-msg-meta"]');
+  }
+
+  beforeEach(async () => {
+    written = [];
+    await TestBed.configureTestingModule({
+      imports: [AssistantConversationComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AssistantApiService, useValue: {} },
+        { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({})), queryParams: of({}) } },
+        { provide: Router, useValue: jasmine.createSpyObj('Router', ['navigate', 'navigateByUrl']) },
+      ],
+    }).compileComponents();
+
+    // A clipboard that records instead of writing — the real one needs a secure context and permission.
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: (text: string) => { written.push(text); return Promise.resolve(); } },
+      configurable: true,
+    });
+
+    store = TestBed.inject(AssistantStore);
+    store.conversation.set({
+      id: 'c1', title: 'T', createdAt: '', updatedAt: '', lastTurnUnanswered: false,
+      messages: [
+        msgRow('u1', 'User', 'Una pregunta', 0),
+        msgRow('a1', 'Assistant', '## Balance\n\nGanaste **1.200 EUR**.', 1),
+      ],
+    } as never);
+    fixture = TestBed.createComponent(AssistantConversationComponent);
+    fixture.detectChanges();
+  });
+
+  it('★ puts a bar under the assistant turn and none under the user turn', () => {
+    // Two messages in the thread, exactly one bar.
+    expect(bars().length).toBe(1);
+    expect(bars()[0].closest('.assistant-msg')?.getAttribute('data-role')).toBe('Assistant');
+  });
+
+  // ★ The streaming bubble is rendered OUTSIDE the message loop, so a row in the loop is by definition
+  // a stored, finished turn. This pins that a half-written answer never grows a copy button.
+  it('★ the streaming answer has no bar — copying it would hand over a truncated reply', () => {
+    store.streamingReply.set('Estoy escrib');
+    fixture.detectChanges();
+
+    const streaming = fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]');
+    expect(streaming).not.toBeNull();
+    expect(streaming.querySelector('[data-testid="assistant-msg-meta"]')).toBeNull();
+    expect(bars().length).withContext('still only the stored answer').toBe(1);
+  });
+
+  it('★ copy markdown hands over the raw string, byte for byte', async () => {
+    await fixture.componentInstance.copyMarkdown('a1', '## Balance\n\nGanaste **1.200 EUR**.');
+
+    expect(written).toEqual(['## Balance\n\nGanaste **1.200 EUR**.']);
+  });
+
+  it('★ copy answer hands over the text with no markdown syntax', async () => {
+    const rendered = fixture.nativeElement.querySelector('.assistant-msg__markdown');
+    await fixture.componentInstance.copyAnswer('a1', { target: rendered } as unknown as Event);
+
+    expect(written.length).toBe(1);
+    expect(written[0]).toContain('Balance');
+    expect(written[0]).not.toContain('##');
+    expect(written[0]).not.toContain('**');
+  });
+
+  it('shows "copied" and then takes it back', fakeAsync(() => {
+    void fixture.componentInstance.copyMarkdown('a1', 'x');
+    tick();
+    expect(fixture.componentInstance.copiedId()).toBe('a1');
+
+    tick(2000);
+    expect(fixture.componentInstance.copiedId()).toBeNull();
+  }));
+
+  // ★ NEVER SILENT. A rejected clipboard write that says nothing leaves the user pasting yesterday's
+  // clipboard into an email, believing it is the assistant's answer.
+  it('★ says so when the clipboard refuses', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: () => Promise.reject(new Error('denied')) },
+      configurable: true,
+    });
+
+    await fixture.componentInstance.copyMarkdown('a1', 'x');
+
+    expect(fixture.componentInstance.copyFailedId()).toBe('a1');
+    expect(fixture.componentInstance.copiedId()).toBeNull();
   });
 });

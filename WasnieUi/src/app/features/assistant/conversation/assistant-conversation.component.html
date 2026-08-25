@@ -152,6 +152,72 @@
             }
           </p>
         }
+
+        <!--
+          Always visible — not revealed on hover. A control that appears only under the pointer is
+          invisible on touch, awkward on a keyboard, and undiscoverable to anyone who never happens to
+          rest the mouse on a message.
+
+          Only on the ASSISTANT's turns, and never on the stand-in reply: copying a sentinel would hand
+          the user a string that is not an answer. The streaming bubble is rendered separately, below
+          this loop, so a message here is by definition a stored, finished one.
+        -->
+        @if (message.role === 'Assistant' && !isPlaceholder(message)) {
+          <div class="assistant-msg__meta" data-testid="assistant-msg-meta">
+            <span class="assistant-msg__time">{{ messageTime(message.createdAt) }}</span>
+
+            <!--
+              ★ IT OPENS UPWARD, AND THAT IS A CLIPPING FIX, NOT A PREFERENCE. The panel lives inside
+              the message list, which is the element with `overflow-y: auto` — so anything that extends
+              past its bottom edge is CUT, and no z-index escapes an overflow clip (the panel already
+              carries z-index 500 and was still disappearing). On the last message the menu opened down,
+              straight past that edge, and read as hidden behind the composer. Opening upward keeps it
+              inside the box that clips it.
+            -->
+            <ws-popover placement="top-end">
+              <button
+                slot="trigger"
+                type="button"
+                class="assistant-msg__meta-btn"
+                [attr.aria-label]="'COMMON.COPY' | translate"
+                data-testid="assistant-copy-menu"
+              >
+                <app-icon name="copy" [size]="13" />
+                <span>
+                  @if (copiedId() === message.id) {
+                    {{ 'COMMON.COPIED' | translate }}
+                  } @else {
+                    {{ 'COMMON.COPY' | translate }}
+                  }
+                </span>
+              </button>
+
+              <button
+                type="button"
+                class="assistant-msg__meta-item"
+                (click)="copyAnswer(message.id, $event)"
+                data-testid="assistant-copy-answer"
+              >
+                {{ 'ASSISTANT.COPY_ANSWER' | translate }}
+              </button>
+
+              <button
+                type="button"
+                class="assistant-msg__meta-item"
+                (click)="copyMarkdown(message.id, message.content)"
+                data-testid="assistant-copy-markdown"
+              >
+                {{ 'ASSISTANT.COPY_MARKDOWN' | translate }}
+              </button>
+            </ws-popover>
+
+            @if (copyFailedId() === message.id) {
+              <span class="assistant-msg__copy-failed" role="alert" data-testid="assistant-copy-failed">
+                {{ 'ASSISTANT.COPY_FAILED' | translate }}
+              </span>
+            }
+          </div>
+        }
       </div>
     }
   }

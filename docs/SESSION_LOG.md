@@ -4,6 +4,281 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-25 — El aviso de envío fallido: copy nuevo y el botón con el color de la alerta
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit**
+
+`ASSISTANT.FAILED_DESC` reemplazado en EN/ES/PL por el texto que pidió Rodolfo, que además invita a
+reportarlo si se repite.
+
+**★ Y hay que saber cuándo se ve.** La plantilla pinta `store.errorKey() ?? 'ASSISTANT.FAILED_DESC'`: si la
+sesión presenció el fallo, gana el `ERROR_*` específico (`ERROR_UNAVAILABLE`, `ERROR_RATE_LIMITED`,
+`ERROR_NOT_CONFIGURED`), y `FAILED_DESC` es el general — el que aparece **después de una recarga**, cuando la
+razón ya no está en memoria. Cambié sólo ése. Los tres `ERROR_*` dicen cosas parecidas pero **más
+específicas** (ocupado, no configurado), y reemplazarlos por el genérico perdería esa información; si Rodolfo
+los quiere unificados igual, es una decisión suya y son tres claves.
+
+**El botón.** Pasa de `secondary` gris a relleno con el ámbar de la alerta. Un gris dentro de una tarjeta
+ámbar no pertenece a ninguno de los dos, y "reintentar" no es una opción entre varias: es lo único que hay
+para hacer con un turno que falló.
+
+**Sigue siendo warning, no danger.** La tarjeta es ámbar a propósito —no se rompió nada y no se perdió nada,
+la pregunta está guardada y se puede volver a responder— así que un botón rojo diría lo contrario de lo que
+dice la tarjeta.
+
+**★ `--color-text-inverse` es el compañero correcto de `--color-warning`, y no por casualidad:** los dos se
+dan vuelta juntos entre temas. Claro y soft dan ámbar oscuro con texto casi blanco; oscuro da ámbar brillante
+con texto casi negro. Un blanco hardcodeado sería ilegible en exactamente un tema.
+
+**Acotado a `.assistant-alert`**, así el botón gemelo que acompaña a una respuesta **cancelada** conserva su
+gris discreto: ese turno es una decisión que tomó el usuario, no un fallo, y gritarlo estaría mal.
+
+Build limpio; suite 1050 sin cambios.
+
+**Archivos:** `en/es/pl.json`, `conversation/assistant-conversation.component.scss`, docs.
+
+## 2026-08-25 — Borrador por conversación, con respaldo de sesión
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit**
+
+**El bug, y por qué era estructural.** El texto del composer era `readonly draft = signal('')` **en el
+componente** (`assistant-conversation.component.ts:103`). Angular **reutiliza** ese componente cuando cambia
+la conversación, así que lo escrito en A seguía en la caja al abrir B — a un Enter de irse al hilo
+equivocado. No era un olvido de limpieza: el texto simplemente no pertenecía a ninguna conversación.
+
+Ahora es un **mapa `id → texto` en el store**, y el componente sólo lee el de la conversación activa. Como el
+store es el mismo para drawer y página, expandir con algo escrito lo conserva sin código extra.
+
+### ★ Tres cosas que aparecieron al construir, no al leer el WI
+
+**1. La clave hay que capturarla ANTES del envío, no después.** Un primer envío **crea** la conversación, así
+que la clave activa cambia del slot "nueva" a un id real mientras el request está en vuelo. Capturada después,
+el retorno del texto fallido lo archivaba bajo el hilo que la clave nombrara para entonces — y las palabras
+volvían al composer equivocado, o a ninguno.
+
+**2. Un borrador puede llegar sin una sola tecla.** Cambiar de conversación y recargar reemplazan el contenido
+del composer sin evento de input, así que la forma y el alto seguían describiendo el texto anterior: un
+borrador de seis líneas volvía mostrándose como una. Se agregó un effect sobre el borrador que re-mide.
+
+**3. ★ Mis propios tests filtraban estado, y lo destapó la suite completa.** El store es singleton de raíz y
+ahora se siembra de `sessionStorage`, que el TestBed **no** resetea: un borrador tipeado por un spec seguía ahí
+para el siguiente, y una suite que pasaba sola fallaba dentro de la corrida completa. Es la misma clase de
+error que el `afterEach` que borraba el root del reporter de Karma — el estado que un test crea, lo limpia el
+test. También hubo que completar los dobles de `AuthService`: sólo respondían `getAccessToken`, y el store
+ahora compone su clave con tenant y usuario.
+
+### Las decisiones de privacidad
+
+`sessionStorage`, no `localStorage`: un borrador acá suele traer **nombres de payees y preguntas sobre pagos**,
+y `localStorage` lo deja en disco indefinidamente. La clave lleva **tenant y usuario** — sin eso, en una
+máquina compartida el siguiente usuario abre el asistente y lee la pregunta a medio escribir del anterior; eso
+no es una comodidad, es una fuga. Y el logout **barre** las claves: las claves por usuario impiden que el
+próximo las LEA, el barrido impide que sigan ahí.
+
+El barrido vive en `AuthService.clearSessionSilent` —el embudo único de ambos logouts— y **busca por prefijo**,
+no importando nada del asistente: apuntar un servicio de core a una feature es la dirección de dependencia que
+la arquitectura prohíbe.
+
+Todo acceso al storage va en `try/catch` y **degrada a memoria**: modo privado, cupo lleno y política del
+navegador se ven igual, y ninguno es motivo para que alguien no pueda escribir o enviar. Un borrador por
+encima del tope no se persiste (sigue en memoria) para que un pegado gigante no tumbe el respaldo del resto.
+
+**Tests:** +22. Front 1028 → **1050**, build limpio.
+
+**Archivos:** `state/draft-storage.ts` + spec (nuevos), `state/assistant.store.ts`,
+`conversation/assistant-conversation.component.ts`, `core/services/auth.service.ts`,
+`assistant-failed-send.spec.ts`, `assistant-page.spec.ts`, docs.
+
+**Fuera de alcance, no construido:** borradores en el servidor, posición del cursor, indicador de "Borrador"
+en la lista.
+
+## 2026-08-25 — El hover de los menús cuadraba las esquinas del panel
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · Sin tests (SCSS puro)
+
+Los dos menús del asistente (renombrar/borrar en la lista, copiar respuesta/markdown bajo un mensaje) perdían
+el redondeo al pasar el mouse: la primera y la última fila se cuadraban.
+
+**La causa está en la primitiva, no en los menús.** `.ws-pop__panel` declara
+`border-radius: var(--radius-lg)` pero no clipea a sus hijos. Un ítem de menú es un rectángulo, así que en
+cuanto toma su relleno de hover pinta **por encima** de las esquinas redondeadas del panel — el menú quieto y
+el menú con el mouse encima se ven como dos componentes distintos.
+
+Se arregló con `overflow: hidden` en el panel. La alternativa era redondear el primer y el último ítem en
+cada consumidor: la misma regla escrita una vez por menú, y equivocada la primera vez que alguien agregue una
+tercera fila o reordene las dos que hay.
+
+**Alcance, verificado antes de tocar:** `ws-popover` lo usan hoy tres plantillas, las tres del asistente
+(conversación, lista de conversaciones, página). Es un cambio en una primitiva compartida, así que lo reporto
+como tal — pero no hay ningún caso en el que un popover quiera que sus hijos se salgan de su propia caja
+redondeada, así que corregirlo en la primitiva es lo correcto y no un atajo.
+
+Build limpio; suite 1028 sin cambios.
+
+**Archivos:** `shared/ui/ws-popover/ws-popover.component.scss`, docs.
+
+## 2026-08-25 — El fade del botón de scroll seguía al color viejo
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · Sin tests (SCSS puro)
+
+Efecto directo del cambio de lienzo del turno anterior, detectado por Rodolfo: el degradado que hay detrás
+del botón "ir al último mensaje" se desvanecía hacia `--color-bg-surface`, pero el fondo ya era
+`--color-bg-canvas` — así que en vez de disolverse dejaba una **banda pálida** cruzando el pie de la
+conversación.
+
+**★ Y no era sólo el fallback: la indirección entera había quedado obsoleta.** El fade se pintaba con
+`var(--assistant-fade, var(--color-bg-surface))`, y el drawer declaraba `--assistant-fade:
+var(--color-bg-surface-raised)`. Esa variable existía por una razón buena: cada host tenía un color distinto
+detrás de la conversación, y el degradado tenía que saber cuál. **Ese motivo desapareció en el momento en que
+el componente pasó a pintar su propio fondo** — desde entonces los dos hosts tienen lo mismo detrás, y las dos
+declaraciones quedaron libres de desincronizarse. Se desincronizaron enseguida: las dos apuntaban a colores
+que ya no estaban ahí.
+
+Así que no se corrigió el fallback: se sacó la indirección. El degradado lee `--color-bg-canvas`, el mismo
+token del que sale el fondo, y el drawer dejó de declarar un color que ya no le corresponde declarar. Un solo
+lugar, imposible de volver a quedar viejo.
+
+Build limpio; suite 1028 sin cambios.
+
+**Archivos:** `conversation/assistant-conversation.component.scss`, `panel/assistant-panel.component.scss`, docs.
+
+## 2026-08-25 — Contraste del composer: se movió el FONDO al lienzo, no la caja
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · Sin tests (SCSS puro)
+
+### Paso 0 — el mapa, y las dos puertas de parada que no se activaron
+
+| | LIGHT | SOFT | DARK |
+|---|---|---|---|
+| `--color-bg-canvas` | `#f6f8fb` | `#f3eee2` | `#11161f` |
+| `--color-bg-surface` | `#ffffff` | `#fffaf0` | `#161c28` |
+| `--color-bg-surface-raised` | `#f8fafc` | `#f8f2e4` | `#1d2432` |
+| `--color-bg-surface-sunken` | `#f1f5f9` | `#ede5d2` | `#0a0e15` |
+
+**0.2 — el diagnóstico se confirma, y en la página es literal.** El panel del chat
+(`assistant-page.component.scss:86`) y el recuadro del composer
+(`assistant-conversation.component.scss:623`) usan **exactamente la misma variable**,
+`--color-bg-surface`. No es que se parezcan: es el mismo color. En el drawer el panel es `raised` y el
+composer `surface`, distintos pero a un 2% en LIGHT (`#f8fafc` contra blanco).
+
+**0.1/0.3 — nodos separados.** El lienzo del asistente y el del aside salen de elementos distintos
+(`.assistant-page__chat:86` vs `.assistant-page__rail:34`), así que la segunda puerta tampoco se activa.
+Y `--color-bg-canvas` existe en los tres temas, así que la primera tampoco.
+
+### El cambio
+
+Una línea, en el `:host` del componente compartido: el lienzo del asistente pasa a `--color-bg-canvas`.
+Desde ahí lo heredan el drawer y la página. **No se editó ningún token** — se repunta un elemento a una
+variable que ya existía, que es la diferencia entre arreglar un panel y repintar media aplicación.
+
+### ★ Dos cosas que reporto en vez de decidir por mi cuenta
+
+**1. El design system dice otra cosa, más chica.** `CLAUDE.md` §5.3: *"Inputs: `--color-bg-surface-sunken`
+(sunken relative to their card)"*. Nuestro composer está en `surface`, o sea al nivel de una TARJETA, no de
+un campo. Mover el composer a `sunken` sería un cambio igual de local (una línea en este mismo componente,
+no propaga a ningún lado — la preocupación del §2 del WI era editar el token, no esta regla) y dejaría la
+elevación conforme al sistema. El WI decidió mover el fondo y eso hice; lo dejo anotado porque las dos
+soluciones no son excluyentes y la segunda es la que el sistema ya prescribe.
+
+**2. Un efecto colateral en LIGHT que hay que mirar.** Las burbujas del asistente usan
+`--color-bg-surface-sunken` (`#f1f5f9`), y el lienzo nuevo es `#f6f8fb`: quedan a un 2% de distancia,
+mucho menos separadas que contra el blanco de antes. **No desaparecen** —conservan su
+`border: 1px solid var(--color-border-default)`— pero el relleno deja de aportar. En DARK y SOFT el
+contraste de las burbujas mejora o queda igual. Es exactamente el efecto que anticipaba el Paso 3.4, y la
+llamada es visual: si en LIGHT se ven flojas, la respuesta es la nota 1 (composer a `sunken`, lienzo de
+vuelta a `surface`), no un color nuevo.
+
+**No se aplicó el Paso 3.3** (reforzar el borde de la caja): con el fondo movido el contraste debería
+alcanzar, y sumar borde sin verlo sería maquillar sobre un cambio no verificado.
+
+Build limpio; suite 1028 sin cambios.
+
+**Archivos:** `conversation/assistant-conversation.component.scss`, docs.
+
+**Fuera de alcance, confirmado y no tocado:** `--shadow-card` sigue **sin definir** (usar una sombra
+inexistente no habría pintado nada), el fondo del shell global, y los gradientes del topbar.
+
+## 2026-08-25 — Barra del mensaje: siempre visible, y el menú deja de recortarse
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit**
+
+**Siempre visible.** Se fue el hover. Un control que sólo aparece bajo el puntero es inalcanzable en touch,
+incómodo desde el teclado e indescubrible para quien nunca apoya el mouse sobre un mensaje. De paso desaparece
+toda la clase de problemas de reflow que existía por mostrarla y ocultarla — el CSS quedó en seis líneas.
+
+**★ El menú no estaba detrás de la caja de texto: estaba RECORTADO.** El panel ya lleva `z-index: 500`, así
+que no era un problema de apilado. Vive dentro de `.assistant-conversation__body`, que es el elemento con
+`overflow-y: auto` — y lo que sobresale por su borde inferior se **corta**. Ningún z-index escapa a un recorte
+de overflow; ésa es la diferencia entre las dos causas y es la que decide el arreglo. En el último mensaje el
+menú abría hacia abajo, pasaba ese borde y se leía como tapado por el composer.
+
+Se abre hacia arriba (`placement="top-end"`), que lo mantiene dentro de la caja que lo recorta. La alternativa
+real —sacar el panel del contenedor con un overlay— exigiría CDK Overlay, que es exactamente la clase de
+dependencia que el proyecto no usa.
+
+Build limpio; suite 1028 sin cambios.
+
+**Archivos:** `conversation/assistant-conversation.component.{html,scss}`, docs.
+
+## 2026-08-25 — Fecha y copiar bajo cada respuesta de la IA
+
+**Rama:** AI-CHAT-ASSISTANT · **Tipo:** barra de metadatos en el componente compartido · **Sin commit**
+
+**Paso 0, sin bloqueos.** `createdAt` llega del backend (`AssistantDtos.cs:33`, `DateTimeOffset CreatedAt`) al
+modelo del front (`assistant.model.ts:27`), así que no hubo que inventar la fecha en el cliente. `ws-popover`
+ya existía y se reutiliza. El nodo renderizado es `.assistant-msg__markdown`.
+
+**★ Un hallazgo del Paso 0.4 que simplificó el Paso 2.2:** la burbuja de streaming se renderiza **fuera** del
+`@for` de mensajes, en su propio bloque. O sea que **cualquier fila del loop es, por definición, un turno
+guardado y terminal** — la regla "sin barra mientras streamea" se cumple estructuralmente, no hace falta un
+flag. Igual dejé un test que lo fija, porque es el tipo de garantía que se pierde si alguien mueve el bloque.
+
+### ★ Por qué el texto plano sale del DOM y no de des-markdownear
+
+`plainTextOf` lee el **`innerText` del nodo ya renderizado**. Escribir un segundo parser que quite `#` y `**`
+sería una segunda implementación del render — y el día que las dos difieran, "copiar respuesta" entrega en
+silencio algo que el usuario nunca vio. `innerText` es la respuesta del propio navegador a "¿cómo se ve esto?".
+
+**`textContent` no servía:** ignora el layout y devuelve todas las celdas de una tabla pegadas en una línea,
+más el contenido de lo que esté oculto por CSS. Hay un test con una tabla que fija justamente eso.
+
+### ★ La fecha usa Intl, no el DatePipe de Angular
+
+El proyecto **no registra ningún locale** (`registerLocaleData` no aparece en ningún lado), así que el
+`DatePipe` habría impreso los meses en inglés a un lector en español o polaco, dijera lo que dijera el idioma
+de la interfaz. `Intl.DateTimeFormat` recibe el idioma como argumento y ya está en el navegador: los tres
+salen bien sin empaquetar datos de locale. Hay un test que compara `es` contra `en` y exige que difieran.
+
+**Absoluta, no relativa**, como pedía el WI: el valor de un timestamp en una respuesta financiera es poder
+citarla después, y "hace 3 horas" no se puede anotar. El pipe `relativeTime` existe y quedó sin usar a
+propósito.
+
+### Detalles de la barra
+
+- **Reserva su alto siempre**; sólo cambia la opacidad, con `visibility` acompañando para que una barra
+  invisible no quede en el orden de tabulación. Sin eso, el hilo entero saltaría cada vez que el mouse cruza
+  un mensaje.
+- **Hover + `:focus-within` + `@media (hover: none)` permanente.** Cualquiera de las tres sola deja a alguien
+  afuera: sin focus-within, el teclado; sin la de touch, el botón existe y es inalcanzable.
+- **Un fallo del portapapeles se anuncia.** Requiere contexto seguro y permiso, y tragarse el rechazo deja a
+  alguien pegando el portapapeles de ayer en un mail creyendo que es la respuesta.
+
+### Dos correcciones sobre la marcha
+- La referencia `#rendered` no servía: vive dentro del `@if` que la declara y la barra está **fuera** de esa
+  rama. El nodo se resuelve desde el clic (subir al `.assistant-msg`, bajar a su cuerpo) — sin alcance de
+  plantilla y sin poder agarrar otro mensaje, porque la barra está dentro de su propia burbuja.
+- Mi primer `afterEach` barría **todos** los `body > div` y se llevaba puesto el root del reporter de Karma:
+  la corrida terminaba en error después de que todos los tests pasaran. Ahora sólo borra los nodos que el
+  suite creó.
+
+**Tests:** +17 (11 de las funciones puras, 6 del comportamiento). Front 1011 → **1028**, build limpio.
+
+**Archivos:** `conversation/message-meta.ts` + spec (nuevos), `conversation/assistant-conversation.component.{ts,html,scss}`,
+`assistant-page.spec.ts`, `en/es/pl.json`, docs.
+
+**Fuera de alcance, detectado y no construido:** pulgares arriba/abajo, regenerar, compartir, y barra de
+acciones en los mensajes del usuario.
+
 ## 2026-08-25 — Composer v6: grid de áreas nombradas y el estado en un atributo del contenedor
 
 **Rama:** AI-CHAT-ASSISTANT · **Tipo:** reemplazo del mecanismo de layout · **Sin commit**

@@ -2071,7 +2071,7 @@
     "ERROR_NOT_CONFIGURED": "El asistente todavía no está disponible. Su mensaje se guardó.",
     "ERROR_NOT_FOUND": "Esta conversación ya no está disponible.",
     "FAILED_TITLE": "No se pudo generar la respuesta",
-    "FAILED_DESC": "Su pregunta se guardó. El asistente no pudo responderla; puede volver a intentarlo.",
+    "FAILED_DESC": "Hubo un error al enviar tu mensaje, pero quedó guardado. Si esto sigue pasando, contanos para que podamos investigarlo y solucionarlo.",
     "RETRY": "Reintentar",
     "DELETE": "Eliminar",
     "DELETE_TITLE": "¿Eliminar esta conversación?",
@@ -2089,6 +2089,9 @@
     "GROUP_YESTERDAY": "Ayer",
     "GROUP_LAST_7": "Últimos 7 días",
     "GROUP_OLDER": "Más antiguas",
-    "JUMP_TO_LATEST": "Ir al último mensaje"
+    "JUMP_TO_LATEST": "Ir al último mensaje",
+    "COPY_ANSWER": "Copiar respuesta",
+    "COPY_MARKDOWN": "Copiar markdown",
+    "COPY_FAILED": "No se pudo copiar — revisá los permisos del navegador."
   }
 }

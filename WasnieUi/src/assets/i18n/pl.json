@@ -2071,7 +2071,7 @@
     "ERROR_NOT_CONFIGURED": "Asystent nie jest jeszcze dostępny. Wiadomość została zapisana.",
     "ERROR_NOT_FOUND": "Ta rozmowa nie jest już dostępna.",
     "FAILED_TITLE": "Nie udało się wygenerować odpowiedzi",
-    "FAILED_DESC": "Pytanie zostało zapisane. Asystent nie mógł na nie odpowiedzieć — można spróbować ponownie.",
+    "FAILED_DESC": "Wystąpił błąd podczas wysyłania wiadomości, ale została ona zapisana. Jeśli będzie się to powtarzać, daj nam znać, abyśmy mogli zbadać i naprawić problem.",
     "RETRY": "Spróbuj ponownie",
     "DELETE": "Usuń",
     "DELETE_TITLE": "Usunąć tę rozmowę?",
@@ -2089,6 +2089,9 @@
     "GROUP_YESTERDAY": "Wczoraj",
     "GROUP_LAST_7": "Ostatnie 7 dni",
     "GROUP_OLDER": "Starsze",
-    "JUMP_TO_LATEST": "Przejdź do najnowszej wiadomości"
+    "JUMP_TO_LATEST": "Przejdź do najnowszej wiadomości",
+    "COPY_ANSWER": "Kopiuj odpowiedź",
+    "COPY_MARKDOWN": "Kopiuj markdown",
+    "COPY_FAILED": "Nie udało się skopiować — sprawdź uprawnienia przeglądarki."
   }
 }

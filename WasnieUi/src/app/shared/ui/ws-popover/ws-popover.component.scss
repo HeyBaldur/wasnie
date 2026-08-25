@@ -20,6 +20,13 @@
   box-shadow: var(--shadow-popover);
   animation: ws-pop-in var(--transition-base) ease;
   min-width: 180px;
+
+  // ★ THE RADIUS ONLY EXISTS IF THE CHILDREN ARE CLIPPED TO IT. A menu item is a rectangle, and the
+  // moment one of them takes a hover fill it paints straight over the panel's rounded corners: the
+  // first and last rows square off and the menu looks like a different, blunter component than the one
+  // sitting still. Clipping here rather than rounding the first and last item in every consumer, which
+  // is the same rule written once per menu and wrong the first time someone adds a third row.
+  overflow: hidden;
 }
 
 .ws-pop__panel--bottom,
