@@ -581,6 +581,9 @@ export class AssistantConversationComponent {
     // ★ RESTORED AFTER THE CLEAR, NEVER BEFORE. The clear above is what empties the box on a normal
     // send; if it ran after this, a turn that died before reaching the server would be handed back and
     // then immediately wiped — the user would watch their message appear and vanish.
+    // ★ AND ONLY THE CONVERSATION ON SCREEN HAS ONE. `unsentText` is the OPEN thread's lost words now,
+    // so a turn that failed while the user was reading somewhere else reads as null here and nothing
+    // is put in this box — the store files those words in their own conversation's draft instead.
     const unsent = this.store.unsentText();
     if (unsent !== null && this.draft().trim().length === 0) {
       const restoreKey = this.store.activeDraftKey();

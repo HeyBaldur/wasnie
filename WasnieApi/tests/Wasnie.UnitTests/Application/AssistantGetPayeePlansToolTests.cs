@@ -128,7 +128,8 @@ public sealed class AssistantGetPayeePlansToolTests
             db, new RoleAuthorization(permissions), guard, tenantCtx, new FakeClock(Now.UtcDateTime));
 
         return new Harness(
-            db, new GetPayeePlansTool(sender, NullLogger<GetPayeePlansTool>.Instance), sender, tenantId);
+            db, new GetPayeePlansTool(sender, guard, NullLogger<GetPayeePlansTool>.Instance), sender,
+            tenantId);
     }
 
     /// <summary>Exactly what the tool needs: find a payee, read their assignments. Nothing more.</summary>
@@ -278,12 +279,12 @@ public sealed class AssistantGetPayeePlansToolTests
     [Fact]
     public async Task A_PAYEE_WITH_NO_VISIBLE_ASSIGNMENT_IS_NOT_REPORTED_AS_HAVING_NONE()
     {
-        // ★★ THE HONESTY RULE. ListAssignmentsByPayeeHandler answers a PayeeAccessGuard denial with an
-        // EMPTY PAGE, not an error — deliberately, so it cannot confirm the payee exists. The
-        // consequence is that zero rows means EITHER "no assignments" OR "not visible to you", and
-        // nothing downstream can tell them apart. Emitting `assignments: []` under the ordinary
-        // "PayeePlans" outcome would invite the model to write "Ana is not on any plan" about a payee
-        // whose assignments are merely hidden — a confident false statement about somebody's pay.
+        // ★★ THE HONESTY RULE, AND IT IS NOW A FACT RATHER THAN A FORM OF WORDS. The payee HAS an
+        // assignment; this caller may not read it. ListAssignmentsByPayeeHandler answers that denial
+        // with an EMPTY PAGE rather than an error, so what reaches the tool is indistinguishable from a
+        // payee on no plan — which is why the tool asks the guard directly and reports a DIFFERENT
+        // outcome. Before that, one token covered both and the model resolved it to the confident
+        // reading: a user was told their payee had no plans while the payee screen listed one.
         var h = Build(nameof(A_PAYEE_WITH_NO_VISIBLE_ASSIGNMENT_IS_NOT_REPORTED_AS_HAVING_NONE),
             Guid.NewGuid(), PayeeVisibility.None, AssignmentPermissions);
         var payeeId = SeedPayee(h, "Ana García", "EMP-ANA");
@@ -291,26 +292,103 @@ public sealed class AssistantGetPayeePlansToolTests
 
         var payload = await ByNameAsync(h, "Ana García");
 
-        payload.GetProperty("outcome").GetString().Should().Be("NoAssignmentsOrNotVisible");
+        payload.GetProperty("outcome").GetString().Should().Be("AssignmentsNotVisible");
         payload.TryGetProperty("assignments", out _).Should().BeFalse(
             "an empty list under the ordinary outcome is what the model would read as 'has no plans'");
-        payload.GetProperty("message").GetString().Should().Contain("do not assert either");
+        payload.GetProperty("message").GetString().Should()
+            .Contain("MAY NOT READ THEIR PLAN ASSIGNMENTS").And
+            .Contain("never that there are none");
+
+        // ★ NO includedEnded HERE. Nothing was filtered because nothing was queried, and reporting a
+        // filter that never ran is how "no ACTIVE ones" gets said about data nobody looked at.
+        payload.TryGetProperty("includedEnded", out _).Should().BeFalse();
     }
 
     [Fact]
-    public async Task A_payee_who_genuinely_has_no_assignment_takes_the_SAME_outcome()
+    public async Task A_payee_who_genuinely_has_no_assignment_takes_a_DIFFERENT_outcome()
     {
-        // The other half of the ambiguity, and it must be indistinguishable from the one above — that is
-        // what makes the honest phrasing the only phrasing available to the model.
-        var h = Build(nameof(A_payee_who_genuinely_has_no_assignment_takes_the_SAME_outcome),
+        // ★★ THE WHOLE WORK ITEM IN ONE ASSERTION, read against the test above it. Same empty page,
+        // opposite fact: there, the assignments were hidden; here, this caller can see everything and
+        // there is genuinely nothing. One token for both made the assistant unable to be honest no
+        // matter how the prompt was worded, because the data to be honest WITH was not there.
+        var h = Build(nameof(A_payee_who_genuinely_has_no_assignment_takes_a_DIFFERENT_outcome),
             Guid.NewGuid(), null, AssignmentPermissions);
         SeedPayee(h, "Ana García", "EMP-ANA");
 
         var payload = await ByNameAsync(h, "Ana García");
 
-        payload.GetProperty("outcome").GetString().Should().Be("NoAssignmentsOrNotVisible");
+        payload.GetProperty("outcome").GetString().Should().Be("NoAssignments");
         payload.GetProperty("found").GetBoolean().Should().BeTrue(
             "the PAYEE was found — only their assignments were not");
+
+        // The model is told it MAY say this one out loud, which is exactly what it may not do for
+        // AssignmentsNotVisible. The two messages must never converge again.
+        payload.GetProperty("message").GetString().Should().Contain("CAN see");
+    }
+
+    [Fact]
+    public async Task THE_EMPTY_ANSWER_SAYS_WHO_IT_SEARCHED_FOR_code_included()
+    {
+        // ★ AN ANSWER THAT FOUND NOTHING HAS TO SAY WHAT IT LOOKED FOR. "I could not see any
+        // assignment" is unfalsifiable on its own; "I looked for Ana García (EMP-ANA) and could not see
+        // any assignment" lets the user catch a lookup that went to the wrong person — which is
+        // precisely the failure that produced this work item. The code cannot come off the assignment
+        // rows: there are none.
+        var h = Build(nameof(THE_EMPTY_ANSWER_SAYS_WHO_IT_SEARCHED_FOR_code_included),
+            Guid.NewGuid(), null, AssignmentPermissions);
+        SeedPayee(h, "Ana García", "EMP-ANA");
+
+        var byName = await ByNameAsync(h, "Ana García");
+        byName.GetProperty("payeeName").GetString().Should().Be("Ana García");
+        byName.GetProperty("payeeEmployeeCode").GetString().Should().Be("EMP-ANA");
+        byName.GetProperty("matchedBy").GetString().Should().Be("ExactName");
+
+        // And on the restricted path too, where naming the person is what makes "go and look at their
+        // screen" an actionable answer rather than a shrug.
+        var restricted = Build(nameof(THE_EMPTY_ANSWER_SAYS_WHO_IT_SEARCHED_FOR_code_included) + ".r",
+            Guid.NewGuid(), PayeeVisibility.None, AssignmentPermissions);
+        SeedPayee(restricted, "Ana García", "EMP-ANA");
+
+        var hidden = await ByNameAsync(restricted, "Ana García");
+        hidden.GetProperty("outcome").GetString().Should().Be("AssignmentsNotVisible");
+        hidden.GetProperty("payeeEmployeeCode").GetString().Should().Be("EMP-ANA");
+    }
+
+    [Fact]
+    public async Task THE_ASSIGNMENT_THE_PAYEE_SCREEN_SHOWS_IS_THE_ONE_THE_TOOL_RETURNS()
+    {
+        // ★★ THE CONTRADICTION THAT STARTED THIS. The payee screen listed "Q3 2026 — Plan
+        // Comercial EMEA", running Jul 1 to Sep 30 and current today, while the assistant said it could
+        // find no assignment. Both surfaces go through the SAME query and the SAME handler
+        // (PayeesController.ListAssignments and this tool both send ListAssignmentsByPayeeQuery), and
+        // the tool's scope is the WIDER of the two: the screen sends a period, the tool sends none. So
+        // an assignment the screen can show can never be one the tool cannot — unless visibility
+        // differs, which is now reported instead of swallowed.
+        var h = Build(nameof(THE_ASSIGNMENT_THE_PAYEE_SCREEN_SHOWS_IS_THE_ONE_THE_TOOL_RETURNS),
+            Guid.NewGuid(), null, AssignmentPermissions);
+        var payeeId = SeedPayee(h, "Rudolph Chipellin", "CEO-001");
+        SeedAssignment(h, payeeId, SeedPlan(h, "Q3 2026 — Plan Comercial EMEA"),
+            "Rudolph Chipellin", "CEO-001");
+
+        // What the screen asks for: this month, active, newest first.
+        var screen = await new ListAssignmentsByPayeeHandler(
+                h.Db, new RoleAuthorization(AssignmentPermissions),
+                new FakePayeeAccessGuard(PayeeVisibility.Everything), new FakeClock(Now.UtcDateTime))
+            .Handle(
+                new ListAssignmentsByPayeeQuery(payeeId, new PaginationQuery
+                {
+                    Page = 1, PageSize = 10, SortBy = "effectivestart", SortOrder = "desc",
+                    Period = "this-month",
+                }),
+                default);
+
+        screen.Value!.Items.Should().ContainSingle("this is what the card renders");
+
+        var payload = await ByIdAsync(h, payeeId);
+
+        payload.GetProperty("outcome").GetString().Should().Be("PayeePlans");
+        payload.GetProperty("assignments").EnumerateArray().Single()
+            .GetProperty("planName").GetString().Should().Be("Q3 2026 — Plan Comercial EMEA");
     }
 
     [Fact]
@@ -327,7 +405,7 @@ public sealed class AssistantGetPayeePlansToolTests
 
         var payload = await ByIdAsync(h, payeeId);
 
-        payload.GetProperty("outcome").GetString().Should().Be("NoAssignmentsOrNotVisible");
+        payload.GetProperty("outcome").GetString().Should().Be("NoAssignments");
         payload.GetProperty("found").GetBoolean().Should().BeTrue();
         payload.GetProperty("payeeName").GetString().Should().Be("Ana García");
     }
@@ -343,8 +421,13 @@ public sealed class AssistantGetPayeePlansToolTests
         SeedAssignment(h, payeeId, SeedPlan(h, "Antiguo Plan"), "Ana García", "EMP-ANA", deactivated: true);
 
         var byDefault = await ByNameAsync(h, "Ana García");
-        byDefault.GetProperty("outcome").GetString().Should().Be("NoAssignmentsOrNotVisible");
+        byDefault.GetProperty("outcome").GetString().Should().Be("NoAssignments");
         byDefault.GetProperty("includedEnded").GetBoolean().Should().BeFalse();
+        // ★ AND THE MESSAGE STILL REFUSES THE BIGGER CLAIM. They DO have an assignment; it ended. The
+        // model may say "no active plan" and must not say "never had one" — includedEnded is what
+        // separates the two, so the payload spells the difference out rather than trusting the flag.
+        byDefault.GetProperty("message").GetString().Should()
+            .Contain("NOT that they never had one");
 
         var withEnded = await RunAsync(h, """{"payeeName":"Ana García","includeEnded":true}""");
         withEnded.GetProperty("outcome").GetString().Should().Be("PayeePlans");

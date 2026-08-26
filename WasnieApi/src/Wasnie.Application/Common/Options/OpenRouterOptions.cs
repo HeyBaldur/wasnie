@@ -86,9 +86,20 @@ public sealed class AssistantProviderOptions
     public const string OpenRouter = "OpenRouter";
 
     /// <summary>
-    /// `Groq` or `OpenRouter`. Anything unrecognised falls back to Groq with a warning rather than
-    /// throwing: a typo here must not take the API down, and the assistant degrading to a provider that
-    /// works is better than a start-up failure for a chat panel.
+    /// `Groq` or `OpenRouter`. REQUIRED — there is deliberately NO default value.
+    ///
+    /// ★ THE DEFAULT WAS THE BUG, NOT ITS VALUE. This used to be `= Groq`, and the registration fell
+    /// back to Groq for an absent OR misspelt value "so a typo in a chat panel's configuration cannot
+    /// take the API down". That reasoning treats the setting as a feature toggle. It is not: both
+    /// providers are US-based, and this key is the only thing that decides WHICH THIRD-PARTY COUNTRY
+    /// European payroll data travels to. A fallback means an environment that forgets to say — a new
+    /// staging box, a container built without its override, a missing environment variable — silently
+    /// picks a vendor for which no privacy configuration was ever reported and no DPA is signed
+    /// (docs/Legal.md §3.1, §5).
+    ///
+    /// So: absent is not "use the usual one", it is an unanswered question, and the answer is refused
+    /// at start-up rather than guessed. Choosing where personal data goes cannot be the result of an
+    /// omission. Empty means absent — the resolution in Infrastructure's DependencyInjection throws.
     /// </summary>
-    public string Provider { get; init; } = Groq;
+    public string Provider { get; init; } = string.Empty;
 }

@@ -156,7 +156,9 @@ public sealed class AssistantAmbiguousPayeeTests
         return new Harness(
             db,
             new GetPayeeLedgerSummaryTool(sender, balanceLog),
-            new GetPayeePlansTool(sender, new CapturingLogger<GetPayeePlansTool>()),
+            new GetPayeePlansTool(
+                sender, FakePayeeAccessGuard.SeesEverything(),
+                new CapturingLogger<GetPayeePlansTool>()),
             balanceLog,
             tenantId);
     }

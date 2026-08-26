@@ -15,7 +15,7 @@
 > Cuando las brechas de nivel 1 estén cerradas, este documento pasa a ser el **insumo** del anexo legal,
 > no el anexo mismo.
 
-**Última actualización:** 2026-08-04
+**Última actualización:** 2026-08-26
 **Alcance:** el asistente de IA de Wasnie y su flujo de datos hacia el proveedor de LLM.
 **Fuera de alcance:** el resto del producto (importaciones, HubSpot, Stripe, emails) — no auditado bajo
 esta óptica todavía.
@@ -249,6 +249,40 @@ Cualquier DPA debe contemplar qué proveedores quedan habilitados.
 **⚠️ PENDIENTE:** identificar **qué vendor downstream** sirve efectivamente `openai/gpt-oss-20b` a través
 de OpenRouter. No es determinable desde el repositorio; hay que obtenerlo del proveedor.
 
+### 5.1 La selección de proveedor es explícita y obligatoria (2026-08-26)
+
+Hasta el 2026-08-26 `Assistant:Provider` **tenía un valor por defecto** (`Groq`), en dos lugares
+independientes: el `appsettings.json` **base** y el propio valor por defecto de la clase de opciones. La
+resolución además caía a Groq ante un valor **no reconocido**. El resultado: cualquier entorno que no
+cargara su override —un staging nuevo, un contenedor mal armado, una variable de entorno faltante, un
+`Assistant:Provider` mal escrito— enviaba datos hacia Groq **en silencio**, sin que nadie lo hubiera
+elegido. Esta sección describía a OpenRouter como el proveedor activo mientras el archivo base decía
+Groq.
+
+**Corregido (FAIL-CLOSED).** No hay valor por defecto en ninguno de los dos lugares. Si la clave falta,
+está vacía o no se reconoce, **la API no arranca**, con un mensaje que nombra la clave y los valores
+admitidos. La comprobación vive en la resolución misma (`DependencyInjection.cs`), que corre al construir
+el host — lo descubre el despliegue, no un usuario preguntando por su comisión.
+
+Selección declarada por entorno, tras el cambio:
+
+| Entorno | `Assistant:Provider` |
+|---|---|
+| `appsettings.json` (base) | **ausente a propósito** — no hay defecto |
+| `appsettings.Development.json` | `OpenRouter` |
+| `appsettings.Production.json` | `OpenRouter` |
+| `appsettings.Development.template.json` | vacío, marcado como obligatorio |
+| Host de tests de integración | `OpenRouter` (declarado explícitamente; sin clave, así que no sale nada) |
+
+**⚠️ LO QUE ESTO NO ARREGLA.** Esto elimina la elección *por omisión*; **no elige proveedor ni crea base
+jurídica**. La brecha §3.1 (DPA ausente) sigue abierta e igual de bloqueante.
+
+**★ CONSECUENCIA PARA EL DPA:** Groq sigue implementado y sigue siendo seleccionable con una línea de
+configuración. Que hoy ningún entorno lo seleccione **no lo saca de la cadena de subencargados**: el DPA
+tiene que nombrar a **todos los proveedores habilitados en el código**, no solo al activo. La alternativa
+—si se decide que Groq no debe poder elegirse— es quitarlo del código, y eso es una decisión de negocio
+que este cambio deliberadamente no toma.
+
 ---
 
 ## 6. Estado de configuración de privacidad en el proveedor
@@ -297,6 +331,7 @@ El orden importa: cada paso abarata el siguiente.
 
 | Fecha | Cambio |
 |---|---|
+| 2026-08-26 | **§5.1 nueva** — la selección de proveedor pasa a ser explícita y obligatoria (FAIL-CLOSED). Se elimina el valor por defecto `Groq` del `appsettings.json` base y de la clase de opciones, y el fallback ante valor no reconocido; sin proveedor declarado la API no arranca. Corrige la contradicción entre esta §5 (que documentaba OpenRouter como activo) y el archivo base (que decía Groq). **No cambia de proveedor y no cierra la §3.1.** |
 | 2026-08-04 | Documento creado a partir de la auditoría GDPR read-only del 2026-08-04 (§§2-5), la configuración del proveedor reportada el 2026-08-03 (§6) y las decisiones de producto registradas (§§3-4). **Cuatro brechas abiertas: 2 de nivel 1, 2 de nivel 2. Un riesgo descartado con justificación.** |
 
 **Mantenimiento:** este documento es **vivo**. Cada vez que se cierre una brecha, se actualiza su estado

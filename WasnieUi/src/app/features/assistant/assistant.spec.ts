@@ -197,7 +197,7 @@ describe('AssistantStore', () => {
 
   it('clears a previous error when a new message is sent', async () => {
     // A stale error under a fresh answer would read as if the new one had failed too.
-    store.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
+    store.setStreamState(store.activeDraftKey(), { errorKey: 'ASSISTANT.ERROR_UNAVAILABLE' });
 
     await store.startConversation();
     await store.send('trying again');
@@ -275,7 +275,7 @@ describe('AssistantStore', () => {
   });
 
   it("clears the previous turn's steps when the next one starts", async () => {
-    store.progressSteps.set([{ phase: 'searching_data', done: true }]);
+    store.setStreamState(store.activeDraftKey(), { steps: [{ phase: 'searching_data', done: true }] });
 
     await store.startConversation();
     await store.send('a new question');
@@ -425,8 +425,8 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
     // '' is "the request is out and nothing has come back" — the only state the loader renders in.
-    store.streamingReply.set('');
-    store.progressSteps.set(steps);
+    store.setStreamState(store.activeDraftKey(), { reply: '' });
+    store.setStreamState(store.activeDraftKey(), { steps });
     fixture.detectChanges();
   }
 
@@ -495,13 +495,15 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
   it('★ the steps disappear the moment the answer starts arriving', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.progressSteps.set([
-      { phase: 'understanding', done: true },
-      { phase: 'reading_docs', done: true },
-      { phase: 'generating', done: false },
-    ]);
+    store.setStreamState(store.activeDraftKey(), {
+      steps: [
+        { phase: 'understanding', done: true },
+        { phase: 'reading_docs', done: true },
+        { phase: 'generating', done: false },
+      ],
+    });
     // The first fragment landed: the bubble now holds the answer, not the wait.
-    store.streamingReply.set('The answer begins');
+    store.setStreamState(store.activeDraftKey(), { reply: 'The answer begins' });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
@@ -1220,7 +1222,7 @@ describe('AssistantPanelComponent — the retry button', () => {
     // can carry request ids and slices of the prompt.
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.setStreamState(store.activeDraftKey(), { errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' });
     store.conversation.set({
       ...CONVERSATION,
       messages: [
@@ -1245,7 +1247,7 @@ describe('AssistantPanelComponent — the retry button', () => {
   it('hides the retry button when there is nothing to retry', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.errorKey.set(null);
+    store.setStreamState(store.activeDraftKey(), { errorKey: null });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeNull();
@@ -1255,7 +1257,7 @@ describe('AssistantPanelComponent — the retry button', () => {
     const spy = spyOn(store, 'retry').and.resolveTo();
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.setStreamState(store.activeDraftKey(), { errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' });
     store.conversation.set({
       ...CONVERSATION,
       messages: [
@@ -1446,7 +1448,8 @@ describe('AssistantPanelComponent — the failed-turn alert', () => {
   });
 
   it('shows the SPECIFIC reason when this session watched it fail', () => {
-    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    // Keyed by the conversation, not by "whatever is open": nothing is open yet at this line.
+    store.setStreamState(CONVERSATION.id, { errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' });
     const alert = renderReloadedFailure();
 
     expect(alert.textContent).toContain('ERROR_RATE_LIMITED');
@@ -1703,8 +1706,8 @@ describe('AssistantPanelComponent — the retry renders the typing bubble', () =
       ],
       lastTurnUnanswered: true,
     });
-    store.sending.set(true);
-    store.streamingReply.set('');
+    store.setStreamState(store.activeDraftKey(), { sending: true });
+    store.setStreamState(store.activeDraftKey(), { reply: '' });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]'))
@@ -2303,7 +2306,7 @@ describe('AssistantConversationComponent — the waiting message', () => {
 
   /** The state between "the request went out" and "the first token came back". */
   function startWaiting(): void {
-    store.streamingReply.set('');
+    store.setStreamState(store.activeDraftKey(), { reply: '' });
     fixture.detectChanges();
   }
 
@@ -2335,7 +2338,7 @@ describe('AssistantConversationComponent — the waiting message', () => {
     startWaiting();
 
     // The first token arrives well inside the threshold.
-    store.streamingReply.set('It was ');
+    store.setStreamState(store.activeDraftKey(), { reply: 'It was ' });
     fixture.detectChanges();
 
     // ...and the pending timer must not fire into a turn that is already answering.
@@ -2352,7 +2355,7 @@ describe('AssistantConversationComponent — the waiting message', () => {
     expect(component.waitingLong()).toBeTrue();
 
     // Answer lands, then a second question goes out.
-    store.streamingReply.set('done');
+    store.setStreamState(store.activeDraftKey(), { reply: 'done' });
     fixture.detectChanges();
     expect(component.waitingLong()).toBeFalse();
 
@@ -2648,13 +2651,13 @@ describe('AssistantPanelComponent — the stop button and the cancelled turn', (
     expect(stop()).withContext('nothing to stop').toBeNull();
     expect(send()).withContext('send is always there').toBeTruthy();
 
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
     fixture.detectChanges();
 
     expect(stop()).withContext('an answer is in flight').toBeTruthy();
     expect(send()).withContext('send is NOT transformed into stop — they are opposites').toBeTruthy();
 
-    store.sending.set(false);
+    store.setStreamState(store.activeDraftKey(), { sending: false });
     fixture.detectChanges();
 
     expect(stop()).withContext('it leaves when the answer does').toBeNull();
@@ -2670,7 +2673,7 @@ describe('AssistantPanelComponent — the stop button and the cancelled turn', (
 
   it('asks the store to stop when it is clicked', () => {
     const cancel = spyOn(store, 'cancel').and.resolveTo();
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
     fixture.detectChanges();
 
     (stop().querySelector('button') as HTMLElement | null)?.click();
@@ -2802,7 +2805,7 @@ describe('AssistantStore — try again after a stopped answer', () => {
   });
 
   it('offers nothing while an answer is already in flight', () => {
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
 
     expect(store.retryableCancelled()).toBeNull();
   });
@@ -2894,7 +2897,7 @@ describe('AssistantPanelComponent — try again beside the cancelled notice', ()
     renderStoppedTurn();
     expect(retryButton()).toBeTruthy();
 
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
     fixture.detectChanges();
 
     // Otherwise it sits there inviting a second retry of the request already in flight.

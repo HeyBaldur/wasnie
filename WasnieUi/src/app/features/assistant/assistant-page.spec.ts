@@ -685,7 +685,7 @@ describe('AssistantConversationComponent — the view follows the answer being w
 
   /** One more fragment of the answer arriving. */
   async function streamFragment(text: string): Promise<void> {
-    store.streamingReply.set(text);
+    store.setStreamState(store.activeDraftKey(), { reply: text });
     fixture.detectChanges();
     TestBed.inject(ApplicationRef).tick();
     await fixture.whenStable();
@@ -920,7 +920,7 @@ describe('AssistantConversationComponent — the message bar', () => {
   // ★ The streaming bubble is rendered OUTSIDE the message loop, so a row in the loop is by definition
   // a stored, finished turn. This pins that a half-written answer never grows a copy button.
   it('★ the streaming answer has no bar — copying it would hand over a truncated reply', () => {
-    store.streamingReply.set('Estoy escrib');
+    store.setStreamState(store.activeDraftKey(), { reply: 'Estoy escrib' });
     fixture.detectChanges();
 
     const streaming = fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]');

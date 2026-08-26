@@ -29,6 +29,12 @@ public sealed class TestWebApplicationFactory(string connectionString) : WebAppl
                 ["RateLimiting:AuthRefresh:WindowSeconds"] = "60",
                 ["RateLimiting:Global:PermitLimit"] = "10000",
                 ["RateLimiting:Global:WindowSeconds"] = "60",
+                // ★ The test host is an environment, so it states its provider like every other one.
+                // There is no default any more: the base appsettings deliberately does not name a
+                // provider, and Infrastructure refuses to start without one, because that key decides
+                // which third-party vendor receives conversation data. No key is configured here, so
+                // nothing is ever sent — the provider resolves and reports itself unconfigured.
+                ["Assistant:Provider"] = "OpenRouter",
                 // Stripe test placeholders — real keys are never committed.
                 // Integration tests replace ISubscriptionPlanService with a mock.
                 ["Stripe:SecretKey"] = "sk_test_integration_test_placeholder",

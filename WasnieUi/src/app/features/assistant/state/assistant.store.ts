@@ -12,6 +12,30 @@ import {
 } from '../models/assistant.model';
 
 /**
+ * Everything one conversation's turn-in-flight needs, held per conversation.
+ *
+ * ★ THE WHOLE TURN LIVES IN ONE OBJECT so it can only ever be moved, cleared or abandoned as a unit.
+ * Split across separate maps, "which conversation is streaming" and "whose partial text is this" could
+ * disagree — which is a smaller version of the bug that made this type necessary.
+ */
+export interface AssistantStreamState {
+  /** The answer as far as it has arrived; null when nothing is being written for this conversation. */
+  reply: string | null;
+  /** The steps the server announced for this turn, in order. */
+  steps: AssistantProgressStep[];
+  /** True while a request for this conversation is out. */
+  sending: boolean;
+  /** A translation key for this conversation's last failure. */
+  errorKey: string | null;
+  /** The words of a turn that never reached the server, so they can be handed back. */
+  unsent: string | null;
+  /** The handle Stop pulls — for THIS conversation, never for whichever one is open. */
+  controller: AbortController | null;
+  /** True from the click on Stop until this conversation's aborted request has finished unwinding. */
+  cancelling: boolean;
+}
+
+/**
  * The assistant panel's state: open/closed, the current thread, and the history list.
  *
  * Root-provided because the panel lives in the app shell and its trigger lives in the topbar — two
@@ -41,28 +65,7 @@ export class AssistantStore {
   readonly conversation = signal<AssistantConversation | null>(null);
   readonly conversations = signal<AssistantConversationSummary[]>([]);
   readonly loading = signal(false);
-  readonly sending = signal(false);
   readonly error = signal<string | null>(null);
-
-  /**
-   * The answer as it arrives, before it is a stored row. Null when nothing is streaming — including
-   * after a failure, because the server persisted nothing and half an answer on screen would be a
-   * message the user cannot find again.
-   */
-  readonly streamingReply = signal<string | null>(null);
-
-  /** A translation key for the last failure, rendered by the panel in the reader's language. */
-  readonly errorKey = signal<string | null>(null);
-
-  /**
-   * The steps of the turn in flight, in the order the server announced them.
-   *
-   * ★ APPEND-ONLY, AND ONLY FROM THE SERVER. Nothing here is predicted: a step exists because the
-   * backend said it started, and turns green because the backend said it finished. A stream that sends
-   * no progress frames at all — an older backend, or a turn that fails before any work — simply leaves
-   * this empty, and the panel falls back to the plain loader it has always shown.
-   */
-  readonly progressSteps = signal<AssistantProgressStep[]>([]);
 
   readonly messages = computed<AssistantMessage[]>(() => this.conversation()?.messages ?? []);
   readonly hasConversation = computed(() => this.conversation() !== null);
@@ -147,6 +150,151 @@ export class AssistantStore {
 
   private persistDrafts(): void {
     writeDrafts(this.draftStorageKey(), this.drafts());
+  }
+
+  // ── Per-conversation streaming ────────────────────────────────────────────
+
+  /**
+   * Everything about the turn in flight, by conversation.
+   *
+   * ★ A MAP, NOT A HANDFUL OF GLOBAL SIGNALS — and those globals WERE the bug, twice over. Asking in A
+   * and switching to B showed A's loader, A's steps and A's Stop button inside B, even when B was a
+   * brand new empty thread. Worse than the wrong indicator: every write went to "the conversation that
+   * is open", so the answer to A's question was appended to whatever thread the user happened to be
+   * reading when it landed. In a product where an answer can name a payee's balance, dropping it into
+   * an unrelated thread is contamination, not a cosmetic glitch.
+   *
+   * ★ SAME KEY SPACE AS THE DRAFTS, deliberately: `activeDraftKey()` — a real conversation id, or the
+   * new-conversation slot — and the same migration when the server assigns the real id. It is the same
+   * problem (state that belongs to a conversation that does not exist yet) and it gets the same answer,
+   * not a second one invented alongside it.
+   */
+  private readonly streams = signal<Record<string, AssistantStreamState>>({});
+
+  /** What a conversation nobody has asked anything in looks like. Shared: it is never mutated. */
+  private static readonly IDLE_STREAM: AssistantStreamState = {
+    reply: null,
+    steps: [],
+    sending: false,
+    errorKey: null,
+    unsent: null,
+    controller: null,
+    cancelling: false,
+  };
+
+  /**
+   * The streaming state of the conversation ON SCREEN — the only one the UI is ever allowed to render.
+   *
+   * ★ NO ENTRY MEANS NO INDICATOR. A conversation that has never been asked anything simply is not in
+   * the map, and reading falls through to the idle shape: no loader, no steps, no Stop button. That is
+   * what makes a freshly opened thread clean while another one is still being answered.
+   */
+  private readonly activeStream = computed<AssistantStreamState>(
+    () => this.streams()[this.activeDraftKey()] ?? AssistantStore.IDLE_STREAM);
+
+  /** True while THIS conversation is waiting on an answer. */
+  readonly sending = computed(() => this.activeStream().sending);
+
+  /**
+   * The answer as it arrives, before it is a stored row. Null when nothing is streaming for the open
+   * conversation — including after a failure, because the server persisted nothing and half an answer
+   * on screen would be a message the user cannot find again.
+   */
+  readonly streamingReply = computed(() => this.activeStream().reply);
+
+  /** A translation key for the open conversation's last failure, rendered in the reader's language. */
+  readonly errorKey = computed(() => this.activeStream().errorKey);
+
+  /**
+   * The steps of the open conversation's turn in flight, in the order the server announced them.
+   *
+   * ★ APPEND-ONLY, AND ONLY FROM THE SERVER. Nothing here is predicted: a step exists because the
+   * backend said it started, and turns green because the backend said it finished. A stream that sends
+   * no progress frames at all — an older backend, or a turn that fails before any work — simply leaves
+   * this empty, and the panel falls back to the plain loader it has always shown.
+   */
+  readonly progressSteps = computed(() => this.activeStream().steps);
+
+  /** True when nothing about this conversation is worth remembering any more. */
+  private static isIdle(state: AssistantStreamState): boolean {
+    return state.reply === null
+      && state.steps.length === 0
+      && !state.sending
+      && state.errorKey === null
+      && state.unsent === null
+      && state.controller === null
+      && !state.cancelling;
+  }
+
+  /**
+   * Folds a change into ONE conversation's streaming state.
+   *
+   * ★ AN ENTRY THAT GOES BACK TO IDLE IS DELETED, not left behind as a row of nulls. The map is read as
+   * "which conversations are busy", and a finished turn that keeps its slot would answer that question
+   * wrongly for every future reader of it.
+   */
+  private patchStream(key: string, patch: Partial<AssistantStreamState>): void {
+    this.streams.update((all) => {
+      const next = { ...(all[key] ?? AssistantStore.IDLE_STREAM), ...patch };
+
+      if (AssistantStore.isIdle(next)) {
+        const { [key]: _finished, ...rest } = all;
+        return rest;
+      }
+
+      return { ...all, [key]: next };
+    });
+  }
+
+  /**
+   * Moves a live stream onto the id the server just assigned.
+   *
+   * ★ WITHOUT THIS THE ANSWER IS ORPHANED. The first question in a fresh panel starts under the
+   * new-conversation slot; the instant the thread gets a real id, everything that reads streaming state
+   * — the composer, the loader, `cancel()` — starts looking under that id instead, and the turn still
+   * being written would be filed where nothing looks. Exactly the draft's problem, exactly its fix.
+   */
+  private migrateStream(from: string, to: string): void {
+    const moving = this.streams()[from];
+    if (moving === undefined) {
+      return;
+    }
+
+    this.streams.update((all) => {
+      const { [from]: _moved, ...rest } = all;
+      return { ...rest, [to]: moving };
+    });
+  }
+
+  /**
+   * Ends a conversation's turn and forgets it — used when the conversation itself is going away.
+   *
+   * The abort is what stops the server too: it sees the connection drop and stops paying for tokens
+   * nobody will ever read. See `cancel()` for the same mechanism used deliberately.
+   */
+  private abandonStream(key: string): void {
+    const entry = this.streams()[key];
+    if (entry === undefined) {
+      return;
+    }
+
+    entry.controller?.abort();
+    this.streams.update((all) => {
+      const { [key]: _gone, ...rest } = all;
+      return rest;
+    });
+  }
+
+  /**
+   * Puts one conversation into a given streaming state directly, with no request behind it.
+   *
+   * ★ THE SEAM THE SPECS USE, and it has to name a conversation. Rendering a mid-stream panel used to
+   * be `streamingReply.set(...)`; with the state per conversation there is no global to poke, and a
+   * test that does not say WHICH conversation it means is asking the question this WI exists to answer.
+   * Production code never calls it — `exchange` owns the map.
+   */
+  setStreamState(key: string, patch: Partial<AssistantStreamState>): void {
+    this.patchStream(key, patch);
   }
 
   async loadEntitlement(): Promise<void> {
@@ -269,24 +417,19 @@ export class AssistantStore {
   }
 
   /**
-   * The handle on the request in flight — what Stop actually pulls.
+   * The handle on the request in flight — what Stop actually pulls. See {@link AssistantStreamState}:
+   * it lives with the conversation that owns the request, not beside the panel.
    *
    * ★ ABORTING THE FETCH IS THE WHOLE MECHANISM, on both sides. The browser stops reading, and the
    * server sees the connection go: its request token cancels, the call to the model is dropped mid
    * answer (no more tokens are paid for words nobody will read), and it writes what had arrived as a
    * cancelled turn. One signal, no second endpoint to keep in step with this one.
-   */
-  private controller: AbortController | null = null;
-
-  /**
-   * True from the instant Stop is pressed until the failed exchange has finished unwinding.
    *
-   * ★ IT IS WHAT TELLS A CANCELLATION APART FROM A FAILURE, and they arrive identically: aborting the
-   * fetch throws into the same catch a dead connection would. Without this the user would press Stop
-   * and be told the assistant could not answer — blamed for a fault, and offered a retry for a turn
-   * they deliberately ended.
+   * ★ AND `cancelling` IS WHAT TELLS A CANCELLATION APART FROM A FAILURE, because they arrive
+   * identically: aborting the fetch throws into the same catch a dead connection would. Without it the
+   * user would press Stop and be told the assistant could not answer — blamed for a fault, and offered
+   * a retry for a turn they deliberately ended.
    */
-  private cancelling = false;
 
   /**
    * Stops the answer being written, and keeps what was written.
@@ -309,29 +452,33 @@ export class AssistantStore {
    * the middle of storing.
    */
   async cancel(): Promise<void> {
-    const controller = this.controller;
+    // ★ ONLY THE CONVERSATION ON SCREEN. Stop is a control the user is looking at, under the answer
+    // they are watching; it has no business reaching into a turn being written somewhere else. Reading
+    // "the request in flight" globally meant leaving a thread mid-answer and pressing Stop in another
+    // one killed the first one's reply.
+    const key = this.activeDraftKey();
+    const entry = this.streams()[key];
 
-    if (!this.sending() || controller === null) {
+    if (!entry?.sending || entry.controller === null) {
       return;
     }
 
-    this.cancelling = true;
-    this.progressSteps.set([]);
-
     const conversationId = this.conversation()?.id ?? null;
     // Read BEFORE the abort: the exchange's own unwinding must not be racing us for this value.
-    const partial = this.streamingReply();
+    const partial = entry.reply;
 
-    controller.abort();
+    entry.controller.abort();
 
-    this.streamingReply.set(null);
+    // The controller is deliberately left in place: the exchange's `finally` compares against it to
+    // tell "the turn I am cleaning up" from "a newer question already running".
+    this.patchStream(key, { cancelling: true, steps: [], reply: null });
 
     // ★ SET HERE, SYNCHRONOUSLY, NOT LEFT TO THE EXCHANGE'S `finally`. That runs a few microtasks later,
     // once the aborted stream has finished throwing — so leaving it to that made "the composer is free"
     // depend on scheduling, and made the reconcile below unable to tell "the turn I just cancelled is
     // still unwinding" from "a new question is being answered". Pressing Stop IS the end of this turn;
     // saying so immediately is both truer and simpler.
-    this.sending.set(false);
+    this.patchStream(key, { sending: false });
 
     // ★ NOTHING WRITTEN YET MEANS NOTHING TO KEEP. Stopping during the classifier or a lookup leaves
     // the server with an empty answer, and it stores nothing rather than a blank bubble — so there is
@@ -341,9 +488,9 @@ export class AssistantStore {
       return;
     }
 
-    this.appendCancelledTurn(partial.trim());
+    this.appendCancelledTurn(key, partial.trim());
 
-    if (conversationId !== null) {
+    if (conversationId !== null && conversationId === key) {
       await this.reconcileCancelled(conversationId);
     }
   }
@@ -365,10 +512,13 @@ export class AssistantStore {
    * whole reason they pressed Stop — the stopped answer would jump BELOW it and the thread would read
    * out of order. Put in sequence, it is simply where it happened.
    */
-  private appendCancelledTurn(content: string): void {
+  private appendCancelledTurn(key: string, content: string): void {
     const current = this.conversation();
 
-    if (!current || content.length === 0) {
+    // ★ INTO THE CONVERSATION THAT WAS STOPPED, OR INTO NONE. `conversation` holds whatever is on
+    // screen, which is not necessarily the thread this turn belongs to; the server has the row either
+    // way, so a thread that is no longer open simply gets it back on the next read.
+    if (!current || current.id !== key || content.length === 0) {
       return;
     }
 
@@ -427,7 +577,10 @@ export class AssistantStore {
 
       // The panel may have moved on while we were asking — a different thread, or this one already
       // busy answering something new. A snapshot taken before that started would erase it.
-      if (this.conversation()?.id !== conversationId || this.sending()) {
+      if (
+        this.conversation()?.id !== conversationId
+        || this.streams()[conversationId]?.sending === true
+      ) {
         return;
       }
 
@@ -449,8 +602,6 @@ export class AssistantStore {
    * only record that one happened. It is session-only by nature: a refresh genuinely loses that turn,
    * because it never existed anywhere but here.
    */
-  private readonly unsentFailure = signal<{ content: string } | null>(null);
-
   /**
    * The words of a turn that never reached the server, or null when there are none.
    *
@@ -461,7 +612,7 @@ export class AssistantStore {
    * The composer is the honest place for it: the message is not IN the conversation, it is still
    * something the user is about to say.
    */
-  readonly unsentText = computed<string | null>(() => this.unsentFailure()?.content ?? null);
+  readonly unsentText = computed<string | null>(() => this.activeStream().unsent);
 
   /**
    * What a Retry would re-run, or null when there is nothing to retry — which is what hides the alert.
@@ -485,9 +636,9 @@ export class AssistantStore {
     // and the retry re-answered a different, older question while the user's own message was lost.
     // The flag is guarded now, but a local fact should never lose to a derivation regardless: if the
     // two ever disagree again, the one that cannot be wrong is this one.
-    const unsent = this.unsentFailure();
-    if (unsent) {
-      return { content: unsent.content, wasPersisted: false };
+    const unsent = this.activeStream().unsent;
+    if (unsent !== null) {
+      return { content: unsent, wasPersisted: false };
     }
 
     const conversation = this.conversation();
@@ -536,42 +687,61 @@ export class AssistantStore {
   });
 
   private async exchange(trimmed: string, isRetry: boolean): Promise<void> {
-    this.sending.set(true);
+    // ★★ THE KEY IS TAKEN ONCE, HERE, AND EVERY WRITE BELOW GOES THROUGH IT. This single line is the
+    // WI: from this point on the exchange never asks "which conversation is open" again. It knows
+    // which conversation it is answering, and the user is free to go and read another one — the
+    // fragments, the steps, the failure and the finished row all land where the question was asked.
+    let key = this.activeDraftKey();
+
     this.error.set(null);
-    this.errorKey.set(null);
-    this.unsentFailure.set(null);
-    this.cancelling = false;
     // One controller per turn: an AbortController is single-use, so reusing last turn's would arrive
     // already fired and stop this request before it began.
     const controller = new AbortController();
-    this.controller = controller;
-    // Last turn's steps belong to last turn. Cleared here rather than at the end of the previous
-    // exchange so a finished list is never left half-shown while the next request is being opened.
-    this.progressSteps.set([]);
 
-    // ★ THE TYPING DOTS ARE NORMALLY LIT BY THE `user` FRAME — and a retry never sends one, because
-    // the question is already stored and echoing it back would duplicate it on screen. So the retry
-    // has to light them itself, or the user presses the button and watches nothing happen until the
-    // first fragment lands: a button that looks broken at the exact moment it is working.
-    //
-    // Empty string, not null: the panel reads null as "nothing is streaming" and an empty reply as
-    // "something is coming", which is precisely the state a retry starts in.
-    this.streamingReply.set(isRetry ? '' : null);
+    this.patchStream(key, {
+      sending: true,
+      errorKey: null,
+      unsent: null,
+      cancelling: false,
+      controller,
+      // Last turn's steps belong to last turn. Cleared here rather than at the end of the previous
+      // exchange so a finished list is never left half-shown while the next request is being opened.
+      steps: [],
+      // ★ THE TYPING DOTS ARE NORMALLY LIT BY THE `user` FRAME — and a retry never sends one, because
+      // the question is already stored and echoing it back would duplicate it on screen. So the retry
+      // has to light them itself, or the user presses the button and watches nothing happen until the
+      // first fragment lands: a button that looks broken at the exact moment it is working.
+      //
+      // Empty string, not null: the panel reads null as "nothing is streaming" and an empty reply as
+      // "something is coming", which is precisely the state a retry starts in.
+      reply: isRetry ? '' : null,
+    });
 
     // Tracks whether the server got as far as storing the question. It decides whether a retry
     // re-answers the stored turn or sends a fresh one — get this wrong and the thread duplicates.
     let persisted = isRetry;
 
     try {
-      if (!this.conversation()) {
+      if (key === AssistantStore.NEW_CONVERSATION_DRAFT) {
         const created = await firstValueFrom(this.api.startConversation());
-        this.conversation.set(created);
-        // The words being sent were typed before this thread had an id; the draft moves with them so a
-        // failure can hand them back under the key the composer is now reading.
+
+        // ★ THE STREAM MIGRATES WITH THE DRAFT, for the same reason and at the same instant. The turn
+        // is already marked as being answered under the new-conversation slot; the moment a real id
+        // exists, everything that renders or stops this turn looks under that id instead.
+        this.migrateStream(AssistantStore.NEW_CONVERSATION_DRAFT, created.id);
         this.migrateNewConversationDraft(created.id);
+        key = created.id;
+
+        // ★ ONLY IF THE USER IS STILL WHERE THEY WERE. Creating a thread takes a round trip, and
+        // someone can open an old conversation inside it — showing the new one anyway would yank them
+        // out of what they chose to read. The answer still lands in the thread that asked for it; the
+        // list refresh at the end of this method is what makes it reachable.
+        if (this.conversation() === null) {
+          this.conversation.set(created);
+        }
       }
 
-      const conversationId = this.conversation()!.id;
+      const conversationId = key;
       const token = this.auth.getAccessToken();
 
       for await (const frame of this.api.streamMessage(
@@ -587,35 +757,36 @@ export class AssistantStore {
             // saying so put the failure card on screen beside the typing dots, telling the user their
             // question had failed while it was being answered. "Waiting" is not "failed"; only the
             // error frame below knows the difference.
-            this.appendMessage(frame.message!);
-            this.streamingReply.set('');
+            this.appendMessage(key, frame.message!);
+            this.patchStream(key, { reply: '' });
             break;
 
           case 'progress':
-            this.recordStep(frame.phase, frame.state);
+            this.recordStep(key, frame.phase, frame.state);
             break;
 
           case 'delta':
-            this.streamingReply.update((soFar) => (soFar ?? '') + (frame.delta ?? ''));
+            this.appendDelta(key, frame.delta ?? '');
             break;
 
           case 'done':
-            this.streamingReply.set(null);
-            this.progressSteps.set([]);
+            this.patchStream(key, { reply: null, steps: [], unsent: null });
             // ★ The answer landed, so the thread no longer ends on a question — the derived failure
             // clears itself. Marking the conversation answered here keeps the open screen honest
             // without a second round trip; a reload would compute the same thing.
-            this.appendMessage(frame.message!, { threadUnanswered: false });
-            this.unsentFailure.set(null);
+            this.appendMessage(key, frame.message!, { threadUnanswered: false });
             break;
 
           case 'error':
-            this.streamingReply.set(null);
-            // The steps go with the loader. Leaving a half-ticked checklist above a failure card would
-            // show the user how far it got as if that were an outcome — nothing was persisted, and the
-            // only thing to do with the turn is retry it.
-            this.progressSteps.set([]);
-            this.errorKey.set(frame.errorKey ?? 'ASSISTANT.ERROR_UNAVAILABLE');
+            this.patchStream(key, {
+              reply: null,
+              // The steps go with the loader. Leaving a half-ticked checklist above a failure card
+              // would show the user how far it got as if that were an outcome — nothing was persisted,
+              // and the only thing to do with the turn is retry it.
+              steps: [],
+              errorKey: frame.errorKey ?? 'ASSISTANT.ERROR_UNAVAILABLE',
+              unsent: persisted ? null : trimmed,
+            });
             // NOW the thread is genuinely waiting on nothing — which is what the server will report
             // on the next read too. A stored question needs no local record beyond this flag; only
             // the turn that never arrived does.
@@ -626,8 +797,8 @@ export class AssistantStore {
             // problem, because `retryable` trusts it: it went looking for the last stored User turn,
             // found the PREVIOUS, already-answered question, and offered to retry that. The user
             // watched their own message vanish and a second answer appear under the old one.
-            this.markThreadUnanswered(persisted);
-            this.unsentFailure.set(persisted ? null : { content: trimmed });
+            this.markThreadUnanswered(key, persisted);
+            this.restoreUnsentDraft(key, persisted ? null : trimmed);
             break;
         }
       }
@@ -638,14 +809,23 @@ export class AssistantStore {
       // and it must take none of this. `cancel()` owns that path: it keeps the partial answer on
       // screen until the stored row replaces it, leaves the thread answered, and offers no retry,
       // because the user did not suffer a failure, they made a decision.
-      if (!this.cancelling) {
-        this.streamingReply.set(null);
-        this.progressSteps.set([]);
-        this.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
+      //
+      // ★ AND A CONVERSATION THAT WAS DELETED MID-ANSWER TAKES NONE OF IT EITHER. `remove` aborts the
+      // request and drops the entry; writing a failure back here would resurrect state for a thread
+      // that no longer exists, and the map would never go empty.
+      const entry = this.streams()[key];
+
+      if (entry !== undefined && !entry.cancelling) {
+        this.patchStream(key, {
+          reply: null,
+          steps: [],
+          errorKey: 'ASSISTANT.ERROR_UNAVAILABLE',
+          unsent: persisted ? null : trimmed,
+        });
         // Same guard as the error frame above, and it matters MORE here: a transport failure is the
         // likeliest way for a turn to die before the server ever saw it.
-        this.markThreadUnanswered(persisted);
-        this.unsentFailure.set(persisted ? null : { content: trimmed });
+        this.markThreadUnanswered(key, persisted);
+        this.restoreUnsentDraft(key, persisted ? null : trimmed);
       }
     } finally {
       // ★ ONLY IF THIS IS STILL THE TURN IN FLIGHT. A cancelled exchange frees the composer at the
@@ -653,11 +833,43 @@ export class AssistantStore {
       // that window, and this clean-up — belonging to a request that is already over — would otherwise
       // clear the NEW turn's sending flag and drop its abort handle, leaving a Stop button with nothing
       // to stop.
-      if (this.controller === controller) {
-        this.sending.set(false);
-        this.controller = null;
+      if (this.streams()[key]?.controller === controller) {
+        this.patchStream(key, { sending: false, controller: null, cancelling: false });
       }
     }
+  }
+
+  /**
+   * Hands a turn that never reached the server back to the composer of the thread that asked it.
+   *
+   * ★ THE STORE DOES THIS, NOT THE COMPOSER, PRECISELY BECAUSE THE USER MAY HAVE LEFT. The component
+   * can only restore into the box on screen; a question typed in A and lost while the user was reading
+   * B has to go back into A's composer, and A's composer does not exist right now. The draft map is
+   * where a conversation's unsent words live, and this is a conversation's unsent words.
+   *
+   * ★ NEVER OVER SOMETHING NEWER. If that thread's box already holds text, it is text the user typed
+   * after this turn failed, and it is theirs.
+   *
+   * ★ AND NOT FOR THE THREAD ON SCREEN — the composer owns that case, because putting the words in the
+   * draft map is only half of it: the textarea itself has to be filled and re-measured, which is DOM
+   * the store cannot touch. Doing it here as well would fill the slot first and make the component
+   * think there was nothing to hand back.
+   */
+  private restoreUnsentDraft(key: string, content: string | null): void {
+    if (
+      content === null
+      || this.activeDraftKey() === key
+      || (this.drafts()[key] ?? '').trim().length > 0
+    ) {
+      return;
+    }
+
+    this.setDraft(key, content);
+  }
+
+  /** Appends one fragment of the answer to the conversation that asked for it. */
+  private appendDelta(key: string, delta: string): void {
+    this.patchStream(key, { reply: (this.streams()[key]?.reply ?? '') + delta });
   }
 
   /**
@@ -668,29 +880,28 @@ export class AssistantStore {
    * it, would silently lose a step the server did perform, and losing information is the one failure
    * mode this list must not have.
    */
-  private recordStep(phase: string | undefined, state: string | undefined): void {
+  private recordStep(key: string, phase: string | undefined, state: string | undefined): void {
     if (!phase) {
       return;
     }
 
     const done = state === 'done';
+    const steps = this.streams()[key]?.steps ?? [];
+    const index = steps.findIndex((s) => s.phase === phase);
 
-    this.progressSteps.update((steps) => {
-      const index = steps.findIndex((s) => s.phase === phase);
+    if (index === -1) {
+      this.patchStream(key, { steps: [...steps, { phase, done }] });
+      return;
+    }
 
-      if (index === -1) {
-        return [...steps, { phase, done }];
-      }
+    // A repeated `start` must not un-tick a step that already finished.
+    if (!done) {
+      return;
+    }
 
-      // A repeated `start` must not un-tick a step that already finished.
-      if (!done) {
-        return steps;
-      }
-
-      const next = [...steps];
-      next[index] = { phase, done: true };
-      return next;
-    });
+    const next = [...steps];
+    next[index] = { phase, done: true };
+    this.patchStream(key, { steps: next });
   }
 
   /** Records that the thread is waiting on an answer that will not come. */
@@ -702,9 +913,11 @@ export class AssistantStore {
    * is a call that has to say, out loud, which of the two situations it is in. `false` is not "do
    * nothing by accident"; it is "the server holds no question, so the flag would be false anyway".
    */
-  private markThreadUnanswered(persisted: boolean): void {
+  private markThreadUnanswered(key: string, persisted: boolean): void {
     const current = this.conversation();
-    if (current && persisted) {
+    // Same rule as every other write in this file: the flag belongs to the thread that asked, and it
+    // is only on screen if that thread is the one being read. A reload derives it from the server.
+    if (current?.id === key && persisted) {
       this.conversation.set({ ...current, lastTurnUnanswered: true });
     }
   }
@@ -718,9 +931,16 @@ export class AssistantStore {
    * handling, and a rule guessed in two places is a rule that eventually differs in two places.
    */
   private appendMessage(
-    message: AssistantMessage, options?: { threadUnanswered: boolean }): void {
+    key: string, message: AssistantMessage, options?: { threadUnanswered: boolean }): void {
     const current = this.conversation();
-    if (!current) {
+
+    // ★★ THE ROW GOES INTO THE THREAD THAT ASKED, OR NOWHERE. This guard is the other half of the WI,
+    // and the half that was not merely cosmetic: `conversation` is whatever the user is reading, so
+    // without it an answer about one payee's balance was appended to whichever conversation happened
+    // to be open when it finished. Dropping it is safe and is why this can be a guard rather than a
+    // second copy of the thread: the server stored the row against the id in the request URL, so
+    // reopening that conversation reads it back complete.
+    if (!current || current.id !== key) {
       return;
     }
     this.conversation.set({
@@ -751,6 +971,10 @@ export class AssistantStore {
   async remove(conversationId: string): Promise<void> {
     // The thread is gone; its unsent text has nothing to belong to.
     this.clearDraft(conversationId);
+    // ★ AND NEITHER DOES ITS ANSWER. A turn still being written for a conversation being deleted has
+    // nowhere to land: the abort stops the model mid-sentence rather than paying for words that will
+    // be thrown away, and dropping the entry is what stops a dead thread showing up as "busy" forever.
+    this.abandonStream(conversationId);
 
     try {
       await firstValueFrom(this.api.deleteConversation(conversationId));

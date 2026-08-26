@@ -133,21 +133,50 @@ public static class DependencyInjection
         services.AddHttpClient(GroqChatProvider.HttpClientName);
         services.AddHttpClient(OpenRouterChatProvider.HttpClientName);
 
-        // ★ THE CHOICE IS A CONFIGURATION VALUE. Both providers implement the same interface, so which
-        // one answers is a registration detail — and as a setting, switching back to Groq is an
-        // appsettings edit and a restart rather than a deployment.
+        // ★ THE CHOICE IS A CONFIGURATION VALUE, AND IT IS MANDATORY. Both providers implement the same
+        // interface, so which one answers is a registration detail — switching is an appsettings edit
+        // and a restart rather than a deployment.
         //
-        // An unrecognised value falls back to Groq with a warning instead of throwing: a typo in a chat
-        // panel's configuration must not stop the API from starting.
+        // ★ FAIL-CLOSED: NO DEFAULT, AND THE FAILURE IS AT START-UP. This used to end in `else =>
+        // Groq`, so an absent or misspelt value silently selected Groq. The justification was that a
+        // typo in a chat panel's configuration must not stop the API — but this key is not a feature
+        // toggle. It decides which third-party vendor, in which country, receives payroll data. Both
+        // options are US-based; only one of them has any privacy configuration reported at all, and
+        // neither has a signed DPA (docs/Legal.md §3.1, §5). An environment that never states its
+        // choice is not asking for the usual one; it has left the question unanswered, and answering
+        // it by omission is how European payroll data reaches an unvetted processor.
+        //
+        // The check lives HERE, at the resolution itself, rather than as ValidateOnStart on the options
+        // — this is the line that actually picks the vendor, so a guard anywhere else could be
+        // bypassed by a code path that resolves the provider without going through validation. This
+        // runs inside AddInfrastructure (Program.cs:35), i.e. while the host is being built: the
+        // deployment finds out, not a user asking about their commission.
         var selected = configuration[$"{AssistantProviderOptions.SectionName}:{nameof(AssistantProviderOptions.Provider)}"];
 
         if (string.Equals(selected, AssistantProviderOptions.OpenRouter, StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IChatCompletionProvider, OpenRouterChatProvider>();
         }
-        else
+        else if (string.Equals(selected, AssistantProviderOptions.Groq, StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IChatCompletionProvider, GroqChatProvider>();
+        }
+        else
+        {
+            // The message names the key and the admitted values, because the person reading it is
+            // looking at a container that will not start and needs to know what to type, not that
+            // something was invalid.
+            var key = $"{AssistantProviderOptions.SectionName}:{nameof(AssistantProviderOptions.Provider)}";
+            var problem = string.IsNullOrWhiteSpace(selected)
+                ? $"'{key}' is not configured."
+                : $"'{key}' has the unrecognised value '{selected}'.";
+
+            throw new InvalidOperationException(
+                $"{problem} It is REQUIRED and has no default: it selects which third-party AI provider " +
+                $"receives conversation data, and that choice must never be made by omission. Set it to " +
+                $"'{AssistantProviderOptions.OpenRouter}' or '{AssistantProviderOptions.Groq}' in " +
+                $"appsettings for this environment, or as the environment variable " +
+                $"'{AssistantProviderOptions.SectionName}__{nameof(AssistantProviderOptions.Provider)}'.");
         }
         // The documentation the assistant answers from. SINGLETON because it reads one file once and
         // that file cannot change while the process runs — re-reading fifteen thousand tokens of text

@@ -4,6 +4,379 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-26 — Un resultado vacío no es prueba de inexistencia
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Solo backend** (`Wasnie.Application` + tests)
+
+### La evidencia
+
+Turno 1: *"¿Tiene planes asignados ese payee?"* → *"No he podido encontrar ninguna asignación de
+planes… revise que el nombre sea exacto o facilíteme el ID interno del payee."* Al mismo tiempo, en
+la pantalla del payee: **ASSIGNMENTS · 1 in this month → Q3 2026 — Plan Comercial EMEA, v1,
+In Progress, Jul 1 – Sep 30 2026.**
+
+Turno 2 (Quota Attainment) contestó **bien**: la capacidad no existe, y enumeró las cuatro que sí.
+Eso probó que la categoría "capacidad inexistente" está sana y que el defecto vivía en la otra.
+
+### ★ La causa raíz la dijo el propio asistente
+
+> *"En la búsqueda el resultado es `NoAssignmentsOrNotVisible`…"*
+
+Ese identificador ES el defecto. `GetPayeePlansTool` devolvía **un único valor para dos hechos
+opuestos** — el payee no tiene asignaciones, o las tiene y esta consulta no las ve — porque
+`ListAssignmentsByPayeeHandler` contesta una denegación del `PayeeAccessGuard` con una **página
+vacía**, no con un error (deliberado: un error confirmaría que el payee existe). El prompt le pedía
+al modelo una frase verdadera bajo ambas lecturas; el modelo eligió la lectura confiada. **Ninguna
+regla de redacción podía arreglarlo: el dato para ser honesto no estaba.**
+
+### ★ La puerta de parada de 2.3 quedó cerrada: no hay discrepancia de datos
+
+Las dos superficies pasan por **la misma query y el mismo handler**: `PayeesController.ListAssignments`
+(`PayeesController.cs:71`) y la herramienta (`GetPayeePlansTool.cs:219`) mandan ambas
+`ListAssignmentsByPayeeQuery`. Diferencias, línea por línea:
+
+| | pantalla | herramienta |
+|---|---|---|
+| estado | ninguno → `Active` por defecto | `Active` (o `all` si `includeEnded`) |
+| fechas | `period=this-month` | **ninguna** → sin filtro de fechas |
+| orden/página | `effectivestart` desc, 10 | desc, 50 |
+
+O sea: el alcance de la herramienta es el **más ancho**. Y `In Progress` es un estado **derivado** de
+la UI a partir del período, no un `AssignmentStatus` (el enum sólo tiene `Active` y `Deactivated`),
+así que tampoco lo excluía. Una asignación que la pantalla puede mostrar no puede ser una que la
+herramienta no vea — **salvo que la visibilidad difiera**, que es la mitad `NotVisible` del nombre.
+
+### Frente A — separar los estados
+
+La herramienta **le pregunta al guard** (`IPayeeAccessGuard.CanReadAsync`) antes de consultar. Es
+request-scoped y cachea su veredicto, así que el handler de abajo reutiliza el mismo trabajo. Cuatro
+outcomes donde había tres:
+
+1. `PayeePlans` — las filas;
+2. **`NoAssignments`** — pude mirar y no hay (y el mensaje distingue "ninguna activa" de "nunca tuvo",
+   según `includedEnded`);
+3. **`AssignmentsNotVisible`** — no pude mirar;
+4. `NotFoundOrNotVisible` — la negativa de la Regla 3, que **conserva su ambigüedad a propósito**.
+
+**★ Esto no viola la Regla 2 ni la Regla 3.** No la 2 porque la herramienta sigue sin *conocer* las
+reglas de visibilidad: le pregunta al único componente que las tiene. No la 3 porque cuando se llega
+a esa pregunta el payee **ya fue confirmado y nombrado** en el payload — `GetPayeeByIdQuery` y el
+resolver aplican `Payees.Read` y el filtro de tenant, **no** el guard — así que la existencia ya es
+pública para quien pregunta, y lo único que agrega el outcome nuevo es un hecho sobre **los permisos
+de quien pregunta**. La negativa de la Regla 3 sigue siendo tan indistinguible como siempre.
+
+Las dos respuestas vacías llevan ahora `payeeEmployeeCode`, para que el asistente pueda decir **con
+qué buscó** — no se puede sacar de las filas, porque no hay filas.
+
+### Frente B — la regla de vacío
+
+22b (un vacío *verificado* sí se puede afirmar, leyendo `includedEnded`), 22c (muro de permisos:
+nunca "no tiene planes", y remitir a la pantalla del payee), **22c-i MONEY-CLOSED** (una negación
+sobre planes, cuotas, comisiones o balances sólo con evidencia positiva; sin ella, describir *qué se
+hizo*: a quién buscó, con qué código, y qué volvió), 22d (no culpar la ortografía del usuario por un
+término de búsqueda que eligió el asistente) y **2C-i** (no pedir un identificador que ya está en la
+conversación — en el caso real acababa de imprimir el nombre y `CEO-001`).
+
+### Frente C — dos regresiones
+
+**Fuga de identificador interno.** La regla 18 ya prohibía imprimir tokens, pero vivía **dentro del
+diccionario de plan-rules** y sólo daba ejemplos de tokens de tasas, así que se leía como consejo
+sobre semántica de rates y no frenó un *outcome*. La regla general es ahora **10a**, con las reglas
+de datos, donde toda consulta la ve; la 18 quedó como "los tokens de tasas no son excepción a 10a".
+
+**El bloque de identidad se disparaba de más.** Acotado a las tres preguntas que le corresponden, con
+las quejas nombradas literalmente ("no me entendés", "no es lo que pregunté") y la orden explícita de
+no desplazar la respuesta pendiente. **★ Y los ejemplos no nombran ningún proveedor:** el test
+antiacoplamiento prohíbe que este prompt lleve un nombre de vendor, y tiene razón — así que la
+frontera se dibuja con las quejas de un lado y el fraseo sin marca del bloque del otro.
+
+### ★ El presupuesto de tokens fue la restricción real, y no se subió
+
+`AssistantRoutingTests` fija un techo de ~6.000 tokens para el prompt ensamblado, porque el primer
+diseño mandaba ~15.300 y el proveedor devolvía 413 contra ~12.000/minuto. Las reglas nuevas no
+entraban. Lo que se hizo, en vez de mover el techo (que es el número del proveedor, no nuestro):
+
+- acortarlas, dejando el *porqué* en los comentarios de código y en los tests, que son gratis;
+- que la regla 18 **defiera** a 10a en vez de repetirla;
+- mover la regla de fuga y la de dinero a un **`DataReminder`** que sólo se manda cuando corrió una
+  consulta — más barato **y más correcto**: un prompt sin lookup no tiene outcome que filtrar ni
+  resultado vacío que sobreleer, y encima quedan *después* de los datos, que es la posición de más peso.
+
+**Queda prácticamente cero holgura en el camino siempre-activo.** Hay un test nuevo
+(`THE_PROMPT_STILL_FITS_INSIDE_THE_PROVIDERS_ALLOWANCE`) que lo dice en voz alta, para que el próximo
+que escriba una regla se entere antes y no después.
+
+### Verificación
+
+`dotnet build` limpio. Unit **1550 → 1551 en verde**, encadenado con guardia de exit-code.
+**Integración NO se pudo correr: Docker está apagado** — 616 fallos, todos
+`Docker is either not running`; ningún test de integración toca el código cambiado.
+
+### Fuera de alcance, detectado
+
+No se construyó la herramienta de Quota Attainment (el asistente sigue contestando bien que no
+existe). El **modelo de permisos de asignaciones no se tocó**: el problema no era de diseño de
+permisos, sino de una herramienta que no los distinguía de una ausencia.
+
+### Lo que sigue abierto
+
+El diagnóstico no puede decir, **sólo desde el código**, cuál de las dos ramas produjo el caso de
+Rodolfo — eso depende del rol de su usuario y de a qué payee resolvió el nombre, que son datos de
+runtime. Lo que sí hace el arreglo es que la reproducción **lo diga**: si vuelve a pasar, la respuesta
+dirá si no puede ver las asignaciones o si realmente no hay, y con qué nombre y código buscó.
+
+## 2026-08-26 — El streaming del asistente se filtraba entre conversaciones
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Solo frontend** (`WasnieUi`)
+
+### El defecto
+
+Preguntar algo en la conversación A y cambiar a B antes de que respondiera dejaba en B el
+"Processing your request…" **de la pregunta de A**, con el botón de parar y el spinner. En la captura
+de Rodolfo se ve incluso en una conversación **nueva y vacía**.
+
+### El indicador era el síntoma; el destino de los tokens era el defecto
+
+Todo el estado del turno vivía en signals globales del store — `sending`, `streamingReply`,
+`progressSteps`, `errorKey`, `unsentFailure` y el `controller` de cancelación — y **todas** las
+escrituras iban contra `conversation()`, que es "lo que el usuario está leyendo", no "el hilo que
+preguntó". Los fragmentos, la fila final (`appendMessage`), el `lastTurnUnanswered` y el fallo se
+aplicaban al chat abierto en el momento en que llegaban. En un producto donde una respuesta puede
+nombrar el balance de un payee, eso es contenido de una conversación escrito dentro de otra.
+
+### ★ La base estaba sana, y eso decidió el alcance
+
+El `conversationId` viaja en la URL (`POST /api/assistant/conversations/{id}/messages/stream`) y
+`StreamAssistantReplyHandler` persiste contra `request.ConversationId` — nunca contra estado de UI. La
+corrupción era **sólo en memoria del navegador** y desaparecía al recargar. No hay datos ya escritos
+que revisar, así que el WI siguió adelante sin parar.
+
+### La corrección
+
+El estado de streaming es un **mapa `conversación → AssistantStreamState`** (texto parcial, pasos,
+`sending`, `errorKey`, `unsent`, `AbortController`, `cancelling`), en el **mismo espacio de claves que
+los borradores** y con la **misma migración** de `__new__` al id real: es el mismo problema — estado de
+una conversación que todavía no existe — y se le dio la misma forma, no una segunda.
+
+**★ La regla central es una línea:** `exchange()` toma la clave UNA vez al enviar y cada escritura del
+turno pasa por ella. Nunca vuelve a preguntar cuál conversación está abierta.
+
+`sending` / `streamingReply` / `progressSteps` / `errorKey` / `unsentText` dejaron de ser signals
+escribibles y pasaron a ser **computeds sobre la conversación en pantalla**. Sin entrada en el mapa no
+hay indicador — que es lo que deja limpia una conversación nueva. Una entrada que vuelve a estado
+inactivo se **borra**, para que el mapa siga contestando bien "quién está ocupado".
+
+Consecuencias que se pidieron y quedaron: cambiar de chat **no cancela** nada; dos streams simultáneos
+funcionan e independientes; **Stop** sólo afecta al hilo abierto; **borrar** una conversación aborta su
+stream y descarta su entrada; y un fallo de envío vuelve al composer de la conversación **que lo
+originó** — el store lo archiva en el borrador de ese hilo cuando el usuario ya no está mirando, y el
+componente sigue dueño del caso en pantalla porque ahí hay que rellenar el textarea, que es DOM.
+
+El auto-scroll no necesitó nada: su efecto ya cambia de "vista" con el id de la conversación, así que
+volver a A cuenta como vista fresca y aparece al fondo.
+
+### Verificación
+
+`ng build --configuration production` limpio. Suite front **1050 → 1063 en verde** (13 tests nuevos en
+`assistant-stream-isolation.spec.ts`), encadenado con guardia de exit-code. Un test viejo
+(`shows the SPECIFIC reason when this session watched it fail`) escribía el `errorKey` **antes** de
+abrir la conversación; con el estado por conversación eso ya no significa nada y se le pasó el id.
+
+### Fuera de alcance, detectado
+
+El backend **no impone** ningún límite de streams concurrentes por usuario ni por plan; el único freno
+es el rate limit del proveedor, que ya se reporta como `ASSISTANT.ERROR_RATE_LIMITED`. Quedan sin
+construir, a propósito: el indicador de "respuesta lista" en la lista de conversaciones y la
+reanudación de un stream tras recargar la página.
+
+## 2026-08-26 — Identidad del asistente: quién dice ser, y qué tiene prohibido prometer
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Solo prompt** (`AssistantPrompt.cs` + tests)
+
+### El defecto
+
+Preguntado en español qué era, el asistente decía ser un modelo de lenguaje de un laboratorio externo
+conocido, y lo repetía al ser confrontado. En la misma conversación un usuario preguntó, asustado, si
+sus datos financieros y los de sus payees los va a leer alguien más.
+
+Son dos problemas de naturaleza distinta: una **fuga de identidad** (de cara a un cliente B2B convierte
+a Incentra en una carcasa sobre el chat de otro) y una pregunta que en realidad es **de tratamiento de
+datos**, no de marca, y cuya respuesta tiene que ser verdadera.
+
+### La ausencia era la causa — pero no era todo
+
+Las tres variantes abrían con "You are the assistant inside Incentra", que dice qué **hace**, no qué
+**es**. En 827 líneas no había ninguna regla de identidad.
+
+**★ Y había algo peor que la ausencia.** La regla 3 manda todo lo ajeno al producto al escenario 2A, y
+2A dice literalmente *"say what you are"*. O sea: el prompt ya tenía un "decí qué sos" **en la única
+rama que no debe ser dueña de esta pregunta**. Un bloque nuevo puesto tranquilamente al lado no
+alcanzaba; tenía que **anteponerse**, y la regla 3 tenía que **apuntar de vuelta**.
+
+### ★ El hallazgo que decide si el arreglo sirve de algo
+
+Una pregunta de identidad **no matchea ninguna sección** del manual. El router entrega corpus vacío y
+`Build` cae en **`NoSourcePrompt`** — casi con seguridad la variante por la que pasó el bug reportado.
+Un bloque de identidad puesto sólo en `ConfinementRules` habría leído perfecto en el código y **no
+habría disparado nunca** en la pregunta para la que se escribió.
+
+Por eso `IdentityRules` está en las **tres** variantes, y además:
+
+- `NoSourcePrompt` lleva un `★ UNLESS IT IS A QUESTION ABOUT YOU`: no tener fuente no es no tener
+  respuesta, y acá la respuesta está justo arriba.
+- El `Reminder` —lo último que lee el modelo antes de la pregunta, la posición de más peso, y que
+  **restablece la rama 2A/2B/2C**— dejó de poder devolver la pregunta a 2A.
+
+### ★ Lo que deliberadamente NO se dijo
+
+Las dos puertas de parada de la v1 del WI se resolvieron **descartando** las frases tranquilizadoras:
+
+- **Garantía de no-entrenamiento: fuera.** El ZDR está registrado en un solo lugar (`Legal.md` §6) que
+  se advierte a sí mismo como reportado desde un panel y **no verificable desde el repositorio**;
+  además describe la cuenta de **un** proveedor y el código trae dos.
+- **"Bajo acuerdo de tratamiento": fuera.** El DPA **no existe**, y su ausencia es bloqueante de
+  release (§3.1). Decirlo trabajaría en contra de ese mismo frente.
+- **Enlace a política de privacidad: fuera.** No existe: sin ruta, sin página, sin documento.
+  `Legal.md` dice de sí mismo que no lo es, y es un tablero interno con las brechas abiertas del propio
+  producto — enlazarlo sería entregárselas a un cliente.
+
+Regla que quedó escrita como prohibición absoluta: **el prompt no afirma la existencia de ningún
+contrato, garantía ni documento.** Sólo dice lo que es cierto hoy y a quién preguntar.
+
+### La excepción del administrador, reconciliada en los dos lugares
+
+La escalada va al **administrador de Incentra en la organización del usuario**: en B2B la contraparte
+de una pregunta de tratamiento de datos es quien firmó, no el empleado al que se le explica
+cumplimiento por chat.
+
+Pero el prompt **prohíbe** "consultá al administrador" en cualquier idioma y frase, porque este usuario
+ES el administrador de su entorno y mandarlo ahí lo manda a sí mismo. Dejado sin reconciliar, el bloque
+de identidad contradice esa regla de frente y el modelo arbitra cuál de dos absolutos gana. Así que la
+excepción está escrita **en los dos lados** (misma técnica con la que 2C se reconcilia con la regla 9),
+y dice explícitamente que no aplica a nada más.
+
+### Los tests, y cuál es el que importa
+
+Los de presencia sólo pinan lo que **llega** al modelo — la obediencia es de los pesos de otro y se
+juzga en pantalla (mismo límite que declara `AssistantConfinementTests`). **El valor real está en los
+dos de regresión, porque vigilan una EDICIÓN FUTURA y no al modelo:**
+
+- **Anti-acoplamiento:** el prompt no contiene ningún nombre de proveedor ni de modelo. No es una regla
+  de mentir por omisión: un nombre clavado acá es un dato que vive en la configuración; el arreglo
+  puede cambiar, la frase no, y ese día el prompt empieza a decir algo falso con total seguridad. Mismo
+  defecto que el degradado que hardcodeaba el color que debía heredar.
+- **Anti-afirmación:** el prompt no contiene "DPA", "política de privacidad", "contratado",
+  "subencargado", "not used to train", "zero retention"… en EN/ES/PL. **Si este test se pone rojo, la
+  pregunta no es cómo satisfacerlo, sino si lo que se está agregando es verdadero y verificable.**
+
+**Encontrado por el propio test mientras se escribía:** mi primera versión del aviso en `NoSourcePrompt`
+citaba *"Are you ChatGPT?"* como ejemplo — o sea metía el nombre que el test prohíbe, dentro del mismo
+cambio que lo prohíbe. Reemplazado por "some other chatbot".
+
+Build limpio. Unit **1480 → 1522** (+42; las theories expanden a 4 variantes × 2, 12 nombres, 16 frases
+y 6 facts).
+
+### Pendiente y fuera de alcance
+
+- **Falta la verificación a mano de Rodolfo, en ES y EN** — los 6 casos del §5 del WI. Los tests no la
+  sustituyen.
+- **★ La cadena termina en un documento que no existe.** El asistente ahora deriva al administrador de
+  la organización, y ese administrador **no tiene nada que entregarle**: no hay política de privacidad
+  ni DPA. Es la respuesta honesta y es mejor que la anterior, pero la brecha §3.1/§3.2 sigue abierta y
+  ahora tiene una superficie de cara al usuario.
+- No construido: la política de privacidad, el DPA, la seudonimización, el DLP.
+
+## 2026-08-26 — El proveedor de IA no puede elegirse por omisión (FAIL-CLOSED)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit**
+
+### El hallazgo
+
+Salió del Paso 0 del WI de identidad del asistente. Los cuatro `appsettings` no coincidían en
+`Assistant:Provider`: base y template decían `Groq`, Development y Production decían `OpenRouter`. Y
+`docs/Legal.md` §5 documentaba a OpenRouter como el proveedor activo — un tablero de cumplimiento
+describiendo una cadena de subencargados que la configuración podía no estar usando.
+
+**El defecto tenía dos capas, no una.** Además del `appsettings.json` base, la propia clase de opciones
+declaraba `public string Provider { get; init; } = Groq;`. Quitar sólo el archivo habría dejado el
+defecto intacto y el arreglo habría parecido hecho.
+
+**Y la mitad peor no era la ausencia sino el valor no reconocido.** La resolución era
+`if (OpenRouter) ... else => Groq`, así que `"OpenRoutr"` seleccionaba Groq en silencio: el operador
+creía haber configurado OpenRouter y los datos iban a otro lado. Un fallo de configuración que se
+presenta como éxito.
+
+El problema no es cuál era el valor por defecto. **Es que existiera uno.** Elegir a qué país viajan
+datos personales no puede ser el resultado de una omisión.
+
+### El cambio
+
+1. **Sin defecto, en los dos lugares.** `AssistantProviderOptions.Provider` pasa a `string.Empty` y el
+   `appsettings.json` base pierde la sección `Assistant` entera.
+2. **Falla al arrancar.** Ausente, vacío o no reconocido → `InvalidOperationException` que nombra la
+   clave, los dos valores admitidos y la variable de entorno equivalente (`Assistant__Provider`).
+3. **★ La guarda vive en la resolución misma**, no como `ValidateOnStart` sobre las opciones. Ésa es la
+   línea que efectivamente elige el vendor; una validación en otro lado la podría sortear un camino que
+   resuelva el proveedor sin pasar por ella. Corre dentro de `AddInfrastructure` (`Program.cs:35`), o
+   sea al construir el host: lo descubre el despliegue, no un usuario preguntando por su comisión.
+4. Development y Production **conservan `OpenRouter`**. Este WI no cambia de proveedor.
+5. El template lleva marcador vacío con comentario de obligatoriedad.
+
+### Lo que casi rompe la suite de integración
+
+`TestWebApplicationFactory` levanta el host real bajo el entorno `Testing`, que hereda del
+`appsettings.json` base. Quitar la clave de ahí habría hecho fallar el arranque de las ~785 pruebas de
+integración de golpe. El host de tests **declara ahora su proveedor explícitamente**, como cualquier
+otro entorno — sin clave configurada, así que no sale nada hacia ningún vendor.
+
+### El test que afirmaba lo contrario
+
+`An_absent_or_misspelt_provider_falls_back_to_Groq_rather_than_failing_to_start` fijaba el fallback como
+una **garantía**, justificada en que "un typo en la configuración de un panel de chat no debe tumbar la
+API". El razonamiento es correcto para un feature toggle y equivocado para la única clave que decide a
+qué jurisdicción viajan datos personales. Se invirtió, y la razón quedó escrita en el test para que el
+próximo que lea el archivo entienda por qué cambió de signo en vez de creer que se rompió algo.
+
+### Verificación en runtime (las dos direcciones)
+
+- Development: la API arranca normal, `Now listening on: http://localhost:5000`.
+- Blanqueando `Assistant:Provider` en `appsettings.Development.json`: **no arranca**, y el mensaje dice
+  qué falta y qué escribir. Archivo restaurado.
+
+Build limpio (0 errores). Unit **1477 → 1480** (+4 nuevos, −1 invertido).
+**Integración NO corrida: Docker Desktop apagado** — falla en el constructor del fixture de
+Testcontainers, antes de construir ningún host, así que no dice nada sobre este cambio.
+
+### ★ Punto 4 del WI: NO construido, y por qué
+
+El WI pedía que una **credencial faltante** del proveedor elegido también impidiera arrancar. El Paso 0
+lo contradice, y por §13 gana el Paso 0:
+
+- `IChatCompletionProvider.IsConfigured` es **miembro de la interfaz** (`:33`), con ramas vivas en
+  `PostMessageHandler.cs:132` y `StreamAssistantReplyHandler.cs:152`, tres guardas dentro de
+  `OpenAiCompatibleChatProvider` y unos cinco tests. Es una degradación diseñada, no un descuido.
+- `appsettings.Development.template.json` **instruye explícitamente** dejar la clave vacía: "con no key
+  el asistente igual funciona, respondiendo con su respuesta de reemplazo".
+- Y el principio no aplica: fail-closed acá protege **a dónde van los datos**. Sin clave **no sale
+  nada** — ya está cerrado. Hacerlo fallar al arrancar cerraría algo que no estaba abierto, y rompería
+  a todo desarrollador sin clave.
+
+Decisión de Rodolfo si quiere invertir esa degradación; es un cambio de diseño, no una corrección.
+
+### Consecuencia para el DPA (§5.1 nueva en Legal.md)
+
+Groq sigue implementado y sigue siendo seleccionable con una línea de configuración. Que hoy ningún
+entorno lo seleccione **no lo saca de la cadena de subencargados**: el DPA tiene que nombrar a **todos
+los proveedores habilitados en el código**, no sólo al activo. Sacar a Groq del código es la
+alternativa, y es decisión de negocio.
+
+**Esto no cierra la §3.1 (DPA ausente).** Elimina la elección por omisión; no elige proveedor ni crea
+base jurídica.
+
+### Fuera de alcance (detectado, no construido)
+
+Elegir proveedor, firmar el DPA, quitar Groq del código, seudonimización, DLP, log de auditoría del LLM.
+
 ## 2026-08-25 — El aviso de envío fallido: copy nuevo y el botón con el color de la alerta
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit**
