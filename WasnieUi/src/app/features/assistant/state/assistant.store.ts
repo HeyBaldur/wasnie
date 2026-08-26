@@ -64,8 +64,46 @@ export class AssistantStore {
   // ── Data ──────────────────────────────────────────────────────────────────
   readonly conversation = signal<AssistantConversation | null>(null);
   readonly conversations = signal<AssistantConversationSummary[]>([]);
+  /**
+   * Something in the CHAT PANE is loading: opening a conversation, or starting one.
+   *
+   * ★★ NOT THE HISTORY LIST — AND CONFLATING THEM WAS A REAL, VISIBLE BUG. When the list's loader was
+   * driven off this signal, clicking a row in the rail made the RAIL blank to "Loading…" and come
+   * back: a blink in the sidebar every single time somebody changed conversation, caused by an
+   * operation that has nothing to do with the sidebar. Two things that can be true independently need
+   * two signals; the streaming map next door exists for the same reason.
+   */
   readonly loading = signal(false);
+
+  /** A failure in the CHAT PANE. See `listError` for the rail's own. */
   readonly error = signal<string | null>(null);
+
+  /** True only while the FIRST batch of the history list is in flight. */
+  readonly listLoading = signal(false);
+
+  /**
+   * The caller's pinned conversations, newest pin first.
+   *
+   * ★★ A SEPARATE LIST, NOT A FLAG ON THE ROWS IN `conversations`. The server EXCLUDES pinned
+   * threads from the paged flow, so they are not in that array at all — by design, because a pinned
+   * conversation that also appeared in its time band would render twice. Keeping them apart here is
+   * what makes that true on screen instead of only in the response.
+   */
+  readonly pinnedConversations = signal<AssistantConversationSummary[]>([]);
+
+  /** True when this conversation is in the pinned group. Drives the menu label and the row marker. */
+  isPinned(conversationId: string): boolean {
+    return this.pinnedConversations().some((c) => c.id === conversationId);
+  }
+
+  /**
+   * A failure loading the history list.
+   *
+   * ★ SEPARATE FROM `error` FOR THE SAME REASON THE LOADER IS. Sharing it meant a conversation that
+   * failed to OPEN put "your conversations could not be loaded" in the sidebar — a sentence about the
+   * rail, raised by something the rail did not do.
+   */
+  readonly listError = signal<string | null>(null);
 
   readonly messages = computed<AssistantMessage[]>(() => this.conversation()?.messages ?? []);
   readonly hasConversation = computed(() => this.conversation() !== null);
@@ -328,16 +366,280 @@ export class AssistantStore {
     this.historyOpen.update((v) => !v);
   }
 
+  // ── The history list: one batch at a time, searched on the server ──────────
+
+  /**
+   * Where the next batch starts, or null when the list is complete.
+   *
+   * ★ IT COMES FROM THE SERVER AND IS NEVER BUILT HERE. The client echoes back what it was handed, so
+   * the server can change what a cursor is made of without this file knowing.
+   */
+  readonly conversationsCursor = signal<string | null>(null);
+
+  /** True while a "Load more" is in flight — distinct from `loading`, which is the first batch. */
+  readonly loadingMore = signal(false);
+
+  /** True when there is another batch to ask for. Drives the button's existence, not its enabled state. */
+  readonly hasMoreConversations = computed(() => this.conversationsCursor() !== null);
+
+  /**
+   * What the search box holds, after the debounce. Empty means "not searching".
+   *
+   * ★ THE APPLIED TERM, NOT THE TYPED ONE. The box's own text lives in the box; this is what the last
+   * request actually asked for, which is what the empty state has to name ("no results for X") — naming
+   * the half-typed text would put a word on screen that was never searched for.
+   */
+  readonly searchTerm = signal('');
+
+  /** Shortest term worth a round trip. Mirrors AssistantPaging.MinSearchLength on the server. */
+  static readonly MIN_SEARCH_LENGTH = 2;
+
+  /** How long the typing has to stop before a search is worth a request. */
+  private static readonly SEARCH_DEBOUNCE_MS = 300;
+
+  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * ★★ THE TOKEN THAT DISCARDS A STALE ANSWER. Every request takes the next number; when one comes back
+   * it is applied only if it is still the newest. Without this, typing "asignacion" fires a request for
+   * "asig" and one for "asignacion", and if the FIRST is slower its results land last — the user reads
+   * matches for a word they finished typing a second ago, with no way to tell. Cancelling the HTTP call
+   * would work too; this also covers the case where the response is already in flight and cannot be
+   * recalled.
+   */
+  private listRequestSeq = 0;
+
+  /**
+   * Loads the FIRST batch, honouring whatever search is active. Replaces the list rather than appending.
+   */
   async loadConversations(): Promise<void> {
-    this.loading.set(true);
-    this.error.set(null);
+    const seq = ++this.listRequestSeq;
+
+    this.listLoading.set(true);
+    this.listError.set(null);
+
     try {
-      this.conversations.set(await firstValueFrom(this.api.listConversations()));
+      const page = await firstValueFrom(
+        this.api.listConversations(null, this.effectiveSearch()));
+
+      if (seq !== this.listRequestSeq) {
+        return;
+      }
+
+      this.conversations.set(page.items);
+      this.conversationsCursor.set(page.nextCursor);
+      // ★ ONLY THE FIRST BATCH CARRIES IT, and a search carries none at all — searching is a
+      // different mode and its results come back flat. Setting it from every response keeps this in
+      // step with the server rather than guessing when to clear it.
+      this.pinnedConversations.set(page.pinned ?? []);
     } catch {
-      this.error.set('LOAD_FAILED');
+      if (seq === this.listRequestSeq) {
+        this.listError.set('LOAD_FAILED');
+      }
     } finally {
-      this.loading.set(false);
+      if (seq === this.listRequestSeq) {
+        this.listLoading.set(false);
+      }
     }
+  }
+
+  /**
+   * Appends the next batch.
+   *
+   * ★ APPENDS, AND DEDUPES WHILE IT DOES. The cursor cannot return a row twice on its own — that is the
+   * property it exists for — but a conversation the user answers between two clicks jumps to the top of
+   * the SERVER'S list while a copy of it is already rendered here from an earlier batch. Filtering by id
+   * is cheap and makes a duplicate row impossible regardless of what moved.
+   */
+  async loadMoreConversations(): Promise<void> {
+    const cursor = this.conversationsCursor();
+
+    if (cursor === null || this.loadingMore() || this.listLoading()) {
+      return;
+    }
+
+    const seq = ++this.listRequestSeq;
+    this.loadingMore.set(true);
+    this.listError.set(null);
+
+    try {
+      const page = await firstValueFrom(
+        this.api.listConversations(cursor, this.effectiveSearch()));
+
+      if (seq !== this.listRequestSeq) {
+        return;
+      }
+
+      const known = new Set(this.conversations().map((c) => c.id));
+      this.conversations.update((all) => [
+        ...all,
+        ...page.items.filter((c) => !known.has(c.id)),
+      ]);
+      this.conversationsCursor.set(page.nextCursor);
+    } catch {
+      if (seq === this.listRequestSeq) {
+        this.listError.set('LOAD_MORE_FAILED');
+      }
+    } finally {
+      if (seq === this.listRequestSeq) {
+        this.loadingMore.set(false);
+      }
+    }
+  }
+
+  /**
+   * The search box changed.
+   *
+   * ★ DEBOUNCED HERE RATHER THAN IN THE COMPONENT, so the drawer and the full page cannot end up with
+   * two different ideas of how long to wait — and so the pending timer is cancelled by whichever of them
+   * is on screen.
+   *
+   * ★ AND A TERM BELOW THE MINIMUM RESTORES THE ORDINARY LIST rather than searching for it. One
+   * character matches most titles, so those "results" would be the list with extra latency and a
+   * misleading heading; the user is mid-word, not asking a question.
+   */
+  setSearch(term: string): void {
+    if (this.searchDebounce !== null) {
+      clearTimeout(this.searchDebounce);
+    }
+
+    this.searchDebounce = setTimeout(() => {
+      this.searchDebounce = null;
+
+      const applied = term.trim();
+      const next = applied.length >= AssistantStore.MIN_SEARCH_LENGTH ? applied : '';
+
+      // Nothing changed in terms the SERVER cares about — "a" and "ab"→"a" are both "no search" — so
+      // there is nothing to ask for. Without this, backspacing through a word fires a request per key.
+      if (next === this.searchTerm()) {
+        return;
+      }
+
+      this.searchTerm.set(next);
+      void this.loadConversations();
+    }, AssistantStore.SEARCH_DEBOUNCE_MS);
+  }
+
+  // ---- Pinning ------------------------------------------------------------
+
+  /**
+   * Pins a conversation, moving it out of its time band and into the pinned group immediately.
+   *
+   * ★★ OPTIMISTIC, AND THE REVERT IS THE HALF THAT MATTERS. Pinning is a click on a menu item and
+   * the answer is a round trip away; waiting for it means the row sits still long enough to look
+   * broken, and people click again. So the move happens now — and if the server refuses (the cap,
+   * a conversation somebody else deleted underneath us) the rows go back EXACTLY where they were and
+   * the failure is said out loud. A silent revert is worse than no optimism: the list would flick and
+   * settle back with no explanation.
+   *
+   * ★ THE SNAPSHOT IS OF BOTH LISTS. The row leaves one array and joins the other, so restoring
+   * only the one that failed would leave a duplicate or a hole.
+   */
+  async pinConversation(conversationId: string): Promise<void> {
+    const conversation = this.conversations().find((c) => c.id === conversationId)
+      ?? this.pinnedConversations().find((c) => c.id === conversationId);
+
+    if (!conversation || this.isPinned(conversationId)) {
+      return;
+    }
+
+    const previousPinned = this.pinnedConversations();
+    const previousList = this.conversations();
+
+    // Newest pin first, which is where a pin just made belongs.
+    this.pinnedConversations.set([conversation, ...previousPinned]);
+    this.conversations.set(previousList.filter((c) => c.id !== conversationId));
+    this.listError.set(null);
+
+    try {
+      await firstValueFrom(this.api.pinConversation(conversationId));
+    } catch (error) {
+      this.pinnedConversations.set(previousPinned);
+      this.conversations.set(previousList);
+      // ★ THE CAP HAS ITS OWN SENTENCE. "Could not pin" for a limit the user can actually do
+      // something about (unpin one) would send them to look for a fault that is not there. The server
+      // answers 422 with a translation key; anything else is an ordinary failure.
+      this.listError.set(this.pinErrorKey(error));
+    }
+  }
+
+  /**
+   * Unpins it, putting it back where its last activity says it belongs.
+   *
+   * ★ IT GOES BACK INTO THE PAGED LIST IN ORDER, not at the end. The list is sorted by UpdatedAt
+   * descending and the grouping reads it positionally; appending would file a conversation from this
+   * morning under whatever band the last loaded row happens to be in.
+   */
+  async unpinConversation(conversationId: string): Promise<void> {
+    const conversation = this.pinnedConversations().find((c) => c.id === conversationId);
+
+    if (!conversation) {
+      return;
+    }
+
+    const previousPinned = this.pinnedConversations();
+    const previousList = this.conversations();
+
+    this.pinnedConversations.set(previousPinned.filter((c) => c.id !== conversationId));
+    this.conversations.set(AssistantStore.insertByRecency(previousList, conversation));
+    this.listError.set(null);
+
+    try {
+      await firstValueFrom(this.api.unpinConversation(conversationId));
+    } catch {
+      this.pinnedConversations.set(previousPinned);
+      this.conversations.set(previousList);
+      this.listError.set('UNPIN_FAILED');
+    }
+  }
+
+  /**
+   * Puts a conversation back into the accumulated list at its place by last activity.
+   *
+   * ★ AND IT IS NOT APPENDED WHEN IT IS OLDER THAN EVERYTHING LOADED. A conversation older than
+   * the last row on screen belongs in a batch that has not been fetched; putting it at the end would
+   * show it above rows that come before it and, worse, would leave a copy behind when that batch does
+   * arrive. Dropping it is honest: the server holds it, and "Load more" brings it back in its place.
+   */
+  private static insertByRecency(
+    list: readonly AssistantConversationSummary[],
+    conversation: AssistantConversationSummary,
+  ): AssistantConversationSummary[] {
+    const at = list.findIndex((c) => c.updatedAt < conversation.updatedAt);
+
+    if (at === -1) {
+      return [...list];
+    }
+
+    return [...list.slice(0, at), conversation, ...list.slice(at)];
+  }
+
+  /**
+   * The 422 the server sends when the pinned group is full, or a plain failure.
+   *
+   * ★ THE PREFIX IS STRIPPED SO EVERY VALUE OF `listError` IS THE SAME SHAPE. The server sends a fully
+   * qualified key ("ASSISTANT.PIN_LIMIT_REACHED") while the client's own failures are bare
+   * ("LOAD_FAILED"), and the template prefixes what it renders — so a qualified key arriving unchanged
+   * would render as "ASSISTANT.ASSISTANT.PIN_LIMIT_REACHED", i.e. as nothing.
+   */
+  private static readonly KEY_PREFIX = 'ASSISTANT.';
+
+  private pinErrorKey(error: unknown): string {
+    const key = (error as { error?: { messageKey?: string } } | null)?.error?.messageKey;
+
+    if (typeof key !== 'string' || key.length === 0) {
+      return 'PIN_FAILED';
+    }
+
+    return key.startsWith(AssistantStore.KEY_PREFIX)
+      ? key.slice(AssistantStore.KEY_PREFIX.length)
+      : key;
+  }
+
+  /** What to send as the search parameter: null when not searching, so the request omits it. */
+  private effectiveSearch(): string | null {
+    const term = this.searchTerm();
+    return term.length >= AssistantStore.MIN_SEARCH_LENGTH ? term : null;
   }
 
   async startConversation(): Promise<void> {
@@ -758,6 +1060,10 @@ export class AssistantStore {
             // question had failed while it was being answered. "Waiting" is not "failed"; only the
             // error frame below knows the difference.
             this.appendMessage(key, frame.message!);
+            // ★★ THE TITLE ARRIVES WITH THE TURN THAT DECIDED IT. The server names a thread from
+            // the first thing said in it, in the same write as the message and before the model is
+            // called — so this is the moment both the header and the row can say the same thing.
+            this.applyTitle(key, frame.title);
             this.patchStream(key, { reply: '' });
             break;
 
@@ -920,6 +1226,43 @@ export class AssistantStore {
     if (current?.id === key && persisted) {
       this.conversation.set({ ...current, lastTurnUnanswered: true });
     }
+  }
+
+  /**
+   * Writes a conversation's title everywhere it is shown.
+   *
+   * ★★ ONE WRITER, WHICH IS THE FIX. The title was reaching the two places at two different
+   * times: the history list picked it up from its own refresh at the END of the exchange, while the
+   * open conversation's header held the object fetched before the send and went on saying "New
+   * conversation" indefinitely. The user watched the rail rename itself while the header did not.
+   *
+   * ★ AND THE TWO SIGNALS ARE NOT COLLAPSED INTO ONE, deliberately. `conversation` is the open
+   * thread with its messages; `conversations` is a paged array of summaries that may not contain the
+   * open thread at all — it can be pinned (returned outside the cursor), or sitting in a batch nobody
+   * has loaded, or brand new. Deriving either from the other breaks exactly those cases. What is
+   * single here is the WRITER: every projection of the title is updated from this method and nowhere
+   * else, so they cannot disagree.
+   */
+  private applyTitle(conversationId: string, title: string | undefined): void {
+    if (!title) {
+      return;
+    }
+
+    const current = this.conversation();
+    if (current?.id === conversationId && current.title !== title) {
+      this.conversation.set({ ...current, title });
+    }
+
+    const rename = (list: AssistantConversationSummary[]) =>
+      list.some((c) => c.id === conversationId && c.title !== title)
+        ? list.map((c) => (c.id === conversationId ? { ...c, title } : c))
+        : list;
+
+    // ★ BOTH LISTS, because a pinned conversation is NOT in the paged one — the server excludes it
+    // so it cannot render twice. Updating only `conversations` would leave a pinned thread showing its
+    // old name in the group at the top.
+    this.conversations.update(rename);
+    this.pinnedConversations.update(rename);
   }
 
   /**

@@ -10,6 +10,7 @@ import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
 import { HubSpotSyncBannerComponent } from '../../../features/integrations/components/hubspot-sync-banner/hubspot-sync-banner.component';
+import { AssistantStore } from '../../../features/assistant/state/assistant.store';
 
 interface NavItem {
   path: string;
@@ -114,6 +115,21 @@ export class SidebarComponent {
     }
     return url === path || url.startsWith(path + '/');
   }
+
+  /**
+   * The assistant's entitlement, for the rail's own entry.
+   *
+   * ★★ IT CANNOT RIDE ON `*hasPermission` LIKE EVERY OTHER ITEM, and that is the whole reason
+   * this entry is not in `navSections`. Access to the assistant is an ENTITLEMENT — a seat plus a paid
+   * plan — not a role permission, and it is decided by the server. Inventing a permission string for it
+   * would either show the link to people whose first click gets a 403, or hide it from people who have
+   * paid for it; both are worse than one special case that reads the real gate.
+   *
+   * ★ HIDE, DO NOT DISABLE (Spec §5b.6): while the answer is unknown the entry renders nothing at
+   * all rather than flashing a control the user may not be entitled to. Same rule the topbar trigger
+   * follows, and the same signal, so the two cannot disagree.
+   */
+  readonly assistant = inject(AssistantStore);
 
   readonly navSections: NavSection[] = [
     {

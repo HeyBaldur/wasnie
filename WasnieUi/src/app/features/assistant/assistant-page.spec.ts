@@ -398,30 +398,43 @@ describe('AssistantConversationListComponent — rename and delete', () => {
 
   // ★ Bands answer "when was that conversation"; a search answers "where is the one about X". Keeping
   // the bands would scatter a handful of results across four headings and hide the answer.
-  it('★ flattens the bands while the search box has text', () => {
+  it('★ flattens the bands while a search is active', () => {
     withConversations();
     fixture.componentRef.setInput('grouped', true);
-    fixture.componentRef.setInput('query', 'plan');
+    // ★ THE TERM COMES FROM THE STORE NOW, NOT AN INPUT — it is one fact shared by the drawer and the
+    // page, and it is what the last REQUEST asked for rather than what the box currently holds.
+    store.searchTerm.set('plan');
     fixture.detectChanges();
 
     expect(fixture.componentInstance.groups().length).toBe(1);
-    expect(fixture.componentInstance.groups()[0].items.map(i => i.id)).toEqual(['b']);
   });
 
   it('goes back to the bands when the search is cleared', () => {
     withConversations();
     fixture.componentRef.setInput('grouped', true);
-    fixture.componentRef.setInput('query', 'plan');
+    store.searchTerm.set('plan');
     fixture.detectChanges();
-    fixture.componentRef.setInput('query', '');
+    store.searchTerm.set('');
     fixture.detectChanges();
 
     expect(fixture.componentInstance.groups().map(g => g.key)).toEqual(['today', 'older']);
   });
 
-  it('reports nothing visible when the search matches no thread', () => {
+  it('★ renders EXACTLY what the store holds while searching — it does not filter again', () => {
+    // ★★ THE CLIENT-SIDE FILTER IS GONE, AND THAT IS THE WORK ITEM. What the store holds IS the
+    // server's answer to the current search. Narrowing it a second time here would hide rows whose
+    // match is real but whose folding differs between the two implementations — and it is what made a
+    // paged list say "no results" while the match sat forty rows further down, never loaded.
     withConversations();
-    fixture.componentRef.setInput('query', 'zzz');
+    store.searchTerm.set('zzz');   // matches neither title, and must change nothing
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.visibleCount()).toBe(2);
+  });
+
+  it('reports nothing visible when the SERVER returned no matches', () => {
+    store.conversations.set([]);
+    store.searchTerm.set('zzz');
     fixture.detectChanges();
 
     expect(fixture.componentInstance.visibleCount()).toBe(0);
@@ -933,6 +946,63 @@ describe('AssistantConversationComponent — the message bar', () => {
     await fixture.componentInstance.copyMarkdown('a1', '## Balance\n\nGanaste **1.200 EUR**.');
 
     expect(written).toEqual(['## Balance\n\nGanaste **1.200 EUR**.']);
+  });
+
+  // ══ ★★ A COPY THAT LEAVES THIS SCREEN ═══════════════════════════════════
+
+  /** Replaces the thread with one CANCELLED assistant turn. */
+  function withCancelledAnswer(): void {
+    store.conversation.set({
+      id: 'c1', title: 'T', createdAt: '', updatedAt: '', lastTurnUnanswered: false,
+      messages: [
+        msgRow('u1', 'User', 'Cuánto le debo a Ana?', 0),
+        { ...msgRow('a1', 'Assistant', 'El balance pendiente es 1.28', 1), status: 'Cancelled' },
+      ],
+    } as never);
+    fixture.detectChanges();
+  }
+
+  it('★★ copying a STOPPED answer as text carries the warning with it', async () => {
+    // ★★ BECAUSE A CUT LANDS ANYWHERE, INCLUDING MID-NUMBER. On screen the notice sits under
+    // the bubble and the reader cannot miss it. On the clipboard that context is gone, and
+    // "el balance pendiente es 1.28" pasted into an email reads as a completely different amount than
+    // the 1,280 it was about to say.
+    withCancelledAnswer();
+
+    const rendered = fixture.nativeElement.querySelector('.assistant-msg__markdown');
+    await fixture.componentInstance.copyAnswer('a1', { target: rendered } as unknown as Event);
+
+    expect(written.length).toBe(1);
+    expect(written[0]).toContain('1.28', 'the words the user actually saw');
+    expect(written[0]).toContain('CANCELLED_COPY_NOTICE',
+      'and the fact that they stop mid-sentence');
+  });
+
+  it('★★ copying it as MARKDOWN stays raw', async () => {
+    // ★ THE TWO BUTTONS DO TWO DIFFERENT JOBS. Markdown's whole value is being the artefact AS
+    // STORED — it goes into a document, a diff, a bug report — and a line this app appended would be
+    // indistinguishable from something the model wrote. The plain-text copy is the one going into an
+    // email, which is where a truncated figure is dangerous.
+    withCancelledAnswer();
+
+    await fixture.componentInstance.copyMarkdown('a1', 'El balance pendiente es 1.28');
+
+    expect(written).toEqual(['El balance pendiente es 1.28']);
+  });
+
+  it('a FINISHED answer copies clean — the notice is not sprinkled on everything', async () => {
+    const rendered = fixture.nativeElement.querySelector('.assistant-msg__markdown');
+    await fixture.componentInstance.copyAnswer('a1', { target: rendered } as unknown as Event);
+
+    expect(written[0]).not.toContain('CANCELLED_COPY_NOTICE');
+  });
+
+  it('★ the notice is added at COPY time and never stored', () => {
+    // The row holds exactly what arrived — the backend appends nothing — so this text cannot reach the
+    // history sent to the model, and cannot be mistaken for the model's own words in the thread.
+    withCancelledAnswer();
+
+    expect(store.messages()[1].content).toBe('El balance pendiente es 1.28');
   });
 
   it('★ copy answer hands over the text with no markdown syntax', async () => {

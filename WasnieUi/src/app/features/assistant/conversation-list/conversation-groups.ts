@@ -93,28 +93,13 @@ export function groupConversations(
  * "comision" must find "Comisión", and someone typing "zwrot" must find "Zwrót". A plain
  * `toLowerCase().includes()` finds neither, and the user has no way to tell that the thread is there.
  */
-export function filterConversations(
-  items: readonly AssistantConversationSummary[],
-  query: string,
-): AssistantConversationSummary[] {
-  const needle = fold(query);
-  if (needle.length === 0) {
-    return [...items];
-  }
 
-  return items.filter(item => fold(item.title ?? '').includes(needle));
-}
-
-function fold(value: string): string {
-  return value
-    .normalize('NFD')
-    // Strip the marks NFD just split off. The Unicode property escape says what it means and
-    // keeps this line pure ASCII - a class of literal combining characters is invisible in an
-    // editor and does not survive every tool that touches the file.
-    .replace(/\p{Diacritic}/gu, '')
-    // Polish ł carries no combining mark, so NFD leaves it alone — it has to be mapped by hand.
-    .replace(/ł/g, 'l')
-    .replace(/Ł/g, 'L')
-    .toLowerCase()
-    .trim();
-}
+// ★ filterConversations AND ITS fold() LIVED HERE AND ARE GONE ON PURPOSE.
+//
+// They matched a title case- and accent-insensitively across the LOADED list, which was the right
+// answer while the whole list was loaded. The list is paged now, and a filter over the loaded batch
+// answers "no results" while the match sits further down, unfetched — the same class of untruth as
+// telling somebody a record does not exist because the lookup could not reach it. The search is a
+// parameter of the list endpoint now, and the insensitivity is the Title column's collation.
+//
+// Deleted rather than left unused: a helper that still exists is a helper somebody wires back in.

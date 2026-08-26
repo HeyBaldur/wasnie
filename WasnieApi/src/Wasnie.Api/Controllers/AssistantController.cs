@@ -35,10 +35,23 @@ public sealed class AssistantController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// One batch of the caller's conversations, newest activity first, plus the cursor for the next.
+    ///
+    /// ★ THE SEARCH RIDES ON THIS ROUTE rather than getting one of its own, so the filtered list pages
+    /// exactly like the unfiltered one — same order, same cursor, same response shape, one code path in
+    /// the client. See <see cref="ListConversationsQuery"/>.
+    /// </summary>
     [HttpGet("conversations")]
-    public async Task<IActionResult> ListConversations(CancellationToken cancellationToken)
+    public async Task<IActionResult> ListConversations(
+        [FromQuery] string? cursor,
+        [FromQuery] int? pageSize,
+        [FromQuery] string? search,
+        CancellationToken cancellationToken)
     {
-        var result = await mediator.Send(new ListConversationsQuery(), cancellationToken);
+        var result = await mediator.Send(
+            new ListConversationsQuery(cursor, pageSize, search), cancellationToken);
+
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
@@ -127,6 +140,37 @@ public sealed class AssistantController(IMediator mediator) : ControllerBase
         return result.Error == Application.Assistant.Common.OwnedConversations.NotFound
             ? NotFound(new { message = result.Error })
             : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>
+    /// Pins a conversation for the CALLER. Idempotent.
+    ///
+    /// ★ 404 RATHER THAN 403 when it is not the caller's, exactly as the read does — a 403 would confirm
+    /// that somebody else's conversation exists at that id. 422 is kept for the one refusal that is
+    /// about the request rather than the record: the pin limit, which comes back as a translation key
+    /// the client renders in the reader's own language.
+    /// </summary>
+    [HttpPost("conversations/{conversationId:guid}/pin")]
+    public async Task<IActionResult> PinConversation(Guid conversationId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new PinConversationCommand(conversationId), cancellationToken);
+
+        if (result.IsSuccess)
+            return NoContent();
+
+        return result.Error == Application.Assistant.Common.OwnedConversations.NotFound
+            ? NotFound(new { message = result.Error })
+            : UnprocessableEntity(new { messageKey = result.Error });
+    }
+
+    [HttpDelete("conversations/{conversationId:guid}/pin")]
+    public async Task<IActionResult> UnpinConversation(Guid conversationId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new UnpinConversationCommand(conversationId), cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : NotFound(new { message = result.Error });
     }
 
     [HttpDelete("conversations/{conversationId:guid}")]

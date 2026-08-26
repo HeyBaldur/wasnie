@@ -4,7 +4,6 @@
  * screen, not here.
  */
 import {
-  filterConversations,
   groupConversations,
   groupKeyFor,
 } from './conversation-groups';
@@ -108,53 +107,5 @@ describe('groupConversations', () => {
 
   it('returns nothing for an empty list', () => {
     expect(groupConversations([], now)).toEqual([]);
-  });
-});
-
-describe('filterConversations — the search box', () => {
-  const list = [
-    conv('a', 'Comisión de Anna', at(2026, 8, 18)),
-    conv('b', 'Zwrót prowizji', at(2026, 8, 18)),
-    conv('c', 'Plan rules for Q3', at(2026, 8, 18)),
-  ];
-
-  it('returns everything for an empty query', () => {
-    expect(filterConversations(list, '').map(c => c.id)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('returns everything when the query is only whitespace', () => {
-    expect(filterConversations(list, '   ').map(c => c.id)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('matches anywhere in the title, not just the start', () => {
-    expect(filterConversations(list, 'rules').map(c => c.id)).toEqual(['c']);
-  });
-
-  it('ignores case', () => {
-    expect(filterConversations(list, 'PLAN').map(c => c.id)).toEqual(['c']);
-  });
-
-  // ★ The titles are Spanish and Polish as often as English. Someone typing on a keyboard without the
-  // accent must still find the thread — otherwise it looks deleted.
-  it('★ matches an accented title from an unaccented query', () => {
-    expect(filterConversations(list, 'comision').map(c => c.id)).toEqual(['a']);
-  });
-
-  it('★ matches a Polish title with a stroked l typed plainly', () => {
-    expect(filterConversations(list, 'zwrot').map(c => c.id)).toEqual(['b']);
-  });
-
-  it('matches the other way round too — an accented query against the same title', () => {
-    expect(filterConversations(list, 'Comisión').map(c => c.id)).toEqual(['a']);
-  });
-
-  it('returns nothing when nothing matches', () => {
-    expect(filterConversations(list, 'zzz')).toEqual([]);
-  });
-
-  it('does not mutate the list it was given', () => {
-    const copy = [...list];
-    filterConversations(list, 'plan');
-    expect(list).toEqual(copy);
   });
 });

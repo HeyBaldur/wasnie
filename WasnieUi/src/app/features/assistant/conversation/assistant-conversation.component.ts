@@ -526,12 +526,46 @@ export class AssistantConversationComponent {
     const bubble = (event.target as HTMLElement | null)?.closest?.('.assistant-msg');
     const rendered = bubble?.querySelector<HTMLElement>('.assistant-msg__markdown') ?? null;
 
-    await this.copy(messageId, plainTextOf(rendered));
+    await this.copy(messageId, this.withInterruptionNotice(messageId, plainTextOf(rendered)));
   }
 
-  /** Copies the Markdown exactly as the model produced it — the stored string, untouched. */
+  /**
+   * Copies the Markdown exactly as the model produced it — the stored string, untouched.
+   *
+   * ★★ AND IT STAYS UNTOUCHED EVEN WHEN THE ANSWER WAS CUT OFF, which is the opposite of what the
+   * plain-text copy does two methods up. The two buttons are for two different jobs. Plain text is
+   * going into an email or a ticket, where a truncated figure read as a whole one is the dangerous
+   * outcome — so it carries the warning. Markdown's entire value is being the artefact AS STORED: it
+   * goes into a document, a diff, a bug report, and a line this app appended would be indistinguishable
+   * from something the model wrote. Appending there would also make the two buttons disagree about what
+   * "the answer" is.
+   */
   async copyMarkdown(messageId: string, content: string): Promise<void> {
     await this.copy(messageId, content);
+  }
+
+  /**
+   * Appends one line saying the answer was stopped, for a copy that leaves this screen.
+   *
+   * ★★ BECAUSE A CUT LANDS ANYWHERE, INCLUDING MID-NUMBER. On screen the notice sits under the bubble
+   * and the reader cannot miss it; on the clipboard that context is gone, and "the balance is 1.28"
+   * pasted into an email reads as a different amount than the 1,280 it was about to say. The notice is
+   * the only thing that travels with it.
+   *
+   * ★ IT IS ADDED HERE AND NEVER STORED. The row holds exactly what arrived — see the backend — so
+   * this text cannot reach the history sent to the model, cannot be mistaken for the model's own words
+   * in the thread, and disappears the moment the message is no longer cancelled.
+   */
+  private withInterruptionNotice(messageId: string, text: string): string {
+    const message = this.store.messages().find((m) => m.id === messageId);
+
+    if (!message || !isCancelledReply(message) || text.length === 0) {
+      return text;
+    }
+
+    return `${text}
+
+${this.translate.instant('ASSISTANT.CANCELLED_COPY_NOTICE')}`;
   }
 
   /**

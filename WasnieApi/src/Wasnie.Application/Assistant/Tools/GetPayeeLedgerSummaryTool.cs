@@ -231,6 +231,10 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
                 Disputed: c.DisputedInPeriod == 0m ? null : c.DisputedInPeriod,
                 AwaitingPayment: c.AwaitingPaymentAllTime,
                 OutstandingDebt: c.OutstandingDebt,
+                // ★ OMITTED WHEN ZERO, like `disputed` above. Almost no payee has a clawback credit,
+                // and a field that is 0.00 on every ordinary balance is a field the model eventually
+                // mentions for something to say.
+                ClawbackCredit: c.ClawbackCreditAllTime == 0m ? null : c.ClawbackCreditAllTime,
                 NetPendingPayout: c.NetPendingPayout,
                 Interpretation: c.Interpretation.ToString())).ToList()), Json);
     }
@@ -299,6 +303,18 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         string? PeriodEnd,
         IReadOnlyList<CurrencyBalance> Balances);
 
+    /// <param name="ClawbackCredit">
+    /// The part of <paramref name="AwaitingPayment"/> that is a clawback balance in the payee's favour
+    /// — money owed TO them because more was withheld than should have been. Null when there is none.
+    ///
+    /// ★★ IT EXISTS BECAUSE ONE NUMBER MEANT TWO THINGS. This amount was always inside
+    /// awaitingPayment, and rule 19 teaches that awaitingPayment is "everything earned and not yet
+    /// paid" — so the assistant read a clawback credit as an unpaid commission and told a real user to
+    /// run a pay run. They ran it. The figure did not move. It told them to run another one.
+    ///
+    /// A pay run settles payouts; it does not settle this. Naming it is what lets the answer point at
+    /// the payee's Clawback tab instead of prescribing the wrong subsystem.
+    /// </param>
     private sealed record CurrencyBalance(
         string Currency,
         decimal EarnedCommissions,
@@ -306,6 +322,7 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         decimal? Disputed,
         decimal AwaitingPayment,
         decimal OutstandingDebt,
+        decimal? ClawbackCredit,
         decimal NetPendingPayout,
         string Interpretation);
 

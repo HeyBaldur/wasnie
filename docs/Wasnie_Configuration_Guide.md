@@ -907,6 +907,18 @@ The churn trigger is **System**: no human can invoke it over HTTP — there is n
 from the CRM sync. Reading the resulting ledger needs `Ledger.Read`; writing a manual entry needs
 `Ledger.Adjust` ([section 18](#18-permissions-and-roles)).
 
+### Where a payee's "pending" money comes from
+
+A pending amount has **two possible sources**, settled by different things:
+
+1. **Commissions not yet paid out** — settled by a **pay run**.
+2. **A clawback balance in the payee's favour.** The ledger balance is normally negative (the payee
+   owes); when more was withheld than was owed it goes **positive**, and that is money owed **to** them.
+   It is on the payee's **Clawback** tab.
+
+**A pay run does not settle a clawback balance.** If the figure does not move after running one and the
+payouts screen is empty, look at the Clawback tab, not at payouts.
+
 ---
 
 ## 16. Termination and orphaned accounts

@@ -63,8 +63,7 @@ export class AssistantPageComponent implements OnInit {
   /** The requested conversation could not be loaded — gone, or never the caller's. See the template. */
   readonly notFound = signal(false);
 
-  /** What the rail's search box holds. The list does the filtering; this is just the text. */
-  readonly query = signal('');
+
 
   // ── The active conversation's own actions, from the chat header ───────────
   readonly renaming = signal(false);

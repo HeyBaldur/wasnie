@@ -129,7 +129,7 @@ describe('AssistantStore — a stream belongs to the conversation that started i
       'postMessage', 'streamMessage', 'renameConversation', 'deleteConversation',
     ]);
     api.getEntitlement.and.returnValue(of({ enabled: true, requiresUpgrade: false }));
-    api.listConversations.and.returnValue(of([]));
+    api.listConversations.and.returnValue(of({ items: [], nextCursor: null, pinned: [] }));
     api.startConversation.and.returnValue(of(CONVERSATION_A));
     api.getConversation.and.callFake((id: string) =>
       of(id === CONVERSATION_B.id ? CONVERSATION_B : CONVERSATION_A));

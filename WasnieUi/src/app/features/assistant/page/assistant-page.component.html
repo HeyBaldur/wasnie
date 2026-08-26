@@ -44,24 +44,16 @@
           </ws-button>
         </div>
 
-        <!--
-          Filters the list the rail already has, in the browser — see the list component for why that
-          is the right answer today rather than a query per keystroke.
-        -->
-        <div class="assistant-page__rail-search">
-          <ws-input
-            type="search"
-            prefixIcon="search"
-            placeholder="ASSISTANT.SEARCH_PLACEHOLDER"
-            (valueChange)="query.set($event)"
-            data-testid="assistant-page-search"
-          />
-        </div>
-
         <div class="assistant-page__rail-list ws-scroll-thin">
-          <!-- The same rows the drawer's history dropdown renders — see the list component. -->
+          <!--
+            The same rows the drawer's history dropdown renders — see the list component.
+
+            ★ AND THE SEARCH BOX WENT IN THERE WITH THEM. It used to be the page's own, sitting above
+            this, which is why the DRAWER could not search at all: the box was in one host and the rows
+            were in the shared component. Now the box, the request and the rows are one thing, and both
+            hosts get the same behaviour instead of the page getting a feature the drawer lacks.
+          -->
           <app-assistant-conversation-list
-            [query]="query()"
             [grouped]="true"
             (select)="openConversation($event)"
           />

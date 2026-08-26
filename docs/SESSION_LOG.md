@@ -4,6 +4,333 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-26 — El clawback fundido, y el guard que medía un corpus viejo
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend + manual + prompt
+
+### La conversación
+
+Un usuario preguntó por el balance de un payee → 1.280 € pendientes. Corrió el pay-run que le
+indicaron. La cifra no se movió. Dijo que los payouts estaban vacíos; le dijeron que revisara payouts.
+Lo repitió; le dijeron que desmarcara un filtro. Lo repitió; le dijeron que corriera otro pay-run.
+
+### ★ El Paso 3 dio vuelta la premisa
+
+La herramienta **sí** veía el clawback. `GetPayeeLedgerSummaryHandler.cs:155-171`:
+
+```csharp
+var credit = balances.ToDictionary(..., b => b.Amount > 0m ? b.Amount : 0m);
+var awaitingAmount = Get(awaiting, currency) + Get(credit, currency);   // fundido
+```
+
+El dominio lo dice explícito (`PayeeBalance.cs:18`): negativo = el payee debe; **positivo = se le debe a
+él**. Y la regla 21 enseña que `awaitingPayment` es "todo lo ganado y no pagado".
+
+**El asistente leyó el payload correctamente.** La mentira estaba en el campo: un número significaba dos
+cosas, y un pay-run sólo puede saldar una de ellas.
+
+**Arreglo: un desglose, no una corrección.** `ClawbackCredit` nuevo, total intacto — todo lo que ya leía
+`awaitingPayment` o `netPendingPayout` sigue leyendo lo mismo. Omitido cuando es cero, porque un campo
+que vale 0,00 en toda respuesta ordinaria es un campo que el modelo termina mencionando por decir algo.
+
+### ★ Frente C: el defecto que no es del clawback
+
+Regla **10c**: cuando el usuario reporta haber mirado y no encontrado, eso es **evidencia**. No repetir
+los pasos ya dados; decir que la explicación anterior era incorrecta; ofrecer otra fuente verificable o
+admitir que no se puede determinar; y **nunca insistir en una explicación sobre dinero que el usuario
+acaba de reportar como falsa**.
+
+Siempre va a haber un subsistema que el asistente no conoce. Lo que se arregla es el reflejo de repetir
+la instrucción más fuerte.
+
+### ★★ El hallazgo grande: el guard medía un corpus viejo
+
+Al editar el manual, dos tests de routing se pusieron en rojo — **y no por la edición**. Medí:
+`ConfinementRules` 3.445 + las secciones 1 y 4 (2.395) = 6.039, con o sin mi cambio.
+
+`CopyToOutputDirectory="PreserveNewest"` copia sólo si el origen tiene marca de tiempo más nueva que la
+copia. Un checkout, un cambio de rama o un restore pueden dejar el origen más viejo. **El corpus real ya
+excedía el techo y nadie se enteró hasta que una edición forzó el refresco.** Es el patrón del binario
+stale de `CLAUDE.md` §4 con otro disfraz.
+
+Arreglado con `Always` para el manual, el mapa de navegación y el PDF del manual de usuario — los tres
+tenían el mismo patrón.
+
+### El techo, reapuntado y medido
+
+El viejo medía 1 sección, sin mapa, sin datos, historial de 1 mensaje — un request que producción nunca
+manda — y se presentaba como un límite del proveedor.
+
+El nuevo (`AssistantPromptSizeTests`) arma el prompt **como producción**: 4 secciones (lo máximo que el
+router pide), mapa de navegación, payload de herramienta, historial lleno.
+
+| | tokens |
+|---|---|
+| system prompt | 16.849 |
+| petición completa | **20.649** |
+| techo nuevo | **24.000** (+15%) |
+| techo viejo | 6.000 |
+
+**Mi primera estimación fue 22.500 y la corregí con lo que el test imprimió** — que es exactamente el
+argumento para que lo imprima. Los finales de línea se normalizan: 41 tokens de diferencia entre CRLF y
+LF decidían si el guard pasaba, o sea que dependía de cómo estuviera checkouteado el repo.
+
+El comentario dice qué es y qué no es: **guarda de crecimiento, no límite del proveedor** — ese límite
+sigue sin establecerse.
+
+### Puerta de parada 3.3 — cerrada
+
+`EarnedCommissions` es `EarnedCommissionsInPeriod`, y el período es un **argumento que elige el modelo**
+(default all-time). Distinto período → distinta cifra. Es un filtro, no dinero moviéndose.
+
+**Riesgo residual, anotado como WI aparte:** el modelo puede cambiar de ventana entre turnos sin que el
+usuario lo pida, así que la misma pregunta devuelve otro número. El payload ya lleva
+`period`/`periodStart`/`periodEnd`; falta obligarlo a nombrarla cada vez que reporta una cifra por
+período.
+
+### Verificación
+
+Builds limpios. Unit **1600 → 1611**, integración **802 → 807**.
+
+Nota de método: la primera corrida de integración dio 56 rojos con
+`Could not find resource 'MsSqlContainer'` — eran **dos corridas mías simultáneas** peleando por el
+contenedor, no el código. Maté la de fondo y volví a correr una sola.
+
+### Fuera de alcance
+
+No se construyeron herramientas nuevas de clawback más allá del saldo (histórico, carryover, desglose
+por pay-run).
+
+## 2026-08-26 — Fijar conversaciones (Pin / Unpin), sobre el endpoint paginado
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Full-stack** · **Migración B27**
+
+### Paso 5 — Diagnóstico
+
+- **5.1** El menú "…" ya existe (`assistant-conversation-list.component.html`, `ws-popover` con
+  `startRename` / `askDelete`). Se reutiliza; la opción nueva es un tercer botón en el mismo popover.
+- **5.2** La respuesta era `AssistantConversationPageDto(Items, NextCursor)`; se le agrega `Pinned`.
+- **5.3 ★** **No hay interceptores de EF ni auditoría que toquen `UpdatedAt`.**
+  `ApplicationDbContext.SaveChangesAsync` (línea 153) sólo llama a `base` y despacha eventos de
+  dominio. `UpdatedAt` de la conversación sólo lo mueven `Start`, `Touch` y añadir un mensaje.
+- **5.4** Borrado real, no lógico: cascada en el FK **y** `RemoveRange` explícito, porque el proveedor
+  InMemory no aplica cascadas y si no los tests pasarían contra una base que deja huérfanos.
+
+Nada contradijo el WI esta vez.
+
+### ★ El modelo
+
+`AssistantConversationStates`: (usuario, conversación) con `PinnedAt` nullable. El nombre no es
+`AssistantPins` a propósito — es la tabla donde caen "archivado", "silenciado" y "último leído", cada
+uno una columna y no una tabla nueva. Clave única `(UserId, ConversationId)`, e índice **filtrado**
+`WHERE PinnedAt IS NOT NULL`: desfijar conserva la fila, así que sin el filtro el índice crecería con
+cada conversación que alguien haya desfijado alguna vez — filas que la única consulta que sirve no
+puede devolver nunca.
+
+### ★★ La costura con la paginación
+
+Las fijadas son justamente las **viejas**. Van **fuera del cursor**, completas, y sólo con el **primer**
+lote. Y por eso se **excluyen del flujo paginado en el servidor**: sin eso la misma fila sale dos veces,
+y taparlo en el navegador dejaría **lotes de tamaño irregular** — "25 filas" pasaría a ser 24 y el final
+de la lista llegaría antes de tiempo.
+
+**Fijar no toca `UpdatedAt`**, verificado y no supuesto: el diagnóstico descartó interceptores, y hay un
+test que compara los timestamps de todas las conversaciones antes y después de fijar/desfijar, más el
+orden observable de los lotes.
+
+**En búsqueda no hay grupo de fijadas** — y una fijada que **sí** matchea sigue apareciendo entre los
+resultados, que es la otra mitad de esa decisión.
+
+### El tope, y por qué no está en el validador
+
+50, comprobado en el handler. Depende de la base **y** de quién pregunta, y un fallo de FluentValidation
+lanza una excepción cuya *frase* no es traducible — mientras esta lista se lee en tres idiomas y
+necesita una **clave**. Un validador que consulta la base en nombre del principal es un handler con otro
+nombre. El validador se queda con la forma (`ConversationId` no vacío) y está dicho ahí por qué.
+
+Re-fijar algo ya fijado **en el límite** sigue funcionando: el early return va antes del conteo.
+
+### Autorización
+
+Fijar la conversación de otro usuario o de otro tenant se rechaza con el **mismo 404 indistinguible**
+que "no existe". "Un pin es mi preferencia, fijar la tuya no te daña" es la lectura tentadora y se
+rechaza igual: escribir una fila contra un id que no puedo leer es una forma de **preguntar** si ese id
+existe, y el grupo de fijadas se arma volviendo a las conversaciones, así que un pin sobre un hilo que
+no puedo leer filtraría su título o renderizaría vacío.
+
+### Frontend
+
+Optimista con **reversión de las dos listas** — la fila sale de un array y entra en el otro, así que
+restaurar sólo el que falló dejaría un duplicado o un hueco. Desfijar **reinserta por recencia**, no al
+final: la lista está ordenada por actividad y el agrupamiento la lee posicionalmente. Y una fijada más
+vieja que todo lo cargado se **descarta** en vez de colocarse mal — pertenece a un lote no traído, y
+"Load more" la devuelve en su sitio.
+
+Una sola definición de fila (`ng-template`) para el grupo de fijadas y las bandas, en vez de dos copias
+del mismo markup.
+
+**★ Compromiso reportado:** el set de iconos **no tiene `pin`, `star` ni `bookmark`**, y agregar uno es
+decisión del design system (CLAUDE.md §6, DESIGN_SYSTEM §10.3), no algo que improvisar dentro de una
+feature. Se usa `arrow-up-to-line`, que al menos es honesto sobre lo que el pin *hace*. Un glifo de pin
+de verdad leería mejor y vale la pena agregarlo a propósito.
+
+### ★ Hallazgo del camino: la primera migración salió mal
+
+Salió **sin índices, sin clave única, sin FK y con `UserId nvarchar(max)`**. Las configuraciones de EF
+se registran **una a una** en `ApplicationDbContext.OnModelCreating` (no hay
+`ApplyConfigurationsFromAssembly`) y la nueva faltaba. Se revirtió, se registró y se regeneró. Vale la
+pena saberlo: una migración generada sin la configuración registrada **no falla**, produce una tabla
+plausible y equivocada.
+
+### Verificación
+
+Builds de producción limpios en ambos lados. Unit **1584 → 1600**, integración **795 → 802** (+2 skipped
+preexistentes, Docker levantado, migraciones sobre contenedor limpio), front **1078 → 1090**.
+Encadenados con guardia de exit-code.
+
+### Fuera de alcance, detectado
+
+- **Share / visibilidad** sigue bloqueado por la decisión de permisos: una conversación contiene
+  resultados de herramientas traídos con los permisos del **dueño**, así que compartir el histórico
+  puede entregar datos que el guard le habría bloqueado al destinatario.
+- Archivar, silenciar, "último leído": tienen sitio en la tabla, no se construyeron.
+- Reordenar las fijadas arrastrando.
+- `messageCount` sigue siendo un COUNT por fila que no se renderiza en ninguna parte.
+
+## 2026-08-26 — Paginación por cursor y búsqueda en servidor de la lista de conversaciones
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Full-stack** · **Migración B26**
+
+### Paso 2 — Diagnóstico
+
+- **2.1** `AssistantController.cs:38` → `ListConversationsHandler.cs:25`: devolvía **todas** las filas,
+  `OrderByDescending(UpdatedAt)` **sin desempate**, scoping por `OwnedConversations.Mine` (UserId) más
+  el filtro global de tenant. Con un `COUNT` correlacionado de mensajes por fila.
+- **2.2** La lista vive en `assistant.store.ts`; el agrupamiento (TODAY/YESTERDAY/LAST7/OLDER) se
+  calcula **en el front**, en `conversation-groups.ts`, por días de calendario y en la zona del lector.
+- **2.3** El buscador filtraba **en memoria**, **sin debounce**, y **sólo existía en la página** — el
+  drawer no tenía caja de búsqueda.
+- **2.4** Un índice: `IX_AssistantConversations_TenantId_UserId_UpdatedAt`. Sin `Id`, sin direcciones.
+- **2.5** Consumidores: el componente de lista y `store.open()` (que mira `.length === 0`).
+  `messageCount` está en el DTO y en el modelo pero **no se renderiza en ninguna parte**.
+
+**★ Contradicción con el WI, reportada:** el §5.4 daba por hecho que ambos hosts tenían buscador. No
+era así. Se resolvió moviendo la caja **al componente compartido**, que es lo que hace que "drawer y
+página comparten el comportamiento" sea cierto en vez de duplicado.
+
+### Paso 3-4 — Backend
+
+Cursor sobre `(UpdatedAt, Id)`, opaco, base64url. **La razón es corrección, no velocidad:** la lista se
+ordena por actividad, así que cualquier respuesta sube un hilo al tope y corre el resto; con `OFFSET` el
+que pagina **se saltea una conversación que nunca vio y repite otra**. El desempate por id es lo que
+hace el orden total: con `<` estricto se saltean los empates, con `<=` se repiten para siempre.
+
+Se pide **una fila de más** para saber si hay siguiente — también evita prometer un lote vacío cuando el
+total es múltiplo exacto del tamaño.
+
+Búsqueda como parámetro del mismo endpoint, por título, mínimo 2 caracteres **ignorados, no rechazados**.
+`Contains` traduce a **CHARINDEX**, así que un `%` tecleado es un carácter y no un comodín.
+
+**★ La insensibilidad a mayúsculas/acentos es la COLACIÓN de la columna** (`Latin1_General_CI_AI`), no
+una expresión en el handler: mantiene el nombre de colación del proveedor fuera de Application y hace
+que *toda* comparación contra un título se comporte igual.
+
+**Puerta de parada 4.6 — no hizo falta índice de texto completo,** así que no se pidió aprobación. La
+búsqueda va **siempre dentro de las filas de un solo usuario** (el índice hace seek por tenant+usuario
+antes de comparar), no a lo ancho del tenant. Un índice de texto completo sería para búsqueda global.
+
+### ★ Lo que los unit tests no pueden probar
+
+InMemory **no tiene colaciones**: evalúa `Contains` en .NET, ordinal y sensible a mayúsculas. Un unit
+test que afirmara "asignacion encuentra Asignación" **fallaría contra una implementación correcta**. Se
+descubrió al correrlo, no se supuso. La insensibilidad se prueba en **integración**, contra SQL Server
+real, y ahí pasa. Queda dicho en un comentario en el archivo de unit tests para que nadie lo lea como un
+olvido.
+
+**Límite conocido:** esa colación **no** pliega la ł polaca — es una letra distinta, no una acentuada.
+El front sí la plegaba. Cambiarlo significa una colación específica de polaco sobre una columna
+compartida por tres idiomas, que es una decisión con su propio trade.
+
+### Índice y migración
+
+`IX_AssistantConversations_TenantId_UserId_UpdatedAt_Id`, con `UpdatedAt DESC, Id DESC` declarados. El
+anterior servía el `ORDER BY` perfectamente (un b-tree se lee al revés) pero **no el seek del keyset**:
+`Id` estaba físicamente en la hoja por ser clave de clustering, pero **no era columna clave**, así que no
+podía entrar en el predicado ni en la ordenación.
+
+**B26_AssistantConversationKeysetIndex**, aplicada y verificada por la suite de integración (que corre
+migraciones contra un contenedor limpio). **Incluye un `AlterColumn` sobre `Title`** para la colación:
+no es destructivo, conserva los datos, y el `Down` lo revierte entero.
+
+### Paso 5 — Frontend
+
+Lotes de 25 con **botón explícito**. Scroll infinito se descartó: gasta peticiones con un golpe de
+rueda, mueve el foco de debajo del teclado, y hace inobservable "llegué al final".
+
+El agrupamiento temporal **no necesitó nada**: se computa sobre la lista acumulada entera, así que un
+lote con filas de dos bandas cae en las dos sin duplicar encabezado ni reordenar lo ya visible.
+
+**★ El descarte de respuestas fuera de orden** es un token de secuencia: cada petición toma el siguiente
+número y sólo se aplica si sigue siendo el último. Sin eso, teclear "asignacion" dispara una petición
+para "asig" y otra para "asignacion", y si la **primera** es más lenta sus resultados aterrizan al final
+— el usuario lee coincidencias de una palabra que terminó de escribir hace un segundo, sin nada que se
+lo diga.
+
+Dos estados vacíos distintos, y el fallo se dice en voz alta con reintento: **una lista que simplemente
+se corta se lee como "esto es todo"**, que es falso y que el usuario no puede verificar.
+
+Se **borró** `filterConversations`/`fold`: quedó muerto en producción y sólo lo usaba su propio spec.
+
+### ★ El parpadeo del rail, encontrado en runtime el mismo día
+
+Al seleccionar un chat, la barra lateral **parpadeaba**: las filas desaparecían, salía "Cargando…" y
+volvían. Causa: el loader de la lista se colgó de `store.loading`, que es **una sola señal para tres
+operaciones** — cargar la lista, abrir una conversación y crear una. Abrir un chat la enciende, así que
+el rail se redibujaba entero por una petición en la que no participa. Lo mismo con `error`: una
+conversación que fallaba al ABRIR ponía "no se pudieron cargar tus conversaciones" en la barra lateral,
+una frase sobre el rail levantada por algo que el rail no hizo.
+
+**Arreglo:** `listLoading` y `listError`, propias de la lista. Dos cosas que pueden ser verdad de forma
+independiente necesitan dos señales — la misma lección que el mapa de streaming de al lado. Verificado
+además por grep: ningún template del asistente fuera del panel de chat lee ya las señales compartidas.
+Dos tests nuevos, front 1072 → 1074.
+
+### ★ La caja de búsqueda mentía (reportado en runtime)
+
+*"Borro todo del search y no reaparecen todos los chats."* Escribí primero un test **a través del DOM**
+del camino exacto — y **borrar sí funcionaba**, tanto de un tirón como carácter a carácter. Lo que
+fallaba era otra cosa: **el texto de la caja es del COMPONENTE y el término aplicado es del STORE**.
+
+El drawer **destruye y reconstruye** este componente cada vez que se abre/cierra el panel de historial
+(`@if (store.historyOpen())`) — y seleccionar una conversación lo cierra. El store es `providedIn:'root'`
+y sobrevive a todo eso. Resultado: buscás, hacés clic en un chat, volvés a abrir el historial, y estás
+mirando una **caja vacía encima de una lista todavía filtrada**. Desde afuera eso se ve exactamente como
+"borré la búsqueda y no volvieron mis chats".
+
+Y había un caso hermano que el seed inicial no cubre: el drawer vive en el shell y la página tiene su
+propio rail, así que **puede haber dos copias vivas a la vez**; buscar en una dejaba la caja de la otra
+vieja. La misma mentira, por otra puerta.
+
+**Arreglo:** la caja se **siembra** del store al construirse y lo **sigue** cuando el cambio vino de otro
+lado (comparando contra el último término que ESTA caja envió — sin eso el efecto le pisa las teclas al
+usuario 300 ms tarde). Cuatro tests nuevos, front 1074 → 1078.
+
+### Verificación
+
+Build limpio en ambos lados. Unit **1551 → 1584**, integración **783 → 795** (+2 skipped preexistentes,
+Docker levantado), front **1064 → 1072** (17 nuevos menos 9 del filtro borrado). Encadenados con guardia
+de exit-code.
+
+### Fuera de alcance, detectado
+
+- **El pin** va en su propio WI encima de este endpoint. Cuando llegue, **las fijadas tienen que ir
+  fuera de la paginación**, o una fijada antigua desaparecería por no estar en el primer lote.
+- **Virtualización: no hace falta.** Con lotes de 25 el DOM nunca pasa de unas decenas de filas.
+- Buscar dentro del contenido de los mensajes, con su pregunta de privacidad.
+- `messageCount` sigue siendo un `COUNT` por fila que **no se renderiza en ninguna parte**. Con la
+  paginación pasó de 2.500 subconsultas a 25 por petición, así que dejó de ser un problema — pero es un
+  campo muerto en el contrato.
+
 ## 2026-08-26 — Un resultado vacío no es prueba de inexistencia
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Solo backend** (`Wasnie.Application` + tests)

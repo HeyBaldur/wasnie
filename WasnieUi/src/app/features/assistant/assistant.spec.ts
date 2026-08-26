@@ -56,7 +56,7 @@ function apiSpy(): jasmine.SpyObj<AssistantApiService> {
     'postMessage', 'streamMessage', 'renameConversation', 'deleteConversation',
   ]);
   api.getEntitlement.and.returnValue(of({ enabled: true, requiresUpgrade: false }));
-  api.listConversations.and.returnValue(of([]));
+  api.listConversations.and.returnValue(of({ items: [], nextCursor: null, pinned: [] }));
   api.startConversation.and.returnValue(of(CONVERSATION));
   api.getConversation.and.returnValue(of(CONVERSATION));
   api.postMessage.and.returnValue(of(exchange('hello')));
@@ -890,6 +890,45 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     expect(historyRow).not.toContain('__UNTITLED__');
     // The i18n key resolves (TranslateModule with no locale echoes the key, which is still not the sentinel).
     expect(header).toContain('UNTITLED');
+  });
+
+  it('★ marks the OPEN conversation with the brand edge, so hover cannot impersonate it', () => {
+    // ★★ THE DEFECT THIS GUARDS. Hover and active both filled the row with
+    // --color-bg-surface-sunken, so pointing at any row made it look exactly like the one being read
+    // and the rail stopped answering "which one am I on?" the moment the mouse entered the list.
+    //
+    // ★ AND WHY THE ASSERTION IS THE EDGE AND NOT THE FILL. In the soft theme
+    // --color-bg-surface-hover and --color-bg-surface-sunken are THE SAME COLOUR (styles.scss), so a
+    // fix that only swapped fills would be correct in two themes and invisible in the third. The brand
+    // inset is what separates them everywhere — the sidebar's own convention for the current item.
+    //
+    // :hover cannot be triggered from script, so the hover half is not assertable here; this pins the
+    // half that carries the distinction in every theme.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversation.set({ ...CONVERSATION, id: 'conv-1' });
+    store.conversations.set([
+      { id: 'conv-1', title: 'The open one', createdAt: '', updatedAt: '', messageCount: 0 },
+      { id: 'conv-2', title: 'Another', createdAt: '', updatedAt: '', messageCount: 0 },
+    ]);
+    fixture.detectChanges();
+
+    document.body.appendChild(fixture.nativeElement);
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="assistant-history-item"]');
+    const open = getComputedStyle(rows[0] as HTMLElement);
+    const other = getComputedStyle(rows[1] as HTMLElement);
+
+    expect(open.boxShadow).not.toBe('none',
+      'the open conversation carries the brand edge');
+    expect(other.boxShadow).toBe('none',
+      'a row nobody is reading carries no marker at all');
+
+    // It is an INSET shadow, not a border: a 3px left border would square the row’s radius and
+    // shove the title sideways on every selection.
+    expect(open.boxShadow).toContain('inset');
+
+    document.body.removeChild(fixture.nativeElement);
   });
 
   it('shows a real title as it was stored', () => {

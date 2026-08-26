@@ -42,6 +42,28 @@ export interface AssistantConversationSummary {
   messageCount: number;
 }
 
+/**
+ * One BATCH of the history list, and where the next one starts.
+ *
+ * ★ THE CURSOR IS OPAQUE AND THE CLIENT NEVER BUILDS ONE. It is echoed back exactly as received, so
+ * the server can change what a cursor is made of — a pin flag, a different sort — without this file
+ * knowing. `null` means there is nothing more, which is how the Load more button knows to disappear
+ * instead of comparing counts to a page size and getting it wrong on an exact multiple.
+ */
+export interface AssistantConversationPage {
+  items: AssistantConversationSummary[];
+  nextCursor: string | null;
+  /**
+   * The caller's pinned conversations, complete and newest-pin-first.
+   *
+   * ★★ OUTSIDE THE CURSOR, WHICH IS THE WHOLE POINT. Pinned threads are exactly the OLD ones — the
+   * ones that have sunk far past the first batch — so putting them through the cursor would mean an old
+   * pin simply is not in the first response, which is the problem pinning exists to solve. Sent with
+   * the FIRST batch only; a continuation already has the group on screen.
+   */
+  pinned: AssistantConversationSummary[];
+}
+
 export interface AssistantConversation {
   id: string;
   title: string;
@@ -92,6 +114,8 @@ export interface AssistantStreamEvent {
    * here for the same reason `errorKey` is: the reader gets their own language.
    */
   phase?: string;
+  /** The conversation's title after this turn. Only on `user` frames — see the store. */
+  title?: string;
 
   /** `'start'` or `'done'` on a `progress` frame. */
   state?: string;

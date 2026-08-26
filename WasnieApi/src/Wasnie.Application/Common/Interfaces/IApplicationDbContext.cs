@@ -53,6 +53,9 @@ public interface IApplicationDbContext
     DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations { get; }
     DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages { get; }
 
+    /// <summary>One user's standing on one conversation — pinned, and later archived/read.</summary>
+    DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates { get; }
+
     DbSet<HubSpotConnection> HubSpotConnections { get; }
     DbSet<HubSpotOAuthState> HubSpotOAuthStates { get; }
     DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings { get; }

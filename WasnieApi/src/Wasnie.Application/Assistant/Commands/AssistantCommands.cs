@@ -25,3 +25,16 @@ public sealed record RenameConversationCommand(Guid ConversationId, string Title
     : IRequest<Result<AssistantConversationSummaryDto>>;
 
 public sealed record DeleteConversationCommand(Guid ConversationId) : IRequest<Result>;
+
+/// <summary>
+/// Pins a conversation FOR THE CALLER. Idempotent: pinning something already pinned changes nothing,
+/// and in particular does NOT move it to the top of the pinned group — see AssistantConversationState.
+///
+/// ★ THERE IS NO USER PARAMETER, AND THAT IS THE AUTHORISATION. A pin belongs to whoever asked for it;
+/// a command that could name a user would be a command that could pin something in somebody else's
+/// list. The caller is taken from the principal, never from the request.
+/// </summary>
+public sealed record PinConversationCommand(Guid ConversationId) : IRequest<Result>;
+
+/// <summary>Unpins it for the caller. Idempotent, and the standing row survives — see the entity.</summary>
+public sealed record UnpinConversationCommand(Guid ConversationId) : IRequest<Result>;

@@ -235,7 +235,8 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(200)")
+                        .UseCollation("Latin1_General_CI_AI");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
@@ -247,10 +248,53 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "UserId", "UpdatedAt")
-                        .HasDatabaseName("IX_AssistantConversations_TenantId_UserId_UpdatedAt");
+                    b.HasIndex("TenantId", "UserId", "UpdatedAt", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("IX_AssistantConversations_TenantId_UserId_UpdatedAt_Id");
 
                     b.ToTable("AssistantConversations", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantConversationState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("PinnedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("UserId", "ConversationId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AssistantConversationStates_UserId_ConversationId");
+
+                    b.HasIndex("TenantId", "UserId", "PinnedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_AssistantConversationStates_TenantId_UserId_PinnedAt")
+                        .HasFilter("[PinnedAt] IS NOT NULL");
+
+                    b.ToTable("AssistantConversationStates", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantMessage", b =>
@@ -2185,6 +2229,15 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Assistant.AssistantConversationState", b =>
+                {
+                    b.HasOne("Wasnie.Domain.Assistant.AssistantConversation", null)
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

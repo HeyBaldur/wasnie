@@ -1,8 +1,63 @@
-@if (visibleCount() === 0) {
-  <p class="assistant-clist__empty">
-    {{ (query() ? 'ASSISTANT.NO_MATCHES' : 'ASSISTANT.NO_CONVERSATIONS') | translate }}
+<!--
+  ★ THE SEARCH BOX LIVES WITH THE LIST NOW. It used to be the full page's, which meant the drawer —
+  the place people actually open first — could not search at all. One box, one behaviour, both hosts.
+-->
+<div class="assistant-clist__search">
+  <ws-input
+    type="search"
+    prefixIcon="search"
+    [ngModel]="searchBox()"
+    (valueChange)="onSearchChange($event)"
+    [placeholder]="'ASSISTANT.SEARCH_PLACEHOLDER' | translate"
+    data-testid="assistant-search"
+  />
+</div>
+
+<!--
+  ★ THE LIST'S OWN LOADER, NOT THE PANEL'S. Driven off the shared `loading` this blanked the rail every
+  time somebody CLICKED a conversation — opening a chat set that signal, and the sidebar flashed
+  "Loading…" for the length of a request it had no part in. The rail only redraws for the rail.
+-->
+@if (store.listLoading()) {
+  <p class="assistant-clist__empty" data-testid="assistant-list-loading">
+    {{ 'ASSISTANT.LOADING' | translate }}
+  </p>
+} @else if (visibleCount() === 0) {
+  <!--
+    ★ TWO DIFFERENT SENTENCES, AND CONFUSING THEM IS THE WHOLE POINT OF THIS WORK ITEM. "You have no
+    conversations" is a fact about the account; "nothing matches X" is a fact about one search. Saying
+    the first when the second is true tells somebody their history is empty when it is not.
+  -->
+  <p class="assistant-clist__empty" data-testid="assistant-list-empty">
+    @if (query()) {
+      {{ 'ASSISTANT.NO_MATCHES_FOR' | translate: { term: query() } }}
+    } @else {
+      {{ 'ASSISTANT.NO_CONVERSATIONS' | translate }}
+    }
   </p>
 } @else {
+  <!--
+    ★★ THE PINNED GROUP, AND IT IS NOT ONE OF THE TIME BANDS. Those are computed from the
+    accumulated paged list (conversation-groups.ts); pinned conversations are not IN that list at all
+    — the server excludes them, so the same row cannot render twice. This group is rendered from its
+    own array, straight from the response.
+
+    ★ AND NOT WHILE SEARCHING. Searching is a different mode: showing a pinned thread that does not
+    match what was typed is noise, and hiding one that does match would be inconsistent. The server
+    sends no pinned group for a search, so this simply has nothing to render.
+
+    It disappears entirely when there is nothing pinned — an empty heading is a promise of rows.
+  -->
+  @if (store.pinnedConversations().length > 0) {
+    <h3 class="assistant-clist__band">{{ 'ASSISTANT.GROUP_PINNED' | translate }}</h3>
+
+    @for (item of store.pinnedConversations(); track item.id) {
+      <ng-container
+        *ngTemplateOutlet="conversationRow; context: { $implicit: item, pinned: true }"
+      />
+    }
+  }
+
   <!--
     ★ SEARCHING FLATTENS THE LIST. Time bands answer "when did I have that conversation"; a search
     answers "where is the one about X", and the bands then split six results across four headings and
@@ -14,6 +69,19 @@
     }
 
     @for (item of group.items; track item.id) {
+      <ng-container
+        *ngTemplateOutlet="conversationRow; context: { $implicit: item, pinned: false }"
+      />
+    }
+  }
+}
+
+<!--
+  ★★ ONE ROW DEFINITION, TWO PLACES THAT RENDER IT. The pinned group and the time bands show the
+  same thing — the same title, the same rename box, the same menu — and a second copy of this markup
+  would be a second place to fix every row bug. `pinned` only decides the marker and the menu's label.
+-->
+<ng-template #conversationRow let-item let-pinned="pinned">
       @if (renamingId() === item.id) {
         <!--
           Inline rename. A `prompt()` would have been fewer lines and is forbidden here for the reason
@@ -53,6 +121,7 @@
         <div
           class="assistant-clist__row"
           [class.assistant-clist__row--active]="item.id === store.conversation()?.id"
+          [class.assistant-clist__row--pinned]="pinned"
           data-testid="assistant-history-item"
         >
           <button
@@ -66,6 +135,19 @@
               under it as well; with the list now cut into time bands, the date is said once per band
               instead of once per row, and the count was never something anyone chose a conversation by.
             -->
+            <!--
+              ★ A MARKER, NOT A BADGE. The row already sits under a heading that says PINNED, so the
+              icon is there for the eye scanning a long rail, not to announce something new. Quiet by
+              design: the same tertiary colour as the rest of the row's furniture.
+            -->
+            @if (pinned) {
+              <app-icon
+                name="pin"
+                [size]="12"
+                class="assistant-clist__pin-marker"
+                data-testid="assistant-pinned-marker"
+              />
+            }
             <span class="assistant-clist__item-title">
               @if (isUntitled(item.title)) {
                 {{ 'ASSISTANT.UNTITLED' | translate }}
@@ -94,6 +176,16 @@
             <button
               type="button"
               class="assistant-clist__menu-item"
+              (click)="togglePin(item.id, $event)"
+              data-testid="assistant-pin-toggle"
+            >
+              <app-icon name="pin" [size]="14" />
+              {{ (pinned ? 'ASSISTANT.UNPIN' : 'ASSISTANT.PIN') | translate }}
+            </button>
+
+            <button
+              type="button"
+              class="assistant-clist__menu-item"
               (click)="startRename(item.id, item.title, $event)"
               data-testid="assistant-rename-start"
             >
@@ -113,8 +205,52 @@
           </ws-popover>
         </div>
       }
+</ng-template>
+
+<!--
+  ★ THE BUTTON EXISTS ONLY WHILE THERE IS SOMETHING BEHIND IT. Its presence is the answer to "is there
+  more?", so it disappears at the end of the list rather than sitting there disabled — a permanently
+  greyed control reads as broken, not as finished.
+-->
+@if (store.hasMoreConversations() && !store.listLoading()) {
+  <div class="assistant-clist__more">
+    <ws-button
+      variant="ghost"
+      size="sm"
+      [loading]="store.loadingMore()"
+      [disabled]="store.loadingMore()"
+      (clicked)="loadMore()"
+      data-testid="assistant-load-more"
+    >
+      {{ 'ASSISTANT.LOAD_MORE' | translate }}
+    </ws-button>
+  </div>
+}
+
+<!--
+  ★ A FAILED BATCH IS SAID OUT LOUD. Silence here is the worst option available: the list simply stops,
+  and the user reads that as "this is all there is" — which is a false statement about their own data,
+  and one they have no way to check.
+-->
+@if (store.listError() !== null) {
+  <div class="assistant-clist__error" role="alert" data-testid="assistant-list-error">
+    <!--
+      ★ THE PIN FAILURES SPEAK FOR THEMSELVES. "Your conversations could not be loaded" is wrong for a
+      pin that was refused because the group is full — that is something the user can act on, and
+      pointing them at a loading fault sends them hunting for a problem that is not there.
+    -->
+    <span>{{ 'ASSISTANT.' + store.listError() | translate }}</span>
+    <!--
+      ★ RETRY IS ONLY OFFERED FOR A FAILED LOAD. Retrying a pin that was refused because the group is
+      full would fail again — a button that promises a second chance at something that cannot succeed
+      is worse than no button. That case is fixed by unpinning something, which the sentence says.
+    -->
+    @if (store.listError() === 'LOAD_FAILED' || store.listError() === 'LOAD_MORE_FAILED') {
+      <ws-button variant="ghost" size="sm" (clicked)="retryLoad()" data-testid="assistant-list-retry">
+        {{ 'ASSISTANT.RETRY' | translate }}
+      </ws-button>
     }
-  }
+  </div>
 }
 
 <ws-confirmation-modal

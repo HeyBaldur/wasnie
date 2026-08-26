@@ -54,9 +54,25 @@
       every project that references Infrastructure — the API and the test projects alike — from one
       declaration instead of one per consumer.
     -->
+    <!--
+      ★★ `Always`, NOT `PreserveNewest`, AND THAT IS A BUG FIX RATHER THAN A PREFERENCE.
+      PreserveNewest copies only when the SOURCE FILE'S TIMESTAMP is newer than the copy already in the
+      output. That comparison silently fails in ordinary work: a checkout, a branch switch or a restore
+      can leave the source with an older mtime than a copy written by a later build, and from then on
+      every build reuses the stale copy.
+
+      It is not a theoretical risk — it happened here. The prompt-size guard reads the guide from the
+      OUTPUT directory, and it went on passing against a copy of the corpus that no longer matched
+      `docs/`. The real corpus had already grown past the ceiling; nobody found out until an edit
+      happened to bump the timestamp and force a refresh. That is exactly the stale-binary trap
+      CLAUDE.md §4 warns about, wearing a different costume.
+
+      These files are a few hundred kilobytes and are read once at startup, so copying them on every
+      build costs nothing measurable — certainly less than a test that measures last month's corpus.
+    -->
     <Content Include="..\..\..\docs\Wasnie_Configuration_Guide.md"
              Link="Knowledge\Wasnie_Configuration_Guide.md"
-             CopyToOutputDirectory="PreserveNewest" />
+             CopyToOutputDirectory="Always" />
 
     <!--
       The navigation map, linked the same way and for the same reason. It is a SEPARATE artefact from
@@ -66,7 +82,7 @@
     -->
     <Content Include="..\..\..\docs\UINavigationMap.json"
              Link="Knowledge\UINavigationMap.json"
-             CopyToOutputDirectory="PreserveNewest" />
+             CopyToOutputDirectory="Always" />
   </ItemGroup>
 
 </Project>

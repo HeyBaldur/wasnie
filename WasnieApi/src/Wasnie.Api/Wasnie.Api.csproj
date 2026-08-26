@@ -56,7 +56,7 @@
     -->
     <Content Include="..\..\..\docs\Wasnie_User_Manual.pdf"
              Link="Knowledge\Wasnie_User_Manual.pdf"
-             CopyToOutputDirectory="PreserveNewest" />
+             CopyToOutputDirectory="Always" />
   </ItemGroup>
 
 </Project>

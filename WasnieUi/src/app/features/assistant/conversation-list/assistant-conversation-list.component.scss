@@ -52,24 +52,65 @@
   // rounded block rather than a band welded to its neighbours.
   margin-bottom: 2px;
 
-  transition: background-color 120ms ease;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
 
-  &:hover {
-    background-color: var(--color-bg-surface-sunken);
+  // ★ THE HOVER TOKEN, NOT THE SUNKEN ONE — AND THAT WAS THE BUG. Both states used
+  // `--color-bg-surface-sunken`, so pointing at any row made it look exactly like the open one and the
+  // list stopped being able to answer "which one am I reading?" the moment the mouse entered it. There
+  // is a token for precisely this (`--color-bg-surface-hover`, the row-hover fill the design system
+  // names for tables); the active row keeps the sunken one.
+  //
+  // ★ BEHIND `hover: hover`. On a touch screen `:hover` sticks after a tap, so the last conversation
+  // the user opened would stay highlighted as if the finger were still on it — two rows claiming to be
+  // current.
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--color-bg-surface-hover);
+    }
+  }
+
+  // Keyboard parity: arrowing through the list has to show where you are, exactly as the pointer does.
+  // Focus already revealed the row menu and left the row itself unlit, which read as nothing happening.
+  &:focus-within {
+    background-color: var(--color-bg-surface-hover);
   }
 
   // ★ THE OPEN CONVERSATION HAS TO BE OBVIOUS. A hover-weight tint was not enough to answer "which one
   // am I reading?" at a glance, which is the question the rail exists to answer. The active row keeps
   // its fill whether or not the pointer is anywhere near it, and its title goes to full-strength text.
+  //
+  // ★★ AND THE FILL ALONE CANNOT CARRY IT, because in the soft theme `--color-bg-surface-hover` and
+  // `--color-bg-surface-sunken` are THE SAME COLOUR (styles.scss). A treatment that relies on those two
+  // differing is correct in two themes out of three and invisible in the third. So the marker is the
+  // brand edge, which is the sidebar's own convention for "this is the one you are on"
+  // (`sidebar.component.scss` — `.sidebar__nav-link--active`), mirrored here rather than invented.
+  //
+  // An inset shadow rather than a border: the row is rounded, so a 3px left border would square that
+  // corner and shove the title 3px sideways on every selection. This follows the radius and moves
+  // nothing.
   &--active,
-  &--active:hover {
+  &--active:hover,
+  &--active:focus-within {
     background-color: var(--color-bg-surface-sunken);
+    box-shadow: inset 3px 0 0 var(--color-brand);
   }
 
   &--active .assistant-clist__item-title {
     color: var(--color-text-primary);
     font-weight: 600;
   }
+}
+
+// The title answers the pointer too. Without this the row lit up underneath text that stayed grey,
+// which reads as the background moving rather than as the row being a target.
+@media (hover: hover) {
+  .assistant-clist__row:hover .assistant-clist__item-title {
+    color: var(--color-text-primary);
+  }
+}
+
+.assistant-clist__row:focus-within .assistant-clist__item-title {
+  color: var(--color-text-primary);
 }
 
 .assistant-clist__open {
@@ -95,6 +136,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  // Matched to the row's own 120ms so the fill and the text arrive together; two different durations
+  // read as the text lagging behind the highlight.
+  transition: color 120ms ease;
 }
 
 // ── The row menu ────────────────────────────────────────────────────────────
@@ -162,4 +206,75 @@
 // flush against the container edge and shifting the list sideways while it is open.
 .assistant-clist__rename {
   padding: 2px var(--space-1) var(--space-1);
+}
+
+// The colour change is the feedback; the fade is only there to keep it from snapping. Someone who has
+// asked for less motion still needs to see which row the pointer is on, so the state stays and the
+// transition goes — the same split the conversation view already makes.
+@media (prefers-reduced-motion: reduce) {
+  .assistant-clist__row,
+  .assistant-clist__item-title,
+  .assistant-clist__pin-marker,
+  .assistant-clist__menu {
+    transition: none;
+  }
+}
+
+// ── Search, Load more, and the failure ──────────────────────────────────────
+
+.assistant-clist__search {
+  // The box belongs to the list, so it gets the rows' own inset rather than sitting flush against the
+  // host's edge and looking like it belongs to whatever is above it.
+  padding: 0 var(--space-1) var(--space-2);
+}
+
+.assistant-clist__more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) var(--space-1) var(--space-1);
+}
+
+// ★ AN ALERT, NOT A ROW. A failed batch that looked like a conversation would be read as one — and a
+// list that simply stops is read as "this is all there is", which is a false statement about somebody's
+// own data that they have no way to check.
+.assistant-clist__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+
+  margin: var(--space-2) var(--space-1) 0;
+  padding: var(--space-2) var(--space-3);
+
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-surface-sunken);
+
+  font-size: var(--font-size-12);
+  color: var(--color-text-primary);
+}
+
+// ── The pinned row ──────────────────────────────────────────────────────────
+//
+// ★ QUIET ON PURPOSE. The row already sits under a heading that says PINNED, so the marker is for the
+// eye scanning a long rail — not a second announcement. It takes the same tertiary colour as the rest
+// of the row's furniture and goes to full strength with the title on hover, so it belongs to the row
+// rather than sitting on top of it.
+.assistant-clist__pin-marker {
+  flex: none;
+  margin-right: var(--space-1);
+  color: var(--color-text-tertiary);
+  transition: color 120ms ease;
+}
+
+.assistant-clist__row--pinned .assistant-clist__open {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+@media (hover: hover) {
+  .assistant-clist__row:hover .assistant-clist__pin-marker {
+    color: var(--color-text-primary);
+  }
 }

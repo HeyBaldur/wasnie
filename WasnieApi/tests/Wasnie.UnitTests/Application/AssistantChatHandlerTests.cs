@@ -197,9 +197,9 @@ public sealed class AssistantChatHandlerTests
         byOtherTenant.IsSuccess.Should().BeFalse();
 
         // And it does not appear in their lists.
-        (await List(bob).Handle(new ListConversationsQuery(), CancellationToken.None)).Value!.Should().BeEmpty();
-        (await List(carol).Handle(new ListConversationsQuery(), CancellationToken.None)).Value!.Should().BeEmpty();
-        (await List(alice).Handle(new ListConversationsQuery(), CancellationToken.None)).Value!.Should().ContainSingle();
+        (await List(bob).Handle(new ListConversationsQuery(), CancellationToken.None)).Value!.Items.Should().BeEmpty();
+        (await List(carol).Handle(new ListConversationsQuery(), CancellationToken.None)).Value!.Items.Should().BeEmpty();
+        (await List(alice).Handle(new ListConversationsQuery(), CancellationToken.None)).Value!.Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -368,8 +368,11 @@ public sealed class AssistantChatHandlerTests
 
         var list = await List(alice).Handle(new ListConversationsQuery(), CancellationToken.None);
 
-        list.Value!.Select(c => c.Title).Should().Equal("Older", "Newer");
-        list.Value[0].MessageCount.Should().Be(2);
-        list.Value[1].Id.Should().Be(newer.Value!.Id);
+        list.Value!.Items.Select(c => c.Title).Should().Equal("Older", "Newer");
+        list.Value.Items[0].MessageCount.Should().Be(2);
+        list.Value.Items[1].Id.Should().Be(newer.Value!.Id);
+
+        // Two rows fit in one batch, so there is nothing after them and the button must not appear.
+        list.Value.NextCursor.Should().BeNull();
     }
 }
