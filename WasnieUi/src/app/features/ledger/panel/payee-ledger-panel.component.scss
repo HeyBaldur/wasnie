@@ -73,6 +73,16 @@
   font-weight: 600;
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
+
+  // ★ OPTS IN BY HAND, because these figures are `<span>`s. The display face is applied globally by an
+  // ELEMENT rule on `h1..h4` (styles.scss) precisely so it reaches the manual's `[innerHTML]` chapters,
+  // which no component stylesheet can touch — the price is that anything set large which is NOT a
+  // heading stays sans and has to say so, exactly as the sidebar brand does.
+  //
+  // On the base class rather than on each modifier: `--anchor`, `--debt`, `--credit` and the smaller
+  // pair inside `.eq--balance` are all the same figure in different registers, and one of them landing
+  // in a different face would read as a different KIND of number.
+  font-family: var(--font-display);
 }
 
 .eq__op {
@@ -223,6 +233,9 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
+
+  // The lead figure of the screen — same opt-in as `.eq__value`, see the note there.
+  font-family: var(--font-display);
 }
 
 .stmt__live-value--debt { color: var(--color-danger); }

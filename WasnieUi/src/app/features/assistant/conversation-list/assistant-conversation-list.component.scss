@@ -52,13 +52,37 @@
   // rounded block rather than a band welded to its neighbours.
   margin-bottom: 2px;
 
-  transition: background-color 120ms ease, box-shadow 120ms ease;
+  // ★★ AND THE SAME ON THE RIGHT, AGAINST THE SCROLLBAR. The row is the full width of the scroll
+  // container's content box, so its right edge lands exactly on the scrollbar with nothing between them
+  // — the selected fill and the hover fill both ran straight into it. This is the row's own margin
+  // rather than padding on the container, so it applies to every state at once and needs no second rule
+  // for hover.
+  margin-right: var(--space-2);
+
+  transition: background-color 120ms ease;
+
+  // ★ THE RAIL IS RESERVED ON EVERY ROW, not added on selection — the same arrangement the sidebar
+  // uses (`.sidebar__nav-item` carries `border-left: 3px solid transparent` whether or not it holds the
+  // active link). Nothing moves when the selection changes.
+  //
+  // ★ A PSEUDO-ELEMENT RATHER THAN THAT BORDER, because the sidebar's item is square and this row is
+  // rounded: a real 3px left border would square the corners it runs between and shove the title 3px
+  // sideways. This follows the radius and takes no layout space at all.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    background: transparent;
+    transition: background 120ms ease;
+  }
 
   // ★ THE HOVER TOKEN, NOT THE SUNKEN ONE — AND THAT WAS THE BUG. Both states used
   // `--color-bg-surface-sunken`, so pointing at any row made it look exactly like the open one and the
   // list stopped being able to answer "which one am I reading?" the moment the mouse entered it. There
   // is a token for precisely this (`--color-bg-surface-hover`, the row-hover fill the design system
-  // names for tables); the active row keeps the sunken one.
+  // names for tables); the active row is a different treatment again, below.
   //
   // ★ BEHIND `hover: hover`. On a touch screen `:hover` sticks after a tap, so the last conversation
   // the user opened would stay highlighted as if the finger were still on it — two rows claiming to be
@@ -77,26 +101,30 @@
 
   // ★ THE OPEN CONVERSATION HAS TO BE OBVIOUS. A hover-weight tint was not enough to answer "which one
   // am I reading?" at a glance, which is the question the rail exists to answer. The active row keeps
-  // its fill whether or not the pointer is anywhere near it, and its title goes to full-strength text.
+  // its treatment whether or not the pointer is anywhere near it.
   //
-  // ★★ AND THE FILL ALONE CANNOT CARRY IT, because in the soft theme `--color-bg-surface-hover` and
-  // `--color-bg-surface-sunken` are THE SAME COLOUR (styles.scss). A treatment that relies on those two
-  // differing is correct in two themes out of three and invisible in the third. So the marker is the
-  // brand edge, which is the sidebar's own convention for "this is the one you are on"
-  // (`sidebar.component.scss` — `.sidebar__nav-link--active`), mirrored here rather than invented.
+  // ★★ AND THE TREATMENT IS THE SIDEBAR'S, NOT ONE INVENTED HERE. Both lists answer the same question
+  // — "this is the one you are on" — and the product already has an answer for it
+  // (`sidebar.component.scss`: `--color-sidebar-active-bg` fill, `--color-sidebar-active-text`, and a
+  // 3px `--gradient-brand` edge). Two different-looking selected states in one screen read as two
+  // different KINDS of selection, so this one is the same one, token for token.
   //
-  // An inset shadow rather than a border: the row is rounded, so a 3px left border would square that
-  // corner and shove the title 3px sideways on every selection. This follows the radius and moves
-  // nothing.
+  // ★ IT ALSO REPAIRS A THEME HOLE. The fill used to be `--color-bg-surface-sunken`, which in the soft
+  // theme is THE SAME COLOUR as `--color-bg-surface-hover` (styles.scss) — a selected row that any
+  // hovered row could impersonate. `--color-sidebar-active-bg` resolves to `--color-brand-subtle`, which
+  // all three themes define separately from both.
   &--active,
   &--active:hover,
   &--active:focus-within {
-    background-color: var(--color-bg-surface-sunken);
-    box-shadow: inset 3px 0 0 var(--color-brand);
+    background-color: var(--color-sidebar-active-bg);
+  }
+
+  &--active::before {
+    background: var(--gradient-brand);
   }
 
   &--active .assistant-clist__item-title {
-    color: var(--color-text-primary);
+    color: var(--color-sidebar-active-text);
     font-weight: 600;
   }
 }
@@ -213,6 +241,7 @@
 // transition goes — the same split the conversation view already makes.
 @media (prefers-reduced-motion: reduce) {
   .assistant-clist__row,
+  .assistant-clist__row::before,
   .assistant-clist__item-title,
   .assistant-clist__pin-marker,
   .assistant-clist__menu {

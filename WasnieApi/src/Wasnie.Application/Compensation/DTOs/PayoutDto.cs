@@ -78,11 +78,24 @@ public sealed record LineCalculationDto(
     TriggerDto Trigger,
     IReadOnlyList<ModifierApplicationDto> Modifiers);
 
+/// <param name="MeasurementBase">
+/// What the rate is applied TO: <c>TransactionAmount</c> or <c>TransactionQuantity</c>.
+///
+/// ★★ WITHOUT IT A RATE CANNOT BE RENDERED, AND THE SCREEN GUESSED. The stored value is a bare
+/// decimal: 0.05 against an AMOUNT is five per cent; 5.00 against a QUANTITY is five euros per unit.
+/// The client had only the number, assumed every flat rate was a percentage, multiplied by 100 and
+/// appended "%" — so a real rule of €5 per unit rendered as "500% flat" on a payout statement.
+///
+/// ★ IT IS THE FACT, NOT THE PRESENTATION. This says what the rate applies to; how to write that
+/// for a reader is the client's business, in the reader's language and currency format. Sending a
+/// pre-formatted string would move presentation into the API and freeze it in one language.
+/// </param>
 public sealed record RateTableDto(
     string Type,
     decimal? FlatRate,
     IReadOnlyList<RateTierDto>? Tiers,
-    IReadOnlyList<AttainmentTierDto>? AttainmentTiers);
+    IReadOnlyList<AttainmentTierDto>? AttainmentTiers,
+    string MeasurementBase = "TransactionAmount");
 
 public sealed record RateTierDto(decimal From, decimal? To, decimal Rate);
 

@@ -1,7 +1,8 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { formatRate, isPerUnitRate } from '../../../shared/utils/rate-format';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
@@ -35,6 +36,7 @@ import {
   styleUrl: './payout-detail.component.scss',
 })
 export class PayoutDetailComponent implements OnInit {
+  private readonly translate = inject(TranslateService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(PayoutsApiService);
@@ -214,9 +216,22 @@ export class PayoutDetailComponent implements OnInit {
     return this.expandedLines().has(lineId);
   }
 
+  /**
+   * ★ THE FLAT BRANCH ASKS WHAT THE RATE MEANS instead of assuming it is a percentage. That
+   * assumption is what printed "500% flat" for a rule paying €5 per unit — see shared/utils/rate-format.
+   *
+   * The tiered and attainment branches are untouched: their rates are always proportions of an
+   * amount, and rewriting a correct branch to look symmetrical is how correct code acquires bugs.
+   */
   rateLabel(rt: RateTableDto): string {
     if (rt.type === 'Flat' && rt.flatRate != null) {
-      return `${(rt.flatRate * 100).toFixed(2).replace(/\.?0+$/, '')}% flat`;
+      const formatted = formatRate(
+        rt.flatRate, rt.measurementBase, this.payout()?.totalCommissionCurrency, this.translate.currentLang,
+        this.translate.instant('PLANS.RATE_PER_UNIT_SUFFIX'));
+
+      return isPerUnitRate(rt.measurementBase)
+        ? formatted
+        : `${formatted} flat`;
     }
     if (rt.type === 'Tiered' && rt.tiers?.length) {
       return rt.tiers.map(t =>

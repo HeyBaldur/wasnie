@@ -85,6 +85,42 @@ public sealed class AssistantClawbackCreditTests
         rules.Should().Contain("cannot determine it");
     }
 
+    // ══ ★★ The arithmetic the assistant invented ═══════════════════════════
+
+    [Fact]
+    public void THE_MODEL_MAY_NOT_DERIVE_FIGURES_THE_LOOKUP_DID_NOT_RETURN()
+    {
+        // ★★ 78.500 ÷ 5 = 15.700 UNITS, PRESENTED AS A FACT. Asked about a rule showing "500%",
+        // the assistant divided the transaction's BASE AMOUNT by the per-unit rate and announced that
+        // 15,700 units had been sold. The line was one unit paying €5. Neither number in that division
+        // was the one it thought it was, and the result does not exist anywhere in the data.
+        var rules = AssistantPrompt.DataRules;
+
+        rules.Should().Contain("10d.");
+        rules.Should().Contain("DO NOT DO ARITHMETIC THE LOOKUP DID NOT DO");
+        rules.Should().Contain("Never divide, multiply or add");
+    }
+
+    [Fact]
+    public void It_says_what_to_do_INSTEAD_when_the_quantity_is_not_in_the_data()
+    {
+        // A rule that only forbids leaves the model to invent the replacement — which is how it got
+        // here. "The lookup does not include that, and here is where to see it" is an answer.
+        AssistantPrompt.DataRules.Should()
+            .Contain("how many").And
+            .Contain("does not include that and where to see it");
+    }
+
+    [Fact]
+    public void EVERY_FIGURE_IS_NAMED_BY_THE_FIELD_IT_CAME_FROM()
+    {
+        // ★ THE ROOT OF THE INVENTED DIVISION: it treated a BASE AMOUNT as a commission. Naming the
+        // field is what makes that mistake visible while it is being written rather than after.
+        AssistantPrompt.DataRules.Should()
+            .Contain("name every figure by the FIELD it came from").And
+            .Contain("never treating a base amount as a commission");
+    }
+
     // ══ The manual half ═══════════════════════════════════════════════════════
 
     [Fact]

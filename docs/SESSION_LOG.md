@@ -4,6 +4,84 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-26 — "500% flat": la tarifa por unidad como porcentaje, y una división inventada
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · front + backend + prompt
+
+### El caso
+
+Statement de un payout: una regla que paga **€5,00 por unidad** aparecía como **`v1 500% flat`**.
+
+El cálculo estaba bien — €5,00 por una unidad. Lo falso era la frase.
+
+### ★ La causa: una suposición
+
+La tarifa se guarda como decimal pelado, y lo que significa depende de a qué se aplica: `0,05` sobre un
+IMPORTE es 5 %; `5,00` sobre una CANTIDAD son 5 € por unidad. **El DTO no llevaba esa semántica**, así
+que el front asumía porcentaje, multiplicaba por 100 y ponía `%`.
+
+### ★★ El inventario destapó algo peor que lo reportado
+
+`credit-detail` no sólo etiquetaba mal: **pinta una ecuación**, `base × tarifa = resultado`. Con una
+regla por unidad eso se lee **"€78.500,00 × 500% = €5,00"** — aritmética que el lector puede ver que no
+cierra. El resultado siempre fue la cifra del servidor y siempre estuvo bien; la operación alrededor era
+un disparate.
+
+**Puerta de parada 2.1 — no se dispara.** Ese valor no alimenta ningún cálculo: `creditedAmount` viene
+del servidor. Es display, no dinero mal computado. Pero era peor que lo reportado y por eso se dice.
+
+| superficie | estado |
+|---|---|
+| `payout-detail:219` | ✗ lo reportado |
+| `credit-detail:47` + su plantilla | ✗ la ecuación falsa |
+| `plan-detail:266` | ✓ sólo pinta el TIPO |
+| exportaciones | ✓ no formatean tarifas |
+| payload del asistente | ✓ ya llevaba `SemanticBehavior` y `RawValue` |
+
+### El arreglo
+
+`MeasurementBase` viaja en `RateTableDto` y en el DTO de credits, tomado del **snapshot** y no de la
+regla viva: un payout es un registro congelado, y leer la regla de hoy describiría un plan que pudo
+editarse después, en un documento sobre dinero que ya se movió.
+
+Y **una sola función**, `shared/utils/rate-format.ts`. La misma suposición estaba copiada en dos
+componentes de forma independiente; arreglar el reportado y dejar el otro es cómo este bug vuelve por
+otra puerta el mes que viene.
+
+El camino de porcentaje quedó **idéntico carácter por carácter**. Este WI es sobre un caso que estaba
+mal, no una excusa para reescribir el que estaba bien.
+
+**★ Lo desconocido cae a porcentaje, a propósito.** Los modos de fallo no son simétricos: adivinar
+porcentaje sobre una tarifa por unidad reproduce el bug que ya sabemos detectar; adivinar por-unidad
+sobre un porcentaje pondría un símbolo de moneda sobre una proporción — una mentira **nueva**, en una
+pantalla que nadie está vigilando.
+
+### Frente B: 78.500 ÷ 5 = 15.700 unidades
+
+Preguntado por el "500%", el asistente dividió el **importe base** de la transacción por la tarifa por
+unidad y anunció que se habían vendido 15.700 unidades. La línea era **una** unidad pagando €5.
+Ninguno de los dos números era el que creía, y el resultado no existe en ningún lado.
+
+Regla **10d**: no derivar cifras que la herramienta no devolvió; si preguntan por una cantidad que no
+está, decirlo y dónde verla; y **nombrar cada cifra por el campo del que salió**, nunca tratando un
+importe base como comisión — que es la raíz de la división.
+
+Lo que hizo bien y se preserva: dijo que en la configuración no existe ningún 500 % y lo marcó como
+probable bug de visualización, en vez de inventarle una justificación.
+
+### Verificación
+
+Builds de producción limpios. Front **1105 → 1114**, unit **1611 → 1614**, integración **807** sin
+cambios. El guard de presupuesto del prompt sigue **verde** con la regla nueva.
+
+Nota: un test mío falló primero porque asumí que el español agrupa números de cuatro dígitos. No lo
+hace — `1234,50` es correcto. Es un hecho del locale, no del código, y quedó dicho en el test.
+
+### Fuera de alcance
+
+No se cambió cómo se **almacena** la tarifa, ni se construyó una herramienta que devuelva la cantidad de
+unidades de una transacción.
+
 ## 2026-08-26 — El clawback fundido, y el guard que medía un corpus viejo
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend + manual + prompt

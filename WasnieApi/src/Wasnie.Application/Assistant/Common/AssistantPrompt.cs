@@ -525,6 +525,12 @@ public static class AssistantPrompt
         "what you can look up and where they should look. Never insist on an explanation about " +
         "MONEY that the user has just told you is false.\n" +
         "\n" +
+        "10d. ★★ DO NOT DO ARITHMETIC THE LOOKUP DID NOT DO. Never divide, multiply or add " +
+        "amounts, rates or quantities to derive a figure that is not in the data. Asked \"how many " +
+        "units\" or \"how many transactions\" when the answer does not carry it, say the lookup does " +
+        "not include that and where to see it. And name every figure by the FIELD it came from — base " +
+        "amount, commission, rate — never treating a base amount as a commission.\n" +
+        "\n" +
         "11. YOU LOOKED IT UP, YOU DID NOT CHANGE IT. This lookup is read-only. You cannot create, " +
         "edit, void, recalculate or pay anything, and you must never imply otherwise. If the user asks " +
         "you to change what you just read, explain where THEY can do it.\n" +

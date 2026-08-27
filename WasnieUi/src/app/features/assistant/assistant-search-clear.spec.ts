@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TranslateModule } from '@ngx-translate/core';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AssistantStore } from './state/assistant.store';
 import { AssistantApiService } from './services/assistant.api.service';
 import { AssistantConversationListComponent } from './conversation-list/assistant-conversation-list.component';
@@ -22,8 +22,8 @@ function summary(id: string): AssistantConversationSummary {
   return { id, title: id, createdAt: '', updatedAt: '2026-08-26T09:00:00Z', messageCount: 1 };
 }
 
-function page(ids: string[]): AssistantConversationPage {
-  return { items: ids.map(summary), nextCursor: null, pinned: [] };
+function page(ids: string[], nextCursor: string | null = null): AssistantConversationPage {
+  return { items: ids.map(summary), nextCursor, pinned: [] };
 }
 
 describe('AssistantConversationListComponent — clearing the search', () => {
@@ -73,6 +73,61 @@ describe('AssistantConversationListComponent — clearing the search', () => {
       fixture.nativeElement.querySelectorAll('[data-testid="assistant-history-item"]'),
     ).map((r) => (r as HTMLElement).textContent!.trim());
   }
+
+  // ══ ★★ The buttons are actually wired ═════════════════════════════════
+
+  it('★★ clicking Load more actually loads more', async () => {
+    // ★★ REPORTED FROM RUNTIME: the button appeared and clicking it did nothing at all. The
+    // template bound `(clicked)`, and WsButtonComponent has NO outputs — it renders a native <button>
+    // and lets the DOM click bubble. Angular reads `(clicked)` on a component as a listener for a
+    // CUSTOM EVENT of that name, so it compiled, rendered, and silently never fired. No error, no
+    // warning, no console line.
+    //
+    // ★ AND THIS TEST GOES THROUGH THE DOM FOR EXACTLY THAT REASON. Calling `loadMore()` on the
+    // component passes while the button is dead — the store-level tests for paging did pass the whole
+    // time. What broke was the wire between the click and the handler, and only a real click crosses it.
+    api.listConversations.and.returnValue(of(page(['alpha'], 'CURSOR-1')));
+    await store.loadConversations();
+    fixture.detectChanges();
+
+    api.listConversations.calls.reset();
+    api.listConversations.and.returnValue(of(page(['beta'], null)));
+
+    const button: HTMLElement =
+      fixture.nativeElement.querySelector('[data-testid="assistant-load-more"] button')
+      ?? fixture.nativeElement.querySelector('[data-testid="assistant-load-more"]');
+    expect(button).withContext('the button is on screen').toBeTruthy();
+
+    button.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(api.listConversations).withContext('the click reached the store').toHaveBeenCalled();
+    expect(api.listConversations.calls.mostRecent().args[0]).toBe('CURSOR-1');
+    expect(rows()).toEqual(['alpha', 'beta']);
+  });
+
+  it('★ clicking Retry after a failed batch actually retries', async () => {
+    // Same wiring bug, same button primitive, one line away in the same template.
+    api.listConversations.and.returnValue(throwError(() => new Error('down')));
+    await store.loadConversations();
+    fixture.detectChanges();
+
+    const retry: HTMLElement =
+      fixture.nativeElement.querySelector('[data-testid="assistant-list-retry"] button')
+      ?? fixture.nativeElement.querySelector('[data-testid="assistant-list-retry"]');
+    expect(retry).withContext('the failure offers a retry').toBeTruthy();
+
+    api.listConversations.calls.reset();
+    api.listConversations.and.returnValue(of(page(ALL)));
+
+    retry.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(api.listConversations).toHaveBeenCalled();
+    expect(rows()).toEqual(ALL);
+  });
 
   it('★ typing a search filters, and clearing the box brings everything back', fakeAsync(() => {
     void store.loadConversations();

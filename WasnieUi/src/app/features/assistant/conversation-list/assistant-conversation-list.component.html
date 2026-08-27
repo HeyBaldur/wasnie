@@ -219,7 +219,7 @@
       size="sm"
       [loading]="store.loadingMore()"
       [disabled]="store.loadingMore()"
-      (clicked)="loadMore()"
+      (click)="loadMore()"
       data-testid="assistant-load-more"
     >
       {{ 'ASSISTANT.LOAD_MORE' | translate }}
@@ -246,7 +246,7 @@
       is worse than no button. That case is fixed by unpinning something, which the sentence says.
     -->
     @if (store.listError() === 'LOAD_FAILED' || store.listError() === 'LOAD_MORE_FAILED') {
-      <ws-button variant="ghost" size="sm" (clicked)="retryLoad()" data-testid="assistant-list-retry">
+      <ws-button variant="ghost" size="sm" (click)="retryLoad()" data-testid="assistant-list-retry">
         {{ 'ASSISTANT.RETRY' | translate }}
       </ws-button>
     }

@@ -916,17 +916,22 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     document.body.appendChild(fixture.nativeElement);
 
     const rows = fixture.nativeElement.querySelectorAll('[data-testid="assistant-history-item"]');
-    const open = getComputedStyle(rows[0] as HTMLElement);
-    const other = getComputedStyle(rows[1] as HTMLElement);
 
-    expect(open.boxShadow).not.toBe('none',
-      'the open conversation carries the brand edge');
-    expect(other.boxShadow).toBe('none',
-      'a row nobody is reading carries no marker at all');
+    // ★ THE MARKER IS THE ROW'S `::before`, NOT ITS BOX-SHADOW. It used to be `inset 3px 0 0` in a flat
+    // brand colour; it is now a 3px pseudo-element painted with `--gradient-brand`, because the
+    // selected state was aligned with the sidebar's, which is where that gradient edge comes from.
+    // Still a pseudo-element and not a real border, for the original reason: a 3px left border would
+    // square the row's radius and shove the title sideways on every selection.
+    const openBar = getComputedStyle(rows[0] as HTMLElement, '::before');
+    const otherBar = getComputedStyle(rows[1] as HTMLElement, '::before');
 
-    // It is an INSET shadow, not a border: a 3px left border would square the row’s radius and
-    // shove the title sideways on every selection.
-    expect(open.boxShadow).toContain('inset');
+    expect(openBar.backgroundImage).toContain('gradient');
+    expect(openBar.width).toBe('3px');
+    expect(otherBar.backgroundImage).toBe('none');
+
+    // ★ AND THE RAIL IS RESERVED ON THE UNSELECTED ROW TOO — same width, no paint. That is what keeps
+    // selecting a conversation from nudging the list sideways, and it is the sidebar's arrangement.
+    expect(otherBar.width).toBe('3px');
 
     document.body.removeChild(fixture.nativeElement);
   });
