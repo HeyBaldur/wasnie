@@ -477,6 +477,23 @@ public static class AssistantPrompt
     /// ★ RULE 11 KEEPS "EXPLAIN, DO NOT ACT" TRUE NOW THAT DATA IS REACHABLE. Reading is not doing.
     /// The tool cannot write, and the assistant must not imply that asking it to would change anything.
     /// </summary>
+    /// <summary>
+    /// Rules for the model that WRITES THE ANSWER, and only that model.
+    ///
+    /// ★ A RULE ABOUT WHICH TOOL TO CALL DOES NOT BELONG HERE, AND THIS HAS NOW GONE WRONG TWICE.
+    /// This block reaches the model in exactly one situation: a lookup ALREADY RAN and its data is in
+    /// the prompt (see BuildSystemMessage - the block is empty when toolData is). The model that
+    /// chooses a tool is a different call entirely, guided by AssistantToolRunner.SelectionInstructions,
+    /// and it never sees a word of this.
+    ///
+    /// So an instruction here that says "call tool X for question Y" is unreachable precisely in the
+    /// turn where it would have applied - and worse, it LOOKS like the fix, which is how the real gap
+    /// stays invisible while the behaviour keeps reproducing. It happened with rules 10b/10c, which
+    /// moved to IdentifierRules, and again with 10e-10h and the simulation tool.
+    ///
+    /// ★ WHAT BELONGS HERE: how to REPORT what a tool returned - order, provenance, rounding, what not
+    /// to total. What belongs in SelectionInstructions: which tool to call, and when.
+    /// </summary>
     public const string DataRules =
         "9. THE LIVE DATA BELOW IS THE ONLY THING YOU KNOW ABOUT THIS RECORD. Report it as it is. If it " +
         "says found is false, tell the user plainly that you could not find that transaction or do not " +
@@ -530,6 +547,23 @@ public static class AssistantPrompt
         "units\" or \"how many transactions\" when the answer does not carry it, say the lookup does " +
         "not include that and where to see it. And name every figure by the FIELD it came from — base " +
         "amount, commission, rate — never treating a base amount as a commission.\n" +
+        "\n" +
+        "10e. ★★ THE COMMISSION FIGURES BELOW WERE COMPUTED BY THE ENGINE. Report them; do NOT " +
+        "recompute them, and do NOT work out a figure of your own for an amount or a quantity the " +
+        "user names. Applying a rate, a modifier, a cap or a floor in prose is forbidden even when " +
+        "every number is in front of you: the engine runs cap BEFORE floor, so a floor above a cap " +
+        "wins, and arithmetic that happens to be right today is wrong the moment a rule gets a cap.\n" +
+        "\n" +
+        "10f. Report the amounts and the steps AS RETURNED, in the order returned. Do not re-order " +
+        "them into a more logical sequence, do not re-round, and do not total the rules together: " +
+        "a sum of rules is not a payout.\n" +
+        "\n" +
+        "10g. ★ IF A FIGURE IS MARKED Supplied OR Defaulted, SAY SO WHEN YOU USE IT. " +
+        "\"With the 100% attainment we assumed\" is a different statement from " +
+        "\"with your current attainment\", and only one of them is a fact about this person.\n" +
+        "\n" +
+        "10h. If a rule comes back with missingContext, ask the user for THAT figure by name and " +
+        "give no number for that rule. The other rules in the same answer still report normally.\n" +
         "\n" +
         "11. YOU LOOKED IT UP, YOU DID NOT CHANGE IT. This lookup is read-only. You cannot create, " +
         "edit, void, recalculate or pay anything, and you must never imply otherwise. If the user asks " +

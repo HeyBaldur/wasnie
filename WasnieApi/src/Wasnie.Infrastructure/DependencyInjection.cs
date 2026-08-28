@@ -204,6 +204,7 @@ public static class DependencyInjection
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPlanRulesTool>();
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPayeeLedgerSummaryTool>();
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPayeePlansTool>();
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.SimulatePlanRulesTool>();
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();
@@ -224,6 +225,11 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, AuditService>();
 
         services.AddScoped<ICreditAllocationService, CreditAllocationService>();
+
+        // The read-only twin of the allocator: same engine, same cascade, but it reports the steps
+        // instead of producing credits. Stateless, so a singleton would do; scoped keeps it beside
+        // the service it explains.
+        services.AddScoped<IRuleCalculationExplainer, RuleCalculationExplainer>();
         // Clawback: withholds a payee's outstanding balance when a pay run is marked Paid.
         services.AddScoped<IPayRunSettlementService, PayRunSettlementService>();
         // Single place for the "can I create this transaction?" rule — used by HubSpot/Excel/Manual ingest.

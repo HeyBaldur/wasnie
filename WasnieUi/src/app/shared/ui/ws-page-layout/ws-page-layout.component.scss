@@ -59,6 +59,10 @@
   color: var(--color-text-primary);
   margin: 0;
   line-height: 1.2;
+
+  // Opt-in only. See PageTitleSize: a header that greets the user by name is the header's content,
+  // not a label for the screen below it.
+  &--lg { font-size: var(--font-size-32); }
 }
 
 .ws-pl__subtitle {

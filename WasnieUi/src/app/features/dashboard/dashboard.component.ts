@@ -12,6 +12,8 @@ import { HasPermissionPipe } from '../../shared/pipes/has-permission.pipe';
 import { DashboardStore } from './store/dashboard.store';
 import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee } from './models/dashboard.models';
 import { TransactionsApiService } from '../transactions/services/transactions.api.service';
+import { ProfileService } from '../profile/services/profile.service';
+import { AuthService } from '../../core/services/auth.service';
 import { TerminatedAccountsStore } from '../ledger/state/terminated-accounts.store';
 import { ToastService } from '../../shared/services/toast.service';
 import { extractApiError } from '../../shared/utils/api-error';
@@ -64,6 +66,8 @@ import {
 export class DashboardComponent {
   readonly store = inject(DashboardStore);
   private readonly transactionsApi = inject(TransactionsApiService);
+  private readonly profile = inject(ProfileService);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
 
@@ -87,8 +91,63 @@ export class DashboardComponent {
    */
   readonly periodControl = new FormControl<string>(this.store.period(), { nonNullable: true });
 
+  /**
+   * The person the header greets. The name is NOT on `/auth/me` (CurrentUser carries identity and
+   * permissions, not display fields), so it comes from the profile endpoint that already serves it.
+   * Empty until it arrives, and empty forever for a user who never filled it in — hence the email
+   * fallback below rather than a greeting addressed to nobody.
+   */
+  private readonly profileFirstName = signal('');
+
+  /**
+   * First name, or the local part of the email capitalised when there is no name on file. Never a
+   * bare "there"/"user": the email prefix is at least the person's own handle.
+   */
+  readonly greetingName = computed(() => {
+    const first = this.profileFirstName().trim();
+    if (first) return first;
+    const local = (this.auth.currentUser()?.email ?? '').split('@')[0];
+    if (!local) return '';
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  });
+
+  /**
+   * Morning / afternoon / evening by the BROWSER's clock — the greeting is about where the user is
+   * sitting, not where the server runs. Boundaries: [0,12) morning, [12,18) afternoon, [18,24) evening.
+   */
+  readonly greetingKey = computed(() => {
+    const hour = this.now().getHours();
+    if (hour < 12) return 'DASHBOARD.GREETING_MORNING';
+    if (hour < 18) return 'DASHBOARD.GREETING_AFTERNOON';
+    return 'DASHBOARD.GREETING_EVENING';
+  });
+
+  /**
+   * The name clause, already punctuated, interpolated into the greeting string. It carries the comma
+   * so the three greeting keys stay single strings that still read correctly when there is no name at
+   * all ("Good morning" rather than "Good morning, ").
+   */
+  readonly greetingNamePart = computed(() => {
+    const name = this.greetingName();
+    return name ? `, ${name}` : '';
+  });
+
+  /** Re-read once per minute so a session open across noon or 6pm eventually corrects itself. */
+  private readonly now = signal(new Date());
+
   constructor() {
     void this.terminated.load();
+
+    this.profile.getProfile()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: p => this.profileFirstName.set(p.firstName ?? ''),
+        // A missing name is not worth a toast — the email fallback covers it.
+        error: () => {},
+      });
+
+    const clock = setInterval(() => this.now.set(new Date()), 60_000);
+    this.destroyRef.onDestroy(() => clearInterval(clock));
 
     // Selecting an option routes to the SAME handler the segmented control called. No period logic
     // moved into this component: the store still owns the period and the reload.

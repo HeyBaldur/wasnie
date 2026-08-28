@@ -684,7 +684,24 @@
     "CLAWBACK_SAVED": "Clawback policy saved.",
     "CLAWBACK_SAVE_ERROR": "The clawback policy could not be saved.",
     "MATURATION_DAYS_INVALID": "Enter a number of days greater than zero.",
-    "CAP_PERCENT_INVALID": "Enter a percentage between 0 and 100."
+    "CAP_PERCENT_INVALID": "Enter a percentage between 0 and 100.",
+    "SIM_TITLE": "Commission simulator",
+    "SIM_INPUT_AMOUNT": "Hypothetical transaction amount",
+    "SIM_INPUT_UNITS": "Hypothetical quantity",
+    "SIM_UNITS_SUFFIX": "units",
+    "SIM_RESULT": "This rule would pay",
+    "SIM_LOADING": "Calculating…",
+    "SIM_TRIGGER_NOT_MATCHED": "The trigger does not match this transaction, so this rule would not generate any commission. That is different from a commission of zero.",
+    "SIM_BLOCKED_ATTAINMENT": "This rule pays by quota attainment, so its commission depends on how much of their quota the rep has reached. Without that figure any number here would describe one particular rep rather than this rule.",
+    "SIM_BLOCKED_SPLIT_QUOTA": "This rule splits at the quota boundary, so its commission depends on the quota target and on the revenue already booked in the period. Without both, a number here would be meaningless.",
+    "SIM_STEP_BASE": "Transaction amount",
+    "SIM_STEP_RATE": "Rate",
+    "SIM_STEP_NOT_SET": "not set",
+    "SIM_STEP_NO_EFFECT": "no effect",
+    "SIM_STEP_SKIPPED": "skipped",
+    "SIM_SCOPE_NOTICE": "This is this rule alone, on this transaction alone. A real payout can combine several rules, quota attainment and clawback, so the amount on a statement may differ.",
+    "SIM_FORM_INCOMPLETE_FIELD": "Not simulable yet — {{field}} is incomplete or invalid.",
+    "SIM_FORM_INCOMPLETE_GENERIC": "Finish configuring the rule to simulate it."
   },
   "PAYEES": {
     "TITLE": "Payees",
@@ -765,6 +782,9 @@
     "UNITS": "units"
   },
   "DASHBOARD": {
+    "GREETING_MORNING": "Good morning{{name}}",
+    "GREETING_AFTERNOON": "Good afternoon{{name}}",
+    "GREETING_EVENING": "Good evening{{name}}",
     "GAUGES_TITLE": "Quota Attainment",
     "TREND_TITLE": "Sales Trend (12 months)",
     "TREND_EMPTY": "No sales history yet for this payee.",

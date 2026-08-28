@@ -5,6 +5,13 @@ import { NgClass } from '@angular/common';
 
 export type PageMaxWidth = 'narrow' | 'standard' | 'wide';
 
+/**
+ * Title scale. 'md' is the page-title default every screen uses. 'lg' is for headers whose title is
+ * addressed to the person rather than naming the screen (the Dashboard greeting) — there the title IS
+ * the content of the header, so it carries the weight a screen name doesn't need.
+ */
+export type PageTitleSize = 'md' | 'lg';
+
 @Component({
   selector: 'ws-page-layout',
   standalone: true,
@@ -19,4 +26,5 @@ export class WsPageLayoutComponent {
   readonly backLink = input('');
   readonly backLabel = input('');
   readonly maxWidth = input<PageMaxWidth>('standard');
+  readonly titleSize = input<PageTitleSize>('md');
 }

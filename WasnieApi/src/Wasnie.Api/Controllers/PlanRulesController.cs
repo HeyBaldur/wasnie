@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Compensation.Commands.Plans;
+using Wasnie.Application.Compensation.Queries.Plans;
 
 namespace Wasnie.Api.Controllers;
 
@@ -22,6 +23,28 @@ public sealed class PlanRulesController(IMediator mediator) : ControllerBase
         }
 
         var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : UnprocessableEntity(new { message = result.Error });
+    }
+
+    /// <summary>
+    /// What one hypothetical transaction would earn under a rule, step by step.
+    ///
+    /// ★ IT TAKES THE RULE'S DEFINITION, NOT ITS ID — so the screen can simulate what is on the form
+    /// right now, including a rule that has never been saved. POST rather than GET because that
+    /// definition is a whole object, not a query string; nothing is created and nothing is written.
+    /// </summary>
+    [HttpPost("simulate")]
+    public async Task<IActionResult> Simulate(
+        Guid planId,
+        [FromBody] SimulateRuleQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (query.PlanId != planId)
+        {
+            return BadRequest(new { message = "Route planId does not match body planId." });
+        }
+
+        var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : UnprocessableEntity(new { message = result.Error });
     }
 

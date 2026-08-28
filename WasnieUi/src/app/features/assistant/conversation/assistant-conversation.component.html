@@ -174,7 +174,12 @@
               straight past that edge, and read as hidden behind the composer. Opening upward keeps it
               inside the box that clips it.
             -->
-            <ws-popover placement="top-end">
+            <!--
+              #copyMenu so the items can close it. The popover closes on an OUTSIDE click, and a menu
+              item is inside it — so choosing an option left the menu sitting open over the answer it
+              had just copied, and the user had to click away to dismiss a menu they were done with.
+            -->
+            <ws-popover placement="top-end" #copyMenu>
               <button
                 slot="trigger"
                 type="button"
@@ -195,7 +200,7 @@
               <button
                 type="button"
                 class="assistant-msg__meta-item"
-                (click)="copyAnswer(message.id, $event)"
+                (click)="copyAnswer(message.id, $event); copyMenu.close()"
                 data-testid="assistant-copy-answer"
               >
                 {{ 'ASSISTANT.COPY_ANSWER' | translate }}
@@ -204,7 +209,7 @@
               <button
                 type="button"
                 class="assistant-msg__meta-item"
-                (click)="copyMarkdown(message.id, message.content)"
+                (click)="copyMarkdown(message.id, message.content); copyMenu.close()"
                 data-testid="assistant-copy-markdown"
               >
                 {{ 'ASSISTANT.COPY_MARKDOWN' | translate }}

@@ -1,7 +1,8 @@
 ﻿<app-shell [refreshOnEnter]="store">
   <ws-page-layout
     icon="dashboard"
-    [title]="'DASHBOARD.TITLE' | translate"
+    titleSize="lg"
+    [title]="greetingKey() | translate: { name: greetingNamePart() }"
     [subtitle]="'DASHBOARD.SUBTITLE' | translate"
   >
     <!-- Period filter. A dropdown rather than a six-item bar: the bar had no affordance (six words
@@ -33,54 +34,6 @@
     </p>
 
     <div class="action-grid">
-
-      <!-- Draft pay runs -->
-      <ws-card variant="interactive" padding="md"
-        [accent]="actionCardAccent(store.actionBand()?.draftPayRunsCount ?? 0)">
-        <!-- ★ `period: 'all-time'` IS THE CONTRACT, NOT A DEFAULT. This count is deliberately all-time
-             (GetDashboardSummaryHandler.cs:77-78, the period-independent action band: a September draft
-             is actionable today), but Pay Runs lands on "this month" whenever the URL carries no
-             `period` (pay-runs-list.component.ts:147-153). Sending only the status made the card
-             promise 2 and the list show 0. The destination already reads this param — the link just
-             never sent it. Sibling cards do NOT need it: Payouts skips its default period whenever the
-             URL has params, and Terminated shares one store with its screen. -->
-        <a [routerLink]="['/pay-runs']" [queryParams]="{ status: 'Draft', period: 'all-time' }" class="stat-card">
-          <div class="stat-card__hd">
-            <div>
-              <h3 class="stat-card__title">{{ 'DASHBOARD.PAYRUNS_DRAFT' | translate }}</h3>
-              <div class="stat-card__meta">
-                @if (!store.loading()) {
-                  @if ((store.actionBand()?.draftPayRunsCount ?? 0) > 0) {
-                    <span class="stat-card__delta stat-card__delta--warn">
-                      <app-icon name="arrow-up" [size]="11" />
-                      {{ store.actionBand()!.draftPayRunsCount }}
-                    </span>
-                    <span class="stat-card__period">{{ 'DASHBOARD.REQUIRES_ACTION' | translate }}</span>
-                  } @else {
-                    <span class="stat-card__delta stat-card__delta--ok">
-                      <app-icon name="check" [size]="11" />
-                    </span>
-                    <span class="stat-card__period">{{ 'DASHBOARD.ALL_CLEAR' | translate }}</span>
-                  }
-                }
-              </div>
-            </div>
-            <div class="stat-card__icon stat-card__icon--brand">
-              <app-icon name="document-text" [size]="24" />
-            </div>
-          </div>
-          <div class="stat-card__vrow">
-            <div class="stat-card__value">
-              @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
-              @else { {{ store.actionBand()?.draftPayRunsCount ?? 0 }} }
-            </div>
-            <span class="stat-card__cta">
-              {{ 'DASHBOARD.VIEW_FILTERED' | translate }}
-              <app-icon name="external-link" [size]="10" />
-            </span>
-          </div>
-        </a>
-      </ws-card>
 
       <!-- Payouts pending approval -->
       <ws-card variant="interactive" padding="md"
@@ -190,6 +143,54 @@
                 <app-icon name="external-link" [size]="10" />
               </span>
             }
+          </div>
+        </a>
+      </ws-card>
+
+      <!-- Draft pay runs -->
+      <ws-card variant="interactive" padding="md"
+        [accent]="actionCardAccent(store.actionBand()?.draftPayRunsCount ?? 0)">
+        <!-- ★ `period: 'all-time'` IS THE CONTRACT, NOT A DEFAULT. This count is deliberately all-time
+             (GetDashboardSummaryHandler.cs:77-78, the period-independent action band: a September draft
+             is actionable today), but Pay Runs lands on "this month" whenever the URL carries no
+             `period` (pay-runs-list.component.ts:147-153). Sending only the status made the card
+             promise 2 and the list show 0. The destination already reads this param — the link just
+             never sent it. Sibling cards do NOT need it: Payouts skips its default period whenever the
+             URL has params, and Terminated shares one store with its screen. -->
+        <a [routerLink]="['/pay-runs']" [queryParams]="{ status: 'Draft', period: 'all-time' }" class="stat-card">
+          <div class="stat-card__hd">
+            <div>
+              <h3 class="stat-card__title">{{ 'DASHBOARD.PAYRUNS_DRAFT' | translate }}</h3>
+              <div class="stat-card__meta">
+                @if (!store.loading()) {
+                  @if ((store.actionBand()?.draftPayRunsCount ?? 0) > 0) {
+                    <span class="stat-card__delta stat-card__delta--warn">
+                      <app-icon name="arrow-up" [size]="11" />
+                      {{ store.actionBand()!.draftPayRunsCount }}
+                    </span>
+                    <span class="stat-card__period">{{ 'DASHBOARD.REQUIRES_ACTION' | translate }}</span>
+                  } @else {
+                    <span class="stat-card__delta stat-card__delta--ok">
+                      <app-icon name="check" [size]="11" />
+                    </span>
+                    <span class="stat-card__period">{{ 'DASHBOARD.ALL_CLEAR' | translate }}</span>
+                  }
+                }
+              </div>
+            </div>
+            <div class="stat-card__icon stat-card__icon--brand">
+              <app-icon name="document-text" [size]="24" />
+            </div>
+          </div>
+          <div class="stat-card__vrow">
+            <div class="stat-card__value">
+              @if (store.loading()) { <span class="skeleton skeleton--num"></span> }
+              @else { {{ store.actionBand()?.draftPayRunsCount ?? 0 }} }
+            </div>
+            <span class="stat-card__cta">
+              {{ 'DASHBOARD.VIEW_FILTERED' | translate }}
+              <app-icon name="external-link" [size]="10" />
+            </span>
           </div>
         </a>
       </ws-card>

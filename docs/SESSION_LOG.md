@@ -4,6 +4,635 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-28 — Diagnóstico READ-ONLY: POL-8554, y el asistente que barajó dos filas
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Sin cambios de producto** · informe en
+`docs/DIAG_POL-8554_PAYOUT_Y_CREDITOS_INVENTADOS.md`
+
+### ★ Dos premisas del WI que los datos desmintieron
+
+1. **La payee SÍ está asignada al plan del crédito.** Tiene DOS asignaciones activas; una es a EU
+   Accelerator Q2 2026 y cubre junio. La asignación faltante no era el motivo.
+2. **El crédito de €5.999 y el 24-jun son REALES.** El asistente no los inventó — la herramienta se los
+   dio. Lo que fabricó es la ASOCIACIÓN entre filas.
+
+### Frente A — qué descarta el crédito
+
+El motor **arranca por asignaciones, no por créditos** (`CalculatePayoutsForPeriodHandler.cs:39-55`), así
+que un crédito cuya asignación no entra al bucle nunca es mirado. Junio tiene **dos bloqueos
+independientes y suficientes**: la payee está `Terminated` (corta en `:75-96`, antes de todo) y ya existe
+un payout `Paid` para exactamente `2026-06-01→06-30` de ese payee y plan. El período filtra
+**`TransactionDate`**, nunca `Credit.AllocatedAt` (`:190-191`) — el mecanismo entero que el asistente
+describió no existe.
+
+**★ Punto ciego doble:** el motor la salta por terminada, y la cola de cuentas huérfanas no la ve porque
+mira `PayeeBalances` (0 filas para ella) y un crédito sin consumir no crea balance. Los €3.869,34 no
+están en NINGUNA pantalla de Incentra.
+
+**★ Puerta de parada disparada:** *"No matching credits found for this period"* es un literal de CLIENTE
+disparado por `payoutsCreated === 0`; el backend nunca establece esa causa. En el run real de junio:
+24 asignaciones → 4 descartadas en silencio por terminación → 20 supervivientes → **20/20 en conflicto**.
+La frase es falsa dos veces. **Reportado, no arreglado.**
+
+### Frente B — de dónde salieron las fechas
+
+**Los logs NO guardan payloads, a propósito** (`AssistantToolRunner.cs:169-172`: los argumentos se omiten
+porque son las palabras del usuario sobre sus propios registros). Reconstruí el payload leyendo la
+proyección + reejecutando las consultas; marcado como DERIVADO, no literal.
+
+La herramienta entregó, en orden `AllocatedAt DESC`: `[0]` 3.869,34 / 27-ago / **no** superseded;
+`[1]` 5.999,00 / 24-jun / **sí** superseded. El asistente tomó **los importes en el orden del array y las
+fechas en el orden inverso**. Barajó una tabla de dos filas: cada valor sobrevive una verificación, el
+par no. **No es la tercera alucinación aritmética — es una clase distinta, mala atribución entre filas.**
+
+**Fabricación pura sí hubo una:** el "28-Jun-2026" del turno 3 — **ese turno no corrió herramienta** y
+`DataRules` sólo viaja con `toolData` no vacío (`AssistantPrompt.cs:947-950`). Cuarto mordisco del mismo
+diseño.
+
+**★ Hueco real de proyección:** los dos créditos son de **payees DISTINTOS** (el de €5.999 es de Adrian
+Dominguez), y `CommissionEarned` marca `PayeeId` con `[JsonIgnore]` — el payload no tiene UN SOLO campo
+que los distinga. La reatribución Adrian→Birgit, que explica todo el caso, era invisible al modelo.
+
+**★ Y la regla 10c SÍ cubre admitir el error propio** — el WI suponía que no. Dice literalmente *"Do NOT
+repeat the steps you already gave […] Say plainly that your explanation was wrong"*. Corrió herramienta
+en el turno 7, así que viajó, y la violó en sus dos mitades. **Recomendación explícita: NO escribir una
+regla nueva.** Estaban ahí y no se cumplieron.
+
+### Inconsistencia de datos — reportada, NO tocada
+
+El crédito de €3.869,34 se creó **56 segundos DESPUÉS** de terminar a la payee (15:16:41 → 15:17:37).
+No establecí si es un flujo soportado. **Ninguna fila modificada.**
+
+`dotnet build` exit 0 (sin cambios de código; sólo para confirmar el árbol).
+
+## 2026-08-28 — El Dashboard saluda a la persona, y la banda de acción es un 2x2
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · frontend · sin migración
+
+### El encabezado deja de nombrar la pantalla
+
+`Dashboard` / *"Commission operations overview."* se convierte en **"Good morning, Rudy"** — el título
+ya no etiqueta la pantalla, se dirige a quien la abre.
+
+- **La hora es la del NAVEGADOR, no la del servidor.** El saludo trata de dónde está sentado el
+  usuario. Cortes: `[0,12)` mañana, `[12,18)` tarde, `[18,24)` noche. Un `signal` releído cada 60 s
+  para que una sesión abierta a través del mediodía se corrija sola.
+- **El nombre NO está en `/auth/me`.** `CurrentUser` lleva identidad y permisos, no campos de
+  presentación; el nombre viene de `ProfileService.getProfile()`, que ya lo servía. Si el usuario
+  nunca lo cargó → **la parte local del email capitalizada**, nunca un *"there"* genérico.
+- **Tres claves i18n, no seis.** El saludo interpola `{{name}}` con la cláusula **ya puntuada**
+  (`, Rudy` o `''`), así el mismo string lee bien con y sin nombre: *"Good morning"*, no
+  *"Good morning, "*.
+- Título más grande vía input **opt-in** `titleSize="lg"` en `ws-page-layout` (32px). El resto de las
+  pantallas siguen en `md`: un nombre de pantalla no necesita ese peso.
+
+### La banda "Requires action": 3 columnas → 2
+
+Cuatro tarjetas en tres columnas dejaban la cuarta sola en una segunda fila, leyéndose como una
+ocurrencia tardía. Ahora es un **2x2 en el orden en que ocurre el trabajo**:
+
+| | |
+|---|---|
+| Pending Approval | Approved Not Paid |
+| Draft Pay Runs | Terminated Accounts |
+
+**Sin tocar el diseño de las tarjetas** — sólo el orden en el DOM y `grid-template-columns`. El
+breakpoint 640–1023px se eliminó por redundante (dos columnas ya es la base).
+
+### Verificación
+
+`ng build --configuration production` limpio (los dos avisos de presupuesto —bundle inicial y
+`dashboard.component.scss` 14.26 kB— son **preexistentes**: el SCSS quedó una línea más corto).
+Front **1148 → 1155**, cero rojos. Los 7 nuevos cubren los tres cortes horarios, el límite de
+medianoche, el nombre del perfil, el fallback por email y el caso sin usuario.
+
+## 2026-08-27 — El dispatcher elige el simulador, y el presupuesto dice basta
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend · sin migración
+
+Base: `docs/ASSISTANT_SIMULATION_TOOL_NOT_CALLED.md`, que estableció por logs que la herramienta tenía
+**0 invocaciones** pese a estar registrada y ofrecida.
+
+### La instrucción, donde sí decide
+
+Movida a `AssistantToolRunner.SelectionInstructions` — el único prompt que lee el modelo que elige —
+con desambiguación explícita, el mismo tratamiento que ya recibió el par payee/plan:
+
+| la pregunta | la herramienta |
+|---|---|
+| "cómo está configurado", "qué reglas tiene", "cuál es la tarifa" | configuración |
+| "cuánto pagaría sobre 7.850", "qué genera la regla 2 con 5 unidades" | **simulación** |
+| "por qué salió así mi comisión" | configuración, **salvo** que el usuario dé cifras |
+
+Y escrita con las palabras del usuario, no del producto: *"tengo una transacción de 7.850 con 5
+unidades"*, no *"a hypothetical sale"*.
+
+### ★★ El test de regresión cazó mi propio resto
+
+La regla 10e **todavía decía** `"call simulate_plan_rules"` dentro de `DataRules`. El mismo error por
+tercera vez —10b/10c, 10e-10h, y ahora el residuo—, cometido por quien acababa de escribir el
+diagnóstico que lo explica.
+
+Reescrita como regla de **reporte**: no recalcular lo que el motor computó. Ninguna herramienta
+nombrada.
+
+`ToolSelectionInstructionsTests` afirma las dos mitades — que la instrucción de elección **está** en
+`SelectionInstructions`, y que **ningún nombre de herramienta** aparece en `DataRules`. Un comentario
+ya explicaba esto y no alcanzó dos veces; un test no depende de que alguien lo lea.
+
+### ★★ Superconjunto, en vez de levantar el techo de rondas
+
+La salida del simulador lleva ahora la configuración de cada rule — medida, tabla de tarifas con su
+**token semántico**, trigger, modifier, cap y floor — reutilizando **la misma proyección** de
+`get_plan_rules`, extraída a `PlanRuleProjection`. Movida sin reescribir: `PlanRulesPayloadCompleteness`
+64/64 es lo que lo dice.
+
+Y el test destapó un fallo real: si la segunda consulta fallaba, el tool **lanzaba
+`NullReferenceException`** en vez de degradar — exactamente lo contrario de lo que decía su propio
+comentario. Ahora la descripción es un extra que nunca cuesta las cifras.
+
+### ★★ Paso 5 — la puerta se dispara, y peor de lo esperado
+
+El guard quedó verde. **Pero modela mal el peor caso.**
+
+| | tokens |
+|---|---|
+| request modelado por el guard | 21.021 |
+| − su `ToolData` (un payload de **balance**) | −114 |
+| **+ payload real de simulación, 3 rules** (medido) | **+715** |
+| + esquemas, que el guard nunca midió | +1.904 |
+| **= peor caso real de un turno de simulación** | **23.521** |
+| techo | 24.000 |
+| **margen** | **479 (2,0 %)** |
+
+Y **escala con la cantidad de rules**:
+
+| rules | total | margen |
+|---|---|---|
+| 3 | 23.521 | +479 |
+| 4 | 23.759 | +240 |
+| 5 | 23.997 | **+2** |
+| 6 | 24.236 | **−236** |
+
+O sea: **la función se queda sin presupuesto alrededor de los 5 rules por plan.**
+
+**No subí el techo, no recorté el manual y no comprimí reglas existentes.** Los números quedan para tu
+decisión.
+
+### Verificación
+
+0 errores CS en Domain, Application, Infrastructure y UnitTests. **Unit 1674 → 1681** (+7).
+
+**La integración no se pudo correr**: la API estaba corriendo (PID 17612) y bloquea la salida del
+proyecto Api con `MSB3027`. No es un error de código, y no se mató el proceso sin permiso.
+
+### Fuera de alcance (reportado, no construido)
+
+- Levantar el techo de rondas por turno.
+- Extender el guard a los esquemas y a un payload de simulación realista — hoy su peor caso está
+  subestimado en ~2.500 tokens.
+- El test de selección contra el proveedor: es el único que vería si el modelo **elige** la
+  herramienta, y necesita una llamada real. Propuesta: opt-in, fuera de la corrida por defecto.
+
+## 2026-08-27 — El asistente deja de hacer aritmética: `simulate_plan_rules`
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend · sin migración
+
+### El caso
+
+Tres rules, una transacción de 7.850 con 5 unidades:
+
+| rule | qué hizo | veredicto |
+|---|---|---|
+| 1 | `7850 × 0,05 × 1,2 = 471` a mano | **acertó**, y por eso es lo peor |
+| 2 | "no puedo, falta el importe por unidad" | el dato estaba (€5,00) |
+| 3 | "cuota alcanzada 0 – 20 000 %" | eran tramos de ingreso |
+
+El simulador de la pantalla, sobre el rule 2 con 5 unidades, devuelve **€25,00** desde el motor real.
+Dos superficies del producto, dos respuestas.
+
+### ★★ El diagnóstico del WI estaba mal en un punto
+
+El WI daba por causa raíz que *"la semántica de la tarifa no viaja en los datos"*. **Sí viaja:**
+
+- `PlanRuleSemantics` define un enum **cerrado**, `RateSemantic`, con los cinco casos — incluido
+  `CurrencyAmountPerUnit`;
+- `GetPlanRulesTool:501-505` lo emite en el payload;
+- `AssistantPrompt:774-776` le enseña al modelo qué significa cada token.
+
+La causa real es otra, y es peor de explicar pero mejor de arreglar: **el modelo tenía la semántica y
+no tenía nada que ejecutara el cálculo.** La regla 10d le prohíbe derivar cifras, así que ante "¿cuánto
+paga?" no le quedaba salida legítima — y a veces la incumplía (rule 1) y a veces se rendía con una
+excusa equivocada (rule 2).
+
+La solución del WI es correcta; su causa declarada, no. Se corrige acá.
+
+### Lo construido
+
+**Una llamada por plan, no una por rule.** Tres viajes le dan a un modelo tres resultados sueltos que
+mantener separados, que son tres oportunidades de atribuir la cifra del rule 2 al rule 3.
+
+**El mismo motor, la misma negativa.** El handler usa `IRuleCalculationExplainer` — el mismo que la
+pantalla — y la decisión de bloqueo se extrajo a `RuleSimulationContext.BlockerFor`, compartida con
+`SimulateRuleHandler`. Un chat que produce un número donde la pantalla se niega sería peor que
+cualquiera de los dos comportamientos por separado: el usuario confía en el que vio primero.
+
+**Sin total.** Sumar los rules parecería el payout y no lo es — un payout real resuelve qué plan
+aplica y puede llevar contexto de cuota y clawback. Una suma impresa al lado es la cifra que la gente
+citaría.
+
+**Reglas 10e-10h.** Los hipotéticos son una llamada a la herramienta; los pasos se reportan tal cual y
+en su orden; un valor `Supplied` o `Defaulted` se declara al usarlo; si falta contexto se pide **ese**
+dato por su nombre y no se da número para ese rule.
+
+### ★★ Paso 5 — la medición, y no entra con holgura
+
+El guard quedó **verde**: 21.016 contra 24.000.
+
+**Pero el guard no mide los esquemas de las herramientas.** Viajan en el array `tools` de la petición,
+fuera de `AssistantPrompt.Build`, que es lo único que el guard compone.
+
+| | tokens |
+|---|---|
+| request medido por el guard | 21.016 |
+| esquemas de los 5 tools (**no medidos**) | 1.833 |
+| **total real** | **22.849** |
+| techo | 24.000 |
+| **margen real** | **1.151 (4,8 %)** |
+
+El techo se fijó como "medición + ~15 %". El margen verdadero es un tercio de eso. Mis reglas sumaron
+367 tokens y el esquema nuevo 504.
+
+**No subí el techo, no recorté el manual y no comprimí reglas.** El número queda acá para tu decisión,
+junto con la recomendación: extender el guard para que mida también los esquemas — con los números de
+hoy seguiría en verde, y dejaría de estar ciego al 8 % de la petición.
+
+### Cobertura de integración: lo que NO cubre, dicho
+
+El test de integración afirma que el tool **está registrado** (ningún test unitario lo vería: todos lo
+construyen a mano) y que su esquema es JSON válido — un esquema roto es un **400 de toda la petición**,
+no una llamada fallida.
+
+No ejecuta el cuerpo del tool: eso necesita identidad de usuario, porque `AuthorizationService`
+resuelve permisos del usuario actual y un scope de DI pelado no tiene request detrás. Antes que montar
+una identidad falsa que demuestre que el tool funciona contra plomería que no es la de producción, el
+camino de ejecución queda cubierto por unitarios, y el mismo motor va extremo a extremo por HTTP en
+`SimulateRuleEndpointTests`. Queda dicho para que el hueco sea una decisión y no un descuido.
+
+### Verificación
+
+Build 0 errores. **Unit 1662 → 1674** (+12). **Integración 815 → 818** (+3), Docker levantado.
+
+### Fuera de alcance
+
+La semántica de la tarifa **sí** viaja, así que el §6 del WI queda re-encuadrado: lo que sigue expuesto
+es el **renderizado** de tarifas en superficies que no consultan al motor, no la ausencia del dato.
+Persistir la traza; simular contra transacciones reales.
+
+## 2026-08-27 — Simulador: serif, input limpio y la moneda como badge
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · solo presentación
+
+### El título es un `<h4>`, no un span con `font-family`
+
+El serif se aplica por **una regla global sobre `h1..h4`** — así es como alcanza los capítulos del
+manual, que se pintan con `[innerHTML]` y ningún stylesheet de componente puede tocar. Ser un heading
+de verdad es lo que lo opta in, sin una segunda declaración que pueda desviarse del resto de la app.
+Y lo es de hecho: titula una sección de la card.
+
+Revierte el "rótulo pequeño en mayúsculas" del WI anterior — instrucción nueva gana.
+
+Las **cifras** sí llevan `font-family: var(--font-display)` explícito, porque son `<span>`: el mismo
+opt-in a mano que las del ledger de clawback.
+
+### ★ Sin spinners, y por qué NO en `ws-input`
+
+`appearance: textfield` + los pseudo-elementos `-webkit-*-spin-button`, acotado con `::ng-deep` al
+campo del simulador.
+
+El input nativo vive dentro de la vista de la primitiva, así que ningún selector normal desde acá lo
+alcanza. Arreglarlo en `ws-input.component.scss` quitaría las flechas de **todos** los campos
+numéricos del producto — tarifa flat, cap, floor, ventana de clawback. Eso es una decisión de design
+system (CLAUDE.md §7): reportada, no improvisada. **Si querés que sea global, es una línea.**
+
+### ★★ El badge no usa las clases del boceto
+
+`bg-brand-softer` y `text-fg-brand-strong` **no existen en este proyecto**. Habrían compilado, no
+habrían pintado nada, y el badge habría quedado invisible — el mismo modo de fallo silencioso del
+`(clicked)` muerto.
+
+`ws-badge variant="brand" size="sm"` resuelve la misma intención con tokens:
+
+| boceto | primitiva |
+|---|---|
+| `bg-brand-softer` | `--color-brand-subtle` |
+| `text-fg-brand-strong` | `--color-brand` |
+| `text-xs` | `--font-size-11` |
+| `px-1.5 py-0.5` | `padding: 2px 6px` |
+
+### La moneda ya era la del plan
+
+`planCurrency()` lee el plan cargado; el EUR de la captura era el del plan de prueba. Quedó fijado
+con un test igual: una moneda clavada en una pantalla de dinero es una mentira que el lector no tiene
+cómo detectar — EUR sobre un plan en USD se ve exactamente igual de convincente que sobre uno en EUR.
+
+### Verificación
+
+Build de producción limpio. **Front 1142 → 1145** (+3).
+
+## 2026-08-27 — El simulador, bloqueado justo donde más falta hacía
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · solo front
+
+### El defecto
+
+En **View Rule** de un rule completo —nombre puesto, medida Revenue, Flat al 10 %— el simulador
+decía *"termine de configurar la regla"*. No faltaba nada.
+
+Y es la pantalla donde más falta hace: el rule pertenece a un plan activo, no se puede modificar, así
+que simular es la **única** manera de entender qué paga.
+
+### ★★ La causa: `form.valid`
+
+```ts
+this.form.disable({ emitEvent: false });   // :694, cuando el plan no es editable
+```
+
+Angular le da a un `FormGroup` deshabilitado el status **DISABLED**, y `valid` es
+`status === 'VALID'`. Así que **`form.valid` es `false` para todo rule de solo lectura**, por
+completo que esté.
+
+**★ Y estaba trabado dos veces.** Ese `disable()` pasa `{ emitEvent: false }`: `valueChanges` nunca
+dispara, así que el `computed` que leía `formValue()` ni siquiera se reevaluaba — se quedaba con el
+valor viejo cacheado. Por eso la condición ahora depende también de `readOnly()`.
+
+### Hipótesis 2.2 descartada
+
+El trigger estaba activo con **0 condiciones**, pero:
+
+- no existe ningún validador que exija ≥1 condición (`conditions` es un `FormArray` pelado, `:353`);
+- en el dominio, un trigger sin condiciones **es** `Trigger.Always` — `EvaluateTrigger` devuelve
+  `true` cuando `Count == 0`.
+
+O sea que es plenamente simulable. Bloquear ahí habría sido inventar un requisito que el producto no
+tiene, que es la misma falla que este WI vino a sacar. Lo que sí bloquea es una condición **sin
+campo**, porque ésa el motor no la puede honrar y el servidor la rechaza.
+
+### El arreglo
+
+La condición dejó de mirar el **estado de los controles** y mira la **definición**: `getRawValue()`,
+que incluye los deshabilitados. Un rule guardado está completo por construcción — ya pasó la
+validación cuando se guardó.
+
+### ★ El mismo acoplamiento, una tercera vez
+
+Un test de la iteración anterior ponía `cap.amount = -5` con la sección del cap **apagada** y
+esperaba bloqueo. Pero con `hasCap` en false ese valor ni se envía (`cap: hasCap ? {...} : null`):
+estaba bloqueando un cálculo del que no participa. Se corrigió **el test**, no el comportamiento.
+
+### ★ Una guarda que no es obvia
+
+`Number('')` y `Number(null)` son **0**. Sin un chequeo explícito de vacío, un campo que el usuario
+acaba de borrar se simularía como un cero perfectamente válido. Hay un test que además fija lo
+contrario: un cero **real** sí es un cap legítimo.
+
+### Verificación
+
+Build de producción limpio. **Front 1136 → 1142** (+6).
+
+Se **reintrodujo el bug a propósito** —volver a `form.valid`— para comprobar que la suite lo caza:
+1 rojo, restaurado, 1142 en verde.
+
+### Fuera de alcance
+
+Endpoint, motor y validación de backend: sin tocar.
+
+## 2026-08-27 — El simulador entra en la card, y el bloqueo dice qué falta
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · solo presentación + i18n
+
+### ★ La corrección al feedback de diseño
+
+La revisión proponía `border-t border-gray-800`, `text-gray-500`, `px-5 pb-5`. La intención era
+correcta; los valores no: `gray-800` y `gray-500` son colores del tema **oscuro** clavados. En LIGHT
+el separador desaparece y el rótulo queda ilegible.
+
+Todo se hizo con tokens — `--color-border-subtle`, `--color-text-tertiary`, `--space-3/4`,
+`--font-size-11` — que resuelven en los tres temas, y por eso el bloque no necesita ni una regla por
+tema.
+
+### ★★ La geometría se hereda, no se inventa
+
+El simulador es la **última fila de la card**, no un bloque anexado: mismo
+`padding: var(--space-3) var(--space-4)` y mismo `border-top` que `.preview-section` ya aplica a
+todas las demás filas. Con márgenes y borde propios se leía como una segunda tarjeta a medio pegar,
+con el encabezado cortado por el borde de la primera.
+
+El label usa **`.preview-label`** — la clase misma de sus hermanas, no una equivalente. Eso obligó a
+renderizarlo a mano en vez de dejar que `ws-input` pintara el suyo, que es justo el punto: así la
+fila se lee como una fila de la card y no como un formulario metido dentro de un resumen.
+
+### ★★ El estado bloqueado ya no es vago
+
+Decía *"termine de configurar la regla"* frente a un formulario con seis secciones. Es la misma
+inutilidad que un "no lo encontré": cierto, y obliga a la persona a rehacer la búsqueda que el
+software ya hizo.
+
+Ahora **nombra el campo**. `simBlockedFieldKey` recorre el árbol del formulario en orden de
+**declaración** — que es el orden de lectura de la pantalla — y devuelve el primero inválido,
+resuelto a **las claves de label que el propio formulario ya usa**:
+
+| ventaja | por qué |
+|---|---|
+| mismas palabras | el mensaje nombra el campo con el texto impreso encima de él |
+| tres idiomas gratis | esas claves ya estaban traducidas |
+| sobrevive un rename | si el campo cambia de nombre, el mensaje se lo lleva |
+| nada que sincronizar | sale de la validez de Angular, no de una lista escrita a mano |
+
+Y dos estados que antes compartían tratamiento quedaron separados:
+
+- **`--blocked`** — el usuario no terminó. Callado, bajo una caja que ya dice que no está lista.
+- **`--refused`** — el SERVIDOR se niega (attainment sin contexto de cuota). Nada que el usuario
+  escriba en esa caja lo arregla, así que lleva el peso que el otro deliberadamente no tiene.
+
+El input se deshabilita con el tratamiento del propio `ws-input` (opacidad, cursor, pointer-events),
+no con uno improvisado, y el icono `info` ya existía en el set compartido — no hizo falta añadir
+ningún glifo ni variable al design system.
+
+### ★ Por qué hizo falta un spec de DOM
+
+El spec hermano **sobrescribe el template**, así que todos sus asserts son sobre signals. Suficiente
+para la lógica de peticiones, inútil acá: si `[disabled]` no llegara al input, compilaría, renderizaría
+y no reportaría nada — el mismo modo de fallo del `(clicked)` muerto de la lista del asistente.
+
+Se agregó `rule-simulator-dom.spec.ts` con el template real, y **se verificó que tiene dientes**:
+neutralizando el binding a propósito se ponen rojos exactamente esos 2.
+
+Nota que costó una corrida: **`NgModel` aplica `disabled` en un microtask**, así que un
+`detectChanges()` síncrono no lo ve. El primer intento dio rojo por eso y no por el código — la
+diferencia entre probar el binding y probar el planificador.
+
+### Verificación
+
+Build de producción limpio. **Front 1127 → 1136** (+9).
+
+### Fuera de alcance
+
+Endpoint, validación, motor y el desglose de resultados: sin tocar.
+
+## 2026-08-27 — Simulador de comisión en Live Preview (WI 2/2)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend + front · sin migración
+
+### El caso
+
+`Flat 5% + modifier ×1,2 + cap 10.000 + floor 100` no se calcula de cabeza. Hasta hoy la única
+forma de saber qué paga esa regla era esperar a que se procesara una transacción real.
+
+### ★★ Por definición, no por id
+
+Live Preview es un espejo del **formulario**, no de la base, y ese formulario sirve para crear y para
+editar. Simular por id habría dado:
+
+- **creando** — no hay id, la card queda muerta;
+- **editando** — el "5 %" recién tipeado al lado de una cifra calculada con el 5 % viejo. Dos números
+  contradictorios en la misma tarjeta, que es exactamente la pérdida de confianza que la card existe
+  para evitar.
+
+Por eso el endpoint recibe la definición completa. Y por eso el front tiene **un solo**
+`_buildDefinition`, compartido con el guardado: si el simulador armara su propio payload, la vista
+previa terminaría describiendo un rule ligeramente distinto del que se guarda, y **las dos peticiones
+seguirían dando 200**.
+
+### ★★ La UI no arma la cascada
+
+Los pasos se pintan tal como los emitió el motor, en su orden. Reconstruirlos desde los campos del
+formulario sería **suponer un orden de operaciones**, y el real aplica el floor DESPUÉS del cap: el
+total saldría bien y la narración mal. Un usuario que aprende de ahí se lleva un modelo del producto
+que no coincide con lo que le paga.
+
+### ★★ Attainment se rechaza, no se adivina
+
+El default del motor es `1.0`. "Simular igual" no fallaría ruidosamente: devolvería la comisión de un
+vendedor **al 100 % de cuota** presentada como la de cualquiera — una cifra que parece perfectamente
+razonable y es falsa para casi todos.
+
+El endpoint responde con un **código** (`AttainmentContextRequired`, `SplitQuotaContextRequired`),
+nunca con prosa: la razón se muestra en tres idiomas y un motor que emite texto hay que
+redesplegarlo para corregir una traducción.
+
+### Validación: las mismas tres capas que al guardar
+
+| capa | qué |
+|---|---|
+| FluentValidation | espejo de `AddRuleToPlanCommandValidator` + los inputs propios de la simulación |
+| handler | la guarda de `CapScope.PerTransaction` |
+| **dominio** | el rule se construye llamando a **`Plan.AddRule`** sobre un plan de usar y tirar |
+
+La tercera es la que importa: no es una reimplementación de las reglas, es *la misma llamada*. Lo que
+el sistema rechazaría al guardar se rechaza acá, y no hay una segunda copia que pueda desincronizarse.
+
+### ★ El bug que habría llegado a runtime
+
+`Program.cs:69` registra un `JsonStringEnumConverter`: la API manda los enums como **nombres**. Los
+enums numéricos que declaré en TypeScript habrían comparado `false` contra todo — para siempre, sin
+error ni warning, simplemente pintando las filas equivocadas del desglose.
+
+**El test de front no lo veía**, porque yo mismo fabricaba los fixtures con números. Lo cazó el test
+de integración contra el endpoint real. Pasados a string enums.
+
+### Verificación
+
+Build 0 errores. **Unit 1647 → 1662**, **integración 807 → 815** (Docker levantado), **front
+1116 → 1127**. Producción limpia.
+
+Una corrida de integración dio 1068 rojas con el total inflado a 1322: contención de contenedores, el
+mismo síntoma ya visto en esta sesión. La corrida limpia posterior dio 815/0.
+
+### Fuera de alcance
+
+Simular un plan completo (varios rules, cuotas, clawback); guardar o compartir simulaciones;
+persistir la traza.
+
+## 2026-08-27 — El motor de cálculo aprende a explicarse (WI 1/2: traza de pasos)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend, refactor puro · sin migración, sin UI
+
+### Por qué esto no era un costo del simulador
+
+El diagnóstico previo dejó establecido que el motor hace esto:
+
+```csharp
+commissionAmount = ComputeCommission(...);
+commissionAmount = ApplyModifier(commissionAmount, ...);
+commissionAmount = ApplyCap(commissionAmount, ...);
+commissionAmount = ApplyFloor(commissionAmount, ...);
+```
+
+Una variable reasignada tres veces. Los intermedios no existían en ningún lado, y
+`RuleSnapshot.Freeze` congela la **definición** del rule, no el cómputo.
+
+Sin ningún simulador de por medio: **cuando alguien preguntaba por qué cobró 100 y no 72, no había
+con qué responder.** Había que reconstruirlo leyendo la configuración a mano. Un pago calculado que
+no se puede explicar no es auditable.
+
+### ★★ Cómo se probó que no se movió un céntimo
+
+La prueba no podía ser "la suite sigue verde": una suite queda verde por construcción si también se
+editan sus expectativas.
+
+Así que el orden fue: **primero** `CommissionEngineCharacterizationTests` — 20 casos sobre flat,
+tiered, attainment, split-at-quota, units, cap, floor y monedas cruzadas — corrido **contra el motor
+sin tocar**. Cada importe de ese archivo salió de esa corrida verde; ninguno se calculó a mano.
+
+Después el refactor. Los 20 volvieron a pasar **sin editar un solo valor esperado**.
+
+Y para comprobar que los tests nuevos tienen dientes, se invirtieron cap y floor a propósito: **2
+rojos**. Restaurado.
+
+### El diseño
+
+| decisión | por qué |
+|---|---|
+| **Un solo `Evaluate`** | La cascada vivía inline en el allocator. Un segundo motor "para previsualizar" es el que la gente mira y el que se desincroniza. |
+| **El orden es el del motor** | trigger → base → tarifa → modifier → cap → **floor**. Un floor por encima del cap gana. Quien reconstruya la cascada leyendo los campos pondría el floor antes y daría otro número. |
+| **Traza opcional** | Producción pasa `trace: null`. Cada emisión es `trace?.Add(...)` y C# **no evalúa el argumento** de una llamada null-condicional: un pay-run masivo no construye un solo paso. |
+| **Cuatro estados** | `NotConfigured` / `AppliedWithoutEffect` / `Skipped` / `Applied`. Los tres primeros pueden dar el mismo importe; para quien audita son respuestas distintas. |
+| **`CreditGenerated` se transporta** | Trigger que no matchea = **no hay crédito**. No es un crédito en cero, y decirle a alguien lo segundo cuando pasó lo primero lo manda a discutir una tarifa cuando el problema es que su deal no calificaba. |
+
+### ★★ Lo que apareció y el WI no pedía: `AttainmentSource`
+
+El motor inicializa el cumplimiento en `1.0m`. Un llamador que no aporta contexto de cuota **no
+recibe cero ni un error**: recibe los números de un vendedor al 100 % de cuota. Parecen
+completamente razonables y son falsos para casi todo el mundo.
+
+El importe no se tocó — cambiarlo cambiaría pagos. Lo que cambió es que ese `1.0` **ya no viaja de
+incógnito**: el paso queda estampado `Measured`, `Supplied` o `Defaulted`. Tres estados, no un
+booleano, porque "lo midió el pay-run", "lo asumió el simulador" y "no lo puso nadie" son tres cosas
+distintas y sólo la primera es un hecho sobre alguien.
+
+### 3.7 — El acceso desde Application
+
+`CommissionCalculator` es `internal static` de Infrastructure. Tres opciones:
+
+1. Hacerlo público — ensancha la superficie del núcleo de cálculo a toda la solución, por un llamador.
+2. Moverlo — cambio grande sobre el archivo que calcula sueldos.
+3. **Interfaz en Application, implementación al lado del motor.** ← elegida
+
+`IRuleCalculationExplainer` + `RuleCalculationExplainer`, scoped. La visibilidad del motor no cambia
+y Application depende de un contrato, no de Infrastructure.
+
+### Verificación
+
+Build 0 errores. **Unit 1614 → 1647** (+20 caracterización, +13 de traza). **Integración 807 → 807**,
+sin cambios, con Docker y un pay-run completo contra la base real.
+
+### Fuera de alcance (detectado, NO construido)
+
+- **Persistir la traza** junto al crédito: migración, volumen, retención. Es lo que cierra la deuda
+  de auditoría de verdad, y es decisión de Rodolfo.
+- Cualquier endpoint o UI (eso es el WI 2/2).
+
 ## 2026-08-26 — "500% flat": la tarifa por unidad como porcentaje, y una división inventada
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · front + backend + prompt

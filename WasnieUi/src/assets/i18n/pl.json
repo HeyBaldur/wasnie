@@ -684,7 +684,24 @@
     "CLAWBACK_SAVED": "Zasady clawbacku zapisane.",
     "CLAWBACK_SAVE_ERROR": "Nie udało się zapisać zasad clawbacku.",
     "MATURATION_DAYS_INVALID": "Podaj liczbę dni większą od zera.",
-    "CAP_PERCENT_INVALID": "Podaj wartość procentową od 0 do 100."
+    "CAP_PERCENT_INVALID": "Podaj wartość procentową od 0 do 100.",
+    "SIM_TITLE": "Symulator prowizji",
+    "SIM_INPUT_AMOUNT": "Hipotetyczna kwota transakcji",
+    "SIM_INPUT_UNITS": "Hipotetyczna ilość",
+    "SIM_UNITS_SUFFIX": "jednostek",
+    "SIM_RESULT": "Ta reguła wypłaciłaby",
+    "SIM_LOADING": "Obliczanie…",
+    "SIM_TRIGGER_NOT_MATCHED": "Wyzwalacz nie pasuje do tej transakcji, więc ta reguła nie wygenerowałaby żadnej prowizji. To co innego niż prowizja zerowa.",
+    "SIM_BLOCKED_ATTAINMENT": "Ta reguła płaci według realizacji celu, więc jej prowizja zależy od tego, jaką część celu osiągnął handlowiec. Bez tej wartości każda liczba tutaj opisywałaby konkretnego handlowca, a nie tę regułę.",
+    "SIM_BLOCKED_SPLIT_QUOTA": "Ta reguła dzieli się na granicy celu, więc jej prowizja zależy od wartości celu i od przychodu już zaksięgowanego w okresie. Bez obu tych danych liczba tutaj nic by nie znaczyła.",
+    "SIM_STEP_BASE": "Kwota transakcji",
+    "SIM_STEP_RATE": "Stawka",
+    "SIM_STEP_NOT_SET": "nieustawione",
+    "SIM_STEP_NO_EFFECT": "bez efektu",
+    "SIM_STEP_SKIPPED": "pominięte",
+    "SIM_SCOPE_NOTICE": "To jest sama ta reguła, na samej tej transakcji. Rzeczywista wypłata może łączyć kilka reguł, realizację celu i clawback, więc kwota na zestawieniu może się różnić.",
+    "SIM_FORM_INCOMPLETE_FIELD": "Nie można jeszcze symulować — {{field}} jest niekompletne lub nieprawidłowe.",
+    "SIM_FORM_INCOMPLETE_GENERIC": "Dokończ konfigurację reguły, aby ją zasymulować."
   },
   "PAYEES": {
     "TITLE": "Beneficjenci",
@@ -765,6 +782,9 @@
     "UNITS": "szt."
   },
   "DASHBOARD": {
+    "GREETING_MORNING": "Dzień dobry{{name}}",
+    "GREETING_AFTERNOON": "Dzień dobry{{name}}",
+    "GREETING_EVENING": "Dobry wieczór{{name}}",
     "GAUGES_TITLE": "Realizacja Kwot",
     "TREND_TITLE": "Trend Sprzedaży (12 miesięcy)",
     "TREND_EMPTY": "Brak historii sprzedaży dla tego beneficjenta.",

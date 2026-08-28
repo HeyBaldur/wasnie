@@ -293,6 +293,21 @@ public sealed class AssistantToolRunner(
         "commission came out the way it did. Questions about the user's OWN plan count even when no " +
         "plan is named — call the plan tool without a name and it will ask which one.\n" +
         "\n" +
+        "★★ A NUMBER IN THE MESSAGE CHANGES WHICH PLAN TOOL YOU WANT. If the user puts an " +
+        "AMOUNT or a QUANTITY to you — \"I have a transaction of 7,850 with 5 units\", \"how much " +
+        "does each rule generate\", \"what would this pay\", \"if I sell X\", \"simulate\" — call " +
+        "the SIMULATION tool, not the plan-rules lookup. It runs the real engine and ALSO returns how " +
+        "each rule is configured, so it answers both halves of \"how is it set up and what would it " +
+        "pay\".\n" +
+        "\n" +
+        "★ AND THIS IS THE PAIR THAT ACTUALLY COLLIDES. \"How is this plan configured\", \"what " +
+        "rules does it have\", \"what is the rate\" are CONFIGURATION: the plan-rules lookup. " +
+        "\"How much would it pay on 7,850\", \"what does rule 2 generate for 5 units\" are a " +
+        "CALCULATION: the simulation tool. \"Why did my commission come out that way\" is " +
+        "configuration UNLESS the user supplies the figures, and then it is simulation. When a number " +
+        "is present, prefer simulation — you only get ONE tool call per turn, and the simulation " +
+        "carries the configuration while the configuration carries no arithmetic.\n" +
+        "\n" +
         "★ A QUESTION ABOUT A PERSON IS NOT A QUESTION ABOUT A PLAN, and the two have DIFFERENT tools. " +
         "\"What plans is Ana on\", \"which plan is she assigned to\", \"does he have a plan\", \"since " +
         "when is she on it\" are about a PAYEE's assignments: call the payee-plans tool with the payee. " +

@@ -5,6 +5,7 @@ import {
   FormArray,
   FormBuilder,
   FormGroup,
+  FormsModule,
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
@@ -13,6 +14,7 @@ import { distinctUntilChanged } from 'rxjs';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
+import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { TranslateModule, TranslatePipe } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -30,10 +32,14 @@ import {
   ModifierType,
   RateTableType,
 } from '../models/rule.model';
-import { AddRuleRequest, TriggerField, UpdateRuleRequest } from '../models/rule.model';
+import {
+  AddRuleRequest, AttainmentSource, RuleCalculationComponent, RuleCalculationOutcome,
+  RuleSimulation, RuleSimulationBlocker, SimulateRuleRequest, TriggerField, UpdateRuleRequest,
+} from '../models/rule.model';
 import {
   WsPageHeaderComponent,
   WsButtonComponent,
+  WsBadgeComponent,
   WsInputComponent,
   WsSelectComponent,
   WsCategoryPickerComponent,
@@ -53,8 +59,11 @@ import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.dir
     TranslatePipe,
     DecimalPipe,
     LowerCasePipe,
+    FormsModule,
+    CurrencyFormatPipe,
     WsPageHeaderComponent,
     WsButtonComponent,
+    WsBadgeComponent,
     WsInputComponent,
     WsSelectComponent,
     WsCategoryPickerComponent,
@@ -383,6 +392,208 @@ export class RuleFormComponent implements OnInit {
     }
   });
 
+  // ══ ★★ The simulator ═══════════════════════════════════════════════════
+  //
+  // A rule like "Flat 5% + modifier x1.2 + cap 10,000 + floor 100" cannot be worked out in anybody's
+  // head, and until now the only way to learn what it pays was to wait for a real transaction to be
+  // processed.
+  //
+  // ★★ THE CASCADE IS NEVER ASSEMBLED HERE. The steps are painted exactly as the server sent
+  // them, in the server's order. Building "base -> modifier -> floor" from the form's own fields
+  // would mean ASSUMING an order of operations, and the engine's real one puts the floor AFTER the
+  // cap - so the total would come out right while the story came out wrong, and the reader would
+  // learn a model of the product that does not match what pays them.
+
+  readonly simInput = signal<number | null>(null);
+  readonly simulation = signal<RuleSimulation | null>(null);
+  readonly simLoading = signal(false);
+  readonly simErrorKey = signal<string | null>(null);
+
+  /** Bumped on every send; a response whose ticket is stale is dropped. */
+  private simSeq = 0;
+  private simTimer: ReturnType<typeof setTimeout> | null = null;
+
+  readonly RuleSimulationBlocker = RuleSimulationBlocker;
+  readonly RuleCalculationComponent = RuleCalculationComponent;
+  readonly RuleCalculationOutcome = RuleCalculationOutcome;
+  readonly AttainmentSource = AttainmentSource;
+
+  readonly planCurrency = computed(() => this.store.selectedPlan()?.currency ?? 'USD');
+
+  /**
+   * ★★ IT ASKS THE DEFINITION, NOT THE FORM CONTROLS — AND THAT WAS THE BUG.
+   *
+   * This used to be `form.valid`, which is wrong in a way that only shows up on the screen where the
+   * simulator matters most. A rule belonging to an active plan is read-only, so the component calls
+   * `form.disable()` (see the load block below); a disabled FormGroup has status DISABLED, and
+   * `valid` is `status === VALID`, so **`form.valid` is false for every read-only rule** no matter
+   * how complete it is. The one place you cannot edit a rule to find out what it pays was the one
+   * place the calculator refused to run.
+   *
+   * ★ AND IT WAS STUCK TWICE OVER. That `disable()` passes `{ emitEvent: false }`, so `valueChanges`
+   * never fires — the signal this computed reads would not even have re-evaluated. Depending on
+   * `readOnly()` as well is what makes it recompute when the form is locked.
+   *
+   * What the simulator actually needs is a definition the engine can compute, which a saved rule has
+   * by construction: it already passed validation when it was stored. So the check reads
+   * `getRawValue()` — which includes disabled controls — and asks whether the numbers are there.
+   */
+  readonly simBlockedFieldKey = computed<string | null>(() => {
+    this.formValue();
+    this.readOnly();
+    return this.missingDefinitionFieldKey();
+  });
+
+  readonly canSimulate = computed(() => this.simBlockedFieldKey() === null);
+
+  /**
+   * The first thing missing from the definition, named with the form's own label key — or null when
+   * there is nothing missing.
+   *
+   * ★ CHECKED IN FORM ORDER, which is the reading order of the screen, so the message sends the user
+   * to the first gap rather than to whichever one an object walk happened to reach first.
+   *
+   * ★ AND ONLY WHAT THE ENGINE NEEDS. A trigger switched on with zero conditions is NOT missing
+   * anything: the domain treats an empty condition list as `Trigger.Always`, so it matches every
+   * transaction and simulates fine. Blocking on it would be inventing a requirement the product does
+   * not have — which is the same false block this work item exists to remove.
+   */
+  private missingDefinitionFieldKey(): string | null {
+    const v = this.form.getRawValue();
+
+    if (!String(v.name ?? '').trim()) return 'PLANS.FIELD_RULE_NAME';
+
+    if (!isFiniteValue(v.measurement?.type)) return 'PLANS.FIELD_MEASUREMENT_TYPE';
+
+    const rateTableKey = this.missingRateTableKey(v);
+    if (rateTableKey) return rateTableKey;
+
+    // Each condition needs a field the engine knows; an empty one is rejected server-side too.
+    if (v.hasTrigger && v.trigger.conditions.some((c) => !String(c['field'] ?? '').trim())) {
+      return 'PLANS.RULE_SECTION_TRIGGER';
+    }
+
+    if (v.hasModifier && !isFiniteValue(v.modifier?.factor)) return 'PLANS.RULE_SECTION_MODIFIER';
+
+    if (v.hasCap && !isNonNegative(v.cap?.amount)) return 'PLANS.FIELD_CAP_AMOUNT';
+    if (v.hasFloor && !isNonNegative(v.floor?.amount)) return 'PLANS.FIELD_FLOOR_AMOUNT';
+
+    return null;
+  }
+
+  private missingRateTableKey(v: ReturnType<typeof this.form.getRawValue>): string | null {
+    switch (Number(v.rateTable?.type)) {
+      case RateTableType.Flat:
+        return isFiniteValue(v.rateTable.flatRate)
+          ? null
+          : (this.isUnitsMode() ? 'PLANS.FIELD_FLAT_RATE_PER_UNIT' : 'PLANS.FIELD_FLAT_RATE');
+
+      case RateTableType.Tiered: {
+        const tiers = v.rateTable.tiers ?? [];
+        const complete = tiers.length > 0 && tiers.every(
+          (t) => isFiniteValue(t['from']) && isFiniteValue(t['rate']));
+        return complete ? null : 'PLANS.RULE_SECTION_RATE_TABLE';
+      }
+
+      case RateTableType.AttainmentBased: {
+        const tiers = v.rateTable.attainmentTiers ?? [];
+        const complete = tiers.length > 0 && tiers.every(
+          (t) => isFiniteValue(t['attainmentFrom']) && isFiniteValue(t['rate']));
+        return complete ? null : 'PLANS.RULE_SECTION_RATE_TABLE';
+      }
+
+      default:
+        return 'PLANS.RULE_SECTION_RATE_TABLE';
+    }
+  }
+
+  /**
+   * ★ THE ENGINE NAMES THE COMPONENT, THIS NAMES IT IN THE READER'S LANGUAGE. The server sends a
+   * code, never a sentence — an engine that emitted display text would have to be redeployed to fix
+   * a translation.
+   */
+  stepLabelKey(component: RuleCalculationComponent): string {
+    switch (component) {
+      case RuleCalculationComponent.Base:     return 'PLANS.SIM_STEP_BASE';
+      case RuleCalculationComponent.Rate:     return 'PLANS.SIM_STEP_RATE';
+      case RuleCalculationComponent.Modifier: return 'PLANS.RULE_SECTION_MODIFIER';
+      case RuleCalculationComponent.Cap:      return 'PLANS.RULE_SECTION_CAP';
+      case RuleCalculationComponent.Floor:    return 'PLANS.RULE_SECTION_FLOOR';
+      default:                                return 'PLANS.RULE_SECTION_TRIGGER';
+    }
+  }
+
+  onSimInput(raw: string | number | null): void {
+    const value = raw === null || raw === '' ? null : Number(raw);
+    this.simInput.set(Number.isNaN(value as number) ? null : value);
+    this.scheduleSimulation();
+  }
+
+  /**
+   * ★ DEBOUNCED, AND THE PREVIOUS ANSWER IS CLEARED THE MOMENT THE INPUT CHANGES. Leaving the old
+   * figure on screen while a new one is in flight shows a commission for an amount nobody typed.
+   */
+  scheduleSimulation(): void {
+    if (this.simTimer) clearTimeout(this.simTimer);
+    this.simulation.set(null);
+    this.simErrorKey.set(null);
+
+    const amount = this.simInput();
+    if (amount === null || amount < 0 || !this.canSimulate()) {
+      this.simLoading.set(false);
+      return;
+    }
+
+    this.simLoading.set(true);
+    this.simTimer = setTimeout(() => this.runSimulation(), 300);
+  }
+
+  retrySimulation(): void {
+    this.simErrorKey.set(null);
+    this.scheduleSimulation();
+  }
+
+  private runSimulation(): void {
+    const amount = this.simInput();
+    if (amount === null) return;
+
+    const v = this.form.getRawValue();
+    const units = this.isUnitsMode();
+
+    // ★ THE DEFINITION ON THE FORM RIGHT NOW, through the same builder the save uses. What gets
+    // simulated is what is on screen - never a version still sitting in the database.
+    const request: SimulateRuleRequest = {
+      ...this._buildDefinition(v, this.planCurrency()),
+      // Units measures a COUNT, so the typed number is the quantity and the money is the rule's own
+      // per-unit rate; the base amount is then irrelevant and goes as zero rather than as a figure
+      // the reader might mistake for a price.
+      amount: units ? 0 : amount,
+      quantity: units ? Math.max(1, Math.trunc(amount)) : 1,
+    };
+
+    const ticket = ++this.simSeq;
+
+    this.plansApi
+      .simulateRule(this.planId, request)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          // ★ A LATE ANSWER TO AN OLD QUESTION IS DISCARDED. Without this, a slow request for 1,200
+          // can land after a fast one for 5,000 and leave a commission that belongs to neither.
+          if (ticket !== this.simSeq) return;
+          this.simulation.set(result);
+          this.simLoading.set(false);
+        },
+        error: (err) => {
+          if (ticket !== this.simSeq) return;
+          // Never leave a stale figure standing next to a failure.
+          this.simulation.set(null);
+          this.simErrorKey.set(extractApiError(err));
+          this.simLoading.set(false);
+        },
+      });
+  }
+
   readonly hasTrigger = computed(() => !!this.formValue()?.hasTrigger);
   readonly hasModifier = computed(() => !!this.formValue()?.hasModifier);
   readonly hasCap = computed(() => !!this.formValue()?.hasCap);
@@ -655,24 +866,7 @@ export class RuleFormComponent implements OnInit {
       const v = this.form.getRawValue();
       const currency = this.store.selectedPlan()?.currency ?? 'USD';
 
-      const request: AddRuleRequest = {
-        planId: this.planId,
-        name: v.name,
-        sortOrder: v.sortOrder,
-        measurement: {
-          _schema: 1,
-          type: Number(v.measurement.type),
-          sourceField: v.measurement.sourceField,
-          aggregation: Number(v.measurement.aggregation),
-        },
-        rateTable: this._buildRateTable(v),
-        trigger: v.hasTrigger ? this._buildTrigger(v) : null,
-        modifier: v.hasModifier ? this._buildModifier(v) : null,
-        // Send the enum NAME (not the number) so the backend deserializes by name — this makes
-        // any frontend/backend numeric misalignment of CapScope harmless. See WI CapScope.
-        cap: v.hasCap ? { _schema: 1, amount: { amount: v.cap.amount, currency }, scope: CapScope[Number(v.cap.scope)] as unknown as CapScope } : null,
-        floor: v.hasFloor ? { _schema: 1, amount: { amount: v.floor.amount, currency } } : null,
-      };
+      const request: AddRuleRequest = this._buildDefinition(v, currency);
 
       if (this.isEdit) {
         await this.store.updateRule(this.planId, this.ruleId!, { ...request, ruleId: this.ruleId! } as UpdateRuleRequest);
@@ -687,6 +881,37 @@ export class RuleFormComponent implements OnInit {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  /**
+   * The rule definition as the server expects it.
+   *
+   * ★ ONE BUILDER, TWO CALLERS — saving and simulating. If the simulator assembled its own payload,
+   * the preview would eventually be describing a slightly different rule from the one that gets
+   * stored, and nothing would report the divergence: both requests would succeed.
+   */
+  private _buildDefinition(
+    v: ReturnType<typeof this.form.getRawValue>,
+    currency: string,
+  ): AddRuleRequest {
+    return {
+      planId: this.planId,
+      name: v.name,
+      sortOrder: v.sortOrder,
+      measurement: {
+        _schema: 1,
+        type: Number(v.measurement.type),
+        sourceField: v.measurement.sourceField,
+        aggregation: Number(v.measurement.aggregation),
+      },
+      rateTable: this._buildRateTable(v),
+      trigger: v.hasTrigger ? this._buildTrigger(v) : null,
+      modifier: v.hasModifier ? this._buildModifier(v) : null,
+      // Send the enum NAME (not the number) so the backend deserializes by name — this makes
+      // any frontend/backend numeric misalignment of CapScope harmless. See WI CapScope.
+      cap: v.hasCap ? { _schema: 1, amount: { amount: v.cap.amount, currency }, scope: CapScope[Number(v.cap.scope)] as unknown as CapScope } : null,
+      floor: v.hasFloor ? { _schema: 1, amount: { amount: v.floor.amount, currency } } : null,
+    };
   }
 
   private _buildRateTable(v: ReturnType<typeof this.form.getRawValue>) {
@@ -741,4 +966,17 @@ export class RuleFormComponent implements OnInit {
       trigger: null,
     };
   }
+}
+
+/**
+ * ★ AN EMPTY BOX IS NOT ZERO. `Number('')` is 0 and `Number(null)` is 0, so a plain `Number(x)` would
+ * read a field the user has cleared as a perfectly good zero and simulate over it.
+ */
+function isFiniteValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === '') return false;
+  return Number.isFinite(Number(value));
+}
+
+function isNonNegative(value: unknown): boolean {
+  return isFiniteValue(value) && Number(value) >= 0;
 }

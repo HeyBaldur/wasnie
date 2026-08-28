@@ -684,7 +684,24 @@
     "CLAWBACK_SAVED": "Política de clawback guardada.",
     "CLAWBACK_SAVE_ERROR": "No se pudo guardar la política de clawback.",
     "MATURATION_DAYS_INVALID": "Ingresá una cantidad de días mayor que cero.",
-    "CAP_PERCENT_INVALID": "Ingresá un porcentaje entre 0 y 100."
+    "CAP_PERCENT_INVALID": "Ingresá un porcentaje entre 0 y 100.",
+    "SIM_TITLE": "Simulador de comisión",
+    "SIM_INPUT_AMOUNT": "Importe hipotético de la transacción",
+    "SIM_INPUT_UNITS": "Cantidad hipotética",
+    "SIM_UNITS_SUFFIX": "unidades",
+    "SIM_RESULT": "Esta regla pagaría",
+    "SIM_LOADING": "Calculando…",
+    "SIM_TRIGGER_NOT_MATCHED": "El disparador no coincide con esta transacción, así que esta regla no generaría ninguna comisión. Eso no es lo mismo que una comisión de cero.",
+    "SIM_BLOCKED_ATTAINMENT": "Esta regla paga según el cumplimiento de cuota, así que su comisión depende de cuánta cuota lleva alcanzada el vendedor. Sin ese dato, cualquier cifra aquí describiría a un vendedor concreto y no a esta regla.",
+    "SIM_BLOCKED_SPLIT_QUOTA": "Esta regla se divide en el límite de la cuota, así que su comisión depende del objetivo de cuota y de los ingresos ya registrados en el período. Sin ambos datos, una cifra aquí no significaría nada.",
+    "SIM_STEP_BASE": "Importe de la transacción",
+    "SIM_STEP_RATE": "Tarifa",
+    "SIM_STEP_NOT_SET": "sin configurar",
+    "SIM_STEP_NO_EFFECT": "sin efecto",
+    "SIM_STEP_SKIPPED": "omitido",
+    "SIM_SCOPE_NOTICE": "Esto es esta regla sola, sobre esta transacción sola. Un pago real puede combinar varias reglas, cumplimiento de cuota y clawback, así que el importe del statement puede ser distinto.",
+    "SIM_FORM_INCOMPLETE_FIELD": "Todavía no se puede simular: {{field}} está incompleto o no es válido.",
+    "SIM_FORM_INCOMPLETE_GENERIC": "Termina de configurar la regla para poder simularla."
   },
   "PAYEES": {
     "TITLE": "Beneficiarios",
@@ -765,6 +782,9 @@
     "UNITS": "uds."
   },
   "DASHBOARD": {
+    "GREETING_MORNING": "Buenos días{{name}}",
+    "GREETING_AFTERNOON": "Buenas tardes{{name}}",
+    "GREETING_EVENING": "Buenas noches{{name}}",
     "GAUGES_TITLE": "Cumplimiento de Cuotas",
     "TREND_TITLE": "Tendencia de Ventas (12 meses)",
     "TREND_EMPTY": "Sin historial de ventas para este beneficiario.",

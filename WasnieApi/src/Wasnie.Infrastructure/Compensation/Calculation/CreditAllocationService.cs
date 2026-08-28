@@ -342,63 +342,24 @@ public sealed class CreditAllocationService : ICreditAllocationService
             if (alreadyCredited.Contains((transaction.Id, plan.Id, rule.Id)))
                 continue;
 
-            if (!CommissionCalculator.EvaluateTrigger(rule.Trigger, transaction, _logger))
+            // ★ THE CASCADE MOVED, IT DID NOT CHANGE. Trigger → base → rate → modifier → cap → floor
+            // used to be written out here; it now lives in CommissionCalculator.Evaluate, so the
+            // pay run and anything that explains a pay run run the same code instead of two copies
+            // that agree until they quietly do not.
+            //
+            // ★ NO TRACE IS REQUESTED HERE, ON PURPOSE. `trace: null` (the default) makes every
+            // emission inside Evaluate a no-op that never even builds a step object, so allocating
+            // credits over a large batch costs exactly what it cost before.
+            var evaluation = CommissionCalculator.Evaluate(
+                rule, transaction, plan.Currency, attainmentPct, splitContext, _logger);
+
+            // A trigger that did not match produces no credit at all — not a credit of zero. Same
+            // `continue` as before; it is now a returned fact instead of an inline branch.
+            if (!evaluation.CreditGenerated)
                 continue;
 
-            // Defensive copy: avoid sharing the same Money instance with the tracked
-            // transaction entity, which can confuse EF Core's owned-entity change tracker
-            // and produce a NULL OriginalAmount in the INSERT.
-            var baseAmount = Money.Of(transaction.Amount.Amount, transaction.Amount.Currency);
-
-            Money commissionAmount;
-            if (rule.Measurement.Type == MeasurementType.Units)
-            {
-                // Units: FlatRate is €/unit applied to transaction.Quantity.
-                // Domain validation rejects Units + non-Flat at save time; this guard is a runtime safety net.
-                if (rule.RateTable.Type != RateTableType.Flat)
-                {
-                    _logger.LogError(
-                        "Rule {RuleId}: Units measurement requires Flat rate table (got {RateType}). " +
-                        "Commission set to zero — data integrity issue, check plan configuration.",
-                        rule.Id, rule.RateTable.Type);
-                    commissionAmount = Money.Zero(plan.Currency);
-                }
-                else
-                {
-                    commissionAmount = CommissionCalculator.ComputeUnitsCommission(
-                        transaction.Quantity, rule.RateTable.FlatRate!.Value, plan.Currency);
-                }
-            }
-            else
-            {
-                // Revenue (default) and future measurement types: use transaction.Amount as base.
-                if (rule.RateTable.Type == RateTableType.AttainmentBased && rule.RateTable.SplitAtQuota)
-                {
-                    if (splitContext is null)
-                    {
-                        // Phase 5 guard: no quota configured for this rep → zero commission.
-                        _logger.LogWarning(
-                            "Split-at-quota: no active quota for payee={PayeeId}, plan={PlanId}, date={Date}. " +
-                            "Commission set to zero. Configure a quota to earn commission under this rule.",
-                            transaction.PayeeId, plan.Id, txDate);
-                        commissionAmount = Money.Zero(baseAmount.Currency);
-                    }
-                    else
-                    {
-                        commissionAmount = CommissionCalculator.ComputeAttainmentSplitCommission(
-                            baseAmount, rule.RateTable.AttainmentTiers!,
-                            splitContext.PriorCumulative, splitContext.QuotaTarget);
-                    }
-                }
-                else
-                {
-                    commissionAmount = CommissionCalculator.ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
-                }
-            }
-
-            commissionAmount = CommissionCalculator.ApplyModifier(commissionAmount, baseAmount, rule.Modifier);
-            commissionAmount = CommissionCalculator.ApplyCap(commissionAmount, rule.Cap);
-            commissionAmount = CommissionCalculator.ApplyFloor(commissionAmount, rule.Floor);
+            var baseAmount = evaluation.BaseAmount;
+            var commissionAmount = evaluation.Commission;
 
             // Defensive copy (same reasoning as baseAmount above): ApplyCap/ApplyFloor may return the
             // rule's OWN cap/floor Money instance, which is shared across every capped transaction in

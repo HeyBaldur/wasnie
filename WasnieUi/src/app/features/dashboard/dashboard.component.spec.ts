@@ -1,11 +1,12 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Router, provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { DashboardComponent } from './dashboard.component';
 import { DashboardStore } from './store/dashboard.store';
+import { AuthService } from '../../core/services/auth.service';
 import { DashboardSummary, DashboardTrendBand, DashboardTrendPoint } from './models/dashboard.models';
 
 // ── DashboardComponent helpers ────────────────────────────────────────────────
@@ -974,3 +975,104 @@ function buildMockSummary(
     activityFeed: [],
   };
 }
+
+// ── Greeting header ───────────────────────────────────────────────────────────
+// The Dashboard header greets the person instead of naming the screen. Two things decide what it
+// says: the browser's hour (never the server's — the greeting is about where the user is sitting)
+// and the name, which is NOT on /auth/me and therefore arrives from the profile endpoint.
+
+describe('DashboardComponent greeting', () => {
+  let httpMock: HttpTestingController;
+
+  /** Builds the component with the clock frozen at `hour` local time. */
+  function createAt(hour: number): DashboardComponent {
+    jasmine.clock().install();
+    jasmine.clock().mockDate(new Date(2026, 7, 28, hour, 30, 0));
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        // The shell pulls in stores that read tenantId/isAuthenticated, so the stub answers those too.
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: () => ({ email: 'rudy@acme.test', tenantId: 't1' }),
+            tenantId: () => 't1',
+            isAuthenticated: () => true,
+            getAccessToken: () => null,
+          },
+        },
+      ],
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    return TestBed.createComponent(DashboardComponent).componentInstance;
+  }
+
+  /** Answers the profile GET the constructor fires. Pass '' for a user who never set a name. */
+  function flushProfile(firstName: string): void {
+    const reqs = httpMock.match(r => r.url.endsWith('/profile'));
+    reqs.forEach(r => r.flush({
+      firstName, lastName: '', email: 'rudy@acme.test',
+      hasPendingEmailChange: false, companyName: 'Acme', organizationSlug: 'acme',
+    }));
+  }
+
+  afterEach(() => jasmine.clock().uninstall());
+
+  it('greets with morning before noon', () => {
+    expect(createAt(8).greetingKey()).toBe('DASHBOARD.GREETING_MORNING');
+  });
+
+  it('switches to afternoon exactly at noon', () => {
+    expect(createAt(12).greetingKey()).toBe('DASHBOARD.GREETING_AFTERNOON');
+  });
+
+  it('switches to evening exactly at 18:00', () => {
+    expect(createAt(18).greetingKey()).toBe('DASHBOARD.GREETING_EVENING');
+  });
+
+  it('still greets in the evening just before midnight', () => {
+    expect(createAt(23).greetingKey()).toBe('DASHBOARD.GREETING_EVENING');
+  });
+
+  it('uses the first name from the profile once it arrives', () => {
+    const component = createAt(9);
+    flushProfile('Rudy');
+    expect(component.greetingName()).toBe('Rudy');
+    expect(component.greetingNamePart()).toBe(', Rudy');
+  });
+
+  it('falls back to the capitalised email local part when no name is on file', () => {
+    const component = createAt(9);
+    flushProfile('');
+    expect(component.greetingName()).toBe('Rudy');
+  });
+
+  it('leaves the name clause empty rather than greeting a dangling comma', () => {
+    TestBed.resetTestingModule();
+    jasmine.clock().install();
+    jasmine.clock().mockDate(new Date(2026, 7, 28, 9, 0, 0));
+    TestBed.configureTestingModule({
+      imports: [DashboardComponent, TranslateModule.forRoot()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: () => null,
+            tenantId: () => null,
+            isAuthenticated: () => false,
+            getAccessToken: () => null,
+          },
+        },
+      ],
+    });
+    const component = TestBed.createComponent(DashboardComponent).componentInstance;
+    expect(component.greetingName()).toBe('');
+    expect(component.greetingNamePart()).toBe('');
+  });
+});
