@@ -505,6 +505,167 @@
                 <span class="preview-value">{{ form.get('floor.amount')?.value }}</span>
               </div>
             }
+
+            <!--
+              ★★ THE SIMULATOR. Not a new card: it belongs to Live Preview, separated by one hairline
+              rule, because it answers the same question the rest of the card answers - "what have I
+              just configured?" - only with a number instead of a summary.
+            -->
+            <div class="rule-sim">
+              <!--
+                ★ A HEADING ELEMENT, WHICH IS HOW IT GETS THE DISPLAY FACE. The serif is applied by one
+                global rule on `h1..h4` (styles.scss) rather than a font-family per component, so
+                making this a real heading opts in without a second declaration — and it is a heading
+                in fact, not only in appearance: it titles a section of the card.
+              -->
+              <h4 class="rule-sim__title">{{ 'PLANS.SIM_TITLE' | translate }}</h4>
+
+              <!--
+                ★ THE LABEL USES THE CARD'S OWN CLASS, NOT AN EQUIVALENT ONE. `.preview-label` is what
+                every other row in this card labels itself with; rendering it here rather than letting
+                ws-input print its own label is what keeps this row reading as one of them instead of
+                as a form dropped inside a summary.
+              -->
+              <label class="rule-sim__field" [attr.for]="'rule-sim-amount'">
+                <span class="rule-sim__label-row">
+                  <span class="preview-label">
+                    {{ (isUnitsMode() ? 'PLANS.SIM_INPUT_UNITS' : 'PLANS.SIM_INPUT_AMOUNT') | translate }}
+                  </span>
+                  <!--
+                    ★ THE UNIT IS THE PLAN'S, NOT A CONSTANT. `planCurrency()` reads the loaded plan, so
+                    a USD plan says USD; nothing here hard-codes a currency.
+
+                    ★ AND IT IS THE Ws PRIMITIVE. The sketch this came from used `bg-brand-softer` /
+                    `text-fg-brand-strong`, which are not classes this project defines — they would
+                    have compiled, rendered nothing, and left the badge invisible. `ws-badge`
+                    variant="brand" resolves to the same intent through tokens: `--color-brand-subtle`
+                    on `--color-brand`, in all three themes.
+                  -->
+                  <ws-badge variant="brand" size="sm" data-testid="rule-sim-unit">
+                    {{ isUnitsMode() ? ('PLANS.SIM_UNITS_SUFFIX' | translate) : planCurrency() }}
+                  </ws-badge>
+                </span>
+                <ws-input
+                  inputId="rule-sim-amount"
+                  type="number"
+                  [ngModel]="simInput()"
+                  [ngModelOptions]="{ standalone: true }"
+                  [disabled]="!canSimulate()"
+                  (valueChange)="onSimInput($event)"
+                  data-testid="rule-sim-input"
+                />
+              </label>
+
+              <!--
+                ★ A HALF-WRITTEN RULE PRODUCES NO NUMBER. A commission computed from a configuration
+                the user has not finished describing is not a preview; it is a figure that looks like
+                one.
+              -->
+              @if (!canSimulate()) {
+                <!--
+                  ★★ IT NAMES WHAT IS MISSING. "Finish configuring the rule" left the user in front of
+                  six sections guessing which one it meant — the same uselessness as "I could not find
+                  it". The field comes from the form's own validity, so it follows the reading order of
+                  the screen and corrects itself as things get filled in.
+
+                  The icon marks this as a STATE rather than as the field's description, which is what
+                  a bare sentence under an input reads as.
+                -->
+                <p class="rule-sim__note rule-sim__note--blocked" data-testid="rule-sim-invalid">
+                  <app-icon name="info" [size]="14" class="rule-sim__note-icon" />
+                  <span>
+                    @if (simBlockedFieldKey(); as fieldKey) {
+                      {{ 'PLANS.SIM_FORM_INCOMPLETE_FIELD' | translate: { field: fieldKey | translate } }}
+                    } @else {
+                      {{ 'PLANS.SIM_FORM_INCOMPLETE_GENERIC' | translate }}
+                    }
+                  </span>
+                </p>
+              } @else if (simLoading()) {
+                <p class="rule-sim__note" data-testid="rule-sim-loading">
+                  {{ 'PLANS.SIM_LOADING' | translate }}
+                </p>
+              } @else if (simErrorKey(); as err) {
+                <!-- Visible failure with a retry, and never a stale figure left standing beside it. -->
+                <div class="rule-sim__error" data-testid="rule-sim-error">
+                  <span>{{ err | translate }}</span>
+                  <button type="button" class="rule-sim__retry" (click)="retrySimulation()"
+                          data-testid="rule-sim-retry">
+                    {{ 'COMMON.RETRY' | translate }}
+                  </button>
+                </div>
+              } @else if (simulation(); as sim) {
+                @if (!sim.simulated) {
+                  <!--
+                    ★★ IT EXPLAINS INSTEAD OF ANSWERING. An attainment rule depends on how much of
+                    their quota the rep has reached; the engine's default for that is 100%, so
+                    "simulating anyway" would not fail loudly - it would report one particular rep's
+                    commission as if it were everybody's.
+                  -->
+                  <p class="rule-sim__note rule-sim__note--refused" data-testid="rule-sim-blocked">
+                    {{ (sim.blocker === RuleSimulationBlocker.SplitQuotaContextRequired
+                          ? 'PLANS.SIM_BLOCKED_SPLIT_QUOTA'
+                          : 'PLANS.SIM_BLOCKED_ATTAINMENT') | translate }}
+                  </p>
+                } @else if (!sim.creditGenerated) {
+                  <!-- No credit at all is not a commission of zero, and the card must not blur them. -->
+                  <p class="rule-sim__note" data-testid="rule-sim-no-credit">
+                    {{ 'PLANS.SIM_TRIGGER_NOT_MATCHED' | translate }}
+                  </p>
+                } @else {
+                  <div class="rule-sim__result" data-testid="rule-sim-result">
+                    <span class="rule-sim__result-label">{{ 'PLANS.SIM_RESULT' | translate }}</span>
+                    <span class="rule-sim__result-value">
+                      {{ sim.commissionAmount | currencyFormat: sim.currency }}
+                    </span>
+                  </div>
+
+                  <!--
+                    ★ PAINTED IN THE SERVER'S ORDER, NEVER REORDERED. The engine runs cap BEFORE floor,
+                    so a floor above a cap wins; a client that sorted these "logically" would show a
+                    sequence that does not match what pays.
+                  -->
+                  <ol class="rule-sim__steps" data-testid="rule-sim-steps">
+                    @for (step of sim.steps; track $index) {
+                      @if (step.component !== RuleCalculationComponent.Trigger) {
+                        <li class="rule-sim__step"
+                            [class.rule-sim__step--inert]="step.outcome === RuleCalculationOutcome.NotConfigured
+                                                        || step.outcome === RuleCalculationOutcome.AppliedWithoutEffect
+                                                        || step.outcome === RuleCalculationOutcome.Skipped">
+                          <span class="rule-sim__step-name">
+                            {{ stepLabelKey(step.component) | translate }}
+                            @if (step.outcome === RuleCalculationOutcome.NotConfigured) {
+                              <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_NOT_SET' | translate }}</span>
+                            } @else if (step.outcome === RuleCalculationOutcome.AppliedWithoutEffect) {
+                              <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_NO_EFFECT' | translate }}</span>
+                            } @else if (step.outcome === RuleCalculationOutcome.Skipped) {
+                              <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_SKIPPED' | translate }}</span>
+                            }
+                          </span>
+                          <span class="rule-sim__step-value">
+                            @if (step.outputAmount !== null) {
+                              {{ step.outputAmount | currencyFormat: sim.currency }}
+                            } @else {
+                              —
+                            }
+                          </span>
+                        </li>
+                      }
+                    }
+                  </ol>
+
+                  <!--
+                    ★★ THE SCOPE IS PART OF THE ANSWER. This is one rule against one transaction. A
+                    real payout runs several rules, applies quota context and can carry clawback - so
+                    somebody who reads this as their pay has been misled by a figure that is
+                    individually correct, and the calculator would destroy trust instead of building it.
+                  -->
+                  <p class="rule-sim__scope" data-testid="rule-sim-scope">
+                    {{ 'PLANS.SIM_SCOPE_NOTICE' | translate }}
+                  </p>
+                }
+              }
+            </div>
           </div>
         </aside>
 

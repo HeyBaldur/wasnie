@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Compensation.Calculation;
+using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
@@ -170,7 +171,10 @@ internal static class CommissionCalculator
         };
     }
 
-    internal static Money ComputeTieredCommission(Money baseAmount, IReadOnlyList<RateTier> tiers)
+    internal static Money ComputeTieredCommission(
+        Money baseAmount,
+        IReadOnlyList<RateTier> tiers,
+        List<RateTierStep>? tierTrace = null)
     {
         // Walk tiers: each tier applies its Rate to the portion of baseAmount within [From, To).
         // If the last tier has To == null, it applies to everything above From.
@@ -190,7 +194,12 @@ internal static class CommissionCalculator
 
             if (inTier <= 0) continue;
 
-            total = total.Add(Money.Of(inTier * tier.Rate, baseAmount.Currency));
+            var tierAmount = Money.Of(inTier * tier.Rate, baseAmount.Currency);
+            // Null when nobody asked: `?.Add(expr)` does not evaluate expr, so an unobserved pay run
+            // allocates nothing here.
+            tierTrace?.Add(new RateTierStep(tier.From, tier.To, tier.Rate, inTier, tierAmount));
+
+            total = total.Add(tierAmount);
             remaining -= inTier;
         }
 
@@ -224,7 +233,8 @@ internal static class CommissionCalculator
         Money txAmount,
         IReadOnlyList<AttainmentTier> tiers,
         decimal priorCumulative,
-        decimal quotaTarget)
+        decimal quotaTarget,
+        List<RateTierStep>? tierTrace = null)
     {
         if (quotaTarget <= 0m) return Money.Zero(txAmount.Currency);
 
@@ -244,7 +254,13 @@ internal static class CommissionCalculator
             var overlapEnd = Math.Min(txEnd, tierCeiling);
 
             if (overlapEnd > overlapStart)
-                total += (overlapEnd - overlapStart) * tier.Rate;
+            {
+                var portion = overlapEnd - overlapStart;
+                total += portion * tier.Rate;
+                tierTrace?.Add(new RateTierStep(
+                    tier.AttainmentFrom, tier.AttainmentTo, tier.Rate,
+                    portion, Money.Of(portion * tier.Rate, txAmount.Currency)));
+            }
         }
 
         return Money.Of(total, txAmount.Currency);
@@ -282,4 +298,296 @@ internal static class CommissionCalculator
             return commission; // Currency mismatch on floor — skip floor.
         return commission < floorAmount ? floorAmount : commission;
     }
+
+    // ── The cascade, and the only place it lives ──────────────────────────────
+
+    /// <summary>
+    /// The outcome of running one rule over one transaction.
+    ///
+    /// ★ <c>CreditGenerated</c> IS CARRIED, NOT INFERRED FROM THE AMOUNT. A trigger that does not
+    /// match produces no credit; a rule that matched and computed nothing produces a credit of zero.
+    /// Collapsing those into "the amount is zero" is how a breakdown ends up telling somebody their
+    /// rule paid nothing when in fact it never applied to them.
+    /// </summary>
+    internal readonly record struct RuleEvaluation(bool CreditGenerated, Money BaseAmount, Money Commission);
+
+    /// <summary>
+    /// Runs a rule over a transaction and, optionally, reports how it got there.
+    ///
+    /// ★★ THIS IS THE SEQUENCE THAT USED TO LIVE INLINE IN CreditAllocationService, MOVED HERE
+    /// UNCHANGED. It is one method rather than two so that anything explaining a payout and the pay
+    /// run that produced it can never disagree: a second implementation "just for previews" is two
+    /// financial engines that drift, and the one people look at would be the one that is wrong.
+    ///
+    /// ★ THE ORDER IS THE ENGINE'S, NOT A LOGICAL ONE. Rate, then modifier, then cap, then FLOOR —
+    /// so a floor set above a cap wins and the rule pays more than its own ceiling. Anybody
+    /// reconstructing this cascade from the rule's fields would put the floor before the cap and
+    /// arrive at a different number.
+    ///
+    /// ★ <paramref name="trace"/> IS OPTIONAL AND COSTS NOTHING WHEN NULL. Every emission goes
+    /// through <c>trace?.Add(...)</c>, and C# does not evaluate the argument of a null-conditional
+    /// call — so a pay run over a million transactions allocates no steps nobody will read.
+    /// </summary>
+    /// <param name="attainmentSource">
+    /// ★ Where <paramref name="attainmentPct"/> came from, so the trace can say so. The engine's own
+    /// default for that value is 1.0 — a rep at full quota — which is a number that looks entirely
+    /// reasonable and is false for almost everybody. A breakdown that presents a defaulted figure as
+    /// a measured one is worse than one that refuses to answer, which is why this is three states
+    /// and not a boolean.
+    /// </param>
+    internal static RuleEvaluation Evaluate(
+        Rule rule,
+        CompensationTransaction tx,
+        string planCurrency,
+        decimal attainmentPct,
+        AttainmentSplitContext? splitContext,
+        ILogger? logger = null,
+        List<RuleCalculationStep>? trace = null,
+        AttainmentSource attainmentSource = AttainmentSource.Measured)
+    {
+        // ── 1. Trigger ───────────────────────────────────────────────────────
+        if (!EvaluateTrigger(rule.Trigger, tx, logger))
+        {
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Trigger,
+                Outcome = RuleCalculationOutcome.NotMatched,
+            });
+
+            return new RuleEvaluation(false, Money.Zero(planCurrency), Money.Zero(planCurrency));
+        }
+
+        trace?.Add(new RuleCalculationStep
+        {
+            Component = RuleCalculationComponent.Trigger,
+            Outcome = RuleCalculationOutcome.Applied,
+        });
+
+        // ── 2. Base ──────────────────────────────────────────────────────────
+        // Defensive copy: avoid sharing the same Money instance with the tracked transaction entity,
+        // which can confuse EF Core's owned-entity change tracker and produce a NULL OriginalAmount
+        // in the INSERT.
+        var baseAmount = Money.Of(tx.Amount.Amount, tx.Amount.Currency);
+
+        trace?.Add(new RuleCalculationStep
+        {
+            Component = RuleCalculationComponent.Base,
+            Outcome = RuleCalculationOutcome.Applied,
+            Output = baseAmount,
+        });
+
+        // ── 3. Rate ──────────────────────────────────────────────────────────
+        var commission = ComputeRate(
+            rule, tx, baseAmount, planCurrency, attainmentPct, splitContext,
+            logger, trace, attainmentSource);
+
+        // ── 4/5/6. Modifier, then cap, then floor ────────────────────────────
+        commission = TraceModifier(commission, baseAmount, rule.Modifier, trace);
+        commission = TraceCap(commission, rule.Cap, trace);
+        commission = TraceFloor(commission, rule.Floor, trace);
+
+        return new RuleEvaluation(true, baseAmount, commission);
+    }
+
+    private static Money ComputeRate(
+        Rule rule,
+        CompensationTransaction tx,
+        Money baseAmount,
+        string planCurrency,
+        decimal attainmentPct,
+        AttainmentSplitContext? splitContext,
+        ILogger? logger,
+        List<RuleCalculationStep>? trace,
+        AttainmentSource attainmentSource)
+    {
+        if (rule.Measurement.Type == MeasurementType.Units)
+        {
+            // Units: FlatRate is per-unit money applied to transaction.Quantity.
+            // Domain validation rejects Units + non-Flat at save time; this guard is a runtime safety net.
+            if (rule.RateTable.Type != RateTableType.Flat)
+            {
+                logger?.LogError(
+                    "Rule {RuleId}: Units measurement requires Flat rate table (got {RateType}). " +
+                    "Commission set to zero — data integrity issue, check plan configuration.",
+                    rule.Id, rule.RateTable.Type);
+
+                var zero = Money.Zero(planCurrency);
+                trace?.Add(new RuleCalculationStep
+                {
+                    Component = RuleCalculationComponent.Rate,
+                    Outcome = RuleCalculationOutcome.Skipped,
+                    Input = baseAmount,
+                    Output = zero,
+                    RateTable = rule.RateTable.Type,
+                });
+                return zero;
+            }
+
+            var units = ComputeUnitsCommission(tx.Quantity, rule.RateTable.FlatRate!.Value, planCurrency);
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Rate,
+                Outcome = RuleCalculationOutcome.Applied,
+                Input = baseAmount,
+                Output = units,
+                // For Units the operand people care about is the quantity; the per-unit money sits
+                // in Threshold because it is the rule's own figure rather than the transaction's.
+                Operand = tx.Quantity,
+                Threshold = Money.Of(rule.RateTable.FlatRate!.Value, planCurrency),
+                RateTable = rule.RateTable.Type,
+            });
+            return units;
+        }
+
+        // Revenue (default) and future measurement types: use transaction.Amount as base.
+        if (rule.RateTable.Type == RateTableType.AttainmentBased && rule.RateTable.SplitAtQuota)
+        {
+            if (splitContext is null)
+            {
+                // Phase 5 guard: no quota configured for this rep → zero commission.
+                logger?.LogWarning(
+                    "Split-at-quota: no active quota for payee={PayeeId}, plan={PlanId}, date={Date}. " +
+                    "Commission set to zero. Configure a quota to earn commission under this rule.",
+                    tx.PayeeId, rule.PlanId, tx.TransactionDate);
+
+                var zero = Money.Zero(baseAmount.Currency);
+                trace?.Add(new RuleCalculationStep
+                {
+                    Component = RuleCalculationComponent.Rate,
+                    Outcome = RuleCalculationOutcome.Skipped,
+                    Input = baseAmount,
+                    Output = zero,
+                    RateTable = rule.RateTable.Type,
+                });
+                return zero;
+            }
+
+            List<RateTierStep>? splitTiers = trace is null ? null : new List<RateTierStep>();
+            var split = ComputeAttainmentSplitCommission(
+                baseAmount, rule.RateTable.AttainmentTiers!,
+                splitContext.PriorCumulative, splitContext.QuotaTarget, splitTiers);
+
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Rate,
+                Outcome = RuleCalculationOutcome.Applied,
+                Input = baseAmount,
+                Output = split,
+                RateTable = rule.RateTable.Type,
+                Tiers = splitTiers,
+            });
+            return split;
+        }
+
+        if (rule.RateTable.Type == RateTableType.Tiered)
+        {
+            List<RateTierStep>? walked = trace is null ? null : new List<RateTierStep>();
+            var tiered = ComputeTieredCommission(baseAmount, rule.RateTable.Tiers!, walked);
+
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Rate,
+                Outcome = RuleCalculationOutcome.Applied,
+                Input = baseAmount,
+                Output = tiered,
+                RateTable = rule.RateTable.Type,
+                Tiers = walked,
+            });
+            return tiered;
+        }
+
+        var result = ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
+        trace?.Add(new RuleCalculationStep
+        {
+            Component = RuleCalculationComponent.Rate,
+            Outcome = RuleCalculationOutcome.Applied,
+            Input = baseAmount,
+            Output = result,
+            Operand = rule.RateTable.Type == RateTableType.Flat
+                ? rule.RateTable.FlatRate
+                : attainmentPct,
+            RateTable = rule.RateTable.Type,
+            AttainmentSource = rule.RateTable.Type == RateTableType.AttainmentBased
+                ? attainmentSource
+                : null,
+        });
+        return result;
+    }
+
+    // ── The traced wrappers ──────────────────────────────────────────────────
+    //
+    // ★ THE AMOUNT ALWAYS COMES FROM THE UNTRACED METHOD. These wrappers never re-derive money: they
+    // call ApplyModifier/ApplyCap/ApplyFloor and then classify what happened by reading the
+    // component's own fields — is there a cap at all, what currency is it in, what scope. Money
+    // logic stays in exactly one place, which is the whole point of this work item.
+
+    private static Money TraceModifier(
+        Money commission, Money baseAmount, Modifier? modifier, List<RuleCalculationStep>? trace)
+    {
+        var result = ApplyModifier(commission, baseAmount, modifier);
+        trace?.Add(new RuleCalculationStep
+        {
+            Component = RuleCalculationComponent.Modifier,
+            Outcome = modifier is null
+                ? RuleCalculationOutcome.NotConfigured
+                : Classify(commission, result),
+            Input = commission,
+            Output = result,
+            Operand = modifier?.Factor,
+        });
+        return result;
+    }
+
+    private static Money TraceCap(Money commission, Cap? cap, List<RuleCalculationStep>? trace)
+    {
+        var result = ApplyCap(commission, cap);
+        trace?.Add(new RuleCalculationStep
+        {
+            Component = RuleCalculationComponent.Cap,
+            Outcome = CapOutcome(commission, result, cap),
+            Input = commission,
+            Output = result,
+            Threshold = cap?.Amount,
+        });
+        return result;
+    }
+
+    private static Money TraceFloor(Money commission, Floor? floor, List<RuleCalculationStep>? trace)
+    {
+        var result = ApplyFloor(commission, floor);
+        trace?.Add(new RuleCalculationStep
+        {
+            Component = RuleCalculationComponent.Floor,
+            Outcome = floor is null
+                ? RuleCalculationOutcome.NotConfigured
+                : SameCurrency(commission, floor.Amount)
+                    ? Classify(commission, result)
+                    : RuleCalculationOutcome.Skipped,
+            Input = commission,
+            Output = result,
+            Threshold = floor?.Amount,
+        });
+        return result;
+    }
+
+    private static RuleCalculationOutcome CapOutcome(Money before, Money after, Cap? cap)
+    {
+        if (cap is null) return RuleCalculationOutcome.NotConfigured;
+
+        // A scope this engine does not honour, or a cap in another currency, is not "a cap that did
+        // not bite" — it is a cap that was never consulted, and whoever audits the payout has to be
+        // able to tell those apart.
+        if (cap.Scope != CapScope.PerTransaction) return RuleCalculationOutcome.Skipped;
+        if (!SameCurrency(before, cap.Amount)) return RuleCalculationOutcome.Skipped;
+
+        return Classify(before, after);
+    }
+
+    private static bool SameCurrency(Money a, Money b) =>
+        string.Equals(a.Currency, b.Currency, StringComparison.OrdinalIgnoreCase);
+
+    private static RuleCalculationOutcome Classify(Money before, Money after) =>
+        before.Amount == after.Amount
+            ? RuleCalculationOutcome.AppliedWithoutEffect
+            : RuleCalculationOutcome.Applied;
 }

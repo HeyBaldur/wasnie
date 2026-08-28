@@ -1,0 +1,164 @@
+<app-shell>
+  @if (store.entitled() === false) {
+    <!--
+      Hide, don't disable — and on a ROUTE that means the page has to answer rather than show an empty
+      chat. The topbar trigger simply vanishes for a tenant without the assistant, but a URL can be
+      reached from a bookmark or a link kept from a previous plan, so this says what to do about it.
+    -->
+    <ws-empty-state
+      icon="lock"
+      titleKey="ASSISTANT.LOCKED_TOOLTIP"
+      descKey="ASSISTANT.LOCKED_PAGE_DESC"
+      actionKey="SUBSCRIPTION.UPGRADE_BTN"
+      actionRoute="/subscription"
+      data-testid="assistant-page-locked"
+    />
+  } @else if (notFound()) {
+    <!--
+      The backend answers 404 for a conversation that is not the caller's exactly as for one that never
+      existed — deliberately, so an id cannot be probed for existence. This screen repeats that: one
+      message for both cases, and a way back to a thread that IS theirs.
+    -->
+    <ws-empty-state
+      icon="inbox"
+      titleKey="ASSISTANT.NOT_FOUND_TITLE"
+      descKey="ASSISTANT.NOT_FOUND_DESC"
+      actionKey="ASSISTANT.NEW_CONVERSATION"
+      (actionClick)="startNew()"
+      data-testid="assistant-page-not-found"
+    />
+  } @else {
+    <div class="assistant-page">
+      <!-- ── The conversations column ─────────────────────────────────────── -->
+      <aside class="assistant-page__rail" data-testid="assistant-page-rail">
+        <div class="assistant-page__rail-head">
+          <h1 class="assistant-page__rail-title">{{ 'ASSISTANT.TITLE' | translate }}</h1>
+
+          <ws-button
+            variant="secondary"
+            size="sm"
+            (click)="startNew()"
+            data-testid="assistant-page-new"
+          >
+            {{ 'ASSISTANT.NEW_CONVERSATION' | translate }}
+          </ws-button>
+        </div>
+
+        <div class="assistant-page__rail-list ws-scroll-thin">
+          <!--
+            The same rows the drawer's history dropdown renders — see the list component.
+
+            ★ AND THE SEARCH BOX WENT IN THERE WITH THEM. It used to be the page's own, sitting above
+            this, which is why the DRAWER could not search at all: the box was in one host and the rows
+            were in the shared component. Now the box, the request and the rows are one thing, and both
+            hosts get the same behaviour instead of the page getting a feature the drawer lacks.
+          -->
+          <app-assistant-conversation-list
+            [grouped]="true"
+            (select)="openConversation($event)"
+          />
+        </div>
+      </aside>
+
+      <!-- ── The conversation ─────────────────────────────────────────────── -->
+      <!--
+        The very same component the drawer mounts, reading the very same store. Typing here and then
+        opening the drawer shows one conversation, not two, because there only is one.
+      -->
+      <section class="assistant-page__chat">
+        <!--
+          ★ THE HEADER ANSWERS "WHICH CONVERSATION AM I IN?" without a trip back to the rail, and puts
+          this thread's own actions where the thread is. Only rendered once there IS one: a header over
+          the welcome would name a conversation that has not been started.
+        -->
+        @if (store.conversation(); as active) {
+          <header class="assistant-page__chat-head" data-testid="assistant-page-chat-head">
+            @if (renaming()) {
+              <!--
+                Enter commits, Escape abandons, clicking away abandons too.
+
+                ★ focusout, NOT blur: `blur` does not bubble and ws-input exposes no blur output, so the
+                handler bound here never ran — clicking elsewhere left this box open and orphaned. Same
+                fix, same reason, as the rename in the conversation list.
+              -->
+              <!--
+                ★ [autofocus] IS PART OF THE CANCEL, not a convenience. A box that never held focus can
+                never LOSE it, so `focusout` never fired and clicking elsewhere left this sitting here
+                orphaned — reproduced 2026-08-18. Taking the caret on open is what gives the click-away
+                something to fire on, and it is also what the user expects after pressing Rename.
+              -->
+              <ws-input
+                [autofocus]="true"
+                data-rename-box
+                class="assistant-page__chat-rename"
+                [ngModel]="renameDraft()"
+                (valueChange)="renameDraft.set($event)"
+                (keydown.enter)="commitRename()"
+                (keydown.escape)="cancelRename()"
+                (focusout)="cancelRename()"
+                placeholder="ASSISTANT.RENAME_PLACEHOLDER"
+                data-testid="assistant-page-rename-input"
+              />
+            } @else {
+              <h2 class="assistant-page__chat-title">
+                @if (isUntitled(active.title)) {
+                  {{ 'ASSISTANT.UNTITLED' | translate }}
+                } @else {
+                  {{ active.title }}
+                }
+              </h2>
+            }
+
+            <ws-popover placement="bottom-end">
+              <ws-button
+                slot="trigger"
+                variant="ghost"
+                size="sm"
+                [iconOnly]="true"
+                [title]="'ASSISTANT.CONVERSATION_ACTIONS' | translate"
+                [attr.aria-label]="'ASSISTANT.CONVERSATION_ACTIONS' | translate"
+                data-testid="assistant-page-chat-menu"
+              >
+                <app-icon name="more-vertical" [size]="16" />
+              </ws-button>
+
+              <button
+                type="button"
+                class="assistant-page__menu-item"
+                (click)="startRename($event)"
+                data-testid="assistant-page-rename"
+              >
+                <app-icon name="edit" [size]="14" />
+                {{ 'ASSISTANT.RENAME' | translate }}
+              </button>
+
+              <button
+                type="button"
+                class="assistant-page__menu-item assistant-page__menu-item--danger"
+                (click)="askDelete()"
+                data-testid="assistant-page-delete"
+              >
+                <app-icon name="trash" [size]="14" />
+                {{ 'ASSISTANT.DELETE' | translate }}
+              </button>
+            </ws-popover>
+          </header>
+        }
+
+        <!-- [wide] caps the turns at a reading measure — see the conversation component. -->
+        <app-assistant-conversation [wide]="true" />
+      </section>
+    </div>
+  }
+
+  <ws-confirmation-modal
+    [isOpen]="confirmingDelete()"
+    [title]="'ASSISTANT.DELETE_TITLE' | translate"
+    [message]="'ASSISTANT.DELETE_MESSAGE' | translate"
+    [confirmLabel]="'ASSISTANT.DELETE' | translate"
+    [cancelLabel]="'COMMON.CANCEL' | translate"
+    variant="danger"
+    (confirmed)="confirmDelete()"
+    (cancelled)="confirmingDelete.set(false)"
+  />
+</app-shell>

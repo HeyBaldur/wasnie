@@ -104,6 +104,18 @@
   font-size: var(--font-size-13);
   font-weight: 500;
   color: var(--color-text-primary);
+
+  // ★ 4px, NOT THE 5px THIS WAS EYEBALLED AT IN THE BROWSER. The spacing scale runs
+  // 0 / 4 / 8 / 12 / 16…, so 5 is not a token and inventing one for a one-pixel difference nobody
+  // can see is exactly the literal the design system forbids (DESIGN_SYSTEM §5.5).
+  //
+  // ★ THE BOTTOM MARGIN STACKS, and that is worth knowing before tuning it further: 9 of the 10
+  // labels sit inside `.field-help-label` within `.field-with-help`, which already puts
+  // `gap: var(--space-1)` between the label row and the control. The gap the eye sees is therefore
+  // 4 + 4 = 8px. If 8px is the target, raising that container's gap to `--space-2` gets there with
+  // one value and no stacking — this rule is here because the request pointed at the label.
+  margin-left: var(--space-1);
+  margin-bottom: var(--space-1);
 }
 
 .form-hint {
@@ -429,4 +441,221 @@
 /* When inside the value column, the field-value warning drops its negative offset. */
 .condition-extras__value .condition-warning {
   margin: 0;
+}
+
+// ── ★★ The simulator ─────────────────────────────────────────────────────────
+//
+// ★★ IT IS THE CARD'S LAST ROW, NOT A BLOCK BOLTED UNDERNEATH IT. That is why the geometry here is
+// borrowed rather than invented: the same `padding` and the same `border-top` token that
+// `.preview-section` already uses for every other row. Given its own margins and its own border it
+// read as a second, half-attached card, with its heading clipped by the edge of the first.
+//
+// ★ THE SEPARATOR IS A TOKEN, NOT A GREY. A literal like `border-gray-800` is a dark-theme colour:
+// in LIGHT it disappears entirely and the row loses the only thing that separates it from the
+// summary above. `--color-border-subtle` is the same variable the sibling rows resolve, in all three
+// themes, which is also why this needs no per-theme rule of its own.
+.rule-sim {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+// ★ A TITLE NOW, NOT THE SMALL UPPER-CASE KICKER THIS STARTED AS. The face comes from the global
+// `h1..h4` rule, so there is no font-family here to drift from the rest of the app.
+.rule-sim__title {
+  margin: 0;
+  font-size: var(--font-size-18);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+// The label sits above the box, the way `.preview-section` stacks its label and value.
+.rule-sim__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+// Label and unit share a line: the unit belongs to the field, not to the number typed into it.
+.rule-sim__label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+// ★★ NO SPINNERS. A number box in this design system is a box with a value in it; the browser's own
+// up/down arrows appear on hover, shift the text, and are a second way to change an amount that the
+// rest of the app does not offer.
+//
+// ★ WHY `::ng-deep` AND NOT ws-input ITSELF: the native input lives inside the primitive's own view,
+// so no ordinary selector from here reaches it. Fixing it in `ws-input.component.scss` would remove
+// the spinners from EVERY number field in the product — the flat rate, the cap, the floor, the
+// clawback window — which is a design-system decision, not something to slip in inside a feature
+// (CLAUDE.md §7). Reported rather than done.
+.rule-sim__field ::ng-deep input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+// Quiet by design: a state line, not an alert. The card's job here is to say why there is no number,
+// and a loud treatment would read as something having gone wrong when usually nothing has.
+.rule-sim__note {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+
+  // ★ THE TWO SILENT STATES ARE NOT THE SAME STATE, so they do not share a treatment.
+  //
+  // `--blocked` is "you have not finished the rule": the user's own next step, quiet, sitting under
+  // a disabled box that already says it is not ready.
+  &--blocked {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    color: var(--color-text-secondary);
+  }
+
+  // `--refused` is the SERVER declining to answer — an attainment rule whose quota context nobody
+  // supplied. Nothing the user can type into this box fixes it, so it gets the weight the other one
+  // deliberately does not.
+  &--refused {
+    color: var(--color-text-secondary);
+    padding: var(--space-2) var(--space-3);
+    border-left: 2px solid var(--color-warning);
+    background: var(--color-bg-surface-sunken);
+    border-radius: var(--radius-sm);
+  }
+}
+
+// Aligned to the first line of text rather than centred on the block: a two-line message with a
+// vertically centred icon reads as a bullet that drifted.
+.rule-sim__note-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--color-text-tertiary);
+}
+
+.rule-sim__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+
+  font-size: var(--font-size-12);
+  color: var(--color-text-primary);
+}
+
+.rule-sim__retry {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-text-link);
+
+  &:hover { color: var(--color-text-link-hover); }
+}
+
+.rule-sim__result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.rule-sim__result-label {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.rule-sim__result-value {
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-brand);
+  font-variant-numeric: tabular-nums;
+
+  // ★ OPTS IN BY HAND, because this is a `<span>`. The global rule sets the display face on heading
+  // ELEMENTS only — which is what lets it reach the manual's `[innerHTML]` chapters — so anything
+  // set large that is not a heading has to ask, exactly as the ledger's figures do.
+  font-family: var(--font-display);
+}
+
+// ── The breakdown ────────────────────────────────────────────────────────────
+//
+// ★ AN ORDERED LIST, BECAUSE THE ORDER IS THE INFORMATION. The engine runs cap before floor, which
+// is why a floor above a cap wins; numbering these makes the sequence a claim the reader can check
+// rather than a coincidence of layout.
+.rule-sim__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rule-sim__step {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// A component that was absent, refused, or checked without biting still occupies a line — "there is
+// no cap" and "the cap was checked and you never reached it" are different answers to an auditor —
+// but it must not compete with the steps that moved the number.
+.rule-sim__step--inert {
+  color: var(--color-text-tertiary);
+}
+
+.rule-sim__step-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rule-sim__step-tag {
+  font-size: var(--font-size-10);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary);
+}
+
+.rule-sim__step-value {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  // The breakdown is the same figure in a quieter register, so it takes the same face.
+  font-family: var(--font-display);
+}
+
+// ★★ THE SCOPE IS PART OF THE ANSWER, so it is not an afterthought in the corner. One rule, one
+// transaction — a real payout runs several rules, applies quota context and can carry clawback.
+// Somebody who reads this figure as their pay has been misled by a number that is correct.
+.rule-sim__scope {
+  margin: 0;
+  font-size: var(--font-size-11);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
 }

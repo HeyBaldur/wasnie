@@ -95,9 +95,6 @@
       <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'profile'" (click)="setTab('profile')">
         {{ 'PAYEES.DETAIL_TAB_PROFILE' | translate }}
       </button>
-      <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'activity'" (click)="setTab('activity')">
-        {{ 'PAYEES.DETAIL_TAB_ACTIVITY' | translate }}
-      </button>
       <button *hasPermission="'Ledger.Read'" class="tab-btn"
               [class.tab-btn--active]="activeTab() === 'ledger'" (click)="setTab('ledger')">
         {{ 'LEDGER.TAB' | translate }}
@@ -446,14 +443,6 @@
           </div>
         </div>
         </ws-card>
-      }
-
-      <!-- ────────── ACTIVITY TAB ───────────────────────────────────────── -->
-      @if (activeTab() === 'activity') {
-        <div class="tab-placeholder">
-          <app-icon name="activity" [size]="32" />
-          <p>{{ 'COMMON.COMING_SOON' | translate }}</p>
-        </div>
       }
 
       <!-- ────────── CLAWBACK LEDGER TAB ────────────────────────────────── -->

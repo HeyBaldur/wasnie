@@ -76,6 +76,21 @@ public sealed record PayeeLedgerSummaryDto(
 /// <param name="Interpretation">
 /// A token, not a sentence — see <see cref="BalanceSemantic"/>.
 /// </param>
+/// <param name="ClawbackCreditAllTime">
+/// How much of <paramref name="AwaitingPaymentAllTime"/> is a CLAWBACK BALANCE IN THE PAYEE'S FAVOUR
+/// rather than an unpaid commission. Zero for almost everybody.
+///
+/// ★★ IT WAS ALWAYS COUNTED AND NEVER NAMED, AND THAT COST A REAL USER FOUR TURNS. A positive
+/// PayeeBalance is money owed TO the payee — they were withheld more than they should have been — and it
+/// has always been added into the awaiting side rather than dropped for having the wrong sign. What it
+/// had no way to be was DISTINGUISHED: one number meant two things, so an assistant told that
+/// awaitingPayment is "everything earned and not yet paid" faithfully prescribed a pay run for an amount
+/// no pay run can move. The user ran it, the figure did not budge, and the advice repeated.
+///
+/// ★ THE TOTAL IS UNCHANGED ON PURPOSE. This is a BREAKDOWN, not a correction:
+/// AwaitingPaymentAllTime and NetPendingPayout still mean exactly what they meant, so nothing that
+/// reads them shifts. What is new is being able to say which part of the total a pay run can settle.
+/// </param>
 public sealed record PayeeCurrencyBalanceDto(
     string Currency,
     decimal EarnedCommissionsInPeriod,
@@ -84,7 +99,8 @@ public sealed record PayeeCurrencyBalanceDto(
     decimal AwaitingPaymentAllTime,
     decimal OutstandingDebt,
     decimal NetPendingPayout,
-    BalanceSemantic Interpretation);
+    BalanceSemantic Interpretation,
+    decimal ClawbackCreditAllTime = 0m);
 
 /// <summary>
 /// WHICH STORY the numbers tell, decided here and rendered by the model.

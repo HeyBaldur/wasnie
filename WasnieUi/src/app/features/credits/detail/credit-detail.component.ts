@@ -1,8 +1,9 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { formatRate } from '../../../shared/utils/rate-format';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
@@ -29,6 +30,7 @@ import {
   styleUrl: './credit-detail.component.scss',
 })
 export class CreditDetailComponent implements OnInit {
+  private readonly translate = inject(TranslateService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(CreditsApiService);
@@ -44,7 +46,13 @@ export class CreditDetailComponent implements OnInit {
     const c = this.credit();
     if (!c) return '';
     if (c.rateTableType === 'Flat' && c.flatRate !== null) {
-      return `${(c.flatRate * 100).toFixed(2)}%`;
+      // ★★ THIS SCREEN SHOWED A FALSE EQUATION, not just a mislabelled rate. It renders
+      // `base × rate = result`, so a per-unit rule read "€78,500.00 × 500% = €5.00" — arithmetic the
+      // reader can see does not hold. The result was always the server's figure and was always right;
+      // the operation around it was nonsense. See shared/utils/rate-format.
+      return formatRate(
+        c.flatRate, c.measurementBase, c.originalCurrency, this.translate.currentLang,
+        this.translate.instant('PLANS.RATE_PER_UNIT_SUFFIX'));
     }
     return c.rateTableType;
   });

@@ -1,0 +1,995 @@
+/**
+ * The conversation: message list, streaming reply, reported steps, the failed and cancelled turns,
+ * the welcome with its starter prompts, and the composer.
+ *
+ * ★ SHARED BY THE DRAWER AND THE FULL PAGE. These styles used to live in the panel's stylesheet, next
+ * to the slide-over chrome. They moved here WITH the markup so there is exactly one copy: the drawer
+ * at `app-assistant-panel` and the page at /assistant both render this component, and a change to a
+ * message bubble has to land in both by construction rather than by remembering.
+ *
+ * The host owns its own width and height; this component fills whatever it is given. That is the whole
+ * difference between the two contexts — a 420px slide-over and a full content area — and it is why
+ * nothing in here sets a width.
+ */
+:host {
+  display: flex;
+  flex-direction: column;
+
+  /**
+   * ★ THE CANVAS, ONE STEP BELOW THE CARDS THAT SIT ON IT — and it is the BACKGROUND that moved, not
+   * the composer. The composer card was painted on a background of the same surface level (identical
+   * variable on the page: `--color-bg-surface` both here and there), so the box the user types into had
+   * nothing to stand out from and did not read as a box at all.
+   *
+   * Fixed HERE, in the shared component, so the drawer and the page get it from one line. And fixed by
+   * REPOINTING this element at an existing token, never by editing a token's value: `--color-bg-surface`
+   * is worn by every card and by the conversation aside, so changing what it means would have fixed one
+   * panel and repainted half the application.
+   */
+  background: var(--color-bg-canvas);
+  // min-height: 0 is load-bearing in a flex column: without it the host refuses to shrink and pushes
+  // the composer out of view — the same bug that once hid Save/Cancel in ws-modal.
+  min-height: 0;
+  flex: 1;
+}
+
+// ── Messages ────────────────────────────────────────────────────────────────
+
+.assistant-conversation__body {
+  // min-height: 0 is load-bearing in a flex column: without it the body refuses to shrink and pushes
+  // the composer out of the panel — the exact bug that hid Save/Cancel in ws-modal.
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+}
+
+// The turns themselves. Separated from the scroller above so the scrollbar can stay at the pane's
+// edge while the text is capped at a reading measure — see the template.
+.assistant-conversation__stream {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/**
+ * ★ THE READING MEASURE, AND WHY IT IS AN OPT-IN.
+ *
+ * At 420px the drawer IS the measure; on a 1800px screen the same markup ran the text edge to edge,
+ * and a line that long is genuinely hard to come back from at the end of it. So the wide view caps the
+ * column and centres it, exactly as the chat products this is modelled on do — and the drawer, which
+ * never had the problem, is left alone rather than given a cap that would do nothing.
+ *
+ * `ch` rather than px: the limit is how many CHARACTERS fit on a line, so it should follow the font.
+ */
+:host(.assistant-conversation--wide) .assistant-conversation__stream,
+:host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-composer {
+  max-width: 76ch;
+  margin-inline: auto;
+  width: 100%;
+}
+
+.assistant-msg {
+  max-width: 85%;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  &--user {
+    align-self: flex-end;
+    background: var(--color-brand-subtle);
+    color: var(--color-text-primary);
+  }
+
+  &--assistant {
+    align-self: flex-start;
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-default);
+  }
+}
+
+/**
+ * Rendered Markdown from the assistant. Every value is a token, so it reads correctly in all three
+ * themes — the code background and the link colour are the two that would otherwise go unreadable in
+ * dark mode.
+ *
+ * ★ ::ng-deep IS LOAD-BEARING, NOT DECORATION. This markup arrives through [innerHTML], so it carries
+ * none of the `_ngcontent` attributes Angular's emulated encapsulation stamps onto template elements.
+ * Without the piercing selector every rule below compiles to `.assistant-msg__markdown[_ngcontent-x]
+ * table[_ngcontent-x]` and matches NOTHING — which is exactly what shipped: the table rendered as a
+ * real <table> and looked like two columns of cramped text.
+ *
+ * ★ AND IT IS SCOPED. `.assistant-msg__markdown` leads every selector, so none of this can reach a
+ * table, a list or a link anywhere else in the application. An unscoped ::ng-deep here would restyle
+ * every table in Wasnie from a chat panel.
+ *
+ * ★ NOTHING MAY OVERFLOW THE PANEL. It is 420px wide and a model will happily return a six-column
+ * table or a line of code longer than the screen. Each gets its own horizontal scroll INSIDE the
+ * bubble; the chat's own layout never moves.
+ */
+.assistant-msg__markdown {
+  // On the container itself, which IS a template element and so needs no piercing.
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+// Everything below targets the INJECTED markup, hence ::ng-deep — and every selector stays behind
+// `.assistant-msg__markdown`, so none of it escapes the chat bubble.
+.assistant-msg__markdown ::ng-deep {
+  p {
+    margin: 0 0 var(--space-2);
+
+    &:last-child { margin-bottom: 0; }
+  }
+
+  // ── Rendered maths ────────────────────────────────────────────────────────
+  //
+  // ★ ONLY THE SPACING AND THE OVERFLOW LIVE HERE. Everything about how a formula is DRAWN — the
+  // fraction bars, the struts, the alignment — comes from KaTeX's own stylesheet, and restating any of
+  // it would be a second definition that drifts. What KaTeX has no opinion about is how a block formula
+  // sits inside a chat bubble, which is what these rules are.
+  .ws-math--block {
+    margin: var(--space-3) 0;
+    // A long formula must scroll inside its own bubble rather than widen it — the same rule the tables
+    // and code blocks in this panel already follow, wearing the same scrollbar.
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  // KaTeX's own error rendering: an unparseable formula shows as its source. It arrives with an inline
+  // colour of its own, which Angular's sanitiser is not involved in here — the node is built by KaTeX —
+  // but the design system's danger token is the colour this application uses for "this is wrong".
+  .katex-error {
+    color: var(--color-danger);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    margin: var(--space-3) 0 var(--space-2);
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--color-text-primary);
+
+    &:first-child { margin-top: 0; }
+  }
+
+  // A heading inside a chat bubble is a label, not a banner: only the first two get any lift at all.
+  h1 { font-size: var(--font-size-16); }
+  h2 { font-size: var(--font-size-15); }
+
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  ul, ol {
+    margin: 0 0 var(--space-2);
+    padding-left: var(--space-5);
+
+    &:last-child { margin-bottom: 0; }
+  }
+
+  ul { list-style: disc; }
+  ol { list-style: decimal; }
+
+  li {
+    margin-bottom: var(--space-1);
+
+    &::marker { color: var(--color-text-tertiary); }
+  }
+
+  // Nested lists indent without compounding the gap, and change marker so depth is readable.
+  li > ul, li > ol { margin: var(--space-1) 0 0; }
+  li > ul { list-style: circle; }
+
+  a {
+    color: var(--color-text-link);
+    text-decoration: underline;
+
+    &:hover { color: var(--color-text-link-hover); }
+  }
+
+  code {
+    padding: 1px var(--space-1);
+    border-radius: var(--radius-xs);
+    background: var(--color-bg-surface-sunken);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: var(--font-size-12);
+    color: var(--color-text-primary);
+  }
+
+  pre {
+    margin: 0 0 var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-surface-sunken);
+    // ★ Containment: a long line scrolls here instead of widening the panel.
+    overflow-x: auto;
+
+    &:last-child { margin-bottom: 0; }
+
+    code {
+      padding: 0;
+      background: none;
+      white-space: pre;
+    }
+  }
+
+  blockquote {
+    margin: 0 0 var(--space-2);
+    padding: var(--space-1) 0 var(--space-1) var(--space-3);
+    border-left: 2px solid var(--color-border-strong);
+    color: var(--color-text-secondary);
+  }
+
+  // ★ THE SCROLL LIVES ON THE WRAPPER, NOT ON THE TABLE — and that split is the whole fix for the gap
+  // on the right. Scrolling used to be bought with `display: block` on the <table>, but a block-level
+  // table shrinks to fit its CONTENT rather than filling its container, so a two-column answer sat
+  // narrow with white space beside it. The two requirements cannot both be met in one element: a table
+  // that fills the column has to stay `display: table`. So the wrapper scrolls and the table fills.
+  .ws-md-table {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 var(--space-2);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+
+    &:last-child { margin-bottom: 0; }
+  }
+
+  table {
+    // 100% of the wrapper when the content fits — which is the ordinary case and the one that was
+    // wrong. When it does not fit, the cells push past it and the WRAPPER scrolls.
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-12);
+    // The border moved to the wrapper so the rounded corners can clip the header's fill; without this
+    // the table would draw a second line just inside the first.
+    border: none;
+  }
+
+  th, td {
+    padding: var(--space-2);
+    border: 1px solid var(--color-border-default);
+    text-align: left;
+    vertical-align: top;
+    // Cells wrap rather than forcing the table wider; the scroll is the fallback for genuinely wide
+    // content, not the first resort.
+    overflow-wrap: anywhere;
+  }
+
+  th {
+    background: var(--color-bg-surface-sunken);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+  }
+
+  // The outer edges belong to the wrapper now; a cell drawing its own would double them.
+  tr > :first-child { border-left: none; }
+  tr > :last-child { border-right: none; }
+  thead tr:first-child > * { border-top: none; }
+  tbody tr:last-child > * { border-bottom: none; }
+
+  // Zebra striping: the cheapest way to keep the eye on one row across several columns.
+  tbody tr:nth-child(even) { background: var(--color-bg-surface-sunken); }
+
+  hr {
+    margin: var(--space-3) 0;
+    border: none;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  img { max-width: 100%; }
+}
+
+/* The assistant's mark while the model is thinking: the gap between pressing Enter and the first token. */
+.assistant-msg__waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+// Secondary, deliberately: it accompanies the answer, it is not the answer. Same size as the panel's
+// small print so it never competes with the content that is about to replace it.
+.assistant-msg__waiting-text {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// Only appears on a slow turn, so it is quieter still — an explanation offered, not an alarm raised.
+.assistant-msg__waiting-long {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+
+  /**
+   * ★ THIS ONE LINE IS THE "…few seconds." BUG, AND IT IS NOT ABOUT THIS PARAGRAPH.
+   *
+   * `.assistant-msg` sets `white-space: pre-wrap`, which it must: a user's message is printed verbatim
+   * and the line breaks they typed have to survive. But it INHERITS, and inside it this sentence is not
+   * typed text — it is a translated UI string sitting in a template on its own indented line. With
+   * pre-wrap the template's newline and leading spaces stop being formatting and become CONTENT: the
+   * sentence starts indented, the wrap comes back to the true left edge, and the last word ("seconds.")
+   * lands under nothing, looking like a broken layout.
+   *
+   * So the inheritance is refused exactly where it does not belong. Fixing it by reflowing the template
+   * onto one long line would work today and break the next time anyone formats this file — the rule
+   * belongs to the element whose text must not preserve whitespace.
+   */
+  white-space: normal;
+}
+
+// ── The waiting avatar ──────────────────────────────────────────────────────
+//
+// The chat's own avatar shape, worn by the assistant rather than by a person. 32px and a full radius
+// are the topbar avatar's numbers, not new ones: an avatar that is nearly but not quite the app's
+// avatar reads as a mistake, and there is no avatar primitive in the design system to inherit from.
+.assistant-msg__avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  // Clips the mark to the circle. Both marks are square, so `cover` below crops nothing — the rule is
+  // here so a future non-square asset degrades to a centred crop instead of a squashed one.
+  overflow: hidden;
+  background: var(--color-bg-surface-sunken);
+}
+
+.assistant-msg__avatar-motion,
+.assistant-msg__avatar-still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+// The still mark is the exception, not the default: it exists only for the media query below.
+.assistant-msg__avatar-still {
+  display: none;
+}
+
+// ★ A GIF CANNOT BE STOPPED FROM CSS. Loops are exactly what this preference is about, so under it the
+// animated mark is swapped for the assistant's still one — same circle, same size, no motion. Hiding
+// the avatar outright would take the assistant's identity away from the reader who asked for calm.
+@media (prefers-reduced-motion: reduce) {
+  .assistant-msg__avatar-motion {
+    display: none;
+  }
+
+  .assistant-msg__avatar-still {
+    display: block;
+  }
+}
+
+// ── The steps of a turn ─────────────────────────────────────────────────────
+//
+// A quiet checklist, not a progress bar. It occupies the same place and the same visual weight as the
+// waiting line it replaces — secondary text beside a small mark — so a turn that reports steps and one
+// that does not look like the same panel doing the same thing at two levels of detail.
+//
+// ★ NO EXTERNAL SPINNER LIBRARY. One ring, one keyframe, tokens throughout: the design system has no
+// spinner primitive, and adding one is a separate decision (DESIGN_SYSTEM §10.3) rather than something
+// to improvise here. This follows the precedent already set two rules above by the typing dots.
+.assistant-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-steps__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+// ★ SMALL AND TIGHT, NOT SMALL AND FAINT. These are labels, not prose: at 11px — the smallest size the
+// system defines — regular weight would go thin and grey enough to read as disabled, which is the one
+// thing a step that is actively running must not look like. The extra weight buys back the legibility
+// the size costs, and the negative tracking keeps four words from sprawling across the panel.
+//
+// The weight and the tracking are literals because the design system has no tokens for either — every
+// other component in this codebase writes them the same way. Inventing `--font-weight-semibold` here
+// would be adding to the design system mid-feature (DESIGN_SYSTEM §10.3), which is a separate decision.
+.assistant-steps__label {
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+// ★ A FINISHED STEP RECEDES; IT DOES NOT CELEBRATE. The tick is green because green is what "done"
+// means, but the text goes tertiary rather than bolder — the eye should be drawn to the step still
+// running, which is the only one the user is actually waiting on.
+.assistant-steps__item--done {
+  color: var(--color-text-tertiary);
+}
+
+.assistant-steps__check {
+  color: var(--color-success);
+  flex-shrink: 0;
+}
+
+// Sized to the tick beside it so the labels line up whichever state a step is in — a list whose text
+// shifts sideways as each step completes reads as jitter.
+.assistant-steps__spinner {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border-default);
+  border-top-color: var(--color-text-secondary);
+  animation: assistant-step-spin 0.7s linear infinite;
+}
+
+@keyframes assistant-step-spin {
+  to { transform: rotate(360deg); }
+}
+
+// Respects the reader's setting: a perpetual rotation is exactly the motion this preference exists to
+// stop. The ring stays — it still marks which step is running — it simply holds still.
+@media (prefers-reduced-motion: reduce) {
+  .assistant-steps__spinner {
+    animation: none;
+  }
+}
+
+.assistant-msg__placeholder {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/**
+ * "Response cancelled", under the words that did arrive.
+ *
+ * ★ QUIETER THAN THE FAILURE CARD, ON PURPOSE. That card is a warning with something to do about it —
+ * warning border, warning title, a Retry button. This is a footnote on a decision the user made
+ * themselves: it explains where the answer stops and asks nothing of them. Same family of component,
+ * one step down in weight, which is exactly the difference between the two states.
+ */
+.assistant-msg__cancelled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  // See --waiting-long below: the bubble preserves whitespace for the USER's typed text, and this is
+  // not typed text.
+  white-space: normal;
+}
+
+// Pushed to the right edge: the note explains, the button is the way out of it — the same left-to-right
+// reading order the failure card already uses for its own retry.
+.assistant-msg__cancelled-text {
+  flex: 1;
+  min-width: 0;
+}
+
+// ── The welcome ─────────────────────────────────────────────────────────────
+//
+// Three levels, and the hierarchy is the message: what you can ask, then what to ask, then what this
+// will never do.
+.assistant-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  // Sits in the upper part of the empty panel rather than dead centre: the eye starts at the top and
+  // the composer is what it travels to next.
+  padding: var(--space-6) var(--space-2) var(--space-4);
+}
+
+.assistant-welcome__logo {
+  // ★ align-self, and it is the whole fix. The welcome is a flex COLUMN, whose default
+  // `align-items: stretch` was widening this box to the full column and letting `object-fit: contain`
+  // centre the mark inside it — so a left-aligned rule produced a visually centred logo. Shrinking the
+  // box to its content is what actually puts the mark on the left edge, in line with the greeting.
+  align-self: flex-start;
+
+  // Present, not shouting. Large enough to register as the product's mark above the greeting, small
+  // enough that the greeting is still the thing being read first.
+  height: 32px;
+  width: auto;
+  // The panel is min(420px, 100vw); on a narrow phone the mark must shrink rather than push the layout.
+  max-width: 60%;
+  margin-bottom: var(--space-1);
+}
+
+.assistant-welcome__greeting {
+  margin: 0;
+  // ★ SCALES WITH THE PANEL, WHICH IS min(420px, 100vw). On a desktop the panel is fixed at 420 and
+  // the viewport is wide, so the clamp lands on its 32px ceiling; on a phone the panel IS the viewport
+  // and the greeting comes down with it instead of overflowing. A single fixed size cannot do both,
+  // and the Spanish greeting is the long one that would break first.
+  font-size: clamp(var(--font-size-24), 7.5vw, var(--font-size-32));
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+
+  // ★ PLAIN TEXT, NOT GRADIENT — and it must stay a TOKEN, never a literal white. This used to paint
+  // `--gradient-assistant` clipped to the glyphs. The token resolves per theme (near-black on light
+  // and soft, near-white on dark), so the greeting reads white where the user asked for white and
+  // stays legible on the two light themes. Hard-coding #fff here would render invisible text on them.
+  color: var(--color-text-primary);
+
+  // The greeting is a question; long ones must wrap, never overflow the panel.
+  text-wrap: balance;
+}
+
+.assistant-welcome__subtitle {
+  margin: 0;
+  font-size: var(--font-size-15);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// ★ THE GUARANTEE, AND IT NO LONGER NEEDS A BOX. It carried its own surface and border so it would not
+// read as small print; on screen that box turned a sentence into a widget and broke the flow of the
+// welcome. The weight does the same job more quietly: same left edge as the subtitle, same colour as
+// ordinary body text, semibold so it still reads as a statement the product is making rather than a
+// footnote — which was always the point, not the border.
+.assistant-welcome__readonly {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// The example questions. They WRAP rather than scroll: four short labels in three languages are not
+// the same four widths, and a row that scrolls sideways hides the last suggestion on exactly the
+// screens where a suggestion is most wanted.
+.assistant-welcome__starters {
+  // ★ LEFT-ALIGNED, not centred. Everything above — logo, greeting, subtitle, guarantee — sits on the
+  // same left edge, so centred buttons were the only block breaking that column and read as stray.
+  // Sharing that edge puts them back in the same reading column as the text they follow.
+  @apply flex flex-wrap items-center justify-start;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+// ── The failed-turn alert ───────────────────────────────────────────────────
+//
+// ★ LOCAL CSS, NOT A NEW SHARED PRIMITIVE. The design system has no `ws-alert`, and adding one is a
+// separate decision (DESIGN_SYSTEM §10.3) rather than something to improvise mid-feature. The
+// documented precedent is followed instead: build it here, in the one component that needs it, from
+// the SAME warning tokens the pay-run and payout screens already use for their banners. If a second
+// feature wants an alert, this is what gets promoted — the tokens are already the house ones, so
+// promotion is a move rather than a rewrite.
+//
+// WARNING, not danger: nothing is broken and nothing was lost — the question is safe and can be
+// answered again. Red would say otherwise.
+.assistant-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+}
+
+.assistant-alert__icon {
+  flex-shrink: 0;
+  color: var(--color-warning);
+  // Optically aligns the glyph with the first line of the title rather than the top of its box.
+  margin-top: 2px;
+}
+
+.assistant-alert__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.assistant-alert__title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.assistant-alert__text {
+  margin: 0;
+  font-size: var(--font-size-13);
+  // Semi-bold: this paragraph is the one thing in the card the user has to read — it says the message
+  // survived. Regular weight let it sit as ordinary body text beside a bolder title that says less.
+  font-weight: 600;
+  // The body reads on the surface's own text colour: warning-on-warning for a whole paragraph is
+  // harder to read than it looks, and the title plus the icon already carry the severity.
+  color: var(--color-text-primary);
+}
+
+.assistant-conversation__error {
+  font-size: var(--font-size-13);
+  color: var(--color-danger);
+}
+
+// ── Composer ────────────────────────────────────────────────────────────────
+
+.assistant-conversation__composer {
+  flex-shrink: 0;
+  padding: var(--space-4);
+  // No border-top here any more: the composer card below draws its own edges, and two lines stacked
+  // a few pixels apart read as a rendering mistake.
+}
+
+/**
+ * The composer card — the same recipe ws-card uses (ws-card.component.scss:6-9): surface background,
+ * subtle border, --radius-xl corners, soft shadow. Not `<ws-card>` itself because that primitive owns
+ * its padding and section slots, and this content needs three flush bands (field / actions /
+ * disclaimer) that its padding would fight.
+ */
+.assistant-composer {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  // The focus treatment moves to the CARD, using the same two tokens WsInput and WsTextarea use for
+  // it. :focus-within means no state has to be plumbed from the child — the card lights up whenever
+  // the textarea inside has focus, which is what makes the pair read as one control.
+  &:focus-within {
+    border-color: var(--color-border-focus);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+/**
+ * The primitive keeps its own chrome for every other consumer; here the CARD is the chrome, so the
+ * field's border, background and focus shadow are neutralised. ::ng-deep is the one way to reach a
+ * child component's internals without editing the primitive — and editing WsTextarea is exactly what
+ * must not happen: a `borderless` flag would be this screen's preference baked into a shared control.
+ * Scoped under .assistant-composer so it cannot leak to any other textarea in the app.
+ */
+.assistant-composer ::ng-deep .ws-textarea__field {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+
+  &:hover:not(.ws-textarea__field--focused) {
+    border-color: transparent;
+  }
+}
+
+/**
+ * The field, full width, with the send button floating over its bottom-right corner.
+ *
+ * ★ WHY NOT A FLEX ROW. Laid out as `field | button`, the button reserved a column of width for its
+ * ENTIRE height — and it sits at the bottom, so every line above it stopped early against a tall empty
+ * gap on the right. The text has the whole width now and the button is taken out of the flow.
+ */
+/**
+ * ★ A GRID OF NAMED AREAS, AND THE ONLY THING THAT CHANGES BETWEEN THE TWO SHAPES IS THE TEMPLATE.
+ *
+ * The children never move, never re-render, never change a class: the field is always `primary` and
+ * the buttons are always `trailing`. Switching shape rewrites one string on the container and the
+ * browser re-places them. That is the whole mechanism.
+ *
+ * ★ WHY THIS REPLACED "FLIP flex-direction ON AN INNER ROW". Four attempts failed and we could never
+ * tell from the outside which half was broken — the state not computing, or the modifier class not
+ * reaching the element the stylesheet selects. With one attribute on the card and everything hanging
+ * off it by descendant selector, the second half cannot happen: there is nowhere else for it to land.
+ *
+ * ★ AND THE FULL WIDTH FALLS OUT, with no width arithmetic anywhere. In the stacked template `primary`
+ * spans BOTH columns, so the field simply is the width of the box. Every earlier version had to
+ * compute, reserve or claw back that width, and each one got it wrong in a different way.
+ */
+.assistant-composer__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'primary trailing';
+  // Centred so the button sits level with a single line of text — the pill's whole look.
+  align-items: center;
+  gap: var(--space-1);
+  padding-right: var(--space-2);
+}
+
+.assistant-composer[data-stacked='true'] .assistant-composer__row {
+  grid-template-areas:
+    'primary primary'
+    '.       trailing';
+  // The button belongs to the last row now; `end` keeps it on that row's baseline rather than
+  // stretched down its height.
+  align-items: end;
+  padding-right: 0;
+}
+
+.assistant-composer__row ws-textarea {
+  grid-area: primary;
+  // A long unbroken word must wrap rather than widen the column past the box.
+  min-width: 0;
+}
+
+/**
+ * ★ THE CLEARANCE IS AT THE BOTTOM, NOT AT THE RIGHT — and that is forced, not preferred. A real
+ * <textarea> cannot flow its text around a floating element (that is a contenteditable capability) and
+ * its padding applies to every line alike. So the button can be kept off the text in exactly two ways:
+ * a reserved COLUMN, which shortens every line — the gap this change removes — or a reserved STRIP
+ * below the text, which costs a little height once and lets every line run to the right edge.
+ *
+ * 34px = the 28px button plus 6px of air. It REPLACES the field's own 8px bottom padding rather than
+ * adding to it, so the strip costs 26px, not 34.
+ *
+ * The primitive measures `scrollHeight` to auto-grow, and padding is part of scrollHeight — so the box
+ * still sizes itself correctly with no change to WsTextarea.
+ */
+/**
+ * ★ THE FIELD'S BOTTOM STRIP IS GONE, AND ON PURPOSE. It existed to keep the last line out from under
+ * an absolutely positioned button — the v1 shape. With the button on its own ROW there is nothing
+ * overlapping the text, so reserving space inside the field would be pure wasted height on every line.
+ */
+.assistant-composer ::ng-deep .ws-textarea__native {
+  padding-bottom: var(--space-2);
+}
+
+/**
+ * ★ OUTSIDE THE SCROLLING FIELD, IN BOTH SHAPES. At the height ceiling the textarea scrolls internally;
+ * a button living inside it would scroll away with the text at the exact moment the user wants to send.
+ * Being a grid AREA rather than a child of the field is what guarantees that.
+ */
+.assistant-composer__actions {
+  grid-area: trailing;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.assistant-composer[data-stacked='true'] .assistant-composer__actions {
+  justify-content: flex-end;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+/**
+ * The shape change, softened — the radius and the height both move at once, and a jump between them
+ * reads as a glitch rather than a response.
+ *
+ * Nothing MOVES here, so there is no motion to remove for a reader who asked for less of it; the
+ * media query still turns it off, because "reduce" means the interface stops animating, not that it
+ * animates only the parts somebody judged harmless.
+ */
+.assistant-composer {
+  transition:
+    border-radius var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-composer {
+    transition: none;
+  }
+}
+
+/**
+ * ★ ROUND, AND THE SAME BLUE AS THE JUMP BUTTON. Two accent circles on one screen have to be the same
+ * circle; a rounded-rectangle send beside a round "jump to latest" reads as two design systems.
+ *
+ * Reaching into the primitive with ::ng-deep rather than adding a `shape` input to WsButton, for the
+ * same reason the textarea's chrome is neutralised the same way just above: a flag on a shared control
+ * would bake this screen's preference into every button in the app. Scoped under .assistant-composer,
+ * so nothing else can inherit it.
+ */
+.assistant-composer ::ng-deep .ws-btn--icon-only {
+  border-radius: var(--radius-full);
+}
+
+.assistant-composer__disclaimer {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  // Semibold for the same reason the welcome's read-only note is: this is the standing promise about
+  // what the assistant will not do, and at 12px in tertiary grey it was the easiest thing on the panel
+  // to stop seeing. The weight is what keeps it readable without making it louder.
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+/**
+ * ★ THE JUMP BUTTON FLOATS WITHOUT TAKING UP A ROW. It sits in the normal flow between the scroller and
+ * the composer, with zero height, and everything inside is lifted out of that flow — so appearing and
+ * disappearing never reflows the conversation underneath, which is the thing that would make a long
+ * answer jump while it is being read.
+ */
+.assistant-conversation__jump {
+  position: relative;
+  height: 0;
+  // Only the button itself catches the pointer; the fade and the strip around it must not eat clicks
+  // on the message sitting behind them.
+  pointer-events: none;
+  z-index: 1;
+
+  /**
+   * The fade. Its job is depth: the last line of text dissolves into the surface instead of being cut
+   * by the composer's edge, and the button gets a ground to sit on so it reads as floating ABOVE the
+   * conversation rather than printed into it.
+   *
+   * ★ IT FADES TO THE CANVAS THIS COMPONENT PAINTS — and that used to be a variable the HOST set,
+   * because the page's pane and the drawer's panel were different colours behind it. The moment this
+   * component started painting its own background, that indirection stopped describing anything: both
+   * hosts now have the same thing behind the fade, and the two declarations were free to drift from it.
+   * They did, immediately — the fallback still said `--color-bg-surface` and the drawer still said
+   * `raised`, so the gradient dissolved into a colour that was no longer there and left a pale band
+   * across the bottom of the conversation.
+   *
+   * One token, read from the same place the background comes from, so it cannot go stale again.
+   */
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 88px;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      var(--color-bg-canvas) 85%
+    );
+  }
+}
+
+.assistant-conversation__jump-btn {
+  position: absolute;
+  // Centred over the composer, not parked in a corner: it belongs to the conversation column, and the
+  // eye is already travelling down the middle of it.
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--space-2);
+  pointer-events: auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  color: var(--color-brand-contrast);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+
+  &:hover {
+    background: var(--color-brand-hover);
+  }
+
+  &:active {
+    transform: translateX(-50%) scale(0.94);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-md), var(--shadow-focus);
+  }
+}
+
+// ── The bar under an assistant message ──────────────────────────────────────
+//
+// Always visible. It was revealed on hover, which put the copy button out of reach on touch, made it
+// awkward to get to from the keyboard, and left it undiscoverable for anyone who never rested the
+// pointer on a message. A permanent bar also removes the whole class of reflow problems that hiding and
+// showing it created.
+.assistant-msg__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.assistant-msg__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-msg__meta-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+
+  padding: 2px var(--space-1);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+}
+
+.assistant-msg__meta-item {
+  display: block;
+  width: 100%;
+
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+  }
+}
+
+// Never silent: a copy that failed must say so, or the user pastes yesterday's clipboard believing it
+// is the answer.
+.assistant-msg__copy-failed {
+  color: var(--color-danger);
+}
+
+/**
+ * ★ THE RETRY BUTTON WEARS THE ALERT'S COLOUR, not the page's neutral grey.
+ *
+ * It was `secondary`, which reads as "an option someone might take" — and this is the only thing to do
+ * with a turn that failed. A grey button inside an amber card also belongs to neither: it looks like a
+ * control that happened to land there rather than the alert's own answer.
+ *
+ * ★ WARNING, STILL NOT DANGER. The card is deliberately warning — nothing is broken and nothing was
+ * lost, the question is stored and can be answered again — so the button is filled in the same amber.
+ * A red one would say the opposite of what the card says.
+ *
+ * ★ `--color-text-inverse` IS THE RIGHT PARTNER FOR `--color-warning`, and not by luck: the two flip
+ * together across the themes. Light and soft give a dark amber fill with near-white text; dark gives a
+ * bright amber fill with near-black text. A hard-coded white would be unreadable in exactly one theme.
+ *
+ * Scoped to `.assistant-alert`, so the twin button beside a CANCELLED reply keeps its quiet secondary
+ * look — that turn is a decision the user made, not a failure, and shouting about it would be wrong.
+ */
+.assistant-alert ::ng-deep .ws-btn {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: var(--color-text-inverse);
+
+  /**
+   * ★ THE HOVER HAS TO RE-DECLARE THE FILL, NOT JUST DIM IT — and forgetting that turned the button
+   * BLACK ON BLACK. `ws-btn--secondary` carries its own `:hover` rule setting
+   * `background: var(--color-bg-surface-sunken)`, so the amber above only ever applied at rest: the
+   * moment the pointer arrived, the primitive's grey won the background while the inverse text colour
+   * stayed. In the dark theme those are `#0a0e15` and `#0e1218` — the label simply disappeared.
+   *
+   * A `filter` could not have saved it either: it dims whatever colour is actually painted, and the
+   * colour actually painted was the primitive's, not this one's.
+   *
+   * The dimming is done by lowering the fill's own opacity against the card behind it, so there is
+   * still no second amber invented here.
+   */
+  &:hover:not(:disabled),
+  &:active:not(:disabled) {
+    background: color-mix(in srgb, var(--color-warning) 88%, transparent);
+    border-color: var(--color-warning);
+    color: var(--color-text-inverse);
+  }
+}

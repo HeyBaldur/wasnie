@@ -86,6 +86,8 @@ export interface CreditDetail {
   // D — Snapshot
   rateTableType: string;
   flatRate: number | null;
+  /** What the rate applies to — see shared/utils/rate-format. */
+  measurementBase?: string;
   ruleSnapshotJson: string;
   triggerAlways: boolean;
   triggerSummary: string | null;

@@ -45,13 +45,29 @@ public sealed record StreamAssistantReplyCommand(Guid ConversationId, string Con
 /// <param name="State">
 /// <see cref="PhaseStart"/> or <see cref="PhaseDone"/>. Only on <see cref="Progress"/> frames.
 /// </param>
+/// <param name="Title">
+/// The conversation's title as it stands after this turn was committed. Only on
+/// <see cref="UserTurn"/> frames.
+///
+/// ★★ IT RIDES WITH THE USER'S TURN BECAUSE THAT IS WHEN IT IS DECIDED. The thread takes its name from
+/// the first thing said in it, and that happens in the SAME SaveChanges as the message — before the
+/// model is called. The client had no way to learn it: the `user` frame carried the message and nothing
+/// else, so the open conversation's header went on saying "New conversation" while the history list
+/// picked the title up later, on its own refresh. One fact, two arrival times, and the user watching
+/// both.
+///
+/// Sent even when the title did not change (a second message, or a thread the user renamed): "what the
+/// title is now" is always true and needs no branch, while "the title changed" would need the server to
+/// track what this client already knows.
+/// </param>
 public sealed record AssistantStreamEvent(
     string Type,
     string? Delta = null,
     AssistantMessageDto? Message = null,
     string? ErrorKey = null,
     string? Phase = null,
-    string? State = null)
+    string? State = null,
+    string? Title = null)
 {
     /// <summary>The user's turn, already persisted. Sent first so the client can replace its optimistic copy.</summary>
     public const string UserTurn = "user";
@@ -81,7 +97,8 @@ public sealed record AssistantStreamEvent(
     /// <summary>The step finished. A step that FAILED never gets one — the error frame ends the turn.</summary>
     public const string PhaseDone = "done";
 
-    public static AssistantStreamEvent OfUser(AssistantMessageDto message) => new(UserTurn, Message: message);
+    public static AssistantStreamEvent OfUser(AssistantMessageDto message, string title) =>
+        new(UserTurn, Message: message, Title: title);
 
     public static AssistantStreamEvent OfFragment(string delta) => new(Fragment, Delta: delta);
 

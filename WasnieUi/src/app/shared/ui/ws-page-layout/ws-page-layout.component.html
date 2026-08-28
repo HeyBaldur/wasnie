@@ -12,7 +12,7 @@
         <app-icon [name]="icon()" [size]="24" />
       </span>
       <div class="ws-pl__title-text">
-        <h1 class="ws-pl__title">{{ title() }}</h1>
+        <h1 class="ws-pl__title" [ngClass]="'ws-pl__title--' + titleSize()">{{ title() }}</h1>
         @if (subtitle()) {
           <p class="ws-pl__subtitle">{{ subtitle() }}</p>
         }

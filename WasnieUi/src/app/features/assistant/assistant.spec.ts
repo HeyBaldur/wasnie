@@ -7,7 +7,9 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { NEVER, of, throwError } from 'rxjs';
 import { AssistantStore } from './state/assistant.store';
 import { AssistantApiService } from './services/assistant.api.service';
+import { By } from '@angular/platform-browser';
 import { AssistantPanelComponent } from './panel/assistant-panel.component';
+import { AssistantConversationComponent } from './conversation/assistant-conversation.component';
 import { AssistantTriggerComponent } from './trigger/assistant-trigger.component';
 import {
   ASSISTANT_NOT_CONNECTED,
@@ -54,7 +56,7 @@ function apiSpy(): jasmine.SpyObj<AssistantApiService> {
     'postMessage', 'streamMessage', 'renameConversation', 'deleteConversation',
   ]);
   api.getEntitlement.and.returnValue(of({ enabled: true, requiresUpgrade: false }));
-  api.listConversations.and.returnValue(of([]));
+  api.listConversations.and.returnValue(of({ items: [], nextCursor: null, pinned: [] }));
   api.startConversation.and.returnValue(of(CONVERSATION));
   api.getConversation.and.returnValue(of(CONVERSATION));
   api.postMessage.and.returnValue(of(exchange('hello')));
@@ -195,7 +197,7 @@ describe('AssistantStore', () => {
 
   it('clears a previous error when a new message is sent', async () => {
     // A stale error under a fresh answer would read as if the new one had failed too.
-    store.errorKey.set('ASSISTANT.ERROR_UNAVAILABLE');
+    store.setStreamState(store.activeDraftKey(), { errorKey: 'ASSISTANT.ERROR_UNAVAILABLE' });
 
     await store.startConversation();
     await store.send('trying again');
@@ -273,7 +275,7 @@ describe('AssistantStore', () => {
   });
 
   it("clears the previous turn's steps when the next one starts", async () => {
-    store.progressSteps.set([{ phase: 'searching_data', done: true }]);
+    store.setStreamState(store.activeDraftKey(), { steps: [{ phase: 'searching_data', done: true }] });
 
     await store.startConversation();
     await store.send('a new question');
@@ -423,8 +425,8 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
     // '' is "the request is out and nothing has come back" — the only state the loader renders in.
-    store.streamingReply.set('');
-    store.progressSteps.set(steps);
+    store.setStreamState(store.activeDraftKey(), { reply: '' });
+    store.setStreamState(store.activeDraftKey(), { steps });
     fixture.detectChanges();
   }
 
@@ -493,13 +495,15 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
   it('★ the steps disappear the moment the answer starts arriving', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.progressSteps.set([
-      { phase: 'understanding', done: true },
-      { phase: 'reading_docs', done: true },
-      { phase: 'generating', done: false },
-    ]);
+    store.setStreamState(store.activeDraftKey(), {
+      steps: [
+        { phase: 'understanding', done: true },
+        { phase: 'reading_docs', done: true },
+        { phase: 'generating', done: false },
+      ],
+    });
     // The first fragment landed: the bubble now holds the answer, not the wait.
-    store.streamingReply.set('The answer begins');
+    store.setStreamState(store.activeDraftKey(), { reply: 'The answer begins' });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-steps"]')).toBeNull();
@@ -575,8 +579,17 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
   // with the right behaviour — and that it does so AFTER the render, not during the effect (which is
   // the mistake that makes a scroll-to-bottom "work sometimes").
 
+  // The scroll now belongs to the CONVERSATION component, which the panel renders as a child — the
+  // drawer is chrome around it. The suite still drives the panel, because that is what a user opens,
+  // so the spy has to reach through to the child that actually owns the behaviour.
+  // The scroll now belongs to the CONVERSATION component, which the panel renders as a child — the
+  // drawer is chrome around it. The suite still drives the panel, because that is what a user opens.
+  //
+  // ★ THE PROTOTYPE, NOT AN INSTANCE. The panel renders nothing until it is open, so at the moment
+  // these tests install the spy there is no child to install it on; spying on the class covers the
+  // instance that is created a few lines later, which is the one that does the scrolling.
   function scrollSpy() {
-    return spyOn(fixture.componentInstance, 'scrollToBottom');
+    return spyOn(AssistantConversationComponent.prototype, 'scrollToBottom');
   }
 
   /** afterNextRender hooks run on the application tick, not on a bare detectChanges(). */
@@ -879,6 +892,50 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     expect(header).toContain('UNTITLED');
   });
 
+  it('★ marks the OPEN conversation with the brand edge, so hover cannot impersonate it', () => {
+    // ★★ THE DEFECT THIS GUARDS. Hover and active both filled the row with
+    // --color-bg-surface-sunken, so pointing at any row made it look exactly like the one being read
+    // and the rail stopped answering "which one am I on?" the moment the mouse entered the list.
+    //
+    // ★ AND WHY THE ASSERTION IS THE EDGE AND NOT THE FILL. In the soft theme
+    // --color-bg-surface-hover and --color-bg-surface-sunken are THE SAME COLOUR (styles.scss), so a
+    // fix that only swapped fills would be correct in two themes and invisible in the third. The brand
+    // inset is what separates them everywhere — the sidebar's own convention for the current item.
+    //
+    // :hover cannot be triggered from script, so the hover half is not assertable here; this pins the
+    // half that carries the distinction in every theme.
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversation.set({ ...CONVERSATION, id: 'conv-1' });
+    store.conversations.set([
+      { id: 'conv-1', title: 'The open one', createdAt: '', updatedAt: '', messageCount: 0 },
+      { id: 'conv-2', title: 'Another', createdAt: '', updatedAt: '', messageCount: 0 },
+    ]);
+    fixture.detectChanges();
+
+    document.body.appendChild(fixture.nativeElement);
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="assistant-history-item"]');
+
+    // ★ THE MARKER IS THE ROW'S `::before`, NOT ITS BOX-SHADOW. It used to be `inset 3px 0 0` in a flat
+    // brand colour; it is now a 3px pseudo-element painted with `--gradient-brand`, because the
+    // selected state was aligned with the sidebar's, which is where that gradient edge comes from.
+    // Still a pseudo-element and not a real border, for the original reason: a 3px left border would
+    // square the row's radius and shove the title sideways on every selection.
+    const openBar = getComputedStyle(rows[0] as HTMLElement, '::before');
+    const otherBar = getComputedStyle(rows[1] as HTMLElement, '::before');
+
+    expect(openBar.backgroundImage).toContain('gradient');
+    expect(openBar.width).toBe('3px');
+    expect(otherBar.backgroundImage).toBe('none');
+
+    // ★ AND THE RAIL IS RESERVED ON THE UNSELECTED ROW TOO — same width, no paint. That is what keeps
+    // selecting a conversation from nudging the list sideways, and it is the sidebar's arrangement.
+    expect(otherBar.width).toBe('3px');
+
+    document.body.removeChild(fixture.nativeElement);
+  });
+
   it('shows a real title as it was stored', () => {
     store.isOpen.set(true);
     store.conversation.set({ ...CONVERSATION, title: '¿Cómo creo un plan?' });
@@ -888,9 +945,13 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
       .toContain('¿Cómo creo un plan?');
   });
 
-  it('keeps title, meta and delete in every history row after the compacting', () => {
-    // The row was compacted (padding/gap) so more threads fit on screen. Spacing is Rodolfo's call, but
-    // the three parts of the row are not — this is what catches a "compact" that dropped one of them.
+  // ★ THE ROW'S CONTRACT CHANGED, AND THIS TEST CHANGED WITH IT — deliberately, not because it was in
+  // the way. It used to assert title + meta + a permanent delete icon. The rail redesign says a row
+  // shows ONE thing at rest, its title, and keeps rename and delete behind a menu that appears on
+  // hover: two permanent icons per row turned the list into a grid of controls where the titles were
+  // meant to be, and a loose pencil under each title was the visible symptom. What still has to hold
+  // is that no row loses its title and no row loses its way to those actions.
+  it('every row shows its title, with the actions behind a menu rather than loose icons', () => {
     store.isOpen.set(true);
     store.historyOpen.set(true);
     store.conversations.set([
@@ -903,13 +964,28 @@ describe('AssistantPanelComponent — placeholder rendering', () => {
     expect(rows.length).toBe(2);
 
     for (const row of rows) {
-      expect(row.querySelector('.assistant-history__item-title')).toBeTruthy();
-      expect(row.querySelector('.assistant-history__item-meta')).toBeTruthy();
-      expect(row.querySelector('.assistant-history__item-delete')).toBeTruthy();
+      expect(row.querySelector('.assistant-clist__item-title')).toBeTruthy();
+      expect(row.querySelector('[data-testid="assistant-item-menu"]')).toBeTruthy();
     }
 
-    expect(rows[0].querySelector('.assistant-history__item-title').textContent).toContain('Primera');
-    expect(rows[0].querySelector('.assistant-history__item-meta').textContent).toContain('4');
+    expect(rows[0].querySelector('.assistant-clist__item-title').textContent).toContain('Primera');
+  });
+
+  // The pencil that started this: it must not be sitting in the row any more.
+  it('★ no rename or delete control sits loose in the row', () => {
+    store.isOpen.set(true);
+    store.historyOpen.set(true);
+    store.conversations.set([
+      { id: 'c1', title: 'Primera', createdAt: '', updatedAt: '2026-08-03T10:00:00Z', messageCount: 4 },
+    ]);
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('[data-testid="assistant-history-item"]');
+
+    expect(row.querySelector('[data-testid="assistant-rename-start"]'))
+      .withContext('rename belongs in the menu, not in the row').toBeNull();
+    expect(row.querySelector('[data-testid="assistant-item-delete"]'))
+      .withContext('delete belongs in the menu, not in the row').toBeNull();
   });
 
   it('identifies a placeholder reply only for the assistant role', () => {
@@ -1190,7 +1266,7 @@ describe('AssistantPanelComponent — the retry button', () => {
     // can carry request ids and slices of the prompt.
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.setStreamState(store.activeDraftKey(), { errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' });
     store.conversation.set({
       ...CONVERSATION,
       messages: [
@@ -1215,7 +1291,7 @@ describe('AssistantPanelComponent — the retry button', () => {
   it('hides the retry button when there is nothing to retry', () => {
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.errorKey.set(null);
+    store.setStreamState(store.activeDraftKey(), { errorKey: null });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-retry"]')).toBeNull();
@@ -1225,7 +1301,7 @@ describe('AssistantPanelComponent — the retry button', () => {
     const spy = spyOn(store, 'retry').and.resolveTo();
     store.isOpen.set(true);
     store.conversation.set(CONVERSATION);
-    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    store.setStreamState(store.activeDraftKey(), { errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' });
     store.conversation.set({
       ...CONVERSATION,
       messages: [
@@ -1416,7 +1492,8 @@ describe('AssistantPanelComponent — the failed-turn alert', () => {
   });
 
   it('shows the SPECIFIC reason when this session watched it fail', () => {
-    store.errorKey.set('ASSISTANT.ERROR_RATE_LIMITED');
+    // Keyed by the conversation, not by "whatever is open": nothing is open yet at this line.
+    store.setStreamState(CONVERSATION.id, { errorKey: 'ASSISTANT.ERROR_RATE_LIMITED' });
     const alert = renderReloadedFailure();
 
     expect(alert.textContent).toContain('ERROR_RATE_LIMITED');
@@ -1673,8 +1750,8 @@ describe('AssistantPanelComponent — the retry renders the typing bubble', () =
       ],
       lastTurnUnanswered: true,
     });
-    store.sending.set(true);
-    store.streamingReply.set('');
+    store.setStreamState(store.activeDraftKey(), { sending: true });
+    store.setStreamState(store.activeDraftKey(), { reply: '' });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[data-testid="assistant-streaming"]'))
@@ -1704,14 +1781,14 @@ const ASSISTANT_BUNDLES: Record<string, Record<string, string>> = {
  * reply with a placeholder". True in piece 1; a lie since the model was connected. Copy that describes
  * a previous version of the product is worse than no copy — the reader believes it and stops asking.
  */
-describe('AssistantPanelComponent — the welcome', () => {
-  let fixture: ComponentFixture<AssistantPanelComponent>;
+describe('AssistantConversationComponent — the welcome', () => {
+  let fixture: ComponentFixture<AssistantConversationComponent>;
   let store: AssistantStore;
   let translate: TranslateService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      imports: [AssistantConversationComponent, TranslateModule.forRoot()],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -1720,7 +1797,7 @@ describe('AssistantPanelComponent — the welcome', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AssistantPanelComponent);
+    fixture = TestBed.createComponent(AssistantConversationComponent);
     store = TestBed.inject(AssistantStore);
     translate = TestBed.inject(TranslateService);
   });
@@ -2245,9 +2322,9 @@ describe('AssistantPanelComponent — the closing animation', () => {
  * starts, it must be cancelled when the answer arrives, and it must not outlive the panel. Each of
  * those failing looks like "the assistant says it is still working after it answered".
  */
-describe('AssistantPanelComponent — the waiting message', () => {
-  let fixture: ComponentFixture<AssistantPanelComponent>;
-  let component: AssistantPanelComponent;
+describe('AssistantConversationComponent — the waiting message', () => {
+  let fixture: ComponentFixture<AssistantConversationComponent>;
+  let component: AssistantConversationComponent;
   let store: AssistantStore;
 
   /** Comfortably past the threshold; the exact value lives in the component, not here. */
@@ -2255,7 +2332,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AssistantPanelComponent, TranslateModule.forRoot()],
+      imports: [AssistantConversationComponent, TranslateModule.forRoot()],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
@@ -2264,7 +2341,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AssistantPanelComponent);
+    fixture = TestBed.createComponent(AssistantConversationComponent);
     component = fixture.componentInstance;
     store = TestBed.inject(AssistantStore);
     store.isOpen.set(true);
@@ -2273,7 +2350,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
 
   /** The state between "the request went out" and "the first token came back". */
   function startWaiting(): void {
-    store.streamingReply.set('');
+    store.setStreamState(store.activeDraftKey(), { reply: '' });
     fixture.detectChanges();
   }
 
@@ -2305,7 +2382,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
     startWaiting();
 
     // The first token arrives well inside the threshold.
-    store.streamingReply.set('It was ');
+    store.setStreamState(store.activeDraftKey(), { reply: 'It was ' });
     fixture.detectChanges();
 
     // ...and the pending timer must not fire into a turn that is already answering.
@@ -2322,7 +2399,7 @@ describe('AssistantPanelComponent — the waiting message', () => {
     expect(component.waitingLong()).toBeTrue();
 
     // Answer lands, then a second question goes out.
-    store.streamingReply.set('done');
+    store.setStreamState(store.activeDraftKey(), { reply: 'done' });
     fixture.detectChanges();
     expect(component.waitingLong()).toBeFalse();
 
@@ -2618,13 +2695,13 @@ describe('AssistantPanelComponent — the stop button and the cancelled turn', (
     expect(stop()).withContext('nothing to stop').toBeNull();
     expect(send()).withContext('send is always there').toBeTruthy();
 
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
     fixture.detectChanges();
 
     expect(stop()).withContext('an answer is in flight').toBeTruthy();
     expect(send()).withContext('send is NOT transformed into stop — they are opposites').toBeTruthy();
 
-    store.sending.set(false);
+    store.setStreamState(store.activeDraftKey(), { sending: false });
     fixture.detectChanges();
 
     expect(stop()).withContext('it leaves when the answer does').toBeNull();
@@ -2640,7 +2717,7 @@ describe('AssistantPanelComponent — the stop button and the cancelled turn', (
 
   it('asks the store to stop when it is clicked', () => {
     const cancel = spyOn(store, 'cancel').and.resolveTo();
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
     fixture.detectChanges();
 
     (stop().querySelector('button') as HTMLElement | null)?.click();
@@ -2772,7 +2849,7 @@ describe('AssistantStore — try again after a stopped answer', () => {
   });
 
   it('offers nothing while an answer is already in flight', () => {
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
 
     expect(store.retryableCancelled()).toBeNull();
   });
@@ -2864,7 +2941,7 @@ describe('AssistantPanelComponent — try again beside the cancelled notice', ()
     renderStoppedTurn();
     expect(retryButton()).toBeTruthy();
 
-    store.sending.set(true);
+    store.setStreamState(store.activeDraftKey(), { sending: true });
     fixture.detectChanges();
 
     // Otherwise it sits there inviting a second retry of the request already in flight.

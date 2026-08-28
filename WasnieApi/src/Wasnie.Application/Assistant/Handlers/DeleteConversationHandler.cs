@@ -32,6 +32,18 @@ public sealed class DeleteConversationHandler(
             .ToListAsync(cancellationToken);
 
         db.AssistantMessages.RemoveRange(messages);
+
+        // ★ AND THE STANDINGS GO WITH IT — EVERY USER'S, NOT JUST THE CALLER'S. The pin lives on a
+        // (user, conversation) row, and when sharing arrives several people will have one on the same
+        // thread. Deleting only mine would leave rows pointing at a conversation that no longer exists,
+        // and the pinned group would silently drop them (see ListConversationsHandler) rather than
+        // anybody noticing. Same pairing as the messages: the FK cascades in SQL Server, and this makes
+        // the InMemory provider — which does not enforce cascades — behave the same way in tests.
+        var states = await db.AssistantConversationStates
+            .Where(s => s.ConversationId == conversation.Id)
+            .ToListAsync(cancellationToken);
+
+        db.AssistantConversationStates.RemoveRange(states);
         db.AssistantConversations.Remove(conversation);
 
         await db.SaveChangesAsync(cancellationToken);

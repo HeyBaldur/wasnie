@@ -137,7 +137,11 @@ public sealed class StreamAssistantReplyHandler(
             db.AssistantMessages.Add(userMessage);
             await db.SaveChangesAsync(cancellationToken);
 
-            yield return AssistantStreamEvent.OfUser(AssistantMapper.ToDto(userMessage));
+            // ★ THE TITLE GOES OUT WITH THE TURN THAT DECIDED IT. It was set two lines above and
+            // committed in the same SaveChanges, so this frame is the first honest moment to say what
+            // the conversation is now called — and the only one before the model answers.
+            yield return AssistantStreamEvent.OfUser(
+                AssistantMapper.ToDto(userMessage), conversation.Title);
 
             history.Add(userMessage);
         }

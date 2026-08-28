@@ -96,6 +96,9 @@ public sealed class GetCreditByIdHandler(
             // D
             RateTableType: rateTable.Type.ToString(),
             FlatRate: rateTable.FlatRate,
+            // ★ FROM THE SNAPSHOT, so the credit describes the rule as it was when it was earned.
+            MeasurementBase: Wasnie.Application.Assistant.Tools.PlanRuleSemantics
+                .BaseOf(snapshot.Measurement.Type).ToString(),
             RuleSnapshotJson: snapshotJson,
             TriggerAlways: trigger.Conditions.Count == 0,
             TriggerSummary: triggerSummary);

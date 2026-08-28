@@ -74,6 +74,8 @@ public sealed record CreditDetailDto(
     // Section D — Rule Snapshot
     string RateTableType,
     decimal? FlatRate,
+    /// <summary>See RateTableDto.MeasurementBase — same fact, same reason, same bug avoided.</summary>
+    string MeasurementBase,
     string RuleSnapshotJson,
     bool TriggerAlways,
     string? TriggerSummary);

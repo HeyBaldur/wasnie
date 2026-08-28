@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Application.Assistant.Common;
 using Wasnie.Application.Common.Exceptions;
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Handlers.Assignments;
@@ -35,16 +36,36 @@ namespace Wasnie.Application.Assistant.Tools;
 /// <see cref="PayeeResolver"/>) to turn a name into an id, then <c>ListAssignmentsByPayeeQuery</c>. No
 /// DbContext in this file and there must never be one.
 ///
-/// ★ RULE 2 — ISOLATION. <c>PayeeAccessGuard</c> runs inside <c>ListAssignmentsByPayeeHandler</c>, on
-/// whatever id arrives, exactly as it does for the payee screen. An id reused from the conversation's
-/// resolved-entity context gets the same check as one typed by hand: the context buys precision, never
-/// access. This file does not know the visibility rules and must not learn them.
+/// ★ RULE 2 — ISOLATION. <c>PayeeAccessGuard</c> ENFORCES access inside
+/// <c>ListAssignmentsByPayeeHandler</c>, on whatever id arrives, exactly as it does for the payee
+/// screen. An id reused from the conversation's resolved-entity context gets the same check as one typed
+/// by hand: the context buys precision, never access.
+///
+/// ★★ AND THIS FILE NOW ASKS THE GUARD A QUESTION OF ITS OWN — which is not the same as knowing the
+/// rules, and the distinction is the whole of the change. It still does not know what a Manager may see;
+/// it asks the one component that does, and only so it can tell its own two empty answers apart. If
+/// visibility ever changes, nothing here changes with it.
+///
+/// WHY IT HAS TO. The handler answers a denial with an EMPTY PAGE rather than an error (deliberately —
+/// an error would confirm the payee exists), so zero rows used to mean "has no assignments" OR "you may
+/// not see them", collapsed into one outcome token. Runtime proved that unusable: the assistant read the
+/// token aloud and told a user their payee had no plans while the payee screen beside it listed one. No
+/// prompt rule can fix that, because THE DATA TO BE HONEST WITH WAS NOT THERE. So the tool asks, and
+/// returns two different outcomes.
+///
+/// ★ AND IT LEAKS NOTHING, WHICH IS WHY RULE 3 SURVIVES IT. By the time this question is asked the payee
+/// has ALREADY been confirmed and named in the payload — <c>GetPayeeByIdQuery</c> and the resolver
+/// enforce <c>Payees.Read</c> and the tenant filter, not the visibility guard, so existence is public to
+/// this caller by then. What the new outcome adds is a fact about the ASKER'S OWN permissions, not about
+/// the payee. The refusal below stays as indistinguishable as it ever was.
 ///
 /// ★ RULE 3 — A REFUSAL SAYS NOTHING. "No such payee", "not yours" and "you may not read assignments"
 /// return one identical payload. A TECHNICAL fault is raised instead, so the runner fails the turn and
 /// the user gets a retry card rather than a sentence claiming their colleague does not exist.
 /// </summary>
-public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool> logger) : IAssistantTool
+public sealed class GetPayeePlansTool(
+    ISender sender, IPayeeAccessGuard payeeAccessGuard, ILogger<GetPayeePlansTool> logger)
+    : IAssistantTool
 {
     public const string ToolName = "get_payee_plans";
 
@@ -152,7 +173,8 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
             }
 
             return await DescribeAsync(
-                id, confirmed.FullName, PayeeMatch.ResolvedById, includeEnded, cancellationToken);
+                id, confirmed.FullName, confirmed.EmployeeCode, PayeeMatch.ResolvedById, includeEnded,
+                cancellationToken);
         }
 
         // ── Name → id ────────────────────────────────────────────────────────
@@ -192,8 +214,8 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
         }
 
         return await DescribeAsync(
-            resolution.Payee.Id, resolution.Payee.FullName, resolution.Match, includeEnded,
-            cancellationToken);
+            resolution.Payee.Id, resolution.Payee.FullName, resolution.Payee.EmployeeCode,
+            resolution.Match, includeEnded, cancellationToken);
     }
 
     /// <summary>
@@ -208,10 +230,39 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
     private async Task<string> DescribeAsync(
         Guid payeeId,
         string knownName,
+        string? knownCode,
         PayeeMatch match,
         bool includeEnded,
         CancellationToken cancellationToken)
     {
+        // BB ASKED BEFORE THE QUERY, AND THE ANSWER IS THE DIFFERENCE BETWEEN TWO OPPOSITE FACTS.
+        // A denial comes back from the handler as an empty page, identical to a payee who is simply on
+        // no plan - so without this the tool would have to pick one reading, and picking wrong means
+        // telling an admin that somebody is covered by no commission plan when they are.
+        //
+        // It costs nothing: the guard is request-scoped and caches its verdict, so the handler below is
+        // reading the same resolved visibility rather than repeating the work.
+        if (!await payeeAccessGuard.CanReadAsync(payeeId, cancellationToken))
+        {
+            LogCause(AssistantToolCause.NotPermitted);
+
+            return JsonSerializer.Serialize(
+                new AssignmentsNotVisible(
+                    Outcome: nameof(PayeePlansOutcome.AssignmentsNotVisible),
+                    Found: true,
+                    PayeeId: payeeId,
+                    PayeeName: knownName,
+                    PayeeEmployeeCode: knownCode,
+                    MatchedBy: match.ToString(),
+                    Message:
+                        "This payee exists, but THIS USER MAY NOT READ THEIR PLAN ASSIGNMENTS, so none "
+                        + "were looked at. Nothing whatsoever is known here about whether they have "
+                        + "any: say you cannot see them, never that there are none, and send the user "
+                        + "to the payee's own screen, which shows the assignments to whoever may see "
+                        + "them."),
+                Json);
+        }
+
         Result<PagedResult<PlanAssignmentDto>> assignments;
 
         try
@@ -246,36 +297,34 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
 
         var rows = assignments.Value.Items ?? [];
 
-        // ★★ AN EMPTY LIST IS TWO DIFFERENT FACTS AND THE TOOL CANNOT TELL THEM APART — so it must not
-        // pick one. ListAssignmentsByPayeeHandler answers a PayeeAccessGuard denial with an EMPTY PAGE
-        // rather than a Forbidden (deliberately: an error would confirm the payee exists). So zero rows
-        // means EITHER this payee genuinely has no assignments OR this user may not see them, and
-        // reporting "Ana is not on any plan" would be a confident false statement about somebody's
-        // compensation in the second case.
+        // ★★ THIS EMPTY LIST MEANS ONE THING, AND THAT IS THE POINT OF THE CHECK ABOVE. It used to mean
+        // two — "has none" or "you may not see them" — under a single outcome token, and the model was
+        // asked to phrase a sentence true under both readings. Runtime showed why that could not work:
+        // an ambiguous token is not a fact, and the model resolved it to the confident reading and told
+        // a user their payee had no plans while the payee screen listed one.
         //
-        // The outcome token says exactly that much and no more, and rule 22b turns it into a sentence
-        // that is true under both readings. This is Rule 3 arriving through a side door: the refusal
-        // stays indistinguishable, and the honest phrasing is the one that does not resolve it.
+        // Visibility has already been established, so what is left is the honest, narrow statement: with
+        // THIS status filter, nothing came back. Note what it still does NOT say — "never assigned to
+        // anything" is only true when includeEnded is set, and the two messages differ for that reason.
         if (rows.Count == 0)
         {
             LogCause(AssistantToolCause.NotFound);
 
             return JsonSerializer.Serialize(
                 new NoAssignments(
-                    Outcome: nameof(PayeePlansOutcome.NoAssignmentsOrNotVisible),
+                    Outcome: nameof(PayeePlansOutcome.NoAssignments),
                     Found: true,
                     PayeeId: payeeId,
                     PayeeName: knownName,
+                    PayeeEmployeeCode: knownCode,
                     MatchedBy: match.ToString(),
                     IncludedEnded: includeEnded,
                     Message: includeEnded
-                        ? "No plan assignment of any status came back for this payee. Either they have "
-                          + "never been assigned to a plan, or this user cannot see their assignments — "
-                          + "you cannot tell which, so do not assert either."
-                        : "No ACTIVE plan assignment came back for this payee. Either they have none "
-                          + "right now, or this user cannot see their assignments — you cannot tell "
-                          + "which, so do not assert either. They may still have ended assignments: "
-                          + "offer to look again including past ones."),
+                        ? "This user CAN see this payee's assignments, and there are none of any "
+                          + "status: they have never been assigned to a plan. You may say so."
+                        : "This user CAN see this payee's assignments, and none is ACTIVE right now. "
+                          + "You may say they have no active plan — but NOT that they never had one: "
+                          + "ended assignments were excluded. Offer to look again including past ones."),
                 Json);
         }
 
@@ -373,7 +422,20 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
     // ── The payload the model reads ───────────────────────────────────────────
 
     /// <summary>The three shapes this tool can return, named so the model can branch on one field.</summary>
-    private enum PayeePlansOutcome { PayeePlans, NoAssignmentsOrNotVisible, NotFoundOrNotVisible }
+    /// <summary>
+    /// ★ FOUR, WHERE THERE USED TO BE THREE — and the new one is the whole work item.
+    /// <c>NoAssignmentsOrNotVisible</c> was ONE token for two opposite facts, so it is split:
+    /// <c>NoAssignments</c> is a verified nothing, <c>AssignmentsNotVisible</c> is a permission wall.
+    /// <c>NotFoundOrNotVisible</c> keeps its ambiguity on purpose — that one is Rule 3's refusal, where
+    /// staying indistinguishable is the security property rather than a shortcoming.
+    /// </summary>
+    private enum PayeePlansOutcome
+    {
+        PayeePlans,
+        NoAssignments,
+        AssignmentsNotVisible,
+        NotFoundOrNotVisible,
+    }
 
     /// <summary>
     /// ★ MINIMAL PII, AND NO MONEY AT ALL. A name and an employee code, because the answer is about a
@@ -401,13 +463,34 @@ public sealed class GetPayeePlansTool(ISender sender, ILogger<GetPayeePlansTool>
         string EffectiveTo,
         string? Notes);
 
+    /// <param name="PayeeEmployeeCode">
+    /// ★ CARRIED ON THE EMPTY ANSWER TOO, WHICH IS NEW. An answer that found nothing has to be able to
+    /// say WHAT IT LOOKED FOR — "I searched for Ana García (EMP-ANA)" — or the user cannot tell a real
+    /// nothing from a lookup that went to the wrong person. It cannot come off the rows here: there are
+    /// none. Both callers confirm the payee first, so it is always available.
+    /// </param>
     private sealed record NoAssignments(
         string Outcome,
         bool Found,
         Guid PayeeId,
         string PayeeName,
+        string? PayeeEmployeeCode,
         string MatchedBy,
         bool IncludedEnded,
+        string Message);
+
+    /// <summary>
+    /// The payee is real and named, and this user may not read their assignments. Deliberately carries
+    /// no <c>includedEnded</c>: nothing was filtered because nothing was queried, and reporting a filter
+    /// that never ran would invite "no ACTIVE ones" — a claim about data nobody looked at.
+    /// </summary>
+    private sealed record AssignmentsNotVisible(
+        string Outcome,
+        bool Found,
+        Guid PayeeId,
+        string PayeeName,
+        string? PayeeEmployeeCode,
+        string MatchedBy,
         string Message);
 
     private sealed record RefusalPayload(string Outcome, bool Found, string Message);

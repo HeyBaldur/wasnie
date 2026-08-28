@@ -1,5 +1,31 @@
 ﻿namespace Wasnie.Application.Assistant.DTOs;
 
+/// <summary>
+/// One BATCH of the history list, plus where the next one starts.
+///
+/// ★ THE CURSOR COMES BACK IN THE RESPONSE, and that is the contract that keeps the client simple: the
+/// front end never composes a cursor, it echoes the one it was handed. Null means there is nothing more
+/// — which is how the "Load more" button knows to disappear, rather than by comparing counts to a page
+/// size and getting it wrong on a batch that happens to land exactly on the boundary.
+/// </summary>
+/// <param name="Pinned">
+/// The caller's pinned conversations, complete and newest-pin-first.
+///
+/// ★★ OUTSIDE THE CURSOR ON PURPOSE, AND THAT IS THE WHOLE COSTUMBRE OF THIS FIELD. Pinned threads are
+/// exactly the ones somebody keeps because they are OLD — the ones that have sunk far past the first
+/// batch. Put them through the cursor and an old pin would not be in the first response at all, which
+/// is precisely the problem pinning exists to solve. So they are returned whole, and the cap on how
+/// many there can be (AssistantPins.MaxPinned) is what keeps "whole" affordable.
+///
+/// ★ AND ONLY WITH THE FIRST BATCH, never with a continuation and never while searching — see the
+/// handler. Repeating them on every batch would be bytes nobody reads and a group that redraws for no
+/// reason.
+/// </param>
+public sealed record AssistantConversationPageDto(
+    IReadOnlyList<AssistantConversationSummaryDto> Items,
+    string? NextCursor,
+    IReadOnlyList<AssistantConversationSummaryDto> Pinned);
+
 /// <summary>One conversation as it appears in the history list. No messages — the list does not need them.</summary>
 public sealed record AssistantConversationSummaryDto(
     Guid Id,

@@ -102,14 +102,67 @@ public sealed class OpenRouterProviderTests
         Resolve("openrouter").Should().BeOfType<OpenRouterChatProvider>();
     }
 
+    // ── Fail-closed: the provider cannot be chosen by omission ────────────────
+
+    /// <summary>
+    /// ★ THIS TEST USED TO ASSERT THE OPPOSITE, and the inversion is the point of the change.
+    ///
+    /// It read "an absent or misspelt provider falls back to Groq rather than failing to start",
+    /// justified by "a typo in a chat panel's configuration must not stop the API". That reasoning
+    /// holds for a feature toggle and fails for this key: it is the only thing that decides which
+    /// third-party vendor, in which jurisdiction, receives payroll data. Both options are US-based,
+    /// only OpenRouter has any privacy configuration reported, and neither has a signed DPA
+    /// (docs/Legal.md §3.1, §5).
+    ///
+    /// The old default made silence mean Groq. An environment that never states a choice — a fresh
+    /// staging box, a container built without its override, a dropped environment variable — is not
+    /// asking for the usual vendor; it has not answered the question. So the refusal is the feature.
+    /// </summary>
     [Fact]
-    public void An_absent_or_misspelt_provider_falls_back_to_Groq_rather_than_failing_to_start()
+    public void An_absent_provider_refuses_to_start_instead_of_choosing_a_vendor_by_omission()
     {
-        // ★ A typo in a chat panel's configuration must not stop the API. Everything else in Wasnie —
-        // pay runs, ledgers, transactions — has nothing to do with which model answers questions.
-        Resolve(null).Should().BeOfType<GroqChatProvider>();
-        Resolve("OpenRoutr").Should().BeOfType<GroqChatProvider>();
-        Resolve(string.Empty).Should().BeOfType<GroqChatProvider>();
+        foreach (var absent in new[] { null, string.Empty, "   " })
+        {
+            var act = () => Resolve(absent);
+
+            act.Should().Throw<InvalidOperationException>(
+                "silence is an unanswered question about where personal data travels, not a default");
+        }
+    }
+
+    [Fact]
+    public void An_unrecognised_provider_refuses_to_start_rather_than_degrading_to_one_that_works()
+    {
+        // A typo must not resolve to SOMETHING. "OpenRoutr" previously selected Groq — the operator
+        // believed they had configured OpenRouter and the data went elsewhere, silently.
+        var act = () => Resolve("OpenRoutr");
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*OpenRoutr*", "the rejected value is echoed so the typo is visible");
+    }
+
+    [Fact]
+    public void The_failure_names_the_key_and_the_admitted_values()
+    {
+        // ★ The message is read by someone staring at a container that will not start. It has to say
+        // what to type, not merely that something was invalid.
+        var act = () => Resolve(null);
+
+        var message = act.Should().Throw<InvalidOperationException>().Which.Message;
+
+        message.Should().Contain("Assistant:Provider");
+        message.Should().Contain(AssistantProviderOptions.OpenRouter);
+        message.Should().Contain(AssistantProviderOptions.Groq);
+        message.Should().Contain("Assistant__Provider", "containers set it as an environment variable");
+    }
+
+    [Fact]
+    public void Both_admitted_values_still_resolve_their_own_implementation()
+    {
+        // Fail-closed removed the DEFAULT, not the choice. Both vendors remain selectable, which is
+        // exactly why the DPA has to name both and not only the one currently active.
+        Resolve(AssistantProviderOptions.OpenRouter).Should().BeOfType<OpenRouterChatProvider>();
+        Resolve(AssistantProviderOptions.Groq).Should().BeOfType<GroqChatProvider>();
     }
 
     [Fact]

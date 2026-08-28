@@ -129,7 +129,15 @@ public sealed class AssistantRoutingTests
 
         // ★ AND IT FITS. The first design sent ~15,300 tokens and every request was refused with 413
         // against a ~12,000-tokens-per-minute allowance. This is the assertion that would have caught it.
-        (system.Length / 4).Should().BeLessThan(6_000);
+        // ★★ THE SIZE ASSERTION THAT SAT HERE HAS MOVED, and not because it was in the wrong file — it
+        // was measuring the wrong thing. It built the prompt WITHOUT the navigation map, WITHOUT tool
+        // data and with a one-message history, i.e. a request production never sends, and then claimed
+        // the result proved the prompt fits the provider's allowance. Real requests are three to four
+        // times that size. See AssistantPromptSizeTests, which measures what actually goes out and says
+        // plainly that it is a growth guard rather than a provider limit.
+        //
+        // What belongs HERE is what this test is named for — routing sends the chosen sections and not
+        // the whole guide — and that is asserted above by containment, which is the honest form of it.
     }
 
     [Fact]
@@ -257,7 +265,15 @@ public sealed class AssistantRoutingTests
         // ★ Generous, not unbounded: a broad question must not smuggle the whole guide back in — that
         // is what exceeded the per-minute allowance in the first place.
         system.Should().NotContain("## 15. Clawback");
-        (system.Length / 4).Should().BeLessThan(6_000);
+        // ★★ THE SIZE ASSERTION THAT SAT HERE HAS MOVED, and not because it was in the wrong file — it
+        // was measuring the wrong thing. It built the prompt WITHOUT the navigation map, WITHOUT tool
+        // data and with a one-message history, i.e. a request production never sends, and then claimed
+        // the result proved the prompt fits the provider's allowance. Real requests are three to four
+        // times that size. See AssistantPromptSizeTests, which measures what actually goes out and says
+        // plainly that it is a growth guard rather than a provider limit.
+        //
+        // What belongs HERE is what this test is named for — routing sends the chosen sections and not
+        // the whole guide — and that is asserted above by containment, which is the honest form of it.
     }
 
     // ── 3. ★ THE FALLBACK — an empty route must never mean "answer freely" ────

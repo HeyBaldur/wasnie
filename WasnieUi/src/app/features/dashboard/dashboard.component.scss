@@ -45,9 +45,11 @@
 
 // ── Grids ──────────────────────────────────────────────────────────────────────
 
+// Two columns, not three: four cards in a 2x2 block, read in work order (approve, then pay; then the
+// two backlogs). At three-per-row the fourth card wrapped alone and read as an afterthought.
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   grid-auto-rows: minmax(160px, auto);
   gap: var(--space-4);
   margin-bottom: var(--space-8);
@@ -798,9 +800,6 @@
   .feed__scroll { max-height: 360px; }
 }
 
-@media (min-width: 640px) and (max-width: 1023px) {
-  .action-grid { grid-template-columns: repeat(2, 1fr); }
-}
 
 // Period filter. The dropdown panel is sized to its trigger, and a trigger sized to "This Month" made
 // the option rows too narrow once the selected-state check icon claimed space — "This Mo…". 160px is the

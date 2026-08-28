@@ -127,7 +127,7 @@ public sealed class GetPayoutByIdHandler(
         return new LineCalculationDto(
             PlanVersion: snapshot.PlanVersion,
             FrozenAt: snapshot.FrozenAt,
-            RateTable: MapRateTable(snapshot.RateTable),
+            RateTable: MapRateTable(snapshot.RateTable, snapshot.Measurement.Type),
             Trigger: MapTrigger(snapshot.Trigger),
             Modifiers: modifiers.Select(m => new ModifierApplicationDto(
                 ModifierName: m.ModifierName,
@@ -138,13 +138,20 @@ public sealed class GetPayoutByIdHandler(
                 AmountAfterCurrency: m.AmountAfter.Currency)).ToList());
     }
 
-    private static RateTableDto MapRateTable(RateTable rt) => new(
+    /// <summary>
+    /// ★ THE MEASUREMENT COMES FROM THE SNAPSHOT, not from the rule as it stands today. A payout is
+    /// a frozen record of how somebody was paid; reading the live rule would describe a plan that may
+    /// have been edited since, on a statement about money that already moved.
+    /// </summary>
+    private static RateTableDto MapRateTable(
+        RateTable rt, Wasnie.Domain.Compensation.Enums.MeasurementType measurement) => new(
         Type: rt.Type.ToString(),
         FlatRate: rt.FlatRate,
         Tiers: rt.Tiers?.Select(t => new RateTierDto(t.From, t.To, t.Rate)).ToList(),
         AttainmentTiers: rt.AttainmentTiers?
             .Select(t => new AttainmentTierDto(t.AttainmentFrom, t.AttainmentTo, t.Rate))
-            .ToList());
+            .ToList(),
+        MeasurementBase: Wasnie.Application.Assistant.Tools.PlanRuleSemantics.BaseOf(measurement).ToString());
 
     private static TriggerDto MapTrigger(Trigger trigger) => new(
         IsAlways: trigger.Conditions.Count == 0,

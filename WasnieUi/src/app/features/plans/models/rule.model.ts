@@ -164,3 +164,85 @@ export interface AddRuleRequest {
 export interface UpdateRuleRequest extends AddRuleRequest {
   ruleId: string;
 }
+
+// ── Rule simulation ─────────────────────────────────────────────────────────
+//
+// ★ THE REQUEST CARRIES THE DEFINITION, NOT AN ID. The Live Preview card mirrors the FORM, and that
+// form creates rules as well as edits them: by id there would be nothing to simulate while creating,
+// and while editing the card would show the rate just typed beside a figure computed from the rate
+// still in the database. Two contradictory numbers in one card is the exact loss of trust the card
+// exists to prevent.
+export interface SimulateRuleRequest extends AddRuleRequest {
+  amount: number;
+  quantity: number;
+  // ★ Optional, and its absence is meaningful — omitting it makes the server REFUSE rather than fall
+  // back on its 1.0 default, which would report a rep at full quota as if it were anybody.
+  attainmentPct?: number | null;
+  priorCumulative?: number | null;
+  quotaTarget?: number | null;
+}
+
+// ★★ STRING ENUMS, BECAUSE THE API SENDS NAMES. `Program.cs` registers a JsonStringEnumConverter,
+// so these arrive as "Cap" and "AppliedWithoutEffect", never as 4 and 2. Declared numeric, every
+// comparison in the template would silently be false — no error, no warning, just a breakdown that
+// renders the wrong rows. Caught by an integration test against the real endpoint, not by a unit
+// test whose fixtures were hand-written to the shape they were assumed to have.
+
+/** Never rendered raw — each value maps to an i18n key. */
+export enum RuleSimulationBlocker {
+  None = 'None',
+  AttainmentContextRequired = 'AttainmentContextRequired',
+  SplitQuotaContextRequired = 'SplitQuotaContextRequired',
+}
+
+export enum RuleCalculationComponent {
+  Trigger = 'Trigger',
+  Base = 'Base',
+  Rate = 'Rate',
+  Modifier = 'Modifier',
+  Cap = 'Cap',
+  Floor = 'Floor',
+}
+
+export enum RuleCalculationOutcome {
+  NotConfigured = 'NotConfigured',
+  Applied = 'Applied',
+  AppliedWithoutEffect = 'AppliedWithoutEffect',
+  Skipped = 'Skipped',
+  NotMatched = 'NotMatched',
+}
+
+export enum AttainmentSource {
+  Measured = 'Measured',
+  Supplied = 'Supplied',
+  Defaulted = 'Defaulted',
+}
+
+export interface RuleSimulationTier {
+  from: number;
+  to: number | null;
+  rate: number;
+  portion: number;
+  amount: number;
+}
+
+export interface RuleSimulationStep {
+  component: RuleCalculationComponent;
+  outcome: RuleCalculationOutcome;
+  inputAmount: number | null;
+  outputAmount: number | null;
+  operand: number | null;
+  thresholdAmount: number | null;
+  rateTable: RateTableType | null;
+  attainmentSource: AttainmentSource | null;
+  tiers: RuleSimulationTier[] | null;
+}
+
+export interface RuleSimulation {
+  simulated: boolean;
+  blocker: RuleSimulationBlocker;
+  creditGenerated: boolean;
+  commissionAmount: number | null;
+  currency: string;
+  steps: RuleSimulationStep[];
+}

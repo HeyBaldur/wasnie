@@ -42,7 +42,7 @@ import {
 } from '../../../shared/ui';
 import { PayeeLedgerPanelComponent } from '../../ledger/panel/payee-ledger-panel.component';
 
-type Tab = 'overview' | 'profile' | 'activity' | 'ledger';
+type Tab = 'overview' | 'profile' | 'ledger';
 type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
 
 @Component({
@@ -186,7 +186,7 @@ export class PayeeDetailComponent implements OnInit {
 
   /** Applies ?tab= / ?period= from the URL, doing nothing when they already match what is shown. */
   private _applyUrlState(requested: Tab | undefined): void {
-    const tabs: Tab[] = ['overview', 'profile', 'activity', 'ledger'];
+    const tabs: Tab[] = ['overview', 'profile', 'ledger'];
     const tab: Tab = requested && tabs.includes(requested) ? requested : 'overview';
     if (tab !== this.activeTab()) this.activeTab.set(tab);
 
@@ -208,7 +208,7 @@ export class PayeeDetailComponent implements OnInit {
     // what lets a deep link land where it promised: the terminated-accounts queue sends finance
     // straight to the clawback tab to close an account, not to a page they must navigate again.
     const requested = this.route.snapshot.queryParamMap.get('tab') as Tab | null;
-    const tabs: Tab[] = ['overview', 'profile', 'activity', 'ledger'];
+    const tabs: Tab[] = ['overview', 'profile', 'ledger'];
     this.activeTab.set(requested && tabs.includes(requested) ? requested : 'overview');
     this.dashboard.set(null);
     this.assignments.set([]); this.assignmentsPage.set(1); this.assignmentsTotal.set(0);

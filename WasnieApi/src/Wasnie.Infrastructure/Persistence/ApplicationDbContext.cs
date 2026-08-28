@@ -68,6 +68,7 @@ public sealed class ApplicationDbContext(
 
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations => Set<Wasnie.Domain.Assistant.AssistantConversation>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages => Set<Wasnie.Domain.Assistant.AssistantMessage>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates => Set<Wasnie.Domain.Assistant.AssistantConversationState>();
 
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotConnection> HubSpotConnections => Set<HubSpotConnection>();
     public Microsoft.EntityFrameworkCore.DbSet<HubSpotOAuthState> HubSpotOAuthStates => Set<HubSpotOAuthState>();
@@ -110,6 +111,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new ProcessedStripeEventConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantConversationConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantMessageConfiguration());
+        builder.ApplyConfiguration(new Configurations.Assistant.AssistantConversationStateConfiguration());
         builder.ApplyConfiguration(new HubSpotConnectionConfiguration());
         builder.ApplyConfiguration(new HubSpotOAuthStateConfiguration());
         builder.ApplyConfiguration(new CrmOwnerMappingConfiguration());
@@ -142,6 +144,8 @@ public sealed class ApplicationDbContext(
         // handlers carry it, and the isolation test is what keeps them honest.
         builder.Entity<Wasnie.Domain.Assistant.AssistantConversation>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Assistant.AssistantMessage>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        // Same floor, same reason: a standing belongs to one USER, and the handlers add that half.
+        builder.Entity<Wasnie.Domain.Assistant.AssistantConversationState>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // HubSpotConnection is tenant-filtered for normal (authenticated) access. HubSpotOAuthState is
         // intentionally NOT filtered — the anonymous OAuth callback resolves the tenant from the state row.
         builder.Entity<HubSpotConnection>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

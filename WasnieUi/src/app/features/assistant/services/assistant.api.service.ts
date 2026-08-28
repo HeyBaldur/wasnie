@@ -1,8 +1,9 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
   AssistantConversation,
+  AssistantConversationPage,
   AssistantConversationSummary,
   AssistantEntitlement,
   AssistantExchange,
@@ -19,8 +20,27 @@ export class AssistantApiService {
     return this.http.get<AssistantEntitlement>(`${this.base}/entitlement`);
   }
 
-  listConversations(): Observable<AssistantConversationSummary[]> {
-    return this.http.get<AssistantConversationSummary[]>(`${this.base}/conversations`);
+  /**
+   * One batch of the history list.
+   *
+   * ★ THE SEARCH IS A PARAMETER OF THE SAME CALL, not a second endpoint — so a filtered list pages
+   * exactly like an unfiltered one and this client has one code path instead of two that drift.
+   *
+   * ★ AND EVERY PARAMETER IS OMITTED WHEN ABSENT. Sending `cursor=` or `search=` empty would ask the
+   * server to distinguish "no cursor" from "an empty cursor", which is a distinction nobody needs and
+   * somebody eventually gets wrong.
+   */
+  listConversations(cursor?: string | null, search?: string | null):
+    Observable<AssistantConversationPage> {
+    let params = new HttpParams();
+    if (cursor) {
+      params = params.set('cursor', cursor);
+    }
+    if (search) {
+      params = params.set('search', search);
+    }
+
+    return this.http.get<AssistantConversationPage>(`${this.base}/conversations`, { params });
   }
 
   getConversation(conversationId: string): Observable<AssistantConversation> {
@@ -99,6 +119,20 @@ export class AssistantApiService {
         }
       }
     }
+  }
+
+  /**
+   * Pin / unpin, for the CALLER.
+   *
+   * ★ NO USER PARAMETER, AND THAT IS THE AUTHORISATION. The server takes the caller from the token; a
+   * body that could name a user would be a request that could pin something in somebody else's list.
+   */
+  pinConversation(conversationId: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/conversations/${conversationId}/pin`, null);
+  }
+
+  unpinConversation(conversationId: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/conversations/${conversationId}/pin`);
   }
 
   renameConversation(conversationId: string, title: string): Observable<AssistantConversationSummary> {

@@ -38,6 +38,14 @@ export interface AttainmentTierDto {
 export interface RateTableDto {
   type: 'Flat' | 'Tiered' | 'AttainmentBased';
   flatRate: number | null;
+  /**
+   * What the rate applies to — 'TransactionAmount' or 'TransactionQuantity'.
+   *
+   * ★ WITHOUT IT A RATE CANNOT BE RENDERED. See shared/utils/rate-format: a bare decimal is a
+   * percentage against an amount and a price per unit against a quantity, and guessing produced
+   * "500% flat" on a statement for a rule paying €5 per unit.
+   */
+  measurementBase?: string;
   tiers: RateTierDto[] | null;
   attainmentTiers: AttainmentTierDto[] | null;
 }

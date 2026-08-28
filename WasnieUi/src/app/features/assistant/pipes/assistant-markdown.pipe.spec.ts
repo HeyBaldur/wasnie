@@ -242,7 +242,30 @@ describe('AssistantMarkdownPipe', () => {
     const host = render('```\nlong line\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |');
 
     expect(host.querySelector('pre')?.classList).toContain('ws-scroll-thin');
-    expect(host.querySelector('table')?.classList).toContain('ws-scroll-thin');
+    // ★ ON THE WRAPPER, NOT THE TABLE, AND THAT MOVED ON PURPOSE. Scrolling used to be bought with
+    // `display: block` on the <table> — which also makes it shrink to its content instead of filling
+    // the column, leaving white space beside a narrow table. One element cannot both fill and scroll,
+    // so the scroll went to a wrapper and the table went back to `display: table`.
+    expect(host.querySelector('.ws-md-table')?.classList).toContain('ws-scroll-thin');
+    expect(host.querySelector('.ws-md-table > table')).not.toBeNull();
+  });
+
+  // The wrapper must close where the table closes; a stray </div> would swallow the rest of the reply.
+  it('★ wraps each table exactly once and lets the text after it out', () => {
+    const host = render('| A |\n| --- |\n| 1 |\n\nAfter the table.');
+
+    expect(host.querySelectorAll('.ws-md-table').length).toBe(1);
+    expect(host.querySelectorAll('table').length).toBe(1);
+    expect(host.textContent).toContain('After the table.');
+    // The paragraph is a SIBLING of the wrapper, not trapped inside it.
+    expect(host.querySelector('.ws-md-table p')).toBeNull();
+  });
+
+  it('wraps two tables separately', () => {
+    const host = render('| A |\n| --- |\n| 1 |\n\n| B |\n| --- |\n| 2 |');
+
+    expect(host.querySelectorAll('.ws-md-table').length).toBe(2);
+    expect(host.querySelectorAll('.ws-md-table > table').length).toBe(2);
   });
 
   // ── 1b. ★ THE ALLOWLIST: <br> survives, everything else still does not ────

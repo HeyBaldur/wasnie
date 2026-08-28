@@ -168,7 +168,10 @@ public sealed class GetPayeeLedgerSummaryHandler(
         var rows = currencies.Select(currency =>
         {
             var earnedAmount = Get(earned, currency);
-            var awaitingAmount = Get(awaiting, currency) + Get(credit, currency);
+            // ★ KEPT SEPARATELY AS WELL AS SUMMED. The total is what every existing reader expects;
+            // the component is what lets a caller say WHICH part of it a pay run can actually move.
+            var clawbackCredit = Get(credit, currency);
+            var awaitingAmount = Get(awaiting, currency) + clawbackCredit;
             var debtAmount = Get(debt, currency);
             var net = awaitingAmount - debtAmount;
 
@@ -180,7 +183,8 @@ public sealed class GetPayeeLedgerSummaryHandler(
                 AwaitingPaymentAllTime: awaitingAmount,
                 OutstandingDebt: debtAmount,
                 NetPendingPayout: net,
-                Interpretation: Classify(earnedAmount, awaitingAmount, debtAmount, net));
+                Interpretation: Classify(earnedAmount, awaitingAmount, debtAmount, net),
+                ClawbackCreditAllTime: clawbackCredit);
         }).ToList();
 
         return Result<PayeeLedgerSummaryDto>.Success(new PayeeLedgerSummaryDto(

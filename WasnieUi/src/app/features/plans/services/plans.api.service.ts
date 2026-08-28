@@ -2,7 +2,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Plan, PlanSummary, CreatePlanRequest } from '../models/plan.model';
-import { AddRuleRequest, Rule, TriggerField, UpdateRuleRequest } from '../models/rule.model';
+import {
+  AddRuleRequest, Rule, RuleSimulation, SimulateRuleRequest, TriggerField, UpdateRuleRequest,
+} from '../models/rule.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
 
@@ -74,6 +76,16 @@ export class PlansApiService {
 
   updateRule(planId: string, ruleId: string, request: UpdateRuleRequest): Observable<Rule> {
     return this.http.put<Rule>(`${this.base}/${planId}/rules/${ruleId}`, request);
+  }
+
+  /**
+   * What one hypothetical transaction would earn under a rule, step by step.
+   *
+   * ★ POST, and nothing is created. The rule's whole definition travels in the body because that is
+   * an object, not a query string — the server writes nothing: no credit, no ledger entry, no counter.
+   */
+  simulateRule(planId: string, request: SimulateRuleRequest): Observable<RuleSimulation> {
+    return this.http.post<RuleSimulation>(`${this.base}/${planId}/rules/simulate`, request);
   }
 
   deletePlan(planId: string): Observable<void> {

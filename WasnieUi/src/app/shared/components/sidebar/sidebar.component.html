@@ -101,6 +101,32 @@
               </li>
             }
           }
+
+          <!--
+            ★★ THE ASSISTANT, GATED BY ITS ENTITLEMENT AND NOT BY A PERMISSION. Every other entry
+            above is filtered by `*hasPermission`; access to the assistant is a seat plus a paid plan,
+            decided by the server. Rendering nothing while the answer is unknown is deliberate — a link
+            that appears and then vanishes is worse than one that arrives a beat late.
+
+            It sits at the end of SETUP rather than in a section of its own: it is one entry, and a
+            heading with a single item under it is a heading that costs more than it explains.
+          -->
+          @if (section.sectionKey === 'NAV.SECTION_SETUP' && assistant.entitled() === true) {
+            <li class="sidebar__nav-item">
+              <a
+                routerLink="/assistant"
+                class="sidebar__nav-link"
+                [class.sidebar__nav-link--active]="isNavActive('/assistant')"
+                [title]="!sidebarState.isExpanded() ? ('NAV.ASSISTANT' | translate) : ''"
+                data-testid="nav-assistant"
+              >
+                <app-icon name="assistant-chat" [size]="18" />
+                @if (sidebarState.isExpanded()) {
+                  <span class="sidebar__nav-label">{{ 'NAV.ASSISTANT' | translate }}</span>
+                }
+              </a>
+            </li>
+          }
         </ul>
       </div>
     }

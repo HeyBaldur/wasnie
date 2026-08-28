@@ -293,6 +293,21 @@ public sealed class AssistantToolRunner(
         "commission came out the way it did. Questions about the user's OWN plan count even when no " +
         "plan is named — call the plan tool without a name and it will ask which one.\n" +
         "\n" +
+        "★★ A NUMBER IN THE MESSAGE CHANGES WHICH PLAN TOOL YOU WANT. If the user puts an " +
+        "AMOUNT or a QUANTITY to you — \"I have a transaction of 7,850 with 5 units\", \"how much " +
+        "does each rule generate\", \"what would this pay\", \"if I sell X\", \"simulate\" — call " +
+        "the SIMULATION tool, not the plan-rules lookup. It runs the real engine and ALSO returns how " +
+        "each rule is configured, so it answers both halves of \"how is it set up and what would it " +
+        "pay\".\n" +
+        "\n" +
+        "★ AND THIS IS THE PAIR THAT ACTUALLY COLLIDES. \"How is this plan configured\", \"what " +
+        "rules does it have\", \"what is the rate\" are CONFIGURATION: the plan-rules lookup. " +
+        "\"How much would it pay on 7,850\", \"what does rule 2 generate for 5 units\" are a " +
+        "CALCULATION: the simulation tool. \"Why did my commission come out that way\" is " +
+        "configuration UNLESS the user supplies the figures, and then it is simulation. When a number " +
+        "is present, prefer simulation — you only get ONE tool call per turn, and the simulation " +
+        "carries the configuration while the configuration carries no arithmetic.\n" +
+        "\n" +
         "★ A QUESTION ABOUT A PERSON IS NOT A QUESTION ABOUT A PLAN, and the two have DIFFERENT tools. " +
         "\"What plans is Ana on\", \"which plan is she assigned to\", \"does he have a plan\", \"since " +
         "when is she on it\" are about a PAYEE's assignments: call the payee-plans tool with the payee. " +
@@ -300,6 +315,16 @@ public sealed class AssistantToolRunner(
         "configuration: call the plan-rules tool with the plan. NEVER pass a PERSON'S NAME as a plan " +
         "name — no plan is called \"Ana García\", the lookup will refuse, and the user will be told the " +
         "person does not exist one turn after you described them.\n" +
+        "\n" +
+        "★ AND THE MIRROR OF IT, WHICH IS THE ONE THAT ACTUALLY BIT. There is NO tool that lists " +
+        "the payees on a plan. The assignment tool runs PAYEE to PLANS and only that way. So when the " +
+        "user asks who is on a plan, how many payees a plan has, or whether a plan has anybody " +
+        "assigned, do NOT reach for the payee tools and do NOT feed them the plan’s name or the " +
+        "plan’s id: no person is called “Q3 EMEA Accelerator” and no person has a plan’s " +
+        "UUID, so the lookup will truthfully answer that nobody like that exists — about a plan the " +
+        "user is reading on their screen. Call NO tool for that question. The answering model has a " +
+        "rule for saying honestly that the capability does not exist yet; it cannot use that rule once " +
+        "you have handed it a real not-found.\n" +
         "\n" +
         "Call NO tool when the message is about what a term means, how the product works in general, or " +
         "how to perform an action in the interface. The documentation answers those and a lookup would " +
