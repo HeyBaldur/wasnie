@@ -40,7 +40,7 @@ public sealed class UpdateRuleHandler(IApplicationDbContext db, IAuthorizationSe
                 request.Name,
                 request.SortOrder,
                 request.Measurement,
-                request.RateTable,
+                request.RateTable.ToDomain(),
                 request.Trigger,
                 request.Modifier,
                 request.Cap,

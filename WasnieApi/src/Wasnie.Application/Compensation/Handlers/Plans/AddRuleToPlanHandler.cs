@@ -39,7 +39,7 @@ public sealed class AddRuleToPlanHandler(IApplicationDbContext db, IAuthorizatio
                 request.Name,
                 request.SortOrder,
                 request.Measurement,
-                request.RateTable,
+                request.RateTable.ToDomain(),
                 request.Trigger,
                 request.Modifier,
                 request.Cap,

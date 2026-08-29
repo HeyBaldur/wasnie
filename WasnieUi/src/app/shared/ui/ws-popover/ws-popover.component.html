@@ -4,7 +4,11 @@
   </div>
 
   @if (isOpen()) {
-    <div #popover [class]="'ws-pop__panel ws-pop__panel--' + placement()">
+    <!--
+      resolvedPlacement(), not placement(): the panel flips to the other side of the trigger when the
+      preferred one has no room. See WsPopoverComponent.resolvedPlacement.
+    -->
+    <div #popover [class]="'ws-pop__panel ws-pop__panel--' + resolvedPlacement()">
       <ng-content />
     </div>
   }

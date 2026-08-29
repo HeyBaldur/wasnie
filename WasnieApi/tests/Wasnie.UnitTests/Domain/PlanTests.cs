@@ -326,7 +326,8 @@ public sealed class PlanTests
         };
 
         var act = () => RateTable.Tiered(tiers);
-        act.Should().Throw<DomainException>().WithMessage("*non-overlapping*");
+        // The message names the two offending tiers now that each invariant reports itself.
+        act.Should().Throw<DomainException>().WithMessage("*tiers 1 and 2 overlap*");
     }
 
     [Fact]
@@ -348,7 +349,9 @@ public sealed class PlanTests
         var tiers = new List<RateTier>
         {
             new() { From = 0m, To = 100m, Rate = 0.05m },
-            new() { From = 101m, To = null, Rate = 0.08m }
+            // Touches at 100 rather than starting at 101: tiers must be contiguous, and the engine
+            // walks tier WIDTHS, so a declared gap would silently shift where the rate changes.
+            new() { From = 100m, To = null, Rate = 0.08m }
         };
 
         var table = RateTable.Tiered(tiers);
@@ -483,7 +486,7 @@ public sealed class PlanTests
             Aggregation = MeasurementAggregation.Sum,
         };
         var attainmentTable = RateTable.AttainmentBased([
-            new AttainmentTier { AttainmentFrom = 0m, AttainmentTo = 1.0m, Rate = 0.05m },
+            new AttainmentTier { AttainmentFrom = 0m, AttainmentTo = null, Rate = 0.05m },
         ]);
 
         Action act = () => plan.AddRule("Units Attainment", 1, unitsMeasurement, attainmentTable);
