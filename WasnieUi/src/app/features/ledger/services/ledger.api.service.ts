@@ -5,7 +5,9 @@ import {
   CreateAdjustmentRequest,
   PayeeLedgerEntry,
   PayeeStatement,
-  TerminatedPayeeBalance,
+  TerminatedAccounts,
+  CloseAccountRequest,
+  CloseAccountResult,
 } from '../models/ledger.model';
 
 @Injectable({ providedIn: 'root' })
@@ -22,9 +24,25 @@ export class LedgerApiService {
     return this.http.get<PayeeLedgerEntry[]>(`${this.base}/${payeeId}/ledger/entries`);
   }
 
-  /** Payees who have left with an account still open — the work queue finance closes. */
-  getTerminatedWithBalance(): Observable<TerminatedPayeeBalance[]> {
-    return this.http.get<TerminatedPayeeBalance[]>(`${this.base}/ledger/terminated-with-balance`);
+  /**
+   * Payees who have left with an account still open — the work queue finance closes.
+   *
+   * Returns rows AND server-computed totals: a screen must not add money, and the totals are per
+   * currency because there is no exchange rate anywhere in Wasnie to blend them with.
+   */
+  getTerminatedWithBalance(): Observable<TerminatedAccounts> {
+    return this.http.get<TerminatedAccounts>(`${this.base}/ledger/terminated-with-balance`);
+  }
+
+  /**
+   * Closes a departed payee's account. One-way: the credits reach a terminal state and the ledger is
+   * append-only, so there is no undo — only a new, separate decision.
+   *
+   * A 409 means the account moved between the modal opening and this call. The caller must reload and
+   * show what is there now, never retry the same body.
+   */
+  closeAccount(payeeId: string, request: CloseAccountRequest): Observable<CloseAccountResult> {
+    return this.http.post<CloseAccountResult>(`${this.base}/${payeeId}/ledger/close-account`, request);
   }
 
   createAdjustment(

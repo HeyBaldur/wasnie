@@ -573,11 +573,15 @@
   &:hover { color: var(--color-text-link-hover); }
 }
 
+// ★★ STACKED, NOT SIDE BY SIDE, AND THAT IS ABOUT LARGE NUMBERS. On one row the label and the figure
+// fought over 286px: a commission of €500,000,000,000,000.00 squeezed "This rule would pay" down to
+// one word per line and still ran off the edge. A label above its figure costs one line and cannot
+// be squeezed by anything.
 .rule-sim__result {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .rule-sim__result-label {
@@ -591,34 +595,81 @@
   color: var(--color-brand);
   font-variant-numeric: tabular-nums;
 
+  // ★ THE FIGURE NEVER WRAPS AND NEVER ESCAPES. A commission broken across two lines is a commission
+  // misread, so it stays on one line and the strip scrolls instead — the same answer the breakdown
+  // table below uses, and the reason the panel keeps its width whatever somebody types.
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+
   // ★ OPTS IN BY HAND, because this is a `<span>`. The global rule sets the display face on heading
   // ELEMENTS only — which is what lets it reach the manual's `[innerHTML]` chapters — so anything
   // set large that is not a heading has to ask, exactly as the ledger's figures do.
   font-family: var(--font-display);
 }
 
-// ── The breakdown ────────────────────────────────────────────────────────────
+// ── The breakdown, as a table ─────────────────────────────────────────────────────────────────────
 //
-// ★ AN ORDERED LIST, BECAUSE THE ORDER IS THE INFORMATION. The engine runs cap before floor, which
-// is why a floor above a cap wins; numbering these makes the sequence a claim the reader can check
-// rather than a coincidence of layout.
-.rule-sim__steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+// ★ IT BORROWS ws-table's TYPOGRAPHY, NOT ITS CONTAINER. The simulator is a section inside a card,
+// under a top border; ws-table is a surface of its own with border, shadow and radius, so using it
+// here would nest a card in a card. What consistency actually requires is the part a reader
+// recognises — uppercase column headers, right-aligned tabular figures, a quiet rule between rows —
+// and those are declared here to match, with the amount column using the shared .col-amount utility.
+// ★★ THE OVERFLOW LIVES ON A WRAPPER, WHICH IS WHAT ws-table DOES TOO. This panel is 318px wide and
+// a commission can be any size somebody types: measured, €5,000,000,000,000,000.00 made the table
+// 346px and it simply spilled 43px past the panel, over the form beside it. A table cannot clip
+// itself — `overflow` on a <table> does nothing — so the scroll container has to be the element
+// around it. The panel never widens and the page never scrolls sideways; only this strip does.
+.rule-sim__table-wrap {
+  overflow-x: auto;
+  // Room for the scrollbar to appear without it sitting on top of the last row.
+  padding-bottom: var(--space-1);
+  // The bar itself is `.ws-scroll-thin` on the element — the app's one scroll utility, which already
+  // sizes BOTH axes and colours the thumb from a token that follows the theme. Declaring it here
+  // would be the sixth hand-rolled copy in this codebase.
 }
 
-.rule-sim__step {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-
+.rule-sim__table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: var(--font-size-12);
+
+  th {
+    padding: 0 0 var(--space-1);
+    font-size: var(--font-size-10);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  // The amount column, matching the tables elsewhere in the app: right-aligned so the decimals of a
+  // chain of running totals line up under each other.
+  th.col-amount,
+  td.col-amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  td {
+    padding: var(--space-1) 0;
+    vertical-align: baseline;
+  }
+
+  // ★ NEVER BREAK A FIGURE. An amount wrapped across two lines is an amount somebody misreads, so
+  // these two columns push the table wider instead — and the wrapper above turns that into a scroll
+  // rather than into a panel that bursts.
+  td.rule-sim__step-applied,
+  td.col-amount {
+    white-space: nowrap;
+  }
+}
+
+// A row is a <tr> now; the flex that used to space its two halves is what the columns do.
+.rule-sim__step {
   color: var(--color-text-secondary);
 }
 
@@ -629,11 +680,20 @@
   color: var(--color-text-tertiary);
 }
 
+// ★ THE ONLY COLUMN ALLOWED TO WRAP, and it is what keeps the scroll from firing on ordinary
+// amounts. "Modifier (optional) NOT SET" on one forced line was costing width that the figures need;
+// as text it can take two lines and cost nothing. The money columns stay nowrap below — a number
+// broken across lines is a number misread.
 .rule-sim__step-name {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
+  color: var(--color-text-primary);
+}
+
+// The scalar the step applied — a rate, a factor, a cap. Quieter than the name and the result,
+// because it is the explanation rather than the answer.
+.rule-sim__step-applied {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  padding-left: var(--space-3);
 }
 
 .rule-sim__step-tag {
@@ -644,10 +704,16 @@
 }
 
 .rule-sim__step-value {
-  flex: none;
-  font-variant-numeric: tabular-nums;
   // The breakdown is the same figure in a quieter register, so it takes the same face.
+  // Alignment and tabular figures come from .col-amount above.
   font-family: var(--font-display);
+  color: var(--color-text-primary);
+  padding-left: var(--space-3);
+}
+
+// An inert step still shows its numbers, just without claiming attention.
+.rule-sim__step--inert td {
+  color: var(--color-text-tertiary);
 }
 
 // ★★ THE SCOPE IS PART OF THE ANSWER, so it is not an afterthought in the corner. One rule, one

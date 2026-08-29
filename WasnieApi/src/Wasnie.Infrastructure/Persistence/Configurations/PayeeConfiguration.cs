@@ -26,6 +26,12 @@ public sealed class PayeeConfiguration : IEntityTypeConfiguration<Payee>
         builder.Property(p => p.Location).HasMaxLength(200);
         builder.Property(p => p.IsActive).IsRequired().HasDefaultValue(true);
         builder.Property(p => p.DeactivatedAt);
+
+        // The financial account's closure. A RECORD, never a filter — see Payee.AccountClosedAt for why
+        // filtering the orphan queue on this would recreate the bug the queue exists to close.
+        builder.Property(p => p.AccountClosedAt).IsRequired(false);
+        builder.Property(p => p.AccountClosedBy).HasMaxLength(450).IsRequired(false);
+
         builder.Property(p => p.TenantId).IsRequired();
 
         builder.HasIndex(p => new { p.TenantId, p.EmployeeCode }).IsUnique();

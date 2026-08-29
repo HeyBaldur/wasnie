@@ -34,7 +34,7 @@ import {
 } from '../models/rule.model';
 import {
   AddRuleRequest, AttainmentSource, RuleCalculationComponent, RuleCalculationOutcome,
-  RuleSimulation, RuleSimulationBlocker, SimulateRuleRequest, TriggerField, UpdateRuleRequest,
+  RuleSimulation, RuleSimulationBlocker, RuleSimulationStep, SimulateRuleRequest, TriggerField, UpdateRuleRequest,
 } from '../models/rule.model';
 import {
   WsPageHeaderComponent,
@@ -521,6 +521,32 @@ export class RuleFormComponent implements OnInit {
       case RuleCalculationComponent.Floor:    return 'PLANS.RULE_SECTION_FLOOR';
       default:                                return 'PLANS.RULE_SECTION_TRIGGER';
     }
+  }
+
+  /**
+   * Which phrase describes what a step APPLIED — the column that turns a list of running totals into
+   * an explanation. "Cap · no effect · €312.00" never said what the cap was; "cap €500.00" does.
+   *
+   * ★ THE VALUE IS NEVER RE-EXPRESSED, ONLY LABELLED. A rate stored as 0.05 is shown as 0.05, not as
+   * 5% — converting between conventions in a field that decides pay is the one arithmetic this app
+   * refuses to do on the user's behalf. Each key carries the noun that makes the bare number
+   * unambiguous, and nothing multiplies or scales it.
+   *
+   * Null means the step has no scalar of its own — a tiered rate table walks tiers instead, and the
+   * base is just the transaction. Those render an em dash.
+   */
+  stepAppliedKey(step: RuleSimulationStep): string | null {
+    if (step.thresholdAmount !== null) {
+      return step.component === RuleCalculationComponent.Floor
+        ? 'PLANS.SIM_APPLIED_FLOOR'
+        : 'PLANS.SIM_APPLIED_CAP';
+    }
+
+    if (step.operand === null) return null;
+
+    return step.component === RuleCalculationComponent.Modifier
+      ? 'PLANS.SIM_APPLIED_FACTOR'
+      : 'PLANS.SIM_APPLIED_RATE';
   }
 
   onSimInput(raw: string | number | null): void {

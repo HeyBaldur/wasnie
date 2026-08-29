@@ -93,9 +93,22 @@ public sealed record PayeeLedgerEntryDto(
     Guid? SourcePlanId);
 
 /// <summary>
-/// One departed payee whose account is still open. <see cref="Balance"/> is signed exactly as stored —
-/// negative means they owe it. A positive balance appears here too: money Wasnie still owes someone who
-/// has left is just as unfinished as money they owe, and hiding it would be the same mistake.
+/// One departed payee's open account, in ONE currency. "Open" now has TWO independent meanings, and a
+/// row appears when EITHER is true:
+///
+///   • <see cref="Balance"/> — the ledger balance, signed exactly as stored (negative = they owe it).
+///     A positive balance appears here too: money Wasnie still owes someone who has left is just as
+///     unfinished as money they owe.
+///
+///   • <see cref="UnsettledCredits"/> — commission they EARNED that never reached a payout. This half
+///     was invisible until now, and the reason is worth stating: the ledger records what a payee OWES,
+///     so an unconsumed credit produces no <c>PayeeBalance</c> row at all. Queueing off balances meant
+///     a departed payee with earned-but-unpaid commission and no debt had a balance of "nothing" and
+///     was therefore, to this screen, settled.
+///
+/// ★ THE TWO ARE NEVER ADDED TOGETHER. They point in opposite directions and come from different
+/// sources; one number covering both would be a figure with no meaning. They are reported side by side
+/// and the reader decides.
 /// </summary>
 public sealed record TerminatedPayeeBalanceDto(
     Guid PayeeId,
@@ -104,4 +117,62 @@ public sealed record TerminatedPayeeBalanceDto(
     DateOnly? TerminationDate,
     decimal Balance,
     string Currency,
-    DateTimeOffset BalanceUpdatedAt);
+    /// <summary>Null when there is no ledger balance row at all — which is the ordinary case for a
+    /// payee whose only open item is unsettled commission. NOT a zero: "never had a balance" and
+    /// "balance updated to zero" are different facts.</summary>
+    DateTimeOffset? BalanceUpdatedAt,
+    /// <summary>
+    /// When this payee's account was closed, if it ever was — and if this row exists at all, then
+    /// something arrived AFTER that.
+    ///
+    /// ★ IT IS NOT A FILTER. Queue membership stays derived from money, so a closed account leaves the
+    /// list because it is empty, not because a flag hides it. That is deliberate: the product allows a
+    /// credit to arrive after someone leaves, so filtering on closure would make the new money invisible
+    /// all over again — the exact bug this queue was built to close. Non-null here therefore means
+    /// "closed once, and reopened by something new", which is a sentence the screen can show.
+    /// </summary>
+    DateTimeOffset? AccountClosedAt,
+    /// <summary>Sum of <see cref="UnsettledCredits"/>. Server-side because a screen must not add money.</summary>
+    decimal UnsettledCreditTotal,
+    IReadOnlyList<UnsettledCreditDto> UnsettledCredits);
+
+/// <summary>
+/// One commission credit that was earned and never paid: active (not superseded) and unconsumed by any
+/// payout. Carries what a person needs to ACT on it — who, how much, under which plan and rule, when it
+/// was credited, and the sale it came from — because a bare total is something to worry about rather
+/// than something to work.
+/// </summary>
+public sealed record UnsettledCreditDto(
+    Guid CreditId,
+    decimal Amount,
+    string Currency,
+    string PlanName,
+    string RuleName,
+    DateOnly AllocatedAt,
+    Guid TransactionId,
+    string TransactionReference);
+
+/// <summary>
+/// The whole queue: the rows, plus the totals that make somebody look at it.
+///
+/// ★ TOTALS ARE PER CURRENCY AND NEVER BLENDED. Wasnie holds no exchange rates, so a single figure
+/// across currencies would be invented. Same rule the balance list already follows by emitting one row
+/// per (payee, currency).
+/// </summary>
+public sealed record TerminatedAccountsDto(
+    IReadOnlyList<TerminatedPayeeBalanceDto> Rows,
+    IReadOnlyList<TerminatedAccountsTotalDto> Totals);
+
+/// <summary>
+/// What is outstanding in ONE currency. <see cref="UnsettledCreditTotal"/> is the money this queue
+/// exists to surface: commission earned by people who have left and that no pay run will ever pick up.
+///
+/// ★ THE LEDGER BALANCES ARE DELIBERATELY NOT TOTALLED HERE. They carry both signs — a debt to recover
+/// and a liability to pay — and summing them would net a debt against a liability into a number that
+/// describes neither. Counting them is safe; adding them is not.
+/// </summary>
+public sealed record TerminatedAccountsTotalDto(
+    string Currency,
+    decimal UnsettledCreditTotal,
+    int UnsettledCreditCount,
+    int PayeeCount);

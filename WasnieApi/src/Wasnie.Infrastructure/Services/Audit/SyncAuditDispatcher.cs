@@ -20,7 +20,19 @@ public sealed class SyncAuditDispatcher(IApplicationDbContext db, IClock clock) 
             resourceDisplayName: entry.DisplayName,
             beforeJson: entry.Before as string,
             afterJson: entry.After as string,
-            correlationId: entry.CorrelationId);
+            correlationId: entry.CorrelationId,
+            // ★★ THIS LINE WAS MISSING, AND THE COLUMN HAS BEEN EMPTY SINCE THE TABLE EXISTED.
+            // AuditEntry has carried Metadata all along and AuditLog has had the column all along; the
+            // one place that joins them did not pass it, so every caller that carefully built a
+            // dictionary — CreateManualLedgerAdjustmentHandler among them, with the signed amount, the
+            // currency and the resulting balance — was writing it into nothing. Discovered because the
+            // account-closure test asked the row what it had closed and the row said null.
+            //
+            // Serialised as JSON because the column is nvarchar(max) and a dictionary has to become
+            // text somehow; JSON is what BeforeJson/AfterJson already are, so a reader needs one habit.
+            metadata: entry.Metadata is null
+                ? null
+                : System.Text.Json.JsonSerializer.Serialize(entry.Metadata));
 
         db.AuditLogs.Add(log);
         await db.SaveChangesAsync(cancellationToken);

@@ -100,6 +100,31 @@ public sealed class AssistantPromptSizeTests(ITestOutputHelper output)
                 i % 2 == 0 ? 120 : 1_400))
             .ToList();
 
+    /// <summary>
+    /// The get_transaction payload at the shape that carries ownership labels — two credits of two
+    /// different payees, which is the case that produced a false table about money.
+    ///
+    /// ★ MEASURED, NOT ASSERTED. The test below prints what this costs so the next person can re-derive
+    /// the margin instead of trusting a comment. It is NOT the binding worst case — that is a
+    /// simulation turn — but it is the one this payload can move.
+    /// </summary>
+    private const string TransactionToolData =
+        """
+        {"found":true,"reference":"POL-8554","transactionDate":"2026-06-16","saleAmount":85700.00,
+        "saleCurrency":"EUR","quantity":1,"transactionStatus":"Calculated","payeeName":"Birgit Schneider",
+        "payeeEmployeeCode":"DE-101","ingestedAt":"2026-06-22","ingestedFrom":"Manual",
+        "commissionVisibleToYou":true,"commissionGenerated":true,"commissions":[
+        {"commissionAmount":3869.3432,"commissionCurrency":"EUR","matchedPlanName":"EU Accelerator Q2 2026",
+        "matchedRuleName":"Tier 1: 4% up to quota; Tier 2: 7% above quota","creditIsSuperseded":false,
+        "creditAllocatedAt":"2026-08-27","payeeRef":"TransactionPayee"},
+        {"commissionAmount":5999.0000,"commissionCurrency":"EUR","matchedPlanName":"EU Accelerator Q2 2026",
+        "matchedRuleName":"Tier 1: 4% up to quota; Tier 2: 7% above quota","creditIsSuperseded":true,
+        "creditAllocatedAt":"2026-06-24","payeeRef":"OtherPayee1"}],
+        "commissionsOrderedBy":"MostRecentlyAllocatedFirst","settlementVisibleToYou":true,
+        "hasBeenPaid":false,
+        "settlementNote":"The commission has been credited but does not yet appear in any payout."}
+        """;
+
     /// <summary>A tool payload of the shape the balance lookup returns — the largest of the four.</summary>
     private const string ToolData =
         """
@@ -155,6 +180,36 @@ public sealed class AssistantPromptSizeTests(ITestOutputHelper output)
 
         total.Should().BeGreaterThan(Ceiling / 2,
             "the ceiling is now far above anything real; re-measure and bring it down");
+    }
+
+    /// <summary>
+    /// What the ownership labels cost, printed rather than claimed.
+    ///
+    /// ★ WHY IT IS ITS OWN TEST. Only ONE tool runs per turn, so a get_transaction turn and a simulation
+    /// turn are different requests that never stack. The binding worst case belongs to the simulation
+    /// path and this payload cannot move it — but "cannot move it" is a claim, and a claim about a
+    /// token budget with a 2% margin should come with its number attached.
+    /// </summary>
+    [Fact]
+    public void A_TRANSACTION_TURN_WITH_OWNERSHIP_LABELS_STAYS_UNDER_THE_CEILING()
+    {
+        var knowledge = Knowledge();
+        var navigationMap = new FileUiNavigationMap(NullLogger<FileUiNavigationMap>.Instance).PromptBlock;
+
+        var prompt = AssistantPrompt.Build(
+            FullHistory(), maxHistory: 20, knowledge.TextFor(knowledge.LargestSectionIds(4)),
+            documentationAvailable: true, navigationMap, TransactionToolData);
+
+        var total = prompt.Sum(m => Tokens(m.Content));
+
+        output.WriteLine($"get_transaction turn, 2 credits with payeeRef + ordering: {total:N0} tok");
+        output.WriteLine($"  payload alone: {Tokens(TransactionToolData):N0} tok "
+                         + $"(the balance payload this file also measures: {Tokens(ToolData):N0} tok)");
+        output.WriteLine($"  ceiling {Ceiling:N0} tok — margin {Ceiling - total:N0}");
+
+        total.Should().BeLessThan(Ceiling,
+            "the ownership labels pushed a transaction turn past the ceiling — re-measure before "
+            + "adding another field to this payload");
     }
 
     [Fact]

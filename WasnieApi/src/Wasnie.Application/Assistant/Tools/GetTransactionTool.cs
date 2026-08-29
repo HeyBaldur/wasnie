@@ -87,6 +87,35 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
     /// </summary>
     private const int MaxPayoutsInspected = 5;
 
+    /// <summary>
+    /// The label for a credit belonging to the payee the SALE is attributed to — the person the question
+    /// is about.
+    ///
+    /// ★★ AN OPAQUE TOKEN, AND THAT IS THE POINT. It distinguishes rows without naming anybody, which is
+    /// the only shape compatible with the pseudonymisation this product has already decided on
+    /// (docs/Legal.md §3.2: the backend sends an opaque reference INSTEAD of the name). Adding
+    /// payeeName here would fix the same bug and walk straight into an open GDPR finding, with no DPA
+    /// signed — see docs/DIAG_ASSISTANT_CREDIT_PAYLOAD_OWNERSHIP.md for both options and the decision.
+    ///
+    /// ★ IT IS A TOKEN THE MODEL READS AND NEVER PRINTS, exactly like `matchedBy: ResolvedById` or
+    /// `interpretation: EarningsAndNoDebt` elsewhere in these payloads. Prompt rule 10a already forbids
+    /// putting any of them on the page.
+    /// </summary>
+    private const string TransactionPayeeRef = "TransactionPayee";
+
+    /// <summary>
+    /// Prefix for everybody else on the same sale — <c>OtherPayee1</c>, <c>OtherPayee2</c>… A reassigned
+    /// transaction leaves the previous holder's superseded credit here, and a split leaves a colleague's.
+    /// The number is a position in this one answer and means nothing outside it.
+    /// </summary>
+    private const string OtherPayeeRefPrefix = "OtherPayee";
+
+    /// <summary>
+    /// How <c>commissions</c> is sorted, said out loud. Newest allocation first — the order
+    /// <see cref="ReadCommissionAsync"/> explicitly asks the credits query for.
+    /// </summary>
+    private const string OrderedByToken = "MostRecentlyAllocatedFirst";
+
     public async Task<string> RunAsync(string argumentsJson, CancellationToken cancellationToken)
     {
         var reference = ReadReference(argumentsJson);
@@ -146,7 +175,11 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
         LogCause(AssistantToolCause.Found);
 
         // ── What it earned ───────────────────────────────────────────────────
-        var commission = await ReadCommissionAsync(reference, cancellationToken);
+        // ★ THE SALE'S OWN PAYEE GOES IN. The credit rows are filtered by TRANSACTION, not by person,
+        // so they can belong to more than one — and which of them is the payee the question is about is
+        // the fact that decides whether an amount may be attributed to them at all.
+        var commission = await ReadCommissionAsync(
+            reference, transaction.PayeeId, cancellationToken);
 
         // ── Whether it has been paid ─────────────────────────────────────────
         var settlement = commission.Credits.Count == 0
@@ -173,6 +206,11 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
             CommissionVisibleToYou: commission.Visible,
             CommissionGenerated: commission.Visible ? commission.Credits.Count > 0 : null,
             Commissions: commission.Visible ? commission.Credits : null,
+            // ★ THE ORDER IS DATA, NOT SOMETHING TO INFER. Stated only when there is a list to order;
+            // see the field's own note on TransactionLifecycle for what went wrong without it.
+            CommissionsOrderedBy: commission.Visible && commission.Credits.Count > 1
+                ? OrderedByToken
+                : null,
             SettlementVisibleToYou: settlement.Visible,
             HasBeenPaid: settlement.HasBeenPaid,
             PayoutStatus: settlement.PayoutStatus,
@@ -232,7 +270,7 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
     /// not exist. The DOMAIN still decides; this only chooses what to do with its answer.
     /// </summary>
     private async Task<CommissionResult> ReadCommissionAsync(
-        string reference, CancellationToken cancellationToken)
+        string reference, Guid? transactionPayeeId, CancellationToken cancellationToken)
     {
         try
         {
@@ -243,6 +281,12 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
                     PageSize = 25,
                     Reference = reference,
                     Status = "All",
+                    // ★ THE SORT IS ASKED FOR, NOT INHERITED. It happens to be ListCreditsHandler's
+                    // default today, and the payload now DECLARES this order to the model — so relying
+                    // on someone else's default would mean the declaration silently becomes a lie the
+                    // day that default changes. Stating it here is what makes OrderedByToken true.
+                    SortBy = "allocatedAt",
+                    SortOrder = "desc",
                 }),
                 cancellationToken);
 
@@ -257,6 +301,24 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
                 .Where(c => string.Equals(c.ReferenceNumber, reference, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
+            // ★★ WHOSE ROW IS THIS. Assigned once per distinct payee, in the order the rows arrive, so
+            // two credits of one person share a label and two people never share one. See
+            // CommissionEarned.PayeeRef for why the payload carries a token instead of a name.
+            var refByPayee = new Dictionary<Guid, string>();
+            var otherPayees = 0;
+
+            string LabelFor(Guid payeeId)
+            {
+                if (refByPayee.TryGetValue(payeeId, out var existing)) return existing;
+
+                var label = transactionPayeeId is not null && payeeId == transactionPayeeId
+                    ? TransactionPayeeRef
+                    : $"{OtherPayeeRefPrefix}{++otherPayees}";
+
+                refByPayee[payeeId] = label;
+                return label;
+            }
+
             return new CommissionResult(
                 true,
                 mine.Select(c => new CommissionEarned(
@@ -266,6 +328,7 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
                     MatchedRuleName: c.RuleName,
                     CreditIsSuperseded: c.IsSuperseded,
                     CreditAllocatedAt: c.AllocatedAt.ToString("yyyy-MM-dd"),
+                    PayeeRef: LabelFor(c.PayeeId),
                     CreditId: c.Id,
                     PayeeId: c.PayeeId,
                     PlanId: c.PlanId)).ToList());
@@ -383,6 +446,13 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
         bool CommissionVisibleToYou,
         bool? CommissionGenerated,
         IReadOnlyList<CommissionEarned>? Commissions,
+        /// <summary>
+        /// ★ THE ORDER IS DATA. Null unless there is more than one credit, because a list of one has no
+        /// order to state. The model was inferring meaning from position — "the first credit" — over a
+        /// list whose order it had never been told, which is how a date from row 1 ended up beside an
+        /// amount from row 0. Same cure `get_plan_rules` already uses for CalculationOrder.
+        /// </summary>
+        string? CommissionsOrderedBy,
         bool SettlementVisibleToYou,
         bool? HasBeenPaid,
         string? PayoutStatus,
@@ -392,6 +462,22 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
         string? PayoutTotalCommissionCurrency,
         string? SettlementNote);
 
+    /// <param name="PayeeRef">
+    /// ★★ WHOSE CREDIT THIS IS — THE FIELD WHOSE ABSENCE PRODUCED A FALSE TABLE ABOUT MONEY.
+    ///
+    /// The credits are looked up BY TRANSACTION, so one sale reassigned from one person to another
+    /// returns both rows. Without this field nothing in the payload distinguished them, and the
+    /// assistant — asked about one payee, handed two people's credits — reported the two rows shuffled:
+    /// the amounts in array order and the dates in reverse, with `superseded` on the wrong one. Every
+    /// individual value was real; the pairing was invented. No prompt rule could have caught that,
+    /// because the model was not given anything to tell the rows apart with
+    /// (docs/DIAG_ASSISTANT_CREDIT_PAYLOAD_OWNERSHIP.md).
+    ///
+    /// <c>TransactionPayee</c> for the person this sale belongs to, <c>OtherPayee1..n</c> for anyone
+    /// else. Rows of the same person share a label; two people never do.
+    ///
+    /// ★ NOT A NAME, DELIBERATELY. See <see cref="TransactionPayeeRef"/>.
+    /// </param>
     private sealed record CommissionEarned(
         decimal CommissionAmount,
         string CommissionCurrency,
@@ -399,6 +485,7 @@ public sealed class GetTransactionTool(ISender sender, ILogger<GetTransactionToo
         string MatchedRuleName,
         bool CreditIsSuperseded,
         string CreditAllocatedAt,
+        string PayeeRef,
         [property: JsonIgnore] Guid CreditId,
         [property: JsonIgnore] Guid PayeeId,
         [property: JsonIgnore] Guid PlanId);

@@ -615,7 +615,7 @@
                 } @else {
                   <div class="rule-sim__result" data-testid="rule-sim-result">
                     <span class="rule-sim__result-label">{{ 'PLANS.SIM_RESULT' | translate }}</span>
-                    <span class="rule-sim__result-value">
+                    <span class="rule-sim__result-value ws-scroll-thin">
                       {{ sim.commissionAmount | currencyFormat: sim.currency }}
                     </span>
                   </div>
@@ -625,34 +625,70 @@
                     so a floor above a cap wins; a client that sorted these "logically" would show a
                     sequence that does not match what pays.
                   -->
-                  <ol class="rule-sim__steps" data-testid="rule-sim-steps">
-                    @for (step of sim.steps; track $index) {
-                      @if (step.component !== RuleCalculationComponent.Trigger) {
-                        <li class="rule-sim__step"
-                            [class.rule-sim__step--inert]="step.outcome === RuleCalculationOutcome.NotConfigured
-                                                        || step.outcome === RuleCalculationOutcome.AppliedWithoutEffect
-                                                        || step.outcome === RuleCalculationOutcome.Skipped">
-                          <span class="rule-sim__step-name">
-                            {{ stepLabelKey(step.component) | translate }}
-                            @if (step.outcome === RuleCalculationOutcome.NotConfigured) {
-                              <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_NOT_SET' | translate }}</span>
-                            } @else if (step.outcome === RuleCalculationOutcome.AppliedWithoutEffect) {
-                              <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_NO_EFFECT' | translate }}</span>
-                            } @else if (step.outcome === RuleCalculationOutcome.Skipped) {
-                              <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_SKIPPED' | translate }}</span>
-                            }
-                          </span>
-                          <span class="rule-sim__step-value">
-                            @if (step.outputAmount !== null) {
-                              {{ step.outputAmount | currencyFormat: sim.currency }}
-                            } @else {
-                              —
-                            }
-                          </span>
-                        </li>
+                  <!--
+                    ★ A REAL TABLE, NOT A ws-table. This is a section INSIDE a card — it sits under a
+                    top border, not on its own surface — and ws-table brings a bordered, shadowed,
+                    rounded container of its own, which here would be a card inside a card and break
+                    the elevation layering. What it does borrow is the table's TYPOGRAPHY: the same
+                    uppercase header, the same right-aligned tabular figures, the same row rhythm, via
+                    the shared .col-amount utility.
+                  -->
+                  <div class="rule-sim__table-wrap ws-scroll-thin">
+                  <table class="rule-sim__table" data-testid="rule-sim-steps">
+                    <thead>
+                      <tr>
+                        <th scope="col">{{ 'PLANS.SIM_COL_STEP' | translate }}</th>
+                        <th scope="col">{{ 'PLANS.SIM_COL_APPLIED' | translate }}</th>
+                        <th scope="col" class="col-amount">{{ 'PLANS.SIM_COL_RESULT' | translate }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (step of sim.steps; track $index) {
+                        @if (step.component !== RuleCalculationComponent.Trigger) {
+                          <tr class="rule-sim__step"
+                              [class.rule-sim__step--inert]="step.outcome === RuleCalculationOutcome.NotConfigured
+                                                          || step.outcome === RuleCalculationOutcome.AppliedWithoutEffect
+                                                          || step.outcome === RuleCalculationOutcome.Skipped">
+                            <td class="rule-sim__step-name">
+                              {{ stepLabelKey(step.component) | translate }}
+                              @if (step.outcome === RuleCalculationOutcome.NotConfigured) {
+                                <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_NOT_SET' | translate }}</span>
+                              } @else if (step.outcome === RuleCalculationOutcome.AppliedWithoutEffect) {
+                                <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_NO_EFFECT' | translate }}</span>
+                              } @else if (step.outcome === RuleCalculationOutcome.Skipped) {
+                                <span class="rule-sim__step-tag">{{ 'PLANS.SIM_STEP_SKIPPED' | translate }}</span>
+                              }
+                            </td>
+
+                            <!-- What this step actually applied. The cap and the floor were already
+                                 fetched and never shown, so "no effect" could not be checked against
+                                 anything. -->
+                            <td class="rule-sim__step-applied">
+                              @if (stepAppliedKey(step); as appliedKey) {
+                                @if (step.thresholdAmount !== null) {
+                                  {{ appliedKey | translate:
+                                     { value: (step.thresholdAmount | currencyFormat: sim.currency) } }}
+                                } @else {
+                                  {{ appliedKey | translate: { value: step.operand } }}
+                                }
+                              } @else {
+                                —
+                              }
+                            </td>
+
+                            <td class="col-amount rule-sim__step-value">
+                              @if (step.outputAmount !== null) {
+                                {{ step.outputAmount | currencyFormat: sim.currency }}
+                              } @else {
+                                —
+                              }
+                            </td>
+                          </tr>
+                        }
                       }
-                    }
-                  </ol>
+                    </tbody>
+                  </table>
+                  </div>
 
                   <!--
                     ★★ THE SCOPE IS PART OF THE ANSWER. This is one rule against one transaction. A

@@ -40,10 +40,18 @@ public sealed class CalculatePayoutsJobHandler(
 
         var summary = result.Value!;
 
+        // ★ THE COUNTERS TRAVEL HERE TOO. An operator reading a job that created nothing had exactly the
+        // same blind spot the screen had: no way to tell "nothing to do" from "skipped everything, for
+        // reasons". Same data, same reason, one line.
         logger.LogInformation(
             "CalculatePayoutsJob {JobId}: complete. PayoutsCreated={Created}, Conflicts={Conflicts}, " +
-            "Warnings={Warnings}",
-            context.JobId, summary.PayoutsCreated, summary.Conflicts.Count, summary.Warnings.Count);
+            "Warnings={Warnings}, AssignmentsConsidered={Considered}, ReachedCreditLookup={Reached}, " +
+            "CreditsExamined={Credits}, Skipped=[{Skipped}]",
+            context.JobId, summary.PayoutsCreated, summary.Conflicts.Count, summary.Warnings.Count,
+            summary.Diagnostics.AssignmentsConsidered,
+            summary.Diagnostics.AssignmentsReachingCreditLookup,
+            summary.Diagnostics.CreditsExamined,
+            string.Join(", ", summary.Diagnostics.Skipped.Select(x => $"{x.Code}={x.Count}")));
 
         if (summary.Warnings.Count > 0)
         {
@@ -61,6 +69,7 @@ public sealed class CalculatePayoutsJobHandler(
         await context.SetResultSummaryAsync(JsonSerializer.Serialize(new
         {
             summary.PayoutsCreated,
+            summary.Diagnostics,
             Conflicts = summary.Conflicts.Select(c => new
             {
                 c.PayeeId, c.PayeeName, c.PlanId,

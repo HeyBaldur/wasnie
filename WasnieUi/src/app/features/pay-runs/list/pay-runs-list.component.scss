@@ -264,6 +264,16 @@
     font-size: var(--font-size-12);
     color: var(--color-text-secondary);
     margin-bottom: var(--space-2);
+
+    // The hand-off to the orphan-accounts queue. It reads as part of the sentence, not as a button:
+    // this is a pointer to where the money now is, and the reader may or may not want it right now.
+    a {
+      color: var(--color-brand);
+      font-weight: 600;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+    }
   }
 
   &__payee-scroll {

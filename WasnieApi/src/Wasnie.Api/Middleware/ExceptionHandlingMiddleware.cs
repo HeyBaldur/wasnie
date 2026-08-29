@@ -36,6 +36,20 @@ public sealed class ExceptionHandlingMiddleware(
                 message = ex.Message,
             }));
         }
+        // ★ 409, and it carries a CODE the client maps to a sentence. The user was looking at a set of
+        // credits that has since changed; the right client behaviour is to reload and show what is
+        // there now, never to retry the same body — which is what a 400 would invite.
+        catch (AccountSnapshotStaleException ex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                error = "AccountSnapshotStale",
+                reason = ex.Reason,
+                message = ex.Message,
+            }));
+        }
         catch (StripeUnavailableException ex)
         {
             logger.LogWarning(ex, "Stripe API unavailable");

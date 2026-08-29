@@ -357,14 +357,28 @@ describe('DashboardComponent helpers', () => {
   // Departed payees whose account never closed. The engine stops processing them — correct — which
   // is also why nothing else on any screen would ever mention the money still sitting there.
   describe('terminated accounts pending settlement', () => {
-    const row = (payeeId: string, balance: number) => ({
+    // `unsettled` is commission earned and never paid. It leaves the ledger balance at zero — the
+    // ledger records what someone OWES — so it is its own bucket, not a slice of the two balance ones.
+    const row = (payeeId: string, balance: number, unsettled = 0) => ({
       payeeId,
       payeeName: `Payee ${payeeId}`,
       employeeCode: payeeId.toUpperCase(),
       terminationDate: '2026-06-30',
       balance,
       currency: 'EUR',
-      balanceUpdatedAt: '2026-07-29T00:00:00Z',
+      balanceUpdatedAt: balance === 0 ? null : '2026-07-29T00:00:00Z',
+      accountClosedAt: null,
+      unsettledCreditTotal: unsettled,
+      unsettledCredits: unsettled === 0 ? [] : [{
+        creditId: `credit-${payeeId}`,
+        amount: unsettled,
+        currency: 'EUR',
+        planName: 'EU Accelerator Q2 2026',
+        ruleName: 'Tier 1: 4% up to quota',
+        allocatedAt: '2026-08-27',
+        transactionId: `tx-${payeeId}`,
+        transactionReference: `POL-${payeeId}`,
+      }],
     });
 
     it('shows nothing to do when no departed payee has an open account', () => {
@@ -389,6 +403,18 @@ describe('DashboardComponent helpers', () => {
         .withContext('a liability: treasury still has to pay them').toBe(1);
       expect(component.terminated.owedByPayeesCount())
         .withContext('debt to recover or write off').toBe(2);
+    });
+
+    // ★ THE ROW THAT USED TO BE INVISIBLE. Unpaid commission puts a departed payee on the queue with
+    // a ledger balance of exactly zero, so it belongs to neither balance bucket — and the card has to
+    // account for it or its own numbers stop adding up to its own total.
+    it('counts unpaid commission as its own bucket, outside both balance buckets', () => {
+      component.terminated.rows.set([row('a', -400), row('b', 0, 3869.34)]);
+
+      expect(component.terminated.count()).toBe(2);
+      expect(component.terminated.owedByPayeesCount()).toBe(1);
+      expect(component.terminated.owedToPayeesCount()).toBe(0);
+      expect(component.terminated.unsettledCreditCount()).toBe(1);
     });
 
     it('adds open accounts to the band badge so the header does not claim all-clear', () => {

@@ -249,10 +249,48 @@
           @if (result.payoutsCreated > 0) {
             {{ 'PAY_RUNS.CALCULATE_CREATED' | translate: { count: result.payoutsCreated } }}
           } @else {
-            {{ 'PAY_RUNS.CALCULATE_NO_PAYOUTS' | translate }}
+            <!-- ★ NEVER "no matching credits for this period" AGAIN. That sentence was a client-side
+                 literal asserting a cause the backend never established; the headline is now chosen
+                 from the engine's own counters, and when they explain nothing it claims nothing. -->
+            {{ noPayoutsHeadlineKey(result)
+               | translate: { considered: result.diagnostics?.assignmentsConsidered ?? 0 } }}
           }
         </p>
       </div>
+
+      <!-- What the engine actually did. Only rendered when it created nothing: on a successful run the
+           conflicts and warnings sections below already carry the detail that matters. -->
+      @if (result.payoutsCreated === 0 && skipCounts(result).length > 0) {
+        <div class="pay-runs-list__result-section pay-runs-list__result-section--info">
+          <p class="pay-runs-list__result-section-title">
+            <app-icon name="info" [size]="14" />
+            {{ 'PAY_RUNS.SKIPPED_TITLE' | translate }}
+          </p>
+          <ul class="pay-runs-list__result-list">
+            @for (skip of skipCounts(result); track skip.code) {
+              <li>{{ skipLabelKey(skip.code) | translate: { count: skip.count } }}</li>
+            }
+          </ul>
+
+          @if (neverLookedAtCredits(result)) {
+            <!-- The single fact that made the old message impossible to defend. -->
+            <p class="pay-runs-list__result-section-desc">
+              {{ 'PAY_RUNS.NEVER_REACHED_CREDITS' | translate }}
+            </p>
+          }
+
+          @if (terminatedSkipCount(result) > 0) {
+            <!-- Closes the loop with WI 1: a departed payee's unpaid commission is not lost, it is on
+                 the orphan-accounts queue, and that is the screen where a person can act on it. -->
+            <p class="pay-runs-list__result-section-desc">
+              {{ 'PAY_RUNS.SKIPPED_TERMINATED_HINT' | translate }}
+              <a routerLink="/terminated-accounts" (click)="closeCalculateModal()">
+                {{ 'PAY_RUNS.SKIPPED_TERMINATED_LINK' | translate }}
+              </a>
+            </p>
+          }
+        </div>
+      }
 
       @if (result.isSupplemental) {
         <div class="pay-runs-list__result-section pay-runs-list__result-section--info">

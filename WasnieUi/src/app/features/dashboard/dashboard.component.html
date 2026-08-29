@@ -248,6 +248,16 @@
                       <span class="stat-card__amt">{{ terminated.owedByPayeesCount() }}</span>
                     </div>
                   }
+                  <!-- ★ A THIRD BUCKET, NOT A SLICE OF THE OTHER TWO. Commission earned and never paid
+                       leaves the ledger balance at exactly zero — the ledger records what someone OWES
+                       — so these rows fall into neither "to pay" nor "to recover". Without this line
+                       the card would count them in its total and account for them nowhere. -->
+                  @if (terminated.unsettledCreditCount() > 0) {
+                    <div class="stat-card__amount-row">
+                      <span class="stat-card__ccy">{{ 'DASHBOARD.TERMINATED_UNSETTLED' | translate }}</span>
+                      <span class="stat-card__amt">{{ terminated.unsettledCreditCount() }}</span>
+                    </div>
+                  }
                 </div>
               } @else {
                 <span class="stat-card__cta">

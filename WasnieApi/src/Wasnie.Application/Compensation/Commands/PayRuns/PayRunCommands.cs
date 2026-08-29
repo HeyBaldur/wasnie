@@ -9,11 +9,16 @@ public sealed record CalculatePayRunCommand(
     DateOnly PeriodStart,
     DateOnly PeriodEnd) : IRequest<Result<CalculatePayRunResult>>;
 
+/// <param name="Diagnostics">
+/// What the engine did, so the screen can say WHY nothing was created instead of guessing. Passed
+/// straight through from the calculation — this handler adds no reason of its own.
+/// </param>
 public sealed record CalculatePayRunResult(
     Guid PayRunId,
     int PayoutsCreated,
     IReadOnlyList<PayoutConflict> Conflicts,
     IReadOnlyList<PayoutWarning> Warnings,
+    PayoutRunDiagnostics Diagnostics,
     bool IsSupplemental = false,
     int SupplementalSequence = 0);
 

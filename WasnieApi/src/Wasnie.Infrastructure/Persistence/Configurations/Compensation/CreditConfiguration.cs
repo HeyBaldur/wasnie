@@ -37,6 +37,24 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
         builder.Property(c => c.SupersededBy).HasColumnType("nvarchar(max)").IsRequired(false);
         builder.Property(c => c.ConsumedAt).IsRequired(false);
         builder.Property(c => c.ConsumedByPayoutId).IsRequired(false);
+
+        // ── Closed without ever being paid ────────────────────────────────────────────────────────
+        // The reason is stored AS A STRING, like Role above: an int would make every closure report a
+        // join against a C# enum nobody can read in SSMS, and "WrittenOff" in a row is the difference
+        // between a finance question answered in one query and one answered by a developer.
+        builder.Property(c => c.ClosedAt).IsRequired(false);
+        builder.Property(c => c.ClosedBy).HasMaxLength(450).IsRequired(false);
+        builder.Property(c => c.ClosureReason).HasConversion<string?>().HasMaxLength(50).IsRequired(false);
+        builder.Property(c => c.ClosureNote).HasMaxLength(1000).IsRequired(false);
+
+        // ★ THE INDEX THE ENGINE NEEDS. Every pay run now filters on the three nulls together
+        // (SupersededAt, ConsumedAt, ClosedAt) for one payee and plan; the orphan queue asks the same
+        // question for a set of payees. A filtered index on the outstanding rows keeps both cheap as
+        // the closed ones accumulate — they are terminal, so that pile only ever grows.
+        builder.HasIndex(c => new { c.TenantId, c.PayeeId })
+            .HasDatabaseName("IX_Credits_TenantId_PayeeId_Outstanding")
+            .HasFilter("[SupersededAt] IS NULL AND [ConsumedAt] IS NULL AND [ClosedAt] IS NULL");
+
         builder.Property(c => c.RowVersion).IsRowVersion();
 
         builder.OwnsOne(c => c.OriginalAmount, m =>

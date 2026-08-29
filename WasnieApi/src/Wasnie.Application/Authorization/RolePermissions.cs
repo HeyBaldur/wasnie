@@ -21,6 +21,7 @@ public static class RolePermissions
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
             Permission.PayoutsDeleteDraft,
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
+            Permission.LedgerCloseAccount,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
             Permission.SettingsUpdate, Permission.IntegrationsManage,
@@ -43,6 +44,7 @@ public static class RolePermissions
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
             Permission.PayoutsDeleteDraft,
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
+            Permission.LedgerCloseAccount,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll,
         };

@@ -54,9 +54,24 @@ public sealed class CalculatePayoutsForPeriodHandler(
                      && a.EffectivePeriod.End >= request.PeriodStart)
             .ToList();
 
+        // Nothing to consider. Reported as its own answer rather than folded into "0 payouts": a run
+        // that had no assignments to process is a different fact from one that processed some and
+        // discarded them, and the screen must be able to say which happened.
         if (overlapping.Count == 0)
             return Result<CalculatePayoutsResult>.Success(
-                new CalculatePayoutsResult(0, [], []));
+                new CalculatePayoutsResult(0, [], [], PayoutRunDiagnostics.NothingToConsider));
+
+        // ── The counters ──────────────────────────────────────────────────────────────────────────────
+        // ★ REPORTING ONLY. Every discard below already happened exactly like this; what is new is that
+        // the caller is told. The screen used to turn a zero into "No matching credits found for this
+        // period" — a cause the engine never established, and in the run that prompted this work, false
+        // twice: nothing was skipped for want of credits, and no credit was ever looked at.
+        var assignmentsConsidered = overlapping.Count;
+        var skippedTerminated = 0;
+        var skippedPlanNotPayable = 0;
+        var skippedExistingPayout = 0;
+        var assignmentsReachingCreditLookup = 0;
+        var creditsExamined = 0;
 
         // ── The circuit breaker for people who have left ──────────────────────────────────────────
         // A terminated payee earns nothing further, so generating payouts for them produces a ghost the
@@ -86,13 +101,17 @@ public sealed class CalculatePayoutsForPeriodHandler(
         {
             var before = overlapping.Count;
             overlapping = overlapping.Where(a => !terminatedPayeeIds.Contains(a.PayeeId)).ToList();
+            skippedTerminated = before - overlapping.Count;
             logger.LogInformation(
                 "CalculatePayouts: skipped {SkippedAssignments} assignment(s) of {TerminatedCount} terminated payee(s).",
-                before - overlapping.Count, terminatedPayeeIds.Count);
+                skippedTerminated, terminatedPayeeIds.Count);
 
+            // This used to be the quietest exit in the engine: zero payouts, zero conflicts, zero
+            // warnings — indistinguishable from a tenant with nothing to do, while a departed payee's
+            // commission sat unpaid. The count now travels with it.
             if (overlapping.Count == 0)
                 return Result<CalculatePayoutsResult>.Success(
-                    new CalculatePayoutsResult(0, [], []));
+                    new CalculatePayoutsResult(0, [], [], BuildDiagnostics()));
         }
 
         // Batch-load plan currencies for all relevant plan IDs (one query).
@@ -122,11 +141,21 @@ public sealed class CalculatePayoutsForPeriodHandler(
                 ? assignment.EffectivePeriod.End
                 : request.PeriodEnd;
 
+            // ★ DELIBERATELY UNCOUNTED. This guard cannot fire: the overlap filter above already proved
+            // a.Start <= PeriodEnd and a.End >= PeriodStart, and DateRange.Of enforces Start <= End on
+            // both ranges, so max(starts) <= min(ends) always holds. A counter here would be a number
+            // that is structurally always zero — worse than absent, because a reader would take its
+            // presence as evidence the case can happen. It stays as defence in depth, unreported.
             if (intersectionStart > intersectionEnd) continue;
 
             var payeeId = assignment.PayeeId;
             var planId = assignment.PlanId;
-            if (!planCurrencyById.TryGetValue(planId, out var planCurrency)) continue;
+            // Archived or unreadable plan: no currency, so no payout this engine could defend.
+            if (!planCurrencyById.TryGetValue(planId, out var planCurrency))
+            {
+                skippedPlanNotPayable++;
+                continue;
+            }
 
             logger.LogDebug(
                 "CalculatePayouts: processing payee={PayeeId}, plan={PlanId}, period={Start}–{End}",
@@ -154,6 +183,7 @@ public sealed class CalculatePayoutsForPeriodHandler(
 
             if (blocking is not null)
             {
+                skippedExistingPayout++;
                 conflicts.Add(new PayoutConflict(
                     payeeId, assignment.PayeeSnapshot.FullName,
                     planId, intersectionStart, intersectionEnd,
@@ -180,6 +210,11 @@ public sealed class CalculatePayoutsForPeriodHandler(
             if (staleCalculated.Count > 0)
                 await db.SaveChangesAsync(cancellationToken);
 
+            // ★ PAST EVERY GATE — from here the engine is actually looking for money to pay. While this
+            // stays at zero for a whole run, "no matching credits" is not a statement anybody may make:
+            // no credit was queried.
+            assignmentsReachingCreditLookup++;
+
             // ── Aggregation audit: load Credits via two safe queries ──────────
             // Step 1: transaction IDs in the intersection period for this payee.
             // CARTESIAN GUARD: straightforward PK lookup — no fan-out join.
@@ -205,9 +240,16 @@ public sealed class CalculatePayoutsForPeriodHandler(
                              && c.PlanId == planId
                              && c.SupersededAt == null
                              && c.ConsumedAt == null
+                             // ★★ MONEY-CLOSED. A credit closed with the departed payee's account was
+                             // either settled outside Wasnie or written off; letting it back into a run
+                             // pays it a second time, or pays something the company decided not to pay.
+                             // Terminal, so it never comes back on its own.
+                             && c.ClosedAt == null
                              && txIdsInPeriod.Contains(c.TransactionId))
                     .ToListAsync(cancellationToken);
             }
+
+            creditsExamined += credits.Count;
 
             // ── Warning: pending transactions without Credits ─────────────────
             // Detect transactions in the period that are still Pending (no Credit yet).
@@ -272,6 +314,26 @@ public sealed class CalculatePayoutsForPeriodHandler(
         }
 
         return Result<CalculatePayoutsResult>.Success(
-            new CalculatePayoutsResult(payoutsCreated, conflicts, warnings));
+            new CalculatePayoutsResult(payoutsCreated, conflicts, warnings, BuildDiagnostics()));
+
+        // Reasons that discarded nothing are left OUT rather than sent as zeros: the reader needs what
+        // happened, and a screen looping over a list of zeros would have to filter them out again.
+        PayoutRunDiagnostics BuildDiagnostics()
+        {
+            var skipped = new List<PayoutSkipCount>();
+
+            if (skippedTerminated > 0)
+                skipped.Add(new PayoutSkipCount(PayoutSkipReason.TerminatedPayee, skippedTerminated));
+            if (skippedPlanNotPayable > 0)
+                skipped.Add(new PayoutSkipCount(PayoutSkipReason.PlanNotPayable, skippedPlanNotPayable));
+            if (skippedExistingPayout > 0)
+                skipped.Add(new PayoutSkipCount(PayoutSkipReason.ExistingPayout, skippedExistingPayout));
+
+            return new PayoutRunDiagnostics(
+                assignmentsConsidered,
+                assignmentsReachingCreditLookup,
+                creditsExamined,
+                skipped);
+        }
     }
 }

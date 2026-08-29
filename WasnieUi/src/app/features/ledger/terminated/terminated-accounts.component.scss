@@ -27,7 +27,46 @@
 }
 
 .col-amount { text-align: right; }
-.col-action { text-align: right; width: 1%; white-space: nowrap; }
+// Two controls live here now — the link to the clawback account and the closure button — and inline
+// elements give them no space at all, so they read as one smudged control. Flex with a gap, right
+// aligned; `align-items: center` because the `link` variant has no button height of its own and would
+// otherwise sit on a different baseline than the secondary one beside it.
+// Width and right-alignment now come from ws-table's `.col-action` utility. What stays here is the
+// layout INSIDE the cell — two controls that need space between them — plus a gutter that keeps them
+// off the money column beside them. `align-items: center` because the link variant has no button
+// height of its own and would otherwise sit on a different baseline than the button next to it.
+// ★★ THE CELL STAYS A CELL. `display: flex` here took the <td> AND the <th> out of the table's
+// column algorithm: the column collapsed to 40px and the two buttons spilled sideways over the
+// money column. Width, nowrap and right-alignment come from ws-table's `.col-action` utility; the
+// only thing this rule adds is the gutter that keeps the controls off the amounts beside them.
+.col-action {
+  padding-left: var(--space-6);
+}
+
+// The row of controls, laid out one level INSIDE the cell. `align-items: center` because the link
+// variant has no button height of its own and would otherwise sit on a different baseline.
+.terminated__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+// ★ ONE RULE FOR EVERY LINK ON THIS TABLE. `--color-text-link` is the product's semantic link colour
+// — the same token every other link resolves to — so "View clawback" and a transaction reference read
+// as the same kind of thing, which is what they are: navigation. Using --color-brand here instead
+// would look identical in the light theme and quietly diverge in the dark one.
+.terminated__link {
+  color: var(--color-text-link);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}
 
 .terminated__balance {
   font-variant-numeric: tabular-nums;
@@ -36,3 +75,248 @@
 
 .terminated__balance--debt { color: var(--color-danger); }
 .terminated__balance--credit { color: var(--color-success); }
+
+// ── The totals band ────────────────────────────────────────────────────────────
+// One card per currency, side by side. They are never merged into a single figure: Wasnie holds no
+// exchange rates, so a blended total would be a number nobody could defend.
+.terminated__totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.terminated__total-label {
+  margin: 0;
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+}
+
+.terminated__total-amount {
+  // The headline figure of the queue, set in the display face — same opt-in the dashboard's stat-card
+  // value uses. It is a <p>, not a heading, so the global h1..h4 rule does not reach it and the token
+  // has to be named here (the sidebar brand is the other exception of this kind).
+  //
+  // `tabular-nums` stays: there is one card per currency and they sit side by side, so proportional
+  // figures would make the amounts fail to line up between them.
+  font-family: var(--font-display);
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.terminated__total-meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// ── Unsettled commission ───────────────────────────────────────────────────────
+// Deliberately NOT painted in the debt/credit colours the balance column uses. Unpaid commission is
+// not a debt and not a settled credit — it is work that has not been done, and giving it one of the
+// two existing colours would state something about it that is not true.
+.terminated__unsettled {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+// "No row at all", which is not the same fact as zero.
+.terminated__none { color: var(--color-text-placeholder); }
+
+// ── The credit sub-row: it has to LOOK like it belongs to the row above ───────────────────────────
+//
+// ★ It used to read as loose text floating under a table row. Two things attach it to its parent: a
+// sunken background one step darker than the surface, and an accent rail down the left edge that
+// starts under the payee's name. Indentation alone was not enough — a reader scanning a column of
+// payees had nothing telling them this line was a child rather than another account.
+.terminated__credit-row td {
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  background: var(--color-bg-surface-sunken);
+}
+
+// The rail. On the FIRST cell only, so it reads as one continuous line down the group rather than a
+// border repeated per column.
+.terminated__credit-row td:first-child {
+  border-left: 2px solid var(--color-brand);
+  padding-left: var(--space-6);
+}
+
+.terminated__credit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// Colour, weight and hover come from .terminated__link, which it also carries. Nothing left to say.
+
+.terminated__credit-plan { color: var(--color-text-primary); font-weight: 500; }
+
+.terminated__credit-date { color: var(--color-text-placeholder); }
+
+// It is a real cell in the money column now, so the alignment comes from `.col-amount` in ws-table —
+// no `margin-left: auto`, which is what used to fling it past the actions column.
+.terminated__credit-amount {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+
+// ── "This row came back" ───────────────────────────────────────────────────────
+// The account was closed and money arrived afterwards. Deliberately quiet: it is context for the
+// reader, not an alarm — the product allows a late credit on purpose, because a commission is earned
+// when the deal closes, not when the CRM catches up.
+.terminated__reopened {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+// ── The closure modal ──────────────────────────────────────────────────────────
+.terminated__close-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.terminated__close-intro {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+// The two halves side by side and never added: they point in opposite directions and there is no
+// exchange rate anywhere in Wasnie to blend them with.
+.terminated__close-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.terminated__close-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+
+.terminated__close-figure-label {
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+}
+
+.terminated__close-figure-amount {
+  // Same display face as the totals card on the page behind it, so the figure being confirmed reads
+  // as the one they were just looking at.
+  font-family: var(--font-display);
+  font-size: var(--font-size-20);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.terminated__close-figure-meta {
+  font-size: var(--font-size-11);
+  color: var(--color-text-secondary);
+}
+
+.terminated__close-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+
+  li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-size-12);
+    border-bottom: 1px solid var(--color-border-subtle);
+
+    &:last-child { border-bottom: none; }
+  }
+}
+
+.terminated__close-list-ref { font-weight: 600; color: var(--color-text-primary); }
+.terminated__close-list-plan { color: var(--color-text-secondary); }
+
+.terminated__close-list-amount {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.terminated__close-hint {
+  margin: calc(var(--space-2) * -1) 0 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+// Said once, plainly. The severe variant is for the resolution that destroys a claim.
+.terminated__close-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--font-size-12);
+  color: var(--color-text-primary);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+
+  app-icon { flex-shrink: 0; margin-top: 1px; }
+
+  &--severe {
+    color: var(--color-danger);
+    background: var(--color-danger-bg);
+    border-color: var(--color-danger-border);
+  }
+}
+
+.terminated__close-conflict {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+
+  app-icon { flex-shrink: 0; margin-top: 1px; }
+}
+
+.terminated__close-error {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-danger);
+}

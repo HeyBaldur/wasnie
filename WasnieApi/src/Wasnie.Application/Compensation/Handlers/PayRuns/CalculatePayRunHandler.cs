@@ -126,6 +126,9 @@ public sealed class CalculatePayRunHandler(
             PayoutsCreated: calcResult.Value!.PayoutsCreated,
             Conflicts: calcResult.Value.Conflicts,
             Warnings: calcResult.Value.Warnings,
+            // Verbatim. This handler orchestrates the run; it establishes no cause of its own and must
+            // never soften or summarise one the engine reported.
+            Diagnostics: calcResult.Value.Diagnostics,
             IsSupplemental: isSupplemental,
             SupplementalSequence: payRun.SupplementalSequence));
     }
