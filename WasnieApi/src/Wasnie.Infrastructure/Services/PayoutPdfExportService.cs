@@ -2,6 +2,7 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Assistant.Tools;
 using Wasnie.Application.Compensation.DTOs;
 
 namespace Wasnie.Infrastructure.Services;
@@ -129,7 +130,7 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
                             ? $"{line.TransactionReference}  {line.TransactionDate:yyyy-MM-dd}"
                             : "—";
 
-                        var rateText = FormatRateText(line.Calculation);
+                        var rateText = FormatRateText(line.Calculation, line.CommissionCurrency);
 
                         table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten3).Padding(5)
                             .Column(c =>
@@ -219,12 +220,32 @@ public sealed class PayoutPdfExportService : IPayoutPdfExportService
         });
     }
 
-    private static string? FormatRateText(LineCalculationDto? calc)
+    /// <summary>
+    /// The one-line description of how a payout line was calculated.
+    ///
+    /// ★★ THE FLAT BRANCH ASKS WHAT THE RATE MEANS. It used to multiply by 100 and append "%"
+    /// unconditionally, so a rule paying €5 per unit was printed on a PAID payout document as
+    /// "Flat rate: 500%". The figures beside it were always right; only this sentence was false — and
+    /// a PDF is the copy people forward and file, so it outlives the screen that had the same bug.
+    ///
+    /// ★ THE TIER BRANCHES REPORT A COUNT, NOT BOUNDS, and are left that way on purpose. They name no
+    /// unit at all, so there is nothing here to state wrongly; the bounds themselves are shown on the
+    /// payout screen, which knows the reader's locale. Inventing a unit here would be the very mistake
+    /// this pass exists to remove.
+    /// </summary>
+    /// <remarks>
+    /// Internal rather than private so the wording can be pinned by a test. A PDF is opaque to
+    /// assertions, and the sentence this builds is the one that was wrong on a document somebody had
+    /// already been paid against.
+    /// </remarks>
+    internal static string? FormatRateText(LineCalculationDto? calc, string currency)
     {
         if (calc is null) return null;
         var rt = calc.RateTable;
         return rt.Type switch
         {
+            "Flat" when rt.MeasurementBase == nameof(MeasurementBase.TransactionQuantity) =>
+                $"Rate: {rt.FlatRate:N2} {currency} per unit  ·  Plan v{calc.PlanVersion}",
             "Flat" => $"Flat rate: {rt.FlatRate * 100:G}%  ·  Plan v{calc.PlanVersion}",
             "Tiered" when rt.Tiers?.Count > 0 =>
                 $"Tiered ({rt.Tiers.Count} tiers)  ·  Plan v{calc.PlanVersion}",

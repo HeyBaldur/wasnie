@@ -1,5 +1,7 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { formatRate, isPerUnitRate } from '../../../shared/utils/rate-format';
+import {
+  formatAmountTier, formatAttainmentTier, formatRate, isPerUnitRate,
+} from '../../../shared/utils/rate-format';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
@@ -220,13 +222,26 @@ export class PayoutDetailComponent implements OnInit {
    * ★ THE FLAT BRANCH ASKS WHAT THE RATE MEANS instead of assuming it is a percentage. That
    * assumption is what printed "500% flat" for a rule paying €5 per unit — see shared/utils/rate-format.
    *
-   * The tiered and attainment branches are untouched: their rates are always proportions of an
-   * amount, and rewriting a correct branch to look symmetrical is how correct code acquires bugs.
+   * ★★ AND THE TIER BRANCHES HAD THE SAME BUG IN THEIR BOUNDS. The note that used to sit here said
+   * they were "untouched: their rates are always proportions of an amount" — true of the RATES, and
+   * it is why the `@ 5%` half is unchanged. But nobody asked the question of the BOUNDS, which were
+   * built inline here rather than routed through the shared helper, so the fix never reached them:
+   *
+   *   - an attainment bound is a PROPORTION OF QUOTA and was multiplied by 100 with a "%" appended,
+   *     which printed a real (malformed) table of 0–20000 as `0–2000000%`;
+   *   - a Tiered bound is MONEY and was printed as a bare number, with no currency at all.
+   *
+   * Both now go through shared/utils/rate-format, and they use the convention the RULE FORM already
+   * declares — bounds in the plan's currency for Tiered, "× quota" for attainment — so the same
+   * stored number reads the same way on both screens.
    */
   rateLabel(rt: RateTableDto): string {
+    const currency = this.payout()?.totalCommissionCurrency;
+    const locale = this.translate.currentLang;
+
     if (rt.type === 'Flat' && rt.flatRate != null) {
       const formatted = formatRate(
-        rt.flatRate, rt.measurementBase, this.payout()?.totalCommissionCurrency, this.translate.currentLang,
+        rt.flatRate, rt.measurementBase, currency, locale,
         this.translate.instant('PLANS.RATE_PER_UNIT_SUFFIX'));
 
       return isPerUnitRate(rt.measurementBase)
@@ -234,14 +249,16 @@ export class PayoutDetailComponent implements OnInit {
         : `${formatted} flat`;
     }
     if (rt.type === 'Tiered' && rt.tiers?.length) {
-      return rt.tiers.map(t =>
-        `${t.to != null ? t.from + '–' + t.to : t.from + '+'}@${(t.rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`
-      ).join(' / ');
+      return rt.tiers
+        .map(t => formatAmountTier(t.from, t.to, t.rate, currency, locale))
+        .join(' / ');
     }
     if (rt.type === 'AttainmentBased' && rt.attainmentTiers?.length) {
-      return rt.attainmentTiers.map(t =>
-        `${t.attainmentTo != null ? (t.attainmentFrom * 100).toFixed(0) + '–' + (t.attainmentTo * 100).toFixed(0) + '%' : (t.attainmentFrom * 100).toFixed(0) + '%+'} @ ${(t.rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`
-      ).join(' / ');
+      const quotaSuffix = this.translate.instant('PLANS.ATT_BOUND_SUFFIX');
+
+      return rt.attainmentTiers
+        .map(t => formatAttainmentTier(t.attainmentFrom, t.attainmentTo, t.rate, locale, quotaSuffix))
+        .join(' / ');
     }
     return rt.type;
   }

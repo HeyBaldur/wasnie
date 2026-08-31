@@ -1,4 +1,7 @@
-import { formatRate, isPerUnitRate } from './rate-format';
+import {
+  formatAmountBound, formatAmountTier, formatAttainmentBound, formatAttainmentTier,
+  formatRate, formatRatePercent, isPerUnitRate,
+} from './rate-format';
 
 /**
  * How a stored rate is written for a human.
@@ -90,5 +93,84 @@ describe('formatRate — a rate means what it is applied to', () => {
 
     expect(result).not.toContain('undefined');
     expect(result).toContain('5');
+  });
+});
+
+// ── Tier bounds: the second half of the same question ─────────────────────────────────────────
+
+describe('Tier bounds — a bound means what its ladder is measured in', () => {
+  const EN = 'en-US';
+  const PER_UNIT = 'per unit';
+  const QUOTA = '× quota';
+  /**
+   * ★★ THE REPORTED BUG, PINNED. A payout that had already been PAID showed
+   * `0–2000000% @ 4% / 2000000–5000000% @ 6%`. The stored bounds are 0 / 20000 / 50000 — money typed
+   * into a ladder whose bounds are ratios of quota — and the screen multiplied them by 100 and
+   * appended "%". The data is absurd and stays absurd; what changes is that it stops being described
+   * in a unit it was never in.
+   */
+  it('writes the malformed historical table as ratios of quota, not as percentages', () => {
+    const first = formatAttainmentTier(0, 20000, 0.04, EN, QUOTA);
+    const second = formatAttainmentTier(20000, 50000, 0.06, EN, QUOTA);
+
+    expect(first).toBe('0–20,000 × quota @ 4%');
+    expect(second).toBe('20,000–50,000 × quota @ 6%');
+
+    // The number that was on screen cannot be produced any more.
+    expect(`${first} / ${second}`).not.toContain('2000000');
+    expect(`${first} / ${second}`).not.toContain('2,000,000');
+  });
+
+  it('writes a well-formed attainment ladder the way the rule form does', () => {
+    expect(formatAttainmentTier(0, 1, 0.04, EN, QUOTA)).toBe('0–1 × quota @ 4%');
+    expect(formatAttainmentTier(1, null, 0.07, EN, QUOTA)).toBe('1+ × quota @ 7%');
+    expect(formatAttainmentTier(1, 1.4, 0.07, EN, QUOTA)).toBe('1–1.4 × quota @ 7%');
+  });
+
+  /** ★ A Tiered bound is MONEY, and used to print as a bare number with no currency at all. */
+  it('writes a Tiered ladder in the plan currency', () => {
+    expect(formatAmountTier(0, 1000, 0.05, 'EUR', EN)).toBe('€0.00–€1,000.00 @ 5%');
+    expect(formatAmountTier(1000, null, 0.09, 'EUR', EN)).toBe('€1,000.00+ @ 9%');
+  });
+
+  it('denominates a Tiered bound in the currency it was given', () => {
+    expect(formatAmountTier(0, 1000, 0.05, 'USD', EN)).toContain('$');
+    expect(formatAmountTier(0, 1000, 0.05, 'PLN', EN)).toContain('PLN');
+  });
+
+  /**
+   * ★ IT NEVER INVENTS A UNIT IT CANNOT DETERMINE. Without a currency the figure stays bare: an
+   * incomplete label lets the reader recognise the number they typed, while a guessed currency symbol
+   * would be a new false statement on a document about money.
+   */
+  it('falls back to a bare number when no currency is known', () => {
+    const text = formatAmountTier(0, 1000, 0.05, null, EN);
+
+    expect(text).toBe('0–1,000 @ 5%');
+    expect(text).not.toContain('€');
+    expect(text).not.toContain('$');
+  });
+
+  it('formats bounds in the reader locale', () => {
+    expect(formatAttainmentBound(1.4, 'es-ES')).toBe('1,4');
+    expect(formatAttainmentBound(20000, 'es-ES')).toBe('20.000');
+    // The currency path is Intl's; assert it follows the locale rather than pinning one
+    // engine's grouping choices, which differ by version and by amount.
+    expect(formatAmountBound(1000, 'EUR', 'es-ES')).not.toBe(formatAmountBound(1000, 'EUR', EN));
+    expect(formatAmountBound(1000, 'EUR', 'es-ES')).toContain('1000,00');
+  });
+
+  /** An attainment bound is never a percentage — that is the entire decision this file records. */
+  it('never appends a percent sign to a bound', () => {
+    expect(formatAttainmentBound(1.4, EN)).not.toContain('%');
+    expect(formatAttainmentBound(20000, EN)).not.toContain('%');
+    expect(formatAmountBound(20000, 'EUR', EN)).not.toContain('%');
+  });
+
+  /** The rate half is unchanged, and is the same function the flat path uses. */
+  it('still writes the rate inside a tier as a percentage', () => {
+    expect(formatRatePercent(0.04)).toBe('4%');
+    expect(formatRatePercent(0.125)).toBe('12.5%');
+    expect(formatRate(0.05, 'TransactionAmount', 'EUR', EN, PER_UNIT)).toBe(formatRatePercent(0.05));
   });
 });

@@ -2,7 +2,7 @@
   @for (toast of toastService.toasts(); track trackToast($index, toast)) {
     <div class="ws-toast ws-toast--{{ toast.type }}" role="alert">
       <span class="ws-toast__accent"></span>
-      <span class="ws-toast__message">{{ toast.message | translate }}</span>
+      <span class="ws-toast__message">{{ toast.message | translate: toast.params }}</span>
       <button
         class="ws-toast__close"
         type="button"

@@ -6,6 +6,23 @@
       backLabel="PLANS.BACK_TO_PLAN"
     />
 
+    <!--
+      ★★ THE URL NAMES A RULE THAT IS NOT IN THIS PLAN, AND IT SAYS SO.
+      This branch replaces the whole editor rather than sitting above it, because the failure it
+      reports used to be SILENT: the form fell through un-patched and rendered as a pristine
+      Add-a-rule form under an "Edit rule" heading. Nothing on the screen said anything was wrong,
+      and saving it would have created a second rule.
+    -->
+    @if (ruleNotFound()) {
+      <ws-empty-state
+        icon="alert-triangle"
+        titleKey="PLANS.RULE_NOT_FOUND_TITLE"
+        descKey="PLANS.RULE_NOT_FOUND_DESC"
+        actionKey="PLANS.BACK_TO_PLAN"
+        [actionRoute]="'/plans/' + planId"
+      />
+    } @else {
+
     @if (readOnly()) {
       <div class="readonly-banner">
         <app-icon name="info" [size]="16" />
@@ -728,5 +745,7 @@
         }
       </div>
     </div>
+
+    }
   </div>
 </app-shell>

@@ -33,9 +33,14 @@ public sealed record RateTableRequest(
     bool SplitAtQuota = false)
 {
     /// <summary>
-    /// Builds the domain table THROUGH THE FACTORIES, so every invariant runs. Throws
-    /// <see cref="DomainException"/> with a message naming the specific rule that was broken —
-    /// ExceptionHandlingMiddleware turns that into a 400 the user can act on.
+    /// Builds the domain table THROUGH THE FACTORIES, so every invariant runs.
+    ///
+    /// A broken ladder throws <see cref="DomainCodedException"/> naming the specific invariant and
+    /// the tiers involved; the handlers let that one past their catch and
+    /// ExceptionHandlingMiddleware turns it into a 422 carrying the code, which the client renders in
+    /// the reader's own language. The two refusals below are still plain
+    /// <see cref="DomainException"/> prose — they are not ladder invariants and were not part of that
+    /// pass.
     /// </summary>
     public RateTable ToDomain() => Type switch
     {

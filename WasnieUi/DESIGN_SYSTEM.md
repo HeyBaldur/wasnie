@@ -388,9 +388,14 @@ Inputs: `illustration` (plans-empty | payees-empty | transactions-empty | payout
 Outputs: `actionClick`
 
 ### WsToast / WsToastService
-Service: `WsToastService.show(message: string, type: WsToastType)` · `dismiss(id)`  
+Service: `WsToastService.show(message: string, type: WsToastType, params?: WsToastParams)` · `dismiss(id)`  
 Types: `success | error | warning | info`  
 Container: `<ws-toast-container />` — add once in `app-shell.component.html`
+
+`message` is a translation KEY — the container pipes it through `translate`. `params` is the
+interpolation object for that key, and exists so a toast can state a value: a message like "tier 2
+ends at 10000" otherwise had to be assembled as an English sentence by the caller, which is not
+translatable. Omit it for a static key (almost all of them).
 
 ### WsPageHeader `<ws-page-header>`
 Inputs: `title` (required) · `subtitle` · `backRoute` · `backLabel`  

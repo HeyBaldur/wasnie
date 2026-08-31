@@ -313,7 +313,9 @@ public sealed class PlanTests
     public void RateTable_TieredWithNoTiers_ThrowsDomainException()
     {
         var act = () => RateTable.Tiered([]);
-        act.Should().Throw<DomainException>().WithMessage("*at least one tier*");
+        // A code, not a sentence: the wording lives in the front end's EN/ES/PL files.
+        act.Should().Throw<DomainCodedException>()
+            .Which.Code.Should().Be(RateTableInvariant.Empty);
     }
 
     [Fact]
@@ -326,8 +328,12 @@ public sealed class PlanTests
         };
 
         var act = () => RateTable.Tiered(tiers);
-        // The message names the two offending tiers now that each invariant reports itself.
-        act.Should().Throw<DomainException>().WithMessage("*tiers 1 and 2 overlap*");
+        // The refusal names the two offending tiers in its parameters, so the sentence the reader
+        // sees can point at them in any of the three languages.
+        var refusal = act.Should().Throw<DomainCodedException>().Which;
+        refusal.Code.Should().Be(RateTableInvariant.TiersOverlap);
+        refusal.Parameters["tierNumber"].Should().Be(1);
+        refusal.Parameters["nextTierNumber"].Should().Be(2);
     }
 
     [Fact]
@@ -340,7 +346,8 @@ public sealed class PlanTests
         };
 
         var act = () => RateTable.Tiered(tiers);
-        act.Should().Throw<DomainException>().WithMessage("*upper bound*");
+        act.Should().Throw<DomainCodedException>()
+            .Which.Code.Should().Be(RateTableInvariant.NonLastTierMustBeClosed);
     }
 
     [Fact]

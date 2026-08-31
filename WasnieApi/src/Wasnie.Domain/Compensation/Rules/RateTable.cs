@@ -17,8 +17,7 @@ public sealed class RateTable
     {
         ValidateLadder(
             tiers.Select(t => (t.From, t.To)).ToList(),
-            kind: "Tiered",
-            boundName: "amount");
+            bound: RateTableBound.Amount);
 
         return new() { Type = RateTableType.Tiered, Tiers = tiers };
     }
@@ -47,56 +46,106 @@ public sealed class RateTable
     /// separate messages because "your tiers overlap" and "your tiers leave a hole" are different
     /// mistakes to a reader.
     /// </summary>
-    /// <param name="boundName">
-    /// What the bounds are denominated in, for the error text. The confusion this validation exists
-    /// to catch is precisely a unit mix-up — ratios typed into an amount ladder and amounts typed
-    /// into a ratio ladder — so an error that does not name the unit is an error that does not help.
+    /// <param name="bound">
+    /// What the bounds are denominated in, as a <see cref="RateTableBound"/> code. The confusion this
+    /// validation exists to catch is precisely a unit mix-up — ratios typed into an amount ladder and
+    /// amounts typed into a ratio ladder — so a message that does not name the unit is a message that
+    /// does not help. It travels as a code, not as a word, because the sentence around it is written
+    /// per language.
     /// </param>
+    ///
+    /// <remarks>
+    /// ★★ THE ORDER OF THESE CHECKS IS A DECISION ABOUT WHICH SENTENCE HELPS, NOT AN ACCIDENT.
+    /// A malformed ladder almost never breaks exactly one rule, and only the first refusal is ever
+    /// seen. Three of these pairs mask systematically, so the checks run from the most structural to
+    /// the most local:
+    ///
+    ///  1. EMPTY first — with no tiers, "the last tier" and "the next tier" do not refer to anything.
+    ///
+    ///  2. ASCENDING ORDER second, and this is the one that was WRONG. It used to run inside the
+    ///     pairwise loop, after the open-last-tier check. But a ladder typed in descending order
+    ///     almost always has a bounded last tier too — the tier the author thinks of as the top is
+    ///     sitting at the bottom of the list — so the reader was told "your last tier must be
+    ///     open-ended", which was true and useless: closing that one tier does not fix a ladder that
+    ///     is upside down. A descending ladder ALSO always registers as an overlap (From decreases
+    ///     while every To exceeds its own From), which is the second masking pair and the reason this
+    ///     must precede the overlap check as well.
+    ///
+    ///  3. EVERY NON-LAST TIER CLOSED third — structurally required, not merely preferred: the
+    ///     overlap and gap checks dereference <c>To</c>, so a middle tier with no upper bound has to
+    ///     be refused before they can run at all.
+    ///
+    ///  4. LAST TIER OPEN, then 5/6 the pairwise overlap and gap. Beyond the three cases above no
+    ///     further pair masks systematically — a bounded last tier does not imply an overlap or a
+    ///     gap, nor the reverse — so their relative order is left as it was.
+    /// </remarks>
     private static void ValidateLadder(
         IReadOnlyList<(decimal From, decimal? To)> tiers,
-        string kind,
-        string boundName)
+        string bound)
     {
         // 1 — Non-empty.
         if (tiers.Count == 0)
-            throw new DomainException($"{kind} rate table must have at least one tier.");
+            throw new DomainCodedException(RateTableInvariant.Empty);
 
-        // 2 — The last tier, and only the last, is open. This is the invariant that was missing
-        //     everywhere, and the one that silently zeroed overachievers.
-        if (tiers[^1].To is not null)
-            throw new DomainException(
-                $"{kind} rate table: the last tier must be open-ended (no upper bound), so that a " +
-                $"{boundName} above every tier still earns a rate. Tier {tiers.Count} ends at " +
-                $"{tiers[^1].To}.");
-
+        // 2 — Strictly ascending. Reads only From, so it is safe to run before anything has been
+        //     established about upper bounds — and it must, because it is the frame that makes
+        //     "last", "overlap" and "gap" mean anything.
         for (var i = 0; i < tiers.Count - 1; i++)
         {
-            // 3 — Every tier before the last is closed.
-            if (tiers[i].To is null)
-                throw new DomainException(
-                    $"{kind} rate table: tier {i + 1} must have an upper bound because it is not the " +
-                    "last tier. Only the last tier may be open-ended.");
-
-            // 4 — Strictly ascending.
             if (tiers[i].From >= tiers[i + 1].From)
-                throw new DomainException(
-                    $"{kind} rate table: tiers must be ordered ascending. Tier {i + 1} starts at " +
-                    $"{tiers[i].From} and tier {i + 2} starts at {tiers[i + 1].From}.");
+                throw new DomainCodedException(RateTableInvariant.TiersOutOfOrder, new Dictionary<string, object?>
+                {
+                    ["tierNumber"] = i + 1,
+                    ["nextTierNumber"] = i + 2,
+                    ["startsAt"] = tiers[i].From,
+                    ["nextStartsAt"] = tiers[i + 1].From,
+                });
+        }
 
-            // 5 / 6 — Touch exactly: neither overlapping nor leaving a hole.
+        // 3 — Every tier before the last is closed.
+        for (var i = 0; i < tiers.Count - 1; i++)
+        {
+            if (tiers[i].To is null)
+                throw new DomainCodedException(RateTableInvariant.NonLastTierMustBeClosed, new Dictionary<string, object?>
+                {
+                    ["tierNumber"] = i + 1,
+                });
+        }
+
+        // 4 — The last tier, and only the last, is open. This is the invariant that was missing
+        //     everywhere, and the one that silently zeroed overachievers.
+        if (tiers[^1].To is not null)
+            throw new DomainCodedException(RateTableInvariant.LastTierMustBeOpen, new Dictionary<string, object?>
+            {
+                ["tierNumber"] = tiers.Count,
+                ["endsAt"] = tiers[^1].To,
+                ["bound"] = bound,
+            });
+
+        // 5 / 6 — Touch exactly: neither overlapping nor leaving a hole.
+        for (var i = 0; i < tiers.Count - 1; i++)
+        {
             var upperBound = tiers[i].To!.Value;
             var nextLowerBound = tiers[i + 1].From;
 
             if (upperBound > nextLowerBound)
-                throw new DomainException(
-                    $"{kind} rate table: tiers {i + 1} and {i + 2} overlap. Tier {i + 1} ends at " +
-                    $"{upperBound} but tier {i + 2} starts at {nextLowerBound}.");
+                throw new DomainCodedException(RateTableInvariant.TiersOverlap, new Dictionary<string, object?>
+                {
+                    ["tierNumber"] = i + 1,
+                    ["nextTierNumber"] = i + 2,
+                    ["endsAt"] = upperBound,
+                    ["nextStartsAt"] = nextLowerBound,
+                });
 
             if (upperBound < nextLowerBound)
-                throw new DomainException(
-                    $"{kind} rate table: tiers {i + 1} and {i + 2} leave a gap. Tier {i + 1} ends at " +
-                    $"{upperBound} and tier {i + 2} starts at {nextLowerBound}; a {boundName} in " +
-                    "between would earn no rate at all.");
+                throw new DomainCodedException(RateTableInvariant.TiersLeaveGap, new Dictionary<string, object?>
+                {
+                    ["tierNumber"] = i + 1,
+                    ["nextTierNumber"] = i + 2,
+                    ["endsAt"] = upperBound,
+                    ["nextStartsAt"] = nextLowerBound,
+                    ["bound"] = bound,
+                });
         }
     }
 
@@ -118,8 +167,7 @@ public sealed class RateTable
     {
         ValidateLadder(
             tiers.Select(t => (t.AttainmentFrom, t.AttainmentTo)).ToList(),
-            kind: "Attainment-based",
-            boundName: "attainment ratio");
+            bound: RateTableBound.AttainmentRatio);
 
         return new() { Type = RateTableType.AttainmentBased, AttainmentTiers = tiers, SplitAtQuota = splitAtQuota };
     }

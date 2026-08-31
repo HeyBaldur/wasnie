@@ -48,6 +48,18 @@ public sealed class AddRuleToPlanHandler(IApplicationDbContext db, IAuthorizatio
             await db.SaveChangesAsync(cancellationToken);
             return Result<RuleDto>.Success(CompensationMapper.ToRuleDto(rule));
         }
+        // ★ THE CODED ONES GO PAST, AND THAT IS THE WHOLE POINT. Result carries a single string, so
+        // anything caught here loses its code and its parameters and arrives at the browser as an
+        // English sentence. Rethrowing lets ExceptionHandlingMiddleware emit the 422 with the code
+        // intact, which is what makes the rate-table refusals translatable.
+        //
+        // Nothing has been persisted at this point: the only coded throw on this path is
+        // RateTableRequest.ToDomain, evaluated as an argument — before AddRule mutates anything and
+        // long before SaveChangesAsync.
+        catch (DomainCodedException)
+        {
+            throw;
+        }
         catch (DomainException ex)
         {
             return Result<RuleDto>.Failure(ex.Message);

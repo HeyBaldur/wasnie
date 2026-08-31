@@ -103,8 +103,11 @@ public sealed class PlanCloneKeepsMalformedTablesTests
             })
             .ToList();
 
+        // The refusal is a CODE now, not an English sentence — the wording lives in the front end's
+        // three translation files. What matters here is unchanged: the write path still refuses the
+        // table the read path just handed back intact.
         FluentActions.Invoking(() => RateTable.AttainmentBased(stillBroken))
-            .Should().Throw<Wasnie.Domain.Exceptions.DomainException>()
-            .WithMessage("*last tier must be open-ended*");
+            .Should().Throw<Wasnie.Domain.Exceptions.DomainCodedException>()
+            .Which.Code.Should().Be(RateTableInvariant.LastTierMustBeOpen);
     }
 }

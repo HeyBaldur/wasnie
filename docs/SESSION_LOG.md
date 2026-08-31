@@ -4,6 +4,168 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-31 — El render del porcentaje: `2000000%` en un payout pagado
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · front + PDF del backend · **sin migración** ·
+**cambio de PRESENTACIÓN puro: no se tocó ningún crédito, importe ni fila histórica**
+
+El desglose de un payout ya pagado mostraba `0–2000000% @ 4% / 2000000–5000000% @ 6%`. Absorbe el
+`WI-tarifa-por-unidad-500-porciento.md`, que quedó escrito sin construir.
+
+### El inventario salió CHICO — dos superficies rotas, no diez
+
+| Superficie | `file:line` | Estado |
+|---|---|---|
+| Payout detail — desglose | `payout-detail.component.ts:226` | **ROTA** (ambos límites) |
+| PDF del payout | `PayoutPdfExportService.cs:222` | **ROTA** (Flat por unidad) |
+| Credit detail | `credit-detail.component.ts:45` | ✅ ya usaba `formatRate` |
+| Rule form (Tiered / Attainment / Flat) | `.html:154`, `.html:186`, `.html:99` | ✅ **el patrón** |
+| Assistant tool | `PlanRuleProjection.cs:66-69` | ✅ **ya distinguía bien** |
+| Plan detail, simulador, 4 exports de Excel, statement | — | No renderizan tasas ni límites |
+
+### ★ Lo que YA estaba bien, y es el patrón que se copió
+
+Dos sitios habían resuelto esto antes y nadie lo propagó:
+
+- **El formulario de regla** declara la convención en la cabecera de columna y en el hint:
+  `Desde (importe)` + *"Los límites son importes en {{currency}}"* para Tiered,
+  `Cumpl. desde (× cuota)` + *"1 = 100% del objetivo, 1,4 = 140%"* para attainment.
+- **La proyección del asistente** lleva la semántica **en el nombre del campo**:
+  `AmountTier(FromAmount, ToAmount, RawRate)` vs
+  `AttainmentBracket(FromAttainmentFraction, ToAttainmentFraction, RawRate)`, más `SemanticBehavior`.
+
+### Puerta del Paso 0.3: LIMPIA
+
+El `×100` es **presentación pura** en todos sus usos. `formatRate` devuelve `string`;
+`payout-detail` devuelve `string`; `flatRatePercent` alimenta un texto y un umbral de *aviso*
+(`>= 100`), nunca un importe; `payee-detail.gaugeColorClass` y `ws-gauge` son una consecución real
+(proporción → %), correctos. Ningún resultado entra en aritmética que termine en dinero.
+
+### Por qué sobrevivió al pase anterior
+
+`formatRate` existe desde el arreglo del 500%, con un comentario que dice *"una función, no un arreglo
+por pantalla"*. Pero el desglose del payout **armaba su propia copia inline** del string, así que
+arreglar el helper nunca lo tocó. Ahora los límites viven en el mismo archivo por la misma razón:
+`formatAmountBound` / `formatAttainmentBound` / `formatRatePercent` / `formatAmountTier` /
+`formatAttainmentTier`.
+
+### La convención (Paso 1) — para revisión de Rodolfo
+
+| Semántica | Antes | Ahora |
+|---|---|---|
+| Tasa (`TransactionAmount`) | `5%` | `5%` — sin cambios |
+| Importe por unidad (`TransactionQuantity`) | `500%` en el PDF | `5.00 EUR per unit` |
+| Límite de escalera Tiered | `0–1000` (número pelado) | `€0.00–€1.000,00` (moneda del plan) |
+| Límite de attainment | `0–140%` | `0–1,4 × cuota` |
+
+`× cuota` son **las mismas palabras** que ya usan las cabeceras del formulario (`× quota` / `× cuota` /
+`× cel`), para que el mismo número guardado se lea igual en las dos pantallas. Clave nueva:
+`PLANS.ATT_BOUND_SUFFIX`, EN/ES/PL.
+
+**Sin moneda no se inventa una:** el límite Tiered queda como número pelado. Un símbolo adivinado sería
+una mentira nueva; un número sin unidad es sólo incompleto.
+
+### El payout `844E7E75` — NO SE PUDO ABRIR DESDE ESTA MÁQUINA
+
+`WasnieDb` en `HEYBALDUR` tiene **0 filas en `Payouts`**, y el id no aparece en ninguna otra tabla ni
+en los docs. **No verifiqué ese payout concreto.** Lo que sí está establecido: el camino de LECTURA del
+payout (`GetPayoutByIdHandler`) **no se tocó**, y el string reportado determina la tabla guardada —
+`attainmentFrom/To` = 0 / 20000 / 50000, tasas 0,04 y 0,06 — que quedó fijada en un test:
+
+- **Antes:** `0–2000000% @ 4% / 2000000–5000000% @ 6%`
+- **Después:** `0–20.000 × cuota @ 4% / 20.000–50.000 × cuota @ 6%`
+
+Sigue siendo absurdo **porque los datos son absurdos** (importes tipeados en una escalera de
+proporciones); deja de ser absurdo *en la unidad equivocada*.
+
+### Verificación
+
+`dotnet build Wasnie.sln` exit 0 · unit **1747 → 1754** (exit 0) · integración **849 verdes / 0 rojas /
+2 skipped** (exit 0) · front **1225 → 1240** (exit 0) · `ng build --configuration production` exit 0,
+con el bundle **idéntico** al de antes (844,78 kB) — sin regresión.
+
+`FormatRateText` pasó de `private` a `internal` para poder fijar su texto: un PDF es opaco a las
+aserciones, y esa frase estaba mal en un documento contra el que ya se había pagado.
+
+### Anotado, no arreglado
+
+- El PDF escribe `5.00%` donde el front escribe `5%` (el `:G` sobre un `decimal` conserva la escala).
+  Divergencia **cosmética y preexistente**: la unidad es correcta en los dos.
+- El PDF es **sólo inglés** (`"Source Transaction"`, `"Base Amount"` hardcodeados). Fuera de alcance.
+- `MeasurementBase` vive en `Wasnie.Application.Assistant.Tools`, que es un hogar raro para un concepto
+  general; el PDF ahora importa ese namespace. `GetPayoutByIdHandler` ya lo hacía.
+
+## 2026-08-31 — Mensajes de invariante: códigos en vez de frases, y los tres defectos del pase anterior
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · dominio + aplicación + API + front + i18n · **sin migración**
+
+Los seis errores de escalera de `RateTable` eran prosa inglesa construida en C# y pintada tal cual en el
+toast: la UI en español y en polaco mostraba inglés, y corregir una palabra polaca exigía redesplegar el
+backend. El repo ya tenía el patrón correcto (`PayoutSkipReason`, `RuleSimulationBlocker`): el backend
+emite **códigos**, el front traduce. Esta pasada lo aplica, y cierra los tres defectos que el pase
+anterior dejó abiertos.
+
+### El barrido del Paso 0.4 disparó la puerta de parada — y no se amplió el alcance
+
+Hay **187 `throw new DomainException`** con prosa inglesa en 30 archivos, todos llegando a pantalla por
+el mismo camino (`ExceptionHandlingMiddleware.cs:105` → `{ message }` → `extractApiError` → toast), más
+los `Result.Failure(string)` en prosa de los handlers. Eso es **un frente propio** y NO se tocó: esta
+pasada cierra sólo los seis que abrimos nosotros. El contrato nuevo convive con el viejo sin romperlo.
+
+### El contrato de error: por qué hizo falta uno nuevo
+
+`Result<T>` lleva **un solo string**, así que no había lugar para un código con parámetros. Se añadió
+`DomainCodedException` (código + diccionario de parámetros), el middleware la serializa como 422 con
+`{ code, parameters }` y **deliberadamente sin `message`** — mandar los dos haría que el cliente leyera
+la frase inglesa primero y el código fuera decoración. Los dos handlers de reglas la dejan pasar con un
+`catch (DomainCodedException) { throw; }` **antes** del catch general; sin eso el código se perdía al
+convertirse en `Result.Failure(ex.Message)`. Nada se persiste en ese punto: `ToDomain()` se evalúa como
+argumento, antes de `AddRule`/`UpdateRule` y muy antes de `SaveChangesAsync`.
+
+### El orden de las comprobaciones: un enmascaramiento real, dos que ya estaban bien
+
+- **El arreglo:** el orden ascendente ahora corre **antes** que "último tramo abierto". Una escalera
+  cargada al revés casi siempre tiene además el último tramo acotado, así que el usuario leía *"el
+  último tramo debe quedar abierto"* — cierto, e inútil: abrir ese tramo no endereza una escalera dada
+  vuelta.
+- **Ya estaba bien, pero ahora tiene test:** una escalera descendente **siempre** registra también un
+  solapamiento (`From` baja mientras cada `To` supera su propio `From`).
+- **Estructural:** los tramos intermedios cerrados se comprueban antes que solapamiento/hueco, que
+  desreferencian `To`.
+- **Y nada más:** un último tramo acotado NO implica solapamiento ni hueco, ni al revés. No se
+  inventaron casos para llenar la sección.
+
+### Paso 5 — el formulario vacío
+
+`_loadExistingRule` hacía `find(r => r.id === ruleId)` y un `return` pelado: un GUID en mayúsculas (la
+API los emite en minúsculas) abría un formulario **de alta, vacío y habilitado**, bajo el título "Editar
+regla" y sin error alguno. Guardarlo habría creado una **segunda** regla. Se hicieron **las dos** cosas:
+comparar sin distinguir mayúsculas **y** un estado explícito `ruleNotFound` (`ws-empty-state` + submit
+bloqueado). Normalizar el caso solo habría tapado el síntoma; una regla borrada de verdad llega igual.
+
+### Cambio al design system (declarado, no improvisado)
+
+`WsToastService.show` gana un tercer argumento opcional `params`, y el contenedor pasa a
+`{{ toast.message | translate: toast.params }}`. Sin eso un mensaje con un número dentro sólo podía
+existir como frase inglesa armada por el llamador — o sea, no traducible. Es aditivo (undefined para
+todos los toasts existentes) y quedó documentado en `DESIGN_SYSTEM.md`.
+
+### Verificación
+
+`dotnet build Wasnie.sln` limpio (exit 0) · unit **1741 → 1747** (exit 0) · integración **849 verdes,
+0 rojas, 2 skipped** (exit 0) · front **1195 → 1225** (exit 0) · `ng build --configuration production`
+exit 0. Cadena encadenada con guarda `${PIPESTATUS[0]}` — y sirvió: la primera corrida de integración
+dio 682 rojas con exit 1 mientras el shell salía 0, porque Docker Desktop no estaba levantado. Tres tests preexistentes que fijaban la prosa
+(`PlanTests` ×3, `PlanCloneKeepsMalformedTablesTests` ×1) pasaron a afirmar el código. **Los 18 tests de
+caracterización de lectura: verdes y sin editar.**
+
+### Deuda que queda anotada
+
+- Los 187 mensajes de dominio en prosa (incluidos los dos de `RateTableRequest` que no son invariantes
+  de escalera: rate plano faltante y tipo no soportado).
+- El bundle inicial del front está **194,78 kB por encima del presupuesto de 650 kB** — preexistente;
+  esta pasada suma ~1 kB de cadenas i18n.
+
 ## 2026-08-28 — Cierre de cuentas huérfanas: créditos + ledger, en una transacción
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · full-stack · **migración `B28_OrphanAccountClosure`**
