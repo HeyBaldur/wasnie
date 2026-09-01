@@ -10,7 +10,7 @@ public sealed record AddRuleToPlanCommand(
     string Name,
     int SortOrder,
     Measurement Measurement,
-    RateTable RateTable,
+    RateTableRequest RateTable,
     Trigger? Trigger,
     Modifier? Modifier,
     Cap? Cap,

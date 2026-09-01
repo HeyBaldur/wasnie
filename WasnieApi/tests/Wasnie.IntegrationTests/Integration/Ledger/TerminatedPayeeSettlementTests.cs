@@ -4,8 +4,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Ledger;
+using Wasnie.Domain.Compensation.Plans;
+using Wasnie.Domain.Compensation.Rules;
+using Wasnie.Domain.Compensation.Transactions;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Infrastructure.Persistence;
@@ -60,12 +64,21 @@ public sealed class TerminatedPayeeSettlementTests(TestDatabaseFixture fixture)
         return payee.Id;
     }
 
+    /// <summary>
+    /// The queue's rows. The endpoint answers with an OBJECT now — rows plus per-currency totals —
+    /// because the totals are money and a screen must not add money up itself.
+    /// </summary>
     private async Task<List<JsonElement>> ListAsync(HttpClient client)
+    {
+        return (await ReadQueueAsync(client))
+            .GetProperty("rows").EnumerateArray().Select(e => e.Clone()).ToList();
+    }
+
+    private async Task<JsonElement> ReadQueueAsync(HttpClient client)
     {
         var response = await client.GetAsync(Endpoint);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync())
-            .RootElement.EnumerateArray().Select(e => e.Clone()).ToList();
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
     }
 
     // ══ The work queue ═══════════════════════════════════════════════════════
@@ -360,5 +373,181 @@ public sealed class TerminatedPayeeSettlementTests(TestDatabaseFixture fixture)
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // == The half that was invisible: commission earned and never paid ========
+    //
+    // The ledger records what a payee OWES. Commission they EARNED and were never paid produces NO
+    // PayeeBalance row at all, so a queue built on balances read "nothing outstanding" for someone owed
+    // real money - while the pay run skipped them for being terminated. Invisible on both sides at once
+    // (docs/DIAG_POL-8554_PAYOUT_Y_CREDITOS_INVENTADOS.md). These tests are that hole.
+
+    /// <summary>
+    /// Seeds a departed payee holding one commission credit, and nothing else - deliberately with NO
+    /// PayeeBalance row, because that absence is the exact shape of the bug.
+    /// </summary>
+    private async Task<(Guid PayeeId, Guid CreditId, Guid TransactionId, string Reference)>
+        SeedPayeeWithUnsettledCreditAsync(
+            string code, decimal commission, bool terminated = true, bool consumed = false)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tenantId = TestConstants.TenantA;
+
+        var payee = Payee.Create(tenantId, $"Payee {code}", code, $"{code}-{Guid.NewGuid():N}@test.com",
+            new DateOnly(2020, 1, 1), "test", Guid.NewGuid(), Now);
+        if (terminated)
+            payee.MarkAsTerminated(new DateOnly(2026, 6, 30), "hr@acme.com", Now);
+        db.Payees.Add(payee);
+
+        var planId = Guid.NewGuid();
+        var plan = Plan.Create(tenantId, $"Plan {code}", "desc",
+            DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)), Eur,
+            "test", planId, Now, Guid.NewGuid());
+        plan.AddRule("Tier 1: 4% up to quota", 1,
+            new Measurement
+            {
+                Type = MeasurementType.Revenue,
+                SourceField = "amount",
+                Aggregation = MeasurementAggregation.Sum,
+            },
+            RateTable.Flat(0.04m));
+        db.CompensationPlans.Add(plan);
+
+        var reference = $"REF-{code}";
+        var tx = CompensationTransaction.Ingest(tenantId, reference, payee.Id,
+            Money.Of(commission * 25m, Eur), new DateOnly(2026, 6, 16), TransactionSource.Manual,
+            "test", Guid.NewGuid(), Now, Guid.NewGuid());
+        db.CompensationTransactions.Add(tx);
+
+        var ruleId = plan.Rules.First().Id;
+        var snapshot = RuleSnapshot.Freeze(ruleId, planId, 1, "Tier 1: 4% up to quota",
+            RateTable.Flat(0.04m), Trigger.Always(), Now);
+
+        var credit = Credit.Allocate(tenantId, tx.Id, payee.Id, planId, ruleId, snapshot,
+            Money.Of(commission * 25m, Eur), Money.Of(commission, Eur),
+            Percentage.FromPercent(100), CreditRole.Primary,
+            "test", Guid.NewGuid(), Now, Guid.NewGuid());
+
+        if (consumed)
+            credit.Consume(Guid.NewGuid(), Now, Guid.NewGuid());
+
+        db.Credits.Add(credit);
+
+        await db.SaveChangesAsync();
+        return (payee.Id, credit.Id, tx.Id, reference);
+    }
+
+    /// <summary>
+    /// * THE CASE THAT WAS INVISIBLE. A departed payee with unpaid commission and NO balance row at all.
+    /// The old query started from PayeeBalances, so "no row" meant "settled" and the money vanished.
+    /// </summary>
+    [Fact]
+    public async Task Unpaid_commission_puts_a_departed_payee_in_the_queue_with_no_balance_row_at_all()
+    {
+        var seed = await SeedPayeeWithUnsettledCreditAsync("GONE-UNPAID", 3869.34m);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            (await db.PayeeBalances.IgnoreQueryFilters().AnyAsync(b => b.PayeeId == seed.PayeeId))
+                .Should().BeFalse("the premise of this test is that the ledger has nothing on this person");
+        }
+
+        var row = (await ListAsync(client)).Single(r => r.GetProperty("payeeId").GetGuid() == seed.PayeeId);
+
+        row.GetProperty("unsettledCreditTotal").GetDecimal().Should().Be(3869.34m);
+        row.GetProperty("currency").GetString().Should().Be(Eur);
+        row.GetProperty("balance").GetDecimal().Should().Be(0m, "there is no ledger balance to report");
+        row.GetProperty("balanceUpdatedAt").ValueKind.Should().Be(JsonValueKind.Null,
+            "no balance row is a different fact from a balance updated to zero");
+    }
+
+    /// <summary>
+    /// A total is something to worry about; the plan, the rule, the date and the sale are what somebody
+    /// can act on. The row carries all four.
+    /// </summary>
+    [Fact]
+    public async Task Each_unpaid_credit_carries_what_a_person_needs_to_act_on_it()
+    {
+        var seed = await SeedPayeeWithUnsettledCreditAsync("GONE-DETAIL", 500m);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        var row = (await ListAsync(client)).Single(r => r.GetProperty("payeeId").GetGuid() == seed.PayeeId);
+        var credit = row.GetProperty("unsettledCredits").EnumerateArray().Single();
+
+        credit.GetProperty("creditId").GetGuid().Should().Be(seed.CreditId);
+        credit.GetProperty("amount").GetDecimal().Should().Be(500m);
+        credit.GetProperty("planName").GetString().Should().Be("Plan GONE-DETAIL");
+        credit.GetProperty("ruleName").GetString().Should().Be("Tier 1: 4% up to quota");
+        credit.GetProperty("allocatedAt").GetString().Should().Be("2026-07-29");
+        credit.GetProperty("transactionId").GetGuid().Should().Be(seed.TransactionId);
+        credit.GetProperty("transactionReference").GetString().Should().Be(seed.Reference);
+    }
+
+    /// <summary>Paid is paid. A credit a payout consumed is finished work, not queue work.</summary>
+    [Fact]
+    public async Task A_credit_already_consumed_by_a_payout_is_not_in_the_queue()
+    {
+        var seed = await SeedPayeeWithUnsettledCreditAsync("GONE-PAID", 750m, consumed: true);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        (await ListAsync(client))
+            .Should().NotContain(r => r.GetProperty("payeeId").GetGuid() == seed.PayeeId);
+    }
+
+    /// <summary>
+    /// The credit half must not widen the queue to people who are still here. Their commission is not
+    /// orphaned - the next pay run picks it up, which is precisely what termination stops.
+    /// </summary>
+    [Fact]
+    public async Task An_active_payee_with_unpaid_commission_is_not_in_the_queue()
+    {
+        var seed = await SeedPayeeWithUnsettledCreditAsync("HERE-UNPAID", 900m, terminated: false);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        (await ListAsync(client))
+            .Should().NotContain(r => r.GetProperty("payeeId").GetGuid() == seed.PayeeId);
+    }
+
+    /// <summary>The total is the sum of the rows, computed by the server, and per currency.</summary>
+    [Fact]
+    public async Task The_total_is_the_sum_of_the_rows_and_never_blends_currencies()
+    {
+        var a = await SeedPayeeWithUnsettledCreditAsync("TOT-A", 1000m);
+        var b = await SeedPayeeWithUnsettledCreditAsync("TOT-B", 250.50m);
+        var client = fixture.Factory.CreateClient().WithAuth(TestConstants.TenantA, role: "CompManager");
+
+        var queue = await ReadQueueAsync(client);
+        var rows = queue.GetProperty("rows").EnumerateArray()
+            .Where(r => r.GetProperty("payeeId").GetGuid() == a.PayeeId
+                     || r.GetProperty("payeeId").GetGuid() == b.PayeeId)
+            .ToList();
+
+        rows.Sum(r => r.GetProperty("unsettledCreditTotal").GetDecimal()).Should().Be(1250.50m);
+
+        var eur = queue.GetProperty("totals").EnumerateArray()
+            .Single(t => t.GetProperty("currency").GetString() == Eur);
+
+        // Every total is one currency's own. The seeds above are all EUR, so this row must at least
+        // cover them; other tests in the suite add their own EUR rows, hence >= rather than ==.
+        eur.GetProperty("unsettledCreditTotal").GetDecimal().Should().BeGreaterThanOrEqualTo(1250.50m);
+        queue.GetProperty("totals").EnumerateArray()
+            .Select(t => t.GetProperty("currency").GetString())
+            .Should().OnlyHaveUniqueItems("one total per currency, never a blended figure");
+    }
+
+    /// <summary>Scoping: the queue is per tenant, like everything else that touches money.</summary>
+    [Fact]
+    public async Task The_queue_never_shows_another_tenants_unpaid_commission()
+    {
+        var seed = await SeedPayeeWithUnsettledCreditAsync("GONE-TENANT-A", 4200m);
+        var otherTenant = fixture.Factory.CreateClient()
+            .WithAuth(TestConstants.TenantB, role: "CompManager");
+
+        var body = await (await otherTenant.GetAsync(Endpoint)).Content.ReadAsStringAsync();
+        body.Should().NotContain(seed.PayeeId.ToString());
+        body.Should().NotContain(seed.Reference);
     }
 }

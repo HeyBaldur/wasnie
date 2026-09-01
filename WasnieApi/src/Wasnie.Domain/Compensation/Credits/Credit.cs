@@ -25,6 +25,31 @@ public sealed class Credit : AggregateRoot
     // Anti-double-pay: set when a Paid payout consumes this credit; cleared on payout revert.
     public DateTimeOffset? ConsumedAt { get; private set; }
     public Guid? ConsumedByPayoutId { get; private set; }
+
+    // ── The third ending: closed without ever being paid ──────────────────────────────────────────
+    // ★★ A TERMINAL STATE WITH NO PAYOUT BEHIND IT, and it had to be new. Before this, a credit could
+    // only leave circulation two ways and neither fitted: Consume demands a non-null payoutId — and
+    // Unconsume dereferences it — so an invented GUID would leave the anti-double-pay trail pointing at
+    // a payout that never existed; Supersede means "a reallocation replaced this one" and raises an
+    // event the attainment queries read as exactly that. A departed payee's unpaid commission was
+    // replaced by nothing and paid by nothing (docs/DIAG_ORPHAN_ACCOUNT_CLOSURE.md §3.1).
+    //
+    // ★ AND IT IS ONE-WAY. There is deliberately no Unclose: reversing a write-off is not an undo, it is
+    // a new business decision with its own authority, and the ledger it travels with is append-only.
+    public DateTimeOffset? ClosedAt { get; private set; }
+    public string? ClosedBy { get; private set; }
+    public CreditClosureReason? ClosureReason { get; private set; }
+
+    /// <summary>
+    /// Why this specific credit was closed, in the words of the person who closed it. Kept ON THE
+    /// CREDIT and not only on the ledger entry: the ledger records a movement of a balance, and a
+    /// balance is not a credit — six months later "what happened to this €3,869.34" has to be
+    /// answerable from the row itself.
+    /// </summary>
+    public string? ClosureNote { get; private set; }
+
+    /// <summary>Still owed and still payable: not replaced, not paid, not closed.</summary>
+    public bool IsOutstanding => SupersededAt is null && ConsumedAt is null && ClosedAt is null;
     // Optimistic concurrency token — EF uses this to detect concurrent consumption of the same credit.
     public byte[] RowVersion { get; private set; } = [];
 
@@ -98,6 +123,45 @@ public sealed class Credit : AggregateRoot
         ConsumedByPayoutId = payoutId;
 
         RaiseDomainEvent(new CreditConsumedEvent(eventId, now, Id, TransactionId, PayeeId, TenantId, payoutId));
+    }
+
+    /// <summary>
+    /// Closes this credit for good, because the account of the payee who earned it was closed.
+    ///
+    /// ★ FAIL-CLOSED ON EVERY OTHER STATE. A consumed credit was already paid and closing it would
+    /// double-count the closure; a superseded one is not this person's claim any more; a closed one
+    /// closing twice would write a second decision over the first. All three throw rather than
+    /// no-op, because each is a caller bug about money and a silent no-op hides it.
+    /// </summary>
+    public void Close(
+        CreditClosureReason reason,
+        string note,
+        string closedBy,
+        DateTimeOffset now,
+        Guid eventId)
+    {
+        if (ClosedAt is not null)
+            throw new DomainException($"Credit {Id} is already closed.");
+        if (ConsumedAt is not null)
+            throw new DomainException(
+                $"Credit {Id} was already paid by payout {ConsumedByPayoutId} and cannot be closed.");
+        if (SupersededAt is not null)
+            throw new DomainException($"Credit {Id} is superseded and is no longer owed to this payee.");
+        if (string.IsNullOrWhiteSpace(note))
+            throw new DomainException("A closure note is required.");
+        if (note.Length > 1000)
+            throw new DomainException("The closure note must not exceed 1000 characters.");
+        if (string.IsNullOrWhiteSpace(closedBy))
+            throw new DomainException("The closing actor is required.");
+
+        ClosedAt = now;
+        ClosedBy = closedBy;
+        ClosureReason = reason;
+        ClosureNote = note;
+
+        RaiseDomainEvent(new CreditClosedEvent(
+            eventId, now, Id, TransactionId, PayeeId, TenantId,
+            reason, CreditedAmount.Amount, CreditedAmount.Currency, note));
     }
 
     // Undo consumption when a Paid payout is reverted. Returns this credit to the available pool.

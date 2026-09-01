@@ -13,6 +13,10 @@ public sealed record PlanDto(
     DateTimeOffset CreatedAt,
     string CreatedBy,
     IList<RuleDto> Rules,
+    // Active assignments this plan currently has. The archive confirmation needs it: archiving
+    // deactivates every one of them, and the dialog has to say how many people that is before
+    // the user agrees to it.
+    int ActiveAssignmentCount,
     // Clawback policy. Null/null means this plan claws nothing back — the state every plan starts in.
     //
     // NO DEFAULT VALUE on purpose, even though both are nullable TYPES. They used to default to null,

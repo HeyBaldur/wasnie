@@ -1,11 +1,30 @@
 @if (store.entitled() === true) {
+  <!--
+    ★ GRADIENT BORDER AT REST, FILLED GRADIENT ON HOVER. The outer button IS the gradient; the inner
+    span sits on the app surface and covers all but a 2px rim, then goes transparent on hover so the
+    gradient underneath floods through. That is why the padding lives outside and the background
+    inside — swapping them would give a gradient that never shows.
+
+    ★ AND THE TAILWIND PALETTE HERE IS THIS FILE'S OWN IDIOM, not a lapse. The control it replaces was
+    `from-pink-500 to-orange-400`; the design system has no gradient token, and inventing one for a
+    single ornamental control would be adding to the design system to style one button. Every other
+    surface in the app still uses tokens.
+
+    ★ NO `group-hover:bg-transparent` ON THE SPAN, deliberately. It is the obvious way to write this
+    and it silently does nothing here: Angular component styles sit outside any CSS layer and Tailwind
+    utilities sit inside one, so the resting background below beats the utility and the gradient never
+    floods. The hover lives in the component stylesheet, next to the rule it has to undo.
+  -->
   <button
     type="button"
-    class="text-white bg-gradient-to-br from-pink-500 to-orange-400 hover:bg-gradient-to-bl focus:ring-4 focus:outline-none focus:ring-pink-200 dark:focus:ring-pink-800 font-medium rounded-md text-sm px-3 py-1.5 text-center leading-5 inline-flex items-center justify-center gap-1.5"
+    class="relative inline-flex items-center justify-center p-0.5 overflow-hidden text-sm font-medium rounded-md group bg-gradient-to-br from-purple-600 to-blue-500 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:focus:ring-blue-800"
     (click)="open()"
     [attr.aria-label]="'ASSISTANT.OPEN' | translate"
     [title]="'ASSISTANT.OPEN' | translate"
   >
+    <span
+      class="assistant-trigger__face relative inline-flex items-center justify-center gap-1.5 px-3 py-1 leading-5 rounded-sm transition-all ease-in duration-75"
+    >
     <!-- Tabler "sparkles" — inline SVG, no icon dependency. Says "assistant" without a word of copy. -->
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -13,18 +32,26 @@
       height="16"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
+      stroke="url(#tally-mark-topbar)"
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
       aria-hidden="true"
+      class="assistant-trigger__icon"
       style="flex-shrink: 0"
     >
+      <defs>
+        <linearGradient id="tally-mark-topbar" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="var(--color-purple-600)" />
+          <stop offset="100%" stop-color="var(--color-blue-500)" />
+        </linearGradient>
+      </defs>
       <path stroke="none" d="M0 0h24v24H0z" fill="none" />
       <path d="M14 6a9.3 9.3 0 0 0 1.516 -.546c.911 -.438 1.494 -1.015 1.937 -1.932c.207 -.428 .382 -.928 .547 -1.522c.165 .595 .34 1.095 .547 1.521c.443 .918 1.026 1.495 1.937 1.933c.426 .205 .925 .38 1.516 .546a9.3 9.3 0 0 0 -1.516 .547c-.911 .438 -1.494 1.015 -1.937 1.932a9 9 0 0 0 -.547 1.521c-.165 -.594 -.34 -1.095 -.547 -1.521c-.443 -.918 -1.026 -1.494 -1.937 -1.932a9 9 0 0 0 -1.516 -.547" />
       <path d="M3 14a21 21 0 0 0 1.652 -.532c2.542 -.953 3.853 -2.238 4.816 -4.806a20 20 0 0 0 .532 -1.662a20 20 0 0 0 .532 1.662c.963 2.567 2.275 3.853 4.816 4.806q .75 .28 1.652 .532a21 21 0 0 0 -1.652 .532c-2.542 .953 -3.854 2.238 -4.816 4.806a20 20 0 0 0 -.532 1.662a20 20 0 0 0 -.532 -1.662c-.963 -2.568 -2.275 -3.853 -4.816 -4.806a21 21 0 0 0 -1.652 -.532" />
     </svg>
     {{ 'ASSISTANT.TRIGGER_LABEL' | translate }}
+    </span>
   </button>
 } @else if (store.requiresUpgrade()) {
   <!--

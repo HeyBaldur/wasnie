@@ -37,6 +37,12 @@
 .ws-pop__panel--top,
 .ws-pop__panel--top-end {
   bottom: calc(100% + var(--space-1));
+
+  // ★ THE ENTRANCE HAS TO COME FROM THE SIDE THE PANEL IS ON. The shared keyframe slides down from
+  // -4px, which reads as "dropping out of the trigger" for a menu below it and as "sinking into the
+  // trigger" for one above. A panel that flips sides and keeps the same motion looks like a glitch,
+  // not a decision.
+  animation-name: ws-pop-in-up;
 }
 
 .ws-pop__panel--bottom,
@@ -51,5 +57,10 @@
 
 @keyframes ws-pop-in {
   from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ws-pop-in-up {
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }

@@ -6,6 +6,7 @@ using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
 
@@ -23,8 +24,17 @@ public sealed class GetPlanByIdHandler(IApplicationDbContext db, IAuthorizationS
             .Include(p => p.Rules.Where(r => r.IsActive).OrderBy(r => r.SortOrder).ThenBy(r => r.Id))
             .FirstOrDefaultAsync(p => p.Id == request.PlanId, cancellationToken);
 
-        return plan is null
-            ? Result<PlanDto>.Failure("Plan not found.")
-            : Result<PlanDto>.Success(CompensationMapper.ToPlanDto(plan));
+        if (plan is null)
+        {
+            return Result<PlanDto>.Failure("Plan not found.");
+        }
+
+        // Counted here rather than derived from a navigation: PlanAssignment is a separate aggregate.
+        // The archive confirmation shows this number, so it has to be the same predicate
+        // ArchivePlanHandler deactivates on — Active assignments of this plan, nothing else.
+        var activeAssignmentCount = await db.PlanAssignments
+            .CountAsync(a => a.PlanId == plan.Id && a.Status == AssignmentStatus.Active, cancellationToken);
+
+        return Result<PlanDto>.Success(CompensationMapper.ToPlanDto(plan, activeAssignmentCount));
     }
 }

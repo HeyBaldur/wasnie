@@ -65,5 +65,8 @@ public sealed class AuditBehavior<TRequest, TResponse>(
             ResourceId: auditCmd.AuditResourceId ?? string.Empty,
             ActorUserId: currentUser.UserId ?? "system",
             ActorEmail: currentUser.Email ?? string.Empty,
-            DisplayName: auditCmd.AuditDisplayName);
+            DisplayName: auditCmd.AuditDisplayName,
+            // Null for almost every command, and that is the point: only the ones with something worth
+            // recording say anything. See IAuditableCommand.AuditMetadata.
+            Metadata: auditCmd.AuditMetadata);
 }

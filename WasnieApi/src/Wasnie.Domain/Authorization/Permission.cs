@@ -50,6 +50,16 @@ public static class Permission
     public const string LedgerAdjust = "Ledger.Adjust";
 
     /// <summary>
+    /// Closing a departed payee's account: settling it as recovered elsewhere, or writing it off.
+    ///
+    /// ★ ITS OWN PERMISSION, NOT Ledger.Adjust. An adjustment moves a balance and can be compensated by
+    /// another adjustment; this destroys a claim a person who has left still had, marks their credits
+    /// terminal, and cannot be undone. Reading the queue is Ledger.Read, and the two must not be the
+    /// same key — see docs/DIAG_ORPHAN_ACCOUNT_CLOSURE.md §6.1.
+    /// </summary>
+    public const string LedgerCloseAccount = "Ledger.CloseAccount";
+
+    /// <summary>
     /// The right to receive a FINISHED balance — earned, owed, net — and nothing else.
     ///
     /// ★ A FACADE PERMISSION, AND THE ALTERNATIVE IS WHY IT EXISTS. The balance summary has to cross the

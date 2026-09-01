@@ -542,6 +542,21 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ClosedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ClosureNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ClosureReason")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<DateTimeOffset?>("ConsumedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -591,6 +606,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ConsumedAt")
                         .HasFilter("[ConsumedAt] IS NULL");
+
+                    b.HasIndex("TenantId", "PayeeId")
+                        .HasDatabaseName("IX_Credits_TenantId_PayeeId_Outstanding")
+                        .HasFilter("[SupersededAt] IS NULL AND [ConsumedAt] IS NULL AND [ClosedAt] IS NULL");
 
                     b.HasIndex("TenantId", "SupersededAt")
                         .HasFilter("[SupersededAt] IS NULL");
@@ -802,6 +821,13 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("AccountClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("AccountClosedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -1054,6 +1080,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<decimal?>("ClawbackCapPercent")
                         .HasColumnType("decimal(5,2)");

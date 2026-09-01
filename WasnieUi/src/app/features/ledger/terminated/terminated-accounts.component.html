@@ -22,6 +22,29 @@
         titleKey="LEDGER.TERMINATED_EMPTY_TITLE"
         descKey="LEDGER.TERMINATED_EMPTY" />
     } @else {
+      <!-- ★ THE TOTAL IS WHAT MAKES SOMEBODY LOOK. A list of rows is something to scroll past; a
+           figure saying how much commission is sitting unpaid is something to act on. One card per
+           currency, never blended — Wasnie holds no exchange rates — and the number arrives finished
+           from the server, because a screen does not add money. -->
+      @if (totals().length > 0) {
+        <div class="terminated__totals">
+          @for (total of totals(); track total.currency) {
+            <ws-card padding="md" accent="warning">
+              <p class="terminated__total-label">
+                {{ 'LEDGER.TERMINATED_UNSETTLED_TOTAL' | translate }}
+              </p>
+              <p class="terminated__total-amount">
+                {{ total.unsettledCreditTotal | currencyFormat: total.currency }}
+              </p>
+              <p class="terminated__total-meta">
+                {{ 'LEDGER.TERMINATED_UNSETTLED_META'
+                   | translate: { credits: total.unsettledCreditCount, payees: total.payeeCount } }}
+              </p>
+            </ws-card>
+          }
+        </div>
+      }
+
       <p class="terminated__intro">{{ 'LEDGER.TERMINATED_INTRO' | translate }}</p>
 
       <ws-table>
@@ -32,6 +55,7 @@
               <th scope="col">{{ 'LEDGER.TERMINATED_COL_CODE' | translate }}</th>
               <th scope="col">{{ 'LEDGER.TERMINATED_COL_TERMINATED_ON' | translate }}</th>
               <th scope="col" class="col-amount">{{ 'LEDGER.TERMINATED_COL_BALANCE' | translate }}</th>
+              <th scope="col" class="col-amount">{{ 'LEDGER.TERMINATED_COL_UNSETTLED' | translate }}</th>
               <th scope="col" class="col-action"></th>
             </tr>
           </thead>
@@ -42,7 +66,19 @@
                 <td>
                   <a class="terminated__name" [routerLink]="['/payees', row.payeeId]">{{ row.payeeName }}</a>
                 </td>
-                <td class="terminated__code">{{ row.employeeCode }}</td>
+                <td class="terminated__code">
+                  {{ row.employeeCode }}
+                  <!-- ★ THIS ROW CAME BACK. The account was closed and money arrived afterwards — which
+                       the product allows on purpose, because a commission is earned when the deal
+                       closes, not when the CRM catches up. Closure is recorded and never filtered on,
+                       so the new credit reopens the row instead of hiding behind a flag. -->
+                  @if (row.accountClosedAt) {
+                    <span class="terminated__reopened"
+                          [title]="'LEDGER.REOPENED_HINT' | translate">
+                      {{ 'LEDGER.REOPENED' | translate: { date: (row.accountClosedAt | date: 'mediumDate') } }}
+                    </span>
+                  }
+                </td>
                 <td>
                   @if (row.terminationDate) {
                     {{ row.terminationDate | date: 'mediumDate' }}
@@ -51,27 +87,112 @@
                   }
                 </td>
                 <td class="col-amount">
-                  <span class="terminated__balance"
-                        [class.terminated__balance--debt]="isDebt(row.balance)"
-                        [class.terminated__balance--credit]="!isDebt(row.balance)">
-                    {{ fmtSigned(row.balance, row.currency) }}
-                  </span>
-                </td>
-                <td class="col-action">
-                  <!-- Closing an account is a finance action: Ledger.Adjust, hidden otherwise. The
-                       closing entry itself is written on the payee's ledger, through the adjustment
-                       flow that already exists — there is deliberately no second write path. -->
-                  @if ('Ledger.Adjust' | hasPermission) {
-                    <ws-button
-                      variant="secondary"
-                      size="sm"
-                      [routerLink]="['/payees', row.payeeId]"
-                      [queryParams]="{ tab: 'ledger' }">
-                      {{ 'LEDGER.TERMINATED_SETTLE' | translate }}
-                    </ws-button>
+                  <!-- No balance row at all is not a balance of zero. An em dash says "the ledger has
+                       nothing on this person", which is the ordinary case for someone whose only open
+                       item is unpaid commission. -->
+                  @if (row.balanceUpdatedAt) {
+                    <span class="terminated__balance"
+                          [class.terminated__balance--debt]="isDebt(row.balance)"
+                          [class.terminated__balance--credit]="!isDebt(row.balance)">
+                      {{ fmtSigned(row.balance, row.currency) }}
+                    </span>
+                  } @else {
+                    <span class="terminated__none">—</span>
                   }
                 </td>
+                <td class="col-amount">
+                  @if (row.unsettledCredits.length > 0) {
+                    <span class="terminated__unsettled">
+                      {{ row.unsettledCreditTotal | currencyFormat: row.currency }}
+                    </span>
+                  } @else {
+                    <span class="terminated__none">—</span>
+                  }
+                </td>
+                <td class="col-action">
+                  <!-- ★★ A LINK, AND IT SAYS SO. This used to read "Close account" in a secondary
+                       button — the shape and the words of an action — while being a `routerLink` and
+                       nothing else. On a screen whose own text says each account must be closed
+                       deliberately, somebody would press it expecting to close one worth €3,869.34 and
+                       land on a tab. A control must not promise a mutation the product does not have.
+                       The label now names the destination in the destination's own words
+                       (LEDGER.TAB / LEDGER.STATEMENT_TITLE both say "Clawback"), and the `link`
+                       variant makes it look like the navigation it is.
+
+                       Still gated on Ledger.Adjust, unchanged: the reason to go there is to record a
+                       closure, and only that permission can. Widening it to Ledger.Read was not asked
+                       for and would put a dead-end link in front of a rep. -->
+                  <!-- ★★ THE FLEX LIVES ON A DIV, NEVER ON THE <td>. A table cell set to `display:
+                       flex` stops being a table cell: it drops out of the column-width algorithm,
+                       collapses (measured: 40px), and its buttons overflow across the money column
+                       beside it. That is exactly what broke this table. The cell stays a cell; the
+                       row of controls is laid out one level in. -->
+                  <div class="terminated__actions">
+                  <!-- ★ AN <a>, NOT A ws-button. Two reasons, and both are the point: a link has to
+                       look like every other link in the product, and a <button> cannot carry `target`
+                       — ws-button renders one and navigates programmatically, so there is no way to
+                       open a new tab from it. As an anchor the router writes a real href and the
+                       browser does the rest. Same element the payee name and the transaction
+                       reference on this table already use. -->
+                  @if ('Ledger.Adjust' | hasPermission) {
+                    <a class="terminated__link"
+                       [routerLink]="['/payees', row.payeeId]"
+                       [queryParams]="{ tab: 'ledger' }"
+                       target="_blank"
+                       rel="noopener">
+                      {{ 'LEDGER.TERMINATED_VIEW_LEDGER' | translate }}
+                    </a>
+                  }
+                  <!-- ★ Its OWN permission, not the one that opens this screen. Closing an account can
+                       mean writing off money a departed person was owed, and that is not the same
+                       authority as reading the list. -->
+                  @if ('Ledger.CloseAccount' | hasPermission) {
+                    <ws-button variant="secondary" size="sm" (click)="openClose(row)">
+                      {{ 'LEDGER.CLOSE_ACTION' | translate }}
+                    </ws-button>
+                  }
+                  </div>
+                </td>
               </tr>
+
+              <!-- ★ THE CREDITS ARE SHOWN, NOT HIDDEN BEHIND A TOGGLE. A total tells finance that
+                   something is wrong; only the plan, the rule, the date and the sale tell them what to
+                   do about it. This is a work queue, not a report — it is meant to be read in full,
+                   and a disclosure control would be one more click between a person and money nobody
+                   has noticed for months. -->
+              @for (credit of row.unsettledCredits; track credit.creditId) {
+                <!-- ★★ REAL CELLS, NOT ONE colspan WITH A FLEX INSIDE. The amount used to be pushed to
+                     the far right of the WHOLE table by `margin-left: auto`, which landed it past the
+                     actions column and nowhere near the figure it belongs under. Splitting the row on
+                     the parent's own column boundaries is what puts this credit's amount directly
+                     beneath the "Unpaid commission" total it makes up — decimals under decimals. -->
+                <tr class="terminated__credit-row">
+                  <td colspan="3">
+                    <div class="terminated__credit">
+                      <!-- New tab, like the clawback link beside it: this queue is a work list, and
+                           following a reference should not cost you the list you were working through. -->
+                      <a class="terminated__link terminated__credit-ref"
+                         [routerLink]="['/transactions', credit.transactionId]"
+                         target="_blank"
+                         rel="noopener">
+                        {{ credit.transactionReference }}
+                      </a>
+                      <span class="terminated__credit-plan">{{ credit.planName }}</span>
+                      <span class="terminated__credit-rule">{{ credit.ruleName }}</span>
+                      <span class="terminated__credit-date">
+                        {{ 'LEDGER.TERMINATED_CREDITED_ON' | translate }}
+                        {{ credit.allocatedAt | date: 'mediumDate' }}
+                      </span>
+                    </div>
+                  </td>
+                  <!-- Balance column: a credit has nothing to say about the ledger. -->
+                  <td class="col-amount"></td>
+                  <td class="col-amount terminated__credit-amount">
+                    {{ credit.amount | currencyFormat: credit.currency }}
+                  </td>
+                  <td class="col-action"></td>
+                </tr>
+              }
             }
           </tbody>
         </table>
@@ -79,3 +200,115 @@
     }
   </ws-page-layout>
 </app-shell>
+
+<!-- ══ Closing an account ═══════════════════════════════════════════════════════════════════════
+     ★★ THE CEREMONY OF `Mark as paid`, FOR A HEAVIER ACTION. That one declares money moved; this can
+     declare money will never move. The modal states the exact figures that are about to end, names the
+     two resolutions apart, demands a written reason, and says plainly that it cannot be undone. -->
+@if (closeTarget(); as target) {
+  <ws-modal
+    [isOpen]="true"
+    (isOpenChange)="cancelClose()"
+    [closable]="!closing()"
+    [title]="'LEDGER.CLOSE_TITLE' | translate">
+
+    <div class="terminated__close-body">
+      <p class="terminated__close-intro">
+        {{ 'LEDGER.CLOSE_INTRO' | translate: { payee: target.payeeName, code: target.employeeCode } }}
+      </p>
+
+      <!-- What ends, in figures. Both halves, never added together: they point in opposite
+           directions and Wasnie holds no rate to blend them with. -->
+      <div class="terminated__close-figures">
+        @if (target.unsettledCredits.length > 0) {
+          <div class="terminated__close-figure">
+            <span class="terminated__close-figure-label">
+              {{ 'LEDGER.CLOSE_FIGURE_UNSETTLED' | translate }}
+            </span>
+            <span class="terminated__close-figure-amount">
+              {{ target.unsettledCreditTotal | currencyFormat: target.currency }}
+            </span>
+            <span class="terminated__close-figure-meta">
+              {{ 'LEDGER.CLOSE_FIGURE_CREDITS' | translate: { count: target.unsettledCredits.length } }}
+            </span>
+          </div>
+        }
+        @if (target.balanceUpdatedAt) {
+          <div class="terminated__close-figure">
+            <span class="terminated__close-figure-label">
+              {{ 'LEDGER.CLOSE_FIGURE_BALANCE' | translate }}
+            </span>
+            <span class="terminated__close-figure-amount">
+              {{ fmtSigned(target.balance, target.currency) }}
+            </span>
+          </div>
+        }
+      </div>
+
+      <!-- The credits by name. A total is something to worry about; these are what is ending. -->
+      @if (target.unsettledCredits.length > 0) {
+        <ul class="terminated__close-list ws-scroll-thin">
+          @for (credit of target.unsettledCredits; track credit.creditId) {
+            <li>
+              <span class="terminated__close-list-ref">{{ credit.transactionReference }}</span>
+              <span class="terminated__close-list-plan">{{ credit.planName }}</span>
+              <span class="terminated__close-list-amount">
+                {{ credit.amount | currencyFormat: credit.currency }}
+              </span>
+            </li>
+          }
+        </ul>
+      }
+
+      <ws-select
+        [formControl]="resolutionControl"
+        [options]="resolutionOptions"
+        [label]="'LEDGER.CLOSE_RESOLUTION_LABEL' | translate" />
+
+      <p class="terminated__close-hint">
+        {{ (isWriteOff() ? 'LEDGER.CLOSE_RESOLUTION_WRITTEN_OFF_HINT'
+                         : 'LEDGER.CLOSE_RESOLUTION_SETTLED_HINT') | translate }}
+      </p>
+
+      <ws-textarea
+        [formControl]="noteControl"
+        [label]="'LEDGER.CLOSE_NOTE_LABEL' | translate"
+        [placeholder]="'LEDGER.CLOSE_NOTE_PLACEHOLDER' | translate"
+        [error]="noteControl.touched && noteControl.invalid
+                   ? ('LEDGER.CLOSE_NOTE_REQUIRED' | translate) : ''" />
+
+      <!-- No undo. Said once, plainly, and louder for the resolution that destroys a claim. -->
+      <p class="terminated__close-warning" [class.terminated__close-warning--severe]="isWriteOff()">
+        <app-icon name="alert-triangle" [size]="14" />
+        {{ (isWriteOff() ? 'LEDGER.CLOSE_WARNING_WRITTEN_OFF'
+                         : 'LEDGER.CLOSE_WARNING') | translate }}
+      </p>
+
+      <!-- ★ THE 409. Never retried in silence: the account is not what the user was shown, so the
+           list reloads underneath and they are asked to look again. -->
+      @if (closeConflict(); as conflict) {
+        <p class="terminated__close-conflict">
+          <app-icon name="alert-triangle" [size]="14" />
+          {{ conflict | translate }} {{ 'LEDGER.CLOSE_CONFLICT_RELOADED' | translate }}
+        </p>
+      }
+
+      @if (closeError(); as error) {
+        <p class="terminated__close-error">{{ error | translate }}</p>
+      }
+    </div>
+
+    <ng-container slot="footer">
+      <ws-button variant="secondary" (click)="cancelClose()" [disabled]="closing()">
+        {{ 'COMMON.CANCEL' | translate }}
+      </ws-button>
+      <ws-button
+        [variant]="isWriteOff() ? 'danger' : 'primary'"
+        (click)="confirmClose()"
+        [loading]="closing()"
+        [disabled]="closing() || !!closeConflict()">
+        {{ 'LEDGER.CLOSE_CONFIRM' | translate }}
+      </ws-button>
+    </ng-container>
+  </ws-modal>
+}

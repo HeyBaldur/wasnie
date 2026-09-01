@@ -858,8 +858,11 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
         {
             var tiers = new List<AttainmentTier>
             {
-                new() { AttainmentFrom = 0m, AttainmentTo = 0.49m, Rate = 0.03m },
-                new() { AttainmentFrom = 0.50m, AttainmentTo = 0.99m, Rate = 0.07m },
+                // Contiguous, not 0-0.49 / 0.50-0.99 / 1.00+: bounds are inclusive at both ends
+                // and LastOrDefault gives a shared edge to the upper tier, so the old gaps meant an
+                // attainment of 0.495 matched NO tier and earned zero. 0.75 still lands at 7%.
+                new() { AttainmentFrom = 0m, AttainmentTo = 0.50m, Rate = 0.03m },
+                new() { AttainmentFrom = 0.50m, AttainmentTo = 1.00m, Rate = 0.07m },
                 new() { AttainmentFrom = 1.00m, AttainmentTo = null, Rate = 0.12m }
             };
             var plan = Plan.Create(tenantId, "Attainment Plan", "desc",

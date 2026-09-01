@@ -199,7 +199,7 @@
 <ws-confirmation-modal
   [(isOpen)]="archiveOpen"
   [title]="'PLANS.CONFIRM_ARCHIVE_TITLE' | translate"
-  [message]="'PLANS.CONFIRM_ARCHIVE_MSG' | translate"
+  [message]="archiveMessageKey() | translate: { count: archiveAssignmentCount() }"
   [confirmLabel]="'PLANS.ACTION_ARCHIVE' | translate"
   [cancelLabel]="'COMMON.CANCEL' | translate"
   variant="danger"

@@ -11,6 +11,8 @@ export interface PlanSummary {
   effectiveEnd: string;
   currency: string;
   activeRuleCount: number;
+  /** Active assignments. Archiving the plan deactivates every one of them. */
+  activeAssignmentCount: number;
 }
 
 export type PlanVersion = PlanSummary;
@@ -28,6 +30,8 @@ export interface Plan {
   createdAt: string;
   createdBy: string;
   rules: Rule[];
+  /** Active assignments. Archiving the plan deactivates every one of them. */
+  activeAssignmentCount: number;
   /** Clawback policy. Null means this plan claws nothing back — the state every plan starts in. */
   clawbackMaturationDays: number | null;
   clawbackCapPercent: number | null;

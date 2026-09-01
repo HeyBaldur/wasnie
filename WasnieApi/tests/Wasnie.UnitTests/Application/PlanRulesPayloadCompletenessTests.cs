@@ -90,9 +90,12 @@ public sealed class PlanRulesPayloadCompletenessTests
             new Measurement { Type = MeasurementType.Revenue, SourceField = "amount" },
             RateTable.AttainmentBased(
             [
-                new AttainmentTier { AttainmentFrom = 0m, AttainmentTo = 20000m, Rate = 0.04m },
-                new AttainmentTier { AttainmentFrom = 20000m, AttainmentTo = 50000m, Rate = 0.06m },
-                new AttainmentTier { AttainmentFrom = 50000m, AttainmentTo = 100000m, Rate = 0.08m },
+                // Ratios of quota, last tier open. The fixture used to carry this plan's REAL
+                // boundaries (0-20000, 20000-50000, 50000-100000), which are currency amounts in a
+                // ladder the engine indexes by ratio — the exact defect the factories now reject.
+                new AttainmentTier { AttainmentFrom = 0m, AttainmentTo = 0.5m, Rate = 0.04m },
+                new AttainmentTier { AttainmentFrom = 0.5m, AttainmentTo = 1m, Rate = 0.06m },
+                new AttainmentTier { AttainmentFrom = 1m, AttainmentTo = null, Rate = 0.08m },
             ]));
 
         plan.AddRule(

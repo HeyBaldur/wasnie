@@ -8,4 +8,7 @@ public sealed record PlanSummaryDto(
     DateOnly EffectiveStart,
     DateOnly EffectiveEnd,
     string Currency,
-    int ActiveRuleCount);
+    int ActiveRuleCount,
+    // Active assignments. The list screen archives plans too, and its confirmation must name the
+    // same number the detail screen does.
+    int ActiveAssignmentCount);

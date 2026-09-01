@@ -1,7 +1,7 @@
 import {
   Component, DestroyRef, effect, inject, OnInit, signal, untracked, viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { distinctUntilChanged, map } from 'rxjs/operators';
@@ -17,7 +17,7 @@ import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-e
 import { PayRunsApiService } from '../services/pay-runs.api.service';
 import { PayRunsStore, PayRunFilter } from '../state/pay-runs.store';
 import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
-import { PayRunListItem, PayRunStatus, CalculatePayRunResult } from '../models/pay-run.model';
+import { PayRunListItem, PayRunStatus, CalculatePayRunResult, PayoutSkipCount } from '../models/pay-run.model';
 import { WsDatePickerComponent as DatePickerRef } from '../../../shared/ui/ws-date-picker/ws-date-picker.component';
 import {
   WsButtonComponent, WsBadgeComponent, WsCardComponent, WsSelectComponent,
@@ -32,7 +32,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
   selector: 'app-pay-runs-list',
   standalone: true,
   imports: [
-    AppShellComponent, ReactiveFormsModule, TranslateModule,
+    AppShellComponent, ReactiveFormsModule, TranslateModule, RouterLink,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
     RefreshOnEnterDirective,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
@@ -279,6 +279,77 @@ export class PayRunsListComponent implements OnInit {
     } finally {
       this.calculating.set(false);
     }
+  }
+
+  // ── Why nothing was created ───────────────────────────────────────────────────────────────────
+  //
+  // ★★ THE SCREEN USED TO INVENT THE CAUSE. A `payoutsCreated === 0` printed "No payouts created. No
+  // matching credits found for this period." — a sentence the backend never established. In the run
+  // that prompted this work it was false twice: four assignments were dropped because their payee had
+  // left, all twenty survivors hit an already-Paid payout, and the engine never queried a single
+  // credit. An administrator moved date ranges for three attempts because the screen told him the
+  // period was the problem.
+  //
+  // Everything below is built from the counters the engine now returns, and says nothing they do not
+  // support. When the engine cannot explain a zero, neither does this screen.
+
+  /**
+   * The reason codes this version knows how to phrase.
+   *
+   * ★ A WHITELIST, NOT A STRING CONCATENATION. Building `PAY_RUNS.SKIP_${code}` blindly would print the
+   * raw key — an internal identifier — the first time the backend adds a code the front end has not
+   * shipped a translation for. An unknown code degrades to a neutral line instead: it still reports
+   * that something was skipped, and it does NOT guess why.
+   */
+  private static readonly KnownSkipCodes: readonly string[] = [
+    'TerminatedPayee',
+    'PlanNotPayable',
+    'ExistingPayout',
+  ];
+
+  skipLabelKey(code: string): string {
+    return PayRunsListComponent.KnownSkipCodes.includes(code)
+      ? `PAY_RUNS.SKIP_${code}`
+      : 'PAY_RUNS.SKIP_UNKNOWN';
+  }
+
+  /**
+   * The headline for a run that produced nothing. Three distinct answers, because they are three
+   * distinct situations and only one of them used to be spoken:
+   *
+   *  - nothing to consider — no assignment covers this period at all;
+   *  - considered and all discarded — the reasons are listed underneath;
+   *  - the neutral fallback, which claims no cause whatsoever.
+   */
+  noPayoutsHeadlineKey(result: CalculatePayRunResult): string {
+    const d = result.diagnostics;
+    if (!d) return 'PAY_RUNS.CALCULATE_NO_PAYOUTS_NEUTRAL';
+    if (d.assignmentsConsidered === 0) return 'PAY_RUNS.CALCULATE_NOTHING_TO_CONSIDER';
+    if (d.skipped.length > 0) return 'PAY_RUNS.CALCULATE_ALL_SKIPPED';
+    return 'PAY_RUNS.CALCULATE_NO_PAYOUTS_NEUTRAL';
+  }
+
+  skipCounts(result: CalculatePayRunResult): PayoutSkipCount[] {
+    return result.diagnostics?.skipped ?? [];
+  }
+
+  /**
+   * ★ THE FACT THAT KILLS THE OLD SENTENCE. While no assignment reached the credit lookup, nobody may
+   * say anything about credits — none were queried. Shown only when there WAS something to consider,
+   * so a genuinely empty run does not get a line about an engine stage it never had a reason to enter.
+   */
+  neverLookedAtCredits(result: CalculatePayRunResult): boolean {
+    const d = result.diagnostics;
+    return !!d && d.assignmentsConsidered > 0 && d.assignmentsReachingCreditLookup === 0;
+  }
+
+  /**
+   * Assignments dropped because the payee has left. When this is non-zero the message points at the
+   * orphan-accounts queue: that is where their unpaid commission is now visible, and it closes the
+   * loop between the two screens instead of leaving the reader with a dead end.
+   */
+  terminatedSkipCount(result: CalculatePayRunResult): number {
+    return result.diagnostics?.skipped.find((s) => s.code === 'TerminatedPayee')?.count ?? 0;
   }
 
   closeCalculateModal(): void {

@@ -40,7 +40,7 @@ public sealed class UpdateRuleHandler(IApplicationDbContext db, IAuthorizationSe
                 request.Name,
                 request.SortOrder,
                 request.Measurement,
-                request.RateTable,
+                request.RateTable.ToDomain(),
                 request.Trigger,
                 request.Modifier,
                 request.Cap,
@@ -50,6 +50,14 @@ public sealed class UpdateRuleHandler(IApplicationDbContext db, IAuthorizationSe
 
             var rule = plan.Rules.First(r => r.Id == request.RuleId);
             return Result<RuleDto>.Success(CompensationMapper.ToRuleDto(rule));
+        }
+        // ★ See AddRuleToPlanHandler: Result carries one string, so a coded refusal caught here would
+        // arrive at the browser as an English sentence with its code and parameters stripped.
+        // Rethrowing is what keeps the rate-table refusals translatable. Nothing is persisted yet —
+        // ToDomain is evaluated as an argument, before UpdateRule and before SaveChangesAsync.
+        catch (DomainCodedException)
+        {
+            throw;
         }
         catch (DomainException ex)
         {

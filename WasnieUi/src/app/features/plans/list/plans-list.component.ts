@@ -106,6 +106,14 @@ export class PlansListComponent implements OnInit {
   readonly archiveSaving = signal(false);
   readonly pendingArchiveId = signal<string | null>(null);
 
+  // Same message as the detail screen, resolved from the row being archived. The list already
+  // holds the count, so no extra request: archiving deactivates every active assignment and the
+  // confirmation must say how many. Explicit keys, never one built from a value.
+  readonly archiveAssignmentCount = computed(() =>
+    this.store.plans().find((p) => p.id === this.pendingArchiveId())?.activeAssignmentCount ?? 0);
+  readonly archiveMessageKey = computed(() =>
+    this.archiveAssignmentCount() > 0 ? 'PLANS.CONFIRM_ARCHIVE_MSG' : 'PLANS.CONFIRM_ARCHIVE_MSG_NONE');
+
   readonly statusOptions: SegOption[] = [
     { value: '', label: 'PLANS.FILTER_ALL' },
     { value: 'Draft', label: 'PLANS.STATUS_DRAFT' },

@@ -8,6 +8,7 @@ using Wasnie.Application.Compensation.Mappings;
 using Wasnie.Application.Compensation.Queries.Plans;
 using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
+using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Plans;
 
 namespace Wasnie.Application.Compensation.Handlers.Plans;
@@ -69,9 +70,20 @@ public sealed class ListPlansHandler(IApplicationDbContext db, IAuthorizationSer
 
         var paged = await query.ToPagedResultAsync(p.Page, p.PageSize, cancellationToken);
 
+        // One grouped query for the whole page, not one per row. Mirrors ListPayeesHandler.
+        var planIds = paged.Items.Select(x => x.Id).ToList();
+        var assignmentCounts = await db.PlanAssignments
+            .Where(a => planIds.Contains(a.PlanId) && a.Status == AssignmentStatus.Active)
+            .GroupBy(a => a.PlanId)
+            .Select(g => new { PlanId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.PlanId, x => x.Count, cancellationToken);
+
         return Result<PagedResult<PlanSummaryDto>>.Success(new PagedResult<PlanSummaryDto>
         {
-            Items = paged.Items.Select(CompensationMapper.ToPlanSummaryDto).ToList(),
+            // GetValueOrDefault: a plan with no assignments has no group, and 0 is the truth there.
+            Items = paged.Items
+                .Select(plan => CompensationMapper.ToPlanSummaryDto(plan, assignmentCounts.GetValueOrDefault(plan.Id)))
+                .ToList(),
             TotalCount = paged.TotalCount,
             Page = paged.Page,
             PageSize = paged.PageSize,

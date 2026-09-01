@@ -36,6 +36,20 @@ public sealed class ExceptionHandlingMiddleware(
                 message = ex.Message,
             }));
         }
+        // ★ 409, and it carries a CODE the client maps to a sentence. The user was looking at a set of
+        // credits that has since changed; the right client behaviour is to reload and show what is
+        // there now, never to retry the same body — which is what a 400 would invite.
+        catch (AccountSnapshotStaleException ex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                error = "AccountSnapshotStale",
+                reason = ex.Reason,
+                message = ex.Message,
+            }));
+        }
         catch (StripeUnavailableException ex)
         {
             logger.LogWarning(ex, "Stripe API unavailable");
@@ -70,6 +84,25 @@ public sealed class ExceptionHandlingMiddleware(
                 tier = ex.CurrentTier,
                 upgradeTier = ex.UpgradeTier,
                 upgradePath = "/subscription",
+            }));
+        }
+        // ★ 422 CARRYING A CODE AND ITS DATA, AND DELIBERATELY NO `message`. This is the same
+        // refusal as the DomainException below, minus the English sentence: the client owns the
+        // wording in EN, ES and PL. Sending a `message` too would be worse than sending none — every
+        // caller reads that field first, so the untranslated sentence would win over the translation
+        // and the code would be decoration. A client that does not know `code` therefore gets no
+        // message and falls back to its own generic error, which is the honest outcome.
+        //
+        // Must precede the DomainException catch: DomainCodedException derives from it.
+        catch (DomainCodedException ex)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.UnprocessableEntity;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                status = (int)HttpStatusCode.UnprocessableEntity,
+                code = ex.Code,
+                parameters = ex.Parameters,
             }));
         }
         catch (DomainException ex)

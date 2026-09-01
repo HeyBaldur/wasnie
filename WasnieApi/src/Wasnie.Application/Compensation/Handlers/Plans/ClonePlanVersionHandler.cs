@@ -36,7 +36,9 @@ public sealed class ClonePlanVersionHandler(
             var clone = source.CloneAsNewVersion(currentUser.UserId ?? "system", clock.UtcNowOffset, guid.NewGuid);
             db.CompensationPlans.Add(clone);
             await db.SaveChangesAsync(cancellationToken);
-            return Result<PlanDto>.Success(CompensationMapper.ToPlanDto(clone));
+            // 0 is the truth, not a placeholder: a cloned version is a brand-new Draft plan and
+            // assignments are never carried over from the source version.
+            return Result<PlanDto>.Success(CompensationMapper.ToPlanDto(clone, activeAssignmentCount: 0));
         }
         catch (DomainException ex)
         {

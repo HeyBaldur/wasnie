@@ -57,5 +57,92 @@ export function formatRate(
     return `${amount} ${perUnitSuffix}`;
   }
 
+  return formatRatePercent(rate);
+}
+
+// ── Tier bounds ────────────────────────────────────────────────────────────────────────────────
+//
+// ★★ THE SECOND HALF OF THE SAME BUG, MISSED THE FIRST TIME. The pass above taught the app that a
+// RATE means what it is applied to. It never asked the same question of a tier's BOUNDS, and those
+// have the same problem in a worse form: a Tiered ladder's bounds are MONEY, an attainment ladder's
+// are a PROPORTION OF QUOTA, and both are stored as bare decimals. The payout breakdown multiplied
+// attainment bounds by 100 and appended "%", so a real (malformed) table with bounds of 0–20000
+// printed as `0–2000000%`.
+//
+// ★ AND IT WAS HAND-ROLLED, WHICH IS WHY IT SURVIVED. The percentage string above lives in one
+// function that every surface routes through — but the payout breakdown built its own copy inline,
+// so fixing the helper never touched it. Both bound shapes now live here for the same reason.
+
+/**
+ * A Tiered ladder's bound: MONEY, in the plan's currency.
+ *
+ * ★ WITHOUT A CURRENCY IT STAYS A BARE NUMBER. A bound printed with the wrong currency symbol is a
+ * new lie; a bound printed with none is merely incomplete, and the reader can still recognise the
+ * figure they typed.
+ */
+export function formatAmountBound(
+  value: number,
+  currency: string | null | undefined,
+  locale: string,
+): string {
+  return currency
+    ? new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value)
+    : new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(value);
+}
+
+/**
+ * An attainment ladder's bound: a PROPORTION OF QUOTA, written the way the rule form writes it.
+ *
+ * ★★ NOT A PERCENTAGE, AND THAT IS THE WHOLE DECISION. The form declares the convention — its
+ * columns read "Attain. from (× quota)" and its hint says "1 = 100% of target, 1.4 = 140%" — so a
+ * payout that rendered the same stored number as "140%" would show the reader two representations of
+ * one value and reproduce the confusion this all came from. The suffix arrives already translated;
+ * this file does no i18n of its own.
+ */
+export function formatAttainmentBound(
+  value: number,
+  locale: string,
+): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(value);
+}
+
+/** The percentage half of {@link formatRate}, on its own, for the rate inside a tier row. */
+export function formatRatePercent(rate: number): string {
   return `${(rate * 100).toFixed(2).replace(/\.?0+$/, '')}%`;
+}
+
+/**
+ * One tier row of a Tiered (money) ladder: `€0.00–€1,000.00 @ 5%`.
+ *
+ * An absent upper bound is the open top tier, written `…+` — it earns its rate on everything above.
+ */
+export function formatAmountTier(
+  from: number,
+  to: number | null | undefined,
+  rate: number,
+  currency: string | null | undefined,
+  locale: string,
+): string {
+  const lo = formatAmountBound(from, currency, locale);
+  const range = to != null ? `${lo}–${formatAmountBound(to, currency, locale)}` : `${lo}+`;
+
+  return `${range} @ ${formatRatePercent(rate)}`;
+}
+
+/**
+ * One tier row of an attainment ladder: `0–1.4 × quota @ 5%`.
+ *
+ * @param quotaSuffix already-translated "× quota" — the same words the form's column headers use.
+ */
+export function formatAttainmentTier(
+  from: number,
+  to: number | null | undefined,
+  rate: number,
+  locale: string,
+  quotaSuffix: string,
+): string {
+  const lo = formatAttainmentBound(from, locale);
+  const range = to != null ? `${lo}–${formatAttainmentBound(to, locale)}` : `${lo}+`;
+
+  return `${range} ${quotaSuffix} @ ${formatRatePercent(rate)}`;
 }

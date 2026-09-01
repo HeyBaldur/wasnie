@@ -44,7 +44,7 @@ public sealed class CreatePlanHandler(
         db.CompensationPlans.Add(plan);
         await db.SaveChangesAsync(cancellationToken);
 
-        var dto = CompensationMapper.ToPlanDto(plan);
+        var dto = CompensationMapper.ToPlanDto(plan, activeAssignmentCount: 0);
 
         try
         {

@@ -79,9 +79,60 @@ public sealed class LedgerController(IMediator mediator) : ControllerBase
             : BadRequest(new { message = result.Error });
     }
 
+    // POST /api/payees/{payeeId}/ledger/close-account
+    //
+    // ★ ITS OWN ENDPOINT, NOT AN ADJUSTMENT. An adjustment moves a balance; this ends an account —
+    // marking a departed payee's unpaid commission terminal and zeroing any debt, in one transaction.
+    // Own permission (Ledger.CloseAccount), own audit action, and no undo.
+    //
+    // ★★ AND IT CAN ANSWER 409. The body carries the exact credits the user was shown; if the account
+    // has moved since, AccountSnapshotStaleException reaches the middleware and the client is told to
+    // reload rather than to retry. See CloseTerminatedAccountHandler.
+    [HttpPost("close-account")]
+    public async Task<IActionResult> CloseAccount(
+        Guid payeeId,
+        [FromBody] CloseAccountRequest body,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<AccountClosureResolution>(body.Resolution, ignoreCase: true, out var resolution))
+            return BadRequest(new { message = $"Unknown resolution '{body.Resolution}'." });
+
+        // The payee comes from the route, like the adjustment above: the URL the caller was authorised
+        // against is the account that gets closed.
+        var result = await mediator.Send(
+            new CloseTerminatedAccountCommand(
+                payeeId,
+                body.Currency,
+                resolution,
+                body.Note,
+                body.Credits.Select(c => new ClosingCreditRef(c.CreditId, c.Amount)).ToList(),
+                body.ExpectedBalance),
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { message = result.Error });
+    }
+
     public sealed record CreateAdjustmentRequest(
         string TransactionType,
         decimal Amount,
         string Currency,
         string Justification);
+
+    /// <param name="Credits">
+    /// Exactly the outstanding credits the modal displayed, with the amounts it displayed. The handler
+    /// closes this set or none of it.
+    /// </param>
+    /// <param name="ExpectedBalance">
+    /// The ledger balance the modal displayed. Null means it showed no balance row at all.
+    /// </param>
+    public sealed record CloseAccountRequest(
+        string Currency,
+        string Resolution,
+        string Note,
+        IReadOnlyList<CloseAccountCreditRef> Credits,
+        decimal? ExpectedBalance);
+
+    public sealed record CloseAccountCreditRef(Guid CreditId, decimal Amount);
 }

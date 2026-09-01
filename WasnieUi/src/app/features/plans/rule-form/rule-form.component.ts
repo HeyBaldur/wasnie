@@ -11,7 +11,8 @@ import {
 } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { distinctUntilChanged } from 'rxjs';
-import { extractApiError } from '../../../shared/utils/api-error';
+import { extractApiError, extractApiErrorCode } from '../../../shared/utils/api-error';
+import { isKnownRateTableError, rateTableErrorKey, rateTableErrorParams } from './rate-table-error';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
@@ -34,7 +35,7 @@ import {
 } from '../models/rule.model';
 import {
   AddRuleRequest, AttainmentSource, RuleCalculationComponent, RuleCalculationOutcome,
-  RuleSimulation, RuleSimulationBlocker, SimulateRuleRequest, TriggerField, UpdateRuleRequest,
+  RuleSimulation, RuleSimulationBlocker, RuleSimulationStep, SimulateRuleRequest, TriggerField, UpdateRuleRequest,
 } from '../models/rule.model';
 import {
   WsPageHeaderComponent,
@@ -43,6 +44,7 @@ import {
   WsInputComponent,
   WsSelectComponent,
   WsCategoryPickerComponent,
+  WsEmptyStateComponent,
   type SelectOption,
 } from '../../../shared/ui';
 import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.directive';
@@ -68,6 +70,7 @@ import { WsTooltipDirective } from '../../../shared/ui/ws-tooltip/ws-tooltip.dir
     WsSelectComponent,
     WsCategoryPickerComponent,
     WsTooltipDirective,
+    WsEmptyStateComponent,
   ],
   templateUrl: './rule-form.component.html',
   styleUrl: './rule-form.component.scss',
@@ -523,6 +526,32 @@ export class RuleFormComponent implements OnInit {
     }
   }
 
+  /**
+   * Which phrase describes what a step APPLIED — the column that turns a list of running totals into
+   * an explanation. "Cap · no effect · €312.00" never said what the cap was; "cap €500.00" does.
+   *
+   * ★ THE VALUE IS NEVER RE-EXPRESSED, ONLY LABELLED. A rate stored as 0.05 is shown as 0.05, not as
+   * 5% — converting between conventions in a field that decides pay is the one arithmetic this app
+   * refuses to do on the user's behalf. Each key carries the noun that makes the bare number
+   * unambiguous, and nothing multiplies or scales it.
+   *
+   * Null means the step has no scalar of its own — a tiered rate table walks tiers instead, and the
+   * base is just the transaction. Those render an em dash.
+   */
+  stepAppliedKey(step: RuleSimulationStep): string | null {
+    if (step.thresholdAmount !== null) {
+      return step.component === RuleCalculationComponent.Floor
+        ? 'PLANS.SIM_APPLIED_FLOOR'
+        : 'PLANS.SIM_APPLIED_CAP';
+    }
+
+    if (step.operand === null) return null;
+
+    return step.component === RuleCalculationComponent.Modifier
+      ? 'PLANS.SIM_APPLIED_FACTOR'
+      : 'PLANS.SIM_APPLIED_RATE';
+  }
+
   onSimInput(raw: string | number | null): void {
     const value = raw === null || raw === '' ? null : Number(raw);
     this.simInput.set(Number.isNaN(value as number) ? null : value);
@@ -705,10 +734,47 @@ export class RuleFormComponent implements OnInit {
     return 0;
   }
 
+  /**
+   * The rule's id AS THE SERVER SPELLS IT, resolved once the plan has loaded.
+   *
+   * ★ NOT THE ONE FROM THE URL. The route value is whatever was typed or pasted, and the API emits
+   * GUIDs in lower case; saving with the URL's casing would send an id the server may not match. Null
+   * until the rule is found, and it stays null when there is none.
+   */
+  private _resolvedRuleId: string | null = null;
+
+  /**
+   * ★★ THE RULE THE URL NAMES DOES NOT EXIST. An explicit state, because the alternative was silence:
+   * a `return` here left a pristine, fully enabled Add-a-rule form on screen under an "Edit rule"
+   * heading, with no error of any kind. Saving it would have created a second rule.
+   *
+   * ★ AND IT IS NOT THE CASE-SENSITIVITY FIX. Comparing ids case-insensitively (below) stops the
+   * commonest way of reaching this state — a GUID pasted in upper case — but a genuinely deleted or
+   * mistyped rule reaches it too, and that one no amount of normalising can fix. The symptom of the
+   * blank form is also indistinguishable from what a validation leaking into the read path would
+   * produce, which is exactly the diagnosis this WI had to rule out by hand.
+   */
+  readonly ruleNotFound = signal(false);
+
   private _loadExistingRule(): void {
     const plan = this.store.selectedPlan();
-    const rule = plan?.rules.find((r) => r.id === this.ruleId);
-    if (!rule) return;
+
+    // A plan that never loaded is a different failure with its own error surface; saying "rule not
+    // found" about it would name the wrong thing.
+    if (!plan) return;
+
+    // ★ CASE-INSENSITIVE ON PURPOSE. The API emits GUIDs lower-cased, so a link carrying
+    // "…-A1B2" — from a copy out of the database, a log line, or an email — matched nothing.
+    const wanted = this.ruleId?.toLowerCase();
+    const rule = plan.rules.find((r) => r.id.toLowerCase() === wanted);
+
+    if (!rule) {
+      this.ruleNotFound.set(true);
+      this.form.disable({ emitEvent: false });
+      return;
+    }
+
+    this._resolvedRuleId = rule.id;
 
     const rateTableTypeNum = this._enumToNumber(RateTableType, rule.rateTable.type);
 
@@ -855,6 +921,9 @@ export class RuleFormComponent implements OnInit {
 
   async onSubmit(): Promise<void> {
     if (this.readOnly()) return;
+    // There is nothing to update. Saving here used to CREATE a second rule from a form the user
+    // believed they were editing.
+    if (this.ruleNotFound()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       // Never fail silently: tell the user why nothing happened on Save.
@@ -869,7 +938,10 @@ export class RuleFormComponent implements OnInit {
       const request: AddRuleRequest = this._buildDefinition(v, currency);
 
       if (this.isEdit) {
-        await this.store.updateRule(this.planId, this.ruleId!, { ...request, ruleId: this.ruleId! } as UpdateRuleRequest);
+        // The resolved id, not the URL's: see _resolvedRuleId. It is non-null here because
+        // onSubmit returns early while ruleNotFound is set.
+        const id = this._resolvedRuleId!;
+        await this.store.updateRule(this.planId, id, { ...request, ruleId: id } as UpdateRuleRequest);
         this.toast.show('PLANS.TOAST_RULE_UPDATED', 'success');
       } else {
         await this.store.addRule(this.planId, request);
@@ -877,10 +949,35 @@ export class RuleFormComponent implements OnInit {
       }
       this.router.navigate(['/plans', this.planId]);
     } catch (err) {
-      this.toast.show(extractApiError(err), 'error');
+      this._showSaveError(err);
     } finally {
       this.saving.set(false);
     }
+  }
+
+  /**
+   * ★★ THE SIX LADDER REFUSALS ARRIVE AS A CODE, AND THIS IS WHERE THEY BECOME A SENTENCE.
+   *
+   * They used to arrive as English prose built in C# and were painted into the toast unchanged, so
+   * the Spanish and Polish builds showed an English sentence — and fixing a wording meant redeploying
+   * the backend. The server now sends `{ code, parameters }`; the wording lives in the three
+   * translation files, and `rateTableErrorKey` maps the code through an explicit whitelist so an
+   * unknown one degrades to a generic line instead of printing a raw identifier.
+   *
+   * ★ A CODED ERROR THIS BUILD DOES NOT RECOGNISE IS NOT ASSUMED TO BE A RATE-TABLE PROBLEM. It falls
+   * through to the plain message path, exactly as before, rather than being described as a bad
+   * ladder — a wrong explanation is worse than a vague one on the screen that decides what people
+   * are paid.
+   */
+  private _showSaveError(err: unknown): void {
+    const coded = extractApiErrorCode(err);
+
+    if (coded && isKnownRateTableError(coded)) {
+      this.toast.show(rateTableErrorKey(coded), 'error', rateTableErrorParams(coded));
+      return;
+    }
+
+    this.toast.show(extractApiError(err), 'error');
   }
 
   /**
@@ -959,7 +1056,7 @@ export class RuleFormComponent implements OnInit {
   private _buildModifier(v: ReturnType<typeof this.form.getRawValue>) {
     return {
       _schema: 1 as const,
-      id: this.isEdit ? (this.store.selectedPlan()?.rules.find((r) => r.id === this.ruleId)?.modifier?.id ?? crypto.randomUUID()) : crypto.randomUUID(),
+      id: this.isEdit ? (this.store.selectedPlan()?.rules.find((r) => r.id === this._resolvedRuleId)?.modifier?.id ?? crypto.randomUUID()) : crypto.randomUUID(),
       name: v.modifier.name,
       type: Number(v.modifier.type),
       factor: v.modifier.factor,

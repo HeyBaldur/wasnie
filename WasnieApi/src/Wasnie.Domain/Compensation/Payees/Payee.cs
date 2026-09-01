@@ -41,6 +41,24 @@ public sealed class Payee : BaseAuditableEntity
     public bool IsActive { get; private set; } = true;
     public DateTimeOffset? DeactivatedAt { get; private set; }
 
+    // ── The financial account, which is a THIRD axis ──────────────────────────────────────────────
+    // Status answers "is this person still here", IsActive answers "may new work be attributed to
+    // them", and this answers "is what they were owed settled". All three are independent: someone can
+    // have left with an open account, or left with a closed one, and a closed account is not a reason
+    // to stop attributing a sale they made before leaving
+    // (docs/DIAG_PAYEE_ISACTIVE.md).
+    //
+    // ★★ IT IS A RECORD, NOT A FILTER, AND THAT DISTINCTION IS THE WHOLE DESIGN. The orphan-accounts
+    // queue derives its membership from MONEY — terminated, and either a non-zero balance or an
+    // unsettled credit — so a closed account leaves the queue because there is nothing left in it, not
+    // because a flag says so. Filtering on this column instead would recreate the bug the queue was
+    // built to close: the policy deliberately allows a credit to arrive AFTER someone leaves, so a
+    // closed-and-filtered account receiving one would go invisible all over again. Leaving membership
+    // derived means the new credit simply brings them back, and this column is then the fact that
+    // lets the row say "closed on the 28th, reopened by a credit that arrived later".
+    public DateTimeOffset? AccountClosedAt { get; private set; }
+    public string? AccountClosedBy { get; private set; }
+
     private Payee() { }
 
     public static Payee Create(
@@ -199,6 +217,33 @@ public sealed class Payee : BaseAuditableEntity
         TerminationDate = terminationDate;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
+    }
+
+    /// <summary>
+    /// Records that a person closed this departed payee's financial account.
+    ///
+    /// ★ TERMINATED ONLY. Closing the account of someone still working here would be meaningless — the
+    /// engine is still going to pay them, and the next pay run would reopen everything this claims to
+    /// have finished.
+    ///
+    /// ★ AND IT IS NOT IDEMPOTENT. Closing twice is a caller bug: the second call would overwrite who
+    /// closed it and when, which is the audit trail. The real guard against a double-click is that
+    /// after the first close there is nothing left to close — this is the backstop behind it.
+    /// </summary>
+    public void MarkAccountClosed(string closedBy, DateTimeOffset now)
+    {
+        if (Status != PayeeStatus.Terminated)
+            throw new DomainException(
+                "Only a terminated payee's account can be closed — an active payee is still being paid.");
+        if (AccountClosedAt is not null)
+            throw new DomainException("This payee's account is already closed.");
+        if (string.IsNullOrWhiteSpace(closedBy))
+            throw new DomainException("The closing actor is required.");
+
+        AccountClosedAt = now;
+        AccountClosedBy = closedBy;
+        UpdatedAt = now;
+        UpdatedBy = closedBy;
     }
 
     // Decision G: platform deactivation — blocks new transaction assignment.

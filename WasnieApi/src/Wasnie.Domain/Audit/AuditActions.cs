@@ -25,6 +25,14 @@ public static class AuditActions
     public const string PayeeDeactivated = "PAYEE_DEACTIVATED";
     public const string PayeeActivated = "PAYEE_ACTIVATED";
 
+    /// <summary>
+    /// A departed payee's account was closed: their unpaid commission marked terminal and any debt
+    /// brought to zero. Its Metadata carries the closed credit ids with their amounts, the resolution,
+    /// and the balance before and after — because "what happened to this money" has to be a query, not
+    /// a paragraph.
+    /// </summary>
+    public const string TerminatedAccountClosed = "TERMINATED_ACCOUNT_CLOSED";
+
     // Plans
     public const string PlanCreated = "PLAN_CREATED";
     public const string PlanActivated = "PLAN_ACTIVATED";

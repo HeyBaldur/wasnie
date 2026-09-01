@@ -1,9 +1,49 @@
 @reference "../../../../styles.scss";
 
 /**
- * The locked entry point. Deliberately the OPPOSITE of the live trigger's pink/orange gradient: a flat
- * sunken surface with muted text, so at a glance it reads as "not yours yet" rather than as a button
- * that failed to load. It still lifts on hover, because it IS clickable — it goes to the plans.
+ * The face of the live trigger: the inner span that covers all but a 2px rim of the gradient behind it.
+ *
+ * ★ IT HAS TO MATCH THE TOPBAR, NOT "a surface". The whole effect is a gradient BORDER, and a border
+ * only reads as one when the middle is the colour of what is behind the button — anything else is a
+ * block sitting on the bar. `--color-surface-raised` is the topbar's own background.
+ *
+ * ★ AND THE TEXT FLIPS ON HOVER. At rest it sits on the topbar surface and takes the ordinary heading
+ * colour; on hover the span goes transparent, the gradient floods through, and the label has to become
+ * white or it lands unreadable on purple.
+ */
+.assistant-trigger__face {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-primary);
+}
+
+/**
+ * ★★ THE FILL IS DECLARED HERE, NOT BY `group-hover:bg-transparent`, AND THE REASON IS SPECIFICITY.
+ * Angular's component styles are not inside a CSS `@layer`; Tailwind's utilities are. An unlayered
+ * rule beats a layered one whatever the selectors say, so the resting background above was winning
+ * over the utility and the gradient never flooded — measured in the browser: hovering the button left
+ * the face at rgb(29,36,50). Whichever rule sets a property has to be the one that clears it.
+ */
+button:hover .assistant-trigger__face,
+button:focus-visible .assistant-trigger__face {
+  background-color: transparent;
+  color: #fff;
+}
+
+/**
+ * ★ AND THE MARK GOES WHITE WITH THE LABEL. At rest it is stroked with the same gradient as the rim;
+ * on hover that gradient floods the whole button, and a gradient-on-gradient icon disappears into
+ * its own background. A CSS `stroke` beats the `stroke="url(#…)"` presentation attribute, so this is
+ * all it takes.
+ */
+button:hover .assistant-trigger__icon,
+button:focus-visible .assistant-trigger__icon {
+  stroke: #fff;
+}
+
+/**
+ * The locked entry point. Deliberately the OPPOSITE of the live trigger's gradient: a flat sunken
+ * surface with muted text, so at a glance it reads as "not yours yet" rather than as a button that
+ * failed to load. It still lifts on hover, because it IS clickable — it goes to the plans.
  */
 .assistant-trigger--locked {
   background-color: var(--color-bg-surface-sunken);

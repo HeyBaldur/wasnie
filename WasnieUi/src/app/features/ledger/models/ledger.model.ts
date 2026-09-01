@@ -108,8 +108,32 @@ export interface CreateAdjustmentRequest {
 }
 
 /**
- * One departed payee whose account is still open. `balance` is signed exactly as the server stored
- * it — negative means they owe it, positive means Wasnie still owes them.
+ * One commission credit a departed payee earned that never reached a payout: active (not superseded)
+ * and unconsumed. Everything a person needs to act on it, so the queue is work rather than worry.
+ */
+export interface UnsettledCredit {
+  creditId: string;
+  amount: number;
+  currency: string;
+  planName: string;
+  ruleName: string;
+  allocatedAt: string;
+  transactionId: string;
+  transactionReference: string;
+}
+
+/**
+ * One departed payee's open account, in ONE currency. "Open" means either half is non-empty:
+ *
+ * - `balance` — the ledger balance, signed exactly as the server stored it: negative means they owe
+ *   it, positive means Wasnie still owes them.
+ * - `unsettledCredits` — commission they EARNED that no payout ever took. This half used to be
+ *   invisible: the ledger records what a payee OWES, so unpaid commission leaves no balance row at
+ *   all, and a queue built on balances read "nothing outstanding".
+ *
+ * The two are NEVER added together — they point in opposite directions and come from different
+ * sources. `balanceUpdatedAt` is null when there is no balance row at all, which is not the same fact
+ * as a balance updated to zero.
  */
 export interface TerminatedPayeeBalance {
   payeeId: string;
@@ -118,5 +142,57 @@ export interface TerminatedPayeeBalance {
   terminationDate: string | null;
   balance: number;
   currency: string;
-  balanceUpdatedAt: string;
+  balanceUpdatedAt: string | null;
+  /**
+   * When this account was closed, if it ever was — and if the row is here at all, something arrived
+   * AFTER that. Closure is recorded, never used as a filter: the queue keeps deriving membership from
+   * money, so a credit that lands after a closure brings the row straight back instead of vanishing.
+   */
+  accountClosedAt: string | null;
+  unsettledCreditTotal: number;
+  unsettledCredits: UnsettledCredit[];
+}
+
+/**
+ * What actually happened to the money. Two values, because the ledger already distinguishes recovering
+ * it from absorbing it and a closure that collapsed them would make its own audit trail unanswerable.
+ */
+export type AccountClosureResolution = 'SettledExternally' | 'WrittenOff';
+
+/**
+ * The confirmation payload.
+ *
+ * ★ IT CARRIES THE EXACT CREDITS THE MODAL SHOWED, with the amounts it showed. The server closes this
+ * set or none of it and answers 409 otherwise — comparing totals would not do, because two credits can
+ * change while the sum stays put and the set is then a different set.
+ */
+export interface CloseAccountRequest {
+  currency: string;
+  resolution: AccountClosureResolution;
+  note: string;
+  credits: { creditId: string; amount: number }[];
+  /** The balance the modal displayed. Null when it displayed no balance row at all. */
+  expectedBalance: number | null;
+}
+
+export interface CloseAccountResult {
+  creditsClosed: number;
+  creditTotalClosed: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  currency: string;
+}
+
+/** What is outstanding in ONE currency. Never blended across currencies — Wasnie holds no rates. */
+export interface TerminatedAccountsTotal {
+  currency: string;
+  unsettledCreditTotal: number;
+  unsettledCreditCount: number;
+  payeeCount: number;
+}
+
+/** The queue: the rows plus the totals the server computed. No screen adds money. */
+export interface TerminatedAccounts {
+  rows: TerminatedPayeeBalance[];
+  totals: TerminatedAccountsTotal[];
 }

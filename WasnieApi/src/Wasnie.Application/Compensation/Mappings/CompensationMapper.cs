@@ -7,7 +7,7 @@ namespace Wasnie.Application.Compensation.Mappings;
 
 public static class CompensationMapper
 {
-    public static PlanDto ToPlanDto(CompensationPlan plan) =>
+    public static PlanDto ToPlanDto(CompensationPlan plan, int activeAssignmentCount) =>
         new(
             plan.Id,
             plan.TenantId,
@@ -21,10 +21,11 @@ public static class CompensationMapper
             plan.CreatedAt,
             plan.CreatedBy,
             plan.Rules.Select(ToRuleDto).ToList(),
+            activeAssignmentCount,
             plan.ClawbackMaturationDays,
             plan.ClawbackCapPercent);
 
-    public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan) =>
+    public static PlanSummaryDto ToPlanSummaryDto(CompensationPlan plan, int activeAssignmentCount) =>
         new(
             plan.Id,
             plan.Name,
@@ -33,7 +34,8 @@ public static class CompensationMapper
             plan.EffectivePeriod.Start,
             plan.EffectivePeriod.End,
             plan.Currency,
-            plan.Rules.Count(r => r.IsActive));
+            plan.Rules.Count(r => r.IsActive),
+            activeAssignmentCount);
 
     public static RuleDto ToRuleDto(CompensationRule rule) =>
         new(

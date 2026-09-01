@@ -47,6 +47,7 @@ describe('RuleFormComponent — commission simulator', () => {
       createdAt: '2024-01-01T00:00:00Z',
       createdBy: 'user-1',
       rules: [],
+      activeAssignmentCount: 0,
       clawbackMaturationDays: null,
       clawbackCapPercent: null,
     } as unknown as Plan;

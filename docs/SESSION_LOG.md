@@ -4,6 +4,896 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-31 — KAN-31 (tanda 2/2): `ArchivedAt` + backfill, y la fuente resultó NO ser AuditLogs
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · dominio + esquema · **migración B29, APLICADA en la
+base local** · backfill de 7 filas · **no se tocó ningún crédito, importe ni payout**
+
+Cierra KAN-31. La tanda 1 (la confirmación) está en la entrada anterior.
+
+### ★ La decisión cambió al medir (§E5)
+
+El ticket decía que la fecha "solo es reconstruible desde `AuditLogs`". **Es falso**, y elegir esa
+fuente habría metido un dato malo:
+
+| Plan | Filas `PLAN_ARCHIVED` | MIN log | MAX log | `UpdatedAt` |
+|---|---|---|---|---|
+| `Plan Test Flat 5%` | **3** | 06-03 11:56:53 | 06-03 15:08:29 | **15:08:29** |
+| Los otros 6 | 1 c/u | = | = | = |
+
+**Con `MIN` ese plan quedaba archivado 3h13m antes de lo real**, sobre el campo que separa una venta
+que todavía cobra por el plan de una que no.
+
+**Por qué hay filas de más:** `AuditBehavior.cs:27-30` despacha el asiento **después** del handler y
+**sin mirar el `Result`**, y `ArchivePlanHandler` devuelve `Result.Failure` sin lanzar. Prueba en los
+datos: **`EU Accelerator Q2 2026` está en `Draft` y tiene una fila `PLAN_ARCHIVED`** — un intento
+fallido registrado como si hubiera ocurrido.
+
+**La fuente correcta es `UpdatedAt`,** y es demostrable, no una corazonada: para un plan `Archived`,
+`Archive()` es lo último que puede escribir `UpdatedAt` — `SetClawbackPolicy` refusa cuando está
+archivado (`Plan.cs:150`), `Activate` exige `Draft` (`:167`, así que archivar es **terminal**), las
+mutaciones de reglas son Draft-only, y `CloneAsNewVersion` sella el clon y no el origen. Además es
+`NOT NULL`, así que no se escapa ningún plan, y no depende de una tabla purgable — que es el agujero
+que esta columna existe para tapar.
+
+### Lo construido
+
+- `Plan.ArchivedAt` (`DateTimeOffset?`), sellado en `Archive()`. **Nunca vuelve a null**: archivar es
+  terminal, así que nada puede limpiarlo (§B6).
+- Migración **B29**, columna nullable + backfill idempotente (`WHERE Status='Archived' AND ArchivedAt
+  IS NULL`), con el razonamiento y la evidencia medida en el comentario.
+- **Aplicada en la base local. Verificado en runtime:** 7/7 con fecha, los 7 cruzan contra una fila
+  `PLAN_ARCHIVED` a menos de 5s, y las dos invariantes en cero — ningún archivado sin fecha, ningún
+  no-archivado con fecha. El `Draft` de la fila espuria **correctamente no recibió fecha**.
+
+### Tests — unit 1757 → 1759
+
+- `Archive_StampsArchivedAt_WithTheArchiveInstant`.
+- `ArchivedPlan_CannotBeReactivated` — **el que sostiene el backfill**: si algún día un plan archivado
+  pudiera volver a `Active`, `UpdatedAt` dejaría de ser el instante de archivado y el razonamiento de
+  B29 se pudriría en silencio. Queda fijado.
+
+### Deuda abierta (reportada, NO tocada — §E1)
+
+1. **`AuditBehavior` registra éxitos falsos.** Cualquier comando que devuelva `Result.Failure` sin
+   lanzar deja un asiento como si hubiera ocurrido. **No es sólo planes: es todo el pipeline de
+   auditoría.** Merece su propio ticket.
+2. **`ArchivedAt` no se expone en `PlanDto` ni en la UI.** Deliberado: el ticket pide que la fecha
+   **exista**, no que se muestre. Exponerla es una decisión aparte.
+3. ~~Integración sin correr~~ → **CORRIDA Y EN VERDE** (2026-08-31, tras parar la API):
+   **849 pasados, 0 fallidos, 2 skipped, exit 0**, 3m10s. *Nota: el bloqueo era sólo la API; la suite
+   levanta su propio SQL con Testcontainers, no hacía falta un contenedor previo.*
+
+## 2026-08-31 — KAN-31 (tanda 1/2): la confirmación de archivar decía "solo lectura" y desasignaba a todos
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend (contrato de lectura) + front · **sin migración** ·
+**cambio de PRESENTACIÓN + campo derivado de lectura: no se tocó ningún crédito, importe ni fila histórica**
+
+Ticket KAN-31, dos defectos. **Esta tanda cierra el segundo (la confirmación). `ArchivedAt` queda para
+la tanda 2** — se separó por §E1: un cambio de esquema y un arreglo de copy no comparten WI.
+
+### Paso 0 — las dos premisas del ticket son VERDADERAS
+
+| Premisa | Verificación |
+|---|---|
+| No existe `ArchivedAt` en `CompensationPlans` | ✅ `Plan.cs:9-40` no la declara; `PlanConfiguration.cs` no la mapea. El archivado solo vive como `Status = Archived` (`Plan.cs:184-196`) + `AuditLogs` |
+| La confirmación subestima la consecuencia | ✅ `en/es/pl.json:527` decían "read-only"; `ArchivePlanHandler.cs:39-49` desactiva TODAS las asignaciones activas en la misma transacción |
+
+### ★ Dos cosas que el ticket no decía y cambiaron el trabajo
+
+1. **El modal está en DOS pantallas, no una:** `plan-detail.component.html:340` y
+   `plans-list.component.html:200`. Arreglar solo el detalle habría dejado la mitad del defecto vivo,
+   y con dos textos distintos para la misma acción.
+2. **La lista y el detalle usan DTOs distintos** (`PlanSummaryDto` vs `PlanDto`), así que el conteo
+   hubo que llevarlo a los dos.
+
+### Lo construido
+
+- `PlanDto.ActiveAssignmentCount` y `PlanSummaryDto.ActiveAssignmentCount`. **Sin valor por defecto**,
+  respetando el comentario que ya vivía en `PlanDto`: un parámetro defaulteado convierte un campo
+  olvidado en una mentira plausible.
+- `GetPlanByIdHandler`: `CountAsync` sobre `PlanAssignments`. `ListPlansHandler`: **una** query
+  agrupada por página, espejando `ListPayeesHandler` — no N+1.
+- Los tres call sites que crean planes pasan `activeAssignmentCount: 0` **con nombre**, porque en un
+  plan recién creado (o en un clon, que es un Draft nuevo) 0 es la verdad, no un relleno.
+- Confirmación reescrita en EN/ES/PL, **dos claves**: `CONFIRM_ARCHIVE_MSG` (con `{{count}}`) y
+  `CONFIRM_ARCHIVE_MSG_NONE`. La elección es un ternario entre dos literales — **nunca** una clave
+  construida a partir de un valor (§C2). A cero, "0 asignaciones" sería ruido, no información.
+- En polaco el número va **entre paréntesis detrás del sustantivo** (`aktywne przypisania ({{count}})`)
+  para esquivar la concordancia 1 / 2-4 / 5+, que el patrón `(s)` del repo no resuelve.
+
+### Tests
+
+- **Backend 1754 → 1757.** El que importa es
+  `ActiveAssignmentCount_EqualsWhatArchivingActuallyDeactivates`: cuenta, archiva, y verifica que se
+  desactivaron **exactamente** esas asignaciones. El número del diálogo es una promesa sobre lo que va
+  a hacer el botón; el test impide que promesa y acción se desincronicen. Con ruido deliberado: una
+  asignación ya desactivada del mismo plan y una activa de otro plan.
+- **Front 1241 → 1245.** `plan-archive-confirmation.i18n.spec.ts`, espejando
+  `terminated-accounts.i18n.spec.ts`: **fija la frase vieja como prohibida** en los tres idiomas, no
+  solo comprueba que la nueva existe.
+
+### Puertas y deuda
+
+- ~~Integración NO corrida~~ → **CORRIDA Y EN VERDE** al cerrar la tanda 2: **849 pasados, 0 fallidos,
+  2 skipped, exit 0**. El único bloqueo real había sido la API de dev levantada; la suite levanta su
+  propio SQL con Testcontainers.
+- **Bundle fuera de presupuesto** (844.78 kB vs 650): **preexistente**, incumple §6.5. No lo introduce
+  este cambio (~15 líneas de TS + 3 strings).
+- **Sin verificación en runtime** de los tres idiomas en pantalla.
+
+### Tanda 2 (pendiente)
+
+`ArchivedAt` nullable en `CompensationPlans` + migración B29. Sin decidir aún: si se hace backfill
+desde `AuditLogs` (`Action = 'PLAN_ARCHIVED'`, 10 filas) o si la columna arranca nula para lo histórico.
+
+## 2026-08-31 — El render del porcentaje: `2000000%` en un payout pagado
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · front + PDF del backend · **sin migración** ·
+**cambio de PRESENTACIÓN puro: no se tocó ningún crédito, importe ni fila histórica**
+
+El desglose de un payout ya pagado mostraba `0–2000000% @ 4% / 2000000–5000000% @ 6%`. Absorbe el
+`WI-tarifa-por-unidad-500-porciento.md`, que quedó escrito sin construir.
+
+### El inventario salió CHICO — dos superficies rotas, no diez
+
+| Superficie | `file:line` | Estado |
+|---|---|---|
+| Payout detail — desglose | `payout-detail.component.ts:226` | **ROTA** (ambos límites) |
+| PDF del payout | `PayoutPdfExportService.cs:222` | **ROTA** (Flat por unidad) |
+| Credit detail | `credit-detail.component.ts:45` | ✅ ya usaba `formatRate` |
+| Rule form (Tiered / Attainment / Flat) | `.html:154`, `.html:186`, `.html:99` | ✅ **el patrón** |
+| Assistant tool | `PlanRuleProjection.cs:66-69` | ✅ **ya distinguía bien** |
+| Plan detail, simulador, 4 exports de Excel, statement | — | No renderizan tasas ni límites |
+
+### ★ Lo que YA estaba bien, y es el patrón que se copió
+
+Dos sitios habían resuelto esto antes y nadie lo propagó:
+
+- **El formulario de regla** declara la convención en la cabecera de columna y en el hint:
+  `Desde (importe)` + *"Los límites son importes en {{currency}}"* para Tiered,
+  `Cumpl. desde (× cuota)` + *"1 = 100% del objetivo, 1,4 = 140%"* para attainment.
+- **La proyección del asistente** lleva la semántica **en el nombre del campo**:
+  `AmountTier(FromAmount, ToAmount, RawRate)` vs
+  `AttainmentBracket(FromAttainmentFraction, ToAttainmentFraction, RawRate)`, más `SemanticBehavior`.
+
+### Puerta del Paso 0.3: LIMPIA
+
+El `×100` es **presentación pura** en todos sus usos. `formatRate` devuelve `string`;
+`payout-detail` devuelve `string`; `flatRatePercent` alimenta un texto y un umbral de *aviso*
+(`>= 100`), nunca un importe; `payee-detail.gaugeColorClass` y `ws-gauge` son una consecución real
+(proporción → %), correctos. Ningún resultado entra en aritmética que termine en dinero.
+
+### Por qué sobrevivió al pase anterior
+
+`formatRate` existe desde el arreglo del 500%, con un comentario que dice *"una función, no un arreglo
+por pantalla"*. Pero el desglose del payout **armaba su propia copia inline** del string, así que
+arreglar el helper nunca lo tocó. Ahora los límites viven en el mismo archivo por la misma razón:
+`formatAmountBound` / `formatAttainmentBound` / `formatRatePercent` / `formatAmountTier` /
+`formatAttainmentTier`.
+
+### La convención (Paso 1) — para revisión de Rodolfo
+
+| Semántica | Antes | Ahora |
+|---|---|---|
+| Tasa (`TransactionAmount`) | `5%` | `5%` — sin cambios |
+| Importe por unidad (`TransactionQuantity`) | `500%` en el PDF | `5.00 EUR per unit` |
+| Límite de escalera Tiered | `0–1000` (número pelado) | `€0.00–€1.000,00` (moneda del plan) |
+| Límite de attainment | `0–140%` | `0–1,4 × cuota` |
+
+`× cuota` son **las mismas palabras** que ya usan las cabeceras del formulario (`× quota` / `× cuota` /
+`× cel`), para que el mismo número guardado se lea igual en las dos pantallas. Clave nueva:
+`PLANS.ATT_BOUND_SUFFIX`, EN/ES/PL.
+
+**Sin moneda no se inventa una:** el límite Tiered queda como número pelado. Un símbolo adivinado sería
+una mentira nueva; un número sin unidad es sólo incompleto.
+
+### El payout `844E7E75` — VERIFICADO CONTRA LA BASE
+
+> **Corrección (misma fecha).** La primera versión de esta entrada decía que no se podía abrir porque
+> `Payouts` tenía 0 filas. **Consulté la tabla equivocada:** `Payouts` es una tabla legado vacía; la
+> real es **`CompensationPayouts`** (478 filas). Mismo error con `Plans` (0 filas) vs
+> **`CompensationPlans`** (42). Anotado en [[wasnie-db-legacy-tables]].
+
+El payout existe: **`Paid`, 26.155,00 EUR, 2026-07-01 → 2026-09-30**. Su `RuleSnapshot` congelado
+confirma la tabla guardada, y trae **un tramo más** del que decía el string reportado:
+
+```
+attainmentTiers: [{0, 20000, 0.04}, {20000, 50000, 0.06}, {50000, 100000, 0.08}]
+```
+
+- **Antes:** `0–2000000% @ 4% / 2000000–5000000% @ 6% / 5000000–10000000% @ 8%`
+- **Después:** `0–20.000 × cuota @ 4% / 20.000–50.000 × cuota @ 6% / 50.000–100.000 × cuota @ 8%`
+
+**★ Y el mismo payout tiene la OTRA mitad del bug:** su otra regla es *"Spiff por Volumen de Unidades"*
+(Flat sobre Units, `flatRate: 5`) — cinco euros por unidad, que el PDF imprimía como **"Flat rate:
+500%"**. Un solo documento, las dos mentiras. Ambos casos quedaron fijados en test con los datos reales.
+
+Sigue siendo absurdo **porque los datos son absurdos** (importes tipeados en una escalera de
+proporciones); deja de ser absurdo *en la unidad equivocada*. Los importes no se tocaron.
+
+### Verificación
+
+`dotnet build Wasnie.sln` exit 0 · unit **1747 → 1754** (exit 0) · integración **849 verdes / 0 rojas /
+2 skipped** (exit 0) · front **1225 → 1240** (exit 0) · `ng build --configuration production` exit 0,
+con el bundle **idéntico** al de antes (844,78 kB) — sin regresión.
+
+`FormatRateText` pasó de `private` a `internal` para poder fijar su texto: un PDF es opaco a las
+aserciones, y esa frase estaba mal en un documento contra el que ya se había pagado.
+
+### Anotado, no arreglado
+
+- El PDF escribe `5.00%` donde el front escribe `5%` (el `:G` sobre un `decimal` conserva la escala).
+  Divergencia **cosmética y preexistente**: la unidad es correcta en los dos.
+- El PDF es **sólo inglés** (`"Source Transaction"`, `"Base Amount"` hardcodeados). Fuera de alcance.
+- `MeasurementBase` vive en `Wasnie.Application.Assistant.Tools`, que es un hogar raro para un concepto
+  general; el PDF ahora importa ese namespace. `GetPayoutByIdHandler` ya lo hacía.
+
+## 2026-08-31 — Mensajes de invariante: códigos en vez de frases, y los tres defectos del pase anterior
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · dominio + aplicación + API + front + i18n · **sin migración**
+
+Los seis errores de escalera de `RateTable` eran prosa inglesa construida en C# y pintada tal cual en el
+toast: la UI en español y en polaco mostraba inglés, y corregir una palabra polaca exigía redesplegar el
+backend. El repo ya tenía el patrón correcto (`PayoutSkipReason`, `RuleSimulationBlocker`): el backend
+emite **códigos**, el front traduce. Esta pasada lo aplica, y cierra los tres defectos que el pase
+anterior dejó abiertos.
+
+### El barrido del Paso 0.4 disparó la puerta de parada — y no se amplió el alcance
+
+Hay **187 `throw new DomainException`** con prosa inglesa en 30 archivos, todos llegando a pantalla por
+el mismo camino (`ExceptionHandlingMiddleware.cs:105` → `{ message }` → `extractApiError` → toast), más
+los `Result.Failure(string)` en prosa de los handlers. Eso es **un frente propio** y NO se tocó: esta
+pasada cierra sólo los seis que abrimos nosotros. El contrato nuevo convive con el viejo sin romperlo.
+
+### El contrato de error: por qué hizo falta uno nuevo
+
+`Result<T>` lleva **un solo string**, así que no había lugar para un código con parámetros. Se añadió
+`DomainCodedException` (código + diccionario de parámetros), el middleware la serializa como 422 con
+`{ code, parameters }` y **deliberadamente sin `message`** — mandar los dos haría que el cliente leyera
+la frase inglesa primero y el código fuera decoración. Los dos handlers de reglas la dejan pasar con un
+`catch (DomainCodedException) { throw; }` **antes** del catch general; sin eso el código se perdía al
+convertirse en `Result.Failure(ex.Message)`. Nada se persiste en ese punto: `ToDomain()` se evalúa como
+argumento, antes de `AddRule`/`UpdateRule` y muy antes de `SaveChangesAsync`.
+
+### El orden de las comprobaciones: un enmascaramiento real, dos que ya estaban bien
+
+- **El arreglo:** el orden ascendente ahora corre **antes** que "último tramo abierto". Una escalera
+  cargada al revés casi siempre tiene además el último tramo acotado, así que el usuario leía *"el
+  último tramo debe quedar abierto"* — cierto, e inútil: abrir ese tramo no endereza una escalera dada
+  vuelta.
+- **Ya estaba bien, pero ahora tiene test:** una escalera descendente **siempre** registra también un
+  solapamiento (`From` baja mientras cada `To` supera su propio `From`).
+- **Estructural:** los tramos intermedios cerrados se comprueban antes que solapamiento/hueco, que
+  desreferencian `To`.
+- **Y nada más:** un último tramo acotado NO implica solapamiento ni hueco, ni al revés. No se
+  inventaron casos para llenar la sección.
+
+### Paso 5 — el formulario vacío
+
+`_loadExistingRule` hacía `find(r => r.id === ruleId)` y un `return` pelado: un GUID en mayúsculas (la
+API los emite en minúsculas) abría un formulario **de alta, vacío y habilitado**, bajo el título "Editar
+regla" y sin error alguno. Guardarlo habría creado una **segunda** regla. Se hicieron **las dos** cosas:
+comparar sin distinguir mayúsculas **y** un estado explícito `ruleNotFound` (`ws-empty-state` + submit
+bloqueado). Normalizar el caso solo habría tapado el síntoma; una regla borrada de verdad llega igual.
+
+### Cambio al design system (declarado, no improvisado)
+
+`WsToastService.show` gana un tercer argumento opcional `params`, y el contenedor pasa a
+`{{ toast.message | translate: toast.params }}`. Sin eso un mensaje con un número dentro sólo podía
+existir como frase inglesa armada por el llamador — o sea, no traducible. Es aditivo (undefined para
+todos los toasts existentes) y quedó documentado en `DESIGN_SYSTEM.md`.
+
+### Verificación
+
+`dotnet build Wasnie.sln` limpio (exit 0) · unit **1741 → 1747** (exit 0) · integración **849 verdes,
+0 rojas, 2 skipped** (exit 0) · front **1195 → 1225** (exit 0) · `ng build --configuration production`
+exit 0. Cadena encadenada con guarda `${PIPESTATUS[0]}` — y sirvió: la primera corrida de integración
+dio 682 rojas con exit 1 mientras el shell salía 0, porque Docker Desktop no estaba levantado. Tres tests preexistentes que fijaban la prosa
+(`PlanTests` ×3, `PlanCloneKeepsMalformedTablesTests` ×1) pasaron a afirmar el código. **Los 18 tests de
+caracterización de lectura: verdes y sin editar.**
+
+### Deuda que queda anotada
+
+- Los 187 mensajes de dominio en prosa (incluidos los dos de `RateTableRequest` que no son invariantes
+  de escalera: rate plano faltante y tipo no soportado).
+- El bundle inicial del front está **194,78 kB por encima del presupuesto de 650 kB** — preexistente;
+  esta pasada suma ~1 kB de cadenas i18n.
+
+## 2026-08-28 — Cierre de cuentas huérfanas: créditos + ledger, en una transacción
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · full-stack · **migración `B28_OrphanAccountClosure`**
+
+**Decisión de Rodolfo en la puerta 4.8: opción C** — `ClosedAt` que **NO filtra**.
+
+### ★★ Por qué la opción C resuelve 4.8 sola
+
+La pertenencia a la cola es **derivada** (terminado + balance ≠ 0 **o** créditos sin liquidar). El cierre
+vacía las dos fuentes, así que el payee sale **porque no queda nada**, no porque una bandera lo esconda.
+Si más tarde entra un crédito —que la política permite a propósito— **la fila vuelve sola**.
+`Payee.AccountClosedAt` se registra y **nunca se filtra**: es lo que deja decir *"cerrada el 28, reabierta
+por un crédito posterior"*. Filtrar por ella habría recreado el bug que la cola existe para cerrar.
+
+### El dominio y la migración
+
+`Credit` gana un **tercer final**: `ClosedAt` / `ClosedBy` / `ClosureReason` (`ExternalSettlement` |
+`WrittenOff`, guardado como **string** para que un CFO totalice en SSMS) / `ClosureNote`. Método
+`Close()` que **falla cerrado** contra los otros tres estados, evento propio `CreditClosedEvent`, y
+**sin `Unclose`**: revertir un write-off es una decisión nueva, no un deshacer.
+
+**No reutilicé `Consume` ni `Supersede`**, que era la trampa que el WI marcaba.
+
+`B28_OrphanAccountClosure`: **6 columnas nullable + 1 índice filtrado**, **cero transformación de datos**.
+Verificada sobre contenedor limpio (las 18 pruebas de terminación pasan contra migraciones frescas, y la
+query proyecta `AccountClosedAt` — EF habría reventado si la columna no estuviera).
+
+**El motor:** `CalculatePayoutsForPeriodHandler` suma `ClosedAt == null` al par de nulls. **Y
+deliberadamente NO lo sumé a `LoadLiveCreditKeysAsync`**: ahí un crédito cerrado *debe* seguir contando
+como vivo, o re-asignar resucitaría el dinero creando uno nuevo.
+
+### El handler
+
+**Concurrencia por conjunto estricta:** compara **ids y importes en las dos direcciones** y responde
+**409** con un código. El caso que un total dejaría pasar —mismo conteo, misma suma, otras identidades—
+tiene su propio test.
+
+**★ Y una guarda que el WI no pedía:** `ConsumedAt` sólo se marca al **pagar**, así que un crédito dentro
+de un payout `Calculated`/`Approved` todavía parece pendiente. Cerrarlo dejaría ese payout con un crédito
+terminal y al marcarlo pagado se liquidaría lo mismo dos veces. **Rechazado por adelantado, nombrando el
+payout.**
+
+Transacción dual todo-o-nada; tipos del ledger según la resolución, **nunca un ajuste genérico** — y el
+**signo elige**: un balance positivo sólo puede llegar a cero con `FinalSettlementDebit`, porque "dar de
+baja" dinero que **debés vos** no es un write-off, es no pagar.
+
+Permiso propio **`Ledger.CloseAccount`** (TenantAdmin + CompManager). Fail-closed: sólo terminados, sólo
+una vez.
+
+### ★★ Dos defectos preexistentes que este WI destapó
+
+**1. `SyncAuditDispatcher` NUNCA pasaba `Metadata`.** La columna existe desde que existe la tabla y
+`AuditEntry` lo lleva desde siempre, pero el único punto que los une **no lo pasaba** — así que el
+`Metadata` que arma `CreateManualLedgerAdjustmentHandler` (importe con signo, moneda, balance resultante,
+nota) **se escribía en la nada**. **Corrige mi propio informe del diagnóstico**, que dio por bueno lo que
+el handler *intenta* escribir sin comprobar la fila. Lo descubrió el test que le preguntó a la fila qué
+había cerrado y la fila dijo null. Arreglado (serializado a JSON, como `BeforeJson`/`AfterJson`).
+
+**2. `AuditBehavior` no podía llevar metadata.** `IAuditableCommand` gana
+`Dictionary<string,string>? AuditMetadata => null` — **con default, cero comandos rotos**. Es lo que
+permite que el cierre escriba **una sola** fila rica **dentro de la transacción** del
+`IMoneyCriticalCommand`, en vez de una thin del behavior más otra del handler.
+
+### El frontend
+
+Modal con la ceremonia de `Mark as paid`: las dos cifras (nunca sumadas), el detalle de los créditos,
+selector de resolución con su explicación, textarea obligatorio, y el aviso de irreversibilidad **más
+fuerte para el write-off**. Manda los ids exactos; ante 409 **no reintenta**: explica con un código
+traducido (desconocido → texto neutro), recarga y pide mirar de nuevo. Chip *"reabierta"* cuando
+`accountClosedAt` viene no nulo.
+
+**★ Un bug que atrapó el test:** `isWriteOff` era un `computed` sobre `resolutionControl.value` — que **no
+es estado reactivo**, así que nunca reevaluaba y **el aviso severo jamás habría aparecido**. Es decir: la
+ceremonia entera no habría ocurrido. Arreglado con `toSignal(valueChanges)`.
+
+### Verificación
+
+Cadena con guarda `${PIPESTATUS[0]}`, **`CHAIN EXIT: 0`**: **unit 1702 → 1702**, **integración 834 → 849**
+(+15), **front 1177 → 1190** (+13). Producción limpia.
+
+**La guardia atrapó dos cosas reales:** una corrida con 87 rojos, de los cuales **2 eran míos** —
+colisión de `EmployeeCode` con otras suites que comparten la base (`STILL-HERE`, `RBAC-REP`), visible
+sólo al correr la suite completa. Prefijados `CTA-`. Los otros 85 eran los timeouts de SQL ya
+documentados.
+
+**Detuve el proceso `Wasnie.Api` (PID 35348)** para poder generar la migración: llevaba 7 minutos sin
+actividad en el log, y era la misma acción autorizada antes en la sesión. **Hay que relanzarlo.**
+
+### Fuera de alcance, reportado
+
+El **estado intermedio** sigue haciendo falta y ahora más: con sólo estas dos resoluciones, un finiquito
+en litigio se saca de la lista escribiendo un asiento que afirma algo falso, y el ledger es append-only.
+Tampoco: reabrir una cuenta cerrada, el historial de estados del payee, el aviso de terminación en el
+alta, ni el rol de auditoría de solo lectura.
+
+## 2026-08-28 — Diagnóstico READ-ONLY: qué significa realmente `Payee.IsActive`
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **NADA CONSTRUIDO** · informe en
+`docs/DIAG_PAYEE_ISACTIVE.md`
+
+### ★ Primero y aparte (§5): NO gobierna acceso ni autenticación
+
+Los dos `IsActive` del camino de login son **`tenant.IsActive`**, no el del payee. Y
+`Wasnie.Application/Features/Auth/` **no menciona `Payee` en ninguna línea**. **No hay frente de acceso.**
+
+### El mapa
+
+**Escritores: cuatro, y ninguno automático.** `Create` (nace en `true`), `Deactivate`, `Activate`, y el
+default de EF. `Deactivate`/`Activate` tienen **un solo llamador** (`DeactivateActivatePayeeHandler`,
+tras `Payees.Deactivate`). **NO lo tocan:** `MarkAsTerminated`, `Update`, la importación ni HubSpot.
+
+**Lectores: siete, y ★ UNO SOLO bloquea algo** — `IngestTransactionHandler:52`, que rechaza el alta
+manual/API de transacciones nuevas (y el propio mensaje ofrece la válvula: usar import). Los demás son
+avisos que no frenan (import, update por Excel), dos contadores del dashboard, y chips de UI.
+
+**No lo leen:** `CreditAllocationService`, el motor de pay runs (usa `Status`), autenticación, el CRM,
+los informes, y **el filtro global de EF** (sólo `TenantId` — no hay borrado lógico oculto).
+
+> **`IsActive` gobierna exactamente UNA cosa: si se puede dar de alta una transacción nueva por la vía
+> manual/API.** Todo lo demás es decoración informativa.
+
+### ★ ¿Es seguro de manipular? Sí — con dos advertencias
+
+Apagarlo en un terminado **no toca** créditos, balance, ledger, cola, cálculo, login ni visibilidad.
+Pero: **(a)** `Activate()` pone `DeactivatedAt = null` — **borra la evidencia** de que estuvo apagado; y
+**(b) ★ la UI no ofrece desactivar a un terminado** (el botón sólo aparece con `status === OnLeave`),
+mientras que **el endpoint no tiene esa guarda**. La combinación existe, la UI la sabe *mostrar* pero no
+*producir*, y hoy sólo se alcanza por API.
+
+### ★ 2.6 — la hipótesis del WI está AL REVÉS
+
+| columna | migración | fecha |
+|---|---|---|
+| `Status` + `TerminationDate` | `ExtendPayeeQuotaAssignment` | **25-may-2026** |
+| `IsActive` + `DeactivatedAt` | `P2_PayeeLifecycle` (`defaultValue: true`) | **1-jun-2026** |
+
+**`Status` es el concepto VIEJO; `IsActive` llegó una semana después**, deliberadamente, etiquetado
+*"Decision G"* y documentado como ortogonal en el mismo commit. **No es deriva: es diseño.** Lo único sin
+reconciliar es **una guarda** — la del alta de transacciones — que eligió el eje nuevo para una pregunta
+que vive en el viejo.
+
+### 2.5 — matriz, sin combinaciones imposibles
+
+Active/1: **161** · OnLeave/1: 2 · Terminated/0: **1** · Terminated/1: **6** (de 170). Las cuatro son
+legítimas bajo el diseño ortogonal. **6 de 7 no es un accidente repetido: es el comportamiento por
+defecto**, porque `MarkAsTerminated` no toca el otro eje.
+
+### ★ 3.3 — NO hay créditos que revisar
+
+De 46 créditos de payees terminados: **0** asignados después de la fecha de terminación, **1** en la
+fecha (POL-8554), **0** de payees hoy `IsActive = 0`. **Bajo la política decidida los 46 son válidos y no
+hace falta revisar datos históricos** — la respuesta que el WI esperaba, confirmada.
+
+**Un caso nombrado:** `TERM-CC-10`, €5.000 **fechada 2026-10-10** para alguien terminado el **2026-09-30**.
+La política justifica un crédito tardío sobre una venta **anterior** a la salida; ésta es **posterior**.
+Única fila así, y el payee se llama "Test Terminacion CC" — casi seguro dato de prueba, pero es la forma
+exacta que la política no cubre.
+
+### Recomendación
+
+**El WI de cierre se puede construir encima de lo que hay; no hace falta reconciliar los flags antes.**
+`IsActive` no interfiere (nadie relevante lo lee), `Status` ya es la guarda correcta donde importa, y no
+hay datos que sanear. **Y NO recomiendo que `MarkAsTerminated` apague `IsActive`:** acoplaría dos ejes
+que el producto separó a propósito, y su único efecto sería bloquear altas que la política **permite**.
+
+**Lo barato que sí conviene primero:** que la terminación sea **visible** en el alta de transacciones —un
+aviso, no un bloqueo, igual que ya hace el import— para que el próximo POL-8554 no sea una sorpresa de
+56 segundos.
+
+`dotnet build` exit 0 con guarda `${PIPESTATUS[0]}`; único archivo tocado: el informe.
+
+## 2026-08-28 — WI P0: el rótulo dejó de prometer; el permiso ya estaba separado (y me equivoqué)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **sólo frontend** · sin migración
+
+### ★ Frente B: la premisa era FALSA, y el error es mío
+
+El WI arranca de una frase de **mi propio informe anterior**: *"todo el que puede mirar puede castigar"*.
+**Es falsa.** Medido sobre `RolePermissions.cs`:
+
+| permiso | titulares |
+|---|---|
+| `Ledger.Read` | TenantAdmin, CompManager, **Manager, Rep** |
+| **`Ledger.Adjust`** | **TenantAdmin, CompManager** — y nadie más |
+
+La separación **ya funciona**: Manager y Rep leen el ledger y **no pueden ajustarlo**. Lo que escribí fue
+generalizar de *"los dos roles que tienen Adjust también tienen Read"* a *"todo el que mira puede
+castigar"*. No es lo mismo, y la diferencia era todo el frente B.
+
+**Los dos roles que sí tienen `Ledger.Adjust` no son de solo lectura** (42 y 45 permisos, con
+`Payouts.MarkPaid`, `Transactions.Void`, `Plans.Archive`). **No hay nada que quitar.** Quitárselo a
+CompManager rompería el trabajo diario de exactamente la persona cuyo cometido es éste — el escenario que
+la puerta de parada de §3.1 existe para evitar. **No toqué `RolePermissions.cs`.**
+
+**Y los tests que pedía el §4 ya existen**, extremo a extremo: `LedgerEndpointsTests.cs:67-95` — un Rep
+recibe `403`, un Manager recibe `403`, y **verifica que no se escribió nada**. Añadir un test del mapa
+sería redundante: si alguien le diera `Ledger.Adjust` a Manager, esos tests empezarían a devolver 200.
+
+### 3.3 — el patrón, medido (sólo reportado)
+
+De 10 recursos, **4 separan de verdad** (`Ledger`, `LedgerSummary`, `Payees`, `Assignments`, `Quotas`
+tienen lectura más amplia que escritura). En los otros — `Payouts`, `Plans`, `Transactions`, `Credits`,
+`CategoryMappings` — la lectura **y todas** sus escrituras las tienen exactamente
+{TenantAdmin, CompManager}.
+
+**No es un agujero hoy** (Manager y Rep no tienen ni la lectura), pero significa que **un rol de
+auditoría financiera de solo lectura no se puede expresar** sin regalar de paso `MarkPaid`, `Void` y
+`Archive`. Es una limitación que aparece el día que alguien lo pida. **No cambié nada.**
+
+### Frente A: el rótulo
+
+`"Close account"` en un botón `secondary` — la forma y las palabras de una mutación — sobre un control
+que es **un `routerLink` y nada más**.
+
+- **Rótulo nuevo: `"View clawback"` / `"Ver clawback"` / `"Zobacz clawback"`.** No inventé término: el
+  destino se llama así en el producto (`LEDGER.TAB` = *"Clawback"*, `LEDGER.STATEMENT_TITLE` =
+  *"Clawback account"*).
+- **`variant="link"`** en vez de `secondary` — la variante que el design system ya tiene para navegación.
+- **Clave vieja `TERMINATED_SETTLE` borrada** de los tres json, con test que falla si vuelve.
+- **★ El párrafo tenía el mismo defecto.** Decía *"cada una hay que cerrarla deliberadamente — saldada
+  por fuera, o dada de baja"* en una pantalla sin control de cierre. Ahora dice **dónde** ocurre: *"Una
+  cuenta se cierra en la cuenta de clawback del propio payee, registrando lo que decidió finanzas"*.
+
+**Lo que NO cambié y quiero que se mire:** el enlace **sigue** detrás de `Ledger.Adjust`. Ahora que es
+navegación se podría argumentar `Ledger.Read`, pero eso **ensancharía** lo que se muestra sin que nadie
+lo pidiera, y le pondría a un rep un enlace a una página donde no puede hacer nada.
+
+**Observación reportada:** para alguien a quien se le **debe** €3.869,34, llamar "clawback" al destino
+suena mal — pero así se llama hoy, y renombrarlo es otro WI.
+
+### Verificación
+
+Cadena con guarda `${PIPESTATUS[0]}`, `CHAIN EXIT: 0`: **unit 1702 → 1702** (sin cambios de backend),
+**integración 834 → 834**, **front 1174 → 1177** (+3). `ng build --configuration production` limpio.
+
+**★ La guarda arreglada hizo su trabajo:** una corrida intermedia dio **4 rojos** y **cortó la cadena
+con exit 1** en vez de imprimir un verde falso. Los 4 eran la inestabilidad de SQL bajo carga ya
+documentada — este WI **no tocó un solo archivo de backend** (verificado con `git status`) y las dos
+corridas siguientes dieron 834/834.
+
+## 2026-08-28 — Diagnóstico READ-ONLY: cierre de cuentas huérfanas
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **NADA CONSTRUIDO** · informe en
+`docs/DIAG_ORPHAN_ACCOUNT_CLOSURE.md`
+
+### ★ Puerta de parada: NO se dispara
+
+El botón **"Close account"** (`terminated-accounts.component.html:104-113`) es un **`routerLink` y nada
+más** — lleva a la pestaña Ledger del payee. Sin `(click)`, sin API, sin handler; el componente no
+inyecta ningún servicio de escritura. **No hay un botón activo sobre dinero sin diseño acordado.** Es un
+problema de rótulo (un enlace etiquetado como una acción), no de seguridad.
+
+### ★★ ¿Hace falta migración? SÍ — y es lo que cambia el tamaño del WI
+
+Un crédito tiene **dos** formas de salir de circulación y **ninguna sirve**:
+
+- **`Consume(Guid payoutId)`** — `payoutId` **no es nullable**, y `Unconsume` hace `ConsumedByPayoutId!.Value`
+  sin comprobar: un GUID inventado dejaría el rastro anti-doble-pago apuntando a un payout inexistente.
+- **`Supersede(reason)`** — significa *"lo reemplazó otro"*, emite `CreditSupersededEvent`, lo leen las
+  consultas de attainment, **y es irreversible** (no hay `Unsupersede`).
+
+No hay `Forfeited` ni `WrittenOff`. **`WrittenOff` exige columnas nuevas en `Credits`.**
+
+**En cambio el lado del LEDGER está completo:** `ExternalSettlementCredit` (5), `WriteOffCredit` (6) y
+`FinalSettlementDebit` (8) ya existen, deliberadamente separados para que un CFO pueda totalizar cada
+caso sin minar texto libre. **No hacen falta tipos nuevos.**
+
+### Trazabilidad — el WI suponía peor de lo que es
+
+Suponía *"un booleano y un párrafo"*. Falso: `CreateManualLedgerAdjustmentHandler.cs:86-101` **ya
+escribe** una fila de `AuditLog` con tipo, **importe con signo**, moneda, **balance resultante**, nota,
+usuario y fecha. Y existe **`IMoneyCriticalCommand`**, que si falla la auditoría **revierte la escritura
+de negocio** en la misma transacción. Lo único que falta es **qué créditos** se cerraron — y falta porque
+el flujo de hoy **no toca créditos**. Van en el `Metadata` que ya existe. **Infraestructura nueva: cero.**
+
+### ★★ Concurrencia — el hallazgo que decide entre las dos opciones
+
+**`Payee` NO TIENE token de concurrencia.** `Credit` y `PayeeBalance` sí (rowversion real de SQL Server);
+`Payee` no tiene ninguno, ni en el dominio ni en su configuración ni en el esquema. **Así que "versionar
+la fila del payee" no es una opción débil: hoy no existe**, y adoptarla exigiría su propia migración
+además de proteger la fila equivocada. Las dos opciones reales (huella del conjunto / ids explícitos)
+**no necesitan migración** — `Credit.RowVersion` ya está ahí. Reportadas con sus contras, **sin elegir**.
+
+### 5.3 — Sí puede aparecer un crédito nuevo para un terminado. Establecido en código Y medido.
+
+`MarkAsTerminated` sólo escribe `Status` y `TerminationDate` — **no toca `IsActive`**. Ni
+`CreditAllocationService` ni **`ReassignPayeeHandler:31-33`** (el camino exacto de POL-8554) miran el
+estado del payee. La única guarda, `IngestTransactionHandler:52`, comprueba `IsActive`, que la
+terminación no cambia. **Medido: 6 de 7 terminados siguen con `IsActive = 1`.**
+
+### Permisos y el estado que falta
+
+`Ledger.Read` y `Ledger.Adjust` **ya son permisos distintos**, pero `RolePermissions.cs` se los da a los
+mismos dos roles: hoy todo el que puede mirar puede castigar. La vara la pone `Mark as paid`: permiso
+propio + modal con conteo, totales por moneda y *"This action cannot be undone."* — **el cierre hoy tiene
+menos ceremonia que eso**, y puede significar dar por perdido dinero.
+
+**★ Estado intermedio: NO existe** en `Payee`, `Credit` ni el ledger. **Confirmado el corolario del WI:**
+con sólo "liquidado" y "castigado", sacar de la lista un finiquito en litigio obliga a escribir un
+asiento que afirma algo falso — y en un ledger **append-only** eso no se borra, sólo se compensa, dejando
+dos hechos falsos.
+
+### Tamaño estimado
+
+**Recomiendo partirlo en dos.** El cierre del **balance** ya se puede hacer y sólo necesita ceremonia,
+permiso propio y auditoría enriquecida — **cero migraciones**. El **write-off de créditos** es el WI con
+esquema (migración sobre la tabla más caliente + la condición en el motor, que es money-closed y exige
+tests). El **estado intermedio** va tercero o aparte, pero no debería quedar para "algún día".
+
+`dotnet build` exit 0 con guarda `${PIPESTATUS[0]}` (sin cambios de código; sólo para confirmar el árbol).
+
+## 2026-08-28 — WI 3/3 construido: cada crédito dice de quién es (alternativa A)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · sólo backend · **sin migración** · prompt, reglas y motor
+**intactos**
+
+Decisión de Rodolfo tras la puerta de parada: **alternativa A, identificador opaco.** Diagnóstico
+completo en `docs/DIAG_ASSISTANT_CREDIT_PAYLOAD_OWNERSHIP.md`.
+
+### El cambio, que es de DATOS y no de prompt
+
+`CommissionEarned` gana **`PayeeRef`**: `TransactionPayee` para el dueño de la venta, `OtherPayee1..n`
+para el resto. Filas de una misma persona comparten etiqueta; dos personas nunca.
+
+- **★ Un token opaco, y ése es el punto.** Distingue filas sin nombrar a nadie — la única forma
+  compatible con la seudonimización que `Legal.md §3.2` ya decidió (*"un `payeeId` opaco EN LUGAR del
+  nombre"*). **Cero datos personales nuevos al proveedor.**
+- **El `[JsonIgnore]` de los GUIDs se queda.** La regla 10a prohíbe imprimir ids; el token es de la
+  misma familia que `matchedBy: ResolvedById` o `interpretation: EarningsAndNoDebt`, que el modelo lee
+  y nunca escribe.
+- **`commissionsOrderedBy: "MostRecentlyAllocatedFirst"`**, sólo cuando hay más de un crédito —
+  una lista de uno no tiene orden que declarar. Misma cura que el `CalculationOrder` de
+  `get_plan_rules`, agregado en su día por el mismo motivo.
+- **★ Y el sort se PIDE, ya no se hereda.** El tool ahora manda `SortBy/SortOrder` explícitos. Era el
+  default de `ListCreditsHandler`; declarar un orden que decide otro significa que el payload empieza a
+  mentir el día que ese default cambie, sin que nada se ponga rojo.
+
+### Presupuesto, medido (§4.4)
+
+Test nuevo que **imprime** la cifra, como el resto de este archivo:
+turno de `get_transaction` con 2 créditos etiquetados = **21.183 tok**; con los esquemas (1.904) =
+**23.087 → margen 913 (3,8 %)**. Por encima del 2 %. **No subí el techo, no recorté el manual.**
+El peor caso vinculante sigue siendo la simulación (2,0 %) y este WI no lo toca — sólo corre UNA
+herramienta por turno.
+
+**Reportado y NO construido:** el techo se rompe con **19 créditos en una transacción** — hoy, sin este
+cambio; con A, a 17. Nada en dev pasa de 7. Merece su propio WI: bajar el `PageSize` de 25 sería
+recortar datos de dinero para que entren en un prompt.
+
+### ★ Dos hallazgos del propio proceso, y uno es mío
+
+**1. Mi guardia de exit-code era falsa, en los tres WIs.** `set -e` con `cmd | grep` toma el estado de
+`grep`, no el de `dotnet test` — así que una corrida con **81 tests rojos** siguió adelante e imprimió
+*"ALL THREE GREEN"*. Reescrita con `${PIPESTATUS[0]}`. **Los números reportados en los WI 1 y 2 eran
+correctos** (los leí de las líneas `Passed!  - Failed: 0` impresas), pero la guardia no los habría
+frenado si no lo hubieran sido.
+
+**2. La suite de integración es inestable bajo carga en esta máquina.** De 6 corridas: 4 en verde
+(834/836) y 2 con cascadas de **`SqlException: Execution Timeout Expired`** (656 timeouts + 514 fallos
+de limpieza de colección). **Cero fallos de aserción en ninguna corrida** — es el contenedor de SQL
+Server ahogado, no un test. Lo reporto porque un verde tras un rojo no es evidencia de nada si no se
+sabe cuál fue el rojo.
+
+### Verificación
+
+Cadena con la guardia arreglada, `CHAIN EXIT: 0`:
+**unit 1693 → 1702** (+9: 8 de atribución + 1 de presupuesto), **integración 832 → 834** (+2, el
+contrato de orden contra SQL real). Frontend sin tocar.
+
+**Lo que NO hice:** ninguna regla nueva sobre admitir el error propio (la 10c ya lo cubre y se violó
+igual), nada de seudonimización ni DLP, y no toqué `ListCreditsHandler` pese a que no aplica
+`PayeeAccessGuard` — reportado en el diagnóstico.
+
+## 2026-08-28 — WI 3/3 DETENIDO EN SU PUERTA DE PARADA: el payload de créditos y la seudonimización
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **NADA CONSTRUIDO** · informe en
+`docs/DIAG_ASSISTANT_CREDIT_PAYLOAD_OWNERSHIP.md`
+
+### La causa raíz, confirmada
+
+`CommissionEarned` (`GetTransactionTool.cs:395-404`) marca `PayeeId` con `[JsonIgnore]`. El payload no
+tiene **un solo campo** que distinga una fila de otra. Se le entregó al modelo una lista de créditos de
+**dos personas** sin decir de quién era cada uno, en una conversación sobre una de ellas.
+
+**★ Y el `[JsonIgnore]` es CORRECTO — no hay que quitarlo.** La regla 10b prohíbe imprimir ids; exponer
+el GUID metería en el contexto justo lo que la regla prohíbe imprimir. La cura no es des-ignorar el id,
+es agregar una etiqueta legible — y **cuál** sea esa etiqueta es la decisión bloqueada.
+
+### ★★ DOS condiciones de parada, ninguna opinable
+
+**1. `docs/Legal.md §3.2` — Prioridad 1, mitigación YA DECIDIDA — dice lo contrario.** Se titula
+literalmente *"PII ESTRUCTURAL — `payeeName` + `payeeEmployeeCode` salen en cada lookup"* y su mitigación
+decidida es *"el backend envía al modelo un `payeeId` opaco **en lugar del nombre**"*. La alternativa B
+es exactamente lo contrario, sobre los dos campos que esa entrada nombra, en el endpoint que usa de
+ejemplo. Y agrava: hoy viaja **un** nombre (el de la transacción, que el usuario ya ve); la B haría
+viajar **nombres de terceros**. Con `§3.1 DPA AUSENTE — RELEASE BLOCKER` abierto.
+
+**2. §4.4 del WI — el margen.** El peor caso vinculante sigue siendo la simulación (23.521/24.000 =
+2,0 %) y este WI no lo mueve. Pero en la ruta de `get_transaction` **el techo ya se rompe con 19
+créditos HOY**, y las alternativas lo adelantan a 17 (A) y 15 (B).
+
+### 3.3 — el defecto es de ESTA herramienta, no del patrón
+
+Revisé las colecciones de las cinco herramientas: `get_payee_plans`, `get_payee_balance`,
+`get_plan_rules` y `simulate_plan_rules` llevan todas una clave intrínseca (plan+versión, moneda,
+regla+orden). **`Commissions` es la única colección cuyo distintivo es una PERSONA** — y la persona es
+justo lo que se ocultó. Y ya existe la casa para el orden explícito: `CalculationOrder` de
+`get_plan_rules`, agregado por el mismo motivo (*"THE ORDER IS DATA, because the assistant got it wrong
+by inference"*).
+
+### 3.2 — medido en dev
+
+591 transacciones con créditos; **exactamente 1** abarca más de un payee (POL-8554). Máximo de créditos
+en una transacción: **7**. Máximo de payees distintos: **2**. Es raro; también es lo que va a pasar cada
+vez que alguien corrija una atribución.
+
+**Hallazgo lateral (fuera de alcance, reportado):** `ListCreditsHandler:22` exige `Credits.Read` y **no
+aplica `PayeeAccessGuard`**. Hoy no se nota porque el chat es admin-only.
+
+### 3.4 — el coste, medido con la heurística del guard
+
+| | caso real (2 créd.) | peor caso real (7 créd.) | rompe el techo a |
+|---|---|---|---|
+| hoy | +956 (4,0 %) | +669 (2,8 %) | **19 créditos** |
+| A: `payeeRef` opaco | +934 (3,9 %) | +620 (2,6 %) | 17 |
+| B: nombre + código | +914 (3,8 %) | +539 (2,2 %) | 15 |
+
+**Recomendación (decisión de Rodolfo):** A ahora, B nunca sin el DPA. La A cierra el barajado por
+completo, no agrega un dato personal, y es la MISMA forma que `Legal.md §3.2` ya eligió — así que no
+habrá que deshacerla. La B es mejor producto y cuesta justo lo que esa entrada decidió dejar de pagar.
+
+**No subí el techo, no recorté el manual, no comprimí reglas, no escribí una regla nueva sobre admitir
+el error propio** (la 10c ya lo cubre y se violó igual — repetirla gasta presupuesto sin ganar nada).
+
+## 2026-08-28 — Pay runs: contadores de descarte y un mensaje que no miente (WI 2/3)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend + frontend · **sin migración** · **elegibilidad
+intacta**
+
+### El defecto
+
+`"No payouts created. No matching credits found for this period."` era un **literal del cliente**
+disparado por `payoutsCreated === 0`. El backend nunca estableció esa causa. En el run real de junio la
+frase era falsa **dos veces**: 4 asignaciones descartadas por terminación, 20 por conflicto con un
+payout ya pagado, y **cero créditos consultados**. Rodolfo movió rangos de fechas tres turnos por eso.
+
+### 2.2 — Los puntos de descarte, que son la lista de contadores
+
+| # | dónde | motivo | contador |
+|---|---|---|---|
+| 1 | `:60` | ninguna asignación solapa el período | `AssignmentsConsidered = 0` |
+| 2 | `:104` | payee `Terminated` | **`TerminatedPayee`** |
+| 3 | `:144` | intersección vacía | **★ SIN CONTADOR, a propósito** |
+| 4 | `:151` | plan archivado o ilegible | **`PlanNotPayable`** |
+| 5 | `:181` | ya existe un payout Approved/Paid | **`ExistingPayout`** |
+
+**★ El #3 no lleva contador y eso es una decisión, no un olvido.** El filtro de solape ya probó
+`a.Start <= PeriodEnd` y `a.End >= PeriodStart`, y `DateRange.Of` impone `Start <= End` en los dos
+rangos: `max(inicios) <= min(fines)` siempre. Un contador ahí sería **estructuralmente siempre cero**, y
+eso es peor que ausente — su presencia le diría al lector que el caso puede ocurrir. La guarda queda
+como defensa en profundidad, sin reportar. (Regla 13 del WI: un contador que no se puede establecer con
+certeza no se inventa.)
+
+### El cambio
+
+`PayoutRunDiagnostics` viaja en `CalculatePayoutsResult` y en `CalculatePayRunResult`:
+
+- `AssignmentsConsidered` — la población, antes de cualquier descarte.
+- **★ `AssignmentsReachingCreditLookup`** — el campo que hace imposible el mensaje viejo. Mientras sea
+  cero, *"no matching credits"* es indecible: no se consultó ninguno.
+- `CreditsExamined`.
+- `Skipped` — **códigos y conteos**, uno por motivo que descartó algo. Los que no descartaron nada se
+  **omiten**, no se mandan como ceros.
+
+**Códigos, no prosa** (`PayoutSkipReason`): un motor que emitiera frases necesitaría un redespliegue
+para arreglar una tilde en polaco, y tendría un solo idioma. La traducción vive en EN/ES/PL.
+
+**El mensaje del front se construye con eso** y no afirma nada que los contadores no sostengan. Tres
+titulares distintos donde antes había uno solo y mentiroso:
+
+| situación | qué dice |
+|---|---|
+| ninguna asignación cubre el período | "…no había nada que calcular" |
+| se consideraron N y todas se descartaron | "…se consideraron N y todas se descartaron" + el detalle |
+| se consideraron y el motor no explicó nada | **"No se creó ningún pago." y punto** |
+
+**★ Un código desconocido degrada a texto neutro.** El mapeo es una **whitelist**, no
+`` `PAY_RUNS.SKIP_${code}` ``: concatenar a ciegas imprimiría un identificador interno la primera vez
+que el backend agregue un código antes de que el front tenga su traducción.
+
+**★ Y cierra el círculo con el WI 1:** si hubo descartes por terminación, el mensaje remite a la cola
+de cuentas huérfanas, que es donde ese dinero ahora se ve.
+
+La frase falsa **se borró** de `PAY_RUNS` en los tres idiomas, y hay un test que falla si vuelve.
+
+**Los contadores también viajan al job en background** (`CalculatePayoutsJobHandler`): un operador
+leyendo un job que no creó nada tenía exactamente el mismo punto ciego. Misma información, una línea.
+*(Extensión mía sobre el alcance literal del WI — reportada.)*
+
+### Fuera de alcance, barrido y reportado
+
+Barrí las 3 traducciones buscando literales del front que afirmen causas: **hay exactamente uno más**,
+`PAYOUTS.CALCULATE_NO_PAYOUTS` — el gemelo muerto de la frase que borré, con el mismo texto falso y
+**sin ninguna referencia en ningún template**. Lo dejé: borrar una clave fuera del alcance nombrado es
+decisión de Rodolfo. Los otros candidatos (`CONFLICTS_DESC`, `ASSIGNMENTS.DELETE_BLOCKED_WARNING`) SÍ
+tienen su causa establecida en el backend — verificado.
+
+### Verificación
+
+Build + unitaria + integración encadenados con `set -e`, los tres en verde:
+**unit 1693 → 1693** (sin unitarios nuevos: el motor necesita SQL real por los tipos `DateOnly` owned,
+así que sus tests son de integración), **integración 824 → 832** (+8), **front 1159 → 1174** (+15).
+`ng build --configuration production` limpio.
+
+## 2026-08-28 — Cuentas huérfanas: el dinero adeudado a terminados deja de ser invisible (WI 1/3)
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend + frontend · **sin migración** (consulta nueva
+sobre datos que ya estaban; cero escrituras)
+
+### El hueco, medido antes de tocar nada
+
+| | |
+|---|---|
+| Créditos activos sin liquidar de payees terminados | **2 créditos, 2 payees, €4.369,34** |
+| Filas que devolvía la cola **antes** | **0** |
+
+Birgit Schneider (DE-101, €3.869,34 de POL-8554) y Test Terminacion CC (TERM-CC-01, €500). **Más de
+uno: no es un caso aislado.**
+
+### Por qué era invisible: el ledger registra lo que se DEBE
+
+`PayeeBalance.Apply` sólo se invoca desde la liquidación de un pay run, un ajuste manual y un clawback.
+**Un crédito sin consumir no es un evento de ledger y no crea fila de balance.** La cola consultaba
+`PayeeBalances`, así que "sin fila" se leía como "saldada". Y el motor la saltaba por terminada. Punto
+ciego doble.
+
+### El cambio: la cola arranca por LOS TERMINADOS, no por los balances
+
+`ListTerminatedPayeesWithBalanceHandler` se reescribió: la población son los payees terminados, y a cada
+fuente se le pregunta qué tiene. Así **"sin fila de balance" ya no puede significar "nada pendiente"**.
+
+- **Ampliación del CONCEPTO, no sólo de la consulta:** "cuenta abierta" pasa a tener DOS significados
+  independientes —balance de ledger ≠ 0, **o** créditos sin liquidar— y basta uno para generar fila.
+- **★ Nunca se suman.** Apuntan en direcciones opuestas y vienen de fuentes distintas; netear una deuda
+  contra una comisión impaga decidiría en silencio una compensación que es decisión de una persona.
+- `SupersededAt == null && ConsumedAt == null` — **el mismo par de nulls que filtra el motor**, para que
+  la cola no pueda derivar de lo que un pay run levantaría.
+- **`balanceUpdatedAt` pasa a nullable.** "No hay fila de balance" no es "balance actualizado a cero", y
+  la pantalla lo pinta con un guion, no con un 0,00.
+- **Totales del servidor, uno por moneda** (`TerminatedAccountsDto` = filas + totales). Un total mezclado
+  entre monedas sería inventado. Los balances **no** se totalizan: llevan los dos signos.
+- Cada crédito muestra plan, regla, fecha de acreditación y la transacción origen, enlazada.
+- Tercer bucket en la tarjeta del dashboard: una fila que sólo lleva comisión impaga tiene balance
+  exactamente cero y no caía en "por pagar" ni en "por recuperar" — la tarjeta contaba filas que no
+  explicaba en ningún lado.
+
+### Lo que NO se tocó, a propósito
+
+La guarda del motor de pay runs (`CalculatePayoutsForPeriodHandler.cs:75-96`) queda **intacta**: saltar
+a los terminados es correcto porque `Mark as paid` es irreversible y una liquidación final se negocia.
+**El defecto no era que los saltara, era que los saltaba en silencio.** Esta cola informa; no liquida,
+no paga y no escribe.
+
+### 3.4 — otras causas de invisibilidad (reportadas, NO construidas)
+
+Sobre 369 créditos vivos sin consumir en la base de dev:
+
+| causa | créditos |
+|---|---|
+| a. payee terminado (**este WI**) | 2 |
+| b. sin asignación activa al plan que cubra la fecha de la transacción | **67** |
+| c. plan archivado | 0 |
+| d. moneda de la transacción ≠ moneda del plan | 0 |
+| e. período ya bloqueado por un payout Approved/Paid | **~300** (aproximación) |
+
+(b) y (e) son huecos reales del mismo tipo y **más grandes que el que este WI cierra**. Los importes de
+(e) están dominados por datos de prueba absurdos (un crédito de 987.654.312.098,76) — los conteos son
+la señal, no los totales.
+
+### Verificación
+
+Build + unitaria + integración encadenados con `set -e`, los tres en verde:
+**unit 1681 → 1693** (+12), **integración 818 → 824** (+6, 2 skipped preexistentes de rate-limit),
+**front 1155 → 1159** (+4). `ng build --configuration production` limpio. Docker/Testcontainers
+levantado; la integración corrió contra SQL Server real.
+
+**Nota:** hubo que detener el proceso `Wasnie.Api` que tenía tomados los DLLs (había salido solo antes de
+que lo matara). **Hay que relanzarlo con `dotnet run` para verificar en el navegador.**
+
+Una intermitencia observada UNA vez y no reproducible:
+`CreditAllocationServiceTests.AllocateAsync_RuleEffectivePeriodDoesNotCoverTxDate_RuleSkipped` falló en
+una corrida con `-l console;verbosity=detailed` y pasó en las otras tres, aislada y completa. **No la
+toca este WI** (no cambié `CreditAllocationService`); queda anotada.
+
 ## 2026-08-28 — Diagnóstico READ-ONLY: POL-8554, y el asistente que barajó dos filas
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · **Sin cambios de producto** · informe en

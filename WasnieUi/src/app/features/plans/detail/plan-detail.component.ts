@@ -97,6 +97,14 @@ export class PlanDetailComponent implements OnInit {
   readonly activateSaving = signal(false);
   readonly archiveOpen = signal(false);
   readonly archiveSaving = signal(false);
+
+  // Archiving deactivates every active assignment of the plan, so the confirmation has to name
+  // how many people that is. Two explicit keys picked by a ternary, never a key built from a
+  // value: at zero, "0 assignments" is noise rather than information.
+  readonly archiveAssignmentCount = computed(() => this.store.selectedPlan()?.activeAssignmentCount ?? 0);
+  readonly archiveMessageKey = computed(() =>
+    this.archiveAssignmentCount() > 0 ? 'PLANS.CONFIRM_ARCHIVE_MSG' : 'PLANS.CONFIRM_ARCHIVE_MSG_NONE');
+
   readonly deleteRuleOpen = signal(false);
   readonly deleteRuleSaving = signal(false);
   readonly pendingRule = signal<Rule | null>(null);
