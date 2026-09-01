@@ -4,6 +4,87 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-01 - KAN-27: la traza de calculo se persiste, y el cero de attainment deja de mentir
+
+**Rama:** AI-CHAT-ASSISTANT - **Sin commit** - dominio + aplicacion + infraestructura + 1 linea de
+front - **migracion B31 APLICADA y verificada** - **ningun importe se movio: los 20 tests de
+caracterizacion verdes y el fichero SIN EDITAR**
+
+El motor sabia narrarse desde hace tiempo; produccion tiraba la narracion (`trace: null`). Lo que
+hace que eso importe es que **la narracion no es reproducible despues**: el attainment de cuota es
+as-of-a-date y sigue moviendose, asi que reejecutar el motor en noviembre responde otra pregunta
+sobre marzo, y la responde con seguridad. Una traza no capturada en la asignacion es un pago que
+nadie va a poder explicar nunca.
+
+### El prerrequisito era el defecto de verdad
+
+Un attainment de 0 significa **"este rep no alcanzo nada de su objetivo"** o **"nadie fijo un
+objetivo"**: un hecho sobre una persona y un agujero de configuracion, identicos en el numero y
+opuestos en significado. Los dos llegaban sellados como `Measured`, porque `Evaluate` defaultea ese
+parametro (`CommissionCalculator.cs:346`) y la ingesta nunca lo pasaba. El producto podia afirmar
+como hecho medido que alguien logro el 0% de una cuota que jamas existio.
+
+**Y no es derivable a posteriori**, que es lo que decide el diseno: un 0% real contra un objetivo
+real tambien es 0. La fuente ahora **viaja con el ratio** (`AttainmentReading`) desde el unico sitio
+donde la diferencia se sabe, que es donde se busco la cuota.
+
+### Lo construido
+
+- `AttainmentSource.NoTarget`, **anadido al final** del enum: algun cliente podria leerlo por ordinal
+  y reordenar reinterpretaria en silencio todo lo que cruzo el cable. Hay test que fija las 4 posiciones.
+- `IQuotaAttainmentService.ComputeAsync` devuelve `AttainmentReading(Value, Source)`.
+  `QuotaAttainmentService` marca `NoTarget` en sus dos casos (`:59` sin cuota vigente, y target <= 0)
+  y `Measured` en todo lo demas **incluido un 0% genuino**.
+- **Split-at-quota emitia CERO fuente**, lo que se leia como "no es una regla de attainment": ahora
+  `NoTarget` cuando no hay contexto y `Measured` cuando lo hay, con el ratio usado en `Operand` -
+  antes solo el camino de bracket guardaba el porcentaje.
+- `Credit.CalculationTrace` (`nvarchar(max) null`), escrito en `Credit.Allocate` y **nunca reescrito**.
+- `CalculationTraceSerializer`: **un solo** `JsonSerializerOptions` para escribir y leer; enums como
+  **texto**; `_schema: 1` en la raiz declarado, **no olfateado** (precedente `Cap.cs:8`/`Floor.cs:7`,
+  NO el de `RuleSnapshotJsonConverter`).
+
+### Decision que se aparta del ticket, y por que
+
+El ticket anticipaba **un value converter de EF**, es decir una propiedad tipada en `Credit`. No se
+hizo: el tipo de la traza vive en la capa de **aplicacion** y `Credit` esta en **dominio**, que no
+puede referenciarla. Las dos salidas eran (a) bajar los tipos a dominio - 11 ficheros de cambio de
+namespace dentro de un WI que ya toca motor, entidad, config y migracion - o (b) copiar la forma del
+step en dominio, que son **dos declaraciones de lo mismo que coinciden hasta el dia que no**, el
+patron por el que este repo ya fue mordido. Se eligio la tercera: la columna guarda **el documento
+serializado**, el dominio lo trata como evidencia opaca (nada ramifica sobre el, nada deriva dinero
+de el) y `CalculationTraceSerializer` es duenio del formato en las dos direcciones.
+
+### Premisas del ticket que resultaron falsas
+
+1. **La migracion no podia ser B30 - ya existia** (`B30_RuleStopMarker`, de KAN-29). Va como **B31**.
+2. **Los caminos a 0% son CUATRO, no cinco**, y el cuarto cambia el diseno: `QuotaAttainmentService.cs:59`
+   (sin cuota), `AttainmentPercentage.cs:24` (target <= 0), `:26` (achieved negativo clampeado) y
+   `:25` (achieved 0 contra un target real - el unico **0% legitimamente medido**). Ese cuarto es la
+   razon por la que `NoTarget` no puede deducirse de "el porcentaje es 0".
+3. Detalles menores: el credito se escribe **25** lineas despues de `Evaluate`, no 22; la llamada de
+   produccion **omite** el parametro en vez de pasar `trace: null` explicito.
+
+Todo lo demas del ticket se confirmo, incluidos los **20** tests de caracterizacion y los **1.296**
+creditos existentes, ambos exactos.
+
+### Verificacion
+
+**build=0 - caracterizacion 20/20 en verde y `git diff` del fichero VACIO - unit 1781->1803 (+22) -
+integracion 849/0/2 skipped exit 0 - front 1271->1274 exit 0 - `ng build` produccion exit 0.**
+
+**B31 aplicada y verificada en el esquema real**: `CalculationTrace nvarchar(max)`, nullable, **sin
+default**, y **1296 de 1296 creditos con traza nula** - el historico no se relleno, y no podia:
+los insumos para reconstruir esas trazas ya no existen, asi que un backfill solo podria inventarlos.
+
+**Un rojo intermedio en integracion fue mio y era un accessor**, no un cambio de comportamiento:
+`(await svc.ComputeAsync(...)).Value.Should().Be(1.0m)` seguia compilando tras el cambio de tipo
+porque cae en la sobrecarga de `object`, y comparaba un `AttainmentPercentage` contra un `decimal`.
+Corregido con el segundo `.Value`; **ninguna expectativa numerica se toco**.
+
+**Sin verificar:** no hay comprobacion en navegador (este WI no tiene superficie de UI - la
+visibilidad de la traza es explicitamente fuera de alcance). El volumen real por credito no se midio
+contra datos nuevos; se acepta la cifra del ticket (714 B).
+
 ## 2026-09-01 - KAN-29 (correccion): la verificacion en runtime encontro lo que 1261 tests verdes no vieron
 
 **Rama:** AI-CHAT-ASSISTANT - **Sin commit** - **SOLO FRONTEND**, sin migracion, sin tocar backend -

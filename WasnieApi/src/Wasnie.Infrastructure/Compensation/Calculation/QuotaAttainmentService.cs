@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Enums;
@@ -14,14 +14,14 @@ namespace Wasnie.Infrastructure.Compensation.Calculation;
 public sealed class QuotaAttainmentService : IQuotaAttainmentService
 {
     private readonly IApplicationDbContext _db;
-    private readonly Dictionary<(Guid, Guid, DateOnly), AttainmentPercentage> _cache = new();
+    private readonly Dictionary<(Guid, Guid, DateOnly), AttainmentReading> _cache = new();
 
     public QuotaAttainmentService(IApplicationDbContext db)
     {
         _db = db;
     }
 
-    public async Task<AttainmentPercentage> ComputeAsync(
+    public async Task<AttainmentReading> ComputeAsync(
         Guid payeeId,
         Guid planId,
         DateOnly asOfDate,
@@ -35,7 +35,7 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
         return result;
     }
 
-    private async Task<AttainmentPercentage> ComputeInternalAsync(
+    private async Task<AttainmentReading> ComputeInternalAsync(
         Guid payeeId,
         Guid planId,
         DateOnly asOfDate,
@@ -56,7 +56,12 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
             .Where(q => q.Period.Start <= asOfDate && q.Period.End >= asOfDate)
             .ToList();
 
-        if (matching.Count == 0) return AttainmentPercentage.Zero;
+        // ★ NO QUOTA IN EFFECT IS NOT 0% ATTAINMENT. It used to return a bare zero, which the engine
+        // then sealed as a measured fact — a breakdown could state that somebody achieved 0% of a
+        // target nobody had set. The ratio stays 0 because there is nothing else it could be; what
+        // changes is that the reason travels with it.
+        if (matching.Count == 0)
+            return new AttainmentReading(AttainmentPercentage.Zero, AttainmentSource.NoTarget);
 
         // Tie-break when periods overlap: shortest span first, then most recent CreatedAt.
         var quota = matching
@@ -65,6 +70,14 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
             .First();
 
         var target = quota.Amount.Amount;
+
+        // The second way to have nothing to measure against: a quota that exists but targets zero.
+        // AttainmentPercentage.FromAchievedAndTarget also returns Zero for this (AttainmentPercentage.cs:24),
+        // so checking here is what keeps the two zeroes distinguishable — from outside that method
+        // they are the same value.
+        if (target <= 0m)
+            return new AttainmentReading(AttainmentPercentage.Zero, AttainmentSource.NoTarget);
+
         var periodStart = quota.Period.Start;
         var periodEnd = quota.Period.End;
 
@@ -72,7 +85,11 @@ public sealed class QuotaAttainmentService : IQuotaAttainmentService
             ? await ComputeUnitsAchievedAsync(payeeId, planId, periodStart, periodEnd, ct)
             : await ComputeRevenueAchievedAsync(payeeId, planId, periodStart, periodEnd, quota.Amount.Currency, ct);
 
-        return AttainmentPercentage.FromAchievedAndTarget(achieved, target);
+        // Anything that gets here was measured against a real target — including a genuine 0%, which
+        // is a fact about the rep and must NOT be reported as a missing quota.
+        return new AttainmentReading(
+            AttainmentPercentage.FromAchievedAndTarget(achieved, target),
+            AttainmentSource.Measured);
     }
 
     // Revenue (Sales Quota): distinct-sale sum via the shared QuotaAchievedQuery — the ONE definition of

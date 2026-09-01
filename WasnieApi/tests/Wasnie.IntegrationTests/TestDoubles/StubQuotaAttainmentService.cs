@@ -1,4 +1,4 @@
-using Wasnie.Application.Compensation.Calculation;
+﻿using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.IntegrationTests.TestDoubles;
@@ -12,23 +12,28 @@ namespace Wasnie.IntegrationTests.TestDoubles;
 public sealed class StubQuotaAttainmentService : IQuotaAttainmentService
 {
     private readonly AttainmentPercentage _value;
+    private readonly AttainmentSource _source;
     private readonly AttainmentSplitContext? _splitContext;
 
     public StubQuotaAttainmentService(
         AttainmentPercentage? value = null,
-        AttainmentSplitContext? splitContext = null)
+        AttainmentSplitContext? splitContext = null,
+        // Defaults to NoTarget because the default VALUE is zero, and a stub that reported a zero as
+        // Measured would be asserting the one thing the production service now refuses to say.
+        AttainmentSource source = AttainmentSource.NoTarget)
     {
         _value = value ?? AttainmentPercentage.Zero;
+        _source = value is null ? AttainmentSource.NoTarget : source;
         _splitContext = splitContext;
     }
 
     public int CallCount { get; private set; }
 
-    public Task<AttainmentPercentage> ComputeAsync(
+    public Task<AttainmentReading> ComputeAsync(
         Guid payeeId, Guid planId, DateOnly asOfDate, CancellationToken ct = default)
     {
         CallCount++;
-        return Task.FromResult(_value);
+        return Task.FromResult(new AttainmentReading(_value, _source));
     }
 
     public Task<AttainmentSplitContext?> GetSplitContextAsync(

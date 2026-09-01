@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Wasnie.Domain.Compensation.Credits;
@@ -73,6 +73,17 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
         {
             pct.Property(x => x.Value).HasColumnName("SplitPercentage").HasColumnType("decimal(5,4)").IsRequired();
         });
+
+        // The calculation trace: an opaque JSON document, stored as text and never queried by SQL.
+        // No value converter, because there is nothing to convert — the property already IS the
+        // document. CalculationTraceSerializer owns the shape on both sides.
+        //
+        // Nullable with no default, which is what makes this migration inert: every existing credit
+        // reads back null, meaning "we did not record this", and nothing has to be backfilled — the
+        // inputs to reconstruct those traces are gone, so a backfill could only invent them.
+        builder.Property(c => c.CalculationTrace)
+            .HasColumnType("nvarchar(max)")
+            .IsRequired(false);
 
         builder.Property(c => c.RuleSnapshot)
             .HasColumnType("nvarchar(max)")

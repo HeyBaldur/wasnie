@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Plans;
@@ -458,6 +458,10 @@ internal static class CommissionCalculator
                     Input = baseAmount,
                     Output = zero,
                     RateTable = rule.RateTable.Type,
+                    // ★ THE REASON THE COMMISSION IS ZERO, not just the fact. A null split context IS
+                    // "no quota in effect" — the log line above says so — so the trace says NoTarget
+                    // rather than leaving the reader to conclude the rep sold nothing.
+                    AttainmentSource = AttainmentSource.NoTarget,
                 });
                 return zero;
             }
@@ -475,6 +479,15 @@ internal static class CommissionCalculator
                 Output = split,
                 RateTable = rule.RateTable.Type,
                 Tiers = splitTiers,
+                // A split context only exists when a real quota answered, so this walk was measured.
+                // The step used to omit the source entirely, which read as "not an attainment rule".
+                AttainmentSource = AttainmentSource.Measured,
+                // The attainment this walk actually used, as a ratio of the quota — the same figure
+                // the bracket path puts here, so one field answers "what percentage was used" on
+                // both attainment paths instead of only one.
+                Operand = splitContext.QuotaTarget <= 0m
+                    ? null
+                    : Math.Round(splitContext.PriorCumulative / splitContext.QuotaTarget, 4, MidpointRounding.ToEven),
             });
             return split;
         }

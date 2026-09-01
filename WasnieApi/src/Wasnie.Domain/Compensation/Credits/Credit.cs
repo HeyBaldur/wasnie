@@ -1,4 +1,4 @@
-using Wasnie.Domain.Common;
+﻿using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -51,6 +51,27 @@ public sealed class Credit : AggregateRoot
     /// <summary>Still owed and still payable: not replaced, not paid, not closed.</summary>
     public bool IsOutstanding => SupersededAt is null && ConsumedAt is null && ClosedAt is null;
     // Optimistic concurrency token — EF uses this to detect concurrent consumption of the same credit.
+    /// <summary>
+    /// How this credit was computed, as the document the engine emitted at the moment it ran. Null on
+    /// every credit allocated before this column existed, and on any credit not produced by the
+    /// engine.
+    ///
+    /// ★★ WHY IT IS STORED AND NOT RECOMPUTED. The inputs do not survive: quota attainment is
+    /// as-of-a-date and keeps moving, so March's number is not what March's number was by the time
+    /// somebody asks in November. Re-running the engine later answers a different question and
+    /// answers it confidently. This is the only moment the reasoning exists.
+    ///
+    /// ★ OPAQUE TO THE DOMAIN, ON PURPOSE. Nothing here branches on it, nothing may derive money from
+    /// it, and it is never rewritten — it is evidence, not state. It is held as the serialised
+    /// document rather than a parsed object because the engine's trace type lives in the application
+    /// layer, and the alternative was a second copy of its shape down here: two declarations of the
+    /// same thing that agree until the day they do not, which is the failure this codebase has been
+    /// bitten by before. The format is owned by <c>CalculationTraceSerializer</c>.
+    ///
+    /// ★ NEVER GOES BACK TO NULL. Same append-only reasoning as every other record of a fact here.
+    /// </summary>
+    public string? CalculationTrace { get; private set; }
+
     public byte[] RowVersion { get; private set; } = [];
 
     private Credit() { }
@@ -69,7 +90,12 @@ public sealed class Credit : AggregateRoot
         string allocatedBy,
         Guid id,
         DateTimeOffset now,
-        Guid eventId)
+        Guid eventId,
+        // Defaulted deliberately, and it is not the "plausible lie" a defaulted DTO field would be:
+        // null here means "no engine run produced this credit", which is exactly true of every
+        // hand-built credit and of all 1,296 rows that predate the column. The production path passes
+        // it explicitly; a caller that forgets it records an honest absence, not a wrong number.
+        string? calculationTrace = null)
     {
         var credit = new Credit
         {
@@ -85,7 +111,8 @@ public sealed class Credit : AggregateRoot
             SplitPercentage = splitPercentage,
             Role = role,
             AllocatedAt = now,
-            AllocatedBy = allocatedBy
+            AllocatedBy = allocatedBy,
+            CalculationTrace = calculationTrace
         };
 
         credit.RaiseDomainEvent(new CreditAllocatedEvent(

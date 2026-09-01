@@ -236,6 +236,16 @@ export enum AttainmentSource {
   Measured = 'Measured',
   Supplied = 'Supplied',
   Defaulted = 'Defaulted',
+  /**
+   * There was nothing to measure against — no quota in effect, or one whose target is zero. The
+   * percentage that comes with this is 0, and it is 0 because nobody set a target, NOT because the
+   * rep sold nothing. Those two are the same number and opposite facts, so they must never be
+   * rendered with the same words.
+   *
+   * Mirrors the backend member added in KAN-27. The simulator never produces it (it supplies or
+   * defaults); it appears on stored calculation traces.
+   */
+  NoTarget = 'NoTarget',
 }
 
 export interface RuleSimulationTier {

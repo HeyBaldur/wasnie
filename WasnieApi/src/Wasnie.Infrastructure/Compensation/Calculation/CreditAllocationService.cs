@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
@@ -12,6 +12,7 @@ using Wasnie.Domain.Compensation.ValueObjects;
 using Wasnie.Domain.Exceptions;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
 using PlanStatus = Wasnie.Domain.Compensation.Plans.PlanStatus;
+using Wasnie.Infrastructure.Persistence.Serialization;
 
 namespace Wasnie.Infrastructure.Compensation.Calculation;
 
@@ -304,6 +305,19 @@ public sealed class CreditAllocationService : ICreditAllocationService
         // Short-circuit: only load attainment data when at least one active rule needs it.
         // This avoids DB round-trips for Flat/Tiered plans (the common case).
         var attainmentPct = 1.0m;     // bracket-lookup path (SplitAtQuota = false)
+
+        // ★★ THE SOURCE TRAVELS BESIDE THE RATIO, because the flattening below destroys it.
+        // `attainment.Value` is a bare decimal, and at 0 that decimal means either "this rep achieved
+        // none of their target" or "nobody set a target" — a fact about a person and a configuration
+        // hole, identical in the number. Until this variable existed the engine's default sealed both
+        // as Measured, so a stored breakdown could assert as measured fact that somebody achieved 0%
+        // of a quota that never existed.
+        //
+        // Defaulted is the honest starting value: 1.0m below is the engine's own assumption — a rep
+        // at exactly full quota — not anybody's measurement. It survives only on paths where no
+        // attainment rule ever reads it.
+        var attainmentSource = AttainmentSource.Defaulted;
+
         AttainmentSplitContext? splitContext = null; // split-at-quota path (SplitAtQuota = true)
 
         if (CommissionCalculator.PlanUsesAttainment(plan))
@@ -317,7 +331,8 @@ public sealed class CreditAllocationService : ICreditAllocationService
             {
                 var attainment = await _quotaAttainmentService.ComputeAsync(
                     transaction.PayeeId!.Value, plan.Id, txDate, ct);
-                attainmentPct = attainment.Value;
+                attainmentPct = attainment.Value.Value;
+                attainmentSource = attainment.Source;
             }
 
             if (needsSplit)
@@ -347,11 +362,21 @@ public sealed class CreditAllocationService : ICreditAllocationService
             // pay run and anything that explains a pay run run the same code instead of two copies
             // that agree until they quietly do not.
             //
-            // ★ NO TRACE IS REQUESTED HERE, ON PURPOSE. `trace: null` (the default) makes every
-            // emission inside Evaluate a no-op that never even builds a step object, so allocating
-            // credits over a large batch costs exactly what it cost before.
+            // ★★ THE TRACE IS REQUESTED, AND IT IS REQUESTED ALWAYS. This used to pass `trace: null`
+            // so the engine allocated no step objects, which was the right trade while nothing kept
+            // them. It is the wrong trade now: the reason a rep was paid what they were paid is only
+            // knowable at the instant the engine runs — the quota attainment of March is not what it
+            // was in March by the time somebody asks in November — so a trace not captured here is a
+            // number nobody can ever explain again. Measured cost is 714 B per credit, ~925 KB for
+            // the entire existing history; that is not a reason to be unable to answer.
+            //
+            // No flag gates it. A trace that exists only when someone remembered to switch it on is
+            // absent from exactly the credits that end up disputed.
+            var steps = new List<RuleCalculationStep>();
+
             var evaluation = CommissionCalculator.Evaluate(
-                rule, transaction, plan.Currency, attainmentPct, splitContext, _logger);
+                rule, transaction, plan.Currency, attainmentPct, splitContext, _logger,
+                trace: steps, attainmentSource: attainmentSource);
 
             // A trigger that did not match produces no credit at all — not a credit of zero. Same
             // `continue` as before; it is now a returned fact instead of an inline branch.
@@ -372,6 +397,17 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 rule.Id, plan.Id, plan.Version, rule.Name,
                 rule.RateTable, rule.Trigger, now, measurement: rule.Measurement);
 
+            // ★ SERIALISED HERE, NOT IN THE DOMAIN. The trace is evidence about a computation, not
+            // state the domain reasons over — nothing branches on it and nothing may recompute it —
+            // so Credit carries the finished document and this layer, which owns both the engine's
+            // type and the storage format, is what turns one into the other.
+            var traceJson = CalculationTraceSerializer.Serialize(new RuleCalculationTrace
+            {
+                CreditGenerated = evaluation.CreditGenerated,
+                Commission = evaluation.Commission,
+                Steps = steps,
+            });
+
             var credit = Credit.Allocate(
                 tenantId: transaction.TenantId,
                 transactionId: transaction.Id,
@@ -386,7 +422,8 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 allocatedBy: transaction.IngestedBy,
                 id: _guidGenerator.NewGuid(),
                 now: now,
-                eventId: _guidGenerator.NewGuid());
+                eventId: _guidGenerator.NewGuid(),
+                calculationTrace: traceJson);
 
             credits.Add(credit);
         }

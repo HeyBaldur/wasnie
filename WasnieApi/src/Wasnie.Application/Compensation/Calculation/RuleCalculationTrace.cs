@@ -1,4 +1,4 @@
-using Wasnie.Domain.Compensation.Enums;
+﻿using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.ValueObjects;
 
 namespace Wasnie.Application.Compensation.Calculation;
@@ -117,6 +117,26 @@ public enum AttainmentSource
     /// never be presented as a fact about anyone.
     /// </summary>
     Defaulted,
+
+    /// <summary>
+    /// ★★ THERE WAS NOTHING TO MEASURE AGAINST — no quota in effect for this payee and plan on this
+    /// date, or one whose target is zero. The percentage that comes with this is 0, and it is 0
+    /// because nobody set a target, NOT because the rep sold nothing.
+    ///
+    /// Those two are indistinguishable in the stored number and opposite in meaning: one is a
+    /// configuration hole and the other is a real, and terrible, quarter. Until this member existed
+    /// both arrived sealed as <see cref="Measured"/>, so a breakdown could state as measured fact
+    /// that somebody achieved 0% of a quota that was never set.
+    ///
+    /// ★ IT CANNOT BE DERIVED FROM THE PERCENTAGE. A genuine 0% against a real target is also 0, so
+    /// the source has to be carried from where the target was looked up. See
+    /// <c>QuotaAttainmentService.ComputeAsync</c>.
+    ///
+    /// ★ APPENDED, NOT INSERTED. Some surfaces serialise this enum by name and some clients could
+    /// read it by ordinal; reordering would silently reinterpret every value that ever crossed the
+    /// wire. New members go at the end, always.
+    /// </summary>
+    NoTarget,
 }
 
 /// <summary>
@@ -129,6 +149,21 @@ public enum AttainmentSource
 /// </summary>
 public sealed record RuleCalculationTrace
 {
+    /// <summary>
+    /// The shape version of this document, written into every persisted trace.
+    ///
+    /// ★★ IT IS DECLARED, NOT SNIFFED. <c>RuleSnapshotJsonConverter</c> infers a shape by probing for
+    /// properties, which works only while the shapes happen to differ and turns every future change
+    /// into an archaeology problem. The precedent to follow is <c>Cap.cs:8</c> / <c>Floor.cs:7</c>:
+    /// one integer that says what this document is, so a reader never has to guess.
+    ///
+    /// ★ AND IT IS WHY THE ENUMS ARE PERSISTED AS TEXT. A compact trace keyed on enum ORDINALS would
+    /// tie years of stored history to today's declaration order — reordering <see
+    /// cref="RuleCalculationOutcome"/> would silently reinterpret every trace ever written, turning
+    /// "the cap was skipped" into "the cap applied" with nothing to notice it by.
+    /// </summary>
+    public int _schema { get; init; } = 1;
+
     public required bool CreditGenerated { get; init; }
 
     /// <summary>Null when <see cref="CreditGenerated"/> is false — there is no amount, not an amount of zero.</summary>
