@@ -135,7 +135,7 @@ public sealed class CreatePlanWithQuotaHandler(
         // exactly the plan-without-quota state this command exists to make impossible.
         await db.SaveChangesAsync(cancellationToken);
 
-        var planDto = CompensationMapper.ToPlanDto(plan);
+        var planDto = CompensationMapper.ToPlanDto(plan, activeAssignmentCount: 0);
 
         var quotaDtos = built
             .Select(q =>

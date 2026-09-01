@@ -21,6 +21,18 @@ public sealed class Plan : AggregateRoot
     public DateTimeOffset UpdatedAt { get; private set; }
     public string UpdatedBy { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// When this plan was archived. Null on every plan that has not been archived.
+    ///
+    /// WHY IT IS STORED. Archiving deactivates every assignment, so this date is the line between a
+    /// sale that still pays through this plan and one that does not. It used to be reconstructible
+    /// only from AuditLogs, and a purge of that table would have made the line uncomputable.
+    ///
+    /// IT NEVER GOES BACK TO NULL. Archiving is terminal — Activate() accepts Draft only — so nothing
+    /// can un-archive a plan, and nothing may clear this. Append-only evidence, like the rest.
+    /// </summary>
+    public DateTimeOffset? ArchivedAt { get; private set; }
+
     // ── Clawback policy (opt-in per plan) ────────────────────────────────────
     // Both null on every existing plan, which is what keeps the clawback subsystem inert until a
     // tenant deliberately configures it: no maturation window means no proportional clawback.
@@ -189,6 +201,7 @@ public sealed class Plan : AggregateRoot
         }
 
         Status = PlanStatus.Archived;
+        ArchivedAt = now;
         UpdatedAt = now;
         UpdatedBy = updatedBy;
 

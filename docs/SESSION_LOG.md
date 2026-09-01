@@ -4,6 +4,129 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-08-31 — KAN-31 (tanda 2/2): `ArchivedAt` + backfill, y la fuente resultó NO ser AuditLogs
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · dominio + esquema · **migración B29, APLICADA en la
+base local** · backfill de 7 filas · **no se tocó ningún crédito, importe ni payout**
+
+Cierra KAN-31. La tanda 1 (la confirmación) está en la entrada anterior.
+
+### ★ La decisión cambió al medir (§E5)
+
+El ticket decía que la fecha "solo es reconstruible desde `AuditLogs`". **Es falso**, y elegir esa
+fuente habría metido un dato malo:
+
+| Plan | Filas `PLAN_ARCHIVED` | MIN log | MAX log | `UpdatedAt` |
+|---|---|---|---|---|
+| `Plan Test Flat 5%` | **3** | 06-03 11:56:53 | 06-03 15:08:29 | **15:08:29** |
+| Los otros 6 | 1 c/u | = | = | = |
+
+**Con `MIN` ese plan quedaba archivado 3h13m antes de lo real**, sobre el campo que separa una venta
+que todavía cobra por el plan de una que no.
+
+**Por qué hay filas de más:** `AuditBehavior.cs:27-30` despacha el asiento **después** del handler y
+**sin mirar el `Result`**, y `ArchivePlanHandler` devuelve `Result.Failure` sin lanzar. Prueba en los
+datos: **`EU Accelerator Q2 2026` está en `Draft` y tiene una fila `PLAN_ARCHIVED`** — un intento
+fallido registrado como si hubiera ocurrido.
+
+**La fuente correcta es `UpdatedAt`,** y es demostrable, no una corazonada: para un plan `Archived`,
+`Archive()` es lo último que puede escribir `UpdatedAt` — `SetClawbackPolicy` refusa cuando está
+archivado (`Plan.cs:150`), `Activate` exige `Draft` (`:167`, así que archivar es **terminal**), las
+mutaciones de reglas son Draft-only, y `CloneAsNewVersion` sella el clon y no el origen. Además es
+`NOT NULL`, así que no se escapa ningún plan, y no depende de una tabla purgable — que es el agujero
+que esta columna existe para tapar.
+
+### Lo construido
+
+- `Plan.ArchivedAt` (`DateTimeOffset?`), sellado en `Archive()`. **Nunca vuelve a null**: archivar es
+  terminal, así que nada puede limpiarlo (§B6).
+- Migración **B29**, columna nullable + backfill idempotente (`WHERE Status='Archived' AND ArchivedAt
+  IS NULL`), con el razonamiento y la evidencia medida en el comentario.
+- **Aplicada en la base local. Verificado en runtime:** 7/7 con fecha, los 7 cruzan contra una fila
+  `PLAN_ARCHIVED` a menos de 5s, y las dos invariantes en cero — ningún archivado sin fecha, ningún
+  no-archivado con fecha. El `Draft` de la fila espuria **correctamente no recibió fecha**.
+
+### Tests — unit 1757 → 1759
+
+- `Archive_StampsArchivedAt_WithTheArchiveInstant`.
+- `ArchivedPlan_CannotBeReactivated` — **el que sostiene el backfill**: si algún día un plan archivado
+  pudiera volver a `Active`, `UpdatedAt` dejaría de ser el instante de archivado y el razonamiento de
+  B29 se pudriría en silencio. Queda fijado.
+
+### Deuda abierta (reportada, NO tocada — §E1)
+
+1. **`AuditBehavior` registra éxitos falsos.** Cualquier comando que devuelva `Result.Failure` sin
+   lanzar deja un asiento como si hubiera ocurrido. **No es sólo planes: es todo el pipeline de
+   auditoría.** Merece su propio ticket.
+2. **`ArchivedAt` no se expone en `PlanDto` ni en la UI.** Deliberado: el ticket pide que la fecha
+   **exista**, no que se muestre. Exponerla es una decisión aparte.
+3. ~~Integración sin correr~~ → **CORRIDA Y EN VERDE** (2026-08-31, tras parar la API):
+   **849 pasados, 0 fallidos, 2 skipped, exit 0**, 3m10s. *Nota: el bloqueo era sólo la API; la suite
+   levanta su propio SQL con Testcontainers, no hacía falta un contenedor previo.*
+
+## 2026-08-31 — KAN-31 (tanda 1/2): la confirmación de archivar decía "solo lectura" y desasignaba a todos
+
+**Rama:** AI-CHAT-ASSISTANT · **Sin commit** · backend (contrato de lectura) + front · **sin migración** ·
+**cambio de PRESENTACIÓN + campo derivado de lectura: no se tocó ningún crédito, importe ni fila histórica**
+
+Ticket KAN-31, dos defectos. **Esta tanda cierra el segundo (la confirmación). `ArchivedAt` queda para
+la tanda 2** — se separó por §E1: un cambio de esquema y un arreglo de copy no comparten WI.
+
+### Paso 0 — las dos premisas del ticket son VERDADERAS
+
+| Premisa | Verificación |
+|---|---|
+| No existe `ArchivedAt` en `CompensationPlans` | ✅ `Plan.cs:9-40` no la declara; `PlanConfiguration.cs` no la mapea. El archivado solo vive como `Status = Archived` (`Plan.cs:184-196`) + `AuditLogs` |
+| La confirmación subestima la consecuencia | ✅ `en/es/pl.json:527` decían "read-only"; `ArchivePlanHandler.cs:39-49` desactiva TODAS las asignaciones activas en la misma transacción |
+
+### ★ Dos cosas que el ticket no decía y cambiaron el trabajo
+
+1. **El modal está en DOS pantallas, no una:** `plan-detail.component.html:340` y
+   `plans-list.component.html:200`. Arreglar solo el detalle habría dejado la mitad del defecto vivo,
+   y con dos textos distintos para la misma acción.
+2. **La lista y el detalle usan DTOs distintos** (`PlanSummaryDto` vs `PlanDto`), así que el conteo
+   hubo que llevarlo a los dos.
+
+### Lo construido
+
+- `PlanDto.ActiveAssignmentCount` y `PlanSummaryDto.ActiveAssignmentCount`. **Sin valor por defecto**,
+  respetando el comentario que ya vivía en `PlanDto`: un parámetro defaulteado convierte un campo
+  olvidado en una mentira plausible.
+- `GetPlanByIdHandler`: `CountAsync` sobre `PlanAssignments`. `ListPlansHandler`: **una** query
+  agrupada por página, espejando `ListPayeesHandler` — no N+1.
+- Los tres call sites que crean planes pasan `activeAssignmentCount: 0` **con nombre**, porque en un
+  plan recién creado (o en un clon, que es un Draft nuevo) 0 es la verdad, no un relleno.
+- Confirmación reescrita en EN/ES/PL, **dos claves**: `CONFIRM_ARCHIVE_MSG` (con `{{count}}`) y
+  `CONFIRM_ARCHIVE_MSG_NONE`. La elección es un ternario entre dos literales — **nunca** una clave
+  construida a partir de un valor (§C2). A cero, "0 asignaciones" sería ruido, no información.
+- En polaco el número va **entre paréntesis detrás del sustantivo** (`aktywne przypisania ({{count}})`)
+  para esquivar la concordancia 1 / 2-4 / 5+, que el patrón `(s)` del repo no resuelve.
+
+### Tests
+
+- **Backend 1754 → 1757.** El que importa es
+  `ActiveAssignmentCount_EqualsWhatArchivingActuallyDeactivates`: cuenta, archiva, y verifica que se
+  desactivaron **exactamente** esas asignaciones. El número del diálogo es una promesa sobre lo que va
+  a hacer el botón; el test impide que promesa y acción se desincronicen. Con ruido deliberado: una
+  asignación ya desactivada del mismo plan y una activa de otro plan.
+- **Front 1241 → 1245.** `plan-archive-confirmation.i18n.spec.ts`, espejando
+  `terminated-accounts.i18n.spec.ts`: **fija la frase vieja como prohibida** en los tres idiomas, no
+  solo comprueba que la nueva existe.
+
+### Puertas y deuda
+
+- ~~Integración NO corrida~~ → **CORRIDA Y EN VERDE** al cerrar la tanda 2: **849 pasados, 0 fallidos,
+  2 skipped, exit 0**. El único bloqueo real había sido la API de dev levantada; la suite levanta su
+  propio SQL con Testcontainers.
+- **Bundle fuera de presupuesto** (844.78 kB vs 650): **preexistente**, incumple §6.5. No lo introduce
+  este cambio (~15 líneas de TS + 3 strings).
+- **Sin verificación en runtime** de los tres idiomas en pantalla.
+
+### Tanda 2 (pendiente)
+
+`ArchivedAt` nullable en `CompensationPlans` + migración B29. Sin decidir aún: si se hace backfill
+desde `AuditLogs` (`Action = 'PLAN_ARCHIVED'`, 10 filas) o si la columna arranca nula para lo histórico.
+
 ## 2026-08-31 — El render del porcentaje: `2000000%` en un payout pagado
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · front + PDF del backend · **sin migración** ·
@@ -65,18 +188,29 @@ arreglar el helper nunca lo tocó. Ahora los límites viven en el mismo archivo 
 **Sin moneda no se inventa una:** el límite Tiered queda como número pelado. Un símbolo adivinado sería
 una mentira nueva; un número sin unidad es sólo incompleto.
 
-### El payout `844E7E75` — NO SE PUDO ABRIR DESDE ESTA MÁQUINA
+### El payout `844E7E75` — VERIFICADO CONTRA LA BASE
 
-`WasnieDb` en `HEYBALDUR` tiene **0 filas en `Payouts`**, y el id no aparece en ninguna otra tabla ni
-en los docs. **No verifiqué ese payout concreto.** Lo que sí está establecido: el camino de LECTURA del
-payout (`GetPayoutByIdHandler`) **no se tocó**, y el string reportado determina la tabla guardada —
-`attainmentFrom/To` = 0 / 20000 / 50000, tasas 0,04 y 0,06 — que quedó fijada en un test:
+> **Corrección (misma fecha).** La primera versión de esta entrada decía que no se podía abrir porque
+> `Payouts` tenía 0 filas. **Consulté la tabla equivocada:** `Payouts` es una tabla legado vacía; la
+> real es **`CompensationPayouts`** (478 filas). Mismo error con `Plans` (0 filas) vs
+> **`CompensationPlans`** (42). Anotado en [[wasnie-db-legacy-tables]].
 
-- **Antes:** `0–2000000% @ 4% / 2000000–5000000% @ 6%`
-- **Después:** `0–20.000 × cuota @ 4% / 20.000–50.000 × cuota @ 6%`
+El payout existe: **`Paid`, 26.155,00 EUR, 2026-07-01 → 2026-09-30**. Su `RuleSnapshot` congelado
+confirma la tabla guardada, y trae **un tramo más** del que decía el string reportado:
+
+```
+attainmentTiers: [{0, 20000, 0.04}, {20000, 50000, 0.06}, {50000, 100000, 0.08}]
+```
+
+- **Antes:** `0–2000000% @ 4% / 2000000–5000000% @ 6% / 5000000–10000000% @ 8%`
+- **Después:** `0–20.000 × cuota @ 4% / 20.000–50.000 × cuota @ 6% / 50.000–100.000 × cuota @ 8%`
+
+**★ Y el mismo payout tiene la OTRA mitad del bug:** su otra regla es *"Spiff por Volumen de Unidades"*
+(Flat sobre Units, `flatRate: 5`) — cinco euros por unidad, que el PDF imprimía como **"Flat rate:
+500%"**. Un solo documento, las dos mentiras. Ambos casos quedaron fijados en test con los datos reales.
 
 Sigue siendo absurdo **porque los datos son absurdos** (importes tipeados en una escalera de
-proporciones); deja de ser absurdo *en la unidad equivocada*.
+proporciones); deja de ser absurdo *en la unidad equivocada*. Los importes no se tocaron.
 
 ### Verificación
 

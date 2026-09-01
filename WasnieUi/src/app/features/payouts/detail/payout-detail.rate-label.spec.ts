@@ -121,14 +121,31 @@ describe('Payout breakdown — every value with its own unit', () => {
       attainmentTiers: [
         { attainmentFrom: 0, attainmentTo: 20000, rate: 0.04 },
         { attainmentFrom: 20000, attainmentTo: 50000, rate: 0.06 },
+        { attainmentFrom: 50000, attainmentTo: 100000, rate: 0.08 },
       ],
     }));
 
-    expect(label).toBe('0–20,000 × quota @ 4% / 20,000–50,000 × quota @ 6%');
+    expect(label).toBe(
+      '0–20,000 × quota @ 4% / 20,000–50,000 × quota @ 6% / 50,000–100,000 × quota @ 8%');
 
     // The string that was on screen is now unreachable.
     expect(label).not.toContain('2000000');
     expect(label).not.toContain('2,000,000');
+  });
+
+  /**
+   * ★ THE SAME PAYOUT CARRIES THE OTHER HALF OF THE BUG TOO. Its second rule is
+   * "Spiff por Volumen de Unidades", Flat over Units with a stored rate of 5 — five euros a unit,
+   * which every surface printed as "500%". One document, both lies.
+   */
+  it('writes the per-unit rule on that same payout as money, not 500%', () => {
+    component = setup('EUR');
+    const label = component.rateLabel(
+      rt({ type: 'Flat', flatRate: 5, measurementBase: 'TransactionQuantity' }));
+
+    expect(label).toContain('per unit');
+    expect(label).not.toContain('500');
+    expect(label).not.toContain('%');
   });
 
   // ── The fallback ──────────────────────────────────────────────────────────────────────────

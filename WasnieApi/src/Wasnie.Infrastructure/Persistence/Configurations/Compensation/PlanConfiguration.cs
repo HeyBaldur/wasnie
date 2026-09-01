@@ -24,6 +24,9 @@ public sealed class CompensationPlanConfiguration : IEntityTypeConfiguration<Pla
         builder.Property(p => p.UpdatedAt).IsRequired();
         builder.Property(p => p.UpdatedBy).IsRequired().HasMaxLength(450);
 
+        // Nullable: only archived plans have one, and it is never cleared once written.
+        builder.Property(p => p.ArchivedAt).IsRequired(false);
+
         // Clawback policy — nullable, so every pre-existing plan stays opted out.
         builder.Property(p => p.ClawbackMaturationDays).IsRequired(false);
         builder.Property(p => p.ClawbackCapPercent).HasColumnType("decimal(5,2)").IsRequired(false);
