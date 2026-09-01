@@ -1,4 +1,4 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+﻿import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -36,6 +36,10 @@ function makeApiRule(overrides: Partial<Rule> = {}): Rule {
     modifier: null,
     cap: null,
     floor: null,
+    // The endpoint sends these on every rule; a fixture that omits them is not what production sees.
+    stoppedAt: null,
+    stoppedBy: null,
+    stopReason: null,
     measurement: {
       _schema: 1 as const,
       type: 'Revenue' as unknown as MeasurementType,

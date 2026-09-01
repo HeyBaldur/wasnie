@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
@@ -115,7 +115,52 @@ public sealed class GetDashboardSummaryHandler(
             UnprocessablePendingItems: [],
             DriftAlerts: [],
             DealLostAlerts: [],
-            AmbiguousAttributionPayees: []);
+            AmbiguousAttributionPayees: [],
+            PlansWithoutLiveRules: await BuildPlansWithoutLiveRulesAsync(ct));
+    }
+
+    // ── Active plans that have stopped paying ────────────────────────────────────────────────
+    // Every rule stopped, plan still Active, sales still arriving. DERIVED from the rules each time
+    // rather than read from a flag: this warning is wrong in both directions if it goes stale.
+    private async Task<IReadOnlyList<PlanWithoutLiveRulesDto>> BuildPlansWithoutLiveRulesAsync(CancellationToken ct)
+    {
+        // A plan that never had a rule is not this: it cannot be Active (Plan.Activate demands one),
+        // and if one ever existed the rows are still there. `Any(IsActive)` is the engine's own
+        // predicate — the same one CreditAllocationService filters on — so the card cannot disagree
+        // with what the engine actually does.
+        var candidates = await db.CompensationPlans
+            .Where(p => p.Status == PlanStatus.Active
+                     && p.Rules.Any()
+                     && !p.Rules.Any(r => r.IsActive))
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Version,
+                // The last brake pulled is when this plan stopped paying.
+                StoppedAt = p.Rules.Max(r => r.StoppedAt),
+            })
+            .ToListAsync(ct);
+
+        if (candidates.Count == 0) return [];
+
+        var planIds = candidates.Select(c => c.Id).ToList();
+
+        // PlanAssignment is a separate aggregate, so the count is a query, not a navigation. It is
+        // the number that makes the warning urgent: people are still assigned to a plan paying zero.
+        var assignmentCounts = await db.PlanAssignments
+            .Where(a => planIds.Contains(a.PlanId) && a.Status == AssignmentStatus.Active)
+            .GroupBy(a => a.PlanId)
+            .Select(g => new { PlanId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.PlanId, x => x.Count, ct);
+
+        return candidates
+            .Select(c => new PlanWithoutLiveRulesDto(
+                c.Id, c.Name, c.Version, c.StoppedAt,
+                assignmentCounts.TryGetValue(c.Id, out var n) ? n : 0))
+            .OrderByDescending(p => p.ActiveAssignmentCount)
+            .ThenBy(p => p.PlanName)
+            .ToList();
     }
 
     // ── Pending transactions whose plan cannot be determined, grouped BY PAYEE ────────────────

@@ -1,4 +1,4 @@
-import { TestBed, ComponentFixture } from '@angular/core/testing';
+﻿import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -983,6 +983,7 @@ function buildMockSummary(
       driftAlerts: [],
       dealLostAlerts: [],
       ambiguousAttributionPayees: [],
+      plansWithoutLiveRules: [],
       ...actionOverride,
     },
     periodBand: {

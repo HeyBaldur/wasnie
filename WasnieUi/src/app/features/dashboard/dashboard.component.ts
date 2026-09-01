@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+﻿import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
@@ -8,9 +8,10 @@ import { AppShellComponent } from '../../shared/components/app-shell/app-shell.c
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
+import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
 import { HasPermissionPipe } from '../../shared/pipes/has-permission.pipe';
 import { DashboardStore } from './store/dashboard.store';
-import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee } from './models/dashboard.models';
+import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee, PlanWithoutLiveRules } from './models/dashboard.models';
 import { TransactionsApiService } from '../transactions/services/transactions.api.service';
 import { ProfileService } from '../profile/services/profile.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -46,6 +47,7 @@ import {
     RefreshOnEnterDirective,
     IconComponent,
     CurrencyFormatPipe,
+    DateFormatPipe,
     HasPermissionPipe,
     WsCardComponent,
     WsBadgeComponent,
@@ -584,12 +586,20 @@ export class DashboardComponent {
     return ['/payees', item.payeeId];
   }
 
-  /** True when the card has anything to show (unprocessable reasons, drift/deal-lost alerts, or ambiguity). */
+  /**
+   * Active plans whose every rule has been stopped — they pay nothing and nothing else says so.
+   */
+  plansWithoutLiveRules(): PlanWithoutLiveRules[] {
+    return this.store.actionBand()?.plansWithoutLiveRules ?? [];
+  }
+
+  /** True when the card has anything to show (unprocessable reasons, drift/deal-lost alerts, ambiguity, or a plan that stopped paying). */
   hasAttentionItems(): boolean {
     return (this.store.actionBand()?.unprocessablePendingItems?.length ?? 0) > 0
       || this.driftAlerts().length > 0
       || this.dealLostAlerts().length > 0
-      || this.ambiguousAttributionPayees().length > 0;
+      || this.ambiguousAttributionPayees().length > 0
+      || this.plansWithoutLiveRules().length > 0;
   }
 
   /**
@@ -601,7 +611,10 @@ export class DashboardComponent {
     return this.attentionTotalCount()
       + this.driftAlerts().length
       + this.dealLostAlerts().length
-      + this.ambiguousAttributionPayees().reduce((s, x) => s + x.transactionCount, 0);
+      + this.ambiguousAttributionPayees().reduce((s, x) => s + x.transactionCount, 0)
+      // One per PLAN, not per assignment: a plan that stopped paying is one thing to fix (clone,
+      // correct, activate), however many people are pointed at it.
+      + this.plansWithoutLiveRules().length;
   }
 
   /** i18n key for the commission state of a lost-deal transaction (calculated vs paid). */

@@ -92,6 +92,17 @@ export class PlansApiService {
     return this.http.delete<void>(`${this.base}/${planId}`);
   }
 
+  /**
+   * THE EMERGENCY BRAKE. Stop one rule of a LIVE plan from generating any further credit.
+   *
+   * POST, not DELETE, and the difference matters: `deleteRule` removes a rule from a draft that was
+   * never activated. This one records a fact on a plan that is paying people right now, and it is
+   * irreversible — there is no matching call to undo it, by design.
+   */
+  stopRule(planId: string, ruleId: string, reason: string): Observable<Rule> {
+    return this.http.post<Rule>(`${this.base}/${planId}/rules/${ruleId}/stop`, { reason });
+  }
+
   deleteRule(planId: string, ruleId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/${planId}/rules/${ruleId}`);
   }

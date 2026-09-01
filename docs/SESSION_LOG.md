@@ -4,6 +4,87 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-01 - KAN-29: el kill switch, y dos criterios de aceptacion que se contradecian
+
+**Rama:** AI-CHAT-ASSISTANT - **Sin commit** - dominio + aplicacion + API + front + i18n -
+**migracion B30 (3 columnas nullable, APLICADA a la base local)** - **no se toco ningun credito,
+importe ni payout**
+
+Un software de comisiones sin freno de emergencia: hasta hoy, detener una regla que paga mal exigia
+clonar el plan entero, con asignaciones y cuotas apuntando al viejo. `Plan.RemoveRule` (`Plan.cs:114`)
+y `Plan.UpdateRule` (`:127`) exigen `Draft`, y `Rule.Deactivate()` (`Rule.cs:103`) es `internal`.
+
+### La contradiccion: el bloqueo real no era el ticket, era algo DENTRO del ticket
+
+El ticket pide dos cosas que no pueden ser ciertas del mismo objeto:
+
+- **Edge case 2:** "cualquier via (publica o interna) que intente reactivarla es rechazada; no existe
+  metodo que devuelva `StoppedAt` a nulo".
+- **Edge case 3:** en el Draft clonado, "editarla la deja activa" - que es exactamente devolver el
+  marcador a nulo.
+
+**Decision (Rodolfo, en sesion): reemplazo.** `UpdateRule` sobre una regla apagada **no la revive**:
+crea una regla NUEVA con Id nuevo y activa, y la apagada se queda en el Draft con su fecha y su
+motivo. Satisface los dos criterios a la vez y es lo unico compatible con B6 - el propio ticket cita
+`Activate()`/`DeactivatedAt` como el precedente a no repetir. *Alternativa descartada:* limpiar el
+marcador al editar (una sola fila, mas simple, pero viola EC2 y repite ese precedente).
+
+### El marcador es un campo aparte, no un `IsActive` sobrecargado
+
+`Rule` gana `StoppedAt` / `StoppedBy` / `StopReason`. Apagar escribe los tres **y** pone
+`IsActive = false`, porque el motor filtra por `IsActive` y por nada mas
+(`CreditAllocationService.cs:332`): un marcador que el motor no lea seria una pantalla que dice
+"detenida" sobre una regla que sigue pagando. Los lectores distinguen **borrada de un borrador**
+(`!IsActive && StoppedAt == null`) de **apagada** (`StoppedAt != null`) en los tres sitios que
+colisionaban - el clon (`Plan.cs:316`), el detalle (`GetPlanByIdHandler.cs:27`) y el update
+(`Plan.cs:152`).
+
+**El clon lleva las apagadas** (antes filtraba `r.IsActive` y las habria tirado): un clon no es una
+revision, y nada ahi decide que el problema se arreglo. Llegan apagadas, con la fecha y el motivo
+originales.
+
+### Lo demas
+
+- `POST /api/plans/{planId}/rules/{ruleId}/stop`, permiso propio **`Plans.StopRule`** (TenantAdmin y
+  CompManager; Manager y Rep no). Separado de `Plans.Update`, que es para borradores.
+- **Cinco codigos i18n**, no frases (C1): `RuleAlreadyStopped`, `RuleStopReasonRequired`,
+  `RuleStopReasonTooLong`, `RuleStopPlanNotActive`, `RuleStopRuleNotFound`. Whitelist explicita en el
+  front (C2), nunca una clave concatenada.
+- **Se puede apagar la ultima regla.** El plan sigue `Active` y sigue ingiriendo ventas sin credito
+  (B2). "Plan sin reglas vivas" es **derivado** de las reglas, nunca una bandera - en el detalle del
+  plan y en una tarjeta nueva del dashboard.
+- **Dialogo:** plan, regla, conteo de creditos vivos, aviso si es la ultima, y el boton deshabilitado
+  hasta escribir el motivo. Si el conteo de creditos falla dice "no se pudieron contar" - **nunca 0**,
+  que se leeria como "esta regla todavia no pago nada".
+
+### Numeros de linea del ticket: derivados, no falsos
+
+`Plan.cs:102-107`->**114**, `:128-131`->**127**, `:238`->**251**, `:133`->**145**. La sustancia de las
+seis premisas se confirmo. `Rule.cs:103` y `CreditAllocationService.cs:332` exactos.
+
+**Tres lectores de `IsActive` que el ticket no lista:** `CreditAllocationService.cs:311-314`,
+`Plan.cs:184` (`Activate` exige >=1 regla viva) y `Plan.cs:216`. Ninguno es bloqueo. Consecuencia del
+segundo, dicha y con test: **un clon cuyas reglas llegaron todas apagadas no se puede activar hasta
+corregir una** - no es defecto, obliga a que la correccion sea un acto deliberado.
+
+### Verificacion
+
+**build=0 - unit 1759->1781 (+22) - integracion 849 pasados / 0 fallidos / 2 skipped, exit 0 (3m56s)
+- front 1245->1261 (+16), exit 0 - `ng build` produccion exit 0.**
+
+La API de dev levantada (PID 14608) bloquea los DLL al copiar: la solucion compila (verificado
+compilando `Wasnie.Api` a un output aparte), y **la primera migracion salio VACIA** porque `--no-build`
+cargo el DLL viejo del `bin` bloqueado. Se descarto y se regenero con `Wasnie.Infrastructure` como
+startup (A3: mirar la salida, no el codigo que deberia producirla).
+
+**B30 aplicada y verificada en el esquema real** (`WasnieDb@HEYBALDUR`), no en la salida del
+comando: `INFORMATION_SCHEMA` devuelve las tres columnas con su tipo (`datetimeoffset`,
+`nvarchar(450)`, `nvarchar(500)`, las tres nullable) y la tabla tiene **58 reglas con las 58 en
+marcador nulo** -- aditiva pura, cero transformacion, ninguna migracion pendiente.
+
+**Sin verificar:** no hay comprobacion en runtime del navegador. Bundle 844.78 kB vs 650 de
+presupuesto: preexistente, sin regresion.
+
 ## 2026-08-31 — KAN-31 (tanda 2/2): `ArchivedAt` + backfill, y la fuente resultó NO ser AuditLogs
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · dominio + esquema · **migración B29, APLICADA en la

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -81,6 +81,14 @@ public sealed class PlanRuleConfiguration : IEntityTypeConfiguration<Rule>
         builder.Navigation(r => r.EffectivePeriod).IsRequired(false);
 
         builder.Property(r => r.Tag).HasColumnType("nvarchar(50)").IsRequired(false);
+
+        // The stop marker. All three nullable, all three null on every rule that exists today —
+        // which is what makes this migration inert: nothing changes meaning until someone brakes a
+        // rule. StopReason's length is enforced in the domain (Rule.StopReasonMaxLength) so the
+        // refusal reaches the browser as a translatable code rather than a truncation at the wall.
+        builder.Property(r => r.StoppedAt).IsRequired(false);
+        builder.Property(r => r.StoppedBy).HasMaxLength(450).IsRequired(false);
+        builder.Property(r => r.StopReason).HasMaxLength(500).IsRequired(false);
 
         builder.HasIndex(r => new { r.PlanId, r.SortOrder });
     }

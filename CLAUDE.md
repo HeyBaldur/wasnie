@@ -358,8 +358,19 @@ Ante cualquier tarea que venga de un ticket:
    - los file:line relevantes
    - el resultado de cada suite
    - lo que quedó sin verificar y por qué
-8. NUNCA transicionar el ticket de estado. El review y el
-   commit son de Rodolfo; el estado lo mueve él.
+8. Al EMPEZAR un ticket, después del Paso 0 y antes de construir:
+   - mové el ticket de To Do a In Progress
+   - dejá un comentario breve: "Empezando. Paso 0 verificado,
+     premisas [ok / la premisa X es falsa]. Voy a construir Y."
+
+   Al TERMINAR:
+   - mové el ticket de In Progress a In Review
+   - dejá el comentario completo (qué se construyó, premisas
+     falsas, decisiones y su porqué, file:line, suites, lo no
+     verificado)
+
+   NUNCA muevas un ticket a Done. Ese estado es de Rodolfo,
+   después de review + commit + runtime.
 9. Si en el camino aparece un defecto ajeno al ticket, crear
    un ticket nuevo con la evidencia y enlazarlo. No arreglarlo
    en la misma tanda.

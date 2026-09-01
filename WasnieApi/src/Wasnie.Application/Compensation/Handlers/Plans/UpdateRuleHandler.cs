@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Plans;
@@ -35,7 +35,11 @@ public sealed class UpdateRuleHandler(IApplicationDbContext db, IAuthorizationSe
 
         try
         {
-            plan.UpdateRule(
+            // ★ THE RETURNED RULE, NOT A LOOKUP BY request.RuleId. Editing a STOPPED rule supersedes
+            // it rather than reviving it, so what comes back carries a NEW Id — and re-finding the
+            // requested id here would answer with the stopped predecessor, telling the screen the
+            // save did nothing.
+            var rule = plan.UpdateRule(
                 request.RuleId,
                 request.Name,
                 request.SortOrder,
@@ -48,7 +52,6 @@ public sealed class UpdateRuleHandler(IApplicationDbContext db, IAuthorizationSe
 
             await db.SaveChangesAsync(cancellationToken);
 
-            var rule = plan.Rules.First(r => r.Id == request.RuleId);
             return Result<RuleDto>.Success(CompensationMapper.ToRuleDto(rule));
         }
         // ★ See AddRuleToPlanHandler: Result carries one string, so a coded refusal caught here would

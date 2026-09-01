@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Compensation.DTOs;
+﻿namespace Wasnie.Application.Compensation.DTOs;
 
 // ── Top-level response ──────────────────────────────────────────────────────
 
@@ -20,7 +20,30 @@ public sealed record DashboardActionBandDto(
     IReadOnlyList<UnprocessablePendingDto> UnprocessablePendingItems,
     IReadOnlyList<DriftAlertDto> DriftAlerts,
     IReadOnlyList<DealLostAlertDto> DealLostAlerts,
-    IReadOnlyList<AmbiguousAttributionPayeeDto> AmbiguousAttributionPayees);
+    IReadOnlyList<AmbiguousAttributionPayeeDto> AmbiguousAttributionPayees,
+    IReadOnlyList<PlanWithoutLiveRulesDto> PlansWithoutLiveRules);
+
+/// <summary>
+/// An ACTIVE plan with no rule left in effect — every one of its rules was stopped.
+///
+/// ★★ THE STATE THAT IS OTHERWISE SILENT. The plan keeps ingesting sales (a sale happened, so it is
+/// recorded whatever the configuration says) and pays nothing on any of them. Nothing else on any
+/// screen says so: the plan looks Active, its assignments look fine, and the money simply stops.
+/// Someone pulled an emergency brake and the next step — clone, correct, activate — is theirs to
+/// take, so it belongs on the surface they open every morning.
+///
+/// ★ DERIVED, NEVER STORED. Computed from the rules on every read. A stored flag drifts the moment a
+/// rule is added or a version activated, and a warning that appears over a plan paying perfectly
+/// well is as damaging as one missing from a plan that is not.
+/// </summary>
+public sealed record PlanWithoutLiveRulesDto(
+    Guid PlanId,
+    string PlanName,
+    int Version,
+    /// <summary>When the LAST live rule was stopped — the moment this plan stopped paying.</summary>
+    DateTimeOffset? StoppedAt,
+    /// <summary>How many assignments are still pointed at a plan that pays nothing.</summary>
+    int ActiveAssignmentCount);
 
 // Transactions blocked because their plan cannot be determined: the payee has 2+ eligible plans and
 // nobody said which one applies, so the engine refuses to guess.

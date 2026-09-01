@@ -1,4 +1,4 @@
-using Wasnie.Application.Compensation.DTOs;
+﻿using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Compensation.Assignments;
 using CompensationPlan = Wasnie.Domain.Compensation.Plans.Plan;
 using CompensationRule = Wasnie.Domain.Compensation.Plans.Rule;
@@ -48,7 +48,10 @@ public static class CompensationMapper
             rule.RateTable,
             rule.Modifier,
             rule.Cap,
-            rule.Floor);
+            rule.Floor,
+            rule.StoppedAt,
+            rule.StoppedBy,
+            rule.StopReason);
 
     public static PlanAssignmentDto ToPlanAssignmentDto(PlanAssignment assignment, string planName, int planVersion) =>
         new(
