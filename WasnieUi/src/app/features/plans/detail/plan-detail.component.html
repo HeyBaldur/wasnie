@@ -153,7 +153,13 @@
           } @else {
             <div class="rules-list">
               @for (rule of sortedRules(); track rule.id) {
-                <div class="rule-card" [class.rule-card--inactive]="!rule.isActive" [class.rule-card--stopped]="isStopped(rule)">
+                <!-- The two classes are MUTUALLY EXCLUSIVE, and binding them off the same flag is what made them
+                     overlap: `--inactive` dims a rule removed from a draft, `--stopped` keeps a braked one at
+                     full contrast, and a stopped rule is `!isActive` too. Leaving both on left the un-dimming
+                     to stylesheet source order — true today, silently false the day the file is reordered. -->
+                <div class="rule-card"
+                     [class.rule-card--inactive]="!rule.isActive && !isStopped(rule)"
+                     [class.rule-card--stopped]="isStopped(rule)">
                   <div class="rule-card__header">
                     <div class="rule-card__title-group">
                       <span class="rule-card__order">#{{ rule.sortOrder }}</span>

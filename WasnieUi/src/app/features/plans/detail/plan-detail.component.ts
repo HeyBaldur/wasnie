@@ -177,9 +177,21 @@ export class PlanDetailComponent implements OnInit {
   readonly sortedRules = computed(() => {
     const plan = this.store.selectedPlan();
     if (!plan) return [];
-    // Only show active rules — a deleted (soft-deactivated) rule must not appear, otherwise
-    // its Edit action opens a form whose save fails with "rule not found in this plan".
-    return [...plan.rules].filter((r) => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+    // Active rules AND STOPPED ONES — the two are not the same kind of inactive.
+    //
+    // ★★ THE FILTER THAT HID THE BRAKE. This kept only `isActive`, which is right for a rule DELETED
+    // from a draft (its Edit action would open a form whose save fails with "rule not found in this
+    // plan" — that is why the filter exists) and wrong for a rule STOPPED on a live plan. The
+    // symptom was the header and the list disagreeing: the tab said "Rules 1" from the raw payload
+    // while the list rendered nothing, on both the Active plan and its clone. A stopped rule has to
+    // be readable — hiding it makes the plan look like it never had that rule, which is the exact
+    // silence the emergency brake exists to end.
+    //
+    // The Edit concern does not apply to a stopped rule: on an Active plan there is no Edit button
+    // (canEditRule is false), and in a Draft `Plan.UpdateRule` accepts it and supersedes it.
+    return [...plan.rules]
+      .filter((r) => r.isActive || isRuleStopped(r))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   });
 
   ngOnInit(): void {

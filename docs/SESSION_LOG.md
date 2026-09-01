@@ -4,6 +4,72 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-01 - KAN-29 (correccion): la verificacion en runtime encontro lo que 1261 tests verdes no vieron
+
+**Rama:** AI-CHAT-ASSISTANT - **Sin commit** - **SOLO FRONTEND**, sin migracion, sin tocar backend -
+**no se toco ningun credito, importe ni payout**
+
+Rodolfo abrio el plan `Test SKU Laptops` despues de apagar su unica regla: la cabecera decia
+**"Rules 1" y la lista estaba vacia**. Lo mismo en el Draft clonado. El aviso derivado "This plan has
+no rule in effect" **si** aparecia.
+
+### A2 y A3 en el mismo defecto
+
+El arreglo del backend habia aterrizado y estaba probado (`GetPlanByIdHandler` devuelve las
+apagadas); el del dominio tambien (el clon las copia). **La regla estaba en la base de los dos
+planes** - Rodolfo lo verifico en SQL antes de reportar. Y la pantalla no mostraba nada, porque
+`sortedRules()` la tiraba **despues** de todo eso.
+
+Los 22 unit y los 16 de front pasaban por caminos que produccion no toma: **ninguno renderizaba la
+lista**. El desajuste cabecera/lista era la prueba en pantalla de que el backend ya mandaba la regla
+y el front la descartaba - la cabecera lee `plan.rules.length` crudo, la lista leia el filtrado.
+
+### El sitio, y es UNO solo
+
+`plan-detail.component.ts:181` (`sortedRules()`), `.filter(r => r.isActive)`.
+
+**Un unico filtro para las DOS pantallas:** la ruta `:planId` (`plans.routes.ts:17-22`) carga
+`PlanDetailComponent` sea cual sea el estado del plan, asi que el plan Active y su clon Draft son el
+mismo componente y el mismo computed. No hay segundo handler ni segundo filtro. Arreglar uno arregla
+los dos - pero el test tenia que cubrir ambos igual, porque nada garantiza que siga siendo uno.
+
+Backend barrido: no hay otra superficie. `SimulatePlanRulesHandler.cs:51` filtra `IsActive`
+correctamente (el asistente no debe simular una apagada) y `CompensationMapper.cs:37` es
+`activeRuleCount`, explicito y correcto.
+
+### Y el test atrapo un segundo defecto que nadie habia visto
+
+La tarjeta llevaba **las dos clases a la vez**: `--inactive` (atada a `!rule.isActive`) y `--stopped`.
+Visualmente no se notaba porque mi `opacity: 1` gana por orden de aparicion en el fichero - es decir,
+"una apagada no se atenua" dependia del orden del stylesheet, cierto ese dia y silenciosamente falso
+el dia que alguien reordene el SCSS. Ahora son **mutuamente excluyentes** en la plantilla:
+`!rule.isActive && !isStopped(rule)`.
+
+### Lo que NO cambio
+
+Las reglas **borradas de un borrador** (`!isActive && stoppedAt == null`) siguen ocultas, con test
+propio: el motivo original del filtro sigue siendo valido para ellas (su accion Editar abre un
+formulario cuyo guardado falla). Y para una apagada ese motivo no aplica - en un plan Active no hay
+boton Editar, y en un Draft `Plan.UpdateRule` la acepta y la supersede.
+
+### Premisa del reporte que resulto falsa
+
+El reporte atribuia a la deuda de KAN-30 el texto ingles del motivo ("This rule is deactivated
+because it was written incorrectly..."). **No es prosa de dominio ni hay nada hardcodeado**: se
+busco en todo el repo y no existe esa cadena. `stopReason` es **texto libre que escribio el propio
+usuario** en el dialogo de parada, y se pinta tal cual. No hay nada que migrar en KAN-30 por este
+camino. Los rotulos que lo rodean si son claves i18n, ya en EN/ES/PL.
+
+### Verificacion
+
+**build=0 - unit 1781 (sin cambio, es solo-frontend) - integracion 849/0/2 skipped exit 0 -
+front 1261 -> 1271 (+10) exit 0 - `ng build` produccion exit 0.**
+
+La integracion corrio con `--no-build` porque la API de dev volvio a levantarse (PID 12500) y bloquea
+la copia de DLL. **Justificado y comprobado, no asumido:** `find src tests -name "*.cs" -newer` sobre
+el DLL de tests no devuelve **ningun** fuente real (solo `AssemblyInfo` generados en `obj/`), asi que
+el binario corresponde al backend actual - que ademas no se toco en esta tanda.
+
 ## 2026-09-01 - KAN-29: el kill switch, y dos criterios de aceptacion que se contradecian
 
 **Rama:** AI-CHAT-ASSISTANT - **Sin commit** - dominio + aplicacion + API + front + i18n -

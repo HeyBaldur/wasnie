@@ -1,4 +1,4 @@
-@reference "../../../../styles.scss";
+﻿@reference "../../../../styles.scss";
 
 .plan-detail {
   padding: var(--space-8);
@@ -202,6 +202,22 @@
   padding: var(--space-4) var(--space-5);
   transition: border-color var(--transition-fast);
 
+  // The gutter the "#N" order marker occupies, declared ONCE and consumed by everything that has to
+  // line up under the rule name: the tags row and the stop marker. Two hand-tuned indents would
+  // agree until the day one of them is edited, and the misalignment is the kind nobody reports.
+  //
+  // Reserved rather than measured, because the number is what varies: #1 is narrower than #12, so an
+  // indent that merely cleared the marker would put every card's tags on a slightly different line.
+  // 4ch of a monospace digit holds up to #999 (sort orders are small integers), and every marker is
+  // given the same floor so the name starts on that line too — which is what makes the alignment
+  // hold ACROSS cards, not just within one.
+  //
+  // TWO COLUMNS, AND ONLY TWO. Column 1 is the marker (the "#N", and the warning icon of a stopped
+  // rule); column 2 is everything the card SAYS — name, tags, stop reason. Anything that lands in
+  // column 2 has to start on the same line, or the card grows a third left edge.
+  --rule-marker-width: 4ch;
+  --rule-order-gutter: calc(var(--rule-marker-width) + var(--space-2));
+
   &:hover { border-color: var(--color-border-strong); }
 
   &--inactive { opacity: 0.55; }
@@ -218,6 +234,8 @@
     color: var(--color-text-tertiary);
     font-weight: 500;
     flex-shrink: 0;
+    // Same floor the gutter reserves, so the name always starts exactly where the tags do.
+    min-width: var(--rule-marker-width);
   }
 
   &__title-group {
@@ -249,6 +267,8 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-2);
+    // Aligned under the rule name, not under the order marker.
+    margin-left: var(--rule-order-gutter);
   }
 }
 
@@ -318,6 +338,21 @@
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-danger-border);
   color: var(--color-danger);
+  gap: var(--space-2);
+
+  // ★ THE ICON GOES IN THE MARKER COLUMN, THE TEXT DOES NOT.
+  //
+  // Indenting this whole block by the gutter aligned the ICON with the name and pushed the two
+  // paragraphs a further icon-width to the right — a third left edge, which is the thing the gutter
+  // exists to prevent. So the block starts at the card edge like the header does, and the icon takes
+  // the same reserved column the "#N" takes. The text then begins exactly where the name and the
+  // tags do, without any indent of its own.
+  > app-icon {
+    // The host is inline by default, and min-width does nothing to an inline box.
+    display: flex;
+    min-width: var(--rule-marker-width);
+    flex-shrink: 0;
+  }
 }
 
 .rule-card__stopped-when {
