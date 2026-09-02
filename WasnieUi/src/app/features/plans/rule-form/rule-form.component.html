@@ -613,7 +613,9 @@
               } @else if (simErrorKey(); as err) {
                 <!-- Visible failure with a retry, and never a stale figure left standing beside it. -->
                 <div class="rule-sim__error" data-testid="rule-sim-error">
-                  <span>{{ err | translate }}</span>
+                  <!-- Params, not just the key: a coded refusal names the tier and the rate, and a
+                       key rendered bare would show the reader "{{tierNumber}}". -->
+                  <span>{{ err | translate: (simErrorParams() ?? {}) }}</span>
                   <button type="button" class="rule-sim__retry" (click)="retrySimulation()"
                           data-testid="rule-sim-retry">
                     {{ 'COMMON.RETRY' | translate }}

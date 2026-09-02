@@ -3,7 +3,7 @@ import { ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { signal } from '@angular/core';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, HttpErrorResponse } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of, throwError, Subject } from 'rxjs';
 import { RuleFormComponent } from './rule-form.component';
@@ -270,6 +270,101 @@ describe('RuleFormComponent — commission simulator', () => {
     expect(comp.simErrorKey()).toBeTruthy('the failure is visible');
     expect(comp.simulation()).withContext('never a number from the previous question next to an error').toBeNull();
     expect(comp.simLoading()).toBeFalse();
+  }));
+
+  /**
+   * ★★ THE PANEL PRINTED "RateTableRateAboveMaximum" ON A USER'S SCREEN, AND THIS IS THE TEST THAT
+   * SAYS IT MAY NOT AGAIN.
+   *
+   * Two halves failed at once. On the server, `DomainCodedException` is a `DomainException`, so
+   * `SimulateRuleHandler`'s catch swallowed it and flattened it into a `Failure(ex.Message)` — and
+   * that Message is the CODE, because the type passes it to `base()` to keep logs readable. On the
+   * client, `extractApiError` returns `err.error.message` verbatim, so the identifier went straight
+   * onto the card. The toast beside it translated correctly the whole time; only this panel did not,
+   * because it never ran the code through the whitelist.
+   *
+   * It stayed hidden until the rate-magnitude guard moved into `Plan.AddRule`: before that, every
+   * coded refusal came from `RateTableRequest.ToDomain`, which the simulator does not call.
+   */
+  it('★★ a coded refusal becomes a translated sentence, never the raw code', fakeAsync(() => {
+    const comp = makeComponent();
+    completeForm(comp);
+
+    api.simulateRule.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 422,
+      error: { status: 422, code: 'RateTableRateAboveMaximum', parameters: { rate: 4, maximum: 1 } },
+    })));
+
+    comp.onSimInput(50000);
+    tick(300);
+
+    expect(comp.simErrorKey()).toBe('PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_FLAT');
+    expect(comp.simErrorKey()).not.toContain('RateTableRateAboveMaximum');
+
+    // Without the parameters the reader is shown "{{rate}}"; the key alone is not the fix.
+    expect(comp.simErrorParams()).toEqual({ rate: 4, maximum: 1 });
+  }));
+
+  it('a coded refusal for a TIER names the tier, and its params reach the sentence', fakeAsync(() => {
+    const comp = makeComponent();
+    completeForm(comp);
+
+    api.simulateRule.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 422,
+      error: {
+        status: 422,
+        code: 'RateTableRateAboveMaximum',
+        parameters: { tierNumber: 2, rate: 7, maximum: 1 },
+      },
+    })));
+
+    comp.onSimInput(50000);
+    tick(300);
+
+    expect(comp.simErrorKey()).toBe('PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_TIER');
+    expect(comp.simErrorParams()!['tierNumber']).toBe(2);
+  }));
+
+  /**
+   * ★ AN UNKNOWN CODE IS NOT ASSUMED TO BE A RATE-TABLE PROBLEM, and above all is not spelled out.
+   * The same rule the save toast follows: fall through to the plain path rather than describe a
+   * refusal this build does not understand as a bad ladder.
+   */
+  it('★ an unrecognised code falls through without ever printing the identifier', fakeAsync(() => {
+    const comp = makeComponent();
+    completeForm(comp);
+
+    api.simulateRule.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 422,
+      error: { status: 422, code: 'SomethingThisBuildHasNeverHeardOf', parameters: {} },
+    })));
+
+    comp.onSimInput(1200);
+    tick(300);
+
+    expect(comp.simErrorKey()).toBeTruthy('the failure is still visible');
+    expect(comp.simErrorKey()).not.toContain('SomethingThisBuildHasNeverHeardOf');
+    expect(comp.simErrorParams()).toBeNull();
+  }));
+
+  it('the parameters are cleared when the error is, so they cannot leak into the next one', fakeAsync(() => {
+    const comp = makeComponent();
+    completeForm(comp);
+
+    api.simulateRule.and.returnValue(throwError(() => new HttpErrorResponse({
+      status: 422,
+      error: { status: 422, code: 'RateTableRateAboveMaximum', parameters: { rate: 4, maximum: 1 } },
+    })));
+    comp.onSimInput(50000);
+    tick(300);
+    expect(comp.simErrorParams()).not.toBeNull();
+
+    api.simulateRule.and.returnValue(of(simulation()));
+    comp.retrySimulation();
+    tick(300);
+
+    expect(comp.simErrorKey()).toBeNull();
+    expect(comp.simErrorParams()).toBeNull();
   }));
 
   it('retry re-issues the request', fakeAsync(() => {

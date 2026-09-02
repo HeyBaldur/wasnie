@@ -196,8 +196,107 @@
           </span>
         </div>
         <ul class="payouts-list__bulk-error-list">
-          @for (err of bulkMarkPaidErrors(); track $index) {
-            <li>{{ err }}</li>
+          @for (block of bulkMarkPaidErrorBlocks(); track $index) {
+            <li class="payouts-list__bulk-error-item">
+              @if (block.payeeName !== null) {
+                <div class="payouts-list__bulk-error-item-head">
+                  <span class="payouts-list__bulk-error-payee">{{ block.payeeName }}</span>
+                  @if (block.totalConflicts !== null) {
+                    <span class="payouts-list__bulk-error-summary">{{
+                      'PAYOUTS.BULK_ERR_CONFLICTS' | translate: { count: block.totalConflicts }
+                    }}</span>
+                  } @else {
+                    <!-- The count could not be read; the server's own words are better than nothing. -->
+                    <span class="payouts-list__bulk-error-summary">{{ block.summary }}</span>
+                  }
+                </div>
+
+                <!-- ★ EVERY IDENTIFIER OPENS ITS OWN RECORD, IN A NEW TAB. The refusal is the only
+                     place these ids exist: the banner lives in a signal that the next reload clears,
+                     so navigating away in this tab would trade one conflict for the other four and
+                     there would be no way back to them. `target="_blank"` is not a preference here,
+                     it is what keeps the list survivable while you work through it. -->
+                <div class="payouts-list__bulk-error-ids">
+                  <span class="payouts-list__bulk-error-label">{{ 'PAYOUTS.BULK_ERR_PAYOUT' | translate }}</span>
+                  <a
+                    class="payouts-list__bulk-error-id payouts-list__bulk-error-id--link"
+                    [routerLink]="['/payouts', block.payoutId]"
+                    target="_blank"
+                    rel="noopener"
+                    [title]="'PAYOUTS.BULK_ERR_OPEN_PAYOUT' | translate"
+                  >{{ block.payoutId }}</a>
+
+                  <!-- Said once when every conflict names the same consuming payout, which is the
+                       normal case. Repeated per conflict below only when they genuinely differ. -->
+                  @if (block.consumedByPayoutIds.length === 1) {
+                    <span class="payouts-list__bulk-error-label">{{ 'PAYOUTS.BULK_ERR_PAID_BY' | translate }}</span>
+                    <a
+                      class="payouts-list__bulk-error-id payouts-list__bulk-error-id--link"
+                      [routerLink]="['/payouts', block.consumedByPayoutIds[0]]"
+                      target="_blank"
+                      rel="noopener"
+                      [title]="'PAYOUTS.BULK_ERR_OPEN_PAYOUT' | translate"
+                    >{{ block.consumedByPayoutIds[0] }}</a>
+                  }
+                </div>
+
+                @for (conflict of block.conflicts; track $index) {
+                  <div class="payouts-list__bulk-error-conflict">
+                    <span class="payouts-list__bulk-error-pair">
+                      <span class="payouts-list__bulk-error-label">{{ 'PAYOUTS.BULK_ERR_CREDIT' | translate }}</span>
+                      @if (canOpenCredits()) {
+                        <a
+                          class="payouts-list__bulk-error-id payouts-list__bulk-error-id--link"
+                          [routerLink]="['/credits', conflict.creditId]"
+                          target="_blank"
+                          rel="noopener"
+                          [title]="'PAYOUTS.BULK_ERR_OPEN_CREDIT' | translate"
+                        >{{ conflict.creditId }}</a>
+                      } @else {
+                        <code class="payouts-list__bulk-error-id">{{ conflict.creditId }}</code>
+                      }
+                    </span>
+                    <span class="payouts-list__bulk-error-pair">
+                      <span class="payouts-list__bulk-error-label">{{ 'PAYOUTS.BULK_ERR_TX' | translate }}</span>
+                      @if (canOpenTransactions()) {
+                        <a
+                          class="payouts-list__bulk-error-id payouts-list__bulk-error-id--link"
+                          [routerLink]="['/transactions', conflict.transactionId]"
+                          target="_blank"
+                          rel="noopener"
+                          [title]="'PAYOUTS.BULK_ERR_OPEN_TX' | translate"
+                        >{{ conflict.transactionId }}</a>
+                      } @else {
+                        <code class="payouts-list__bulk-error-id">{{ conflict.transactionId }}</code>
+                      }
+                    </span>
+                    @if (block.consumedByPayoutIds.length > 1) {
+                      <span class="payouts-list__bulk-error-pair">
+                        <span class="payouts-list__bulk-error-label">{{ 'PAYOUTS.BULK_ERR_PAID_BY' | translate }}</span>
+                        <a
+                          class="payouts-list__bulk-error-id payouts-list__bulk-error-id--link"
+                          [routerLink]="['/payouts', conflict.consumedByPayoutId]"
+                          target="_blank"
+                          rel="noopener"
+                          [title]="'PAYOUTS.BULK_ERR_OPEN_PAYOUT' | translate"
+                        >{{ conflict.consumedByPayoutId }}</a>
+                      </span>
+                    }
+                  </div>
+                }
+
+                @if (block.omittedConflicts > 0) {
+                  <p class="payouts-list__bulk-error-more">{{
+                    'PAYOUTS.BULK_ERR_MORE' | translate: { count: block.omittedConflicts }
+                  }}</p>
+                }
+              } @else {
+                <!-- Unrecognised shape. The translate pipe returns a non-key unchanged, so this
+                     covers both a reworded server message and the i18n key the catch block puts in
+                     this same list. -->
+                <span class="payouts-list__bulk-error-raw">{{ block.raw | translate }}</span>
+              }
+            </li>
           }
         </ul>
       </ws-card>

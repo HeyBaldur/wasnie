@@ -106,6 +106,13 @@ public sealed class Plan : AggregateRoot
             throw new DomainException("Rules can only be modified on Draft plans.");
         }
 
+        // ★ THE FLAT RATE'S MAGNITUDE IS CHECKED HERE AND NOT IN RateTable.Flat, because only here
+        // is the MEASUREMENT in scope — and with Units the flat rate is euros per unit, where a 5 is
+        // €5 and not 500%. Not in Rule.Create either: that is the clone's constructor, and cloning
+        // into a Draft is the only way to repair a rule on an active plan (§D4). The tiered and
+        // attainment ladders are already checked in their factories.
+        RateMagnitude.ValidateFlatRateForWrite(measurement, rateTable);
+
         var rule = Rule.Create(Id, name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
         _rules.Add(rule);
         return rule;
@@ -145,6 +152,13 @@ public sealed class Plan : AggregateRoot
         {
             throw new DomainException("Rules can only be modified on Draft plans.");
         }
+
+        // ★ THE FLAT RATE'S MAGNITUDE IS CHECKED HERE AND NOT IN RateTable.Flat, because only here
+        // is the MEASUREMENT in scope — and with Units the flat rate is euros per unit, where a 5 is
+        // €5 and not 500%. Not in Rule.Create either: that is the clone's constructor, and cloning
+        // into a Draft is the only way to repair a rule on an active plan (§D4). The tiered and
+        // attainment ladders are already checked in their factories.
+        RateMagnitude.ValidateFlatRateForWrite(measurement, rateTable);
 
         // Stopped rules are findable here, unlike removed ones: a clone carries them into the Draft
         // precisely so they can be corrected, and a "not found" on the rule the screen is showing

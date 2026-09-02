@@ -291,15 +291,20 @@
     margin-bottom: var(--space-2);
   }
 
+  // ★ NO LONGER A BULLETED LIST OF PARAGRAPHS. Each refusal names one payout and up to three
+  // credits, every one of them a GUID; run together with commas they were an unreadable block, and
+  // indenting them under a bullet only made the wrap worse. Each refusal is now its own bordered
+  // card, and each conflict inside it its own labelled row.
   &__bulk-error-list {
     margin: 0;
-    padding-left: var(--space-5);
+    padding: 0;
+    list-style: none;
     font-size: var(--font-size-12);
     color: var(--color-text-secondary);
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
-    max-height: 180px;
+    gap: var(--space-2);
+    max-height: 380px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--color-border-strong) transparent;
@@ -307,6 +312,120 @@
     &::-webkit-scrollbar        { width: 6px; }
     &::-webkit-scrollbar-track  { background: transparent; }
     &::-webkit-scrollbar-thumb  { background: var(--color-border-strong); border-radius: 9999px; }
+  }
+
+  // ★ THE RIGHT MARGIN IS NOT DECORATION — IT IS CLEARANCE FOR THE SCROLLBAR. The list scrolls, so
+  // its 10px scrollbar is drawn inside the padding box: measured, the card sat 0px from the list's
+  // left edge and hard against the scrollbar on the right, which read as glued on one side and
+  // indented on the other. The margin pushes the card clear of the track so both edges breathe, and
+  // the roomier horizontal padding matches the credit sub-rows in Terminated accounts, which is the
+  // house pattern for a nested block: sunken background, accent rail, and generous inset.
+  &__bulk-error-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    margin-right: var(--space-2);
+    border: 1px solid var(--color-danger-border);
+    border-left-width: 3px;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-surface-sunken);
+  }
+
+  &__bulk-error-item-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-2);
+  }
+
+  &__bulk-error-payee {
+    font-size: var(--font-size-13);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  &__bulk-error-summary {
+    color: var(--color-danger);
+  }
+
+  // The block's own two identifiers — this payout, and the payout that already took its credits —
+  // in a two-column grid so their labels and values line up under each other.
+  &__bulk-error-ids {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-3);
+    row-gap: var(--space-1);
+  }
+
+  // ★ ONE CONFLICT, ONE LINE. The first pass gave each identifier its own row, which put the SAME
+  // consuming-payout GUID three times under itself and made one refusal 300px tall — five of them
+  // scrolled for a page and a half. With that id hoisted into the header, a conflict is the two ids
+  // that actually differ, and they fit side by side. `flex-wrap` is what keeps that honest on a
+  // narrow window: the pairs stack instead of the card growing a horizontal scrollbar.
+  &__bulk-error-conflict {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--space-4);
+    row-gap: var(--space-1);
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--color-border-default);
+  }
+
+  &__bulk-error-pair {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  &__bulk-error-label {
+    font-size: var(--font-size-11);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-tertiary);
+  }
+
+  // ★ FULL IDENTIFIERS, NEVER TRUNCATED. The only reason a GUID is on screen is so somebody can
+  // paste it into a query; eight characters and an ellipsis would look tidier and be useless.
+  // Monospace lines them up, `user-select: all` makes one click take the whole value, and
+  // `overflow-wrap` keeps a long one inside the card instead of widening the page.
+  &__bulk-error-id {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-11);
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+
+  // ★ THE UNDERLINE IS DOTTED, NOT SOLID. Three linked GUIDs on a line, each 36 characters long,
+  // solidly underlined in brand blue reads as a bar of colour and undoes the alignment the labels
+  // just bought. Dotted says "this opens something" without competing with the value itself; the
+  // colour arrives on hover, where the pointer already is.
+  &__bulk-error-id--link {
+    color: var(--color-text-secondary);
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--color-brand);
+      text-decoration: underline solid;
+    }
+  }
+
+  &__bulk-error-more {
+    margin: 0;
+    font-size: var(--font-size-11);
+    font-style: italic;
+    color: var(--color-text-tertiary);
+  }
+
+  &__bulk-error-raw {
+    overflow-wrap: anywhere;
   }
 
   // ── Shared: bulk confirmation modal body ─────────────────────────────────────

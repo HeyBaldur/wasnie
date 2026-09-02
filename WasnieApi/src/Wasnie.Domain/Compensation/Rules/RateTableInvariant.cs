@@ -34,6 +34,16 @@ public static class RateTableInvariant
 
     /// <summary>One tier ends short of where the next begins, leaving values with no rate.</summary>
     public const string TiersLeaveGap = "RateTableTiersLeaveGap";
+
+    /// <summary>
+    /// A rate above <see cref="RateMagnitude.MaxFractionalRate"/> — the commission would exceed the
+    /// sale it is paid on. ★ THE SEVENTH INVARIANT, AND THE ONLY ONE ABOUT THE RATE RATHER THAN THE
+    /// SHAPE: it is what `4` typed for "4%" looks like, and the engine pays it 400% without a word.
+    /// </summary>
+    public const string RateAboveMaximum = "RateTableRateAboveMaximum";
+
+    /// <summary>A negative rate, which would take money back on every sale that matched.</summary>
+    public const string RateBelowZero = "RateTableRateBelowZero";
 }
 
 /// <summary>

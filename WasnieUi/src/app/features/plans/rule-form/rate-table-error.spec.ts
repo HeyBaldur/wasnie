@@ -65,6 +65,30 @@ describe('Rate-table refusals — code → key → sentence', () => {
       params: { tierNumber: 1, nextTierNumber: 2, endsAt: 0.99, nextStartsAt: 1, bound: 'AttainmentRatio' },
       key: 'PLANS.RATE_TABLE_ERR_GAP_RATIO',
     },
+    // The seventh invariant. `tierNumber` is present for a ladder and ABSENT for a flat table —
+    // that absence is what picks the wording, and it is also why the server omits the key rather
+    // than sending null: the loop below interpolates every parameter it is given, so a null would
+    // put the word "null" in the sentence.
+    {
+      code: 'RateTableRateAboveMaximum',
+      params: { tierNumber: 1, rate: 4, maximum: 1 },
+      key: 'PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_TIER',
+    },
+    {
+      code: 'RateTableRateAboveMaximum',
+      params: { rate: 4, maximum: 1 },
+      key: 'PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_FLAT',
+    },
+    {
+      code: 'RateTableRateBelowZero',
+      params: { tierNumber: 2, rate: -0.05 },
+      key: 'PLANS.RATE_TABLE_ERR_RATE_NEGATIVE_TIER',
+    },
+    {
+      code: 'RateTableRateBelowZero',
+      params: { rate: -0.05 },
+      key: 'PLANS.RATE_TABLE_ERR_RATE_NEGATIVE_FLAT',
+    },
   ];
 
   // ── The whitelist ─────────────────────────────────────────────────────────────────────────

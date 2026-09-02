@@ -16,7 +16,7 @@ public sealed class RateTable
     public static RateTable Tiered(IReadOnlyList<RateTier> tiers)
     {
         ValidateLadder(
-            tiers.Select(t => (t.From, t.To)).ToList(),
+            tiers.Select(t => (t.From, t.To, t.Rate)).ToList(),
             bound: RateTableBound.Amount);
 
         return new() { Type = RateTableType.Tiered, Tiers = tiers };
@@ -78,9 +78,19 @@ public sealed class RateTable
     ///  4. LAST TIER OPEN, then 5/6 the pairwise overlap and gap. Beyond the three cases above no
     ///     further pair masks systematically — a bounded last tier does not imply an overlap or a
     ///     gap, nor the reverse — so their relative order is left as it was.
+    ///
+    ///  7. RATE MAGNITUDE LAST, and last is the deliberate half of that. It is the only check about
+    ///     a tier's VALUE rather than the ladder's SHAPE, so it masks nothing and nothing masks it:
+    ///     placing it anywhere would still refuse the same tables. It goes at the end because the
+    ///     six above are one tuned sequence and a value check dropped into the middle of them buys
+    ///     nothing. The cost is that a table typed wrong in both ways — money in an attainment
+    ///     ladder AND per cents as whole numbers, which is the same person making the same class of
+    ///     mistake twice — is refused for its bounds first and its rates on the second attempt.
+    ///     Both refusals name a real problem, and the shape one is the problem the reader has to
+    ///     understand in order to fix the rates.
     /// </remarks>
     private static void ValidateLadder(
-        IReadOnlyList<(decimal From, decimal? To)> tiers,
+        IReadOnlyList<(decimal From, decimal? To, decimal Rate)> tiers,
         string bound)
     {
         // 1 — Non-empty.
@@ -147,6 +157,13 @@ public sealed class RateTable
                     ["bound"] = bound,
                 });
         }
+
+        // 7 — Each rate is a fraction of the base, not a per cent typed as a whole number. LAST on
+        //     purpose: see the closing paragraph of the remarks above.
+        for (var i = 0; i < tiers.Count; i++)
+        {
+            RateMagnitude.ValidateFractionalRate(tiers[i].Rate, tierNumber: i + 1);
+        }
     }
 
     /// <summary>
@@ -166,7 +183,7 @@ public sealed class RateTable
     public static RateTable AttainmentBased(IReadOnlyList<AttainmentTier> tiers, bool splitAtQuota = false)
     {
         ValidateLadder(
-            tiers.Select(t => (t.AttainmentFrom, t.AttainmentTo)).ToList(),
+            tiers.Select(t => (t.AttainmentFrom, t.AttainmentTo, t.Rate)).ToList(),
             bound: RateTableBound.AttainmentRatio);
 
         return new() { Type = RateTableType.AttainmentBased, AttainmentTiers = tiers, SplitAtQuota = splitAtQuota };

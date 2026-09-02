@@ -4,6 +4,107 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-02 (b) - KAN-26 tanda 1: el simulador enseñaba el codigo crudo
+
+Los 9 casos de prueba de la tanda 1 se ejecutaron en runtime. 8 pasaron; el 9 destapo un defecto que
+esta misma tanda habia introducido.
+
+**El defecto era de BACKEND.** `DomainCodedException` ES un `DomainException`, asi que el
+`catch (DomainException ex)` de `SimulateRuleHandler` se lo tragaba y lo aplanaba en
+`Result.Failure(ex.Message)`. Ese `Message` es EL CODIGO: el tipo llama a `base(code)` para que los
+logs sean legibles. El navegador recibia `message: "RateTableRateAboveMaximum"` y el panel del
+simulador lo pintaba tal cual — lo unico que la documentacion de ese tipo prohibe explicitamente.
+
+**Por que no se veia antes.** `AddRuleToPlanHandler` tiene el rethrow desde el principio. El
+simulador no lo necesitaba: todo lanzamiento con codigo venia de `RateTableRequest.ToDomain`, que el
+simulador NO llama (`SimulateRuleQuery` lleva un `RateTable` de dominio directo). Al poner la guarda
+de magnitud del flat DENTRO de `Plan.AddRule` — que el simulador si llama — se abrio el hueco.
+
+**Arreglo en las dos capas:** `catch (DomainCodedException) { throw; }` en `SimulateRuleHandler`
+(seguro por lo mismo que en el save: `BuildRule` usa un `Plan` desechable que nunca toca el
+DbContext); y en el front `_setSimError`, gemelo de `_showSaveError`, que enruta el 422 con codigo
+por la MISMA whitelist `rateTableErrorKey` (§C2), mas `simErrorParams` — sin los parametros el lector
+veria `{{rate}}`, la clave sola no era el arreglo.
+
+**Tests nuevos.** Integracion: assert sobre la FORMA del cuerpo y no sobre el status — el 422 ya se
+devolvia, lo que faltaba era el codigo; verifica `code`, `parameters`, la ausencia de `tierNumber` en
+flat y (la regresion de verdad) la AUSENCIA de `message`. Front: 4 casos en `rule-simulator.spec.ts`.
+
+**Verificado en runtime en EN/ES/PL.** `RateTableRateAboveMaximum` ya no aparece en el DOM.
+
+**11 rojos de front arreglados de paso, y eran mios:** al anadir los enlaces del banner de payouts
+inyecte `CurrentUserService` en `PayoutsListComponent` y sus specs no proveian `HttpClient`
+(`NG0201`). No corri la suite de front en aquella ronda; debi hacerlo.
+
+**Suites:** build 0; unit **1820**; integracion **849 -> 850**; front **1278 -> 1282**;
+`ng build` produccion limpio. Todo con guarda de exit-code.
+
+**Sigue abierto y es PREEXISTENTE:** con tabla Attainment el simulador ni llama al backend (guarda
+propia del front). Ajeno a esta tanda.
+
+## 2026-09-02 - KAN-26 (tanda 1/N): la guarda de magnitud de tasa — 4 deja de significar 400%
+
+**Alcance: SOLO la guarda de magnitud.** NoTarget y los cuatro caminos de tabla (a-d) de KAN-26 NO se
+tocaron; van en tandas separadas. El ticket queda In Review, no Done.
+
+**El defecto.** Una tasa se guarda como MULTIPLICADOR: 0.04 es 4%. Quien escribe el porcentaje que
+piensa, `4`, guarda 400%, y el motor multiplica la venta por el sin decir nada
+(`CommissionCalculator.ComputeAttainmentCommission`). Reproducido el 2026-09-01: base 50.000 -> credito
+200.000, step marcado `Applied`. Los seis invariantes de `RateTable` pasaron esa tabla porque los seis
+leen `From`/`To` y ninguno lee `Rate` — `ValidateLadder` ni siquiera recibia el `Rate` en su tupla.
+
+**El limite: 1, y estrictamente mayor. Medido, no inventado.** En las 60 reglas de `PlanRules`, la
+mayor tasa tiered es 0.15 y la mayor de attainment 0.09; la unica tasa de tramo > 1 en toda la base es
+el 4/7 de la regla que reprodujo el bug (`E2345397`). Ninguna escalera legitima se rechaza. El `>` y no
+`>=` tiene su propia razon: la regla flat "Full payout" (`8F5DA7E8`) vale exactamente 1.00 — un
+referral que paga la venta entera — y tiene que seguir guardandose. El 100% es raro; el 400% es un
+tipeo. El limite es `RateMagnitude.MaxFractionalRate`, constante nombrada, y viaja al lector dentro
+del propio rechazo.
+
+**★★ FLAT NO SIEMPRE ES UNA FRACCION, Y ESO PARTIO EL ARREGLO EN DOS PUERTAS.** Con
+`MeasurementType.Units` el flat rate es DINERO POR UNIDAD — hay cuatro reglas en produccion pagando
+€3 o €5 la unidad. `Rule.cs:71` confina Units a tablas Flat, asi que tiered y attainment son
+incondicionalmente fracciones y se validan sin contexto; una tasa flat no. Un techo unico en
+`RateTable.Flat` habria rechazado los cuatro spiffs de unidades, y una validacion que bloquea una
+configuracion correcta manda al usuario a soporte. Por eso:
+
+- tiered/attainment: check 7 dentro de `ValidateLadder` (`RateTable.cs`), la misma puerta unica de las
+  escaleras, que la clonacion no atraviesa.
+- flat: `RateMagnitude.ValidateFlatRateForWrite(measurement, rateTable)` en `Plan.AddRule` y
+  `Plan.UpdateRule` — las unicas puertas donde la MEDICION esta en alcance — con Units exento.
+
+**★ DONDE NO PODIA IR: `Rule.Create`.** Es el constructor que comparte `Plan.CloneAsNewVersion`, y
+clonar a un Draft es la UNICA via de corregir una regla de un plan activo. La regla con tasa 4 ya
+existe en la base: validar ahi la habria congelado para siempre detras de la regla pensada para
+ayudar (§D4). Tres tests lo fijan (clonar no lanza, el clon arrastra el 4 intacto, y el Draft
+resultante sí rechaza al reguardar por fabrica).
+
+**Orden del check: septimo y ultimo, a proposito.** Es el unico check sobre el VALOR y no sobre la
+FORMA, asi que no enmascara a ninguno ni ninguno lo enmascara. Una tabla rota en las dos direcciones
+a la vez se rechaza primero por sus limites; test que lo fija.
+
+**Mensajes.** Dos codigos nuevos (`RateTableRateAboveMaximum`, `RateTableRateBelowZero`), cuatro claves
+EN/ES/PL — el par tramo/flat existe porque el servidor OMITE `tierNumber` cuando no hay tramo, y el
+front interpola todo parametro que recibe: un null habria impreso la palabra "null". Whitelist
+explicita en `rate-table-error.ts`, nunca concatenacion (§C2).
+
+**Tambien se rechazan las tasas negativas** — el mismo rango, la otra punta, codigo y frase propios.
+
+**Suites:** build 0 errores; unit 1803 -> **1820** (17 nuevos, 0 rojos); integracion **849 verdes**,
+2 skipped (rate-limit, preexistentes), 0 rojos; front 1274 -> **1278**, 0 rojos;
+`ng build --configuration production` limpio. La primera corrida de integracion dio 682 rojas con
+Docker Desktop apagado — el caso literal de §A5; se levanto el motor y se reejecuto.
+
+**Sin verificar:** no se probo en runtime contra la UI (cambio de escritura cubierto por unit +
+integracion + el spec de traduccion, y §verification-effort). `SimulateRuleHandler` pasa por
+`Plan.AddRule`, asi que simular una regla flat con tasa > 1 ahora tambien se rechaza: es coherente
+(no se puede simular lo que no se puede guardar) y ningun test de simulacion se puso rojo, pero es un
+cambio de comportamiento que nadie pidio explicitamente.
+
+**Premisas del ticket que resultaron falsas:** el `file:line` del aviso del front (es
+`rule-form.component.ts:157-160`, no :123-127) y, la que importa, "las tasas se guardan como
+fraccion" — cierto para tiered/attainment, falso para flat en modo Units.
+
 ## 2026-09-01 - KAN-27: la traza de calculo se persiste, y el cero de attainment deja de mentir
 
 **Rama:** AI-CHAT-ASSISTANT - **Sin commit** - dominio + aplicacion + infraestructura + 1 linea de
