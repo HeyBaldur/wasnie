@@ -4,6 +4,111 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-02 (d) - KAN-26 tanda 2: el floor tampoco resucita el rechazo
+
+Cierra el hueco reportado en (c). Decision de producto tomada, con respaldo de industria: un **floor**
+es el minimo de la comision de una venta comisionada — un componente DEL calculo, que presupone que
+hubo uno. Sin cuota no hay calculo, luego no hay piso que aplicar. Lo que paga pase lo que pase es un
+**draw**, y un draw vive a nivel de rep y periodo, no de transaccion: otro mecanismo, otro ticket.
+
+**Solo el floor necesitaba el arreglo, y eso es aritmetica, no atajo.** Los TRES tipos de modifier
+(Accelerator, Multiplier y el stub de Spiff) pasan por el unico `Multiply` de `ApplyModifier`, y un cap
+solo baja. Los dos dejan un cero en cero. El floor es el unico componente que puede SUBIR, asi que es
+el unico que podia deshacer el rechazo.
+
+**La senal se lleva, no se re-deriva.** `ComputeRate` devuelve ahora `RateOutcome(Money, bool
+RefusedForWantOfTarget)` en vez de un `Money` pelado. `Evaluate` podria volver a preguntar por la
+fuente, pero entonces el predicado viviria en dos sitios y acabarian divergiendo: el componente que
+tomo la decision es el que la reporta.
+
+**El floor se declina EN VOZ ALTA.** El step sigue apareciendo, con `Skipped` y con el importe del
+piso en `Threshold`. Quien audite un cero en una regla con floor de 8.520 EUR tiene que poder ver que
+el piso se consulto y se declino, no preguntarse si el motor se lo salto (§B1).
+
+**El hermano recibe el mismo trato:** split-at-quota sin contexto es el mismo rechazo NoTarget por otra
+ruta, asi que su floor tambien se suprime. Si no, la asimetria que la tanda acababa de cerrar se
+reabriria un componente mas abajo en la cascada.
+
+**Lo que NO se ensancho:** una regla de Units conserva su floor aunque le pase una fuente NoTarget al
+lado — la guarda es "AttainmentBased Y NoTarget", y quitar la primera mitad le habria quitado el piso
+a todos los spiffs de unidades. Test que lo fija.
+
+**Un test propio corregido por §A3.** El primer test de Units decia en su nombre y su comentario que
+ejercitaba la guarda de MISCONFIGURACION de Units (Units + tabla no-Flat). No la toca: el dominio
+rechaza esa pareja al escribir, asi que solo se alcanza desde una fila guardada. Renombrado y
+documentado por lo que realmente prueba, y declarado explicitamente lo que no alcanza.
+
+**Casos 10 y 11 del ticket verificados.** 10: sin cuota + floor de 8.520 -> credito **0**, el floor no
+paga. 11: con cuota + floor -> el floor aplica normal (2.000 elevados a 8.520), intacto.
+
+**Suites:** build 0; unit **1841 -> 1846**; integracion **850**; front **1282**, 0 rojos; todo con
+guarda de exit-code.
+
+## 2026-09-02 (c) - KAN-26 tanda 2: sin cuota, el motor no paga
+
+**Alcance: SOLO NoTarget.** La tanda 3 (los cuatro caminos a-d) NO se toco. El ticket sigue abierto.
+
+**El defecto.** Una regla AttainmentBased cuyo payee no tiene cuota resuelve el ratio a 0, 0 cae
+dentro del tramo [0,1], y el motor pagaba la tasa de ese tramo sobre la venta entera marcando el step
+`Applied` — indistinguible de un calculo legitimo. Dos creditos por 7.160 EUR llegaron a un payout
+Pagado por ahi.
+
+**Punto exacto (Paso 0).** No es `:222` como decia el ticket. `ComputeAttainmentCommission` calcula el
+dinero pero NO recibe el `attainmentSource`; el unico sitio con la senal en alcance es el bloque final
+de `CommissionCalculator.ComputeRate`. Ahi va la guarda.
+
+**El hermano ya lo hacia bien.** Split-at-quota sin contexto de cuota ya devolvia cero con
+`Skipped` + `NoTarget` unas lineas mas arriba. La asimetria nunca fue intencional; esto es el camino
+de bracket poniendose al dia, con el MISMO outcome para que una sola consulta encuentre los dos.
+`Skipped` y no `NotConfigured` a proposito: la regla SI configura una tabla de tasas — lo que falta es
+la cuota — y `NotConfigured` significa "la regla no configura este componente".
+
+**Metodo (obligatorio, es dinero).** `NoTargetCharacterizationTests` se escribio y se corrio ANTES de
+tocar el motor: 14 verdes a la primera, sin corregir una sola cifra. Tras el arreglo: **13 intactos y
+exactamente 1 rojo**, el que se escribio para fijar el bug. Esa pareja es la prueba de que el cambio
+dio donde apuntaba. Fichero separado del de caracterizacion existente A PROPOSITO: aquel llama a
+`ComputeCommission` directo, que nunca ve el `attainmentSource`, y habria seguido verde pasara lo que
+pasara (§A2).
+
+**Dos rojos que salieron y NO eran regresiones:**
+
+1. **Test de KAN-27** (`NoQuotaInEffect_IsNoTarget_AndTheRatioIsZero`). Mi primer corte dejaba
+   `Operand` en null en el rechazo, razonando que publicar un 0 en el que no se confia se leeria como
+   un "0%" medido. **Estaba equivocado y KAN-27 tenia razon:** el contrato es justo el contrario — el
+   ratio SOLO es lo que miente, y la fuente a su lado es lo que hace seguro publicarlo. La pareja
+   (0, NoTarget) es la representacion honesta; quitar el ratio borra la mitad. Restaurado.
+2. **`StubQuotaAttainmentService` describia un estado que produccion no puede producir.** Su
+   parametro `source` defaulteaba a `NoTarget` de golpe, asi que un test que pasaba un 75% real y no
+   decia nada de la fuente obtenia "75% de attainment medido contra ningun objetivo" — una
+   contradiccion. Era inofensivo mientras el bracket ignoraba la fuente; dejo de serlo en cuanto el
+   motor empezo a negarse a pagar con NoTarget. El rechazo era correcto y el fixture estaba mal.
+   Ahora: sin valor -> NoTarget, con valor -> Measured.
+
+**Consultable.** El portador es la traza que `CreditAllocationService` ya serializa en cada credito
+(KAN-27). Un credito NoTarget se distingue de sus TRES vecinos: de "aun no procesada" (no hay fila),
+de un trigger que no matcheo (tampoco hay fila) y de un 0% real contra una cuota real (`Applied` +
+`Measured`). **El hecho se DERIVA, no se marca con una bandera** (§B5): nada que pueda desincronizarse
+con el dinero. Los enums se serializan como TEXTO, asi que `JSON_VALUE(CalculationTrace, ...)` lo
+encuentra.
+
+**⚠ DECISION PENDIENTE — EL FLOOR RESUCITA EL RECHAZO.** El floor corre DESPUES del rate, asi que en
+una regla con floor el motor se niega a pagar y el floor paga igual. Medido: **6 reglas reales de
+attainment tienen floor**, dos de ellas de 8.520 EUR y 7.800 EUR. No lo introduce este cambio (antes
+pagaba MAS: el tramo base y ademas el floor) y el propio ticket ya lo anotaba ("un floor posterior
+disfraza el cero"), pero significa que el criterio "el credito es 0" NO se cumple para esas 6 reglas.
+Cambiar la cascada es tanda 3. Test que lo fija tal como se comporta, para que la tanda 3 tenga que
+mirarlo de frente.
+
+**Sin i18n nueva, y es deliberado.** La traza persistida por KAN-27 **no la consume ningun DTO ni la
+pinta ninguna pantalla** todavia. Anadir claves EN/ES/PL ahora seria texto muerto en una rama que no
+se ejecuta (§A3). La superficie es KAN-28.
+
+**Puerta de dinero: verificada.** Los creditos 5AFC720E y 32176B67 siguen consumidos en el payout
+844E7E75 con su `ConsumedAt` original. El cambio es solo hacia adelante; no se ejecuto ningun pay run.
+
+**Suites:** build 0; unit **1820 -> 1841**; integracion **850**; front **1282**, 0 rojos;
+todo con guarda de exit-code. Esta vez SI se corrio la de front.
+
 ## 2026-09-02 (b) - KAN-26 tanda 1: el simulador enseñaba el codigo crudo
 
 Los 9 casos de prueba de la tanda 1 se ejecutaron en runtime. 8 pasaron; el 9 destapo un defecto que

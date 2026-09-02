@@ -377,19 +377,43 @@ internal static class CommissionCalculator
         });
 
         // ── 3. Rate ──────────────────────────────────────────────────────────
-        var commission = ComputeRate(
+        var rate = ComputeRate(
             rule, tx, baseAmount, planCurrency, attainmentPct, splitContext,
             logger, trace, attainmentSource);
 
+        var commission = rate.Commission;
+
         // ── 4/5/6. Modifier, then cap, then floor ────────────────────────────
+        //
+        // ★★ ONLY THE FLOOR NEEDS THE REFUSAL, AND THAT IS NOT A SHORTCUT — IT IS ARITHMETIC.
+        // Every modifier type multiplies (Accelerator, Multiplier and the Spiff stub all go through
+        // ApplyModifier's single Multiply), and a cap only ever lowers. Both leave a zero a zero. The
+        // floor is the one component that can LIFT, so it is the one that could undo a refusal, and
+        // suppressing it is enough to make "the credit is zero" true rather than nearly true.
         commission = TraceModifier(commission, baseAmount, rule.Modifier, trace);
         commission = TraceCap(commission, rule.Cap, trace);
-        commission = TraceFloor(commission, rule.Floor, trace);
+        commission = TraceFloor(commission, rule.Floor, trace, rate.RefusedForWantOfTarget);
 
         return new RuleEvaluation(true, baseAmount, commission);
     }
 
-    private static Money ComputeRate(
+    /// <summary>
+    /// What the Rate component produced, and whether it REFUSED for want of a target.
+    ///
+    /// ★★ THE FLAG EXISTS SO THE FLOOR CANNOT UNDO THE REFUSAL. A floor is the minimum commission on
+    /// a commissioned sale — a component OF the calculation, which presupposes there was one. When
+    /// the rule cannot calculate at all because nobody set a quota, there is no commission for a
+    /// floor to be the minimum of, and a floor paying anyway is an orphan, not a guarantee. (A DRAW —
+    /// a guaranteed income floor that pays regardless of sales — is a different mechanism, at rep and
+    /// period level rather than per transaction, and is not this engine's business.)
+    ///
+    /// ★ IT IS CARRIED, NOT RE-DERIVED. Evaluate could ask the same question again by re-testing the
+    /// source, but then the predicate would live in two places and they would drift; the component
+    /// that made the decision is the one that reports it.
+    /// </summary>
+    private readonly record struct RateOutcome(Money Commission, bool RefusedForWantOfTarget);
+
+    private static RateOutcome ComputeRate(
         Rule rule,
         CompensationTransaction tx,
         Money baseAmount,
@@ -420,7 +444,7 @@ internal static class CommissionCalculator
                     Output = zero,
                     RateTable = rule.RateTable.Type,
                 });
-                return zero;
+                return new RateOutcome(zero, false);
             }
 
             var units = ComputeUnitsCommission(tx.Quantity, rule.RateTable.FlatRate!.Value, planCurrency);
@@ -436,7 +460,7 @@ internal static class CommissionCalculator
                 Threshold = Money.Of(rule.RateTable.FlatRate!.Value, planCurrency),
                 RateTable = rule.RateTable.Type,
             });
-            return units;
+            return new RateOutcome(units, false);
         }
 
         // Revenue (default) and future measurement types: use transaction.Amount as base.
@@ -463,7 +487,7 @@ internal static class CommissionCalculator
                     // rather than leaving the reader to conclude the rep sold nothing.
                     AttainmentSource = AttainmentSource.NoTarget,
                 });
-                return zero;
+                return new RateOutcome(zero, RefusedForWantOfTarget: true);
             }
 
             List<RateTierStep>? splitTiers = trace is null ? null : new List<RateTierStep>();
@@ -489,7 +513,7 @@ internal static class CommissionCalculator
                     ? null
                     : Math.Round(splitContext.PriorCumulative / splitContext.QuotaTarget, 4, MidpointRounding.ToEven),
             });
-            return split;
+            return new RateOutcome(split, false);
         }
 
         if (rule.RateTable.Type == RateTableType.Tiered)
@@ -506,7 +530,64 @@ internal static class CommissionCalculator
                 RateTable = rule.RateTable.Type,
                 Tiers = walked,
             });
-            return tiered;
+            return new RateOutcome(tiered, false);
+        }
+
+        // ── NoTarget: an attainment rule with nothing to measure against ─────
+        //
+        // ★★ THIS IS THE PATH THAT PAID 7,160 EUR FOR QUOTAS NOBODY EVER SET. An attainment lookup
+        // with no quota resolves the ratio to 0, 0 falls inside the [0,1] bracket, and the engine
+        // paid that bracket's rate on the whole sale and stamped the step Applied — indistinguishable
+        // from a rep who genuinely achieved 0%. Two credits reached a Paid payout that way.
+        //
+        // ★★ THE RATIO CANNOT TELL THE TWO APART; ONLY THE SOURCE CAN. "Achieved none of a real
+        // target" and "there was no target" are both 0. That is exactly why KAN-27 made the source
+        // travel beside the ratio instead of leaving it to be inferred — and this is the decision
+        // that could not be made before it existed.
+        //
+        // ★ IT REFUSES, IT DOES NOT GUESS. An attainment rule presupposes a quota; without one the
+        // configuration is incomplete, not a case to calculate. The engine does not invent a number
+        // and does not fall back to the base tier: it pays zero, says why in the trace, and hands the
+        // case back to a human to set the quota or confirm the exception. Registering is not throwing
+        // (§B1): an exception here would kill the whole pay-run batch, and this leaves a row somebody
+        // can find instead.
+        //
+        // ★ THE SIBLING BRANCH ALREADY DID THIS. Split-at-quota with no context returns zero with
+        // Skipped + NoTarget a few lines above. The asymmetry was never intentional; this is the
+        // bracket path catching up, using the same outcome so one query finds both.
+        //
+        // Skipped and not NotConfigured on purpose: the rule DOES configure a rate table — what is
+        // missing is the quota — and NotConfigured means "the rule does not configure this component
+        // at all". Skipped is documented as "configured, but the engine declined to apply it", which
+        // is precisely what happened.
+        if (rule.RateTable.Type == RateTableType.AttainmentBased &&
+            attainmentSource == AttainmentSource.NoTarget)
+        {
+            logger?.LogWarning(
+                "Attainment rule {RuleId}: no quota in effect for payee={PayeeId}, plan={PlanId}, " +
+                "date={Date}. Commission set to zero and the step marked Skipped — the rule pays by " +
+                "attainment and there is no target to measure against. Assign a quota to earn " +
+                "commission under this rule.",
+                rule.Id, tx.PayeeId, rule.PlanId, tx.TransactionDate);
+
+            var noTarget = Money.Zero(baseAmount.Currency);
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Rate,
+                Outcome = RuleCalculationOutcome.Skipped,
+                Input = baseAmount,
+                Output = noTarget,
+                RateTable = rule.RateTable.Type,
+                AttainmentSource = AttainmentSource.NoTarget,
+                // ★★ THE RATIO STILL TRAVELS, AND OMITTING IT WAS A MISTAKE THIS TEST SUITE CAUGHT.
+                // The first cut left Operand null, reasoning that publishing a 0 the engine refuses
+                // to trust would read as a measured "0%". That breaks KAN-27's contract, which is
+                // the opposite: the ratio alone is what lies, and the SOURCE beside it is what makes
+                // it safe to publish. The pair (0, NoTarget) is the honest representation; a null
+                // just deletes half of it and tells the reader less.
+                Operand = attainmentPct,
+            });
+            return new RateOutcome(noTarget, RefusedForWantOfTarget: true);
         }
 
         var result = ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
@@ -524,7 +605,7 @@ internal static class CommissionCalculator
                 ? attainmentSource
                 : null,
         });
-        return result;
+        return new RateOutcome(result, false);
     }
 
     // ── The traced wrappers ──────────────────────────────────────────────────
@@ -565,8 +646,34 @@ internal static class CommissionCalculator
         return result;
     }
 
-    private static Money TraceFloor(Money commission, Floor? floor, List<RuleCalculationStep>? trace)
+    /// <param name="refusedForWantOfTarget">
+    /// True when the Rate component declined to calculate because no quota was in effect. The floor
+    /// is then not applied at all: it is the minimum of a commission, and there was no commission.
+    ///
+    /// ★ THE STEP STILL APPEARS, AND IT SAYS Skipped. Dropping it — or reporting NotConfigured —
+    /// would hide a floor the rule really does carry, and somebody auditing a zero on a rule with an
+    /// 8,520 EUR floor has to be able to see that the floor was CONSULTED AND DECLINED rather than
+    /// wonder whether the engine forgot it (§B1: register, never fail quietly).
+    /// </param>
+    private static Money TraceFloor(
+        Money commission, Floor? floor, List<RuleCalculationStep>? trace,
+        bool refusedForWantOfTarget = false)
     {
+        if (refusedForWantOfTarget)
+        {
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Floor,
+                Outcome = floor is null
+                    ? RuleCalculationOutcome.NotConfigured
+                    : RuleCalculationOutcome.Skipped,
+                Input = commission,
+                Output = commission,
+                Threshold = floor?.Amount,
+            });
+            return commission;
+        }
+
         var result = ApplyFloor(commission, floor);
         trace?.Add(new RuleCalculationStep
         {
