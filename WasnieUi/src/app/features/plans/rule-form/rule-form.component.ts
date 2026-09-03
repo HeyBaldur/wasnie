@@ -412,6 +412,16 @@ export class RuleFormComponent implements OnInit {
   readonly simLoading = signal(false);
   readonly simErrorKey = signal<string | null>(null);
 
+  /**
+   * The values the simulator's error sentence interpolates, or null when it has none.
+   *
+   * ★ IT EXISTS BECAUSE THE SIMULATOR'S FAILURES ARE NOW CODED TOO. A coded refusal is a key plus
+   * its numbers — "the rate of tier 1 is 4" — and a key rendered without them shows the reader
+   * `{{tierNumber}}`. The save toast has carried parameters since the ladder invariants landed; this
+   * is the same pair on the panel beside it.
+   */
+  readonly simErrorParams = signal<Record<string, unknown> | null>(null);
+
   /** Bumped on every send; a response whose ticket is stale is dropped. */
   private simSeq = 0;
   private simTimer: ReturnType<typeof setTimeout> | null = null;
@@ -566,6 +576,7 @@ export class RuleFormComponent implements OnInit {
     if (this.simTimer) clearTimeout(this.simTimer);
     this.simulation.set(null);
     this.simErrorKey.set(null);
+    this.simErrorParams.set(null);
 
     const amount = this.simInput();
     if (amount === null || amount < 0 || !this.canSimulate()) {
@@ -579,6 +590,7 @@ export class RuleFormComponent implements OnInit {
 
   retrySimulation(): void {
     this.simErrorKey.set(null);
+    this.simErrorParams.set(null);
     this.scheduleSimulation();
   }
 
@@ -617,7 +629,7 @@ export class RuleFormComponent implements OnInit {
           if (ticket !== this.simSeq) return;
           // Never leave a stale figure standing next to a failure.
           this.simulation.set(null);
-          this.simErrorKey.set(extractApiError(err));
+          this._setSimError(err);
           this.simLoading.set(false);
         },
       });
@@ -969,6 +981,32 @@ export class RuleFormComponent implements OnInit {
    * ladder — a wrong explanation is worse than a vague one on the screen that decides what people
    * are paid.
    */
+  /**
+   * The simulator's half of the same contract `_showSaveError` implements for the toast.
+   *
+   * ★★ WITHOUT THIS THE PANEL PRINTED THE RAW CODE. `extractApiError` returns `err.error.message`,
+   * and a coded 422 has no `message` — but the simulate handler used to flatten the coded exception
+   * into one, whose text was the identifier itself. Both halves are fixed: the handler now lets the
+   * coded refusal through, and this routes it through the SAME explicit whitelist the toast uses, so
+   * a code this build does not recognise degrades to a generic line instead of being spelled out.
+   *
+   * ★ IT DOES NOT ASSUME EVERY CODED 422 IS A RATE-TABLE PROBLEM, for the reason `_showSaveError`
+   * gives: an unrecognised code falls through to the plain message path rather than being described
+   * as a bad ladder.
+   */
+  private _setSimError(err: unknown): void {
+    const coded = extractApiErrorCode(err);
+
+    if (coded && isKnownRateTableError(coded)) {
+      this.simErrorKey.set(rateTableErrorKey(coded));
+      this.simErrorParams.set(rateTableErrorParams(coded));
+      return;
+    }
+
+    this.simErrorKey.set(extractApiError(err));
+    this.simErrorParams.set(null);
+  }
+
   private _showSaveError(err: unknown): void {
     const coded = extractApiErrorCode(err);
 

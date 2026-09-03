@@ -4,6 +4,1023 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 (g) - KAN-49: resolucion por correccion en el Centro (deep links + reproceso manual)
+
+**Rama:** KAN-38 · v2 de KAN-28, se apoya en KAN-50 · **Sin commit.** Solo frontend.
+
+**★★ El Paso 0 ERA el entregable, y mi primera version se equivoco en un motivo — corregido en review.**
+Declare `NoQuotaInEffect` sin destino tras comprobar que no existe pantalla de "cuotas de este payee":
+`/quotas` acepta unicamente `?status=` (`quotas-list.component.ts:94`), su store no filtra por payee,
+el detalle de payee tiene pestanas overview/profile/ledger y ninguna de cuotas, y
+`QuotasApiService.listByPayee` existe y no se llama desde ningun sitio. Todo eso es cierto **y la
+conclusion era falsa**: la cura de "este payee no tiene cuota" es CREARLA, y `/quotas/new` existe desde
+siempre — y **precarga el payee desde `?payeeId=`** (`quotas/create:156-170`: lee el param, resuelve la
+etiqueta y lo anade al formulario). **La leccion, anotada en el codigo: buscar la pantalla que nombra el
+ticket en vez de la pantalla que necesita la CURA es como un destino alcanzable se registra como
+inalcanzable.**
+
+**Tabla motivo → destino (el entregable del Paso 0), toda verificada en codigo:**
+
+| Motivo | Destino | Estado |
+|---|---|---|
+| NoPayee | `/transactions?ref=` → modal Assign Payee de la LISTA | ok |
+| NoActiveAssignment | `/assignments/new?payeeId=` (prefill verificado) | ok |
+| AmbiguousAttribution | `/assignments?payeeId=` | ok |
+| DealLost / CrmDrift | `/transactions?ref=` | ok |
+| NoQuotaInEffect | `/quotas/new?payeeId=` (prefill verificado) | ok |
+| NoMatchingBracket / AmountOutsideTable | `/plans/:planId` + tooltip explicativo | ok |
+| PlanHasNoActiveRules | `/plans/:planId` (ahi vive Clonar) | ok |
+| ProcessableWithoutCredit | reproceso manual `ByPayeeAndPeriod` | ok, accion |
+| CurrencyMismatch | **sin destino** (KAN-45) | sin accion |
+
+**★ Los rechazos de escalera nunca estuvieron "sin accion": ya enlazaban al plan, y eran "parciales".**
+Lo que les faltaba era decir POR QUE. Son de UNA regla concreta y `ReconciliationRowDto` lleva `PlanId`
+pero **no `RuleId`**, asi que `/plans/:id/rules/:ruleId` no se puede construir con lo que la fila tiene.
+En vez de ensanchar el DTO, un `titleKey` opcional en la resolucion lleva el mensaje que el enlace no
+puede: que una regla de ESE plan no pudo tarifar la venta porque su tabla no declara tasa para ella, y
+que revise sus tramos. Codigo i18n, EN/ES/PL (§C1). Resuelve el caso sin dato nuevo.
+
+**★ `CurrencyMismatch` es el unico "sin accion", y por la razon correcta:** que significa arreglarlo lo
+decide KAN-45 —redenominar el plan, o enrutar la venta a otro— y son pantallas distintas. Un enlace
+ahora seria una adivinanza. La regla del Paso 0 sigue viva para el y para cualquier motivo futuro en su
+posicion: sin boton, con tooltip que lo explica, nunca un deep link roto.
+
+**★★ Ninguna accion muta una fila para ocultarla.** Los deep links no tocan estado. El reproceso
+ejecuta el motor que ya existe. En los dos casos la fila se va porque la condicion dejo de ser cierta
+—la cola DERIVA del dato (KAN-28)— asi que no hay bandera "resuelto" que poner ni que se desincronice.
+Cerrar el modal llama a `store.refresh()`: si el reproceso creo credito, la fila ya no vuelve; si no
+creo nada, sigue ahi, que es la verdad.
+
+**★★ El modal hospeda `ProcessPendingComponent`, no una copia.** Es el mismo panel que usan el detalle
+de plan, el de asignacion y la lista de transacciones: ensena el recuento de candidatas y las
+elegibles ANTES de disparar, hace polling del job y reporta lo que la corrida creo de verdad —
+incluido "procesadas N, creadas 0", que a proposito no pinta como exito. Reconstruir eso aqui habria
+sido una segunda superficie contra el motor, de las que coinciden hasta que dejan de coincidir.
+
+**★ El `@if` del modal es portante.** `ProcessPendingComponent` lee sus inputs de scope UNA vez, en
+`ngOnInit`. Reutilizar la instancia entre dos filas le ensenaria al segundo payee los numeros del
+primero, en una pantalla sobre dinero. El `@if` la destruye y la recrea.
+
+**★ El mapa vive en `reconciliation-resolution.ts`, no en el componente**, que es lo que permite testear
+la tabla del Paso 0 sin renderizar nada — y la misma separacion que ya usa el whitelist de motivos.
+Y no se concatena la clave de traduccion en ninguno de los dos lados (§C2): el tooltip del "sin accion"
+sale de un `Record` exhaustivo sobre la union, asi que anadir un caso sin clave es error de compilacion.
+
+**★ RBAC esconde, no deshabilita (§5.8):** sin `Transactions.ProcessPending` el boton no esta. La fila
+si: VER el dinero no es el mismo permiso que lanzar una corrida sobre el.
+
+**Tests (15 nuevos, front):** la tabla del Paso 0 entera como spec ejecutable — el alta de cuota con y
+sin payee que precargar; el tooltip de los dos rechazos de escalera; el destino que se explica solo y
+por tanto NO lleva tooltip; `CurrencyMismatch` pinchado como el unico sin cura, para que nadie lo
+"arregle" con un enlace malo; el reproceso sin payee o sin fecha que no ofrece boton (un boton que
+daria 400 no es un boton); los dos silencios distinguidos ("no hay pantalla" vs "a esta fila le faltan
+datos", §B3); el codigo desconocido; y la fila con dos motivos que ofrece el primero accionable.
+
+**★ Un rojo en la correccion, y era del TEST, no del codigo.**
+`jasmine.objectContaining({ titleKey: undefined })` exige que la clave este PRESENTE y valga undefined;
+la resolucion simplemente la omite, que es justo lo que se queria comprobar. Se afirma sobre la
+propiedad. Anotado en el test para que nadie lo reescriba con la forma que da rojo contra codigo bueno.
+
+**Suites:** front 1308 → **1323**, 0 fallos · `ng build --configuration production` exit 0. Backend sin
+tocar. El bundle inicial no cambia: la ruta de reconciliation es lazy (`app.routes.ts:75`); los avisos
+de presupuesto son preexistentes.
+
+**Premisas del ticket que resultaron falsas (§E6):**
+- El ticket no menciona `NoMatchingBracket` / `AmountOutsideTable` en su lista de motivos; se mapearon
+  igual, al plan mas un mensaje explicativo.
+- **Y una premisa MIA que resulto falsa:** declare `NoQuotaInEffect` sin destino. Lo verificado era
+  cierto (no hay pantalla de "cuotas de este payee") pero la conclusion no: la cura es `/quotas/new`,
+  que ya existia y ya precargaba. Corregido en review, no por un ticket nuevo.
+
+**★★ Verificado en runtime, y el DOM real encontro una regresion que los tests no podian ver (§A3).**
+La columna Resolve hizo que la tabla desbordara **8px** — medido en el navegador: contenedor 1150,
+tabla 1158. Esta tabla estaba deliberadamente ajustada para caber sin scroll (hay dos comentarios en
+su HTML explicando que se midio, y que por eso no tiene columna Type). Ningun test de jsdom podia
+detectarlo: jsdom no hace layout.
+
+**Causa exacta: el icono `external-link` del enlace, 18px con su hueco.** Quitarlo devuelve el
+desborde a 0 (verificado: `scrollWidth === clientWidth`) y ademas CORRIGE una inconsistencia: era el
+unico enlace de esta tabla que anunciaba con un glifo que abre en pestana nueva — la referencia, el
+payee y el plan hacen lo mismo y ninguno lo lleva.
+
+**★★ Y el scrollbar de las tablas era el nativo, en toda la plataforma.** `.ws-table-wrap` declara
+`overflow-x: auto` y nunca estilo la barra, asi que cualquier tabla que desborde dibuja la nativa
+gruesa. La receta fina de la casa —`scrollbar-width: thin`, pista transparente, pulgar redondeado en
+`--color-border-strong` que se aclara al hover— estaba copiada a mano en cinco componentes
+(asistente, detalle de credito, detalle de payee, modales de pay-runs y payouts), siempre sobre
+scrollers internos, nunca sobre una tabla. Se aplico en `ws-table.component.scss`, que es donde vive:
+ponerla en la hoja de reconciliation habria arreglado una tabla y dejado el resto para descubrirse
+igual, que es exactamente como llegaron a existir las cinco copias. **Es un cambio de alcance
+app-wide, puramente cosmetico (ninguna regla de layout), sobre la primitiva compartida.** Verificado
+forzando el desborde en el navegador: la barra sale fina y redondeada.
+
+---
+
+## 2026-09-03 (f) - KAN-50: la venta que no le falta nada y no tiene comision
+
+**Rama:** KAN-38 · Hermano de KAN-44 (salio de su Paso 0) · **Sin commit.**
+
+**El hueco:** el Centro de Reconciliacion nombraba lo que a una transaccion le FALTA — sin payee, sin
+asignacion, moneda distinta — y la ambiguedad, que es una eleccion que nadie hizo. Una `Pending` a la
+que no le falta nada y que no tenia nada que elegir no caia en ninguno de los cuatro. Existia, era
+dinero, y ninguna pantalla podia mostrarla. Medido en la base de desarrollo: 2 filas sobre 10.141
+pendientes (`SCC-20260515-0002` y `-0006`, EMP310, 234,50 y 415,00 PLN).
+
+**★★ El frente A del ticket resulto una premisa falsa, y eso cambio el diseno del frente B.** El
+ticket suponia que el motor habia devuelto cero para esas dos filas y que eso era anomalo (regla plana
+al 5% sin condiciones). El motor nunca las vio. Reconstruido con `BackgroundJobRecords`: se ingestaron
+el 2026-06-01 sin asignacion (eran `NoActiveAssignment`, visibles y correctas); la asignacion se creo
+el 2026-06-09 12:34; la corrida de las 12:36 fue de otro payee (EMP303); y **ninguna de las cuatro
+corridas posteriores del tenant tuvo `processed > creditsCreated`** (3/3, 4/4, 1/1, 0/0). Como
+`processed` cuenta toda transaccion en alcance con o sin credito, eso prueba que nunca entraron en uno.
+Salieron del bucket `NoActiveAssignment` esa tarde y no entraron en ningun otro.
+
+**★★ Causa de fondo: nada reprocesa una transaccion cuya asignacion aparece despues.**
+`ProcessPendingScope` (`ProcessPendingScope.cs:6-16`) ofrece `ByPlanAssignment`, `ByPlan` y
+`ByPayeeAndPeriod` — **no hay alcance de tenant ni disparo automatico**. Solo se paga si alguien lanza
+a mano una corrida que la alcance.
+
+**★★ Por eso la visibilidad es ESTADO DERIVADO y no una bandera (§B5).** La alternativa obvia era que
+el motor estampara la transaccion al terminar con cero creditos. Esa bandera habria estado **ausente
+justo en estas dos filas**, porque el motor nunca corrio sobre ellas; y habria quedado pegada despues
+de que una corrida posterior las pagara, salvo que algo se acordara de limpiarla. La condicion se
+puede leer del dinero, asi que se lee del dinero.
+
+**★ No distingue "el motor corrio y ninguna regla matcheo" de "el motor nunca corrio", a proposito.**
+Para quien concilia son el mismo hecho: una venta que deberia llevar comision no la lleva. El estado
+actual no puede separarlos —ninguna corrida deja registro por transaccion— e inventar la distincion
+seria un campo con dos significados (§B3).
+
+**Construido:** `ProcessableWithoutCreditSpec` (nueva, complemento exacto de `UnprocessablePendingSpec`:
+Pending + payee + >=1 candidata elegible + sin credito vivo, excluyendo el caso ambiguo que ya tiene
+dueno); su codigo en `ReconciliationReason` (tomado prestado de la spec, no redeclarado); el seed en
+`ReconciliationQuery`; whitelist del front y EN/ES/PL. **Sin migracion y sin tocar el motor.**
+
+**★ "Sin credito vivo" se pregunta a los CREDITOS, no al estado.** Hoy bastaria con `Pending`
+—`MarkCalculated` mueve la transaccion en cuanto hay un credito— pero la pregunta que responde la fila
+es sobre DINERO. Un credito superseded no cuenta: fue reemplazado y no paga nada.
+
+**Tests (4 de integracion + 1 de front):** el caso EMP310 reproducido en vez de descrito; el fail-safe
+(una venta pagada normalmente no llega a la cola); la exclusividad frente a los cuatro motivos previos
+—las cuatro filas conservan exactamente su motivo y ninguna gana el nuevo—; y el acuerdo SQL <->
+`PlanAssignmentResolver.Candidates` sobre los mismos datos, que es como se sujeta la segunda expresion
+de una regla del motor (mismo molde que el test de ambiguedad).
+
+**Verificado contra la base real (§A3):** la spec corrida como SQL sobre `WasnieDb` devuelve
+exactamente esas 2 filas y ninguna mas. El bucket nuevo no abre ninguna compuerta.
+
+**Suites:** build solucion 0 errores · unit 1909/1909 · integracion 865 verdes + 2 skipped (rate limit)
+· front 1307 -> 1308. Los 4 tests nuevos verificados por nombre en la salida, no por conteo.
+
+**Premisas del ticket que resultaron falsas (§E6):**
+- "Una regla plana al 5% que da cero es anomalo, investigar el calculo" — el motor nunca calculo estas
+  dos. No hay bug de calculo.
+- "El job solo contabiliza el descarte cuando hubo `DomainException`" — cierto, pero irrelevante aqui:
+  el job nunca las proceso. Un contador de descartes no las habria detectado.
+
+**Queda fuera, con razon:** el contador de descartes sin excepcion en el job
+(`ProcessPendingTransactionsJobHandler.cs:204-260`) y el alcance de tenant / reproceso automatico. Son
+otro riesgo de reversion (§E1) y el segundo es una decision de producto, no una correccion.
+
+---
+
+## 2026-09-03 (e) - ws-date-picker: el calendario no seguia a su input al hacer scroll
+
+**Rama:** KAN-38 · Detectado verificando la pantalla de KAN-28 · **Sin commit.**
+
+**Sintoma:** con el calendario abierto, al hacer scroll el popover se quedaba clavado donde nacio,
+flotando sobre filas ajenas. Mismo sintoma que ya habia tenido el dropdown de `ws-select`.
+
+**★★ La causa NO era un listener de scroll ausente, y ahi estaba la trampa.** El listener existia,
+se disparaba, y `computePlacement()` remedia el trigger y asignaba coordenadas nuevas — correctas.
+El problema es que aterrizaban en **campos planos**, y `popoverStyle` es un `computed()`: solo
+recalcula cuando cambia un SIGNAL que haya leido. El estilo inline conservaba los numeros del
+momento de abrir. Todo parecia cableado y nada se movia.
+
+**Arreglo:** `fixedLeft`, `fixedWidth` y `fixedVertical` pasan de campos planos a `signal()`, que es
+exactamente como los tiene `ws-select` (`dropdownLeft`, `dropdownWidth`, `dropdownFixedTop`,
+`dropdownFixedBottom`). Tres lineas de declaracion, tres `.set()` y tres lecturas con `()`.
+
+**★ El test asserta el ESTILO renderizado, nunca los campos internos.** Un test que leyera los
+campos habria pasado contra el build roto (§A2). `ws-date-picker.component.spec.ts` (nuevo, 5):
+se ancla al abrir, se remide y se mueve al hacer scroll, sigue tambien en horizontal, se cierra si
+el trigger sale del viewport, y deja de escuchar al cerrarse.
+
+**Verificado que el test muerde:** se reintrodujo el bug a proposito (una copia estancada de la
+coordenada) y el spec se puso **rojo con el sintoma exacto** ('120px' donde tocaba '20px'); al
+restaurar, verde. Fichero restaurado byte a byte.
+
+**Dos detalles del entorno que el spec fija a proposito:** la altura de viewport se pinea a 1000
+(el iframe de karma es lo bastante bajo como para invertir la decision arriba/abajo, y estos tests
+son sobre "sigue al trigger", no sobre lo alta que sea la ventana del runner); y el scroll se
+despacha desde `document` con burbujeo, que es lo que produce un contenedor anidado real — el
+componente escucha en `window` en fase de CAPTURA justamente para ver scrolls de contenedores que
+no conoce.
+
+**Ficheros:** `ws-date-picker.component.ts` · `ws-date-picker.component.spec.ts` (nuevo).
+
+**Suites:** front **1290 -> 1295**, `ng build --configuration production` exit 0.
+
+## 2026-09-03 (d) - KAN-28 tanda B: el Centro de Reconciliacion
+
+**Rama:** KAN-38 · **Ticket:** KAN-28 (tanda B de 2, COMPLETA el ticket) · **Sin commit.**
+Full-stack: backend + frontend + export.
+
+**La pantalla LEE, no re-implementa.** Los 3 motivos del motor salen de `Credits.RateRefusal`
+(tanda A); los 3 de transacciones, de `UnprocessablePendingSpec` —la misma queryable que cuenta
+la tarjeta del Dashboard y filtra la lista de Transactions—; la ambiguedad, de
+`AmbiguousAttributionSpec`. El panel del Dashboard **no se toco**.
+
+**★★ Todo es IQueryable hasta el final.** Los "seeds" (una fila por pareja entidad+motivo) se
+concatenan, filtran, cuentan, agrupan y paginan en SQL. No es una preferencia de rendimiento:
+las tarjetas tienen que ser LA MISMA consulta que las filas, y un total solo puede garantizarse
+igual a la tabla si ninguno de los dos se armo en memoria a partir de una pagina.
+
+**★★ El importe es la VENTA, no una comision.** Cuando el motor rechaza, la comision es justo la
+cifra que nadie conoce — eso es lo que significa el rechazo. Publicar un "importe adeudado"
+seria inventar el numero que KAN-26 existe para no inventar. La tarjeta dice "ventas afectadas"
+y hay una nota en pantalla que lo explica (§C3).
+
+**★★ Dos bolsillos que nunca se suman.** `AffectedBase` y `Clawback` viajan como campos
+separados hasta la tarjeta; **no existe ningun campo `net`** en el DTO ni en el modelo del front.
+Test que lo fija.
+
+**★★ Una entrada con dos motivos aparece UNA vez.** El filtro por motivo se aplica a la ENTIDAD,
+no al seed: filtrar seeds devolveria la fila despojada de su otro motivo. El dinero se suma sobre
+entidades distintas (`Distinct` sobre la tupla monetaria), no sobre seeds.
+
+**★ `AmbiguousAttributionSpec.Queryable` es una SEGUNDA expresion de una regla del motor**, y eso
+es un riesgo conocido de este repo. Existe porque `PlanAssignmentResolver.Candidates` es
+in-memory por diseño y una pantalla que declara totales tiene que calcularlos en SQL. Hay un test
+que corre **las dos sobre los mismos datos** y exige la misma respuesta; si se pone rojo, la
+queryable es la que esta mal.
+
+**★ `PlansWithoutLiveRulesSpec` extraida** del handler del dashboard para que las dos superficies
+compartan el predicado. Significado intacto, solo cambio de direccion.
+
+**★ Un plan es una CAUSA, no una suma:** aparece en la lista y en el conteo por motivo, con
+importe null, y nunca entra en un total por moneda. En el export, celda **vacia y no 0,00**.
+
+**★ La whitelist del front no concatena la clave (§C2):** un codigo desconocido cae a una frase
+generica, nunca imprime el identificador. Test que lo fija.
+
+**Hallazgo de fixture (§A3):** los primeros tests de dos motivos salieron rojos porque mis
+transacciones estaban `Pending` con payee y sin asignacion — o sea, tambien eran legitimamente
+`NoActiveAssignment`. La consulta tenia razon; el fixture describia un estado que produccion no
+puede producir. Se añadio `PaidTx` (calculada y pagada), que es lo que un deal perdido es por
+definicion.
+
+**Ficheros nuevos:** `ReconciliationReason.cs` · `PlansWithoutLiveRulesSpec.cs` ·
+`ReconciliationDtos.cs` · `ReconciliationQueries.cs` · `ReconciliationQuery.cs` ·
+`GetReconciliationHandler.cs` · `ExportReconciliationHandler.cs` ·
+`IReconciliationExcelExportService.cs` · `ReconciliationExcelExportService.cs` ·
+`ReconciliationController.cs` · `ReconciliationCentreTests.cs` (9) · feature `reconciliation/`
+del front (modelos, whitelist, api, store, lista, rutas, spec) · EN/ES/PL.
+**Modificados:** `AmbiguousAttributionSpec.cs` (+Queryable) · `GetDashboardSummaryHandler.cs`
+(usa la spec extraida) · `DependencyInjection.cs` · `app.routes.ts` · `sidebar.component.ts`.
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1909**, integracion
+**852 -> 861** (9 nuevos), front **1282 -> 1290** (8 nuevos), `ng build --configuration
+production` exit 0. La ruta es lazy, asi que no entra al bundle inicial; los dos avisos de budget
+(bundle inicial y `dashboard.component.scss`) son preexistentes.
+
+**Ajuste posterior (mismo WI):** el boton de Export estaba mal ubicado. Se alineo con el patron de
+la lista de Payouts: fila propia entre el filtro y la tabla, **alineada a la derecha**, boton
+`ghost` con icono `file-excel` y estado `[loading]`, y **oculta** cuando no hay nada que exportar en
+vez de deshabilitada (§5.8: mostrar lo que se PUEDE hacer). La clave i18n `EXPORTING` quedo muerta
+al usar el estado del boton y se elimino de los tres idiomas. Front **1295**, build limpio.
+
+**Iconos de Excel y PDF como artwork (mismo WI, alcance global):** los PNG nuevos de
+`WasnieUi/public/icons` sustituyen al trazo generico en TODOS los botones de exportacion. Se
+enrutan por el propio `app-icon` mediante un mapa `IMAGE_ICONS` en vez de esparcir `<img>` por cinco
+plantillas: Excel y PDF son **marcas**, su color es parte de su significado y no pueden ser un
+`stroke="currentColor"` como el resto. Los cinco puntos de llamada siguen diciendo
+`<app-icon name="file-excel" />`. Alcanza a Payouts, Transactions, Credits y Reconciliation (Excel)
+y al detalle de payout (PDF, que usaba el icono generico `download`). **Segunda pasada, tras un
+barrido sistematico:** los dos botones de pay-runs (lista y detalle) tambien decian "Export to
+Excel" y devuelven `.xlsx`, pero llevaban `download` — corregidos. El barrido cruza el icono con la
+clave i18n del boton y con lo que devuelve el endpoint, en vez de buscar solo `file-excel`; asi es
+como aparecieron. Quedan **8 botones de export** y los 8 tienen su marca correcta. Se deja a
+proposito `TRANSACTIONS.ACTION_UPDATE_EXCEL` con `refresh`: es "Update FROM Excel", una reimportacion
+— el icono describe la accion, no el formato. Todos a `[size]="16"`, el tamano natural del PNG
+(a 14 se resampleaban y se veian borrosos). `public/` se copia a la raiz
+del build, asi que las rutas `/icons/*.png` existen en produccion — verificado en `dist/`.
+`icon.component.spec.ts` (nuevo, 5) asserta el ELEMENTO renderizado, no el mapa: un componente que
+eligiera la URL correcta y siguiera dibujando un `<svg>` vacio pasaria un test del mapa y fallaria
+al usuario.
+
+**Y la etiqueta decia solo "Export":** ahora "Export to Excel" en los tres idiomas, como el resto de
+las listas.
+
+**Defecto ajeno, NO corregido (§10):** el polaco del boton de export es inconsistente en pantallas
+preexistentes — `Eksportuj do Excel` en Payouts y Transactions, `Eksportuj do Excela` en Credits.
+La forma correcta es la segunda (genitivo) y es la que se uso aqui; las otras dos se dejan como
+estan, que es una decision de traduccion y no de este WI.
+
+**Suites:** front **1295 -> 1300**, build limpio.
+
+**Tabla del Centro rehecha con el lenguaje de terminated-accounts (mismo WI):** mismas CLASES, no
+parecidas — `__name` para el sujeto de la fila (primario, peso 500), `__link` con
+`--color-text-link` para todo lo que navega, `.col-amount` de ws-table para el dinero (la
+alineacion NO se declara local: nueve pantallas lo hicieron y todas dejaron el TH desalineado),
+`tabular-nums`, y `__none` para el guion, que es "no hay importe" y no "cero". El **kind deja de ser
+un badge**: es un TIPO, no un estado, y pasa a texto discreto para que los badges de motivo sigan
+siendo lo que el ojo busca (§5.4 reserva WsBadge para valores de ESTADO).
+
+**Links a nueva pestana** en referencia, payee y plan — misma razon y mismo markup que las
+referencias de credito de terminated-accounts: es una cola de trabajo, y seguir un enlace no debe
+costarle al lector la lista filtrada que estaba recorriendo.
+
+**★ Bug evitado al cablear los links:** en una fila de tipo Credit el `entityId` es el id del
+CREDITO, pero la referencia mostrada es la de su TRANSACCION. El primer corte enlazaba
+`['/transactions', entityId]`, que habria llevado a una ruta de transaccion con id de credito — un
+404 con pinta de registro roto. La fila lleva ahora `TransactionId` propio (null en filas de Plan) y
+hay un test que exige que difiera del `entityId`.
+
+**★★ Y el diseno seguia sin verse compacto, porque el problema NO eran las clases: era que las
+celdas ENVOLVIAN.** Medido en el DOM real, no supuesto: filas de **77px** contra las de 53px/30px de
+terminated. "Rudolph GeHard Chipellin 3ero" partia en tres lineas y el rotulo "Clawback" anadia una
+cuarta bajo cada importe. Arreglado con `white-space: nowrap` en la celda de payee y una sola linea
+en el importe — el clawback lo dice ahora el COLOR (`--color-danger`, el mismo vocabulario que la
+columna de balance de terminated) y un `title`. Resultado medido: **46px, una sola altura para las
+25 filas, 0px de desborde**.
+
+**Dos columnas eliminadas por medicion, no por gusto:**
+- **TYPE**: repetia "TRANSACTION" en casi cada fila y costaba 117px, con la columna AMOUNT fuera de
+  pantalla en una pagina sobre dinero. Es **redundante**: cada motivo pertenece a un unico tipo (los
+  tres del motor solo aparecen en creditos; los inprocesables solo en transacciones;
+  `PlanHasNoActiveRules` solo en planes), asi que la columna REASONS ya lo codifica.
+- **CODE como columna propia**: se probo separarla —como en terminated— y costaba **47px de
+  desborde**. Se simulo la alternativa en el navegador antes de editar nada: fusionarla en la celda
+  de payee con nowrap da **0px**. El codigo comparte celda otra vez; compartirla nunca fue el
+  problema, envolver si.
+
+**Tercera pasada: nowrap solo movio el problema de sitio.** Con datos reales —una referencia de
+HubSpot de 33 caracteres y un payee llamado literalmente "Agnieszka Jankowska Super Very Long Name
+For this Payee!"— esas dos columnas pedian **174px mas** de los que hay, asi que la tabla crecia una
+barra horizontal y AMOUNT se iba de la pantalla otra vez. La medicion anterior de 0px fue con filas
+que no incluian esos casos: **medi mal, no solo asumi mal**. Arreglado con tope + elipsis
+(`max-width` + `text-overflow`) en referencia, nombre y plan, y **`title` en cada valor truncado**:
+una referencia que no se puede leer es peor que una tabla ancha, porque existe para copiarla a otro
+sistema. **El nombre trunca, el codigo NO** — es la mitad que identifica sin ambiguedad y son cuatro
+caracteres.
+
+**Y el tamano de fuente estaba mal, como se me dijo:** `.recon__code` a **12px** cuando toda la fila
+—y la columna de codigo de terminated, que no declara `font-size` y hereda el de la tabla— esta a
+**14px**. Quitado el override. Medido en ambas paginas antes y despues, no deducido.
+
+**Verificado en el navegador:** 0px de desborde con las filas largas en pantalla, **46px de altura
+en las 25 filas**, `td`/`code`/`name`/`link` todos a 14px, 7 valores truncados y los 7 con `title`.
+
+**Cuarta pasada — paginacion, y dos falsas alarmas verificadas:**
+
+- **La paginacion no volvia arriba.** Ahora `goToPage` espera a que lleguen las filas y sube el
+  scroll. **★ La pagina NO scrollea en `window`**, sino dentro de la columna del app-shell
+  (`main.shell__content`), asi que `window.scrollTo(0,0)` es un no-op en toda esta app — trampa ya
+  documentada en el `jumpTo` del manual. **★ Y el scroll es INSTANTANEO, no `smooth`, que era el
+  bug de mi primer intento:** una animacion se cancela cuando Angular repinta 25 filas en ese mismo
+  contenedor un frame despues, y el lector se quedaba donde estaba. Medido: con `smooth` el scroller
+  quedaba clavado en su maximo (845), sin el aterriza en **0**.
+  La busqueda del scroller se extrajo a `shared/utils/find-scroll-container.ts` con 6 tests que
+  construyen elementos con tamanos REALES: un test con `scrollHeight` stubbeado pasaria contra
+  cualquier implementacion que lea la propiedad, incluida una mala. Ninguna otra tabla de la app
+  hace esto todavia; es mejora, no paridad.
+
+- **"No aplicaste el font size" — verificado: SI estaba.** `.recon__code` computa **14px**, igual
+  que `td`, `name` y `link`, y que la columna de codigo de terminated. Era cache del navegador.
+- **"Tampoco el truncate al plan" — verificado: SI estaba.** `.recon__plan` tiene `max-width:160px`
+  + `text-overflow:ellipsis`. No se ve recortado porque **el unico plan del dataset es "Test SKU
+  Laptops"**, que cabe. Demostrado inyectando un nombre largo: renderiza 160px sobre 416px reales,
+  `clipped=true`.
+
+**★★ Quinta pasada, y aqui esta el error que sostuvo las cuatro anteriores: copie la MITAD
+EQUIVOCADA de terminated-accounts.** Esa pantalla tiene DOS densidades — las filas de payee (14px,
+~53px, llevan un boton) y las **sub-filas de credito** (`var(--font-size-12)` +
+`padding: var(--space-1)`, ~30px). Las sub-filas son las que se leen compactas y elegantes, y son
+las que el usuario pego en su primer mensaje. Yo medi las filas de payee, vi 14px en ambas pantallas
+y reporte "coinciden": **medi lo que no era y lo llame verificado**, cuatro veces.
+
+Ahora la tabla usa 12px + `--space-1`: **27px de alto** (contra 46px antes). Primer intento con
+`--space-2` dio 35px — "casi igual", que es exactamente el fallo del que iba todo esto.
+
+**★ Scoped a ESTA tabla, no a `ws-table`.** El `font-size: 14px` vive en el componente compartido y
+nueve listas lo heredan; cambiarlo alli habria reestilado toda la app para contentar una pantalla.
+`::ng-deep` detras de `.recon__table`, el mismo patron que sigue el composer del asistente.
+
+**Suites:** front **1300 -> 1307**, integracion 9/9 del Centro, build limpio.
+
+**Pendiente:** verificacion en runtime en los tres idiomas antes de commitear A+B juntas.
+
+## 2026-09-03 (c) - KAN-28 tanda A: la columna consultable RateRefusal
+
+**Rama:** KAN-38 · **Ticket:** KAN-28 (tanda A de 2) · **Sin commit.** Sin pantalla.
+
+Prepara el Centro de Reconciliacion (tanda B) resolviendo antes su unico problema estructural:
+los 3 motivos que emite KAN-26 viven dentro de `Credits.CalculationTrace`, y esa columna esta
+declarada en `CreditConfiguration.cs:79` como «an opaque JSON document, stored as text and
+**never queried by SQL**». El ticket pide agregados por moneda calculados en backend sobre el
+conjunto filtrado: eso es, literalmente, consultar esa columna.
+
+**Medido antes de decidir (§E5):** 1.306 creditos, **10** con traza, **0** con `rateRefusal`
+(KAN-26 T3 aterrizo hoy y no ha corrido ningun pay run), 5 con `NoTarget`. Del otro lado,
+**10.141** transacciones Pending ya consultables por `UnprocessablePendingSpec`.
+
+**Construido:** `Credits.RateRefusal` (nvarchar(64), nullable, indice FILTRADO
+`IX_Credits_TenantId_RateRefusal` con `WHERE RateRefusal IS NOT NULL`), migracion B32, escrita
+por el motor.
+
+**★★ La columna es un INDICE, no una segunda verdad.** La traza sigue siendo la evidencia.
+Ambas se escriben en el MISMO acto desde el MISMO objeto `RuleCalculationTrace`
+(`CreditAllocationService.cs:403-415`): no hay job posterior, ni lector que reparsee, ni segunda
+derivacion. Una desnormalizacion que puede producirse por dos caminos acaba discrepando consigo
+misma, y discrepar sobre por que alguien no cobro no es un fallo tolerable.
+
+**★ El test anti-drift da la vuelta larga a proposito:** la columna se calcula del OBJETO y la
+expectativa se parsea del DOCUMENTO serializado. Leer las dos del mismo objeto solo probaria que
+un campo es igual a si mismo. Se comprueba en unit (en memoria) y en integracion (tras ida y
+vuelta por SQL Server, con contexto nuevo).
+
+**★ Devuelve string y no el enum, y eso es capas y no pereza:** `RateRefusalReason` vive en
+Application; `Credit` vive en Domain y no puede referenciarlo. El dominio queda tan ciego al
+vocabulario de la traza como ya lo estaba al documento. Ademas el texto coincide con como la
+traza codifica el enum, asi que columna y documento se leen igual.
+
+**★ Los 5 NoTarget historicos quedan NULL, y no es un olvido.** Sus trazas son anteriores a
+KAN-26 T3: expresan el rechazo como `Skipped` + `NoTarget`, sin campo `rateRefusal`.
+Reconstruirlos daria a la proyeccion dos gramaticas —la actual y una arqueologica— y la segunda
+decidiria por su cuenta que significaba dinero viejo. Test que lo fija.
+
+**Puerta de dinero — verificada antes y despues:** creditos 1.306 / suma 988.417.137.447,1088 y
+consumidos 284 / 13.463.824,1639, **identicos**; `RateRefusal IS NOT NULL` = **0** (sin backfill).
+La migracion es inerte: columna nullable, sin default.
+
+**Ficheros:** `CreditRefusalProjection.cs` (nuevo) · `Credit.cs` (propiedad + parametro de
+`Allocate`) · `CreditConfiguration.cs` (columna + indice filtrado) · `CreditAllocationService.cs`
+· migracion `B32_CreditRateRefusal` · `CreditRefusalProjectionTests.cs` (nuevo, 10) ·
+`CreditAllocationServiceTests.cs` (+2 de integracion).
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1899 -> 1909**, integracion
+**850 -> 852**, front **1282**, build 0 errores.
+
+⚠️ **La integracion es inestable bajo carga y hay que decirlo:** 3 corridas dieron 8 rojas, 1
+roja y 0 rojas. Las rojas eran **deadlocks de SQL Server en el InitializeAsync del fixture**
+(`TestDatabaseFixture.ResetTransactionImportDataAsync:190`), en tests de importacion ajenos a
+esta tanda — ninguna era una asercion. Coincide con la deuda ya conocida de la suite.
+
+**Pendiente (tanda B):** el Centro de Reconciliacion completo, leyendo de esta columna y de
+`UnprocessablePendingSpec`, con agregados backend por moneda y export.
+
+## 2026-09-03 (b) - KAN-48: correccion de las escaleras acotadas de planes Activos
+
+**Rama:** KAN-38 · **Ticket:** KAN-48 (deriva de KAN-26 Tanda 3) · **Sin commit.**
+
+**Premisa del ticket parcialmente falsa: cambian 2 reglas, no 5.** Las 3 "Acelerador Hardware
+Premium" NO cambian de comportamiento: son tablas de bracket, el ratio de attainment vive en
+0-3 y `[0, 20000]` lo contiene siempre, asi que la guarda `NoMatchingBracket` nunca se dispara.
+Su defecto es otro (un rep al 150% cobra el 4% del tramo 1 en vez del 8%) y es **latente**.
+**Hallazgo nuevo:** `D617E6EB` "Claude Code - Rule #1" tiene el mismo defecto (limites
+2500/5000/7500) y no figuraba en el ticket. 20 creditos, ninguno consumido.
+
+**Corregidas 2 reglas, las unicas con intencion inequivoca y cambio real:**
+
+| Regla | Plan | Tope antes | Tope despues | Draft creado |
+| --- | --- | --- | --- | --- |
+| `EBD3FA15` "RL-1" | Pounds 2 Rules (GBP) | 5.000-10.000 @ 9% | 5.000-abierto @ 9% | `B4887332` v2 |
+| `A57BA4C8` "Acelerador Laptops" | Q3 2026 - Plan HubSpot E2E (EUR) | 25.000-100.000 @ 8% | 25.000-abierto @ 8% | `F3E49C7A` v2 |
+
+**Solo se mueve el limite superior del ultimo tramo.** Ni una tasa, ni un limite intermedio, ni
+el numero de tramos. Es la edicion mas pequena que hace que la escalera cubra su propio sujeto,
+y por eso "todo lo de debajo del techo viejo queda igual" es una afirmacion demostrable.
+
+**⚠️ PARADO Y CONSULTADO (4 reglas):** las 3 "Hardware Premium" y `D617E6EB` tienen los limites
+en euros dentro de una tabla de attainment. Dos lecturas incompatibles —(i) deberia ser Tiered
+sobre ingreso, (ii) deberia ser Attainment con ratios— y la diferencia es dinero (400 EUR vs
+600 EUR para un rep al 150%). No se adivina; consulta abierta en el ticket.
+
+**⚠️ La correccion NO es una edicion, es una migracion de version.** `CloneAsNewVersion` crea un
+plan nuevo y **las asignaciones no viajan** (`ClonePlanVersionHandler.cs:39-41`); `Plan.Activate`
+**no archiva la version anterior** (`Plan.cs:260-277`). Dejarla en vigor exige activar v2 +
+archivar v1 (que por KAN-31 desasigna a TODOS los payees) + reasignar. **Esos pasos NO se
+ejecutaron**: apagan un plan Activo y mueven payees, y esa decision no es de quien ejecuta (§E2).
+
+**Puerta de dinero — no se dispara.** Ninguna de las 2 reglas corregidas tiene un credito
+consumido (`EBD3FA15`: 0 creditos en total; `A57BA4C8`: 2, sin consumir). Ademas corregir una
+regla **no recalcula nada por si solo**: el recalculo es una accion aparte
+(`RecalculateCreditsHandler.cs:44-47`) que solo toca creditos no superseded y no consumidos,
+salta transacciones Paid/Cancelled y **se bloquea entera** si hay un pay run Approved o Paid
+(`:105-116`). Verificado en BD tras aplicar: originales intactos y Activos, creditos
+`81326A30` (1.684,00) y `744B0D6B` (298,00) sin tocar.
+
+**⚠️ Constancia, fuera de alcance:** `E2345397` (plan Activo) conserva las tasas 4 y 7 (400% y
+700%) y tiene **2 creditos CONSUMIDOS de 200.000,00 EUR cada uno** sobre ventas de 50.000. No es
+un defecto de forma de escalera, asi que no es de KAN-48; remediacion por KAN-15.
+
+**Como se ejecuto:** harness de un solo uso (fuera del repo, en scratchpad) que pasa por el
+DOMINIO — `Plan.CloneAsNewVersion` + `Plan.UpdateRule` con la tabla construida por la fabrica
+`RateTable.Tiered`, de modo que corren todos los invariantes de escritura. Solo se salta HTTP y
+autorizacion. Con dry-run por defecto, guarda de escalera esperada, guarda de idempotencia, y
+match de regla **por Id y no por nombre** (dos nombres llevan no-ASCII). El trigger de la regla
+Laptops se pasa de vuelta intacto y se verifico byte a byte en BD.
+
+**Ficheros:** `LadderCorrectionKan48Tests.cs` (nuevo, 22 tests) · `docs/`.
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1877 -> 1899**, integracion
+**850** (2 skipped preexistentes), front **1282**, `dotnet build Wasnie.sln` 0 errores.
+
+## 2026-09-03 - KAN-26 tanda 3: el motor no paga lo que no puede justificar
+
+**Rama:** KAN-38 · **Ticket:** KAN-26 (ultima tanda) · **Sin commit.**
+
+Los cuatro caminos de tabla (a-d) del ticket. Los `file:line` del ticket resultaron CORRECTOS
+por una vez: las tandas 1 y 2 no movieron nada por debajo de la linea 300 de
+`CommissionCalculator.cs`.
+
+**Premisa falsa, y cambia el encuadre.** «Ningun credito real afectado por a-d» es cierto, pero
+NO porque los caminos esten latentes. Medido en `PlanRules`: **las 4 reglas tiered de la base
+tienen el ultimo tramo acotado**, dos de ellas en planes **Activos**. El 820 EUR del ticket es
+literalmente `EBD3FA15` "RL-1", viva: 50 + 320 + 450, y una venta de 1.000.000 EUR paga lo
+mismo que una de 10.000. Lo que salva la situacion es que solo se han generado 2 creditos
+tiered en toda la historia (`81326A30` 29.800->1.684 y `744B0D6B` 7.450->298), ambos por debajo
+del techo y **ninguno consumido**. Puerta de dinero: no se dispara.
+
+**Quinto cero mudo, dentro de las lineas de (c).** `GetSplitContextAsync` construye el contexto
+sin mirar el objetivo (`QuotaAttainmentService.cs:135-139`), asi que una cuota con objetivo 0
+llegaba viva a la caminata split, que devolvia 0 marcado `Applied` + `Measured`. La ruta de
+bracket si trata el objetivo cero como `NoTarget` desde KAN-27. Se incluye en la tanda.
+
+**El principio:** el motor no paga un importe que no puede justificar. Si la tabla tarifa solo
+parte de la venta, no paga la parte — se niega entera y lo dice. Pagar la rebanada cubierta es
+la forma mas peligrosa de este fallo: **no parece un fallo, parece una comision pequena**.
+
+**El resto que no se ensancho:** una tabla malformada que SI tarifa la venta sigue pagando
+igual (las 3 "Acelerador Hardware Premium" Activas, con los limites en euros, siguen pagando su
+4%). Un solape NO es un hueco: se paga, con exactamente un tramo por euro.
+
+**El resto sobrante es salida de la caminata, no un segundo calculo.** `WalkTiers` y
+`WalkSplitTiers` devuelven `LadderWalk(Money, decimal Unpriced)`; deducirlo aparte («base menos
+el techo del ultimo tramo») seria un segundo modelo de la misma escalera y divergirian en
+cuanto apareciera una con huecos — la ENKIO los tiene entre cada par.
+
+**El de-solape es un no-op en una escalera valida.** El techo de cada tramo se recorta al suelo
+mas bajo por encima de el; si los tramos se tocan exactamente, `techo == suelo siguiente` y no
+cambia nada. Solo muerde en tablas que se solapan, que el write path rechaza desde que existen
+los invariantes.
+
+**Caracterizacion (requisito de metodo):** `RateTableCoverageCharacterizationTests.cs` (nuevo,
+31 tests) por `Evaluate`, con las tablas verbatim de `PlanRules` deserializadas por propiedad
+igual que produccion. Verde a la primera contra el motor intacto (1 importe corregido al valor
+real de esa corrida). Al aplicar el arreglo: **exactamente 12 rojos, todos en la region de los
+agujeros, y ninguno mas en 1.876**.
+
+**Ficheros:** `CommissionCalculator.cs` (`LadderWalk` :174-190, `WalkTiers`, `FindAttainmentBracket`
+:222-236, `WalkSplitTiers` :265-330, los 3 rechazos nuevos en `ComputeRate`, `RateOutcome.Refused`),
+`RuleCalculationTrace.cs` (`RateRefusalReason` + `RuleCalculationStep.RateRefusal`),
+`RateTableCoverageCharacterizationTests.cs` (nuevo).
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1846 -> 1877**, integracion
+**850** (2 skipped preexistentes), front **1282**, `dotnet build Wasnie.sln` 0 errores.
+
+**Sin i18n nueva, deliberado:** la traza sigue sin consumirse en ningun DTO ni pintarse en
+ninguna pantalla (mismo argumento §A3 que la tanda 2). La superficie es KAN-28.
+
+**Sin verificar:** no se ejecuto ningun pay run real. Reproducir (b) en runtime exigiria procesar
+una transaccion sobre un plan Activo y crear creditos, que es justo lo que la puerta de dinero
+pide no hacer.
+
+## 2026-09-02 (d) - KAN-26 tanda 2: el floor tampoco resucita el rechazo
+
+Cierra el hueco reportado en (c). Decision de producto tomada, con respaldo de industria: un **floor**
+es el minimo de la comision de una venta comisionada — un componente DEL calculo, que presupone que
+hubo uno. Sin cuota no hay calculo, luego no hay piso que aplicar. Lo que paga pase lo que pase es un
+**draw**, y un draw vive a nivel de rep y periodo, no de transaccion: otro mecanismo, otro ticket.
+
+**Solo el floor necesitaba el arreglo, y eso es aritmetica, no atajo.** Los TRES tipos de modifier
+(Accelerator, Multiplier y el stub de Spiff) pasan por el unico `Multiply` de `ApplyModifier`, y un cap
+solo baja. Los dos dejan un cero en cero. El floor es el unico componente que puede SUBIR, asi que es
+el unico que podia deshacer el rechazo.
+
+**La senal se lleva, no se re-deriva.** `ComputeRate` devuelve ahora `RateOutcome(Money, bool
+RefusedForWantOfTarget)` en vez de un `Money` pelado. `Evaluate` podria volver a preguntar por la
+fuente, pero entonces el predicado viviria en dos sitios y acabarian divergiendo: el componente que
+tomo la decision es el que la reporta.
+
+**El floor se declina EN VOZ ALTA.** El step sigue apareciendo, con `Skipped` y con el importe del
+piso en `Threshold`. Quien audite un cero en una regla con floor de 8.520 EUR tiene que poder ver que
+el piso se consulto y se declino, no preguntarse si el motor se lo salto (§B1).
+
+**El hermano recibe el mismo trato:** split-at-quota sin contexto es el mismo rechazo NoTarget por otra
+ruta, asi que su floor tambien se suprime. Si no, la asimetria que la tanda acababa de cerrar se
+reabriria un componente mas abajo en la cascada.
+
+**Lo que NO se ensancho:** una regla de Units conserva su floor aunque le pase una fuente NoTarget al
+lado — la guarda es "AttainmentBased Y NoTarget", y quitar la primera mitad le habria quitado el piso
+a todos los spiffs de unidades. Test que lo fija.
+
+**Un test propio corregido por §A3.** El primer test de Units decia en su nombre y su comentario que
+ejercitaba la guarda de MISCONFIGURACION de Units (Units + tabla no-Flat). No la toca: el dominio
+rechaza esa pareja al escribir, asi que solo se alcanza desde una fila guardada. Renombrado y
+documentado por lo que realmente prueba, y declarado explicitamente lo que no alcanza.
+
+**Casos 10 y 11 del ticket verificados.** 10: sin cuota + floor de 8.520 -> credito **0**, el floor no
+paga. 11: con cuota + floor -> el floor aplica normal (2.000 elevados a 8.520), intacto.
+
+**Suites:** build 0; unit **1841 -> 1846**; integracion **850**; front **1282**, 0 rojos; todo con
+guarda de exit-code.
+
+## 2026-09-02 (c) - KAN-26 tanda 2: sin cuota, el motor no paga
+
+**Alcance: SOLO NoTarget.** La tanda 3 (los cuatro caminos a-d) NO se toco. El ticket sigue abierto.
+
+**El defecto.** Una regla AttainmentBased cuyo payee no tiene cuota resuelve el ratio a 0, 0 cae
+dentro del tramo [0,1], y el motor pagaba la tasa de ese tramo sobre la venta entera marcando el step
+`Applied` — indistinguible de un calculo legitimo. Dos creditos por 7.160 EUR llegaron a un payout
+Pagado por ahi.
+
+**Punto exacto (Paso 0).** No es `:222` como decia el ticket. `ComputeAttainmentCommission` calcula el
+dinero pero NO recibe el `attainmentSource`; el unico sitio con la senal en alcance es el bloque final
+de `CommissionCalculator.ComputeRate`. Ahi va la guarda.
+
+**El hermano ya lo hacia bien.** Split-at-quota sin contexto de cuota ya devolvia cero con
+`Skipped` + `NoTarget` unas lineas mas arriba. La asimetria nunca fue intencional; esto es el camino
+de bracket poniendose al dia, con el MISMO outcome para que una sola consulta encuentre los dos.
+`Skipped` y no `NotConfigured` a proposito: la regla SI configura una tabla de tasas — lo que falta es
+la cuota — y `NotConfigured` significa "la regla no configura este componente".
+
+**Metodo (obligatorio, es dinero).** `NoTargetCharacterizationTests` se escribio y se corrio ANTES de
+tocar el motor: 14 verdes a la primera, sin corregir una sola cifra. Tras el arreglo: **13 intactos y
+exactamente 1 rojo**, el que se escribio para fijar el bug. Esa pareja es la prueba de que el cambio
+dio donde apuntaba. Fichero separado del de caracterizacion existente A PROPOSITO: aquel llama a
+`ComputeCommission` directo, que nunca ve el `attainmentSource`, y habria seguido verde pasara lo que
+pasara (§A2).
+
+**Dos rojos que salieron y NO eran regresiones:**
+
+1. **Test de KAN-27** (`NoQuotaInEffect_IsNoTarget_AndTheRatioIsZero`). Mi primer corte dejaba
+   `Operand` en null en el rechazo, razonando que publicar un 0 en el que no se confia se leeria como
+   un "0%" medido. **Estaba equivocado y KAN-27 tenia razon:** el contrato es justo el contrario — el
+   ratio SOLO es lo que miente, y la fuente a su lado es lo que hace seguro publicarlo. La pareja
+   (0, NoTarget) es la representacion honesta; quitar el ratio borra la mitad. Restaurado.
+2. **`StubQuotaAttainmentService` describia un estado que produccion no puede producir.** Su
+   parametro `source` defaulteaba a `NoTarget` de golpe, asi que un test que pasaba un 75% real y no
+   decia nada de la fuente obtenia "75% de attainment medido contra ningun objetivo" — una
+   contradiccion. Era inofensivo mientras el bracket ignoraba la fuente; dejo de serlo en cuanto el
+   motor empezo a negarse a pagar con NoTarget. El rechazo era correcto y el fixture estaba mal.
+   Ahora: sin valor -> NoTarget, con valor -> Measured.
+
+**Consultable.** El portador es la traza que `CreditAllocationService` ya serializa en cada credito
+(KAN-27). Un credito NoTarget se distingue de sus TRES vecinos: de "aun no procesada" (no hay fila),
+de un trigger que no matcheo (tampoco hay fila) y de un 0% real contra una cuota real (`Applied` +
+`Measured`). **El hecho se DERIVA, no se marca con una bandera** (§B5): nada que pueda desincronizarse
+con el dinero. Los enums se serializan como TEXTO, asi que `JSON_VALUE(CalculationTrace, ...)` lo
+encuentra.
+
+**⚠ DECISION PENDIENTE — EL FLOOR RESUCITA EL RECHAZO.** El floor corre DESPUES del rate, asi que en
+una regla con floor el motor se niega a pagar y el floor paga igual. Medido: **6 reglas reales de
+attainment tienen floor**, dos de ellas de 8.520 EUR y 7.800 EUR. No lo introduce este cambio (antes
+pagaba MAS: el tramo base y ademas el floor) y el propio ticket ya lo anotaba ("un floor posterior
+disfraza el cero"), pero significa que el criterio "el credito es 0" NO se cumple para esas 6 reglas.
+Cambiar la cascada es tanda 3. Test que lo fija tal como se comporta, para que la tanda 3 tenga que
+mirarlo de frente.
+
+**Sin i18n nueva, y es deliberado.** La traza persistida por KAN-27 **no la consume ningun DTO ni la
+pinta ninguna pantalla** todavia. Anadir claves EN/ES/PL ahora seria texto muerto en una rama que no
+se ejecuta (§A3). La superficie es KAN-28.
+
+**Puerta de dinero: verificada.** Los creditos 5AFC720E y 32176B67 siguen consumidos en el payout
+844E7E75 con su `ConsumedAt` original. El cambio es solo hacia adelante; no se ejecuto ningun pay run.
+
+**Suites:** build 0; unit **1820 -> 1841**; integracion **850**; front **1282**, 0 rojos;
+todo con guarda de exit-code. Esta vez SI se corrio la de front.
+
+## 2026-09-02 (b) - KAN-26 tanda 1: el simulador enseñaba el codigo crudo
+
+Los 9 casos de prueba de la tanda 1 se ejecutaron en runtime. 8 pasaron; el 9 destapo un defecto que
+esta misma tanda habia introducido.
+
+**El defecto era de BACKEND.** `DomainCodedException` ES un `DomainException`, asi que el
+`catch (DomainException ex)` de `SimulateRuleHandler` se lo tragaba y lo aplanaba en
+`Result.Failure(ex.Message)`. Ese `Message` es EL CODIGO: el tipo llama a `base(code)` para que los
+logs sean legibles. El navegador recibia `message: "RateTableRateAboveMaximum"` y el panel del
+simulador lo pintaba tal cual — lo unico que la documentacion de ese tipo prohibe explicitamente.
+
+**Por que no se veia antes.** `AddRuleToPlanHandler` tiene el rethrow desde el principio. El
+simulador no lo necesitaba: todo lanzamiento con codigo venia de `RateTableRequest.ToDomain`, que el
+simulador NO llama (`SimulateRuleQuery` lleva un `RateTable` de dominio directo). Al poner la guarda
+de magnitud del flat DENTRO de `Plan.AddRule` — que el simulador si llama — se abrio el hueco.
+
+**Arreglo en las dos capas:** `catch (DomainCodedException) { throw; }` en `SimulateRuleHandler`
+(seguro por lo mismo que en el save: `BuildRule` usa un `Plan` desechable que nunca toca el
+DbContext); y en el front `_setSimError`, gemelo de `_showSaveError`, que enruta el 422 con codigo
+por la MISMA whitelist `rateTableErrorKey` (§C2), mas `simErrorParams` — sin los parametros el lector
+veria `{{rate}}`, la clave sola no era el arreglo.
+
+**Tests nuevos.** Integracion: assert sobre la FORMA del cuerpo y no sobre el status — el 422 ya se
+devolvia, lo que faltaba era el codigo; verifica `code`, `parameters`, la ausencia de `tierNumber` en
+flat y (la regresion de verdad) la AUSENCIA de `message`. Front: 4 casos en `rule-simulator.spec.ts`.
+
+**Verificado en runtime en EN/ES/PL.** `RateTableRateAboveMaximum` ya no aparece en el DOM.
+
+**11 rojos de front arreglados de paso, y eran mios:** al anadir los enlaces del banner de payouts
+inyecte `CurrentUserService` en `PayoutsListComponent` y sus specs no proveian `HttpClient`
+(`NG0201`). No corri la suite de front en aquella ronda; debi hacerlo.
+
+**Suites:** build 0; unit **1820**; integracion **849 -> 850**; front **1278 -> 1282**;
+`ng build` produccion limpio. Todo con guarda de exit-code.
+
+**Sigue abierto y es PREEXISTENTE:** con tabla Attainment el simulador ni llama al backend (guarda
+propia del front). Ajeno a esta tanda.
+
+## 2026-09-02 - KAN-26 (tanda 1/N): la guarda de magnitud de tasa — 4 deja de significar 400%
+
+**Alcance: SOLO la guarda de magnitud.** NoTarget y los cuatro caminos de tabla (a-d) de KAN-26 NO se
+tocaron; van en tandas separadas. El ticket queda In Review, no Done.
+
+**El defecto.** Una tasa se guarda como MULTIPLICADOR: 0.04 es 4%. Quien escribe el porcentaje que
+piensa, `4`, guarda 400%, y el motor multiplica la venta por el sin decir nada
+(`CommissionCalculator.ComputeAttainmentCommission`). Reproducido el 2026-09-01: base 50.000 -> credito
+200.000, step marcado `Applied`. Los seis invariantes de `RateTable` pasaron esa tabla porque los seis
+leen `From`/`To` y ninguno lee `Rate` — `ValidateLadder` ni siquiera recibia el `Rate` en su tupla.
+
+**El limite: 1, y estrictamente mayor. Medido, no inventado.** En las 60 reglas de `PlanRules`, la
+mayor tasa tiered es 0.15 y la mayor de attainment 0.09; la unica tasa de tramo > 1 en toda la base es
+el 4/7 de la regla que reprodujo el bug (`E2345397`). Ninguna escalera legitima se rechaza. El `>` y no
+`>=` tiene su propia razon: la regla flat "Full payout" (`8F5DA7E8`) vale exactamente 1.00 — un
+referral que paga la venta entera — y tiene que seguir guardandose. El 100% es raro; el 400% es un
+tipeo. El limite es `RateMagnitude.MaxFractionalRate`, constante nombrada, y viaja al lector dentro
+del propio rechazo.
+
+**★★ FLAT NO SIEMPRE ES UNA FRACCION, Y ESO PARTIO EL ARREGLO EN DOS PUERTAS.** Con
+`MeasurementType.Units` el flat rate es DINERO POR UNIDAD — hay cuatro reglas en produccion pagando
+€3 o €5 la unidad. `Rule.cs:71` confina Units a tablas Flat, asi que tiered y attainment son
+incondicionalmente fracciones y se validan sin contexto; una tasa flat no. Un techo unico en
+`RateTable.Flat` habria rechazado los cuatro spiffs de unidades, y una validacion que bloquea una
+configuracion correcta manda al usuario a soporte. Por eso:
+
+- tiered/attainment: check 7 dentro de `ValidateLadder` (`RateTable.cs`), la misma puerta unica de las
+  escaleras, que la clonacion no atraviesa.
+- flat: `RateMagnitude.ValidateFlatRateForWrite(measurement, rateTable)` en `Plan.AddRule` y
+  `Plan.UpdateRule` — las unicas puertas donde la MEDICION esta en alcance — con Units exento.
+
+**★ DONDE NO PODIA IR: `Rule.Create`.** Es el constructor que comparte `Plan.CloneAsNewVersion`, y
+clonar a un Draft es la UNICA via de corregir una regla de un plan activo. La regla con tasa 4 ya
+existe en la base: validar ahi la habria congelado para siempre detras de la regla pensada para
+ayudar (§D4). Tres tests lo fijan (clonar no lanza, el clon arrastra el 4 intacto, y el Draft
+resultante sí rechaza al reguardar por fabrica).
+
+**Orden del check: septimo y ultimo, a proposito.** Es el unico check sobre el VALOR y no sobre la
+FORMA, asi que no enmascara a ninguno ni ninguno lo enmascara. Una tabla rota en las dos direcciones
+a la vez se rechaza primero por sus limites; test que lo fija.
+
+**Mensajes.** Dos codigos nuevos (`RateTableRateAboveMaximum`, `RateTableRateBelowZero`), cuatro claves
+EN/ES/PL — el par tramo/flat existe porque el servidor OMITE `tierNumber` cuando no hay tramo, y el
+front interpola todo parametro que recibe: un null habria impreso la palabra "null". Whitelist
+explicita en `rate-table-error.ts`, nunca concatenacion (§C2).
+
+**Tambien se rechazan las tasas negativas** — el mismo rango, la otra punta, codigo y frase propios.
+
+**Suites:** build 0 errores; unit 1803 -> **1820** (17 nuevos, 0 rojos); integracion **849 verdes**,
+2 skipped (rate-limit, preexistentes), 0 rojos; front 1274 -> **1278**, 0 rojos;
+`ng build --configuration production` limpio. La primera corrida de integracion dio 682 rojas con
+Docker Desktop apagado — el caso literal de §A5; se levanto el motor y se reejecuto.
+
+**Sin verificar:** no se probo en runtime contra la UI (cambio de escritura cubierto por unit +
+integracion + el spec de traduccion, y §verification-effort). `SimulateRuleHandler` pasa por
+`Plan.AddRule`, asi que simular una regla flat con tasa > 1 ahora tambien se rechaza: es coherente
+(no se puede simular lo que no se puede guardar) y ningun test de simulacion se puso rojo, pero es un
+cambio de comportamiento que nadie pidio explicitamente.
+
+**Premisas del ticket que resultaron falsas:** el `file:line` del aviso del front (es
+`rule-form.component.ts:157-160`, no :123-127) y, la que importa, "las tasas se guardan como
+fraccion" — cierto para tiered/attainment, falso para flat en modo Units.
+
+## 2026-09-01 - KAN-27: la traza de calculo se persiste, y el cero de attainment deja de mentir
+
+**Rama:** AI-CHAT-ASSISTANT - **Sin commit** - dominio + aplicacion + infraestructura + 1 linea de
+front - **migracion B31 APLICADA y verificada** - **ningun importe se movio: los 20 tests de
+caracterizacion verdes y el fichero SIN EDITAR**
+
+El motor sabia narrarse desde hace tiempo; produccion tiraba la narracion (`trace: null`). Lo que
+hace que eso importe es que **la narracion no es reproducible despues**: el attainment de cuota es
+as-of-a-date y sigue moviendose, asi que reejecutar el motor en noviembre responde otra pregunta
+sobre marzo, y la responde con seguridad. Una traza no capturada en la asignacion es un pago que
+nadie va a poder explicar nunca.
+
+### El prerrequisito era el defecto de verdad
+
+Un attainment de 0 significa **"este rep no alcanzo nada de su objetivo"** o **"nadie fijo un
+objetivo"**: un hecho sobre una persona y un agujero de configuracion, identicos en el numero y
+opuestos en significado. Los dos llegaban sellados como `Measured`, porque `Evaluate` defaultea ese
+parametro (`CommissionCalculator.cs:346`) y la ingesta nunca lo pasaba. El producto podia afirmar
+como hecho medido que alguien logro el 0% de una cuota que jamas existio.
+
+**Y no es derivable a posteriori**, que es lo que decide el diseno: un 0% real contra un objetivo
+real tambien es 0. La fuente ahora **viaja con el ratio** (`AttainmentReading`) desde el unico sitio
+donde la diferencia se sabe, que es donde se busco la cuota.
+
+### Lo construido
+
+- `AttainmentSource.NoTarget`, **anadido al final** del enum: algun cliente podria leerlo por ordinal
+  y reordenar reinterpretaria en silencio todo lo que cruzo el cable. Hay test que fija las 4 posiciones.
+- `IQuotaAttainmentService.ComputeAsync` devuelve `AttainmentReading(Value, Source)`.
+  `QuotaAttainmentService` marca `NoTarget` en sus dos casos (`:59` sin cuota vigente, y target <= 0)
+  y `Measured` en todo lo demas **incluido un 0% genuino**.
+- **Split-at-quota emitia CERO fuente**, lo que se leia como "no es una regla de attainment": ahora
+  `NoTarget` cuando no hay contexto y `Measured` cuando lo hay, con el ratio usado en `Operand` -
+  antes solo el camino de bracket guardaba el porcentaje.
+- `Credit.CalculationTrace` (`nvarchar(max) null`), escrito en `Credit.Allocate` y **nunca reescrito**.
+- `CalculationTraceSerializer`: **un solo** `JsonSerializerOptions` para escribir y leer; enums como
+  **texto**; `_schema: 1` en la raiz declarado, **no olfateado** (precedente `Cap.cs:8`/`Floor.cs:7`,
+  NO el de `RuleSnapshotJsonConverter`).
+
+### Decision que se aparta del ticket, y por que
+
+El ticket anticipaba **un value converter de EF**, es decir una propiedad tipada en `Credit`. No se
+hizo: el tipo de la traza vive en la capa de **aplicacion** y `Credit` esta en **dominio**, que no
+puede referenciarla. Las dos salidas eran (a) bajar los tipos a dominio - 11 ficheros de cambio de
+namespace dentro de un WI que ya toca motor, entidad, config y migracion - o (b) copiar la forma del
+step en dominio, que son **dos declaraciones de lo mismo que coinciden hasta el dia que no**, el
+patron por el que este repo ya fue mordido. Se eligio la tercera: la columna guarda **el documento
+serializado**, el dominio lo trata como evidencia opaca (nada ramifica sobre el, nada deriva dinero
+de el) y `CalculationTraceSerializer` es duenio del formato en las dos direcciones.
+
+### Premisas del ticket que resultaron falsas
+
+1. **La migracion no podia ser B30 - ya existia** (`B30_RuleStopMarker`, de KAN-29). Va como **B31**.
+2. **Los caminos a 0% son CUATRO, no cinco**, y el cuarto cambia el diseno: `QuotaAttainmentService.cs:59`
+   (sin cuota), `AttainmentPercentage.cs:24` (target <= 0), `:26` (achieved negativo clampeado) y
+   `:25` (achieved 0 contra un target real - el unico **0% legitimamente medido**). Ese cuarto es la
+   razon por la que `NoTarget` no puede deducirse de "el porcentaje es 0".
+3. Detalles menores: el credito se escribe **25** lineas despues de `Evaluate`, no 22; la llamada de
+   produccion **omite** el parametro en vez de pasar `trace: null` explicito.
+
+Todo lo demas del ticket se confirmo, incluidos los **20** tests de caracterizacion y los **1.296**
+creditos existentes, ambos exactos.
+
+### Verificacion
+
+**build=0 - caracterizacion 20/20 en verde y `git diff` del fichero VACIO - unit 1781->1803 (+22) -
+integracion 849/0/2 skipped exit 0 - front 1271->1274 exit 0 - `ng build` produccion exit 0.**
+
+**B31 aplicada y verificada en el esquema real**: `CalculationTrace nvarchar(max)`, nullable, **sin
+default**, y **1296 de 1296 creditos con traza nula** - el historico no se relleno, y no podia:
+los insumos para reconstruir esas trazas ya no existen, asi que un backfill solo podria inventarlos.
+
+**Un rojo intermedio en integracion fue mio y era un accessor**, no un cambio de comportamiento:
+`(await svc.ComputeAsync(...)).Value.Should().Be(1.0m)` seguia compilando tras el cambio de tipo
+porque cae en la sobrecarga de `object`, y comparaba un `AttainmentPercentage` contra un `decimal`.
+Corregido con el segundo `.Value`; **ninguna expectativa numerica se toco**.
+
+**Sin verificar:** no hay comprobacion en navegador (este WI no tiene superficie de UI - la
+visibilidad de la traza es explicitamente fuera de alcance). El volumen real por credito no se midio
+contra datos nuevos; se acepta la cifra del ticket (714 B).
+
+## 2026-09-01 - KAN-29 (correccion): la verificacion en runtime encontro lo que 1261 tests verdes no vieron
+
+**Rama:** AI-CHAT-ASSISTANT - **Sin commit** - **SOLO FRONTEND**, sin migracion, sin tocar backend -
+**no se toco ningun credito, importe ni payout**
+
+Rodolfo abrio el plan `Test SKU Laptops` despues de apagar su unica regla: la cabecera decia
+**"Rules 1" y la lista estaba vacia**. Lo mismo en el Draft clonado. El aviso derivado "This plan has
+no rule in effect" **si** aparecia.
+
+### A2 y A3 en el mismo defecto
+
+El arreglo del backend habia aterrizado y estaba probado (`GetPlanByIdHandler` devuelve las
+apagadas); el del dominio tambien (el clon las copia). **La regla estaba en la base de los dos
+planes** - Rodolfo lo verifico en SQL antes de reportar. Y la pantalla no mostraba nada, porque
+`sortedRules()` la tiraba **despues** de todo eso.
+
+Los 22 unit y los 16 de front pasaban por caminos que produccion no toma: **ninguno renderizaba la
+lista**. El desajuste cabecera/lista era la prueba en pantalla de que el backend ya mandaba la regla
+y el front la descartaba - la cabecera lee `plan.rules.length` crudo, la lista leia el filtrado.
+
+### El sitio, y es UNO solo
+
+`plan-detail.component.ts:181` (`sortedRules()`), `.filter(r => r.isActive)`.
+
+**Un unico filtro para las DOS pantallas:** la ruta `:planId` (`plans.routes.ts:17-22`) carga
+`PlanDetailComponent` sea cual sea el estado del plan, asi que el plan Active y su clon Draft son el
+mismo componente y el mismo computed. No hay segundo handler ni segundo filtro. Arreglar uno arregla
+los dos - pero el test tenia que cubrir ambos igual, porque nada garantiza que siga siendo uno.
+
+Backend barrido: no hay otra superficie. `SimulatePlanRulesHandler.cs:51` filtra `IsActive`
+correctamente (el asistente no debe simular una apagada) y `CompensationMapper.cs:37` es
+`activeRuleCount`, explicito y correcto.
+
+### Y el test atrapo un segundo defecto que nadie habia visto
+
+La tarjeta llevaba **las dos clases a la vez**: `--inactive` (atada a `!rule.isActive`) y `--stopped`.
+Visualmente no se notaba porque mi `opacity: 1` gana por orden de aparicion en el fichero - es decir,
+"una apagada no se atenua" dependia del orden del stylesheet, cierto ese dia y silenciosamente falso
+el dia que alguien reordene el SCSS. Ahora son **mutuamente excluyentes** en la plantilla:
+`!rule.isActive && !isStopped(rule)`.
+
+### Lo que NO cambio
+
+Las reglas **borradas de un borrador** (`!isActive && stoppedAt == null`) siguen ocultas, con test
+propio: el motivo original del filtro sigue siendo valido para ellas (su accion Editar abre un
+formulario cuyo guardado falla). Y para una apagada ese motivo no aplica - en un plan Active no hay
+boton Editar, y en un Draft `Plan.UpdateRule` la acepta y la supersede.
+
+### Premisa del reporte que resulto falsa
+
+El reporte atribuia a la deuda de KAN-30 el texto ingles del motivo ("This rule is deactivated
+because it was written incorrectly..."). **No es prosa de dominio ni hay nada hardcodeado**: se
+busco en todo el repo y no existe esa cadena. `stopReason` es **texto libre que escribio el propio
+usuario** en el dialogo de parada, y se pinta tal cual. No hay nada que migrar en KAN-30 por este
+camino. Los rotulos que lo rodean si son claves i18n, ya en EN/ES/PL.
+
+### Verificacion
+
+**build=0 - unit 1781 (sin cambio, es solo-frontend) - integracion 849/0/2 skipped exit 0 -
+front 1261 -> 1271 (+10) exit 0 - `ng build` produccion exit 0.**
+
+La integracion corrio con `--no-build` porque la API de dev volvio a levantarse (PID 12500) y bloquea
+la copia de DLL. **Justificado y comprobado, no asumido:** `find src tests -name "*.cs" -newer` sobre
+el DLL de tests no devuelve **ningun** fuente real (solo `AssemblyInfo` generados en `obj/`), asi que
+el binario corresponde al backend actual - que ademas no se toco en esta tanda.
+
+## 2026-09-01 - KAN-29: el kill switch, y dos criterios de aceptacion que se contradecian
+
+**Rama:** AI-CHAT-ASSISTANT - **Sin commit** - dominio + aplicacion + API + front + i18n -
+**migracion B30 (3 columnas nullable, APLICADA a la base local)** - **no se toco ningun credito,
+importe ni payout**
+
+Un software de comisiones sin freno de emergencia: hasta hoy, detener una regla que paga mal exigia
+clonar el plan entero, con asignaciones y cuotas apuntando al viejo. `Plan.RemoveRule` (`Plan.cs:114`)
+y `Plan.UpdateRule` (`:127`) exigen `Draft`, y `Rule.Deactivate()` (`Rule.cs:103`) es `internal`.
+
+### La contradiccion: el bloqueo real no era el ticket, era algo DENTRO del ticket
+
+El ticket pide dos cosas que no pueden ser ciertas del mismo objeto:
+
+- **Edge case 2:** "cualquier via (publica o interna) que intente reactivarla es rechazada; no existe
+  metodo que devuelva `StoppedAt` a nulo".
+- **Edge case 3:** en el Draft clonado, "editarla la deja activa" - que es exactamente devolver el
+  marcador a nulo.
+
+**Decision (Rodolfo, en sesion): reemplazo.** `UpdateRule` sobre una regla apagada **no la revive**:
+crea una regla NUEVA con Id nuevo y activa, y la apagada se queda en el Draft con su fecha y su
+motivo. Satisface los dos criterios a la vez y es lo unico compatible con B6 - el propio ticket cita
+`Activate()`/`DeactivatedAt` como el precedente a no repetir. *Alternativa descartada:* limpiar el
+marcador al editar (una sola fila, mas simple, pero viola EC2 y repite ese precedente).
+
+### El marcador es un campo aparte, no un `IsActive` sobrecargado
+
+`Rule` gana `StoppedAt` / `StoppedBy` / `StopReason`. Apagar escribe los tres **y** pone
+`IsActive = false`, porque el motor filtra por `IsActive` y por nada mas
+(`CreditAllocationService.cs:332`): un marcador que el motor no lea seria una pantalla que dice
+"detenida" sobre una regla que sigue pagando. Los lectores distinguen **borrada de un borrador**
+(`!IsActive && StoppedAt == null`) de **apagada** (`StoppedAt != null`) en los tres sitios que
+colisionaban - el clon (`Plan.cs:316`), el detalle (`GetPlanByIdHandler.cs:27`) y el update
+(`Plan.cs:152`).
+
+**El clon lleva las apagadas** (antes filtraba `r.IsActive` y las habria tirado): un clon no es una
+revision, y nada ahi decide que el problema se arreglo. Llegan apagadas, con la fecha y el motivo
+originales.
+
+### Lo demas
+
+- `POST /api/plans/{planId}/rules/{ruleId}/stop`, permiso propio **`Plans.StopRule`** (TenantAdmin y
+  CompManager; Manager y Rep no). Separado de `Plans.Update`, que es para borradores.
+- **Cinco codigos i18n**, no frases (C1): `RuleAlreadyStopped`, `RuleStopReasonRequired`,
+  `RuleStopReasonTooLong`, `RuleStopPlanNotActive`, `RuleStopRuleNotFound`. Whitelist explicita en el
+  front (C2), nunca una clave concatenada.
+- **Se puede apagar la ultima regla.** El plan sigue `Active` y sigue ingiriendo ventas sin credito
+  (B2). "Plan sin reglas vivas" es **derivado** de las reglas, nunca una bandera - en el detalle del
+  plan y en una tarjeta nueva del dashboard.
+- **Dialogo:** plan, regla, conteo de creditos vivos, aviso si es la ultima, y el boton deshabilitado
+  hasta escribir el motivo. Si el conteo de creditos falla dice "no se pudieron contar" - **nunca 0**,
+  que se leeria como "esta regla todavia no pago nada".
+
+### Numeros de linea del ticket: derivados, no falsos
+
+`Plan.cs:102-107`->**114**, `:128-131`->**127**, `:238`->**251**, `:133`->**145**. La sustancia de las
+seis premisas se confirmo. `Rule.cs:103` y `CreditAllocationService.cs:332` exactos.
+
+**Tres lectores de `IsActive` que el ticket no lista:** `CreditAllocationService.cs:311-314`,
+`Plan.cs:184` (`Activate` exige >=1 regla viva) y `Plan.cs:216`. Ninguno es bloqueo. Consecuencia del
+segundo, dicha y con test: **un clon cuyas reglas llegaron todas apagadas no se puede activar hasta
+corregir una** - no es defecto, obliga a que la correccion sea un acto deliberado.
+
+### Verificacion
+
+**build=0 - unit 1759->1781 (+22) - integracion 849 pasados / 0 fallidos / 2 skipped, exit 0 (3m56s)
+- front 1245->1261 (+16), exit 0 - `ng build` produccion exit 0.**
+
+La API de dev levantada (PID 14608) bloquea los DLL al copiar: la solucion compila (verificado
+compilando `Wasnie.Api` a un output aparte), y **la primera migracion salio VACIA** porque `--no-build`
+cargo el DLL viejo del `bin` bloqueado. Se descarto y se regenero con `Wasnie.Infrastructure` como
+startup (A3: mirar la salida, no el codigo que deberia producirla).
+
+**B30 aplicada y verificada en el esquema real** (`WasnieDb@HEYBALDUR`), no en la salida del
+comando: `INFORMATION_SCHEMA` devuelve las tres columnas con su tipo (`datetimeoffset`,
+`nvarchar(450)`, `nvarchar(500)`, las tres nullable) y la tabla tiene **58 reglas con las 58 en
+marcador nulo** -- aditiva pura, cero transformacion, ninguna migracion pendiente.
+
+**Sin verificar:** no hay comprobacion en runtime del navegador. Bundle 844.78 kB vs 650 de
+presupuesto: preexistente, sin regresion.
+
 ## 2026-08-31 — KAN-31 (tanda 2/2): `ArchivedAt` + backfill, y la fuente resultó NO ser AuditLogs
 
 **Rama:** AI-CHAT-ASSISTANT · **Sin commit** · dominio + esquema · **migración B29, APLICADA en la

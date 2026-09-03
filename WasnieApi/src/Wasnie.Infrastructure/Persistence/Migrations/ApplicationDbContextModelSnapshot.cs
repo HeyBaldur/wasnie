@@ -542,6 +542,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("CalculationTrace")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset?>("ClosedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -568,6 +571,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("PlanId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RateRefusal")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -610,6 +617,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "PayeeId")
                         .HasDatabaseName("IX_Credits_TenantId_PayeeId_Outstanding")
                         .HasFilter("[SupersededAt] IS NULL AND [ConsumedAt] IS NULL AND [ClosedAt] IS NULL");
+
+                    b.HasIndex("TenantId", "RateRefusal")
+                        .HasDatabaseName("IX_Credits_TenantId_RateRefusal")
+                        .HasFilter("[RateRefusal] IS NOT NULL");
 
                     b.HasIndex("TenantId", "SupersededAt")
                         .HasFilter("[SupersededAt] IS NULL");
@@ -1180,6 +1191,17 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
+
+                    b.Property<string>("StopReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("StoppedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("StoppedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Tag")
                         .HasColumnType("nvarchar(50)");

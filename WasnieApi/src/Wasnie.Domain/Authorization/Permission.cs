@@ -15,6 +15,13 @@ public static class Permission
     public const string PlansActivate = "Plans.Activate";
     public const string PlansArchive = "Plans.Archive";
 
+    /// <summary>
+    /// Pull the emergency brake on a rule of a LIVE plan — the one plan permission that changes what
+    /// the engine pays without going through a Draft. Separate from Plans.Update because that one is
+    /// held for editing drafts: this one stops money mid-flight and is irreversible.
+    /// </summary>
+    public const string PlansStopRule = "Plans.StopRule";
+
     public const string QuotasRead = "Quotas.Read";
     public const string QuotasSet = "Quotas.Set";
     public const string QuotasUpdate = "Quotas.Update";

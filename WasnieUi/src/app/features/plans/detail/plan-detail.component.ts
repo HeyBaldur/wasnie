@@ -1,5 +1,6 @@
 ﻿import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { firstValueFrom } from 'rxjs';
 import { extractApiError } from '../../../shared/utils/api-error';
@@ -17,7 +18,11 @@ import {
   Rule,
   MeasurementType,
   RateTableType,
+  isRuleStopped,
 } from '../models/rule.model';
+import { stopRuleErrorKey, stopRuleErrorParams, STOP_RULE_ERR_UNKNOWN } from './stop-rule-error';
+import { extractApiErrorCode } from '../../../shared/utils/api-error';
+import { CreditsApiService } from '../../credits/services/credits.api.service';
 import { getPlanPermissions } from '../services/plan-permissions';
 import { PlanClawbackPolicyComponent } from '../clawback/plan-clawback-policy.component';
 import { Assignment } from '../../assignments/models/assignment.model';
@@ -33,6 +38,8 @@ import {
   WsConfirmationModalComponent,
   WsCopyButtonComponent,
   WsPaginationComponent,
+  WsModalComponent,
+  WsTextareaComponent,
   type BadgeVariant,
 } from '../../../shared/ui';
 
@@ -56,6 +63,9 @@ type Tab = 'rules' | 'versions' | 'assignments' | 'clawback';
     WsConfirmationModalComponent,
     WsCopyButtonComponent,
     WsPaginationComponent,
+    WsModalComponent,
+    WsTextareaComponent,
+    FormsModule,
     ProcessPendingComponent,
     HasPermissionDirective,
   ],
@@ -71,6 +81,7 @@ export class PlanDetailComponent implements OnInit {
   private readonly plansApi = inject(PlansApiService);
   private readonly subState = inject(SubscriptionStateService);
   private readonly tierLimitModal = inject(TierLimitModalService);
+  private readonly creditsApi = inject(CreditsApiService);
 
   private get plansTierLimit(): number {
     const tier = this.subState.subscription()?.tier ?? 'Free';
@@ -109,6 +120,53 @@ export class PlanDetailComponent implements OnInit {
   readonly deleteRuleSaving = signal(false);
   readonly pendingRule = signal<Rule | null>(null);
 
+  // ── The emergency brake ───────────────────────────────────────────────────
+
+  readonly stopRuleOpen = signal(false);
+  readonly stopRuleSaving = signal(false);
+  readonly stopRuleTarget = signal<Rule | null>(null);
+  readonly stopRuleReason = signal('');
+
+  /**
+   * How many live credits this rule has already produced. Null while it is still being fetched, and
+   * ALSO null if the lookup failed — the two are told apart on screen, because "we could not count"
+   * must never render as "0". Someone deciding whether to brake a rule reads this number as the size
+   * of what is already out there.
+   */
+  readonly stopRuleCreditCount = signal<number | null>(null);
+  readonly stopRuleCreditCountFailed = signal(false);
+
+  /** Trimmed, because a reason of three spaces is no reason — and the server agrees. */
+  readonly stopRuleReasonValid = computed(() => this.stopRuleReason().trim().length > 0);
+
+  /**
+   * True when the rule about to be stopped is the last live one on the plan. The dialog says so:
+   * the plan will keep ingesting transactions and stop paying on every one of them, and that is a
+   * consequence the person pressing the button has to see BEFORE they press it.
+   */
+  readonly stopRuleIsLast = computed(() => {
+    const target = this.stopRuleTarget();
+    if (!target) return false;
+    const live = (this.store.selectedPlan()?.rules ?? []).filter((r) => r.isActive);
+    return live.length === 1 && live[0].id === target.id;
+  });
+
+  /**
+   * An Active plan with no live rule left. DERIVED from the rules on every read, never stored:
+   * a stored flag drifts the moment a new version is activated, and this warning appearing on a plan
+   * that pays fine is as bad as it not appearing on one that does not.
+   */
+  readonly hasNoLiveRules = computed(() => {
+    const plan = this.store.selectedPlan();
+    if (!plan || plan.status !== 'Active') return false;
+    return plan.rules.length > 0 && !plan.rules.some((r) => r.isActive);
+  });
+
+  /** A rule braked on a live plan, as opposed to one removed from a draft. */
+  isStopped(rule: Rule): boolean {
+    return isRuleStopped(rule);
+  }
+
   readonly permissions = computed(() => getPlanPermissions(this.store.selectedPlan()?.status));
 
   /** Re-reads the plan after the clawback policy is saved, so the tab shows the stored state. */
@@ -119,9 +177,21 @@ export class PlanDetailComponent implements OnInit {
   readonly sortedRules = computed(() => {
     const plan = this.store.selectedPlan();
     if (!plan) return [];
-    // Only show active rules — a deleted (soft-deactivated) rule must not appear, otherwise
-    // its Edit action opens a form whose save fails with "rule not found in this plan".
-    return [...plan.rules].filter((r) => r.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+    // Active rules AND STOPPED ONES — the two are not the same kind of inactive.
+    //
+    // ★★ THE FILTER THAT HID THE BRAKE. This kept only `isActive`, which is right for a rule DELETED
+    // from a draft (its Edit action would open a form whose save fails with "rule not found in this
+    // plan" — that is why the filter exists) and wrong for a rule STOPPED on a live plan. The
+    // symptom was the header and the list disagreeing: the tab said "Rules 1" from the raw payload
+    // while the list rendered nothing, on both the Active plan and its clone. A stopped rule has to
+    // be readable — hiding it makes the plan look like it never had that rule, which is the exact
+    // silence the emergency brake exists to end.
+    //
+    // The Edit concern does not apply to a stopped rule: on an Active plan there is no Edit button
+    // (canEditRule is false), and in a Draft `Plan.UpdateRule` accepts it and supersedes it.
+    return [...plan.rules]
+      .filter((r) => r.isActive || isRuleStopped(r))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   });
 
   ngOnInit(): void {
@@ -264,6 +334,73 @@ export class PlanDetailComponent implements OnInit {
       this.toast.show(extractApiError(err), 'error');
     } finally {
       this.deleteRuleSaving.set(false);
+    }
+  }
+
+  onStopRule(rule: Rule): void {
+    this.stopRuleTarget.set(rule);
+    this.stopRuleReason.set('');
+    this.stopRuleCreditCount.set(null);
+    this.stopRuleCreditCountFailed.set(false);
+    this.stopRuleOpen.set(true);
+    void this.loadStopRuleCreditCount(rule);
+  }
+
+  /**
+   * Counts the LIVE credits this rule has already generated, for the confirmation dialog.
+   *
+   * ★ A FAILURE HERE DOES NOT BLOCK THE BRAKE. This number is context, not a precondition: refusing
+   * to let someone stop a miscalculating rule because a count query timed out would be the tool
+   * failing at the one moment it exists for. The dialog says the count is unavailable and the button
+   * still works.
+   */
+  private async loadStopRuleCreditCount(rule: Rule): Promise<void> {
+    try {
+      const page = await firstValueFrom(
+        this.creditsApi.list({
+          page: 1,
+          // One row is enough: only totalCount is read, and the rows themselves are never shown.
+          pageSize: 1,
+          // "Active" is what live means here — a superseded credit was already replaced by another.
+          filters: { ruleIds: rule.id, status: 'Active' },
+        }),
+      );
+      if (this.stopRuleTarget()?.id === rule.id) {
+        this.stopRuleCreditCount.set(page.totalCount);
+      }
+    } catch {
+      if (this.stopRuleTarget()?.id === rule.id) {
+        this.stopRuleCreditCountFailed.set(true);
+      }
+    }
+  }
+
+  async onConfirmStopRule(): Promise<void> {
+    const rule = this.stopRuleTarget();
+    if (!rule || !this.stopRuleReasonValid()) return;
+
+    this.stopRuleSaving.set(true);
+    try {
+      await firstValueFrom(this.plansApi.stopRule(this.planId, rule.id, this.stopRuleReason().trim()));
+      // Re-read rather than patch the rule in place: the plan detail derives "no live rules" from
+      // the whole set, and a locally patched copy would leave that warning one step behind.
+      await this.store.loadPlan(this.planId);
+      this.toast.show('PLANS.TOAST_RULE_STOPPED', 'success');
+      this.stopRuleOpen.set(false);
+      this.stopRuleTarget.set(null);
+      this.stopRuleReason.set('');
+    } catch (err) {
+      // ★ THE CODED HALF FIRST. Every refusal this endpoint issues is a code with parameters; the
+      // plain `message` path would paint an English sentence over a Spanish or Polish screen.
+      const coded = extractApiErrorCode(err);
+      const key = coded ? stopRuleErrorKey(coded) : null;
+      if (coded && key !== STOP_RULE_ERR_UNKNOWN) {
+        this.toast.show(key!, 'error', stopRuleErrorParams(coded));
+      } else {
+        this.toast.show(coded ? STOP_RULE_ERR_UNKNOWN : extractApiError(err), 'error');
+      }
+    } finally {
+      this.stopRuleSaving.set(false);
     }
   }
 

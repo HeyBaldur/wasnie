@@ -41,6 +41,7 @@ public static class AuditActions
     public const string PlanRuleAdded = "PLAN_RULE_ADDED";
     public const string PlanRuleUpdated = "PLAN_RULE_UPDATED";
     public const string PlanRuleRemoved = "PLAN_RULE_REMOVED";
+    public const string PlanRuleStopped = "PLAN_RULE_STOPPED";
 
     // Quotas
     public const string QuotaCreated = "QUOTA_CREATED";

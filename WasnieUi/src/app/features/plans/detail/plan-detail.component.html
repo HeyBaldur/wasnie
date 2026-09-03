@@ -120,6 +120,20 @@
         }
 
         @if (activeTab() === 'rules') {
+          <!-- An Active plan with no live rule left. DERIVED from the rules on every render, never a
+               stored flag: a flag drifts, and this banner appearing over a plan that pays fine is as
+               harmful as it missing from one that does not. The plan is still ingesting sales — they
+               are recorded and left uncredited, which is exactly what this says. -->
+          @if (hasNoLiveRules()) {
+            <div class="plan-no-live-rules">
+              <app-icon name="alert-triangle" [size]="18" />
+              <div>
+                <p class="plan-no-live-rules__title">{{ 'PLANS.NO_LIVE_RULES_TITLE' | translate }}</p>
+                <p class="plan-no-live-rules__body">{{ 'PLANS.NO_LIVE_RULES_BODY' | translate }}</p>
+              </div>
+            </div>
+          }
+
           @if (sortedRules().length === 0) {
             <div class="rules-empty">
               <ws-empty-state
@@ -139,12 +153,23 @@
           } @else {
             <div class="rules-list">
               @for (rule of sortedRules(); track rule.id) {
-                <div class="rule-card" [class.rule-card--inactive]="!rule.isActive">
+                <!-- The two classes are MUTUALLY EXCLUSIVE, and binding them off the same flag is what made them
+                     overlap: `--inactive` dims a rule removed from a draft, `--stopped` keeps a braked one at
+                     full contrast, and a stopped rule is `!isActive` too. Leaving both on left the un-dimming
+                     to stylesheet source order — true today, silently false the day the file is reordered. -->
+                <div class="rule-card"
+                     [class.rule-card--inactive]="!rule.isActive && !isStopped(rule)"
+                     [class.rule-card--stopped]="isStopped(rule)">
                   <div class="rule-card__header">
                     <div class="rule-card__title-group">
                       <span class="rule-card__order">#{{ rule.sortOrder }}</span>
                       <span class="rule-card__name">{{ rule.name }}</span>
-                      @if (!rule.isActive) {
+                      <!-- Two different facts, never the same badge: a rule REMOVED from a draft and
+                           a rule STOPPED on a live plan both have isActive false, and calling them
+                           both "inactive" is the silence this feature exists to end. -->
+                      @if (isStopped(rule)) {
+                        <ws-badge variant="danger" size="sm">{{ 'PLANS.RULE_STOPPED' | translate }}</ws-badge>
+                      } @else if (!rule.isActive) {
                         <ws-badge variant="neutral" size="sm">{{ 'PLANS.RULE_INACTIVE' | translate }}</ws-badge>
                       }
                     </div>
@@ -164,8 +189,36 @@
                           {{ 'COMMON.VIEW' | translate }}
                         </ws-button>
                       }
+                      <!-- The emergency brake. Hidden, never disabled (Spec 5b.6): a user without
+                           Plans.StopRule does not see it at all. Gone once the rule is stopped —
+                           there is no second stop, and no unstop. -->
+                      @if (permissions().canStopRule && rule.isActive) {
+                        <ws-button
+                          *hasPermission="'Plans.StopRule'"
+                          variant="danger"
+                          size="sm"
+                          (click)="onStopRule(rule)"
+                        >
+                          <app-icon name="x" [size]="13" />
+                          {{ 'PLANS.ACTION_STOP_RULE' | translate }}
+                        </ws-button>
+                      }
                     </div>
                   </div>
+
+                  <!-- What happened, on the rule itself. The audit log is not a surface anyone
+                       opens, so the date and the reason live here where the reader already is. -->
+                  @if (isStopped(rule)) {
+                    <div class="rule-card__stopped">
+                      <app-icon name="alert-triangle" [size]="14" />
+                      <div>
+                        <p class="rule-card__stopped-when">
+                          {{ 'PLANS.RULE_STOPPED_ON' | translate: { date: (rule.stoppedAt | dateFormat) } }}
+                        </p>
+                        <p class="rule-card__stopped-why">{{ rule.stopReason }}</p>
+                      </div>
+                    </div>
+                  }
                   <div class="rule-card__tags">
                     <span class="rule-tag">{{ measurementLabel(rule.measurement.type) | translate }}</span>
                     <span class="rule-tag">{{ rateTableLabel(rule.rateTable.type) | translate }}</span>
@@ -359,3 +412,85 @@
   (confirmed)="onConfirmDeleteRule()"
   (cancelled)="deleteRuleOpen.set(false)"
 />
+
+<!--
+  THE EMERGENCY BRAKE DIALOG.
+
+  ★ NOT ws-confirmation-modal, because this one asks for something. The reason is mandatory and is
+  stored on the rule forever, so the button stays disabled until it is typed — a confirmation modal
+  has no field to type it into.
+
+  ★ IT STATES THE CONSEQUENCES BEFORE THE BUTTON, not after. The archive dialog once said "read
+  only" while it silently unassigned every payee, and this is the same class of screen: the count of
+  live credits and the last-rule warning are what someone needs in order to decide.
+-->
+<ws-modal
+  [(isOpen)]="stopRuleOpen"
+  size="md"
+  [title]="'PLANS.STOP_RULE_TITLE' | translate"
+  [description]="'PLANS.STOP_RULE_DESC' | translate"
+>
+  @if (stopRuleTarget(); as rule) {
+    <div class="stop-rule">
+      <dl class="stop-rule__facts">
+        <div>
+          <dt>{{ 'PLANS.LABEL_PLAN' | translate }}</dt>
+          <dd>{{ store.selectedPlan()?.name }}</dd>
+        </div>
+        <div>
+          <dt>{{ 'PLANS.LABEL_RULE' | translate }}</dt>
+          <dd>{{ rule.name }}</dd>
+        </div>
+        <div>
+          <dt>{{ 'PLANS.STOP_RULE_LIVE_CREDITS' | translate }}</dt>
+          <dd>
+            <!-- Three states, not two. "We could not count" must never render as "0": the number is
+                 how someone sizes what is already out there, and a false zero reads as "nothing has
+                 been paid under this rule yet". -->
+            @if (stopRuleCreditCountFailed()) {
+              {{ 'PLANS.STOP_RULE_LIVE_CREDITS_UNKNOWN' | translate }}
+            } @else if (stopRuleCreditCount() === null) {
+              {{ 'COMMON.LOADING' | translate }}
+            } @else {
+              {{ stopRuleCreditCount() }}
+            }
+          </dd>
+        </div>
+      </dl>
+
+      @if (stopRuleIsLast()) {
+        <div class="stop-rule__warning">
+          <app-icon name="alert-triangle" [size]="16" />
+          <p>{{ 'PLANS.STOP_RULE_LAST_WARNING' | translate }}</p>
+        </div>
+      }
+
+      <p class="stop-rule__irreversible">{{ 'PLANS.STOP_RULE_IRREVERSIBLE' | translate }}</p>
+
+      <ws-textarea
+        [label]="'PLANS.STOP_RULE_REASON_LABEL' | translate"
+        [placeholder]="'PLANS.STOP_RULE_REASON_PLACEHOLDER' | translate"
+        [maxlength]="500"
+        [submitOnEnter]="false"
+        [ngModel]="stopRuleReason()"
+        (ngModelChange)="stopRuleReason.set($event)"
+      />
+    </div>
+  }
+
+  <div slot="footer" class="stop-rule__actions">
+    <ws-button variant="secondary" (click)="stopRuleOpen.set(false)" [disabled]="stopRuleSaving()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <!-- Disabled until a reason exists. The reason is the record: without it the stopped rule
+         outlives everyone who remembers why it was stopped. -->
+    <ws-button
+      variant="danger"
+      [disabled]="!stopRuleReasonValid() || stopRuleSaving()"
+      [loading]="stopRuleSaving()"
+      (click)="onConfirmStopRule()"
+    >
+      {{ 'PLANS.ACTION_STOP_RULE' | translate }}
+    </ws-button>
+  </div>
+</ws-modal>

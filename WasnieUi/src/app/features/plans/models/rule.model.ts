@@ -1,4 +1,4 @@
-import { Money } from './value-objects.model';
+﻿import { Money } from './value-objects.model';
 
 export enum LogicalOperator {
   And = 0,
@@ -147,6 +147,26 @@ export interface Rule {
   modifier: Modifier | null;
   cap: Cap | null;
   floor: Floor | null;
+
+  /**
+   * When someone pulled the emergency brake on this rule, or null if nobody ever did.
+   *
+   * WHY IT IS NOT JUST `isActive: false`. A false `isActive` has always meant "removed from a draft
+   * that was never activated". A rule STOPPED on a live plan is a different fact and must read
+   * differently on screen, so the two are told apart by this field, never by the flag alone:
+   * `!isActive && stoppedAt === null` is removed, `stoppedAt !== null` is stopped.
+   *
+   * It never comes back as null once it has a value. There is no unstop.
+   */
+  stoppedAt: string | null;
+  stoppedBy: string | null;
+  /** Why it was stopped. Mandatory when it was, so this is non-null exactly when stoppedAt is. */
+  stopReason: string | null;
+}
+
+/** True when this rule was braked on a live plan, as opposed to removed from a draft. */
+export function isRuleStopped(rule: Rule): boolean {
+  return rule.stoppedAt !== null && rule.stoppedAt !== undefined;
 }
 
 export interface AddRuleRequest {
@@ -216,6 +236,16 @@ export enum AttainmentSource {
   Measured = 'Measured',
   Supplied = 'Supplied',
   Defaulted = 'Defaulted',
+  /**
+   * There was nothing to measure against — no quota in effect, or one whose target is zero. The
+   * percentage that comes with this is 0, and it is 0 because nobody set a target, NOT because the
+   * rep sold nothing. Those two are the same number and opposite facts, so they must never be
+   * rendered with the same words.
+   *
+   * Mirrors the backend member added in KAN-27. The simulator never produces it (it supplies or
+   * defaults); it appears on stored calculation traces.
+   */
+  NoTarget = 'NoTarget',
 }
 
 export interface RuleSimulationTier {

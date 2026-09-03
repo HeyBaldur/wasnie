@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -193,6 +194,63 @@ public sealed class SimulateRuleEndpointTests : IAsyncLifetime
             $"/api/plans/{plan.Id}/rules/simulate", request);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    /// <summary>
+    /// ★★ THE SIMULATOR'S REFUSAL KEEPS ITS CODE — AND THIS TEST EXISTS BECAUSE IT ONCE DID NOT.
+    ///
+    /// <c>DomainCodedException</c> is a <c>DomainException</c>, so the handler's catch used to
+    /// swallow it and flatten it into <c>Result.Failure(ex.Message)</c> — and that Message is the
+    /// CODE ITSELF, because the type calls <c>base(code)</c> to keep logs readable. The browser was
+    /// handed <c>message: "RateTableRateAboveMaximum"</c> and painted the identifier on screen,
+    /// which is the one thing that type's own documentation forbids.
+    ///
+    /// It stayed invisible until the rate-magnitude guard moved into <c>Plan.AddRule</c>: before
+    /// that, every coded refusal came from <c>RateTableRequest.ToDomain</c>, which this endpoint
+    /// never calls. Asserting on the SHAPE of the body rather than on a status code is the point —
+    /// a 422 was returned all along; what was missing was the code.
+    /// </summary>
+    [Fact]
+    public async Task A_rate_above_the_maximum_is_refused_with_its_code_and_never_as_a_message()
+    {
+        var plan = await CreatePlanAsync(_clientA);
+
+        var request = new
+        {
+            planId = plan.Id,
+            name = "Four hundred per cent",
+            sortOrder = 1,
+            measurement = new { _schema = 1, type = 0, sourceField = "amount", aggregation = 0 },
+            rateTable = new { _schema = 1, type = 0, flatRate = 4m },
+            trigger = (object?)null,
+            modifier = (object?)null,
+            cap = (object?)null,
+            floor = (object?)null,
+            amount = 50000m,
+            quantity = 1,
+        };
+
+        var response = await _clientA.PostAsJsonAsync(
+            $"/api/plans/{plan.Id}/rules/simulate", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        body.GetProperty("code").GetString().Should().Be(
+            "RateTableRateAboveMaximum", "the client matches the code against its own translations");
+
+        body.GetProperty("parameters").GetProperty("rate").GetDecimal().Should().Be(4m);
+        body.GetProperty("parameters").GetProperty("maximum").GetDecimal().Should().Be(1m);
+
+        body.TryGetProperty("parameters", out var parameters).Should().BeTrue();
+        parameters.TryGetProperty("tierNumber", out _).Should().BeFalse(
+            "a flat table has no tiers, and the client picks its wording by the ABSENCE of this key");
+
+        // ★ THE REGRESSION ITSELF. A `message` here means the coded refusal was flattened again, and
+        // whatever is in it reaches the screen unchanged.
+        body.TryGetProperty("message", out var message).Should().BeFalse(
+            $"the code must never travel as prose; got '{(message.ValueKind == JsonValueKind.Undefined ? "" : message.ToString())}'");
     }
 
     [Fact]

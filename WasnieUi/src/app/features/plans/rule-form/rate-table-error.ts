@@ -54,6 +54,20 @@ export function rateTableErrorKey(error: ApiErrorCode): string {
         ? 'PLANS.RATE_TABLE_ERR_GAP_RATIO'
         : 'PLANS.RATE_TABLE_ERR_GAP_AMOUNT';
 
+    // ★ THE TWO RATE-VALUE REFUSALS BRANCH ON WHETHER THERE IS A TIER TO POINT AT, the same way the
+    // two above branch on the unit. A flat table has no tiers, so the server sends `tierNumber` as
+    // null and the sentence has to say "the rate" where the other says "the rate of tier 2" — a
+    // single key would have to read "tier null".
+    case 'RateTableRateAboveMaximum':
+      return error.parameters['tierNumber'] === null || error.parameters['tierNumber'] === undefined
+        ? 'PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_FLAT'
+        : 'PLANS.RATE_TABLE_ERR_RATE_TOO_HIGH_TIER';
+
+    case 'RateTableRateBelowZero':
+      return error.parameters['tierNumber'] === null || error.parameters['tierNumber'] === undefined
+        ? 'PLANS.RATE_TABLE_ERR_RATE_NEGATIVE_FLAT'
+        : 'PLANS.RATE_TABLE_ERR_RATE_NEGATIVE_TIER';
+
     default:
       return RATE_TABLE_ERR_UNKNOWN;
   }

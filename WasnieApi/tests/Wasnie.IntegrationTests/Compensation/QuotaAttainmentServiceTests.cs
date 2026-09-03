@@ -1,5 +1,6 @@
 ﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
@@ -109,8 +110,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 25));
 
             // Transaction.Amount total = 37,714.32 EUR; target = 50,000 EUR → 37714.32/50000 = 0.7543
-            result.Value.Should().Be(0.7543m);
-            result.ToPercentString().Should().Be("75%");
+            result.Value.Value.Should().Be(0.7543m);
+            result.Value.ToPercentString().Should().Be("75%");
         }
     }
 
@@ -157,8 +158,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var svc = new QuotaAttainmentService(db);
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 20));
 
-            result.Value.Should().Be(0.8m); // 80 / 100 = 80%
-            result.ToPercentString().Should().Be("80%");
+            result.Value.Value.Should().Be(0.8m); // 80 / 100 = 80%
+            result.Value.ToPercentString().Should().Be("80%");
         }
     }
 
@@ -180,7 +181,9 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var svc = new QuotaAttainmentService(db);
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
-            result.Should().Be(AttainmentPercentage.Zero);
+            result.Value.Should().Be(AttainmentPercentage.Zero);
+            result.Source.Should().Be(AttainmentSource.NoTarget,
+                "no quota in effect is not 0% attainment — nobody set a target");
         }
     }
 
@@ -209,7 +212,7 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var svc = new QuotaAttainmentService(db);
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
-            result.Should().Be(AttainmentPercentage.Zero);
+            result.Value.Should().Be(AttainmentPercentage.Zero);
         }
     }
 
@@ -237,7 +240,9 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             // No credits → achieved=0 → 0%
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
-            result.Should().Be(AttainmentPercentage.Zero); // 0 / 10,000 = 0
+            result.Value.Should().Be(AttainmentPercentage.Zero); // 0 / 10,000 = 0
+            result.Source.Should().Be(AttainmentSource.Measured,
+                "a real target answered — this rep genuinely achieved 0%, which is a fact about them");
         }
     }
 
@@ -297,7 +302,9 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var svc = new QuotaAttainmentService(db);
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
-            result.Should().Be(AttainmentPercentage.Zero); // 0 credits inside May
+            result.Value.Should().Be(AttainmentPercentage.Zero); // 0 credits inside May
+            result.Source.Should().Be(AttainmentSource.Measured,
+                "the quota exists; nothing landed in the period, which is a measured zero");
         }
     }
 
@@ -348,8 +355,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 6, 20));
 
             // Jun Transaction.Amount = 1,500 EUR; target = 500 EUR → 1500/500 = 3.0000 (overachievement)
-            result.Value.Should().Be(3.0m);
-            result.ToPercentString().Should().Be("300%");
+            result.Value.Value.Should().Be(3.0m);
+            result.Value.ToPercentString().Should().Be("300%");
         }
     }
 
@@ -392,8 +399,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 20));
 
             // Only EUR transaction counts: 2,000 EUR / 1,000 EUR target = 2.0000 (overachievement)
-            result.Value.Should().Be(2.0m);
-            result.ToPercentString().Should().Be("200%");
+            result.Value.Value.Should().Be(2.0m);
+            result.Value.ToPercentString().Should().Be("200%");
         }
     }
 
@@ -446,11 +453,11 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
 
             // Expected: Jun Transaction.Amount / 25,000 target = 6,855 / 25,000 = 0.2742
             var expectedAttainment = Math.Round(expectedJunTxTotal / 25_000m, 4, MidpointRounding.ToEven);
-            result.Value.Should().Be(expectedAttainment);
+            result.Value.Value.Should().Be(expectedAttainment);
 
             // Must include only Jun transactions — Jan tx total would inflate to 0.2742 + 20*140.196/25000
-            result.Value.Should().BeGreaterThan(0.2m);
-            result.Value.Should().BeLessThan(0.5m); // still reasonable — not the full 100%+ territory
+            result.Value.Value.Should().BeGreaterThan(0.2m);
+            result.Value.Value.Should().BeLessThan(0.5m); // still reasonable — not the full 100%+ territory
         }
     }
 
@@ -511,7 +518,7 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
             // 6,000 counted ONCE / 10,000 = 0.6. The old (per-credit) code would double to 12,000 → 1.2.
-            result.Value.Should().Be(0.6m);
+            result.Value.Value.Should().Be(0.6m);
         }
     }
 
@@ -539,7 +546,7 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
             // Sum of the three sales = 6,000 / 6,000 = 1.0. Old code → 12,000 → 2.0.
-            result.Value.Should().Be(1.0m);
+            result.Value.Value.Should().Be(1.0m);
         }
     }
 
@@ -580,8 +587,8 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
             var svc = new QuotaAttainmentService(db);
-            (await svc.ComputeAsync(payeeId, planA, new DateOnly(2026, 5, 15))).Value.Should().Be(1.0m);
-            (await svc.ComputeAsync(payeeId, planB, new DateOnly(2026, 5, 15))).Value.Should().Be(1.0m);
+            (await svc.ComputeAsync(payeeId, planA, new DateOnly(2026, 5, 15))).Value.Value.Should().Be(1.0m);
+            (await svc.ComputeAsync(payeeId, planB, new DateOnly(2026, 5, 15))).Value.Value.Should().Be(1.0m);
         }
     }
 
@@ -623,7 +630,7 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
             // Only the live sale counts, once: 4,000 / 4,000 = 1.0. The 9,999 superseded sale is excluded.
-            result.Value.Should().Be(1.0m);
+            result.Value.Value.Should().Be(1.0m);
         }
     }
 
@@ -650,7 +657,7 @@ public sealed class QuotaAttainmentServiceTests(CreditAllocationServiceFixture f
             var result = await svc.ComputeAsync(payeeId, planId, new DateOnly(2026, 5, 15));
 
             // Quantity 40 counted ONCE / 40 = 1.0. Old code → 80 → 2.0.
-            result.Value.Should().Be(1.0m);
+            result.Value.Value.Should().Be(1.0m);
         }
     }
 

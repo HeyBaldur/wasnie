@@ -96,6 +96,25 @@ public sealed class SimulateRuleHandler(
         {
             rule = BuildRule(request, plan.TenantId, plan.Currency);
         }
+        // ★★ THE CODED ONES GO PAST, EXACTLY AS ON THE SAVE PATH — AND FORGETTING THAT HERE PUT AN
+        // INTERNAL IDENTIFIER ON A USER'S SCREEN. DomainCodedException is a DomainException, so the
+        // catch below used to swallow it, and its Message is the CODE ITSELF (it calls base(code) so
+        // logs stay readable). Flattened into Result.Failure, "RateTableRateAboveMaximum" travelled
+        // as the message and the simulator painted it verbatim — the one thing that type's own
+        // documentation says must never reach a screen.
+        //
+        // It only became reachable when the rate-magnitude guard moved into Plan.AddRule: until then
+        // every coded refusal came from RateTableRequest.ToDomain, which the simulator does not call
+        // (SimulateRuleQuery carries a domain RateTable straight through). The save path had this
+        // rethrow from the start; this one is the same fix in the second door.
+        //
+        // Safe here for the same reason it is safe in AddRuleToPlanHandler: BuildRule works on a
+        // throwaway Plan that never meets the DbContext, so nothing is persisted and nothing is left
+        // half-written when the exception leaves.
+        catch (DomainCodedException)
+        {
+            throw;
+        }
         catch (DomainException ex)
         {
             // ★ NOT A RE-IMPLEMENTATION OF THE RULES — the rule is built through the very same

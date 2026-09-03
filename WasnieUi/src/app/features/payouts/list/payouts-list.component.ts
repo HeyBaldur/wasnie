@@ -1,7 +1,7 @@
 import {
   Component, computed, inject, OnInit, signal, DestroyRef,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { distinctUntilChanged, map } from 'rxjs/operators';
@@ -18,6 +18,8 @@ import { PlansApiService } from '../../plans/services/plans.api.service';
 import { PayoutsApiService } from '../services/payouts.api.service';
 import { PayoutsStore, PayoutFilter, EMPTY_PAYOUT_FILTER } from '../state/payouts.store';
 import { PayoutStatus } from '../models/payout.model';
+import { parseBulkMarkPaidError } from './bulk-mark-paid-error';
+import { CurrentUserService } from '../../../core/auth/current-user.service';
 import {
   WsButtonComponent,
   WsBadgeComponent,
@@ -41,6 +43,7 @@ type PeriodKey = 'this-month' | 'last-month' | 'ytd' | 'all-time';
   selector: 'app-payouts-list',
   standalone: true,
   imports: [
+    RouterLink,
     AppShellComponent, RefreshOnEnterDirective, ReactiveFormsModule, TranslateModule,
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
@@ -59,6 +62,7 @@ export class PayoutsListComponent implements OnInit {
   private readonly payeesApi = inject(PayeesApiService);
   private readonly plansApi = inject(PlansApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly currentUser = inject(CurrentUserService);
 
   readonly filterOpen = signal(false);
   readonly bulkApproveConfirmOpen = signal(false);
@@ -66,6 +70,32 @@ export class PayoutsListComponent implements OnInit {
   readonly bulkMarkPaidConfirmOpen = signal(false);
   readonly bulkMarkPaiding = signal(false);
   readonly bulkMarkPaidErrors = signal<string[]>([]);
+
+  /**
+   * The same refusals, taken apart so the template can lay them out.
+   *
+   * The server sends one unbroken line of comma-separated GUIDs per payout; see
+   * `bulk-mark-paid-error.ts` for why it is parsed here and what happens to a line that does not
+   * match — it renders exactly as it does today, never blank.
+   */
+  readonly bulkMarkPaidErrorBlocks = computed(() =>
+    this.bulkMarkPaidErrors().map(parseBulkMarkPaidError)
+  );
+
+  /**
+   * Whether each identifier in a refusal is worth turning into a link.
+   *
+   * ★★ A LINK, OR PLAIN TEXT — NEVER A LINK THAT LEADS TO A REFUSAL. `/credits/:id` and
+   * `/transactions/:id` sit behind `Credits.Read` and `Transactions.Read`; offering the link to
+   * somebody without the permission just moves the dead end one click further away. This is the
+   * "hide, don't disable" rule applied to the affordance rather than to the value: the GUID itself
+   * stays on screen either way, because it is still the thing they have to paste into a message to
+   * whoever CAN open it. Only the ability to click it comes and goes.
+   *
+   * Payouts needs no check — this whole screen is behind `Payouts.Read`.
+   */
+  readonly canOpenCredits = computed(() => this.currentUser.hasPermission('Credits.Read'));
+  readonly canOpenTransactions = computed(() => this.currentUser.hasPermission('Transactions.Read'));
   readonly bulkMarkPaidCount = signal(0);
   readonly bulkOverlapCount = signal(0);
   readonly bulkOverlapsLoading = signal(false);

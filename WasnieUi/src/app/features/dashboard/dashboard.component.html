@@ -364,6 +364,41 @@
             </a>
           }
 
+          <!-- A plan that has stopped paying: Active, still ingesting sales, every rule stopped.
+               Placed FIRST because it outranks everything else in this card — the others are
+               individual items stuck, this one is a whole plan silently paying zero. -->
+          @if (plansWithoutLiveRules().length > 0) {
+            <div class="attention-group-label">{{ 'DASHBOARD.NO_LIVE_RULES_GROUP_TITLE' | translate }}</div>
+            <p class="attention-group-note">{{ 'DASHBOARD.NO_LIVE_RULES_EXPLAIN' | translate }}</p>
+            @for (plan of plansWithoutLiveRules(); track plan.planId) {
+              <a [routerLink]="['/plans', plan.planId]"
+                 class="pending-plan-card__row attention-row">
+                <span class="attention-row__icon">
+                  <app-icon name="alert-triangle" [size]="16" />
+                </span>
+                <span class="attention-row__text">
+                  <span class="attention-row__label">
+                    {{ plan.planName }}
+                    <span class="attention-row__code">(v{{ plan.version }})</span>
+                  </span>
+                  <span class="attention-row__desc">
+                    @if (plan.stoppedAt) {
+                      {{ 'DASHBOARD.NO_LIVE_RULES_SINCE' | translate: { date: (plan.stoppedAt | dateFormat) } }}
+                    }
+                    <!-- Two explicit keys, never a key built from the number: at zero, "0 payees
+                         assigned" is noise, and the plan still needs fixing before anyone is. -->
+                    @if (plan.activeAssignmentCount > 0) {
+                      {{ 'DASHBOARD.NO_LIVE_RULES_ASSIGNED' | translate: { count: plan.activeAssignmentCount } }}
+                    } @else {
+                      {{ 'DASHBOARD.NO_LIVE_RULES_ASSIGNED_NONE' | translate }}
+                    }
+                  </span>
+                </span>
+                <ws-badge variant="danger" size="sm">{{ plan.activeAssignmentCount }}</ws-badge>
+              </a>
+            }
+          }
+
           <!-- Ambiguous attribution: payee on 2+ eligible plans, so the plan can't be determined.
                One row per PAYEE (the cause), linking to their assignments (where the fix is). -->
           @if (ambiguousAttributionPayees().length > 0) {

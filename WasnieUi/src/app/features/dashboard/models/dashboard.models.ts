@@ -1,4 +1,4 @@
-export interface CurrencyTotal {
+﻿export interface CurrencyTotal {
   amount: number;
   currency: string;
 }
@@ -75,6 +75,23 @@ export interface DealLostAlertItem {
   detectedAt: string;
 }
 
+/**
+ * An ACTIVE plan with no rule left in effect — every rule on it was stopped.
+ *
+ * The plan keeps ingesting sales and pays nothing on any of them, and nothing else on any screen
+ * says so: it still looks Active and its assignments still look fine. Derived by the backend from
+ * the rules on every read, never a stored flag.
+ */
+export interface PlanWithoutLiveRules {
+  planId: string;
+  planName: string;
+  version: number;
+  /** When the last live rule was stopped — the moment this plan stopped paying. */
+  stoppedAt: string | null;
+  /** People still assigned to a plan that pays zero. */
+  activeAssignmentCount: number;
+}
+
 export interface DashboardActionBand {
   draftPayRunsCount: number;
   payoutsPendingApprovalCount: number;
@@ -85,6 +102,7 @@ export interface DashboardActionBand {
   driftAlerts: DriftAlertItem[];
   dealLostAlerts: DealLostAlertItem[];
   ambiguousAttributionPayees: AmbiguousAttributionPayee[];
+  plansWithoutLiveRules: PlanWithoutLiveRules[];
 }
 
 export interface DashboardPeriodBand {

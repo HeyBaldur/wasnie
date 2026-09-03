@@ -337,29 +337,58 @@ Van a `CLAUDE.md`. Aplican a CC y a quien escriba los WIs.
 
 Ante cualquier tarea que venga de un ticket:
 
-1. Arrancar con un **PASO 0 de SOLO LECTURA**. Verificar cada premisa del ticket contra el código, con `file:line`. El código manda.
-2. Si una premisa del ticket es **falsa**, PARAR y reportar. No corregir sobre la marcha.
-3. Si el ticket toca **dinero ya pagado**, PARAR y reportar.
-4. **NUNCA commitear.**
+1. Arrancar con un PASO 0 de SOLO LECTURA. Verificar cada premisa del
+   ticket contra el código, con file:line. El código manda.
+2. Si una premisa del ticket es falsa, PARAR y reportar. No corregir
+   sobre la marcha.
+3. Si el ticket toca dinero ya pagado, PARAR y reportar.
+4. NUNCA commitear.
 5. Terminar con la cadena completa, con guarda de exit-code:
-   ```
    dotnet build Wasnie.sln --nologo 2>&1 | tail -5; B=${PIPESTATUS[0]}
    dotnet test tests/Wasnie.UnitTests/... --no-build 2>&1 | tail -5; U=${PIPESTATUS[0]}
    dotnet test tests/Wasnie.IntegrationTests/... --no-build 2>&1 | tail -5; I=${PIPESTATUS[0]}
    echo "build=$B unit=$U integration=$I"
-   ```
-6. Reportar al final **qué premisas del ticket resultaron falsas**.
-7. AL TERMINAR, comentar SIEMPRE en el ticket, sin preguntar.
-   El comentario lleva:
+
+REPORTE EN JIRA — reglas generales
+- Escribir en español, profesional e impersonal (nada de tuteo).
+- Breve, conciso y legible. Cada punto en una o dos líneas.
+- NO duplicar. Antes de comentar, revisar los comentarios que ya
+  existen: si la información ya está, ACTUALIZAR el comentario o la
+  tabla existente en vez de pegar una nueva. Los tickets no deben
+  crecer sin control.
+- La descripción del ticket es el mapa (qué y en qué estado). El
+  detalle de ejecución va en comentarios, no en la descripción.
+
+6. Al EMPEZAR: después del Paso 0, mover el ticket a In Progress y
+   dejar un comentario breve: "Empezando. Paso 0 verificado,
+   premisas [ok / la premisa X es falsa]. Se construirá Y."
+
+7. AL TERMINAR de CONSTRUIR: mover a In Review y comentar, breve:
    - qué se construyó y qué quedó fuera
-   - las premisas del ticket que resultaron falsas
-   - las decisiones tomadas y POR QUÉ (la alternativa
-     descartada y la razón)
+   - premisas del ticket que resultaron falsas
+   - decisiones tomadas y por qué (con la alternativa descartada)
    - los file:line relevantes
-   - el resultado de cada suite
+   - el resultado de cada suite (build / unit / integración / front)
    - lo que quedó sin verificar y por qué
-8. NUNCA transicionar el ticket de estado. El review y el
-   commit son de Rodolfo; el estado lo mueve él.
-9. Si en el camino aparece un defecto ajeno al ticket, crear
-   un ticket nuevo con la evidencia y enlazarlo. No arreglarlo
-   en la misma tanda.
+
+8. CUANDO SE VERIFICA O SE TESTEA (Claude in Chrome, runtime, o
+   cualquier prueba pedida): el reporte va como TABLA DE PASOS con
+   resultado marcado ✅ (correcto) o ❌ (incorrecto). Formato:
+
+   | # | Pasos | Entrada | Esperado | Resultado |
+   |---|-------|---------|----------|-----------|
+   | 1 | ...   | ...     | ...      | ✅ ...     |
+   | 2 | ...   | ...     | ...      | ❌ ...     |
+
+   - Una fila por paso. El "Resultado" dice ✅ o ❌ y, en una línea,
+     qué se observó (dato real, id, valor en BD).
+   - Si el ticket YA tiene una tabla de casos de prueba, RELLENAR la
+     columna Resultado de esa misma tabla; no crear otra.
+   - Debajo de la tabla, solo si algo salió ❌: una nota corta con la
+     causa y qué se hará. Nada más.
+
+9. NUNCA mover un ticket a Done. Ese estado es de Rodolfo, después de
+   review + commit + runtime.
+
+10. Si aparece un defecto ajeno al ticket, crear un ticket nuevo con
+    la evidencia y enlazarlo. No arreglarlo en la misma tanda.

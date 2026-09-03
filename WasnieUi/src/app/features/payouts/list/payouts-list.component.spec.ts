@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 
@@ -76,6 +78,11 @@ describe('PayoutsListComponent — onBulkMarkPaid', () => {
     TestBed.configureTestingModule({
       imports: [PayoutsListComponent],
       providers: [
+        // The component asks CurrentUserService whether the ids in the bulk-refusal banner may be
+        // links, and that service injects HttpClient. Nothing here talks to the network; the
+        // testing backend just makes the graph constructible.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: PayoutsApiService, useValue: apiSpy },
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
@@ -163,6 +170,11 @@ describe('PayoutsStore — bulkApproveSummary', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
+        // The component asks CurrentUserService whether the ids in the bulk-refusal banner may be
+        // links, and that service injects HttpClient. Nothing here talks to the network; the
+        // testing backend just makes the graph constructible.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         PayoutsStore,
         { provide: PayoutsApiService, useValue: jasmine.createSpyObj('PayoutsApiService', { list: of(EMPTY_PAGE) }) },
       ],
@@ -211,6 +223,11 @@ describe('PayoutsListComponent — ngOnInit reload', () => {
     TestBed.configureTestingModule({
       imports: [PayoutsListComponent],
       providers: [
+        // The component asks CurrentUserService whether the ids in the bulk-refusal banner may be
+        // links, and that service injects HttpClient. Nothing here talks to the network; the
+        // testing backend just makes the graph constructible.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: PayoutsApiService, useValue: apiSpy },
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
@@ -250,6 +267,11 @@ describe('PayoutsListComponent — onExport', () => {
     TestBed.configureTestingModule({
       imports: [PayoutsListComponent],
       providers: [
+        // The component asks CurrentUserService whether the ids in the bulk-refusal banner may be
+        // links, and that service injects HttpClient. Nothing here talks to the network; the
+        // testing backend just makes the graph constructible.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: PayoutsApiService, useValue: apiSpy },
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },
@@ -313,6 +335,11 @@ describe('PayoutsStore — bulkMarkPaidSummary', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
+        // The component asks CurrentUserService whether the ids in the bulk-refusal banner may be
+        // links, and that service injects HttpClient. Nothing here talks to the network; the
+        // testing backend just makes the graph constructible.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         PayoutsStore,
         { provide: PayoutsApiService, useValue: jasmine.createSpyObj('PayoutsApiService', { list: of(EMPTY_PAGE) }) },
       ],
@@ -363,6 +390,11 @@ describe('PayoutsListComponent — query params after the first render', () => {
     TestBed.configureTestingModule({
       imports: [PayoutsListComponent],
       providers: [
+        // The component asks CurrentUserService whether the ids in the bulk-refusal banner may be
+        // links, and that service injects HttpClient. Nothing here talks to the network; the
+        // testing backend just makes the graph constructible.
+        provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: PayoutsApiService, useValue: apiSpy },
         { provide: PayoutsStore,      useValue: storeMock },
         { provide: PayeesApiService,  useValue: jasmine.createSpyObj('PayeesApiService', ['getPayees']) },

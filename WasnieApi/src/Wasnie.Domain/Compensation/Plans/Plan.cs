@@ -1,4 +1,4 @@
-using Wasnie.Domain.Common;
+﻿using Wasnie.Domain.Common;
 using Wasnie.Domain.Compensation.Events;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.ValueObjects;
@@ -106,6 +106,13 @@ public sealed class Plan : AggregateRoot
             throw new DomainException("Rules can only be modified on Draft plans.");
         }
 
+        // ★ THE FLAT RATE'S MAGNITUDE IS CHECKED HERE AND NOT IN RateTable.Flat, because only here
+        // is the MEASUREMENT in scope — and with Units the flat rate is euros per unit, where a 5 is
+        // €5 and not 500%. Not in Rule.Create either: that is the clone's constructor, and cloning
+        // into a Draft is the only way to repair a rule on an active plan (§D4). The tiered and
+        // attainment ladders are already checked in their factories.
+        RateMagnitude.ValidateFlatRateForWrite(measurement, rateTable);
+
         var rule = Rule.Create(Id, name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
         _rules.Add(rule);
         return rule;
@@ -124,7 +131,11 @@ public sealed class Plan : AggregateRoot
         rule.Deactivate();
     }
 
-    public void UpdateRule(
+    /// <returns>
+    /// The rule the caller should now show. It is USUALLY the one identified by <paramref name="ruleId"/>
+    /// — but not when that rule was stopped, in which case the edit lands on a new rule with a new Id.
+    /// </returns>
+    public Rule UpdateRule(
         Guid ruleId,
         string name,
         int sortOrder,
@@ -142,10 +153,82 @@ public sealed class Plan : AggregateRoot
             throw new DomainException("Rules can only be modified on Draft plans.");
         }
 
-        var rule = _rules.FirstOrDefault(r => r.Id == ruleId && r.IsActive)
+        // ★ THE FLAT RATE'S MAGNITUDE IS CHECKED HERE AND NOT IN RateTable.Flat, because only here
+        // is the MEASUREMENT in scope — and with Units the flat rate is euros per unit, where a 5 is
+        // €5 and not 500%. Not in Rule.Create either: that is the clone's constructor, and cloning
+        // into a Draft is the only way to repair a rule on an active plan (§D4). The tiered and
+        // attainment ladders are already checked in their factories.
+        RateMagnitude.ValidateFlatRateForWrite(measurement, rateTable);
+
+        // Stopped rules are findable here, unlike removed ones: a clone carries them into the Draft
+        // precisely so they can be corrected, and a "not found" on the rule the screen is showing
+        // would be a dead end.
+        var rule = _rules.FirstOrDefault(r => r.Id == ruleId && (r.IsActive || r.IsStopped))
             ?? throw new DomainException($"Rule {ruleId} not found in this plan.");
 
+        // ★★ EDITING A STOPPED RULE DOES NOT REVIVE IT — IT SUPERSEDES IT. Clearing the marker would
+        // put StoppedAt back to null, which is the one thing this feature promises never happens,
+        // and it is the exact shape of the bug Payee.Activate() left behind (clears DeactivatedAt,
+        // erases the history). So the stopped rule stays stopped, with its date and its reason
+        // intact, and the correction lands as a NEW rule beside it: "there is no unstop; there is a
+        // new rule". The caller gets that new rule back, because its Id is not the one it asked for.
+        //
+        // Safe here and nowhere else: this path is Draft-only (guarded above), so neither rule has
+        // ever been read by the engine.
+        if (rule.IsStopped)
+        {
+            var replacement = Rule.Create(
+                Id, name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable,
+                modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
+
+            _rules.Add(replacement);
+            return replacement;
+        }
+
         rule.Update(name, sortOrder, trigger ?? Trigger.Always(), measurement, rateTable, modifier, cap, floor, effectivePeriod: effectivePeriod, tag: tag);
+        return rule;
+    }
+
+    /// <summary>
+    /// THE EMERGENCY BRAKE. Stop one rule of a live plan from generating any further credit, without
+    /// cloning the plan.
+    ///
+    /// ★★ WHY IT HAD TO EXIST. Until this method there was no way to stop a rule that pays wrong:
+    /// RemoveRule and UpdateRule both demand Draft, and the only escape was cloning the whole plan —
+    /// leaving assignments and quotas pointed at the old version. A commission engine with no brake
+    /// means RevOps watches a miscalculation pay out until the end of the month.
+    ///
+    /// ★ THE PLAN DOES NOT CHANGE STATE, AND THE LAST RULE MAY GO TOO. An Active plan whose rules
+    /// have all been stopped stays Active and keeps ingesting transactions — they are recorded and
+    /// marked, never rejected, because the sale happened whatever the configuration says. "A plan
+    /// with no live rules" is then DERIVED from the rules, not stored as a flag that can drift.
+    /// </summary>
+    /// <returns>The rule that was stopped, so the caller can report what it recorded.</returns>
+    public Rule StopRule(Guid ruleId, string stoppedBy, string? reason, DateTimeOffset now)
+    {
+        if (Status != PlanStatus.Active)
+        {
+            throw new DomainCodedException(RuleStopInvariant.PlanNotActive, new Dictionary<string, object?>
+            {
+                ["status"] = Status.ToString(),
+            });
+        }
+
+        // A rule already removed from a draft (!IsActive, no marker) is not stoppable — there is
+        // nothing live about it — but an already-stopped one IS found, so Rule.Stop can answer with
+        // AlreadyStopped and its date rather than a misleading "no such rule".
+        var rule = _rules.FirstOrDefault(r => r.Id == ruleId && (r.IsActive || r.IsStopped))
+            ?? throw new DomainCodedException(RuleStopInvariant.RuleNotFound, new Dictionary<string, object?>
+            {
+                ["ruleId"] = ruleId,
+            });
+
+        rule.Stop(stoppedBy, reason, now);
+
+        UpdatedAt = now;
+        UpdatedBy = stoppedBy;
+
+        return rule;
     }
 
     /// <summary>
@@ -248,9 +331,15 @@ public sealed class Plan : AggregateRoot
             UpdatedBy = createdBy
         };
 
-        foreach (var rule in _rules.Where(r => r.IsActive))
+        // ★ STOPPED RULES TRAVEL, REMOVED ONES DO NOT — and the difference is the whole reason the
+        // marker is a separate field. Dropping a stopped rule here would hand the next version a
+        // clean slate that quietly omits the rule someone braked, so the next reader rebuilds it
+        // from scratch not knowing it had ever paid wrong. It arrives STILL STOPPED, carrying the
+        // original date, actor and reason: a clone is not a review, and nothing here decides that
+        // the problem was fixed. Correcting it in the new Draft is a deliberate, separate act.
+        foreach (var rule in _rules.Where(r => r.IsActive || r.IsStopped))
         {
-            clone._rules.Add(Rule.Create(
+            var copy = Rule.Create(
                 clone.Id,
                 rule.Name,
                 rule.SortOrder,
@@ -262,7 +351,10 @@ public sealed class Plan : AggregateRoot
                 rule.Floor,
                 id: newId(),
                 effectivePeriod: rule.EffectivePeriod,
-                tag: rule.Tag));
+                tag: rule.Tag);
+
+            copy.CopyStopMarkerFrom(rule);
+            clone._rules.Add(copy);
         }
 
         clone.RaiseDomainEvent(new PlanVersionClonedEvent(

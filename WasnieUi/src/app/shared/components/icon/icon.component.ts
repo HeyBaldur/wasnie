@@ -144,21 +144,48 @@ const ICONS: Record<string, string> = {
     '<path d="M6 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12"/><path d="M14 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12"/>',
 };
 
+/**
+ * The handful of icons that are ARTWORK rather than line drawings.
+ *
+ * ★★ THEY LIVE HERE SO THE CALL SITES DO NOT CHANGE. Excel and PDF are brand marks: their colour is
+ * part of their meaning, so they cannot be a `stroke="currentColor"` path like every other icon in
+ * this file. Routing them through the same component keeps five templates saying
+ * `<app-icon name="file-excel" />` instead of sprouting bare <img> tags that each pick their own
+ * size, alt text and alignment — and it means the next raster icon is one line here, not a sixth
+ * variation of the same markup.
+ *
+ * ★ SERVED FROM /icons, which is `public/` — copied to the build root untouched by the bundler.
+ */
+const IMAGE_ICONS: Record<string, string> = {
+  'file-excel': '/icons/excel.png',
+  'file-pdf': '/icons/pdf.png',
+};
+
 @Component({
   selector: 'app-icon',
   standalone: true,
-  template: `<svg
-    [attr.width]="size()"
-    [attr.height]="size()"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="1.75"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    [innerHTML]="svgContent()"
-    aria-hidden="true"
-  ></svg>`,
+  template: `@if (imageSrc(); as src) {
+    <img
+      [src]="src"
+      [attr.width]="size()"
+      [attr.height]="size()"
+      alt=""
+      aria-hidden="true"
+    />
+  } @else {
+    <svg
+      [attr.width]="size()"
+      [attr.height]="size()"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.75"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      [innerHTML]="svgContent()"
+      aria-hidden="true"
+    ></svg>
+  }`,
   styles: [
     `:host {
       display: inline-flex;
@@ -168,7 +195,12 @@ const ICONS: Record<string, string> = {
       line-height: 0;
       vertical-align: middle;
     }
-    svg { display: block; }`,
+    svg { display: block; }
+    /* Square and contained: the source PNGs are not guaranteed to share an aspect ratio, and an
+       icon that grows a few pixels taller than its neighbours pushes a button's text off the
+       baseline. NOTE: this block is plain CSS, not SCSS — a // comment here is not a comment, it
+       is an invalid selector that swallows the rule after it. */
+    img { display: block; object-fit: contain; }`,
   ],
 })
 export class IconComponent {
@@ -188,4 +220,7 @@ export class IconComponent {
   readonly svgContent = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(ICONS[this.name()] ?? '')
   );
+
+  /** The artwork for this name, or null when it is an ordinary line icon. */
+  readonly imageSrc = computed<string | null>(() => IMAGE_ICONS[this.name()] ?? null);
 }
