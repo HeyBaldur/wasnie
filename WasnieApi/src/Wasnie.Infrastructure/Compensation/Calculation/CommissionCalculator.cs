@@ -171,7 +171,27 @@ internal static class CommissionCalculator
         };
     }
 
+    /// <summary>
+    /// What a ladder walk produced AND how much of the transaction it never priced.
+    ///
+    /// ★★ THE UNPRICED REMAINDER IS AN OUTPUT OF THE WALK, NOT A SECOND CALCULATION. Working it out
+    /// separately — "base minus the last tier's ceiling" — would be a second, subtly different model
+    /// of the same ladder, and the two would agree until a ladder with gaps arrived and they did not.
+    /// The loop already knows exactly what it could not place; this just stops throwing that away.
+    /// </summary>
+    internal readonly record struct LadderWalk(Money Commission, decimal Unpriced);
+
+    /// <summary>
+    /// ★ THE ORIGINAL SIGNATURE, UNCHANGED AND STILL THE ONE MOST CALLERS WANT. It delegates rather
+    /// than duplicating the loop, so there is exactly one tiered walk in the engine.
+    /// </summary>
     internal static Money ComputeTieredCommission(
+        Money baseAmount,
+        IReadOnlyList<RateTier> tiers,
+        List<RateTierStep>? tierTrace = null)
+        => WalkTiers(baseAmount, tiers, tierTrace).Commission;
+
+    internal static LadderWalk WalkTiers(
         Money baseAmount,
         IReadOnlyList<RateTier> tiers,
         List<RateTierStep>? tierTrace = null)
@@ -203,21 +223,39 @@ internal static class CommissionCalculator
             remaining -= inTier;
         }
 
-        return total;
+        // ★ WHAT IS LEFT IN `remaining` IS REVENUE THE LADDER STATES NO RATE FOR. The walk used to
+        // drop it on the floor and hand back a total that looked like an ordinary commission.
+        return new LadderWalk(total, remaining > 0m ? remaining : 0m);
     }
+
+    /// <summary>
+    /// The bracket containing <paramref name="attainmentPct"/>, or null when the ladder does not
+    /// mention this ratio at all.
+    ///
+    /// ★ LastOrDefault IS THE OVERLAP RULE FOR THIS PATH, and it is deliberate: a ratio on a shared
+    /// edge (attainment 1.00 under [0.50,1.00] and [1.00,null]) belongs to the upper tier, and any
+    /// ratio covered twice is priced by exactly one bracket, never by two rates added together. The
+    /// split walk reaches the same answer by clipping; see <see cref="WalkSplitTiers"/>.
+    /// </summary>
+    internal static AttainmentTier? FindAttainmentBracket(
+        IReadOnlyList<AttainmentTier> tiers,
+        decimal attainmentPct)
+        => tiers.LastOrDefault(t =>
+            t.AttainmentFrom <= attainmentPct &&
+            (t.AttainmentTo == null || attainmentPct <= t.AttainmentTo.Value));
 
     internal static Money ComputeAttainmentCommission(
         Money baseAmount,
         IReadOnlyList<AttainmentTier> tiers,
         decimal attainmentPct)
     {
-        // Find the bracket that contains attainmentPct.
-        // LastOrDefault handles overlapping lower/upper boundary at adjacent tier edges
-        // (e.g. attainment=1.00 matches [0.50,1.00] AND [1.00,null] — last wins).
-        var tier = tiers.LastOrDefault(t =>
-            t.AttainmentFrom <= attainmentPct &&
-            (t.AttainmentTo == null || attainmentPct <= t.AttainmentTo.Value));
+        var tier = FindAttainmentBracket(tiers, attainmentPct);
 
+        // ★ THE CALLER DECIDES WHAT "NO BRACKET" MEANS, NOT THIS METHOD. This zero is arithmetic —
+        // there is no rate to multiply by — and it is NOT the engine's answer: ComputeRate refuses
+        // before it ever gets here (KAN-26 tanda 3). The behaviour is left as it was so that every
+        // caller of this pure function, including the frozen expectations in the characterization
+        // suites, keeps seeing the same number.
         if (tier == null) return Money.Zero(baseAmount.Currency);
         return baseAmount.Multiply(tier.Rate);
     }
@@ -235,20 +273,58 @@ internal static class CommissionCalculator
         decimal priorCumulative,
         decimal quotaTarget,
         List<RateTierStep>? tierTrace = null)
+        => WalkSplitTiers(txAmount, tiers, priorCumulative, quotaTarget, tierTrace).Commission;
+
+    /// <summary>
+    /// The split walk, with the two things the old one threw away: how much of the transaction no
+    /// tier priced, and the guarantee that no euro was priced twice.
+    ///
+    /// ★★ EACH TIER'S CEILING IS CLIPPED TO THE NEXT FLOOR ABOVE IT, AND THAT IS THE OVERLAP FIX.
+    /// The walk used to give every tier its own range outright, so a ladder whose tiers all run to
+    /// infinity — rule A1CDBEA0, three open tiers at 5%, 8% and 9% — charged all three rates over
+    /// the same revenue and paid a blended 22% on a table that declares 9%. Clipping makes the
+    /// ranges disjoint, so every euro is priced by EXACTLY ONE tier, which is the same rule the
+    /// bracket lookup enforces with LastOrDefault: where two tiers claim the same revenue, the
+    /// higher one wins.
+    ///
+    /// ★ ON A VALID LADDER THIS IS A NO-OP. Tiers that touch exactly already have
+    /// <c>ceiling == next floor</c>, so the clip changes nothing and every existing amount is
+    /// reproduced to the cent. It only ever bites on a table that overlaps, which is a table the
+    /// write path has refused since the ladder invariants landed.
+    /// </summary>
+    internal static LadderWalk WalkSplitTiers(
+        Money txAmount,
+        IReadOnlyList<AttainmentTier> tiers,
+        decimal priorCumulative,
+        decimal quotaTarget,
+        List<RateTierStep>? tierTrace = null)
     {
-        if (quotaTarget <= 0m) return Money.Zero(txAmount.Currency);
+        // A target of zero has no ladder to project onto — every boundary collapses to 0. The whole
+        // transaction is unpriced, and the caller reads that as a refusal rather than as a zero.
+        if (quotaTarget <= 0m)
+            return new LadderWalk(Money.Zero(txAmount.Currency), txAmount.Amount);
 
         var txValue = txAmount.Amount;
         var txStart = priorCumulative;
         var txEnd = priorCumulative + txValue;
         var total = 0m;
+        var priced = 0m;
 
-        foreach (var tier in tiers)
+        for (var i = 0; i < tiers.Count; i++)
         {
+            var tier = tiers[i];
             var tierFloor = tier.AttainmentFrom * quotaTarget;
             var tierCeiling = tier.AttainmentTo.HasValue
                 ? tier.AttainmentTo.Value * quotaTarget
                 : decimal.MaxValue;
+
+            // The lowest floor of any tier above this one. On a well-formed ladder that is the next
+            // tier's floor, which already equals this tier's ceiling.
+            for (var j = i + 1; j < tiers.Count; j++)
+            {
+                var higherFloor = tiers[j].AttainmentFrom * quotaTarget;
+                if (higherFloor < tierCeiling) tierCeiling = higherFloor;
+            }
 
             var overlapStart = Math.Max(txStart, tierFloor);
             var overlapEnd = Math.Min(txEnd, tierCeiling);
@@ -257,13 +333,18 @@ internal static class CommissionCalculator
             {
                 var portion = overlapEnd - overlapStart;
                 total += portion * tier.Rate;
+                priced += portion;
                 tierTrace?.Add(new RateTierStep(
                     tier.AttainmentFrom, tier.AttainmentTo, tier.Rate,
                     portion, Money.Of(portion * tier.Rate, txAmount.Currency)));
             }
         }
 
-        return Money.Of(total, txAmount.Currency);
+        // ★ THE RANGES ARE DISJOINT AFTER CLIPPING, so `priced` can never exceed the transaction and
+        // this subtraction is the revenue the ladder genuinely never mentions — whether it sits
+        // above a bounded top tier or inside a gap between two.
+        var unpriced = txValue - priced;
+        return new LadderWalk(Money.Of(total, txAmount.Currency), unpriced > 0m ? unpriced : 0m);
     }
 
     // ── Modifiers, caps, floors ───────────────────────────────────────────────
@@ -392,26 +473,33 @@ internal static class CommissionCalculator
         // suppressing it is enough to make "the credit is zero" true rather than nearly true.
         commission = TraceModifier(commission, baseAmount, rule.Modifier, trace);
         commission = TraceCap(commission, rule.Cap, trace);
-        commission = TraceFloor(commission, rule.Floor, trace, rate.RefusedForWantOfTarget);
+        commission = TraceFloor(commission, rule.Floor, trace, rate.Refused);
 
         return new RuleEvaluation(true, baseAmount, commission);
     }
 
     /// <summary>
-    /// What the Rate component produced, and whether it REFUSED for want of a target.
+    /// What the Rate component produced, and whether it REFUSED to produce anything.
     ///
     /// ★★ THE FLAG EXISTS SO THE FLOOR CANNOT UNDO THE REFUSAL. A floor is the minimum commission on
     /// a commissioned sale — a component OF the calculation, which presupposes there was one. When
-    /// the rule cannot calculate at all because nobody set a quota, there is no commission for a
-    /// floor to be the minimum of, and a floor paying anyway is an orphan, not a guarantee. (A DRAW —
-    /// a guaranteed income floor that pays regardless of sales — is a different mechanism, at rep and
-    /// period level rather than per transaction, and is not this engine's business.)
+    /// the rule cannot calculate at all, there is no commission for a floor to be the minimum of, and
+    /// a floor paying anyway is an orphan, not a guarantee. (A DRAW — a guaranteed income floor that
+    /// pays regardless of sales — is a different mechanism, at rep and period level rather than per
+    /// transaction, and is not this engine's business.)
     ///
-    /// ★ IT IS CARRIED, NOT RE-DERIVED. Evaluate could ask the same question again by re-testing the
-    /// source, but then the predicate would live in two places and they would drift; the component
-    /// that made the decision is the one that reports it.
+    /// ★★ IT IS ONE FLAG FOR ALL FOUR REFUSALS, AND THAT IS DELIBERATE. Tanda 2 introduced it for
+    /// "nobody set a quota"; tanda 3 adds "the ladder states no rate for this ratio" and "the ladder
+    /// stops below this amount". The reason differs and the trace records which one
+    /// (<c>RateRefusalReason</c>), but the consequence is identical — there is no commission — so
+    /// splitting it into several booleans would only create the chance of honouring one and
+    /// forgetting another.
+    ///
+    /// ★ IT IS CARRIED, NOT RE-DERIVED. Evaluate could work the question out again from the rule and
+    /// the source, but then the predicate would live in two places and they would drift; the
+    /// component that made the decision is the one that reports it.
     /// </summary>
-    private readonly record struct RateOutcome(Money Commission, bool RefusedForWantOfTarget);
+    private readonly record struct RateOutcome(Money Commission, bool Refused);
 
     private static RateOutcome ComputeRate(
         Rule rule,
@@ -486,51 +574,149 @@ internal static class CommissionCalculator
                     // "no quota in effect" — the log line above says so — so the trace says NoTarget
                     // rather than leaving the reader to conclude the rep sold nothing.
                     AttainmentSource = AttainmentSource.NoTarget,
+                    RateRefusal = RateRefusalReason.NoQuotaInEffect,
                 });
-                return new RateOutcome(zero, RefusedForWantOfTarget: true);
+                return new RateOutcome(zero, Refused: true);
+            }
+
+            // ★★ A QUOTA THAT EXISTS AND TARGETS ZERO IS ALSO "NOTHING TO MEASURE AGAINST", AND THIS
+            // BRANCH IS WHY IT NEEDED SAYING TWICE. QuotaAttainmentService already calls a zero
+            // target the second way to have no target and returns NoTarget on the BRACKET path — but
+            // GetSplitContextAsync hands back a context without looking at the target
+            // (QuotaAttainmentService.cs:135-139), so the split walk got a live context with a zero
+            // in it, projected every tier boundary onto zero and returned a zero stamped Applied +
+            // Measured. Same hole as the null context, one line further on.
+            if (splitContext.QuotaTarget <= 0m)
+            {
+                logger?.LogWarning(
+                    "Split-at-quota: the quota in effect for payee={PayeeId}, plan={PlanId}, " +
+                    "date={Date} targets zero, so there is no ladder to split at. Commission set to " +
+                    "zero and the step marked Skipped. Set a non-zero target to earn under this rule.",
+                    tx.PayeeId, rule.PlanId, tx.TransactionDate);
+
+                var zeroTarget = Money.Zero(baseAmount.Currency);
+                trace?.Add(new RuleCalculationStep
+                {
+                    Component = RuleCalculationComponent.Rate,
+                    Outcome = RuleCalculationOutcome.Skipped,
+                    Input = baseAmount,
+                    Output = zeroTarget,
+                    RateTable = rule.RateTable.Type,
+                    AttainmentSource = AttainmentSource.NoTarget,
+                    RateRefusal = RateRefusalReason.NoQuotaInEffect,
+                });
+                return new RateOutcome(zeroTarget, Refused: true);
             }
 
             List<RateTierStep>? splitTiers = trace is null ? null : new List<RateTierStep>();
-            var split = ComputeAttainmentSplitCommission(
+            var splitWalk = WalkSplitTiers(
                 baseAmount, rule.RateTable.AttainmentTiers!,
                 splitContext.PriorCumulative, splitContext.QuotaTarget, splitTiers);
+
+            // The attainment this walk actually used, as a ratio of the quota — the same figure the
+            // bracket path puts here, so one field answers "what percentage was used" on both
+            // attainment paths instead of only one.
+            var splitOperand = Math.Round(
+                splitContext.PriorCumulative / splitContext.QuotaTarget, 4, MidpointRounding.ToEven);
+
+            // ★★ PATH (c). The transaction ran past the top of the ladder, or fell in a gap, and the
+            // walk priced only part of it. Paying the covered slice is the most dangerous shape this
+            // family of bugs takes: it does not look like a failure, it looks like a small
+            // commission. So the whole transaction is refused rather than part-paid — the tiers that
+            // DID match stay in the trace, so the reader can see exactly how far the ladder got.
+            if (splitWalk.Unpriced > 0m)
+            {
+                logger?.LogWarning(
+                    "Rule {RuleId}: the split-at-quota ladder prices only part of this transaction — " +
+                    "{Unpriced} of {Total} {Currency} falls outside every tier (quota={Quota}, " +
+                    "prior={Prior}). Commission set to zero and the step marked Skipped: the engine " +
+                    "will not pay a slice of a sale as if it were the whole one. Extend the top tier " +
+                    "or close the gap in the ladder.",
+                    rule.Id, splitWalk.Unpriced, baseAmount.Amount, baseAmount.Currency,
+                    splitContext.QuotaTarget, splitContext.PriorCumulative);
+
+                var unpricedZero = Money.Zero(baseAmount.Currency);
+                trace?.Add(new RuleCalculationStep
+                {
+                    Component = RuleCalculationComponent.Rate,
+                    Outcome = RuleCalculationOutcome.Skipped,
+                    Input = baseAmount,
+                    Output = unpricedZero,
+                    RateTable = rule.RateTable.Type,
+                    Tiers = splitTiers,
+                    AttainmentSource = AttainmentSource.Measured,
+                    Operand = splitOperand,
+                    RateRefusal = RateRefusalReason.AmountOutsideTable,
+                });
+                return new RateOutcome(unpricedZero, Refused: true);
+            }
 
             trace?.Add(new RuleCalculationStep
             {
                 Component = RuleCalculationComponent.Rate,
                 Outcome = RuleCalculationOutcome.Applied,
                 Input = baseAmount,
-                Output = split,
+                Output = splitWalk.Commission,
                 RateTable = rule.RateTable.Type,
                 Tiers = splitTiers,
                 // A split context only exists when a real quota answered, so this walk was measured.
                 // The step used to omit the source entirely, which read as "not an attainment rule".
                 AttainmentSource = AttainmentSource.Measured,
-                // The attainment this walk actually used, as a ratio of the quota — the same figure
-                // the bracket path puts here, so one field answers "what percentage was used" on
-                // both attainment paths instead of only one.
-                Operand = splitContext.QuotaTarget <= 0m
-                    ? null
-                    : Math.Round(splitContext.PriorCumulative / splitContext.QuotaTarget, 4, MidpointRounding.ToEven),
+                Operand = splitOperand,
             });
-            return new RateOutcome(split, false);
+            return new RateOutcome(splitWalk.Commission, false);
         }
 
         if (rule.RateTable.Type == RateTableType.Tiered)
         {
             List<RateTierStep>? walked = trace is null ? null : new List<RateTierStep>();
-            var tiered = ComputeTieredCommission(baseAmount, rule.RateTable.Tiers!, walked);
+            var tieredWalk = WalkTiers(baseAmount, rule.RateTable.Tiers!, walked);
+
+            // ★★ PATH (b), AND THE ONE THAT IS LIVE RIGHT NOW. Every tiered rule in this database
+            // has a bounded top tier, two of them on Active plans: "RL-1" stops at 10,000, so a
+            // 1,000,000 EUR sale used to pay 820 EUR — the same as a 10,000 EUR sale — with the step
+            // marked Applied. The excess was not capped, which is a decision somebody could make and
+            // audit; it was dropped, which is not.
+            //
+            // ★ THE RULE STOPS PAYING ENTIRELY RATHER THAN PAYING WHAT IT CAN. Half an answer here
+            // is indistinguishable from a whole one, and this engine's job is to be auditable before
+            // it is generous: a zero with a reason is a case a human resolves, a plausible number is
+            // a case nobody ever looks at. A rule that genuinely means to stop paying above a
+            // threshold expresses that with a CAP, which the cascade honours a few lines below.
+            if (tieredWalk.Unpriced > 0m)
+            {
+                logger?.LogWarning(
+                    "Rule {RuleId}: the tiered ladder prices only part of this transaction — " +
+                    "{Unpriced} of {Total} {Currency} falls above the last tier or inside a gap. " +
+                    "Commission set to zero and the step marked Skipped: the engine will not pay the " +
+                    "covered slice as if it were the whole sale. Open the last tier (or add a cap if " +
+                    "the ceiling is intentional).",
+                    rule.Id, tieredWalk.Unpriced, baseAmount.Amount, baseAmount.Currency);
+
+                var unpricedZero = Money.Zero(baseAmount.Currency);
+                trace?.Add(new RuleCalculationStep
+                {
+                    Component = RuleCalculationComponent.Rate,
+                    Outcome = RuleCalculationOutcome.Skipped,
+                    Input = baseAmount,
+                    Output = unpricedZero,
+                    RateTable = rule.RateTable.Type,
+                    Tiers = walked,
+                    RateRefusal = RateRefusalReason.AmountOutsideTable,
+                });
+                return new RateOutcome(unpricedZero, Refused: true);
+            }
 
             trace?.Add(new RuleCalculationStep
             {
                 Component = RuleCalculationComponent.Rate,
                 Outcome = RuleCalculationOutcome.Applied,
                 Input = baseAmount,
-                Output = tiered,
+                Output = tieredWalk.Commission,
                 RateTable = rule.RateTable.Type,
                 Tiers = walked,
             });
-            return new RateOutcome(tiered, false);
+            return new RateOutcome(tieredWalk.Commission, false);
         }
 
         // ── NoTarget: an attainment rule with nothing to measure against ─────
@@ -586,8 +772,51 @@ internal static class CommissionCalculator
                 // it safe to publish. The pair (0, NoTarget) is the honest representation; a null
                 // just deletes half of it and tells the reader less.
                 Operand = attainmentPct,
+                RateRefusal = RateRefusalReason.NoQuotaInEffect,
             });
-            return new RateOutcome(noTarget, RefusedForWantOfTarget: true);
+            return new RateOutcome(noTarget, Refused: true);
+        }
+
+        // ── Path (a): a bracket ladder that does not mention this ratio ──────
+        //
+        // ★★ THE LOOKUP USED TO ANSWER "NO BRACKET" WITH A ZERO, AND ZERO IS A RATE SOMEBODY MIGHT
+        // HAVE CHOSEN. "This ladder pays nothing at 30% attainment" and "this ladder never says what
+        // 30% attainment is worth" are a policy and a hole, they arrive as the same number, and the
+        // step said Applied for both.
+        //
+        // ★ IT IS REACHABLE THROUGH TODAY'S WRITE PATH, which is why it is not merely a legacy-row
+        // guard. Nothing in ValidateLadder requires a ladder to START at zero: [0.5→1, 1→open] is
+        // strictly ascending, closed except for the last, touching, and every rate a fraction — it
+        // saves cleanly, and every rep under half quota falls off the bottom of it.
+        //
+        // ★ NOT reached by the split path: that one projects tiers onto revenue and reports its hole
+        // as unpriced amount instead. Nor by a well-formed ladder from 0 with an open top, which
+        // contains every ratio there is — this branch cannot fire on a table that covers its subject.
+        if (rule.RateTable.Type == RateTableType.AttainmentBased &&
+            FindAttainmentBracket(rule.RateTable.AttainmentTiers!, attainmentPct) is null)
+        {
+            logger?.LogWarning(
+                "Rule {RuleId}: attainment {Attainment} falls outside every tier of this rule's " +
+                "ladder for payee={PayeeId}, plan={PlanId}, date={Date}. Commission set to zero and " +
+                "the step marked Skipped — the table states no rate for this attainment, which is " +
+                "not the same as stating a rate of zero. Extend the ladder to cover it.",
+                rule.Id, attainmentPct, tx.PayeeId, rule.PlanId, tx.TransactionDate);
+
+            var noBracket = Money.Zero(baseAmount.Currency);
+            trace?.Add(new RuleCalculationStep
+            {
+                Component = RuleCalculationComponent.Rate,
+                Outcome = RuleCalculationOutcome.Skipped,
+                Input = baseAmount,
+                Output = noBracket,
+                RateTable = rule.RateTable.Type,
+                // The ratio still travels, for the same reason it does on the NoTarget step: it is
+                // the figure the reader needs in order to see WHICH value the ladder failed to cover.
+                Operand = attainmentPct,
+                AttainmentSource = attainmentSource,
+                RateRefusal = RateRefusalReason.NoMatchingBracket,
+            });
+            return new RateOutcome(noBracket, Refused: true);
         }
 
         var result = ComputeCommission(baseAmount, rule.RateTable, attainmentPct);
@@ -646,9 +875,10 @@ internal static class CommissionCalculator
         return result;
     }
 
-    /// <param name="refusedForWantOfTarget">
-    /// True when the Rate component declined to calculate because no quota was in effect. The floor
-    /// is then not applied at all: it is the minimum of a commission, and there was no commission.
+    /// <param name="refused">
+    /// True when the Rate component declined to calculate at all — no quota in effect, no bracket
+    /// containing this attainment, or a ladder that prices only part of the transaction. The floor
+    /// is then not applied: it is the minimum of a commission, and there was no commission.
     ///
     /// ★ THE STEP STILL APPEARS, AND IT SAYS Skipped. Dropping it — or reporting NotConfigured —
     /// would hide a floor the rule really does carry, and somebody auditing a zero on a rule with an
@@ -657,9 +887,9 @@ internal static class CommissionCalculator
     /// </param>
     private static Money TraceFloor(
         Money commission, Floor? floor, List<RuleCalculationStep>? trace,
-        bool refusedForWantOfTarget = false)
+        bool refused = false)
     {
-        if (refusedForWantOfTarget)
+        if (refused)
         {
             trace?.Add(new RuleCalculationStep
             {

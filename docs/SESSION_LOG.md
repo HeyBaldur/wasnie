@@ -4,6 +4,66 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 - KAN-26 tanda 3: el motor no paga lo que no puede justificar
+
+**Rama:** KAN-38 · **Ticket:** KAN-26 (ultima tanda) · **Sin commit.**
+
+Los cuatro caminos de tabla (a-d) del ticket. Los `file:line` del ticket resultaron CORRECTOS
+por una vez: las tandas 1 y 2 no movieron nada por debajo de la linea 300 de
+`CommissionCalculator.cs`.
+
+**Premisa falsa, y cambia el encuadre.** «Ningun credito real afectado por a-d» es cierto, pero
+NO porque los caminos esten latentes. Medido en `PlanRules`: **las 4 reglas tiered de la base
+tienen el ultimo tramo acotado**, dos de ellas en planes **Activos**. El 820 EUR del ticket es
+literalmente `EBD3FA15` "RL-1", viva: 50 + 320 + 450, y una venta de 1.000.000 EUR paga lo
+mismo que una de 10.000. Lo que salva la situacion es que solo se han generado 2 creditos
+tiered en toda la historia (`81326A30` 29.800->1.684 y `744B0D6B` 7.450->298), ambos por debajo
+del techo y **ninguno consumido**. Puerta de dinero: no se dispara.
+
+**Quinto cero mudo, dentro de las lineas de (c).** `GetSplitContextAsync` construye el contexto
+sin mirar el objetivo (`QuotaAttainmentService.cs:135-139`), asi que una cuota con objetivo 0
+llegaba viva a la caminata split, que devolvia 0 marcado `Applied` + `Measured`. La ruta de
+bracket si trata el objetivo cero como `NoTarget` desde KAN-27. Se incluye en la tanda.
+
+**El principio:** el motor no paga un importe que no puede justificar. Si la tabla tarifa solo
+parte de la venta, no paga la parte — se niega entera y lo dice. Pagar la rebanada cubierta es
+la forma mas peligrosa de este fallo: **no parece un fallo, parece una comision pequena**.
+
+**El resto que no se ensancho:** una tabla malformada que SI tarifa la venta sigue pagando
+igual (las 3 "Acelerador Hardware Premium" Activas, con los limites en euros, siguen pagando su
+4%). Un solape NO es un hueco: se paga, con exactamente un tramo por euro.
+
+**El resto sobrante es salida de la caminata, no un segundo calculo.** `WalkTiers` y
+`WalkSplitTiers` devuelven `LadderWalk(Money, decimal Unpriced)`; deducirlo aparte («base menos
+el techo del ultimo tramo») seria un segundo modelo de la misma escalera y divergirian en
+cuanto apareciera una con huecos — la ENKIO los tiene entre cada par.
+
+**El de-solape es un no-op en una escalera valida.** El techo de cada tramo se recorta al suelo
+mas bajo por encima de el; si los tramos se tocan exactamente, `techo == suelo siguiente` y no
+cambia nada. Solo muerde en tablas que se solapan, que el write path rechaza desde que existen
+los invariantes.
+
+**Caracterizacion (requisito de metodo):** `RateTableCoverageCharacterizationTests.cs` (nuevo,
+31 tests) por `Evaluate`, con las tablas verbatim de `PlanRules` deserializadas por propiedad
+igual que produccion. Verde a la primera contra el motor intacto (1 importe corregido al valor
+real de esa corrida). Al aplicar el arreglo: **exactamente 12 rojos, todos en la region de los
+agujeros, y ninguno mas en 1.876**.
+
+**Ficheros:** `CommissionCalculator.cs` (`LadderWalk` :174-190, `WalkTiers`, `FindAttainmentBracket`
+:222-236, `WalkSplitTiers` :265-330, los 3 rechazos nuevos en `ComputeRate`, `RateOutcome.Refused`),
+`RuleCalculationTrace.cs` (`RateRefusalReason` + `RuleCalculationStep.RateRefusal`),
+`RateTableCoverageCharacterizationTests.cs` (nuevo).
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1846 -> 1877**, integracion
+**850** (2 skipped preexistentes), front **1282**, `dotnet build Wasnie.sln` 0 errores.
+
+**Sin i18n nueva, deliberado:** la traza sigue sin consumirse en ningun DTO ni pintarse en
+ninguna pantalla (mismo argumento §A3 que la tanda 2). La superficie es KAN-28.
+
+**Sin verificar:** no se ejecuto ningun pay run real. Reproducir (b) en runtime exigiria procesar
+una transaccion sobre un plan Activo y crear creditos, que es justo lo que la puerta de dinero
+pide no hacer.
+
 ## 2026-09-02 (d) - KAN-26 tanda 2: el floor tampoco resucita el rechazo
 
 Cierra el hueco reportado en (c). Decision de producto tomada, con respaldo de industria: un **floor**

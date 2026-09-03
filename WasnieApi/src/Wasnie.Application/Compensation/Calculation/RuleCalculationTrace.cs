@@ -99,6 +99,56 @@ public sealed record RuleCalculationStep
     /// figure that looks entirely reasonable and is false for almost everybody.
     /// </summary>
     public AttainmentSource? AttainmentSource { get; init; }
+
+    /// <summary>
+    /// ★★ WHY A <see cref="RuleCalculationOutcome.Skipped"/> RATE STEP PAID NOTHING. Null on every
+    /// step the engine actually priced.
+    ///
+    /// Skipped already says the engine declined; this says what it declined over, so that ONE query
+    /// finds every refusal the rate component can make instead of one query per shape of hole. It is
+    /// a CODE and not a sentence for the usual reason (§C1): an engine that emits prose has to be
+    /// redeployed to fix a translation.
+    ///
+    /// ★ APPENDED, NEVER REORDERED, for the same reason as <see cref="Calculation.AttainmentSource"/>:
+    /// the trace is persisted, and while it is persisted as text a client reading by ordinal would
+    /// have every stored refusal silently reinterpreted.
+    /// </summary>
+    public RateRefusalReason? RateRefusal { get; init; }
+}
+
+/// <summary>
+/// Why the rate component refused to price a transaction. See <see cref="RuleCalculationStep.RateRefusal"/>.
+///
+/// ★★ EVERY MEMBER IS A CASE THE ENGINE USED TO PAY SILENTLY. Each of these once produced a number
+/// — a zero, or a partial amount over the slice of the sale the table happened to cover — stamped
+/// <see cref="RuleCalculationOutcome.Applied"/> and indistinguishable from a real calculation. The
+/// engine now pays nothing in these cases and says which one it was, because a rule that cannot
+/// justify an amount must not invent one.
+/// </summary>
+public enum RateRefusalReason
+{
+    /// <summary>
+    /// No quota in effect for this payee, plan and date — or one whose target is zero. The rule pays
+    /// by attainment and there is nothing to measure against. KAN-26 tanda 2; the accompanying
+    /// <see cref="RuleCalculationStep.AttainmentSource"/> is
+    /// <see cref="Calculation.AttainmentSource.NoTarget"/>.
+    /// </summary>
+    NoQuotaInEffect,
+
+    /// <summary>
+    /// The attainment ladder has no bracket containing this ratio, so the table states no rate for
+    /// this rep. ★ NOT the same as a rate of zero: zero is a decision somebody made, and this is a
+    /// ladder that never mentions the case.
+    /// </summary>
+    NoMatchingBracket,
+
+    /// <summary>
+    /// The ladder priced only part of the transaction and stops below the rest of it — a bounded top
+    /// tier, or a gap the amount falls into. ★ THIS IS THE ONE THAT LOOKED MOST LIKE A REAL PAYMENT:
+    /// the engine paid the covered slice and dropped the remainder, so a 1,000,000 EUR sale under a
+    /// ladder that stops at 10,000 produced a perfectly ordinary-looking 820 EUR.
+    /// </summary>
+    AmountOutsideTable,
 }
 
 /// <summary>
