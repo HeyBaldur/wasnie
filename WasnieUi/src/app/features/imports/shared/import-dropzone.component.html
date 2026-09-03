@@ -1,0 +1,85 @@
+<div class="dz">
+  <!-- ★ THE ZONE STAYS PUT WHEN A FILE IS CHOSEN. It used to be replaced by the file's own row, so
+       the way to pick a different file was to clear the current one first — the reference keeps the
+       zone and lists the file beneath it, which is both fewer steps and a stabler layout. -->
+  <div
+    class="dz__zone"
+    [class.dz__zone--dragging]="isDragging()"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave()"
+    (drop)="onDrop($event)"
+  >
+    <input
+      #input
+      type="file"
+      class="dz__input"
+      [accept]="accept()"
+      (change)="onFileInput($event)"
+    />
+
+    <!-- The framed icon: a bordered tile, not a bare glyph. It is what gives the zone a focal
+         point now that the zone itself is quiet. -->
+    <span class="dz__featured-icon" aria-hidden="true">
+      <app-icon name="upload-cloud" [size]="20" />
+    </span>
+
+    <p class="dz__prompt">
+      <span class="dz__cta">{{ 'IMPORTS.SHARED.DROPZONE_CTA' | translate }}</span>
+      <span class="dz__or">{{ 'IMPORTS.SHARED.DROPZONE_OR' | translate }}</span>
+    </p>
+
+    @if (hintKey()) {
+      <p class="dz__hint">{{ hintKey() | translate }}</p>
+    }
+  </div>
+
+  @if (file(); as f) {
+    <!-- ★ ONE FILE, ONE CARD. The reference lists many because it uploads many; this imports a
+         single workbook, so the list is a list of one and stays a list so the shape does not
+         change if that ever stops being true. -->
+    <ul class="dz__files">
+      <li class="dz__file">
+        <span class="dz__file-icon" aria-hidden="true">
+          <app-icon name="file-text" [size]="20" />
+          <span class="dz__file-ext">{{ extension(f) }}</span>
+        </span>
+
+        <div class="dz__file-body">
+          <div class="dz__file-head">
+            <div class="dz__file-meta">
+              <p class="dz__file-name" [title]="f.name">{{ f.name }}</p>
+              <p class="dz__file-sub">
+                <span>{{ formatSize(f.size) }}</span>
+                @if (busy()) {
+                  <span class="dz__file-sep" aria-hidden="true"></span>
+                  <span class="dz__file-status">
+                    <app-icon name="upload-cloud" [size]="14" />
+                    {{ 'IMPORTS.SHARED.DROPZONE_UPLOADING' | translate }}
+                  </span>
+                }
+              </p>
+            </div>
+
+            <button
+              type="button"
+              class="dz__file-remove"
+              [attr.aria-label]="'IMPORTS.SHARED.DROPZONE_REMOVE' | translate"
+              [title]="'IMPORTS.SHARED.DROPZONE_REMOVE' | translate"
+              (click)="cleared.emit()"
+            >
+              <app-icon name="trash" [size]="16" />
+            </button>
+          </div>
+
+          @if (busy()) {
+            <!-- ★ INDETERMINATE, AND THE ARIA SAYS SO. `aria-valuenow` is deliberately absent: the
+                 upload is one request with no progress events, so any number here would be made up. -->
+            <div class="dz__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+              <div class="dz__progress-fill"></div>
+            </div>
+          }
+        </div>
+      </li>
+    </ul>
+  }
+</div>

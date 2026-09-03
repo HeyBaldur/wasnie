@@ -1,0 +1,256 @@
+@reference "../../../../styles.scss";
+
+// The import file picker. Every colour, radius, gap and size below is a token: the design this
+// follows is Untitled UI's, whose own markup is Tailwind utilities and raw hex, and none of that
+// ships here (§5.5). What was taken is the layout and the hierarchy, not the stylesheet.
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.dz {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+// ── The zone ─────────────────────────────────────────────────────────────────────────────────
+//
+// ★ A 1px SOLID BORDER, NOT A 2px DASHED ONE. The dashed box read as a placeholder — the loudest
+// thing on a step whose real subject is the file you are about to import. Quieting it is what lets
+// the framed icon and the brand-coloured call to action carry the invitation instead.
+.dz__zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+  cursor: pointer;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  transition: border-color var(--transition-base), background var(--transition-base);
+
+  &:hover,
+  &--dragging {
+    border-color: var(--color-brand);
+    background: var(--color-brand-subtle);
+  }
+
+  // ★ FOCUS COMES FROM THE INPUT, WHICH IS THE ONLY FOCUSABLE THING HERE. The input is invisible
+  // and covers the zone, so styling its focus on the parent is what makes keyboard use visible —
+  // the div itself never receives focus and a ring on it would never appear.
+  &:focus-within {
+    border-color: var(--color-border-focus);
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.dz__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+// The framed tile around the icon. Sits on the surface with its own border and a small shadow, so
+// it reads as an object on the zone rather than as a large glyph printed on it.
+.dz__featured-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-10);
+  height: var(--space-10);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-secondary);
+}
+
+.dz__prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+}
+
+.dz__cta {
+  font-weight: 600;
+  color: var(--color-text-link);
+}
+
+.dz__zone:hover .dz__cta { color: var(--color-text-link-hover); }
+
+.dz__or { color: var(--color-text-tertiary); }
+
+.dz__hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+// ── The chosen file ──────────────────────────────────────────────────────────────────────────
+
+.dz__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dz__file {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+}
+
+// The document tile with its extension badge. One icon plus text, so a third accepted format needs
+// no new artwork.
+.dz__file-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--space-10);
+  height: var(--space-10);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.dz__file-ext {
+  position: absolute;
+  bottom: calc(-1 * var(--space-1));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--color-brand);
+  color: var(--color-fg-on-brand);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+.dz__file-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.dz__file-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.dz__file-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.dz__file-name {
+  margin: 0;
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dz__file-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+// The hairline between size and status. A bordered element rather than a "|" character, so it
+// keeps its weight at every font size.
+.dz__file-sep {
+  width: 1px;
+  height: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-border-default);
+}
+
+.dz__file-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 500;
+}
+
+.dz__file-remove {
+  flex-shrink: 0;
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--color-bg-surface-hover);
+    color: var(--color-text-secondary);
+  }
+}
+
+// ── Progress ─────────────────────────────────────────────────────────────────────────────────
+//
+// ★ INDETERMINATE ON PURPOSE. The reference pairs its track with "50%", which it can do because it
+// uploads with progress events. This posts one request and waits, so there is no percentage to
+// report and printing one would be a number nobody measured. The stripe travels instead.
+.dz__progress {
+  width: 100%;
+  height: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+}
+
+.dz__progress-fill {
+  width: 40%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  animation: dz-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes dz-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+// Respect a reader who asked for less motion: the bar stays, it simply stops travelling.
+@media (prefers-reduced-motion: reduce) {
+  .dz__progress-fill {
+    width: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+}

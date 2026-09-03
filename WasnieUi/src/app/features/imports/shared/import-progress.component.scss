@@ -32,7 +32,7 @@
   &__bar {
     width: 100%;
     max-width: 480px;
-    height: 8px;
+    height: var(--space-2);
     background: var(--color-bg-surface-sunken);
     border-radius: var(--radius-full);
     overflow: hidden;

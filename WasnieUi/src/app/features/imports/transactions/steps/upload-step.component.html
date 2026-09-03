@@ -1,38 +1,16 @@
 <div class="upload-step">
-  <div
-    class="drop-zone"
-    [class.drop-zone--dragging]="isDragging()"
-    [class.drop-zone--has-file]="!!selectedFile()"
-    (dragover)="onDragOver($event)"
-    (dragleave)="onDragLeave()"
-    (drop)="onDrop($event)"
-  >
-    <input
-      id="file-input"
-      type="file"
-      accept=".csv,.xlsx"
-      class="drop-zone__input"
-      (change)="onFileInput($event)"
-    />
-    @if (selectedFile(); as file) {
-      <div class="drop-zone__file">
-        <app-icon name="file-text" [size]="32" class="drop-zone__file-icon" />
-        <div class="drop-zone__file-info">
-          <span class="drop-zone__file-name">{{ file.name }}</span>
-          <span class="drop-zone__file-size">{{ formatSize(file.size) }}</span>
-        </div>
-        <button type="button" class="drop-zone__clear" (click)="selectedFile.set(null); error.set(null)">
-          <app-icon name="x" [size]="16" />
-        </button>
-      </div>
-    } @else {
-      <label for="file-input" class="drop-zone__label">
-        <app-icon name="upload-cloud" [size]="40" class="drop-zone__icon" />
-        <span class="drop-zone__title">{{ 'IMPORTS.TRANSACTIONS.UPLOAD_PROMPT' | translate }}</span>
-        <span class="drop-zone__hint">{{ 'IMPORTS.TRANSACTIONS.UPLOAD_HINT' | translate }}</span>
-      </label>
-    }
-  </div>
+  <!-- ★ THE ZONE AND THE FILE CARD ARE ONE SHARED COMPONENT (app-import-dropzone), used identically
+       by the update wizard and the payees wizard. Everything below it — validation messages, the
+       constraints line, the sample download and the Next button — stays here, because it is this
+       import's business and not the picker's. -->
+  <app-import-dropzone
+    accept=".csv,.xlsx"
+    hintKey="IMPORTS.TRANSACTIONS.UPLOAD_HINT"
+    [file]="selectedFile()"
+    [busy]="loading()"
+    (fileSelected)="selectFile($event)"
+    (cleared)="clearFile()"
+  />
 
   @if (error()) {
     <p class="upload-error">

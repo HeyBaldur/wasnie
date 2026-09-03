@@ -1426,7 +1426,11 @@
       "NET_ERROR": "Problema de red — reintentando…",
       "FAILED_TITLE": "Error al importar",
       "FAILED_MSG": "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
-      "RETRY": "Volver a la vista previa"
+      "RETRY": "Volver a la vista previa",
+      "DROPZONE_CTA": "Haz clic para subir",
+      "DROPZONE_OR": "o arrastra y suelta",
+      "DROPZONE_UPLOADING": "Subiendo…",
+      "DROPZONE_REMOVE": "Quitar archivo"
     },
     "TRANSACTIONS": {
       "TITLE": "Importar Transacciones",

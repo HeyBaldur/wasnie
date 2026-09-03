@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
 import { WsButtonComponent } from '../../../../shared/ui';
+import { ImportDropzoneComponent } from '../../shared/import-dropzone.component';
 import { TransactionImportService } from '../services/transaction-import.service';
 import { ParseResponse } from '../models/transaction-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
@@ -14,7 +15,7 @@ const SAMPLE_HEADERS = ['Reference Number', 'Payee Code', 'Amount', 'Currency', 
 @Component({
   selector: 'app-tx-upload-step',
   standalone: true,
-  imports: [TranslateModule, DecimalPipe, IconComponent, WsButtonComponent],
+  imports: [TranslateModule, DecimalPipe, IconComponent, WsButtonComponent, ImportDropzoneComponent],
   templateUrl: './upload-step.component.html',
   styleUrl: './upload-step.component.scss',
 })
@@ -23,7 +24,6 @@ export class TxUploadStepComponent implements OnInit {
 
   readonly parsed = output<ParseResponse & { fileName: string; fileSize: number }>();
 
-  readonly isDragging = signal(false);
   readonly selectedFile = signal<File | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
@@ -36,30 +36,13 @@ export class TxUploadStepComponent implements OnInit {
     });
   }
 
-  onDragOver(e: DragEvent): void {
-    e.preventDefault();
-    this.isDragging.set(true);
-  }
-
-  onDragLeave(): void {
-    this.isDragging.set(false);
-  }
-
-  onDrop(e: DragEvent): void {
-    e.preventDefault();
-    this.isDragging.set(false);
-    const file = e.dataTransfer?.files[0];
-    if (file) this.selectFile(file);
-  }
-
-  onFileInput(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) this.selectFile(file);
-    input.value = '';
-  }
-
-  private selectFile(file: File): void {
+  /**
+   * ★ VALIDATION STAYED HERE WHEN THE PICKER MOVED OUT. `app-import-dropzone` reports the file the
+   * user chose and nothing else: what counts as an acceptable file — the extensions, the size cap,
+   * the message shown when it is not — is this import's rule, and a picker that decided it would
+   * have to be told the rules of all three wizards.
+   */
+  selectFile(file: File): void {
     this.error.set(null);
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     if (!['csv', 'xlsx'].includes(ext)) {
@@ -99,9 +82,8 @@ export class TxUploadStepComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 
-  formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  clearFile(): void {
+    this.selectedFile.set(null);
+    this.error.set(null);
   }
 }

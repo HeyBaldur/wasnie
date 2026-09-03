@@ -52,7 +52,11 @@
 
 .confirm-email__title {
   margin: 0;
-  font-size: var(--font-size-22);
+  // ★ WAS `--font-size-22`, WHICH IS NOT A TOKEN. The scale is 11-16, 18, 20, 24, 28, 32; an
+  // undefined custom property leaves `font-size` to inherit, so this "title" was rendering at
+  // body size and had been since it was written. 20 is the nearest declared step above the
+  // description beside it.
+  font-size: var(--font-size-20);
   font-weight: 700;
   color: var(--color-text-primary);
 }

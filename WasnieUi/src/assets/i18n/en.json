@@ -1018,7 +1018,11 @@
       "NET_ERROR": "Network issue — retrying…",
       "FAILED_TITLE": "Import failed",
       "FAILED_MSG": "An unexpected error occurred. Please try again.",
-      "RETRY": "Back to preview"
+      "RETRY": "Back to preview",
+      "DROPZONE_CTA": "Click to upload",
+      "DROPZONE_OR": "or drag and drop",
+      "DROPZONE_UPLOADING": "Uploading…",
+      "DROPZONE_REMOVE": "Remove file"
     },
     "TRANSACTIONS": {
       "TITLE": "Import Transactions",

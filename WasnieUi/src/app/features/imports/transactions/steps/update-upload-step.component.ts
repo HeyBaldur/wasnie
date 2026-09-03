@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
 import { WsButtonComponent } from '../../../../shared/ui';
+import { ImportDropzoneComponent } from '../../shared/import-dropzone.component';
 import { TransactionUpdateService } from '../services/transaction-update.service';
 import { ParseResponse } from '../models/transaction-import.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
@@ -13,7 +14,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 @Component({
   selector: 'app-tx-update-upload-step',
   standalone: true,
-  imports: [TranslateModule, DecimalPipe, IconComponent, WsButtonComponent],
+  imports: [TranslateModule, DecimalPipe, IconComponent, WsButtonComponent, ImportDropzoneComponent],
   templateUrl: './update-upload-step.component.html',
   styleUrl: './upload-step.component.scss',
 })
@@ -22,36 +23,12 @@ export class TxUpdateUploadStepComponent {
 
   readonly parsed = output<ParseResponse & { fileName: string; fileSize: number }>();
 
-  readonly isDragging = signal(false);
   readonly selectedFile = signal<File | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly maxRows = signal<number | null>(null); // update mode: no row limit shown
 
-  onDragOver(e: DragEvent): void {
-    e.preventDefault();
-    this.isDragging.set(true);
-  }
-
-  onDragLeave(): void {
-    this.isDragging.set(false);
-  }
-
-  onDrop(e: DragEvent): void {
-    e.preventDefault();
-    this.isDragging.set(false);
-    const file = e.dataTransfer?.files[0];
-    if (file) this.selectFile(file);
-  }
-
-  onFileInput(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) this.selectFile(file);
-    input.value = '';
-  }
-
-  private selectFile(file: File): void {
+  selectFile(file: File): void {
     this.error.set(null);
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     if (!['csv', 'xlsx'].includes(ext)) {
@@ -83,9 +60,8 @@ export class TxUpdateUploadStepComponent {
   // No sample download for update mode — the user should upload their own exported file.
   downloadSample(): void { /* no-op for update mode */ }
 
-  formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  clearFile(): void {
+    this.selectedFile.set(null);
+    this.error.set(null);
   }
 }
