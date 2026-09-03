@@ -1,0 +1,226 @@
+// Tokens only — no literals, no Tailwind palette utilities (DESIGN_SYSTEM §5.5).
+
+.recon__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.recon__card-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.recon__card-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: var(--space-1) 0 0;
+}
+
+.recon__card-secondary {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  // The clawback sits BELOW a rule, never beside the other figure as if they added up.
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.recon__note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-3);
+}
+
+.recon__reasons {
+  margin-bottom: var(--space-3);
+}
+
+.recon__reasons-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-2);
+}
+
+.recon__reasons-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.recon__reason-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+}
+
+.recon__filter {
+  margin-bottom: var(--space-3);
+}
+
+.recon__filter-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.recon__filter-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.recon__filter-spacer {
+  flex: 1;
+}
+
+.recon__filter-body {
+  margin-top: var(--space-3);
+}
+
+.recon__filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+// Mirrors .payouts-list__export-row — right-aligned, its own row above the table.
+.recon__export-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.recon__export-error {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-danger);
+}
+
+// ── The table, in the terminated-accounts vocabulary ─────────────────────────────────────────────
+//
+// ★ THE SAME CLASSES, NOT SIMILAR ONES. That screen reads as elegant because it is mostly quiet text:
+// one link colour for navigation, one weight for the name, tabular figures on the right, and colour
+// spent only where it means something. Copying the spacing without the restraint would just be a
+// second table.
+//
+// The right-alignment of the money column deliberately does NOT live here: it comes from ws-table's
+// `.col-amount` utility, which styles the TH as well. Nine screens once declared their own and every
+// one of them left the header misaligned.
+
+// Everything else that navigates: the semantic link colour, so a reference and a plan read as the
+// same kind of thing — navigation — rather than each inventing its own emphasis.
+.recon__link {
+  color: var(--color-text-link);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}
+
+// ── Truncation, because nowrap alone is not a layout ─────────────────────────────────────────────
+//
+// ★★ nowrap KEPT THE ROWS ONE LINE TALL AND MOVED THE PROBLEM SIDEWAYS. Real data carries a
+// 33-character HubSpot reference and a payee literally named "Agnieszka Jankowska Super Very Long
+// Name For this Payee!", and with nothing to stop them those two columns demanded 174px more than
+// the container had — so the table grew a horizontal scrollbar and the Amount column left the
+// screen. A cap plus an ellipsis is what makes the width predictable regardless of the data.
+//
+// ★ EVERY TRUNCATED VALUE CARRIES A `title`. An identifier you cannot read is worse than a wide
+// table: the point of the reference column is to be copied into another system.
+.recon__payee { white-space: nowrap; }
+
+// The whole cell refuses to wrap, which is what keeps the row one line tall.
+.recon__ref {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recon__plan {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+// The payee: the row's subject, so it carries the weight and the primary colour.
+//
+// ★ THE NAME TRUNCATES, THE CODE NEVER DOES. Truncating the cell as a whole would eat the employee
+// code, which is the half that identifies the person unambiguously and is only a few characters —
+// clipping it to save six pixels would be the wrong trade.
+.recon__name {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--color-text-primary);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+}
+
+// ★ 14px, NOT 12px — the same size as every other cell on this table, and the same as the code
+// column on terminated-accounts, which sets no font-size at all and simply inherits the table's.
+// A smaller code was the one place this table was quietly a different scale from the screen it
+// copies.
+.recon__code {
+  margin-left: var(--space-2);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.recon__date {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.recon__amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+// Money owed BACK. Same colour vocabulary as the terminated-accounts balance column, so a reader who
+// knows one screen already reads this one.
+.recon__amount--clawback { color: var(--color-danger); }
+
+// "No amount at all", which is not the same fact as zero.
+.recon__none { color: var(--color-text-placeholder); }
+
+// Badges sit on one line. A row with two reasons is rare; letting them wrap would make that rare row
+// twice as tall as every other one, which is the same defect as the payee wrap.
+.recon__reason-cell {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  white-space: nowrap;
+}

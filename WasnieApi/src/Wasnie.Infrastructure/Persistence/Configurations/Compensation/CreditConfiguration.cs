@@ -85,6 +85,21 @@ public sealed class CreditConfiguration : IEntityTypeConfiguration<Credit>
             .HasColumnType("nvarchar(max)")
             .IsRequired(false);
 
+        // The one fact out of that document that IS queried by SQL: why the rate component refused.
+        // Short and indexed, because the reconciliation queue filters and groups by it over every
+        // credit in a tenant — the alternative was scanning the nvarchar(max) above on every page and
+        // every aggregate, and making its internal field names a query contract.
+        //
+        // Filtered index: refusals are the rare case (a healthy tenant has none), so indexing only
+        // the non-null rows keeps it a fraction of the table instead of a full-width copy of it.
+        builder.Property(c => c.RateRefusal)
+            .HasMaxLength(64)
+            .IsRequired(false);
+
+        builder.HasIndex(c => new { c.TenantId, c.RateRefusal })
+            .HasFilter("[RateRefusal] IS NOT NULL")
+            .HasDatabaseName("IX_Credits_TenantId_RateRefusal");
+
         builder.Property(c => c.RuleSnapshot)
             .HasColumnType("nvarchar(max)")
             .HasConversion(

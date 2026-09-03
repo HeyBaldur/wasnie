@@ -128,10 +128,9 @@ public sealed class GetDashboardSummaryHandler(
         // and if one ever existed the rows are still there. `Any(IsActive)` is the engine's own
         // predicate — the same one CreditAllocationService filters on — so the card cannot disagree
         // with what the engine actually does.
-        var candidates = await db.CompensationPlans
-            .Where(p => p.Status == PlanStatus.Active
-                     && p.Rules.Any()
-                     && !p.Rules.Any(r => r.IsActive))
+        // The predicate moved to PlansWithoutLiveRulesSpec so the Reconciliation Centre counts this
+        // condition with the SAME query rather than a copy of it. Meaning unchanged.
+        var candidates = await PlansWithoutLiveRulesSpec.Queryable(db)
             .Select(p => new
             {
                 p.Id,

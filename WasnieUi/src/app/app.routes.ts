@@ -67,6 +67,15 @@ export const routes: Routes = [
       import('./features/pay-runs/pay-runs.routes').then((m) => m.payRunsRoutes),
   },
   {
+    // The Reconciliation Centre. Reports.ViewAll, the same permission the Financials group carries:
+    // it is a finance-wide view of money, not a per-payee record.
+    path: 'reconciliation',
+    title: 'NAV.RECONCILIATION',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Reports.ViewAll')],
+    loadChildren: () =>
+      import('./features/reconciliation/reconciliation.routes').then((m) => m.reconciliationRoutes),
+  },
+  {
     path: 'payouts',
     title: 'NAV.PAYOUTS',
     canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Payouts.Read')],

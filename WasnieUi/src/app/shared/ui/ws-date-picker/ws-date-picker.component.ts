@@ -87,25 +87,34 @@ export class WsDatePickerComponent implements ControlValueAccessor, AfterViewIni
   readonly yearRangeStart = signal(Math.floor(new Date().getFullYear() / 12) * 12);
   readonly hasInputError = signal(false);
 
-  // When inside a modal, the calendar uses position:fixed to escape overflow:hidden
+  // The calendar is always position:fixed once open, so it escapes any overflow-constrained ancestor
+  // (filter panels, cards, page scroll containers).
   readonly useFixed = signal(false);
-  private fixedLeft = 0;
-  private fixedWidth = 0;
-  private fixedVertical = 0; // top (below) or bottom (above) value in px
+
+  // ★★ SIGNALS, NOT PLAIN FIELDS, AND THAT IS THE WHOLE BUG THIS ONCE HAD. `popoverStyle` below is a
+  // computed(), so it only recomputes when a SIGNAL it read changes. While these were plain numbers,
+  // repositioning on scroll did run — computePlacement() faithfully measured the trigger and assigned
+  // new coordinates — and the computed never noticed, so the inline style kept the values from the
+  // moment the calendar opened. The calendar stayed pinned where it was born while the page scrolled
+  // away underneath it, which looked exactly like a missing scroll listener and was not one.
+  // ws-select carries the same values as signals for the same reason.
+  private readonly fixedLeft = signal(0);
+  private readonly fixedWidth = signal(0);
+  private readonly fixedVertical = signal(0); // top (below) or bottom (above) value in px
 
   readonly popoverStyle = computed((): Record<string, string> => {
     if (!this.useFixed()) return {};
     const base: Record<string, string> = {
       position: 'fixed',
-      left: `${this.fixedLeft}px`,
-      width: `${this.fixedWidth}px`,
+      left: `${this.fixedLeft()}px`,
+      width: `${this.fixedWidth()}px`,
       minWidth: '280px',
       zIndex: '1100',
     };
     if (this.openUpward()) {
-      return { ...base, bottom: `${this.fixedVertical}px`, top: 'auto' };
+      return { ...base, bottom: `${this.fixedVertical()}px`, top: 'auto' };
     }
-    return { ...base, top: `${this.fixedVertical}px`, bottom: 'auto' };
+    return { ...base, top: `${this.fixedVertical()}px`, bottom: 'auto' };
   });
 
   private readonly host = inject(ElementRef);
@@ -283,11 +292,11 @@ export class WsDatePickerComponent implements ControlValueAccessor, AfterViewIni
     const goUpward = spaceBelow < 350 && spaceAbove > spaceBelow;
     this.useFixed.set(true);
     this.openUpward.set(goUpward);
-    this.fixedLeft = rect.left;
-    this.fixedWidth = Math.max(rect.width, 280);
-    this.fixedVertical = goUpward
+    this.fixedLeft.set(rect.left);
+    this.fixedWidth.set(Math.max(rect.width, 280));
+    this.fixedVertical.set(goUpward
       ? window.innerHeight - rect.top + 4
-      : rect.bottom + 4;
+      : rect.bottom + 4);
   }
 
   // --- Navigation ---

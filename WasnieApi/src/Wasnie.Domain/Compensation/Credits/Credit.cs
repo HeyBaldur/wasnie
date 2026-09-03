@@ -72,6 +72,29 @@ public sealed class Credit : AggregateRoot
     /// </summary>
     public string? CalculationTrace { get; private set; }
 
+    /// <summary>
+    /// The code for WHY the rate component refused to pay, when it did — the one fact out of
+    /// <see cref="CalculationTrace"/> that has to be queryable.
+    ///
+    /// ★★ AN INDEX ONTO THE TRACE, NOT A SECOND TRUTH. The document above stays the evidence. This
+    /// exists because a reconciliation queue must filter and aggregate over the refusal across every
+    /// credit in a tenant, and the trace is deliberately opaque to SQL. Both are written in the same
+    /// act from the same object (<c>CreditRefusalProjection.FromTrace</c>), so there is no path that
+    /// can produce one without the other.
+    ///
+    /// ★ A CODE THE DOMAIN NEVER INTERPRETS. It is a string rather than an enum because the
+    /// vocabulary — <c>RateRefusalReason</c> — belongs to the application layer's trace, and the
+    /// domain is as blind to it as it already is to the document itself. Nothing here branches on it
+    /// and no money is ever derived from it.
+    ///
+    /// ★ NULL IS AN ANSWER, AND NOTHING BACKFILLS IT. Null means "not a refusal": no engine run
+    /// recorded this credit, or the rule priced the sale. The rows that predate this column keep it,
+    /// including the five whose traces express a refusal in the older Skipped + NoTarget shape —
+    /// re-deriving those would be guessing what old money meant from a document whose grammar has
+    /// since changed.
+    /// </summary>
+    public string? RateRefusal { get; private set; }
+
     public byte[] RowVersion { get; private set; } = [];
 
     private Credit() { }
@@ -95,7 +118,11 @@ public sealed class Credit : AggregateRoot
         // null here means "no engine run produced this credit", which is exactly true of every
         // hand-built credit and of all 1,296 rows that predate the column. The production path passes
         // it explicitly; a caller that forgets it records an honest absence, not a wrong number.
-        string? calculationTrace = null)
+        string? calculationTrace = null,
+        // ★ ARRIVES ALREADY DERIVED, from the same trace object the document above came from. The
+        // domain does not parse the document to find it — that would be a second derivation, and two
+        // derivations of the same fact are the drift this column is built to avoid.
+        string? rateRefusal = null)
     {
         var credit = new Credit
         {
@@ -112,7 +139,8 @@ public sealed class Credit : AggregateRoot
             Role = role,
             AllocatedAt = now,
             AllocatedBy = allocatedBy,
-            CalculationTrace = calculationTrace
+            CalculationTrace = calculationTrace,
+            RateRefusal = rateRefusal
         };
 
         credit.RaiseDomainEvent(new CreditAllocatedEvent(

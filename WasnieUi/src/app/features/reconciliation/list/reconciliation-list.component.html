@@ -1,0 +1,272 @@
+<app-shell [refreshOnEnter]="store">
+  <ws-page-layout
+    icon="alert-triangle"
+    [title]="'RECONCILIATION.TITLE' | translate"
+    [subtitle]="'RECONCILIATION.SUBTITLE' | translate"
+  >
+
+    <!-- ── Summary cards ──────────────────────────────────────────────────────
+         Every figure here is the SERVER's, over the whole filtered set. Nothing
+         on this page adds up store.rows(): that is one page, and a total built
+         from it would shrink as somebody paginates. -->
+    <div class="recon__cards">
+      <ws-card variant="flat" padding="sm" class="recon__card">
+        <p class="recon__card-value">{{ store.summary().totalRows | number }}</p>
+        <p class="recon__card-label">{{ 'RECONCILIATION.CARD_ENTRIES' | translate }}</p>
+      </ws-card>
+
+      @for (total of store.summary().byCurrency; track total.currency) {
+        <!-- ★ TWO FIGURES ON ONE LINE, NEVER ADDED. Unpaid commission is money still
+             owed; a clawback is money to be recovered. A single net would let one
+             hide the other, which is the one thing this screen must not do. -->
+        <ws-card variant="flat" padding="sm" class="recon__card recon__card--money">
+          <p class="recon__card-value">
+            {{ total.affectedBaseAmount | currencyFormat: total.currency }}
+          </p>
+          <p class="recon__card-label">
+            {{ 'RECONCILIATION.CARD_AFFECTED_BASE' | translate: { currency: total.currency } }}
+          </p>
+          @if (total.clawbackAmount > 0) {
+            <p class="recon__card-secondary">
+              {{ 'RECONCILIATION.CARD_CLAWBACK' | translate }}:
+              <strong>{{ total.clawbackAmount | currencyFormat: total.currency }}</strong>
+            </p>
+          }
+        </ws-card>
+      }
+    </div>
+
+    <!-- The sale value at stake is NOT a commission owed, and the screen says so
+         rather than letting a reader assume it. When the engine refuses, the
+         commission is precisely the figure nobody knows. -->
+    @if (store.hasMoney()) {
+      <p class="recon__note">
+        <app-icon name="info-circle" [size]="14" />
+        {{ 'RECONCILIATION.AFFECTED_BASE_NOTE' | translate }}
+      </p>
+    }
+
+    <!-- ── Count by reason ────────────────────────────────────────────────────── -->
+    @if (store.summary().byReason.length > 0) {
+      <ws-card variant="flat" padding="sm" class="recon__reasons">
+        <p class="recon__reasons-title">{{ 'RECONCILIATION.BY_REASON' | translate }}</p>
+        <div class="recon__reasons-list">
+          @for (r of store.summary().byReason; track r.reason) {
+            <span class="recon__reason-chip">
+              <!-- Whitelisted key, never the raw code -->
+              {{ reasonKeyFor(r.reason) | translate }}
+              <ws-badge variant="warning" size="sm">{{ r.count }}</ws-badge>
+            </span>
+          }
+        </div>
+      </ws-card>
+    }
+
+    <!-- ── Filters ────────────────────────────────────────────────────────────── -->
+    <ws-card variant="raised" padding="sm" class="recon__filter">
+      <div class="recon__filter-header" (click)="filterOpen.set(!filterOpen())">
+        <span class="recon__filter-title">
+          <app-icon name="filter" [size]="14" />
+          {{ 'RECONCILIATION.FILTER.TITLE' | translate }}
+        </span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
+        }
+        <span class="recon__filter-spacer"></span>
+        @if (store.hasActiveFilters()) {
+          <ws-button variant="ghost" size="sm" (click)="$event.stopPropagation(); clearFilters()">
+            {{ 'RECONCILIATION.FILTER.CLEAR' | translate }}
+          </ws-button>
+        }
+        <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+      </div>
+
+      @if (filterOpen()) {
+        <form [formGroup]="form" class="recon__filter-body">
+          <div class="recon__filter-row">
+            <div class="recon__filter-field">
+              <ws-select
+                formControlName="reason"
+                [options]="reasonOptions()"
+                [label]="'RECONCILIATION.FILTER.REASON' | translate"
+              />
+            </div>
+            <div class="recon__filter-field">
+              <ws-date-picker
+                formControlName="from"
+                [label]="'RECONCILIATION.FILTER.FROM' | translate"
+              />
+            </div>
+            <div class="recon__filter-field">
+              <ws-date-picker
+                formControlName="to"
+                [label]="'RECONCILIATION.FILTER.TO' | translate"
+              />
+            </div>
+          </div>
+        </form>
+      }
+    </ws-card>
+
+    <!-- ── Export row ─────────────────────────────────────────────────────────────
+         Same shape as the Payouts list: its own right-aligned row between the filter
+         card and the table. HIDDEN rather than disabled when there is nothing to
+         export — a queue with no entries has nothing to offer, and a greyed-out
+         button invites a click that could never work (§5.8). -->
+    @if (store.summary().totalRows > 0) {
+      <div class="recon__export-row">
+        <ws-button
+          variant="ghost"
+          size="sm"
+          [disabled]="store.loading()"
+          [loading]="exporting()"
+          (click)="exportToExcel()"
+        >
+          <app-icon name="file-excel" [size]="16" />
+          {{ 'RECONCILIATION.EXPORT' | translate }}
+        </ws-button>
+        @if (exportError()) {
+          <span class="recon__export-error">{{ exportError()! | translate }}</span>
+        }
+      </div>
+    }
+
+    <!-- ── The queue ──────────────────────────────────────────────────────────── -->
+    @if (store.error()) {
+      <ws-empty-state icon="alert-triangle" [titleKey]="store.error()!" />
+    } @else {
+      <ws-table>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{{ 'RECONCILIATION.COL_REFERENCE' | translate }}</th>
+              <th scope="col">{{ 'RECONCILIATION.COL_PAYEE' | translate }}</th>
+              <th scope="col">{{ 'RECONCILIATION.COL_PLAN' | translate }}</th>
+              <th scope="col">{{ 'RECONCILIATION.COL_REASONS' | translate }}</th>
+              <th scope="col">{{ 'RECONCILIATION.COL_PERIOD' | translate }}</th>
+              <th scope="col" class="col-amount">{{ 'RECONCILIATION.COL_AMOUNT' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of store.rows(); track trackRow($index, row)) {
+              <tr>
+                <!-- ★ THERE IS NO "TYPE" COLUMN, AND NOTHING IS LOST BY THAT. Every reason belongs
+                     to exactly one kind — the engine's three refusals only ever appear on a credit,
+                     the unprocessable ones only on a transaction, PlanHasNoActiveRules only on a
+                     plan — so a Type column repeated "TRANSACTION" down the page and told the reader
+                     what the Reasons cell beside it already said. It cost 117px, which is why the
+                     Amount column was off the right edge of a screen about money. -->
+                <!-- ★ EVERY LINK ON THIS TABLE OPENS IN A NEW TAB. This is a work queue: following a
+                     reference to see what went wrong should not cost the reader the filtered list
+                     they were working through. Same reasoning, and same markup, as the credit
+                     references on the terminated-accounts table. -->
+                <td class="recon__ref">
+                  @if (row.referenceNumber && row.transactionId) {
+                    <a class="recon__link"
+                       [routerLink]="['/transactions', row.transactionId]"
+                       [title]="row.referenceNumber"
+                       target="_blank"
+                       rel="noopener">{{ row.referenceNumber }}</a>
+                  } @else {
+                    <span class="recon__none">—</span>
+                  }
+                </td>
+
+                <!-- ★ NAME AND CODE SHARE A CELL, AND THAT WAS NEVER THE PROBLEM. The rows were
+                     77px tall because the cell WRAPPED, not because it held two things: "Rudolph
+                     GeHard Chipellin 3ero" broke over three lines. With nowrap they sit on one line
+                     and the whole table fits its container with nothing to scroll — measured, not
+                     assumed: splitting them into two columns instead cost 47px of horizontal
+                     overflow and pushed the Amount column off the edge of a screen about money. -->
+                <td class="recon__payee">
+                  @if (row.payeeId) {
+                    <a class="recon__name"
+                       [routerLink]="['/payees', row.payeeId]"
+                       [title]="row.payeeName"
+                       target="_blank"
+                       rel="noopener">{{ row.payeeName }}</a>
+                    @if (row.payeeCode) {
+                      <span class="recon__code">{{ row.payeeCode }}</span>
+                    }
+                  } @else {
+                    <span class="recon__none">—</span>
+                  }
+                </td>
+
+                <td>
+                  @if (row.planId) {
+                    <a class="recon__link recon__plan"
+                       [routerLink]="['/plans', row.planId]"
+                       [title]="row.planName"
+                       target="_blank"
+                       rel="noopener">{{ row.planName }}</a>
+                  } @else {
+                    <span class="recon__none">—</span>
+                  }
+                </td>
+
+                <td>
+                  <!-- ★ ONE ROW, EVERY REASON. An entry that failed for two things says so here
+                       rather than appearing twice and doubling its money. -->
+                  <span class="recon__reason-cell">
+                    @for (reason of row.reasons; track reason) {
+                      <ws-badge variant="warning" size="sm">
+                        {{ reasonKeyFor(reason) | translate }}
+                      </ws-badge>
+                    }
+                  </span>
+                </td>
+
+                <td class="recon__date">
+                  @if (row.periodDate) {
+                    {{ row.periodDate | dateFormat }}
+                  } @else {
+                    <span class="recon__none">—</span>
+                  }
+                </td>
+
+                <td class="col-amount">
+                  @if (row.amount !== null && row.currency) {
+                    <!-- ★ ONE LINE, AND THE COLOUR CARRIES THE MEANING. A "Clawback" caption under
+                         every recovered amount added a second line to most rows and doubled the
+                         table's height. Money owed BACK is painted in the danger colour — the same
+                         vocabulary the terminated-accounts balance column uses — and the title says
+                         it in words for anyone who needs them. -->
+                    <span class="recon__amount"
+                          [class.recon__amount--clawback]="row.moneyKind === 'Clawback'"
+                          [title]="(row.moneyKind === 'Clawback'
+                            ? 'RECONCILIATION.CARD_CLAWBACK'
+                            : 'RECONCILIATION.CARD_AFFECTED_BASE_SHORT') | translate">
+                      {{ row.amount | currencyFormat: row.currency }}
+                    </span>
+                  } @else {
+                    <!-- No amount is not an amount of zero: a plan or a drifted deal has none, and a
+                         0.00 would read as "nothing is owed", which is a measurement nobody made. -->
+                    <span class="recon__none">—</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <ws-table-empty>
+                <ws-empty-state
+                  icon="check"
+                  titleKey="RECONCILIATION.EMPTY_TITLE"
+                  descKey="RECONCILIATION.EMPTY_DESC"
+                />
+              </ws-table-empty>
+            }
+          </tbody>
+        </table>
+      </ws-table>
+
+      <ws-pagination
+        [currentPage]="store.filter().page"
+        [totalPages]="store.totalPages()"
+        [totalCount]="store.total()"
+        [pageSize]="store.filter().pageSize"
+        (pageChange)="goToPage($event)"
+      />
+    }
+
+  </ws-page-layout>
+</app-shell>

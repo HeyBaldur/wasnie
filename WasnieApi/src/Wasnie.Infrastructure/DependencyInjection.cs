@@ -254,6 +254,7 @@ public static class DependencyInjection
         services.AddScoped<IQuotaAttainmentService, QuotaAttainmentService>();
         services.AddScoped<ITransactionExcelExportService, TransactionExcelExportService>();
         services.AddScoped<ICreditExcelExportService, CreditExcelExportService>();
+        services.AddScoped<IReconciliationExcelExportService, ReconciliationExcelExportService>();
         services.AddScoped<IPayoutPdfExportService, PayoutPdfExportService>();
         services.AddScoped<IPayoutExcelExportService, PayoutExcelExportService>();
         services.AddScoped<IPayRunExcelExportService, PayRunExcelExportService>();

@@ -401,12 +401,20 @@ public sealed class CreditAllocationService : ICreditAllocationService
             // state the domain reasons over — nothing branches on it and nothing may recompute it —
             // so Credit carries the finished document and this layer, which owns both the engine's
             // type and the storage format, is what turns one into the other.
-            var traceJson = CalculationTraceSerializer.Serialize(new RuleCalculationTrace
+            // ★★ ONE TRACE OBJECT, TWO WRITES, NO SECOND DERIVATION. The document and the queryable
+            // refusal code both come from `trace` below, on this line, in this act. Building the
+            // column anywhere else — a later job, a reader that parses the JSON back — would be a
+            // second path to the same fact, and two paths to one fact eventually disagree. Here
+            // there is no arrangement of the code in which a credit gets one and not the other.
+            var trace = new RuleCalculationTrace
             {
                 CreditGenerated = evaluation.CreditGenerated,
                 Commission = evaluation.Commission,
                 Steps = steps,
-            });
+            };
+
+            var traceJson = CalculationTraceSerializer.Serialize(trace);
+            var rateRefusal = CreditRefusalProjection.FromTrace(trace);
 
             var credit = Credit.Allocate(
                 tenantId: transaction.TenantId,
@@ -423,7 +431,8 @@ public sealed class CreditAllocationService : ICreditAllocationService
                 id: _guidGenerator.NewGuid(),
                 now: now,
                 eventId: _guidGenerator.NewGuid(),
-                calculationTrace: traceJson);
+                calculationTrace: traceJson,
+                rateRefusal: rateRefusal);
 
             credits.Add(credit);
         }

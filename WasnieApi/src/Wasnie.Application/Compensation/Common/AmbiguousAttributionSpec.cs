@@ -1,5 +1,8 @@
+using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
 using Wasnie.Domain.Compensation.Assignments;
+using Wasnie.Domain.Compensation.Enums;
+using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Transactions;
 
 namespace Wasnie.Application.Compensation.Common;
@@ -73,4 +76,36 @@ public static class AmbiguousAttributionSpec
         IReadOnlyDictionary<Guid, string> planCurrencyById,
         IReadOnlySet<Guid> archivedPlanIds) =>
         AmbiguousCandidates(transaction, payeeAssignments, planCurrencyById, archivedPlanIds).Count > 0;
+
+    /// <summary>
+    /// The same rule as an <c>IQueryable</c>, so the reconciliation queue can page and aggregate over
+    /// it in SQL instead of materialising every Pending row in the tenant.
+    ///
+    /// ★★ THIS IS A SECOND EXPRESSION OF ONE RULE, AND THAT IS A RISK THE CODEBASE HAS BEEN BITTEN BY.
+    /// It exists because <see cref="PlanAssignmentResolver.Candidates"/> is in-memory by design — the
+    /// engine calls it per transaction inside a batch it has already loaded — while a screen that
+    /// says "you owe exactly this" has to compute its totals from the same query that produced its
+    /// rows, which means SQL. The two are kept honest by
+    /// <c>AmbiguousAttributionQueryableAgreesWithCandidatesTests</c>, which runs both over the same
+    /// data and requires identical answers. If that test ever goes red, the queryable is wrong — the
+    /// in-memory version is the engine's, and the engine is the authority.
+    ///
+    /// ★ THE CLAUSES ARE IN THE SAME ORDER AS Candidates, one for one: not archived, Active, period
+    /// covers the date, plan currency equals the transaction currency. Plus the two conditions the
+    /// scalar overload checks before it delegates — no declared choice, and a payee at all.
+    /// </summary>
+    public static IQueryable<CompensationTransaction> Queryable(IApplicationDbContext db) =>
+        db.CompensationTransactions.Where(t =>
+            t.Status == CompensationTransactionStatus.Pending
+            && t.PayeeId != null
+            && t.SelectedPlanAssignmentId == null
+            && db.PlanAssignments.Count(a =>
+                a.PayeeId == t.PayeeId
+                && a.Status == AssignmentStatus.Active
+                && a.EffectivePeriod.Start <= t.TransactionDate
+                && a.EffectivePeriod.End >= t.TransactionDate
+                && db.CompensationPlans.Any(p =>
+                    p.Id == a.PlanId
+                    && p.Status != PlanStatus.Archived
+                    && p.Currency == t.Amount.Currency)) >= 2);
 }

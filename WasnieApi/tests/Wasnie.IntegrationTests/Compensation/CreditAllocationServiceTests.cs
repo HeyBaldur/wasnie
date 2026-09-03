@@ -1514,4 +1514,127 @@ public sealed class CreditAllocationServiceTests(CreditAllocationServiceFixture 
         credits.Should().HaveCount(1);
         credits[0].CreditedAmount.Amount.Should().Be(50.00m, "Revenue regression: 5% × €1000 = €50");
     }
+
+    // ══ KAN-28 tanda A — the queryable refusal column ═════════════════════════════════════════
+
+    /// <summary>
+    /// ★★ THE ANTI-DRIFT INVARIANT, CHECKED WHERE IT CAN ACTUALLY BREAK: after a round trip through
+    /// SQL Server. The unit tests pin the projection against the serialised document in memory; this
+    /// one allocates a real credit through the real service, saves it, reads it back on a FRESH
+    /// context, and requires the column to equal the refusal parsed out of the stored JSON. Column
+    /// and document are written in one act — if a future edit ever splits them, this goes red.
+    /// </summary>
+    [Fact]
+    public async Task AllocateAsync_RefusedForWantOfQuota_PersistsRateRefusalMatchingTheStoredTrace()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        Guid creditId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = Plan.Create(tenantId, "Attainment Plan", "desc",
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+                Currency, "test-user", planId, Now, Guid.NewGuid());
+
+            // A well-formed ladder. The refusal comes from the payee having NO quota, not from the
+            // table — this is the KAN-26 tanda 2 path, and the only one reachable without a
+            // deliberately malformed row.
+            plan.AddRule("Attainment Rule", 1,
+                new Measurement { Type = MeasurementType.Revenue, SourceField = "amount", Aggregation = MeasurementAggregation.Sum },
+                RateTable.AttainmentBased(
+                [
+                    new AttainmentTier { AttainmentFrom = 0m, AttainmentTo = 1m, Rate = 0.04m },
+                    new AttainmentTier { AttainmentFrom = 1m, AttainmentTo = null, Rate = 0.07m },
+                ]));
+            db.CompensationPlans.Add(plan);
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = CompensationTransaction.Ingest(
+                tenantId, "REF-KAN28-A", payeeId, Money.Of(50_000m, Currency),
+                TxDate, TransactionSource.Manual, "user", Guid.NewGuid(), Now, Guid.NewGuid());
+            db.CompensationTransactions.Add(tx);
+
+            // No quota exists for this payee, so the real service resolves NoTarget.
+            var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db);
+            var credits = await svc.AllocateAsync(tx);
+
+            credits.Should().HaveCount(1);
+            credits[0].CreditedAmount.Amount.Should().Be(0m, "no quota means the engine refuses to pay");
+
+            creditId = credits[0].Id;
+            db.Credits.Add(credits[0]);
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var stored = await db.Credits.AsNoTracking().SingleAsync(c => c.Id == creditId);
+
+            stored.RateRefusal.Should().Be("NoQuotaInEffect");
+            stored.CalculationTrace.Should().NotBeNull();
+
+            // The expectation comes out of the DOCUMENT, not out of the object that wrote it.
+            var fromDocument = System.Text.Json.JsonDocument.Parse(stored.CalculationTrace!)
+                .RootElement.GetProperty("steps")
+                .EnumerateArray()
+                .Single(s => s.GetProperty("component").GetString() == "Rate")
+                .GetProperty("rateRefusal").GetString();
+
+            stored.RateRefusal.Should().Be(fromDocument);
+        }
+    }
+
+    /// <summary>A credit the engine actually priced carries no refusal — null, and queryably so.</summary>
+    [Fact]
+    public async Task AllocateAsync_NormalCommission_PersistsNullRateRefusal()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        Guid creditId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationPlans.Add(MakePlanWithFlatRule(tenantId, planId, 0.10m,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            db.Payees.Add(MakePayee(tenantId, payeeId));
+            db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payeeId,
+                new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = CompensationTransaction.Ingest(
+                tenantId, "REF-KAN28-B", payeeId, Money.Of(1_000m, Currency),
+                TxDate, TransactionSource.Manual, "user", Guid.NewGuid(), Now, Guid.NewGuid());
+            db.CompensationTransactions.Add(tx);
+
+            var svc = CreateService(new CreditAllocationServiceFixture.FixedTenantContext(tenantId), db);
+            var credits = await svc.AllocateAsync(tx);
+
+            credits.Should().HaveCount(1);
+            credits[0].CreditedAmount.Amount.Should().Be(100m);
+
+            creditId = credits[0].Id;
+            db.Credits.Add(credits[0]);
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var stored = await db.Credits.AsNoTracking().SingleAsync(c => c.Id == creditId);
+
+            stored.RateRefusal.Should().BeNull();
+            stored.CalculationTrace.Should().NotContain("rateRefusal");
+        }
+    }
 }

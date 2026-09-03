@@ -4,6 +4,278 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 (e) - ws-date-picker: el calendario no seguia a su input al hacer scroll
+
+**Rama:** KAN-38 · Detectado verificando la pantalla de KAN-28 · **Sin commit.**
+
+**Sintoma:** con el calendario abierto, al hacer scroll el popover se quedaba clavado donde nacio,
+flotando sobre filas ajenas. Mismo sintoma que ya habia tenido el dropdown de `ws-select`.
+
+**★★ La causa NO era un listener de scroll ausente, y ahi estaba la trampa.** El listener existia,
+se disparaba, y `computePlacement()` remedia el trigger y asignaba coordenadas nuevas — correctas.
+El problema es que aterrizaban en **campos planos**, y `popoverStyle` es un `computed()`: solo
+recalcula cuando cambia un SIGNAL que haya leido. El estilo inline conservaba los numeros del
+momento de abrir. Todo parecia cableado y nada se movia.
+
+**Arreglo:** `fixedLeft`, `fixedWidth` y `fixedVertical` pasan de campos planos a `signal()`, que es
+exactamente como los tiene `ws-select` (`dropdownLeft`, `dropdownWidth`, `dropdownFixedTop`,
+`dropdownFixedBottom`). Tres lineas de declaracion, tres `.set()` y tres lecturas con `()`.
+
+**★ El test asserta el ESTILO renderizado, nunca los campos internos.** Un test que leyera los
+campos habria pasado contra el build roto (§A2). `ws-date-picker.component.spec.ts` (nuevo, 5):
+se ancla al abrir, se remide y se mueve al hacer scroll, sigue tambien en horizontal, se cierra si
+el trigger sale del viewport, y deja de escuchar al cerrarse.
+
+**Verificado que el test muerde:** se reintrodujo el bug a proposito (una copia estancada de la
+coordenada) y el spec se puso **rojo con el sintoma exacto** ('120px' donde tocaba '20px'); al
+restaurar, verde. Fichero restaurado byte a byte.
+
+**Dos detalles del entorno que el spec fija a proposito:** la altura de viewport se pinea a 1000
+(el iframe de karma es lo bastante bajo como para invertir la decision arriba/abajo, y estos tests
+son sobre "sigue al trigger", no sobre lo alta que sea la ventana del runner); y el scroll se
+despacha desde `document` con burbujeo, que es lo que produce un contenedor anidado real — el
+componente escucha en `window` en fase de CAPTURA justamente para ver scrolls de contenedores que
+no conoce.
+
+**Ficheros:** `ws-date-picker.component.ts` · `ws-date-picker.component.spec.ts` (nuevo).
+
+**Suites:** front **1290 -> 1295**, `ng build --configuration production` exit 0.
+
+## 2026-09-03 (d) - KAN-28 tanda B: el Centro de Reconciliacion
+
+**Rama:** KAN-38 · **Ticket:** KAN-28 (tanda B de 2, COMPLETA el ticket) · **Sin commit.**
+Full-stack: backend + frontend + export.
+
+**La pantalla LEE, no re-implementa.** Los 3 motivos del motor salen de `Credits.RateRefusal`
+(tanda A); los 3 de transacciones, de `UnprocessablePendingSpec` —la misma queryable que cuenta
+la tarjeta del Dashboard y filtra la lista de Transactions—; la ambiguedad, de
+`AmbiguousAttributionSpec`. El panel del Dashboard **no se toco**.
+
+**★★ Todo es IQueryable hasta el final.** Los "seeds" (una fila por pareja entidad+motivo) se
+concatenan, filtran, cuentan, agrupan y paginan en SQL. No es una preferencia de rendimiento:
+las tarjetas tienen que ser LA MISMA consulta que las filas, y un total solo puede garantizarse
+igual a la tabla si ninguno de los dos se armo en memoria a partir de una pagina.
+
+**★★ El importe es la VENTA, no una comision.** Cuando el motor rechaza, la comision es justo la
+cifra que nadie conoce — eso es lo que significa el rechazo. Publicar un "importe adeudado"
+seria inventar el numero que KAN-26 existe para no inventar. La tarjeta dice "ventas afectadas"
+y hay una nota en pantalla que lo explica (§C3).
+
+**★★ Dos bolsillos que nunca se suman.** `AffectedBase` y `Clawback` viajan como campos
+separados hasta la tarjeta; **no existe ningun campo `net`** en el DTO ni en el modelo del front.
+Test que lo fija.
+
+**★★ Una entrada con dos motivos aparece UNA vez.** El filtro por motivo se aplica a la ENTIDAD,
+no al seed: filtrar seeds devolveria la fila despojada de su otro motivo. El dinero se suma sobre
+entidades distintas (`Distinct` sobre la tupla monetaria), no sobre seeds.
+
+**★ `AmbiguousAttributionSpec.Queryable` es una SEGUNDA expresion de una regla del motor**, y eso
+es un riesgo conocido de este repo. Existe porque `PlanAssignmentResolver.Candidates` es
+in-memory por diseño y una pantalla que declara totales tiene que calcularlos en SQL. Hay un test
+que corre **las dos sobre los mismos datos** y exige la misma respuesta; si se pone rojo, la
+queryable es la que esta mal.
+
+**★ `PlansWithoutLiveRulesSpec` extraida** del handler del dashboard para que las dos superficies
+compartan el predicado. Significado intacto, solo cambio de direccion.
+
+**★ Un plan es una CAUSA, no una suma:** aparece en la lista y en el conteo por motivo, con
+importe null, y nunca entra en un total por moneda. En el export, celda **vacia y no 0,00**.
+
+**★ La whitelist del front no concatena la clave (§C2):** un codigo desconocido cae a una frase
+generica, nunca imprime el identificador. Test que lo fija.
+
+**Hallazgo de fixture (§A3):** los primeros tests de dos motivos salieron rojos porque mis
+transacciones estaban `Pending` con payee y sin asignacion — o sea, tambien eran legitimamente
+`NoActiveAssignment`. La consulta tenia razon; el fixture describia un estado que produccion no
+puede producir. Se añadio `PaidTx` (calculada y pagada), que es lo que un deal perdido es por
+definicion.
+
+**Ficheros nuevos:** `ReconciliationReason.cs` · `PlansWithoutLiveRulesSpec.cs` ·
+`ReconciliationDtos.cs` · `ReconciliationQueries.cs` · `ReconciliationQuery.cs` ·
+`GetReconciliationHandler.cs` · `ExportReconciliationHandler.cs` ·
+`IReconciliationExcelExportService.cs` · `ReconciliationExcelExportService.cs` ·
+`ReconciliationController.cs` · `ReconciliationCentreTests.cs` (9) · feature `reconciliation/`
+del front (modelos, whitelist, api, store, lista, rutas, spec) · EN/ES/PL.
+**Modificados:** `AmbiguousAttributionSpec.cs` (+Queryable) · `GetDashboardSummaryHandler.cs`
+(usa la spec extraida) · `DependencyInjection.cs` · `app.routes.ts` · `sidebar.component.ts`.
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1909**, integracion
+**852 -> 861** (9 nuevos), front **1282 -> 1290** (8 nuevos), `ng build --configuration
+production` exit 0. La ruta es lazy, asi que no entra al bundle inicial; los dos avisos de budget
+(bundle inicial y `dashboard.component.scss`) son preexistentes.
+
+**Ajuste posterior (mismo WI):** el boton de Export estaba mal ubicado. Se alineo con el patron de
+la lista de Payouts: fila propia entre el filtro y la tabla, **alineada a la derecha**, boton
+`ghost` con icono `file-excel` y estado `[loading]`, y **oculta** cuando no hay nada que exportar en
+vez de deshabilitada (§5.8: mostrar lo que se PUEDE hacer). La clave i18n `EXPORTING` quedo muerta
+al usar el estado del boton y se elimino de los tres idiomas. Front **1295**, build limpio.
+
+**Iconos de Excel y PDF como artwork (mismo WI, alcance global):** los PNG nuevos de
+`WasnieUi/public/icons` sustituyen al trazo generico en TODOS los botones de exportacion. Se
+enrutan por el propio `app-icon` mediante un mapa `IMAGE_ICONS` en vez de esparcir `<img>` por cinco
+plantillas: Excel y PDF son **marcas**, su color es parte de su significado y no pueden ser un
+`stroke="currentColor"` como el resto. Los cinco puntos de llamada siguen diciendo
+`<app-icon name="file-excel" />`. Alcanza a Payouts, Transactions, Credits y Reconciliation (Excel)
+y al detalle de payout (PDF, que usaba el icono generico `download`). **Segunda pasada, tras un
+barrido sistematico:** los dos botones de pay-runs (lista y detalle) tambien decian "Export to
+Excel" y devuelven `.xlsx`, pero llevaban `download` — corregidos. El barrido cruza el icono con la
+clave i18n del boton y con lo que devuelve el endpoint, en vez de buscar solo `file-excel`; asi es
+como aparecieron. Quedan **8 botones de export** y los 8 tienen su marca correcta. Se deja a
+proposito `TRANSACTIONS.ACTION_UPDATE_EXCEL` con `refresh`: es "Update FROM Excel", una reimportacion
+— el icono describe la accion, no el formato. Todos a `[size]="16"`, el tamano natural del PNG
+(a 14 se resampleaban y se veian borrosos). `public/` se copia a la raiz
+del build, asi que las rutas `/icons/*.png` existen en produccion — verificado en `dist/`.
+`icon.component.spec.ts` (nuevo, 5) asserta el ELEMENTO renderizado, no el mapa: un componente que
+eligiera la URL correcta y siguiera dibujando un `<svg>` vacio pasaria un test del mapa y fallaria
+al usuario.
+
+**Y la etiqueta decia solo "Export":** ahora "Export to Excel" en los tres idiomas, como el resto de
+las listas.
+
+**Defecto ajeno, NO corregido (§10):** el polaco del boton de export es inconsistente en pantallas
+preexistentes — `Eksportuj do Excel` en Payouts y Transactions, `Eksportuj do Excela` en Credits.
+La forma correcta es la segunda (genitivo) y es la que se uso aqui; las otras dos se dejan como
+estan, que es una decision de traduccion y no de este WI.
+
+**Suites:** front **1295 -> 1300**, build limpio.
+
+**Tabla del Centro rehecha con el lenguaje de terminated-accounts (mismo WI):** mismas CLASES, no
+parecidas — `__name` para el sujeto de la fila (primario, peso 500), `__link` con
+`--color-text-link` para todo lo que navega, `.col-amount` de ws-table para el dinero (la
+alineacion NO se declara local: nueve pantallas lo hicieron y todas dejaron el TH desalineado),
+`tabular-nums`, y `__none` para el guion, que es "no hay importe" y no "cero". El **kind deja de ser
+un badge**: es un TIPO, no un estado, y pasa a texto discreto para que los badges de motivo sigan
+siendo lo que el ojo busca (§5.4 reserva WsBadge para valores de ESTADO).
+
+**Links a nueva pestana** en referencia, payee y plan — misma razon y mismo markup que las
+referencias de credito de terminated-accounts: es una cola de trabajo, y seguir un enlace no debe
+costarle al lector la lista filtrada que estaba recorriendo.
+
+**★ Bug evitado al cablear los links:** en una fila de tipo Credit el `entityId` es el id del
+CREDITO, pero la referencia mostrada es la de su TRANSACCION. El primer corte enlazaba
+`['/transactions', entityId]`, que habria llevado a una ruta de transaccion con id de credito — un
+404 con pinta de registro roto. La fila lleva ahora `TransactionId` propio (null en filas de Plan) y
+hay un test que exige que difiera del `entityId`.
+
+**★★ Y el diseno seguia sin verse compacto, porque el problema NO eran las clases: era que las
+celdas ENVOLVIAN.** Medido en el DOM real, no supuesto: filas de **77px** contra las de 53px/30px de
+terminated. "Rudolph GeHard Chipellin 3ero" partia en tres lineas y el rotulo "Clawback" anadia una
+cuarta bajo cada importe. Arreglado con `white-space: nowrap` en la celda de payee y una sola linea
+en el importe — el clawback lo dice ahora el COLOR (`--color-danger`, el mismo vocabulario que la
+columna de balance de terminated) y un `title`. Resultado medido: **46px, una sola altura para las
+25 filas, 0px de desborde**.
+
+**Dos columnas eliminadas por medicion, no por gusto:**
+- **TYPE**: repetia "TRANSACTION" en casi cada fila y costaba 117px, con la columna AMOUNT fuera de
+  pantalla en una pagina sobre dinero. Es **redundante**: cada motivo pertenece a un unico tipo (los
+  tres del motor solo aparecen en creditos; los inprocesables solo en transacciones;
+  `PlanHasNoActiveRules` solo en planes), asi que la columna REASONS ya lo codifica.
+- **CODE como columna propia**: se probo separarla —como en terminated— y costaba **47px de
+  desborde**. Se simulo la alternativa en el navegador antes de editar nada: fusionarla en la celda
+  de payee con nowrap da **0px**. El codigo comparte celda otra vez; compartirla nunca fue el
+  problema, envolver si.
+
+**Tercera pasada: nowrap solo movio el problema de sitio.** Con datos reales —una referencia de
+HubSpot de 33 caracteres y un payee llamado literalmente "Agnieszka Jankowska Super Very Long Name
+For this Payee!"— esas dos columnas pedian **174px mas** de los que hay, asi que la tabla crecia una
+barra horizontal y AMOUNT se iba de la pantalla otra vez. La medicion anterior de 0px fue con filas
+que no incluian esos casos: **medi mal, no solo asumi mal**. Arreglado con tope + elipsis
+(`max-width` + `text-overflow`) en referencia, nombre y plan, y **`title` en cada valor truncado**:
+una referencia que no se puede leer es peor que una tabla ancha, porque existe para copiarla a otro
+sistema. **El nombre trunca, el codigo NO** — es la mitad que identifica sin ambiguedad y son cuatro
+caracteres.
+
+**Y el tamano de fuente estaba mal, como se me dijo:** `.recon__code` a **12px** cuando toda la fila
+—y la columna de codigo de terminated, que no declara `font-size` y hereda el de la tabla— esta a
+**14px**. Quitado el override. Medido en ambas paginas antes y despues, no deducido.
+
+**Verificado en el navegador:** 0px de desborde con las filas largas en pantalla, **46px de altura
+en las 25 filas**, `td`/`code`/`name`/`link` todos a 14px, 7 valores truncados y los 7 con `title`.
+
+**Cuarta pasada — paginacion, y dos falsas alarmas verificadas:**
+
+- **La paginacion no volvia arriba.** Ahora `goToPage` espera a que lleguen las filas y sube el
+  scroll. **★ La pagina NO scrollea en `window`**, sino dentro de la columna del app-shell
+  (`main.shell__content`), asi que `window.scrollTo(0,0)` es un no-op en toda esta app — trampa ya
+  documentada en el `jumpTo` del manual. **★ Y el scroll es INSTANTANEO, no `smooth`, que era el
+  bug de mi primer intento:** una animacion se cancela cuando Angular repinta 25 filas en ese mismo
+  contenedor un frame despues, y el lector se quedaba donde estaba. Medido: con `smooth` el scroller
+  quedaba clavado en su maximo (845), sin el aterriza en **0**.
+  La busqueda del scroller se extrajo a `shared/utils/find-scroll-container.ts` con 6 tests que
+  construyen elementos con tamanos REALES: un test con `scrollHeight` stubbeado pasaria contra
+  cualquier implementacion que lea la propiedad, incluida una mala. Ninguna otra tabla de la app
+  hace esto todavia; es mejora, no paridad.
+
+- **"No aplicaste el font size" — verificado: SI estaba.** `.recon__code` computa **14px**, igual
+  que `td`, `name` y `link`, y que la columna de codigo de terminated. Era cache del navegador.
+- **"Tampoco el truncate al plan" — verificado: SI estaba.** `.recon__plan` tiene `max-width:160px`
+  + `text-overflow:ellipsis`. No se ve recortado porque **el unico plan del dataset es "Test SKU
+  Laptops"**, que cabe. Demostrado inyectando un nombre largo: renderiza 160px sobre 416px reales,
+  `clipped=true`.
+
+**Suites:** front **1300 -> 1307**, integracion 9/9 del Centro, build limpio.
+
+**Pendiente:** verificacion en runtime en los tres idiomas antes de commitear A+B juntas.
+
+## 2026-09-03 (c) - KAN-28 tanda A: la columna consultable RateRefusal
+
+**Rama:** KAN-38 · **Ticket:** KAN-28 (tanda A de 2) · **Sin commit.** Sin pantalla.
+
+Prepara el Centro de Reconciliacion (tanda B) resolviendo antes su unico problema estructural:
+los 3 motivos que emite KAN-26 viven dentro de `Credits.CalculationTrace`, y esa columna esta
+declarada en `CreditConfiguration.cs:79` como «an opaque JSON document, stored as text and
+**never queried by SQL**». El ticket pide agregados por moneda calculados en backend sobre el
+conjunto filtrado: eso es, literalmente, consultar esa columna.
+
+**Medido antes de decidir (§E5):** 1.306 creditos, **10** con traza, **0** con `rateRefusal`
+(KAN-26 T3 aterrizo hoy y no ha corrido ningun pay run), 5 con `NoTarget`. Del otro lado,
+**10.141** transacciones Pending ya consultables por `UnprocessablePendingSpec`.
+
+**Construido:** `Credits.RateRefusal` (nvarchar(64), nullable, indice FILTRADO
+`IX_Credits_TenantId_RateRefusal` con `WHERE RateRefusal IS NOT NULL`), migracion B32, escrita
+por el motor.
+
+**★★ La columna es un INDICE, no una segunda verdad.** La traza sigue siendo la evidencia.
+Ambas se escriben en el MISMO acto desde el MISMO objeto `RuleCalculationTrace`
+(`CreditAllocationService.cs:403-415`): no hay job posterior, ni lector que reparsee, ni segunda
+derivacion. Una desnormalizacion que puede producirse por dos caminos acaba discrepando consigo
+misma, y discrepar sobre por que alguien no cobro no es un fallo tolerable.
+
+**★ El test anti-drift da la vuelta larga a proposito:** la columna se calcula del OBJETO y la
+expectativa se parsea del DOCUMENTO serializado. Leer las dos del mismo objeto solo probaria que
+un campo es igual a si mismo. Se comprueba en unit (en memoria) y en integracion (tras ida y
+vuelta por SQL Server, con contexto nuevo).
+
+**★ Devuelve string y no el enum, y eso es capas y no pereza:** `RateRefusalReason` vive en
+Application; `Credit` vive en Domain y no puede referenciarlo. El dominio queda tan ciego al
+vocabulario de la traza como ya lo estaba al documento. Ademas el texto coincide con como la
+traza codifica el enum, asi que columna y documento se leen igual.
+
+**★ Los 5 NoTarget historicos quedan NULL, y no es un olvido.** Sus trazas son anteriores a
+KAN-26 T3: expresan el rechazo como `Skipped` + `NoTarget`, sin campo `rateRefusal`.
+Reconstruirlos daria a la proyeccion dos gramaticas —la actual y una arqueologica— y la segunda
+decidiria por su cuenta que significaba dinero viejo. Test que lo fija.
+
+**Puerta de dinero — verificada antes y despues:** creditos 1.306 / suma 988.417.137.447,1088 y
+consumidos 284 / 13.463.824,1639, **identicos**; `RateRefusal IS NOT NULL` = **0** (sin backfill).
+La migracion es inerte: columna nullable, sin default.
+
+**Ficheros:** `CreditRefusalProjection.cs` (nuevo) · `Credit.cs` (propiedad + parametro de
+`Allocate`) · `CreditConfiguration.cs` (columna + indice filtrado) · `CreditAllocationService.cs`
+· migracion `B32_CreditRateRefusal` · `CreditRefusalProjectionTests.cs` (nuevo, 10) ·
+`CreditAllocationServiceTests.cs` (+2 de integracion).
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1899 -> 1909**, integracion
+**850 -> 852**, front **1282**, build 0 errores.
+
+⚠️ **La integracion es inestable bajo carga y hay que decirlo:** 3 corridas dieron 8 rojas, 1
+roja y 0 rojas. Las rojas eran **deadlocks de SQL Server en el InitializeAsync del fixture**
+(`TestDatabaseFixture.ResetTransactionImportDataAsync:190`), en tests de importacion ajenos a
+esta tanda — ninguna era una asercion. Coincide con la deuda ya conocida de la suite.
+
+**Pendiente (tanda B):** el Centro de Reconciliacion completo, leyendo de esta columna y de
+`UnprocessablePendingSpec`, con agregados backend por moneda y export.
+
 ## 2026-09-03 (b) - KAN-48: correccion de las escaleras acotadas de planes Activos
 
 **Rama:** KAN-38 · **Ticket:** KAN-48 (deriva de KAN-26 Tanda 3) · **Sin commit.**

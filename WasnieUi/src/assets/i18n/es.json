@@ -207,7 +207,8 @@
     "INTEGRATIONS": "Conector CRM HubSpot",
     "IMPORT_TRANSACTIONS": "Importar transacciones",
     "MANUAL": "Manual de usuario",
-    "PROFILE": "Perfil"
+    "PROFILE": "Perfil",
+    "RECONCILIATION": "Reconciliación"
   },
   "WELCOME": {
     "TITLE": "Bienvenido a Incentra",
@@ -2227,5 +2228,47 @@
     "COPY_ANSWER": "Copiar respuesta",
     "COPY_MARKDOWN": "Copiar markdown",
     "COPY_FAILED": "No se pudo copiar — revisá los permisos del navegador."
+  },
+  "RECONCILIATION": {
+    "TITLE": "Centro de Reconciliación",
+    "SUBTITLE": "Dinero ganado que el sistema no pudo convertir en un pago, y por qué",
+    "CARD_ENTRIES": "Entradas",
+    "CARD_AFFECTED_BASE": "Ventas afectadas ({{currency}})",
+    "CARD_CLAWBACK": "Recuperación",
+    "AFFECTED_BASE_NOTE": "Son importes de venta, no comisión adeudada: donde el motor se negó a calcular, la comisión es justamente la cifra que nadie conoce. La recuperación se muestra aparte y nunca se suma.",
+    "BY_REASON": "Por motivo",
+    "EXPORT": "Exportar a Excel",
+    "EXPORT_ERROR": "No se pudo generar la exportación. Inténtalo de nuevo.",
+    "LOAD_ERROR": "No se pudo cargar la cola de reconciliación.",
+    "EMPTY_TITLE": "No hay nada retenido",
+    "EMPTY_DESC": "Todas las transacciones y créditos de este filtro se convirtieron en un pago.",
+    "COL_REFERENCE": "Referencia",
+    "COL_PAYEE": "Beneficiario",
+    "COL_PLAN": "Plan",
+    "COL_REASONS": "Motivos",
+    "COL_PERIOD": "Período",
+    "COL_AMOUNT": "Importe",
+    "FILTER": {
+      "TITLE": "Filtros",
+      "CLEAR": "Limpiar",
+      "REASON": "Motivo",
+      "ALL_REASONS": "Todos los motivos",
+      "FROM": "Desde",
+      "TO": "Hasta"
+    },
+    "REASON": {
+      "NO_QUOTA_IN_EFFECT": "Sin cuota vigente",
+      "NO_MATCHING_BRACKET": "Cumplimiento fuera de la tabla de tarifas",
+      "AMOUNT_OUTSIDE_TABLE": "Importe fuera de la tabla de tarifas",
+      "NO_PAYEE": "Sin beneficiario asignado",
+      "CURRENCY_MISMATCH": "La moneda no coincide con el plan",
+      "NO_ACTIVE_ASSIGNMENT": "Sin asignación de plan activa",
+      "AMBIGUOUS_ATTRIBUTION": "No se puede determinar el plan",
+      "DEAL_LOST": "La oportunidad ya no está ganada",
+      "CRM_DRIFT": "La oportunidad cambió en el CRM",
+      "PLAN_HAS_NO_ACTIVE_RULES": "El plan dejó de pagar",
+      "UNKNOWN": "No se pudo pagar (motivo no reconocido por esta versión)"
+    },
+    "CARD_AFFECTED_BASE_SHORT": "Venta afectada"
   }
 }

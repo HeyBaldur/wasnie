@@ -207,7 +207,8 @@
     "INTEGRATIONS": "HubSpot CRM Connector",
     "IMPORT_TRANSACTIONS": "Import transactions",
     "MANUAL": "User manual",
-    "PROFILE": "Profile"
+    "PROFILE": "Profile",
+    "RECONCILIATION": "Reconciliation"
   },
   "WELCOME": {
     "TITLE": "Welcome to Incentra",
@@ -2227,5 +2228,47 @@
     "COPY_ANSWER": "Copy answer",
     "COPY_MARKDOWN": "Copy markdown",
     "COPY_FAILED": "Could not copy — check your browser permissions."
+  },
+  "RECONCILIATION": {
+    "TITLE": "Reconciliation Centre",
+    "SUBTITLE": "Earned money the system could not turn into a payment, and why",
+    "CARD_ENTRIES": "Entries",
+    "CARD_AFFECTED_BASE": "Sales at stake ({{currency}})",
+    "CARD_CLAWBACK": "Clawback",
+    "AFFECTED_BASE_NOTE": "These are sale amounts, not commission owed: where the engine refused to calculate, the commission is precisely the figure nobody knows. Clawback is shown separately and is never added to it.",
+    "BY_REASON": "By reason",
+    "EXPORT": "Export to Excel",
+    "EXPORT_ERROR": "The export could not be generated. Try again.",
+    "LOAD_ERROR": "The reconciliation queue could not be loaded.",
+    "EMPTY_TITLE": "Nothing is held up",
+    "EMPTY_DESC": "Every transaction and credit in this filter turned into a payment.",
+    "COL_REFERENCE": "Reference",
+    "COL_PAYEE": "Payee",
+    "COL_PLAN": "Plan",
+    "COL_REASONS": "Reasons",
+    "COL_PERIOD": "Period",
+    "COL_AMOUNT": "Amount",
+    "FILTER": {
+      "TITLE": "Filters",
+      "CLEAR": "Clear",
+      "REASON": "Reason",
+      "ALL_REASONS": "All reasons",
+      "FROM": "From",
+      "TO": "To"
+    },
+    "REASON": {
+      "NO_QUOTA_IN_EFFECT": "No quota in effect",
+      "NO_MATCHING_BRACKET": "Attainment outside the rate table",
+      "AMOUNT_OUTSIDE_TABLE": "Amount outside the rate table",
+      "NO_PAYEE": "No payee assigned",
+      "CURRENCY_MISMATCH": "Currency doesn't match the plan",
+      "NO_ACTIVE_ASSIGNMENT": "No active plan assignment",
+      "AMBIGUOUS_ATTRIBUTION": "Plan cannot be determined",
+      "DEAL_LOST": "Deal no longer won",
+      "CRM_DRIFT": "Deal changed in the CRM",
+      "PLAN_HAS_NO_ACTIVE_RULES": "Plan has stopped paying",
+      "UNKNOWN": "Could not be paid (reason not recognised by this version)"
+    },
+    "CARD_AFFECTED_BASE_SHORT": "Sale at stake"
   }
 }
