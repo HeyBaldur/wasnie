@@ -2270,6 +2270,22 @@
       "PLAN_HAS_NO_ACTIVE_RULES": "Plan przestał wypłacać",
       "UNKNOWN": "Nie można było wypłacić (przyczyna nierozpoznana w tej wersji)"
     },
-    "CARD_AFFECTED_BASE_SHORT": "Sprzedaż objęta"
+    "CARD_AFFECTED_BASE_SHORT": "Sprzedaż objęta",
+    "COL_RESOLVE": "Rozwiąż",
+    "RESOLVE": {
+      "REPROCESS": "Przetwórz ponownie",
+      "REPROCESS_TITLE": "Ponowne przetworzenie oczekujących sprzedaży tego odbiorcy",
+      "REPROCESS_DESC": "Uruchamia silnik dla tego odbiorcy i tej daty. Nic nie zostaje wypłacone: utworzona prowizja przechodzi przez zwykłe kroki przebiegu wypłat, zatwierdzenia i płatności.",
+      "CREATE_ASSIGNMENT": "Utwórz przypisanie",
+      "REVIEW_ASSIGNMENTS": "Przejrzyj przypisania",
+      "ASSIGN_PAYEE": "Przypisz odbiorcę",
+      "REVIEW_TRANSACTION": "Przejrzyj transakcję",
+      "REVIEW_RULES": "Przejrzyj reguły planu",
+      "REVIEW_RULES_HELP": "Reguła w tym planie nie wyceniła tej sprzedaży: jej tabela stawek nie przewiduje dla niej żadnej stawki. Otwórz plan i sprawdź progi tej reguły.",
+      "CREATE_QUOTA": "Utwórz limit",
+      "CLONE_PLAN": "Otwórz plan, aby go sklonować",
+      "NONE_NO_CURE_SCREEN": "Nie ma jeszcze ekranu do naprawienia tej przyczyny.",
+      "NONE_ROW_LACKS_IDENTIFIERS": "Tej pozycji brakuje danych potrzebnych do utworzenia linku."
+    }
   }
 }

@@ -2270,6 +2270,22 @@
       "PLAN_HAS_NO_ACTIVE_RULES": "Plan has stopped paying",
       "UNKNOWN": "Could not be paid (reason not recognised by this version)"
     },
-    "CARD_AFFECTED_BASE_SHORT": "Sale at stake"
+    "CARD_AFFECTED_BASE_SHORT": "Sale at stake",
+    "COL_RESOLVE": "Resolve",
+    "RESOLVE": {
+      "REPROCESS": "Reprocess",
+      "REPROCESS_TITLE": "Reprocess this payee’s pending sales",
+      "REPROCESS_DESC": "Runs the engine over this payee for this date. Nothing is paid: any commission it creates enters the usual pay run, approval and payment steps.",
+      "CREATE_ASSIGNMENT": "Create assignment",
+      "REVIEW_ASSIGNMENTS": "Review assignments",
+      "ASSIGN_PAYEE": "Assign payee",
+      "REVIEW_TRANSACTION": "Review transaction",
+      "REVIEW_RULES": "Review plan rules",
+      "REVIEW_RULES_HELP": "A rule in this plan would not price this sale: its rate table states no rate for it. Open the plan and review that rule's tiers.",
+      "CREATE_QUOTA": "Create quota",
+      "CLONE_PLAN": "Open plan to clone",
+      "NONE_NO_CURE_SCREEN": "There is no screen yet for fixing this reason.",
+      "NONE_ROW_LACKS_IDENTIFIERS": "This entry is missing the details a link would need."
+    }
   }
 }

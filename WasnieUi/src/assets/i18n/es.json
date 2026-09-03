@@ -2270,6 +2270,22 @@
       "PLAN_HAS_NO_ACTIVE_RULES": "El plan dejó de pagar",
       "UNKNOWN": "No se pudo pagar (motivo no reconocido por esta versión)"
     },
-    "CARD_AFFECTED_BASE_SHORT": "Venta afectada"
+    "CARD_AFFECTED_BASE_SHORT": "Venta afectada",
+    "COL_RESOLVE": "Resolver",
+    "RESOLVE": {
+      "REPROCESS": "Reprocesar",
+      "REPROCESS_TITLE": "Reprocesar las ventas pendientes de este payee",
+      "REPROCESS_DESC": "Ejecuta el motor sobre este payee para esta fecha. No paga nada: la comisión que genere entra en el pay run, la aprobación y el pago de siempre.",
+      "CREATE_ASSIGNMENT": "Crear asignación",
+      "REVIEW_ASSIGNMENTS": "Revisar asignaciones",
+      "ASSIGN_PAYEE": "Asignar payee",
+      "REVIEW_TRANSACTION": "Revisar transacción",
+      "REVIEW_RULES": "Revisar reglas del plan",
+      "REVIEW_RULES_HELP": "Una regla de este plan no pudo tarifar esta venta: su tabla no declara ninguna tasa para ella. Abre el plan y revisa los tramos de esa regla.",
+      "CREATE_QUOTA": "Crear cuota",
+      "CLONE_PLAN": "Abrir el plan para clonarlo",
+      "NONE_NO_CURE_SCREEN": "Todavía no existe una pantalla para corregir este motivo.",
+      "NONE_ROW_LACKS_IDENTIFIERS": "A esta entrada le faltan los datos que necesitaría el enlace."
+    }
   }
 }

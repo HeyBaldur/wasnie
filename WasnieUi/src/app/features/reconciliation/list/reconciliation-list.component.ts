@@ -15,6 +15,15 @@ import { ReconciliationApiService } from '../services/reconciliation.api.service
 import { ReconciliationStore } from '../state/reconciliation.store';
 import { ReconciliationRow } from '../models/reconciliation.model';
 import { reasonKey } from '../models/reconciliation-reason';
+import {
+  resolutionFor,
+  noResolutionKey,
+  type ReconciliationResolution,
+  type ReprocessResolution,
+} from '../models/reconciliation-resolution';
+import { ProcessPendingComponent } from '../../transactions/process-pending/process-pending.component';
+import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
+import { WsModalComponent } from '../../../shared/ui';
 import { findScrollContainer } from '../../../shared/utils/find-scroll-container';
 import {
   WsButtonComponent,
@@ -49,7 +58,8 @@ import {
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
     WsSelectComponent, WsDatePickerComponent,
     WsPageLayoutComponent, WsTableComponent, WsTableEmptyComponent,
-    WsEmptyStateComponent, WsPaginationComponent,
+    WsEmptyStateComponent, WsPaginationComponent, WsModalComponent,
+    HasPermissionPipe, ProcessPendingComponent,
   ],
   templateUrl: './reconciliation-list.component.html',
   styleUrl: './reconciliation-list.component.scss',
@@ -112,6 +122,19 @@ export class ReconciliationListComponent implements OnInit {
     this.scrollToTop();
   }
 
+  /**
+   * Change how many rows a page holds, then put the reader back at the top.
+   *
+   * ★ THE PAGINATOR EMITS TWO EVENTS AND THIS SCREEN ONLY LISTENED TO ONE. `ws-pagination` has
+   * emitted `pageSizeChange` all along; every other list in the app binds it and this one did not,
+   * so 10 / 25 / 50 / 100 rendered, highlighted on click, and did nothing. Nothing in a unit test
+   * would have caught it: the handler that was missing is the one the template never called.
+   */
+  async goToPageSize(pageSize: number): Promise<void> {
+    await this.store.setPageSize(pageSize);
+    this.scrollToTop();
+  }
+
   private scrollToTop(): void {
     const table = this.host.nativeElement.querySelector<HTMLElement>('.ws-table-wrap');
     const scroller = findScrollContainer(table?.parentElement ?? null);
@@ -130,6 +153,40 @@ export class ReconciliationListComponent implements OnInit {
   }
 
   trackRow = (_: number, row: ReconciliationRow): string => `${row.kind}:${row.entityId}`;
+
+  // ── Resolution (KAN-49) ───────────────────────────────────────────────────
+
+  /**
+   * ★ THE MAP IS THE MODEL'S, NOT THIS COMPONENT'S. Keeping it in
+   * `reconciliation-resolution.ts` is what let the Paso 0 table be tested without rendering
+   * anything, and it is the same separation the reason whitelist already uses.
+   */
+  readonly resolutionFor = resolutionFor;
+  readonly noResolutionKeyFor = noResolutionKey;
+
+  /** The row whose reprocess modal is open, or null. */
+  readonly reprocessTarget = signal<ReprocessResolution | null>(null);
+
+  /**
+   * ★ THE MODAL IS KEYED SO THE PANEL INSIDE IT IS REBUILT PER ROW. `ProcessPendingComponent` reads
+   * its scope inputs ONCE, in ngOnInit, to load the candidate count and the eligible list. Reusing
+   * one instance across two rows would show the second payee the first payee's numbers — on a screen
+   * about money. The `@if` on the target destroys and recreates it.
+   */
+  openReprocess(resolution: ReconciliationResolution): void {
+    if (resolution.kind === 'reprocess') this.reprocessTarget.set(resolution);
+  }
+
+  /**
+   * ★★ CLOSING RELOADS THE QUEUE, AND THAT IS THE WHOLE "no marca" CONTRACT. Nothing here marks the
+   * row resolved: if the reprocess created a credit, the row stops satisfying
+   * `ProcessableWithoutCreditSpec` and the reload simply does not return it. If it created nothing,
+   * the row is still there — truthfully. The screen never asserts a fix it did not verify.
+   */
+  async closeReprocess(): Promise<void> {
+    this.reprocessTarget.set(null);
+    await this.store.refresh();
+  }
 
   /**
    * ★ THE FILE IS THE FILTERED SET, and the service asks for it without a page. The blob is turned

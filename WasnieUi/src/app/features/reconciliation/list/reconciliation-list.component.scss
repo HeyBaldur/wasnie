@@ -255,3 +255,38 @@
   gap: var(--space-1);
   white-space: nowrap;
 }
+
+// ── Resolve column (KAN-49) ──────────────────────────────────────────────────
+//
+// ★ THE COLUMN IS AS NARROW AS ITS WIDEST LABEL AND NO WIDER. This table already lost its Amount
+// column off the right edge once by spending width on a Type column that repeated what the row said
+// (see the note above the header). A resolve cell holds one short action, on one line.
+.recon__col-resolve {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.recon__resolve {
+  white-space: nowrap;
+  text-align: right;
+}
+
+// ★ IT READS AS A LINK, NOT AS A SECOND PRIMARY BUTTON. Most rows resolve by navigating somewhere,
+// and a row of filled buttons down a work queue competes with the money for attention. The reprocess
+// action is the one that RUNS something, so it stays a real ws-button and looks different on purpose.
+//
+// ★★ NO ICON, AND THAT IS BOTH A FIX AND A CORRECTION. It carried an external-link glyph, which cost
+// 18px of column — measured, that was the whole of the 8px this table overflowed by once the Resolve
+// column existed, and this table had been deliberately fitted to its container with nothing to
+// scroll. It was also the only link here wearing one: the reference, payee and plan links all open
+// in a new tab and none of them announces it with a glyph.
+.recon__resolve-link {
+  color: var(--color-text-link);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

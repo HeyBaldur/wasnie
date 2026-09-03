@@ -106,6 +106,45 @@ describe('ReconciliationStore', () => {
     expect(Object.keys(eur)).not.toContain('net');
   });
 
+  /**
+   * ★★ THE PAGE SIZE BUTTONS DID NOTHING, AND THE STORE IS WHERE THAT IS PINNED. `ws-pagination`
+   * emits `pageSizeChange`; this screen bound only `pageChange`, so 10 / 25 / 50 / 100 rendered,
+   * highlighted on click, and went nowhere. The request is asserted rather than the signal, because
+   * what was broken was the round trip: a store that set `pageSize` and never asked the server again
+   * would look right in state and change nothing on screen.
+   */
+  it('asks the server for the new page size', async () => {
+    const load = store.setPageSize(100);
+    const req = http.expectOne((r) => r.url === '/api/reconciliation');
+
+    expect(req.request.params.get('pageSize')).toBe('100');
+
+    req.flush({ ...page, pageSize: 100 });
+    await load;
+    expect(store.filter().pageSize).toBe(100);
+  });
+
+  /**
+   * ★★ AND IT RESETS TO PAGE 1. Growing the page size shrinks the number of pages: staying on page 5
+   * after switching 10 → 100 asks for a page that no longer exists and the server answers with
+   * nothing — an empty table that reads as "no unpaid money", on the screen whose entire job is to
+   * say how much there is. Every other list in the app resets; this asserts it does too.
+   */
+  it('returns to the first page when the page size changes', async () => {
+    const first = store.goToPage(5);
+    http.expectOne((r) => r.url === '/api/reconciliation').flush({ ...page, page: 5 });
+    await first;
+    expect(store.filter().page).toBe(5);
+
+    const resize = store.setPageSize(100);
+    const req = http.expectOne((r) => r.url === '/api/reconciliation');
+    expect(req.request.params.get('page')).toBe('1');
+
+    req.flush({ ...page, page: 1, pageSize: 100 });
+    await resize;
+    expect(store.filter().page).toBe(1);
+  });
+
   it('sends only the filters that are set', async () => {
     const load = store.load({ reason: 'NoPayee', from: null, to: null });
     const req = http.expectOne((r) => r.url === '/api/reconciliation');

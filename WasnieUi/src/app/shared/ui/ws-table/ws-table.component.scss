@@ -5,6 +5,32 @@
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-sm);
+
+  // ── The house scrollbar ─────────────────────────────────────────────────────────────────────
+  //
+  // ★★ THE APP HAS ONE SCROLLBAR AND EVERY TABLE WAS MISSING IT. This exact recipe — thin, a
+  // transparent track, a rounded thumb in the border colour that warms on hover — is already copied
+  // into the assistant panes, the credit detail, the payees detail, and the pay-runs and payouts
+  // list modals. Every one of those is an INNER scroller somebody styled by hand. `.ws-table-wrap`
+  // declares `overflow-x: auto` and never styled it, so the moment any table did overflow it drew
+  // the raw native bar: chunky, opaque, and visibly not the rest of the product.
+  //
+  // ★ IT LIVES HERE, NOT IN A SCREEN. Copying it into reconciliation's stylesheet would have fixed
+  // one table and left every other one to be discovered the same way — which is exactly how five
+  // hand-rolled copies of this block came to exist. This component already owns app-wide table
+  // concerns for the same reason (see the `.col-amount` note below).
+  //
+  // ★ BOTH AXES. `height` is the one that matters for a table, which scrolls sideways; `width` is
+  // set too so a vertically-capped table gets the same bar, and `-corner` keeps their junction from
+  // rendering as a grey native square.
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+
+  &::-webkit-scrollbar { width: 6px; height: 6px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 9999px; }
+  &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
+  &::-webkit-scrollbar-corner { background: transparent; }
 }
 
 .ws-table-wrap table {

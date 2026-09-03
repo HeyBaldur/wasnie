@@ -97,4 +97,15 @@ export class ReconciliationStore {
   async goToPage(page: number): Promise<void> {
     await this.load({ page });
   }
+
+  /**
+   * ★★ IT RESETS TO PAGE 1, AND THAT IS NOT A DETAIL. Growing the page size shrinks the number of
+   * pages: sitting on page 5 of 47 rows at 10-per-page and switching to 100 leaves the reader on a
+   * page that no longer exists, and the server answers with nothing. Every other list in the app
+   * resets — assignments, credits, transactions, category-mappings — and this one now agrees with
+   * them instead of inventing a fifth behaviour.
+   */
+  async setPageSize(pageSize: number): Promise<void> {
+    await this.load({ pageSize, page: 1 });
+  }
 }

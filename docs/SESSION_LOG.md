@@ -4,6 +4,118 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 (g) - KAN-49: resolucion por correccion en el Centro (deep links + reproceso manual)
+
+**Rama:** KAN-38 · v2 de KAN-28, se apoya en KAN-50 · **Sin commit.** Solo frontend.
+
+**★★ El Paso 0 ERA el entregable, y mi primera version se equivoco en un motivo — corregido en review.**
+Declare `NoQuotaInEffect` sin destino tras comprobar que no existe pantalla de "cuotas de este payee":
+`/quotas` acepta unicamente `?status=` (`quotas-list.component.ts:94`), su store no filtra por payee,
+el detalle de payee tiene pestanas overview/profile/ledger y ninguna de cuotas, y
+`QuotasApiService.listByPayee` existe y no se llama desde ningun sitio. Todo eso es cierto **y la
+conclusion era falsa**: la cura de "este payee no tiene cuota" es CREARLA, y `/quotas/new` existe desde
+siempre — y **precarga el payee desde `?payeeId=`** (`quotas/create:156-170`: lee el param, resuelve la
+etiqueta y lo anade al formulario). **La leccion, anotada en el codigo: buscar la pantalla que nombra el
+ticket en vez de la pantalla que necesita la CURA es como un destino alcanzable se registra como
+inalcanzable.**
+
+**Tabla motivo → destino (el entregable del Paso 0), toda verificada en codigo:**
+
+| Motivo | Destino | Estado |
+|---|---|---|
+| NoPayee | `/transactions?ref=` → modal Assign Payee de la LISTA | ok |
+| NoActiveAssignment | `/assignments/new?payeeId=` (prefill verificado) | ok |
+| AmbiguousAttribution | `/assignments?payeeId=` | ok |
+| DealLost / CrmDrift | `/transactions?ref=` | ok |
+| NoQuotaInEffect | `/quotas/new?payeeId=` (prefill verificado) | ok |
+| NoMatchingBracket / AmountOutsideTable | `/plans/:planId` + tooltip explicativo | ok |
+| PlanHasNoActiveRules | `/plans/:planId` (ahi vive Clonar) | ok |
+| ProcessableWithoutCredit | reproceso manual `ByPayeeAndPeriod` | ok, accion |
+| CurrencyMismatch | **sin destino** (KAN-45) | sin accion |
+
+**★ Los rechazos de escalera nunca estuvieron "sin accion": ya enlazaban al plan, y eran "parciales".**
+Lo que les faltaba era decir POR QUE. Son de UNA regla concreta y `ReconciliationRowDto` lleva `PlanId`
+pero **no `RuleId`**, asi que `/plans/:id/rules/:ruleId` no se puede construir con lo que la fila tiene.
+En vez de ensanchar el DTO, un `titleKey` opcional en la resolucion lleva el mensaje que el enlace no
+puede: que una regla de ESE plan no pudo tarifar la venta porque su tabla no declara tasa para ella, y
+que revise sus tramos. Codigo i18n, EN/ES/PL (§C1). Resuelve el caso sin dato nuevo.
+
+**★ `CurrencyMismatch` es el unico "sin accion", y por la razon correcta:** que significa arreglarlo lo
+decide KAN-45 —redenominar el plan, o enrutar la venta a otro— y son pantallas distintas. Un enlace
+ahora seria una adivinanza. La regla del Paso 0 sigue viva para el y para cualquier motivo futuro en su
+posicion: sin boton, con tooltip que lo explica, nunca un deep link roto.
+
+**★★ Ninguna accion muta una fila para ocultarla.** Los deep links no tocan estado. El reproceso
+ejecuta el motor que ya existe. En los dos casos la fila se va porque la condicion dejo de ser cierta
+—la cola DERIVA del dato (KAN-28)— asi que no hay bandera "resuelto" que poner ni que se desincronice.
+Cerrar el modal llama a `store.refresh()`: si el reproceso creo credito, la fila ya no vuelve; si no
+creo nada, sigue ahi, que es la verdad.
+
+**★★ El modal hospeda `ProcessPendingComponent`, no una copia.** Es el mismo panel que usan el detalle
+de plan, el de asignacion y la lista de transacciones: ensena el recuento de candidatas y las
+elegibles ANTES de disparar, hace polling del job y reporta lo que la corrida creo de verdad —
+incluido "procesadas N, creadas 0", que a proposito no pinta como exito. Reconstruir eso aqui habria
+sido una segunda superficie contra el motor, de las que coinciden hasta que dejan de coincidir.
+
+**★ El `@if` del modal es portante.** `ProcessPendingComponent` lee sus inputs de scope UNA vez, en
+`ngOnInit`. Reutilizar la instancia entre dos filas le ensenaria al segundo payee los numeros del
+primero, en una pantalla sobre dinero. El `@if` la destruye y la recrea.
+
+**★ El mapa vive en `reconciliation-resolution.ts`, no en el componente**, que es lo que permite testear
+la tabla del Paso 0 sin renderizar nada — y la misma separacion que ya usa el whitelist de motivos.
+Y no se concatena la clave de traduccion en ninguno de los dos lados (§C2): el tooltip del "sin accion"
+sale de un `Record` exhaustivo sobre la union, asi que anadir un caso sin clave es error de compilacion.
+
+**★ RBAC esconde, no deshabilita (§5.8):** sin `Transactions.ProcessPending` el boton no esta. La fila
+si: VER el dinero no es el mismo permiso que lanzar una corrida sobre el.
+
+**Tests (15 nuevos, front):** la tabla del Paso 0 entera como spec ejecutable — el alta de cuota con y
+sin payee que precargar; el tooltip de los dos rechazos de escalera; el destino que se explica solo y
+por tanto NO lleva tooltip; `CurrencyMismatch` pinchado como el unico sin cura, para que nadie lo
+"arregle" con un enlace malo; el reproceso sin payee o sin fecha que no ofrece boton (un boton que
+daria 400 no es un boton); los dos silencios distinguidos ("no hay pantalla" vs "a esta fila le faltan
+datos", §B3); el codigo desconocido; y la fila con dos motivos que ofrece el primero accionable.
+
+**★ Un rojo en la correccion, y era del TEST, no del codigo.**
+`jasmine.objectContaining({ titleKey: undefined })` exige que la clave este PRESENTE y valga undefined;
+la resolucion simplemente la omite, que es justo lo que se queria comprobar. Se afirma sobre la
+propiedad. Anotado en el test para que nadie lo reescriba con la forma que da rojo contra codigo bueno.
+
+**Suites:** front 1308 → **1323**, 0 fallos · `ng build --configuration production` exit 0. Backend sin
+tocar. El bundle inicial no cambia: la ruta de reconciliation es lazy (`app.routes.ts:75`); los avisos
+de presupuesto son preexistentes.
+
+**Premisas del ticket que resultaron falsas (§E6):**
+- El ticket no menciona `NoMatchingBracket` / `AmountOutsideTable` en su lista de motivos; se mapearon
+  igual, al plan mas un mensaje explicativo.
+- **Y una premisa MIA que resulto falsa:** declare `NoQuotaInEffect` sin destino. Lo verificado era
+  cierto (no hay pantalla de "cuotas de este payee") pero la conclusion no: la cura es `/quotas/new`,
+  que ya existia y ya precargaba. Corregido en review, no por un ticket nuevo.
+
+**★★ Verificado en runtime, y el DOM real encontro una regresion que los tests no podian ver (§A3).**
+La columna Resolve hizo que la tabla desbordara **8px** — medido en el navegador: contenedor 1150,
+tabla 1158. Esta tabla estaba deliberadamente ajustada para caber sin scroll (hay dos comentarios en
+su HTML explicando que se midio, y que por eso no tiene columna Type). Ningun test de jsdom podia
+detectarlo: jsdom no hace layout.
+
+**Causa exacta: el icono `external-link` del enlace, 18px con su hueco.** Quitarlo devuelve el
+desborde a 0 (verificado: `scrollWidth === clientWidth`) y ademas CORRIGE una inconsistencia: era el
+unico enlace de esta tabla que anunciaba con un glifo que abre en pestana nueva — la referencia, el
+payee y el plan hacen lo mismo y ninguno lo lleva.
+
+**★★ Y el scrollbar de las tablas era el nativo, en toda la plataforma.** `.ws-table-wrap` declara
+`overflow-x: auto` y nunca estilo la barra, asi que cualquier tabla que desborde dibuja la nativa
+gruesa. La receta fina de la casa —`scrollbar-width: thin`, pista transparente, pulgar redondeado en
+`--color-border-strong` que se aclara al hover— estaba copiada a mano en cinco componentes
+(asistente, detalle de credito, detalle de payee, modales de pay-runs y payouts), siempre sobre
+scrollers internos, nunca sobre una tabla. Se aplico en `ws-table.component.scss`, que es donde vive:
+ponerla en la hoja de reconciliation habria arreglado una tabla y dejado el resto para descubrirse
+igual, que es exactamente como llegaron a existir las cinco copias. **Es un cambio de alcance
+app-wide, puramente cosmetico (ninguna regla de layout), sobre la primitiva compartida.** Verificado
+forzando el desborde en el navegador: la barra sale fina y redondeada.
+
+---
+
 ## 2026-09-03 (f) - KAN-50: la venta que no le falta nada y no tiene comision
 
 **Rama:** KAN-38 · Hermano de KAN-44 (salio de su Paso 0) · **Sin commit.**

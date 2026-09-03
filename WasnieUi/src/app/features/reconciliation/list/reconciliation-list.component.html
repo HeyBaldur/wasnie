@@ -145,6 +145,7 @@
               <th scope="col">{{ 'RECONCILIATION.COL_REASONS' | translate }}</th>
               <th scope="col">{{ 'RECONCILIATION.COL_PERIOD' | translate }}</th>
               <th scope="col" class="col-amount">{{ 'RECONCILIATION.COL_AMOUNT' | translate }}</th>
+              <th scope="col" class="recon__col-resolve">{{ 'RECONCILIATION.COL_RESOLVE' | translate }}</th>
             </tr>
           </thead>
           <tbody>
@@ -245,6 +246,41 @@
                     <span class="recon__none">—</span>
                   }
                 </td>
+
+                <!-- ★★ AN UNMAPPED REASON GETS NO BUTTON, NEVER A BROKEN LINK. This is the whole
+                     safety net of KAN-49's Paso 0: `NoQuotaInEffect` has no cure screen in the app
+                     today, so its rows show a dash and say why on hover, rather than a "Resolve"
+                     that navigates somewhere unhelpful.
+                     ★ NOTHING HERE MUTATES A ROW TO HIDE IT. A link changes no state; the reprocess
+                     runs the engine. The row leaves the queue only because the queue derives from
+                     the data. -->
+                <td class="recon__resolve">
+                  @if (resolutionFor(row); as resolution) {
+                    @if (resolution.kind === 'link') {
+                      <a class="recon__resolve-link"
+                         [routerLink]="resolution.commands"
+                         [queryParams]="resolution.queryParams"
+                         [title]="(resolution.titleKey ?? resolution.labelKey) | translate"
+                         target="_blank"
+                         rel="noopener">{{ resolution.labelKey | translate }}</a>
+                    } @else {
+                      <!-- ★ RBAC HIDES, IT DOES NOT DISABLE (§5.8). Without ProcessPending the
+                           button is absent; the row still shows, because SEEING the money is not
+                           the same permission as dispatching a run over it. -->
+                      @if ('Transactions.ProcessPending' | hasPermission) {
+                        <ws-button variant="secondary" size="sm"
+                                   [title]="resolution.labelKey | translate"
+                                   (click)="openReprocess(resolution)">
+                          {{ resolution.labelKey | translate }}
+                        </ws-button>
+                      } @else {
+                        <span class="recon__none">—</span>
+                      }
+                    }
+                  } @else {
+                    <span class="recon__none" [title]="noResolutionKeyFor(row) | translate">—</span>
+                  }
+                </td>
               </tr>
             } @empty {
               <ws-table-empty>
@@ -265,8 +301,33 @@
         [totalCount]="store.total()"
         [pageSize]="store.filter().pageSize"
         (pageChange)="goToPage($event)"
+        (pageSizeChange)="goToPageSize($event)"
       />
     }
 
   </ws-page-layout>
 </app-shell>
+
+<!-- ★★ THE PANEL INSIDE IS THE ONE THE PLAN AND ASSIGNMENT SCREENS ALREADY USE. It shows the
+     candidate count and the eligible transactions BEFORE dispatching, polls the job, and reports
+     what the run actually created — including "processed N, created 0", which it deliberately does
+     not colour as success. Rebuilding any of that here would be a second engine-facing surface that
+     agrees with the first until it does not.
+     ★ THE @if IS LOAD-BEARING: it destroys the panel when the modal closes, so the next row gets a
+     component that reads ITS scope in ngOnInit instead of showing the previous payee's numbers. -->
+@if (reprocessTarget(); as target) {
+  <ws-modal
+    [isOpen]="true"
+    size="lg"
+    [title]="'RECONCILIATION.RESOLVE.REPROCESS_TITLE' | translate"
+    [description]="'RECONCILIATION.RESOLVE.REPROCESS_DESC' | translate"
+    (closed)="closeReprocess()"
+  >
+    <app-process-pending
+      scope="ByPayeeAndPeriod"
+      [scopeId]="target.payeeId"
+      [periodStart]="target.periodStart"
+      [periodEnd]="target.periodEnd"
+    />
+  </ws-modal>
+}
