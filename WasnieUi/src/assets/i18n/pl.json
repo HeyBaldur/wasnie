@@ -1426,7 +1426,11 @@
       "NET_ERROR": "Problem z siecią — ponawiam próbę…",
       "FAILED_TITLE": "Import nie powiódł się",
       "FAILED_MSG": "Wystąpił nieoczekiwany błąd. Spróbuj ponownie.",
-      "RETRY": "Wróć do podglądu"
+      "RETRY": "Wróć do podglądu",
+      "DROPZONE_CTA": "Kliknij, aby przesłać",
+      "DROPZONE_OR": "lub przeciągnij i upuść",
+      "DROPZONE_UPLOADING": "Przesyłanie…",
+      "DROPZONE_REMOVE": "Usuń plik"
     },
     "TRANSACTIONS": {
       "TITLE": "Importuj Transakcje",

@@ -10,11 +10,26 @@
 }
 
 .complete-icon {
+  // ★ THE SAME FRAMED TILE THE DROPZONE USES, so the first step and the last one speak with one
+  // vocabulary: a bordered square on the surface with a small shadow, not a bare 48px glyph.
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-12);
+  height: var(--space-12);
+  border: 1px solid var(--color-success-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-success-bg);
+  box-shadow: var(--shadow-sm);
   color: var(--color-success);
 }
 
 .complete-title {
-  font-size: var(--font-size-22);
+  // ★ WAS `--font-size-22`, WHICH IS NOT A TOKEN. The scale is 11-16, 18, 20, 24, 28, 32; an
+  // undefined custom property leaves `font-size` to inherit, so this "title" was rendering at
+  // body size and had been since it was written. 20 is the nearest declared step above the
+  // description beside it.
+  font-size: var(--font-size-20);
   font-weight: 700;
   color: var(--color-text-primary);
   margin: 0;

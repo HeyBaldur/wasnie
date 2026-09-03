@@ -57,8 +57,8 @@
   overflow-x: auto;
   overflow-y: auto;
   max-height: 440px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-sm);
 }
@@ -203,8 +203,8 @@
   gap: var(--space-3);
   padding: var(--space-4);
   background: var(--color-bg-surface-raised);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   transition: border-color var(--transition-fast), background var(--transition-fast);

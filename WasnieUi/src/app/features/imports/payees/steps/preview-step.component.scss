@@ -58,8 +58,8 @@
   overflow-x: auto;
   overflow-y: auto;
   max-height: 440px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
   box-shadow: var(--shadow-sm);
 }
@@ -181,8 +181,8 @@
   position: fixed;
   z-index: 1000;
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   min-width: 190px;
   padding: var(--space-2);
@@ -194,7 +194,11 @@
 .col-filter-input {
   width: 100%;
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
+  // ★ `--color-border` IS NOT A TOKEN and never was — the defined ones are -default, -subtle,
+  // -strong and -focus. An undefined custom property makes `border-color` fall back to
+  // `currentColor`, so this input wore the TEXT colour as its border: far heavier than any
+  // other field in the app, and invisible as a defect because it still looked deliberate.
+  border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-12);
   font-weight: 600;

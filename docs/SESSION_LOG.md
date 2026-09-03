@@ -4,6 +4,68 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 (h) - Wizards de importacion: el uploader de Untitled UI, traducido a tokens
+
+**Rama:** KAN-38 · Cambio visual pedido por el usuario, sin ticket · **Sin commit.** Solo frontend.
+
+**★★ LA REFERENCIA ERA TAILWIND Y HEX, Y NADA DE ESO PODIA ENTRAR.** El diseno viene del file
+uploader de Untitled UI, cuyo markup es `ring-secondary`, `bg-primary`, `text-brand-secondary` y hex
+crudo en los SVG (`#7F56D9`, `#D5D7DA`). §5.5 prohibe hex, rgba y utilidades de paleta Tailwind, asi
+que **se copio la jerarquia, no la hoja de estilos**: tesela de icono enmarcada, llamada a la accion
+en color de marca junto a texto plano, linea de formatos en voz baja, y el archivo como TARJETA
+DEBAJO de la zona en vez de reemplazarla. Cada color, radio, hueco y tamano es un token.
+
+**★★ UN COMPONENTE, NO TRES COPIAS.** Los tres pasos de subida —importar transacciones, actualizar
+transacciones, importar payees— tenian su propio `.drop-zone` y su propio SCSS casi identico.
+Restilarlos de uno en uno habria creado tres copias del look nuevo, que es exactamente como llegaron
+a existir las cinco copias de la receta del scrollbar. El picker vive ahora en
+`features/imports/shared/import-dropzone.component.*` y los tres lo renderizan.
+
+**★ LA VALIDACION SE QUEDO EN CADA PASO.** El componente reporta el archivo elegido y nada mas: que
+extensiones valen, el tope de tamano y el mensaje de rechazo son la regla de CADA import, y un picker
+que las decidiera tendria que conocer las de los tres wizards. Por eso el cambio siguio siendo
+visual: ningun servicio se movio, ninguna llamada al API se movio.
+
+**★★ DOS DESVIACIONES DELIBERADAS DE LA REFERENCIA.**
+- **La barra de progreso es indeterminada, sin porcentaje.** La referencia muestra "50%" porque sube
+  con eventos de progreso; esto manda UNA peticion y espera a que el servidor parsee. Un numero seria
+  inventado — la misma objecion que el motor hace con el dinero. `aria-valuenow` esta ausente a
+  proposito.
+- **El badge del tipo de archivo es TEXTO.** La referencia trae un SVG por formato con la etiqueta
+  metida en el path. Llegan CSV y XLSX; con texto no se queda obsoleto si entra un tercero.
+
+**Alineacion del resto del wizard (decision del usuario: lenguaje visual, no rediseno; los 3 wizards).**
+Los paneles de mapping/preview adoptan la tarjeta del uploader —`--color-bg-surface`, borde
+`--color-border-default`, `--radius-xl`— y el icono del paso final adopta la misma tesela enmarcada.
+Verificado en el navegador: el panel del mapeo mide 14px de radio, que es `--radius-xl`, y su borde
+resuelve a `--color-border-default`. Las dos barras de progreso comparten ya `--radius-full` y
+`--space-2`.
+
+**★★ DOS TOKENS INEXISTENTES ENCONTRADOS AL PASAR, Y LOS DOS ROMPIAN ALGO VISIBLE (§A3).**
+- **`--font-size-22` no esta en la escala** (11-16, 18, 20, 24, 28, 32). Una custom property sin
+  definir deja `font-size` heredando, asi que el TITULO del paso final llevaba renderizando a tamano
+  de cuerpo desde que se escribio. Tres ficheros: los dos complete-step y `confirm-email`. Pasan a
+  `--font-size-20`. *(El de auth queda fuera del alcance nominal; es la misma linea y dejar un titulo
+  roto a proposito era peor.)*
+- **`--color-border` no es un token** — los definidos son -default, -subtle, -strong y -focus. Sin
+  definir, `border-color` cae a `currentColor`, asi que el input de filtro de columna llevaba el
+  COLOR DEL TEXTO como borde: mucho mas pesado que cualquier otro campo de la app, e invisible como
+  defecto porque parecia deliberado. Dos ficheros (preview-step de transacciones y de payees).
+
+Ninguno de los dos lo habria visto un test: son propiedades sin definir, no reglas equivocadas.
+
+**Verificado en runtime:** la zona nueva, la tarjeta del archivo con su badge CSV y su tamano, que la
+zona SIGUE visible al elegir archivo (antes se reemplazaba, y para cambiar de fichero habia que
+borrarlo primero), y el paso al mapeo con las columnas autodetectadas.
+
+**Suites:** front **1325**, 0 fallos · `ng build --configuration production` exit 0 · backend sin
+tocar.
+
+**Sin verificar:** el paso "complete" en pantalla — llegar hasta el exige ejecutar un import real
+contra la base de desarrollo, y no se hizo por un titulo. La correccion es una sustitucion de token.
+
+---
+
 ## 2026-09-03 (g) - KAN-49: resolucion por correccion en el Centro (deep links + reproceso manual)
 
 **Rama:** KAN-38 · v2 de KAN-28, se apoya en KAN-50 · **Sin commit.** Solo frontend.
