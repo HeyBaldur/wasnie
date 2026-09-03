@@ -213,6 +213,20 @@ en las 25 filas**, `td`/`code`/`name`/`link` todos a 14px, 7 valores truncados y
   Laptops"**, que cabe. Demostrado inyectando un nombre largo: renderiza 160px sobre 416px reales,
   `clipped=true`.
 
+**★★ Quinta pasada, y aqui esta el error que sostuvo las cuatro anteriores: copie la MITAD
+EQUIVOCADA de terminated-accounts.** Esa pantalla tiene DOS densidades — las filas de payee (14px,
+~53px, llevan un boton) y las **sub-filas de credito** (`var(--font-size-12)` +
+`padding: var(--space-1)`, ~30px). Las sub-filas son las que se leen compactas y elegantes, y son
+las que el usuario pego en su primer mensaje. Yo medi las filas de payee, vi 14px en ambas pantallas
+y reporte "coinciden": **medi lo que no era y lo llame verificado**, cuatro veces.
+
+Ahora la tabla usa 12px + `--space-1`: **27px de alto** (contra 46px antes). Primer intento con
+`--space-2` dio 35px — "casi igual", que es exactamente el fallo del que iba todo esto.
+
+**★ Scoped a ESTA tabla, no a `ws-table`.** El `font-size: 14px` vive en el componente compartido y
+nueve listas lo heredan; cambiarlo alli habria reestilado toda la app para contentar una pantalla.
+`::ng-deep` detras de `.recon__table`, el mismo patron que sigue el composer del asistente.
+
 **Suites:** front **1300 -> 1307**, integracion 9/9 del Centro, build limpio.
 
 **Pendiente:** verificacion en runtime en los tres idiomas antes de commitear A+B juntas.
