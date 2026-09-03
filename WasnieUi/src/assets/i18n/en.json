@@ -2264,6 +2264,7 @@
       "CURRENCY_MISMATCH": "Currency doesn't match the plan",
       "NO_ACTIVE_ASSIGNMENT": "No active plan assignment",
       "AMBIGUOUS_ATTRIBUTION": "Plan cannot be determined",
+      "PROCESSABLE_WITHOUT_CREDIT": "Ready to pay, with no commission",
       "DEAL_LOST": "Deal no longer won",
       "CRM_DRIFT": "Deal changed in the CRM",
       "PLAN_HAS_NO_ACTIVE_RULES": "Plan has stopped paying",

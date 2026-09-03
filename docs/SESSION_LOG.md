@@ -4,6 +4,74 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 (f) - KAN-50: la venta que no le falta nada y no tiene comision
+
+**Rama:** KAN-38 · Hermano de KAN-44 (salio de su Paso 0) · **Sin commit.**
+
+**El hueco:** el Centro de Reconciliacion nombraba lo que a una transaccion le FALTA — sin payee, sin
+asignacion, moneda distinta — y la ambiguedad, que es una eleccion que nadie hizo. Una `Pending` a la
+que no le falta nada y que no tenia nada que elegir no caia en ninguno de los cuatro. Existia, era
+dinero, y ninguna pantalla podia mostrarla. Medido en la base de desarrollo: 2 filas sobre 10.141
+pendientes (`SCC-20260515-0002` y `-0006`, EMP310, 234,50 y 415,00 PLN).
+
+**★★ El frente A del ticket resulto una premisa falsa, y eso cambio el diseno del frente B.** El
+ticket suponia que el motor habia devuelto cero para esas dos filas y que eso era anomalo (regla plana
+al 5% sin condiciones). El motor nunca las vio. Reconstruido con `BackgroundJobRecords`: se ingestaron
+el 2026-06-01 sin asignacion (eran `NoActiveAssignment`, visibles y correctas); la asignacion se creo
+el 2026-06-09 12:34; la corrida de las 12:36 fue de otro payee (EMP303); y **ninguna de las cuatro
+corridas posteriores del tenant tuvo `processed > creditsCreated`** (3/3, 4/4, 1/1, 0/0). Como
+`processed` cuenta toda transaccion en alcance con o sin credito, eso prueba que nunca entraron en uno.
+Salieron del bucket `NoActiveAssignment` esa tarde y no entraron en ningun otro.
+
+**★★ Causa de fondo: nada reprocesa una transaccion cuya asignacion aparece despues.**
+`ProcessPendingScope` (`ProcessPendingScope.cs:6-16`) ofrece `ByPlanAssignment`, `ByPlan` y
+`ByPayeeAndPeriod` — **no hay alcance de tenant ni disparo automatico**. Solo se paga si alguien lanza
+a mano una corrida que la alcance.
+
+**★★ Por eso la visibilidad es ESTADO DERIVADO y no una bandera (§B5).** La alternativa obvia era que
+el motor estampara la transaccion al terminar con cero creditos. Esa bandera habria estado **ausente
+justo en estas dos filas**, porque el motor nunca corrio sobre ellas; y habria quedado pegada despues
+de que una corrida posterior las pagara, salvo que algo se acordara de limpiarla. La condicion se
+puede leer del dinero, asi que se lee del dinero.
+
+**★ No distingue "el motor corrio y ninguna regla matcheo" de "el motor nunca corrio", a proposito.**
+Para quien concilia son el mismo hecho: una venta que deberia llevar comision no la lleva. El estado
+actual no puede separarlos —ninguna corrida deja registro por transaccion— e inventar la distincion
+seria un campo con dos significados (§B3).
+
+**Construido:** `ProcessableWithoutCreditSpec` (nueva, complemento exacto de `UnprocessablePendingSpec`:
+Pending + payee + >=1 candidata elegible + sin credito vivo, excluyendo el caso ambiguo que ya tiene
+dueno); su codigo en `ReconciliationReason` (tomado prestado de la spec, no redeclarado); el seed en
+`ReconciliationQuery`; whitelist del front y EN/ES/PL. **Sin migracion y sin tocar el motor.**
+
+**★ "Sin credito vivo" se pregunta a los CREDITOS, no al estado.** Hoy bastaria con `Pending`
+—`MarkCalculated` mueve la transaccion en cuanto hay un credito— pero la pregunta que responde la fila
+es sobre DINERO. Un credito superseded no cuenta: fue reemplazado y no paga nada.
+
+**Tests (4 de integracion + 1 de front):** el caso EMP310 reproducido en vez de descrito; el fail-safe
+(una venta pagada normalmente no llega a la cola); la exclusividad frente a los cuatro motivos previos
+—las cuatro filas conservan exactamente su motivo y ninguna gana el nuevo—; y el acuerdo SQL <->
+`PlanAssignmentResolver.Candidates` sobre los mismos datos, que es como se sujeta la segunda expresion
+de una regla del motor (mismo molde que el test de ambiguedad).
+
+**Verificado contra la base real (§A3):** la spec corrida como SQL sobre `WasnieDb` devuelve
+exactamente esas 2 filas y ninguna mas. El bucket nuevo no abre ninguna compuerta.
+
+**Suites:** build solucion 0 errores · unit 1909/1909 · integracion 865 verdes + 2 skipped (rate limit)
+· front 1307 -> 1308. Los 4 tests nuevos verificados por nombre en la salida, no por conteo.
+
+**Premisas del ticket que resultaron falsas (§E6):**
+- "Una regla plana al 5% que da cero es anomalo, investigar el calculo" — el motor nunca calculo estas
+  dos. No hay bug de calculo.
+- "El job solo contabiliza el descarte cuando hubo `DomainException`" — cierto, pero irrelevante aqui:
+  el job nunca las proceso. Un contador de descartes no las habria detectado.
+
+**Queda fuera, con razon:** el contador de descartes sin excepcion en el job
+(`ProcessPendingTransactionsJobHandler.cs:204-260`) y el alcance de tenant / reproceso automatico. Son
+otro riesgo de reversion (§E1) y el segundo es una decision de producto, no una correccion.
+
+---
+
 ## 2026-09-03 (e) - ws-date-picker: el calendario no seguia a su input al hacer scroll
 
 **Rama:** KAN-38 · Detectado verificando la pantalla de KAN-28 · **Sin commit.**

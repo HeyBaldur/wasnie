@@ -23,6 +23,10 @@ const REASON_KEYS: Readonly<Record<string, string>> = {
   NoActiveAssignment: 'RECONCILIATION.REASON.NO_ACTIVE_ASSIGNMENT',
 
   AmbiguousAttribution: 'RECONCILIATION.REASON.AMBIGUOUS_ATTRIBUTION',
+
+  // KAN-50 — the complement of the three above: a sale missing nothing, carrying no commission.
+  ProcessableWithoutCredit: 'RECONCILIATION.REASON.PROCESSABLE_WITHOUT_CREDIT',
+
   DealLost: 'RECONCILIATION.REASON.DEAL_LOST',
   CrmDrift: 'RECONCILIATION.REASON.CRM_DRIFT',
   PlanHasNoActiveRules: 'RECONCILIATION.REASON.PLAN_HAS_NO_ACTIVE_RULES',

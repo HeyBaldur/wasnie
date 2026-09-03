@@ -91,6 +91,17 @@ internal static class ReconciliationQuery
         var noAssignment = Pending(UnprocessablePendingSpec.NoActiveAssignment(db), ReconciliationReason.NoActiveAssignment);
         var ambiguous = Pending(AmbiguousAttributionSpec.Queryable(db), ReconciliationReason.AmbiguousAttribution);
 
+        // ── A sale that is missing nothing and still carries no credit (KAN-50) ──────────────
+        //
+        // ★ THE HOLE THE OTHER FOUR LEFT. The three unprocessable reasons name what a transaction
+        // LACKS, and ambiguity names a choice nobody made. A Pending transaction that lacks nothing
+        // and had no choice to make fell through all four, so the queue — the screen whose promise is
+        // that unpaid money is visible — was silently complete-looking while such rows existed. It
+        // carries the sale, like the other Pending reasons, for the same reason: the commission is
+        // the number nobody knows.
+        var processableWithoutCredit = Pending(
+            ProcessableWithoutCreditSpec.Queryable(db), ReconciliationReason.ProcessableWithoutCredit);
+
         // ── A deal that left closed-won after its commission was calculated or paid ──────────
         //
         // ★ THE CLAWBACK POT, AND IT NEVER JOINS THE OTHER ONE. This is money already paid out that
@@ -163,6 +174,7 @@ internal static class ReconciliationQuery
             .Concat(currencyMismatch)
             .Concat(noAssignment)
             .Concat(ambiguous)
+            .Concat(processableWithoutCredit)
             .Concat(dealLost)
             .Concat(drift)
             .Concat(deadPlans);

@@ -474,6 +474,243 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
         }
     }
 
+
+    // ══ KAN-50 — a sale that lacks nothing and still carries no credit ═════════════════════════
+
+    /// <summary>
+    /// ★★ THE STATE THAT HAD NO NAME. Payee, Active assignment covering the date, plan in the
+    /// transaction's currency, one candidate so nothing to choose — every test the other reasons
+    /// apply, this row passes, and it has no credit. Before KAN-50 the queue returned nothing for
+    /// it: <c>UnprocessablePendingSpec</c> calls it processable and therefore not its problem, and
+    /// <c>AmbiguousAttributionSpec</c> sees a single candidate. The money was real and no screen
+    /// could show it.
+    ///
+    /// ★ THIS IS THE SHAPE OF THE TWO ROWS THAT PRODUCED THE TICKET (SCC-20260515-0002 / -0006),
+    /// reproduced rather than described: their assignment was created after they were ingested, and
+    /// no processing run has covered them since.
+    /// </summary>
+    [Fact]
+    public async Task A_sale_that_lacks_nothing_and_carries_no_credit_appears_in_the_queue()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-UNPAID"));
+            var plan = MakePlan(tenantId, Guid.NewGuid(), "Payable Plan");
+            db.CompensationPlans.Add(plan);
+            AssignFully(db, tenantId, plan.Id, payeeId);
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-UNPAID", payeeId, 234.50m));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId);
+
+        var row = page.Items.Should().ContainSingle().Subject;
+        row.Kind.Should().Be(ReconciliationEntryKind.Transaction);
+        row.Reasons.Should().Equal(ReconciliationReason.ProcessableWithoutCredit);
+        // The SALE, like every other Pending reason: the commission is the number nobody knows.
+        row.Amount.Should().Be(234.50m);
+        page.Summary.ByReason
+            .Single(r => r.Reason == ReconciliationReason.ProcessableWithoutCredit)
+            .Count.Should().Be(1);
+    }
+
+    /// <summary>
+    /// ★★ THE FAIL-SAFE. A transaction the engine paid normally must not start reading as an
+    /// exception — a queue that lists healthy money is a queue nobody reads.
+    /// </summary>
+    [Fact]
+    public async Task A_sale_that_was_paid_normally_never_reaches_the_queue()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-PAID"));
+            var plan = MakePlan(tenantId, Guid.NewGuid(), "Paying Plan");
+            db.CompensationPlans.Add(plan);
+            AssignFully(db, tenantId, plan.Id, payeeId);
+
+            var tx = Tx(tenantId, "REF-PAID", payeeId, 1_000m);
+            tx.MarkCalculated(1, Money.Of(100m, EUR), "test", Now, Guid.NewGuid());
+            db.CompensationTransactions.Add(tx);
+            db.Credits.Add(PaidCredit(tenantId, tx.Id, payeeId, plan.Id, plan.Rules.First().Id, 1_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId);
+
+        page.Items.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// ★★ THE REGRESSION THE TICKET ASKS FOR, stated as exclusivity rather than as four separate
+    /// assertions: every transaction that already had a reason keeps exactly that reason, and the
+    /// new one claims none of them. A bucket that overlapped would make one unpaid sale read as two
+    /// problems and inflate the count the screen exists to state precisely.
+    /// </summary>
+    [Fact]
+    public async Task The_new_reason_never_overlaps_the_reasons_that_already_existed()
+    {
+        var tenantId = Guid.NewGuid();
+        var noAssignmentPayee = Guid.NewGuid();
+        var wrongCurrencyPayee = Guid.NewGuid();
+        var ambiguousPayee = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, noAssignmentPayee, "EMP-NOASG"));
+            db.Payees.Add(MakePayee(tenantId, wrongCurrencyPayee, "EMP-CCY"));
+            db.Payees.Add(MakePayee(tenantId, ambiguousPayee, "EMP-AMB"));
+
+            var planA = MakePlan(tenantId, Guid.NewGuid(), "Plan A");
+            var planB = MakePlan(tenantId, Guid.NewGuid(), "Plan B");
+            db.CompensationPlans.AddRange(planA, planB);
+
+            AssignFully(db, tenantId, planA.Id, wrongCurrencyPayee);
+            AssignFully(db, tenantId, planA.Id, ambiguousPayee);
+            AssignFully(db, tenantId, planB.Id, ambiguousPayee);
+
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-NOPAYEE", null, 100m));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-NOASG", noAssignmentPayee, 200m));
+            // EUR plan, USD sale.
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-CCY", wrongCurrencyPayee, 300m, "USD"));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-AMB", ambiguousPayee, 400m));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId);
+
+        page.Items.Should().HaveCount(4);
+        page.Items.SelectMany(i => i.Reasons)
+            .Should().NotContain(ReconciliationReason.ProcessableWithoutCredit);
+
+        page.Items.Single(i => i.Amount == 100m).Reasons.Should().Equal(ReconciliationReason.NoPayee);
+        page.Items.Single(i => i.Amount == 200m).Reasons.Should().Equal(ReconciliationReason.NoActiveAssignment);
+        page.Items.Single(i => i.Amount == 300m).Reasons.Should().Equal(ReconciliationReason.CurrencyMismatch);
+        page.Items.Single(i => i.Amount == 400m).Reasons.Should().Equal(ReconciliationReason.AmbiguousAttribution);
+    }
+
+    /// <summary>
+    /// ★★ THE SECOND EXPRESSION, PINNED. The spec is SQL because the queue pages and totals in SQL,
+    /// while eligibility itself lives in <c>PlanAssignmentResolver.Candidates</c> in memory because
+    /// the engine calls it per transaction. Two expressions of one rule is the risk this codebase
+    /// has been bitten by, so they are run over the same rows and required to agree. If this goes
+    /// red the SQL is wrong: the engine is the authority.
+    /// </summary>
+    [Fact]
+    public async Task The_queryable_selects_exactly_the_sales_the_engine_calls_payable_and_unpaid()
+    {
+        var tenantId = Guid.NewGuid();
+        var payablePayee = Guid.NewGuid();
+        var archivedPlanPayee = Guid.NewGuid();
+        var deactivatedPayee = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payablePayee, "EMP-PAY"));
+            db.Payees.Add(MakePayee(tenantId, archivedPlanPayee, "EMP-ARC"));
+            db.Payees.Add(MakePayee(tenantId, deactivatedPayee, "EMP-DEA"));
+
+            var live = MakePlan(tenantId, Guid.NewGuid(), "Live Plan");
+            var archived = MakePlan(tenantId, Guid.NewGuid(), "Archived Plan");
+            archived.Activate("test-user", Now, Guid.NewGuid());
+            archived.Archive("test-user", Now, Guid.NewGuid());
+            var forDeactivated = MakePlan(tenantId, Guid.NewGuid(), "Deactivated Plan");
+            db.CompensationPlans.AddRange(live, archived, forDeactivated);
+
+            AssignFully(db, tenantId, live.Id, payablePayee);
+            AssignFully(db, tenantId, archived.Id, archivedPlanPayee);
+
+            var dead = PlanAssignment.Create(
+                tenantId, forDeactivated.Id, deactivatedPayee,
+                PayeeReference.Snapshot(deactivatedPayee, "Queue Payee", "EMP"),
+                DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+                "test-user", Guid.NewGuid(), Now, Guid.NewGuid());
+            dead.Deactivate("test-user", Now, Guid.NewGuid());
+            db.PlanAssignments.Add(dead);
+
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-PAY", payablePayee, 1_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-ARC", archivedPlanPayee, 1_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-DEA", deactivatedPayee, 1_000m));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var fromSql = await ProcessableWithoutCreditSpec.Queryable(db)
+                .Select(t => t.Id)
+                .ToListAsync();
+
+            // The engine's own path, over the same rows.
+            var transactions = await db.CompensationTransactions.ToListAsync();
+            var assignments = await db.PlanAssignments.ToListAsync();
+            var creditedTxIds = (await db.Credits
+                .Where(c => c.SupersededAt == null)
+                .Select(c => c.TransactionId)
+                .ToListAsync())
+                .ToHashSet();
+            var planCurrency = await db.CompensationPlans
+                .ToDictionaryAsync(p => p.Id, p => p.Currency);
+            var archivedPlanIds = (await db.CompensationPlans
+                .Where(p => p.Status == PlanStatus.Archived)
+                .Select(p => p.Id)
+                .ToListAsync())
+                .ToHashSet();
+
+            var fromEngine = transactions
+                .Where(t => t.PayeeId.HasValue && !creditedTxIds.Contains(t.Id))
+                .Where(t =>
+                {
+                    var candidates = Wasnie.Application.Compensation.Calculation.PlanAssignmentResolver.Candidates(
+                        assignments.Where(a => a.PayeeId == t.PayeeId),
+                        t.TransactionDate, t.Amount.Currency, planCurrency, archivedPlanIds);
+
+                    // 1+ candidate, minus the ambiguous case the other spec owns.
+                    return candidates.Count >= 1
+                        && (t.SelectedPlanAssignmentId != null || candidates.Count == 1);
+                })
+                .Select(t => t.Id)
+                .ToList();
+
+            fromSql.Should().BeEquivalentTo(fromEngine);
+            fromEngine.Should().HaveCount(1,
+                "an archived plan and a deactivated assignment are not candidates the engine would honour");
+        }
+    }
+
+    /// <summary>An Active assignment covering the whole of 2026, the shape every KAN-50 test needs.</summary>
+    private static void AssignFully(
+        Wasnie.Infrastructure.Persistence.ApplicationDbContext db,
+        Guid tenantId, Guid planId, Guid payeeId) =>
+        db.PlanAssignments.Add(PlanAssignment.Create(
+            tenantId, planId, payeeId,
+            PayeeReference.Snapshot(payeeId, "Queue Payee", "EMP"),
+            DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+            "test-user", Guid.NewGuid(), Now, Guid.NewGuid()));
+
+    /// <summary>A normal, non-refused credit — the money a healthy transaction carries.</summary>
+    private static Credit PaidCredit(
+        Guid tenantId, Guid txId, Guid payeeId, Guid planId, Guid ruleId, decimal baseAmount)
+    {
+        var snapshot = RuleSnapshot.Freeze(ruleId, planId, 1, "Rule",
+            RateTable.Flat(0.1m), Trigger.Always(), Now,
+            measurement: new Measurement { Type = MeasurementType.Revenue });
+
+        return Credit.Allocate(
+            tenantId, txId, payeeId, planId, ruleId, snapshot,
+            originalAmount: Money.Of(baseAmount, EUR),
+            creditedAmount: Money.Of(baseAmount * 0.1m, EUR),
+            splitPercentage: Percentage.FromPercent(100),
+            role: CreditRole.Primary,
+            allocatedBy: "test",
+            id: Guid.NewGuid(), now: Now, eventId: Guid.NewGuid(),
+            calculationTrace: "{\"_schema\":1,\"creditGenerated\":true,\"steps\":[]}",
+            rateRefusal: null);
+    }
     private sealed class AlwaysAllowAuthorization : Wasnie.Application.Common.Interfaces.IAuthorizationService
     {
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;

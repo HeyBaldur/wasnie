@@ -2264,6 +2264,7 @@
       "CURRENCY_MISMATCH": "Waluta nie zgadza się z planem",
       "NO_ACTIVE_ASSIGNMENT": "Brak aktywnego przypisania do planu",
       "AMBIGUOUS_ATTRIBUTION": "Nie można ustalić planu",
+      "PROCESSABLE_WITHOUT_CREDIT": "Gotowa do wypłaty, bez prowizji",
       "DEAL_LOST": "Transakcja nie jest już wygrana",
       "CRM_DRIFT": "Transakcja zmieniona w CRM",
       "PLAN_HAS_NO_ACTIVE_RULES": "Plan przestał wypłacać",

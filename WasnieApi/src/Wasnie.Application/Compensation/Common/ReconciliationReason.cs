@@ -39,6 +39,15 @@ public static class ReconciliationReason
 
     public const string AmbiguousAttribution = AmbiguousAttributionSpec.Reason;
 
+    /// <summary>
+    /// A sale with everything it needs in order to pay, carrying no credit. KAN-50.
+    ///
+    /// ★ THE COMPLEMENT OF THE THREE ABOVE. Those name what is MISSING; this one names a transaction
+    /// that is missing nothing and still has no money against it — the state that had no name, and
+    /// therefore no screen.
+    /// </summary>
+    public const string ProcessableWithoutCredit = ProcessableWithoutCreditSpec.Reason;
+
     // ── Surfaced by the dashboard panel, given codes here for the first time ──
 
     /// <summary>A deal left closed-won after its commission was calculated or paid.</summary>
@@ -66,6 +75,7 @@ public static class ReconciliationReason
         CurrencyMismatch,
         NoActiveAssignment,
         AmbiguousAttribution,
+        ProcessableWithoutCredit,
         DealLost,
         CrmDrift,
         PlanHasNoActiveRules,

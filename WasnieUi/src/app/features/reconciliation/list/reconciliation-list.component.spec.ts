@@ -15,6 +15,17 @@ describe('Reconciliation reason whitelist', () => {
   });
 
   /**
+   * ★ KAN-50 arrives as a code the server serves in its reason list, so without an entry here the
+   * new bucket would render as the generic phrase — truthfully, but uselessly, since it is the one
+   * reason on the screen that means "nothing is wrong with this sale except that it has no money".
+   */
+  it('names the sale that lacks nothing and still carries no commission', () => {
+    expect(reasonKey('ProcessableWithoutCredit'))
+      .toBe('RECONCILIATION.REASON.PROCESSABLE_WITHOUT_CREDIT');
+    expect(isKnownReason('ProcessableWithoutCredit')).toBe(true);
+  });
+
+  /**
    * ★★ THE TEST THIS FILE EXISTS FOR. A key built by concatenation would produce
    * 'RECONCILIATION.REASON.SomethingNobodyTranslated', ngx-translate would fail to resolve it and
    * print the key — an internal identifier on a finance screen. The whitelist cannot do that.
