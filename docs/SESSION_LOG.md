@@ -4,6 +4,63 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-03 (b) - KAN-48: correccion de las escaleras acotadas de planes Activos
+
+**Rama:** KAN-38 · **Ticket:** KAN-48 (deriva de KAN-26 Tanda 3) · **Sin commit.**
+
+**Premisa del ticket parcialmente falsa: cambian 2 reglas, no 5.** Las 3 "Acelerador Hardware
+Premium" NO cambian de comportamiento: son tablas de bracket, el ratio de attainment vive en
+0-3 y `[0, 20000]` lo contiene siempre, asi que la guarda `NoMatchingBracket` nunca se dispara.
+Su defecto es otro (un rep al 150% cobra el 4% del tramo 1 en vez del 8%) y es **latente**.
+**Hallazgo nuevo:** `D617E6EB` "Claude Code - Rule #1" tiene el mismo defecto (limites
+2500/5000/7500) y no figuraba en el ticket. 20 creditos, ninguno consumido.
+
+**Corregidas 2 reglas, las unicas con intencion inequivoca y cambio real:**
+
+| Regla | Plan | Tope antes | Tope despues | Draft creado |
+| --- | --- | --- | --- | --- |
+| `EBD3FA15` "RL-1" | Pounds 2 Rules (GBP) | 5.000-10.000 @ 9% | 5.000-abierto @ 9% | `B4887332` v2 |
+| `A57BA4C8` "Acelerador Laptops" | Q3 2026 - Plan HubSpot E2E (EUR) | 25.000-100.000 @ 8% | 25.000-abierto @ 8% | `F3E49C7A` v2 |
+
+**Solo se mueve el limite superior del ultimo tramo.** Ni una tasa, ni un limite intermedio, ni
+el numero de tramos. Es la edicion mas pequena que hace que la escalera cubra su propio sujeto,
+y por eso "todo lo de debajo del techo viejo queda igual" es una afirmacion demostrable.
+
+**⚠️ PARADO Y CONSULTADO (4 reglas):** las 3 "Hardware Premium" y `D617E6EB` tienen los limites
+en euros dentro de una tabla de attainment. Dos lecturas incompatibles —(i) deberia ser Tiered
+sobre ingreso, (ii) deberia ser Attainment con ratios— y la diferencia es dinero (400 EUR vs
+600 EUR para un rep al 150%). No se adivina; consulta abierta en el ticket.
+
+**⚠️ La correccion NO es una edicion, es una migracion de version.** `CloneAsNewVersion` crea un
+plan nuevo y **las asignaciones no viajan** (`ClonePlanVersionHandler.cs:39-41`); `Plan.Activate`
+**no archiva la version anterior** (`Plan.cs:260-277`). Dejarla en vigor exige activar v2 +
+archivar v1 (que por KAN-31 desasigna a TODOS los payees) + reasignar. **Esos pasos NO se
+ejecutaron**: apagan un plan Activo y mueven payees, y esa decision no es de quien ejecuta (§E2).
+
+**Puerta de dinero — no se dispara.** Ninguna de las 2 reglas corregidas tiene un credito
+consumido (`EBD3FA15`: 0 creditos en total; `A57BA4C8`: 2, sin consumir). Ademas corregir una
+regla **no recalcula nada por si solo**: el recalculo es una accion aparte
+(`RecalculateCreditsHandler.cs:44-47`) que solo toca creditos no superseded y no consumidos,
+salta transacciones Paid/Cancelled y **se bloquea entera** si hay un pay run Approved o Paid
+(`:105-116`). Verificado en BD tras aplicar: originales intactos y Activos, creditos
+`81326A30` (1.684,00) y `744B0D6B` (298,00) sin tocar.
+
+**⚠️ Constancia, fuera de alcance:** `E2345397` (plan Activo) conserva las tasas 4 y 7 (400% y
+700%) y tiene **2 creditos CONSUMIDOS de 200.000,00 EUR cada uno** sobre ventas de 50.000. No es
+un defecto de forma de escalera, asi que no es de KAN-48; remediacion por KAN-15.
+
+**Como se ejecuto:** harness de un solo uso (fuera del repo, en scratchpad) que pasa por el
+DOMINIO — `Plan.CloneAsNewVersion` + `Plan.UpdateRule` con la tabla construida por la fabrica
+`RateTable.Tiered`, de modo que corren todos los invariantes de escritura. Solo se salta HTTP y
+autorizacion. Con dry-run por defecto, guarda de escalera esperada, guarda de idempotencia, y
+match de regla **por Id y no por nombre** (dos nombres llevan no-ASCII). El trigger de la regla
+Laptops se pasa de vuelta intacto y se verifico byte a byte en BD.
+
+**Ficheros:** `LadderCorrectionKan48Tests.cs` (nuevo, 22 tests) · `docs/`.
+
+**Suites — `build=0 unit=0 integration=0`, front exit 0:** unit **1877 -> 1899**, integracion
+**850** (2 skipped preexistentes), front **1282**, `dotnet build Wasnie.sln` 0 errores.
+
 ## 2026-09-03 - KAN-26 tanda 3: el motor no paga lo que no puede justificar
 
 **Rama:** KAN-38 · **Ticket:** KAN-26 (ultima tanda) · **Sin commit.**
