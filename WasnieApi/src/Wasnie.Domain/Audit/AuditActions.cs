@@ -159,4 +159,11 @@ public static class AuditActions
     // A previously deal-lost-cancelled deal returned to closed-won → a fresh transaction was re-created and
     // the stale deal-lost alert resolved (lost→won recovery). The cancelled row stays as history.
     public const string CrmDealRecovered = "CRM_DEAL_RECOVERED";
+
+    // Reconciliation Centre — a human decided one anomaly is to be left as it stands (KAN-51).
+    //
+    // ★ INFORMATIONAL ONLY. The row's disappearance from the queue is decided by
+    // ReconciliationClosures, never by this entry: an audit log that has been known to record
+    // actions that did not happen may not be what hides money from a CFO. See KAN-34.
+    public const string ReconciliationRowClosed = "RECONCILIATION_ROW_CLOSED";
 }

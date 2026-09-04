@@ -13,4 +13,5 @@ public static class ResourceTypes
     public const string FieldRequirement = "FieldRequirement";
     public const string Subscription = "Subscription";
     public const string Integration = "Integration";
+    public const string Reconciliation = "Reconciliation";
 }

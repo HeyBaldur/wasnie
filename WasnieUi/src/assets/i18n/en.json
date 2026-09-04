@@ -2275,7 +2275,6 @@
       "UNKNOWN": "Could not be paid (reason not recognised by this version)"
     },
     "CARD_AFFECTED_BASE_SHORT": "Sale at stake",
-    "COL_RESOLVE": "Resolve",
     "RESOLVE": {
       "REPROCESS": "Reprocess",
       "REPROCESS_TITLE": "Reprocess this payee’s pending sales",
@@ -2290,6 +2289,19 @@
       "CLONE_PLAN": "Open plan to clone",
       "NONE_NO_CURE_SCREEN": "There is no screen yet for fixing this reason.",
       "NONE_ROW_LACKS_IDENTIFIERS": "This entry is missing the details a link would need."
-    }
+    },
+    "CLOSE": {
+      "ACTION": "Close",
+      "ACTION_HELP": "Record that this entry has been reviewed and is to be left as it stands",
+      "TITLE": "Review and close this entry",
+      "DESC": "It will stop appearing in the queue and stop counting towards the totals. Nothing is repaired and nothing is deleted: the credit, the transaction and the plan are untouched, and this decision is recorded permanently.",
+      "NOTE_LABEL": "Why is it being left as it stands?",
+      "NOTE_PLACEHOLDER": "e.g. The deal was lost after the commission had been paid; the clawback is already applied, so there is nothing to repair.",
+      "NOTE_HELP": "Required. This is what an auditor will read to understand why the entry stopped being shown.",
+      "CONFIRM": "Review and close",
+      "TOAST_SUCCESS": "Entry closed. It no longer appears in the queue.",
+      "TOAST_ERROR": "The entry could not be closed. It may have been closed or fixed already — reload the queue and try again."
+    },
+    "COL_ACTIONS": "Actions"
   }
 }

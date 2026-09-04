@@ -1,6 +1,12 @@
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Compensation.Commands.Reconciliation;
+using Wasnie.Domain.Audit;
+using Wasnie.Domain.Common.Results;
+using Wasnie.IntegrationTests.TestDoubles;
+using Wasnie.Application.Compensation.Handlers.Dashboard;
+using Wasnie.Application.Compensation.Queries.Dashboard;
 using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Handlers.Reconciliation;
@@ -711,6 +717,547 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
             calculationTrace: "{\"_schema\":1,\"creditGenerated\":true,\"steps\":[]}",
             rateRefusal: null);
     }
+
+    // ══ KAN-51: closing a row by human decision ══════════════════════════════════════════════
+
+    private async Task<Result<CloseReconciliationRowResult>> CloseAsync(
+        Guid tenantId, ReconciliationEntryKind kind, Guid entityId, string note)
+    {
+        await using var db = fixture.CreateDbForTenant(tenantId);
+        var handler = new CloseReconciliationRowHandler(
+            db,
+            new CreditAllocationServiceFixture.FixedTenantContext(tenantId),
+            new FixedCurrentUser(),
+            new FakeClock(),
+            new FakeGuidGenerator(),
+            new AlwaysAllowAuthorization());
+
+        return await handler.Handle(
+            new CloseReconciliationRowCommand(kind, entityId, note), CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The ticket's second and third acceptance criteria at once: the closure exists with who, when
+    /// and why; the underlying record is untouched; and the row is gone from BOTH the table and the
+    /// totals.
+    ///
+    /// ★ THE TOTALS ARE ASSERTED, NOT ONLY THE ROWS. A closure applied after the aggregates were
+    /// computed would leave a card claiming money the table no longer lists — the exact failure this
+    /// screen exists to prevent. It is why the exclusion lives in Filtered(), upstream of both.
+    /// </summary>
+    [Fact]
+    public async Task A_closed_row_leaves_the_queue_and_the_totals_and_the_transaction_is_untouched()
+    {
+        var tenantId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = Tx(tenantId, "REF-CLOSE-ME", null, 4_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+            await db.SaveChangesAsync();
+        }
+
+        var before = await RunAsync(tenantId);
+        before.Items.Should().ContainSingle();
+        before.Summary.ByCurrency.Single().AffectedBaseAmount.Should().Be(4_000m);
+
+        var result = await CloseAsync(
+            tenantId, ReconciliationEntryKind.Transaction, txId,
+            "Legacy import with no payee on record; nothing left to attribute.");
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.ClosedReasons.Should().Equal(ReconciliationReason.NoPayee);
+
+        var after = await RunAsync(tenantId);
+        after.Items.Should().BeEmpty("a closed row leaves the table");
+        after.Summary.TotalRows.Should().Be(0);
+        after.Summary.ByCurrency.Should().BeEmpty("and it leaves the money cards with it");
+        after.Summary.ByReason.Should().BeEmpty();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var closure = await db.ReconciliationClosures.SingleAsync();
+            closure.EntityId.Should().Be(txId);
+            closure.Reason.Should().Be(ReconciliationReason.NoPayee);
+            closure.Note.Should().Be("Legacy import with no payee on record; nothing left to attribute.");
+            closure.ClosedByUserId.Should().Be("closer-user");
+            closure.ClosedAt.Should().NotBe(default);
+
+            // ★ THE ORIGINAL RECORD IS UNTOUCHED. Not "we remembered not to set a flag" — there is
+            // no flag, and the handler never loads the transaction in order to modify it.
+            var tx = await db.CompensationTransactions.SingleAsync(t => t.Id == txId);
+            tx.PayeeId.Should().BeNull();
+            tx.Status.Should().Be(CompensationTransactionStatus.Pending);
+            tx.CancelledAt.Should().BeNull();
+        }
+    }
+
+    /// <summary>
+    /// ★★ THE PRODUCT DECISION, AS A TEST. A closure is immutable over the fact it reviewed; a NEWER
+    /// detection of the same anomaly is a new fact and comes back. Nothing revives and nothing is
+    /// edited — the closure row is exactly as it was, and the newer alert simply falls outside it.
+    ///
+    /// The alternative — keying the closure on the entity alone — would hide this second detection
+    /// for ever, which is money disappearing without anybody deciding it should (§B1).
+    /// </summary>
+    [Fact]
+    public async Task A_later_detection_of_the_same_anomaly_returns_as_a_new_row()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+        Guid alertId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-LATER"));
+            var tx = PaidTx(tenantId, "REF-LOST-TWICE", payeeId, 9_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+
+            alertId = Guid.NewGuid();
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                alertId, tenantId, "HubSpot", "deal-1", tx.Id, "REF-LOST-TWICE",
+                CompensationTransactionStatus.Paid, 450m, EUR, Now, "sync"));
+            await db.SaveChangesAsync();
+        }
+
+        (await RunAsync(tenantId)).Items.Should().ContainSingle();
+
+        var closed = await CloseAsync(
+            tenantId, ReconciliationEntryKind.Transaction, txId,
+            "Commission was already paid and the clawback is applied; nothing to repair.");
+        closed.IsSuccess.Should().BeTrue(closed.Error);
+
+        (await RunAsync(tenantId)).Items.Should().BeEmpty();
+
+        // The same deal is detected as lost again, later. Refresh moves DetectedAt forward — a new
+        // fact about the same money.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var alert = await db.DealLostAlerts.SingleAsync(a => a.Id == alertId);
+            alert.Refresh(CompensationTransactionStatus.Paid, 450m, EUR, Now.AddDays(30), "sync");
+            await db.SaveChangesAsync();
+        }
+
+        var after = await RunAsync(tenantId);
+        after.Items.Should().ContainSingle("a newer detection is a new fact, not a revival");
+        after.Items[0].Reasons.Should().Equal(ReconciliationReason.DealLost);
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var closure = await db.ReconciliationClosures.SingleAsync();
+            closure.FactOccurredAt.Should().Be(Now,
+                "the closure records the fact it reviewed and is never edited");
+        }
+    }
+
+    /// <summary>
+    /// ★★ CLOSING ONE REASON MUST NOT SWALLOW ANOTHER. A transaction that is both drifted and lost
+    /// is two judgements; closing it while only the drift was known must leave the lost deal visible
+    /// when it is detected. This is the case that puts the reason in the closure key.
+    /// </summary>
+    [Fact]
+    public async Task Closing_a_row_does_not_hide_a_different_anomaly_found_on_the_same_entity_later()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-BOTH"));
+            var tx = PaidTx(tenantId, "REF-BOTH-CLOSE", payeeId, 12_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+
+            db.CrmDriftAlerts.Add(CrmDriftAlert.Create(
+                Guid.NewGuid(), tenantId, "hubspot", "deal-drift", tx.Id, "REF-BOTH-CLOSE",
+                CompensationTransactionStatus.Paid,
+                amountChanged: true, oldAmount: 12_000m, oldCurrency: EUR,
+                newAmount: 11_999.99m, newCurrency: EUR,
+                dateChanged: false, oldCloseDate: TxDate, newCloseDate: TxDate,
+                detectedAt: Now, detectedBy: "test"));
+            await db.SaveChangesAsync();
+        }
+
+        var closed = await CloseAsync(
+            tenantId, ReconciliationEntryKind.Transaction, txId,
+            "Amount changed by a cent; immaterial.");
+        closed.IsSuccess.Should().BeTrue(closed.Error);
+        closed.Value!.ClosedReasons.Should().Equal(ReconciliationReason.CrmDrift);
+
+        (await RunAsync(tenantId)).Items.Should().BeEmpty();
+
+        // The SAME transaction is later found to be a lost deal — a different reason entirely.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                Guid.NewGuid(), tenantId, "HubSpot", "deal-2", txId, "REF-BOTH-CLOSE",
+                CompensationTransactionStatus.Paid, 600m, EUR, Now.AddDays(5), "sync"));
+            await db.SaveChangesAsync();
+        }
+
+        var after = await RunAsync(tenantId);
+        var row = after.Items.Should().ContainSingle().Subject;
+        // The drift stays closed; the lost deal is a separate, unjudged fact and comes through.
+        row.Reasons.Should().Equal(ReconciliationReason.DealLost);
+    }
+
+    /// <summary>
+    /// ★ THE MANDATORY NOTE IS A SERVER INVARIANT, NOT ONLY A DISABLED BUTTON (§D2). This endpoint is
+    /// reachable without the modal, and a closure with no stated reason is precisely the row an
+    /// auditor would ask about. Whitespace counts as empty: three spaces explain nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task A_closure_without_a_stated_reason_is_refused(string note)
+    {
+        var tenantId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = Tx(tenantId, "REF-NO-NOTE", null, 700m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+            await db.SaveChangesAsync();
+        }
+
+        var result = await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, txId, note);
+
+        result.IsSuccess.Should().BeFalse();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            (await db.ReconciliationClosures.CountAsync()).Should().Be(0);
+        }
+
+        (await RunAsync(tenantId)).Items.Should().ContainSingle("a refused closure hides nothing");
+    }
+
+    /// <summary>
+    /// ★★ THE EXCLUSION READS ReconciliationClosures, NEVER AuditLogs — the ticket's fourth
+    /// criterion. An AuditLog row naming this action against this resource must move nothing: the
+    /// audit log records what people did, and until KAN-34 it recorded actions that never happened.
+    /// Evidence deciding what a CFO stops seeing cannot come from there.
+    /// </summary>
+    [Fact]
+    public async Task An_audit_log_entry_alone_hides_nothing()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = Tx(tenantId, "REF-PHANTOM", null, 3_300m);
+            db.CompensationTransactions.Add(tx);
+
+            db.AuditLogs.Add(AuditLog.Create(
+                tenantId, Now.UtcDateTime, "ghost-user", "ghost@test.com",
+                AuditActions.ReconciliationRowClosed, ResourceTypes.Reconciliation,
+                tx.Id.ToString()));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId);
+        page.Items.Should().ContainSingle("only ReconciliationClosures can remove a row");
+        page.Summary.ByCurrency.Single().AffectedBaseAmount.Should().Be(3_300m);
+    }
+
+    /// <summary>
+    /// ★ CLOSING SOMETHING THAT IS NOT OPEN IS REPORTED, NOT SILENTLY ACCEPTED. Two people on the
+    /// same screen, or a row fixed between the page loading and the click: answering "done" would
+    /// leave the second person believing they recorded a decision that was never written (§B1).
+    /// </summary>
+    [Fact]
+    public async Task Closing_a_row_that_is_no_longer_open_is_refused_rather_than_silently_accepted()
+    {
+        var tenantId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var tx = Tx(tenantId, "REF-TWICE", null, 500m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+            await db.SaveChangesAsync();
+        }
+
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, txId, "Reviewed."))
+            .IsSuccess.Should().BeTrue();
+
+        var second = await CloseAsync(
+            tenantId, ReconciliationEntryKind.Transaction, txId, "Reviewed again.");
+
+        second.IsSuccess.Should().BeFalse("nothing is open under this key any more");
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            (await db.ReconciliationClosures.CountAsync()).Should().Be(1, "no second row is written");
+        }
+    }
+
+
+    // ══ KAN-51 (corrección): el cierre vale para TODA superficie, no sólo para el Centro ══════
+
+    private async Task<DashboardSummaryDto> DashboardAsync(Guid tenantId)
+    {
+        await using var db = fixture.CreateDbForTenant(tenantId);
+        var handler = new GetDashboardSummaryHandler(db, new AlwaysAllowAuthorization(), new FakeClock());
+        var result = await handler.Handle(new GetDashboardSummaryQuery(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        return result.Value!;
+    }
+
+    /// <summary>
+    /// ★★ THE BUG THIS TEST EXISTS FOR, FOUND IN RUNTIME AND NOT BY ANY SUITE. The first cut of
+    /// KAN-51 put the closure exclusion inside the Reconciliation Centre's query only. The dashboard
+    /// reads <c>db.DealLostAlerts</c> directly, so a deal somebody had reviewed and closed vanished
+    /// from the Centre and kept alerting on the dashboard — two screens disagreeing about the same
+    /// money, which is exactly the drift the Centre was built not to create.
+    ///
+    /// ★ IT ASSERTS THE DASHBOARD'S OWN OUTPUT, not the query behind it (§A3). What was broken was a
+    /// surface nobody had pointed at the rule; only the surface can prove it now does.
+    /// </summary>
+    [Fact]
+    public async Task A_closed_deal_lost_alert_stops_showing_on_the_dashboard_too()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-DASH"));
+            var tx = PaidTx(tenantId, "REF-DASH-LOST", payeeId, 8_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                Guid.NewGuid(), tenantId, "HubSpot", "deal-dash", tx.Id, "REF-DASH-LOST",
+                CompensationTransactionStatus.Paid, 400m, EUR, Now, "sync"));
+            await db.SaveChangesAsync();
+        }
+
+        (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts
+            .Should().ContainSingle("the alert is open before anybody reviews it");
+
+        var closed = await CloseAsync(
+            tenantId, ReconciliationEntryKind.Transaction, txId,
+            "Commission was already paid and the clawback is applied; nothing to repair.");
+        closed.IsSuccess.Should().BeTrue(closed.Error);
+
+        (await RunAsync(tenantId)).Items.Should().BeEmpty();
+        (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts
+            .Should().BeEmpty("a closure is about the anomaly, not about one screen");
+    }
+
+    /// <summary>
+    /// ★ AND IT STILL COMES BACK ON THE DASHBOARD WHEN THE FACT IS NEWER. The dashboard honours the
+    /// same <c>fact &lt;= FactOccurredAt</c> comparison as the Centre, so a re-detection alerts again
+    /// rather than staying silently suppressed. Pinning it on this surface too is what stops the two
+    /// from drifting apart the next time one of them is edited.
+    /// </summary>
+    [Fact]
+    public async Task A_re_detected_deal_alerts_on_the_dashboard_again()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+        Guid alertId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-DASH2"));
+            var tx = PaidTx(tenantId, "REF-DASH-AGAIN", payeeId, 6_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+
+            alertId = Guid.NewGuid();
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                alertId, tenantId, "HubSpot", "deal-again", tx.Id, "REF-DASH-AGAIN",
+                CompensationTransactionStatus.Paid, 300m, EUR, Now, "sync"));
+            await db.SaveChangesAsync();
+        }
+
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, txId, "Reviewed."))
+            .IsSuccess.Should().BeTrue();
+        (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts.Should().BeEmpty();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var alert = await db.DealLostAlerts.SingleAsync(a => a.Id == alertId);
+            alert.Refresh(CompensationTransactionStatus.Paid, 300m, EUR, Now.AddDays(30), "sync");
+            await db.SaveChangesAsync();
+        }
+
+        (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts
+            .Should().ContainSingle("a newer detection is a new fact on every surface");
+    }
+
+    /// <summary>
+    /// ★ THE DRIFT PANEL AND THE DEAD-PLAN PANEL FOLLOW THE SAME RULE. They were the deal-lost bug's
+    /// identical twins — their own entity, their own dashboard list, no knowledge of closures — and
+    /// fixing one of the three would have shipped a known inconsistency in the other two.
+    /// </summary>
+    [Fact]
+    public async Task A_closed_drift_and_a_closed_dead_plan_stop_showing_on_the_dashboard()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-TWINS"));
+            var tx = PaidTx(tenantId, "REF-TWINS", payeeId, 5_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+
+            db.CrmDriftAlerts.Add(CrmDriftAlert.Create(
+                Guid.NewGuid(), tenantId, "hubspot", "deal-twins", tx.Id, "REF-TWINS",
+                CompensationTransactionStatus.Paid,
+                amountChanged: true, oldAmount: 5_000m, oldCurrency: EUR,
+                newAmount: 4_900m, newCurrency: EUR,
+                dateChanged: false, oldCloseDate: TxDate, newCloseDate: TxDate,
+                detectedAt: Now, detectedBy: "test"));
+
+            var plan = MakePlan(tenantId, planId, "Dead Plan");
+            plan.Activate("test", Now, Guid.NewGuid());
+            plan.StopRule(plan.Rules.First().Id, "test", "no longer paying", Now);
+            db.CompensationPlans.Add(plan);
+
+            await db.SaveChangesAsync();
+        }
+
+        var before = await DashboardAsync(tenantId);
+        before.ActionBand.DriftAlerts.Should().ContainSingle();
+        before.ActionBand.PlansWithoutLiveRules.Should().ContainSingle();
+
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, txId, "Immaterial change."))
+            .IsSuccess.Should().BeTrue();
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Plan, planId, "Superseded by the 2027 plan."))
+            .IsSuccess.Should().BeTrue();
+
+        var after = await DashboardAsync(tenantId);
+        after.ActionBand.DriftAlerts.Should().BeEmpty();
+        after.ActionBand.PlansWithoutLiveRules.Should().BeEmpty();
+    }
+
+
+    /// <summary>
+    /// ★★ THE CARD AND THE LIST BEHIND IT STAY EQUAL, WHICH IS WHY THE EXCLUSION WENT INSIDE THE
+    /// SPEC. <c>UnprocessablePendingSpec</c> serves both the dashboard count and the Transactions
+    /// list's <c>?attentionReason=</c> filter, and its own doc comment promises the two never
+    /// disagree. Applying the closure at the dashboard call site would have kept that promise only
+    /// until somebody clicked through; applying it in the spec means neither caller can forget.
+    /// </summary>
+    [Fact]
+    public async Task A_closed_unprocessable_transaction_leaves_the_dashboard_card_and_the_attention_filter_together()
+    {
+        var tenantId = Guid.NewGuid();
+        Guid closedId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var closing = Tx(tenantId, "REF-CARD-CLOSED", null, 2_000m);
+            closedId = closing.Id;
+            db.CompensationTransactions.Add(closing);
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-CARD-OPEN", null, 1_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var before = await DashboardAsync(tenantId);
+        NoPayeeCount(before).Should().Be(2);
+        (await AttentionFilterCountAsync(tenantId, ReconciliationReason.NoPayee)).Should().Be(2);
+
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, closedId, "Legacy import; no payee exists."))
+            .IsSuccess.Should().BeTrue();
+
+        var after = await DashboardAsync(tenantId);
+        NoPayeeCount(after).Should().Be(1, "the card stops counting what somebody closed");
+        (await AttentionFilterCountAsync(tenantId, ReconciliationReason.NoPayee))
+            .Should().Be(1, "and the list it deep-links to shows exactly that many rows");
+
+        (await RunAsync(tenantId)).Items.Should().ContainSingle("the Centre agrees with both");
+    }
+
+    /// <summary>
+    /// ★ The ambiguity panel counts TRANSACTIONS per payee, so a closed row must not contribute to
+    /// its payee's number. Excluded in the SQL projection rather than in the in-memory matcher: a
+    /// closed row never reaches the engine's Candidates rule at all.
+    /// </summary>
+    [Fact]
+    public async Task A_closed_ambiguous_transaction_stops_counting_on_the_dashboard()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-AMB"));
+
+            // Two Active assignments covering the same date, both in the transaction's currency:
+            // the engine's own definition of an ambiguous attribution.
+            var planA = MakePlan(tenantId, Guid.NewGuid(), "Plan A");
+            var planB = MakePlan(tenantId, Guid.NewGuid(), "Plan B");
+            planA.Activate("test", Now, Guid.NewGuid());
+            planB.Activate("test", Now, Guid.NewGuid());
+            db.CompensationPlans.AddRange(planA, planB);
+
+            foreach (var plan in new[] { planA, planB })
+            {
+                db.PlanAssignments.Add(PlanAssignment.Create(
+                    tenantId, plan.Id, payeeId,
+                    PayeeReference.Snapshot(payeeId, "Queue Payee", "EMP-AMB"),
+                    DateRange.Of(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+                    "test", Guid.NewGuid(), Now, Guid.NewGuid()));
+            }
+
+            var tx = Tx(tenantId, "REF-AMBIG", payeeId, 3_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+            await db.SaveChangesAsync();
+        }
+
+        (await DashboardAsync(tenantId)).ActionBand.AmbiguousAttributionPayees
+            .Should().ContainSingle();
+
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, txId, "Attributed by hand offline."))
+            .IsSuccess.Should().BeTrue();
+
+        (await DashboardAsync(tenantId)).ActionBand.AmbiguousAttributionPayees
+            .Should().BeEmpty("a payee whose only ambiguous sale was closed has nothing left to warn about");
+    }
+
+    private static int NoPayeeCount(DashboardSummaryDto dashboard) =>
+        dashboard.ActionBand.UnprocessablePendingItems
+            .Where(i => i.Reason == ReconciliationReason.NoPayee)
+            .Select(i => i.Count)
+            .FirstOrDefault();
+
+    /// <summary>The rows the Transactions list returns for a "needs attention" deep link.</summary>
+    private async Task<int> AttentionFilterCountAsync(Guid tenantId, string reason)
+    {
+        await using var db = fixture.CreateDbForTenant(tenantId);
+        var query = UnprocessablePendingSpec.ForReason(db, reason);
+        query.Should().NotBeNull();
+        return await query!.CountAsync();
+    }
+
+    private sealed class FixedCurrentUser : Wasnie.Application.Common.Interfaces.ICurrentUserService
+    {
+        public string? UserId => "closer-user";
+        public string? Email => "closer@test.com";
+        public bool IsAuthenticated => true;
+    }
+
     private sealed class AlwaysAllowAuthorization : Wasnie.Application.Common.Interfaces.IAuthorizationService
     {
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;

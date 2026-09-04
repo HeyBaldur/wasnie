@@ -24,7 +24,8 @@ public static class RolePermissions
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
             Permission.LedgerCloseAccount,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
-            Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
+            Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
+            Permission.SubscriptionManage,
             Permission.SettingsUpdate, Permission.IntegrationsManage,
         };
 
@@ -48,7 +49,7 @@ public static class RolePermissions
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
             Permission.LedgerCloseAccount,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
-            Permission.ImportsExecute, Permission.ReportsViewAll,
+            Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
         };
 
     private static readonly IReadOnlySet<string> ManagerPermissions =

@@ -2275,7 +2275,6 @@
       "UNKNOWN": "Nie można było wypłacić (przyczyna nierozpoznana w tej wersji)"
     },
     "CARD_AFFECTED_BASE_SHORT": "Sprzedaż objęta",
-    "COL_RESOLVE": "Rozwiąż",
     "RESOLVE": {
       "REPROCESS": "Przetwórz ponownie",
       "REPROCESS_TITLE": "Ponowne przetworzenie oczekujących sprzedaży tego odbiorcy",
@@ -2290,6 +2289,19 @@
       "CLONE_PLAN": "Otwórz plan, aby go sklonować",
       "NONE_NO_CURE_SCREEN": "Nie ma jeszcze ekranu do naprawienia tej przyczyny.",
       "NONE_ROW_LACKS_IDENTIFIERS": "Tej pozycji brakuje danych potrzebnych do utworzenia linku."
-    }
+    },
+    "CLOSE": {
+      "ACTION": "Zamknij",
+      "ACTION_HELP": "Odnotuj, że ta pozycja została przejrzana i zostaje bez zmian",
+      "TITLE": "Przejrzyj i zamknij tę pozycję",
+      "DESC": "Przestanie pojawiać się w kolejce i wliczać się do sum. Nic nie zostaje naprawione ani usunięte: kredyt, transakcja i plan pozostają nietknięte, a ta decyzja zostaje zapisana na stałe.",
+      "NOTE_LABEL": "Dlaczego pozostaje bez zmian?",
+      "NOTE_PLACEHOLDER": "np. Transakcja została utracona po wypłaceniu prowizji; clawback jest już zastosowany, więc nie ma czego naprawiać.",
+      "NOTE_HELP": "Wymagane. To właśnie przeczyta audytor, aby zrozumieć, dlaczego pozycja przestała być wyświetlana.",
+      "CONFIRM": "Przejrzyj i zamknij",
+      "TOAST_SUCCESS": "Pozycja zamknięta. Nie pojawia się już w kolejce.",
+      "TOAST_ERROR": "Nie udało się zamknąć pozycji. Mogła już zostać zamknięta lub naprawiona — odśwież kolejkę i spróbuj ponownie."
+    },
+    "COL_ACTIONS": "Akcje"
   }
 }

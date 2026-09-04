@@ -197,18 +197,52 @@ internal static class ReconciliationQuery
     }
 
     /// <summary>
-    /// The filtered seeds.
+    /// The seeds a human has already reviewed and decided to leave as they stand (KAN-51).
+    ///
+    /// ★★ AN ANTI-JOIN IN SQL, NOT A FILTER IN MEMORY. It is applied to <see cref="Seeds"/> before
+    /// anything counts, groups or pages, so the cards and the table exclude exactly the same rows.
+    /// Excluding after the fact — in the handler, over a page — would make a total describe rows the
+    /// table does not show, which is the one promise this screen was built to keep.
+    ///
+    /// ★★ THE COMPARISON IS PER FACT, NOT PER ROW. A closure suppresses a seed only while the
+    /// anomaly is no NEWER than the one that was reviewed (<c>OccurredAt &lt;= FactOccurredAt</c>).
+    /// A fresh detection carries a later stamp, no closure covers it, and it returns as a new row —
+    /// the product decision "a later change is a new fact, not a revival", expressed as a predicate
+    /// rather than as a job that reopens things.
+    ///
+    /// ★ IT MATCHES ON THE REASON TOO. Closing a lost deal must not swallow a CRM drift detected on
+    /// the same transaction afterwards: those are two facts, and only the one that was judged is
+    /// hidden (§B1 — nothing disappears without someone deciding it should).
+    ///
+    /// ★ IT READS ReconciliationClosures, NEVER AuditLogs. The audit log is a record of what people
+    /// did; this exclusion is load-bearing evidence, and it comes from the table that exists to be
+    /// exactly that.
+    /// </summary>
+    internal static IQueryable<ReconciliationSeed> ExcludeClosed(
+        IApplicationDbContext db, IQueryable<ReconciliationSeed> seeds) =>
+        seeds.Where(s => !db.ReconciliationClosures.Any(c =>
+            c.EntryKind == s.Kind &&
+            c.EntityId == s.EntityId &&
+            c.Reason == s.Reason &&
+            s.OccurredAt <= c.FactOccurredAt));
+
+    /// <summary>
+    /// The filtered seeds, minus the ones somebody has already reviewed and closed.
     ///
     /// ★★ THE REASON FILTER IS APPLIED TO THE ENTITY, NOT TO THE SEED, and that distinction is the
     /// whole "an entry with two reasons appears once, with BOTH" rule. Filtering seeds directly would
     /// return a row stripped of its other reason — the screen would then say a transaction failed for
     /// one thing when it failed for two. So the reason narrows WHICH entities qualify, and every seed
     /// of a qualifying entity comes back.
+    ///
+    /// ★★ THE CLOSURE EXCLUSION RUNS FIRST, BEFORE THE FILTERS. Everything downstream — the page, the
+    /// counts, the money cards, the export — goes through here, so a closed row cannot survive in one
+    /// surface and vanish from another. See <see cref="ExcludeClosed"/>.
     /// </summary>
     internal static IQueryable<ReconciliationSeed> Filtered(
         IApplicationDbContext db, ReconciliationFilter filter)
     {
-        var seeds = Seeds(db);
+        var seeds = ExcludeClosed(db, Seeds(db));
 
         if (filter.PayeeId.HasValue)
             seeds = seeds.Where(s => s.PayeeId == filter.PayeeId.Value);

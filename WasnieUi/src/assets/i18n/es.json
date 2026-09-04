@@ -2275,7 +2275,6 @@
       "UNKNOWN": "No se pudo pagar (motivo no reconocido por esta versión)"
     },
     "CARD_AFFECTED_BASE_SHORT": "Venta afectada",
-    "COL_RESOLVE": "Resolver",
     "RESOLVE": {
       "REPROCESS": "Reprocesar",
       "REPROCESS_TITLE": "Reprocesar las ventas pendientes de este payee",
@@ -2290,6 +2289,19 @@
       "CLONE_PLAN": "Abrir el plan para clonarlo",
       "NONE_NO_CURE_SCREEN": "Todavía no existe una pantalla para corregir este motivo.",
       "NONE_ROW_LACKS_IDENTIFIERS": "A esta entrada le faltan los datos que necesitaría el enlace."
-    }
+    },
+    "CLOSE": {
+      "ACTION": "Cerrar",
+      "ACTION_HELP": "Dejar constancia de que esta entrada se ha revisado y se deja como está",
+      "TITLE": "Revisar y cerrar esta entrada",
+      "DESC": "Dejará de aparecer en la cola y de contar en los totales. No se repara nada ni se borra nada: el crédito, la transacción y el plan quedan intactos, y esta decisión se registra de forma permanente.",
+      "NOTE_LABEL": "¿Por qué se deja como está?",
+      "NOTE_PLACEHOLDER": "p. ej. El deal se perdió después de haberse pagado la comisión; el clawback ya está aplicado, así que no hay nada que reparar.",
+      "NOTE_HELP": "Obligatorio. Es lo que leerá un auditor para entender por qué la entrada dejó de mostrarse.",
+      "CONFIRM": "Revisar y cerrar",
+      "TOAST_SUCCESS": "Entrada cerrada. Ya no aparece en la cola.",
+      "TOAST_ERROR": "No se pudo cerrar la entrada. Puede que ya se haya cerrado o corregido: recargue la cola y vuelva a intentarlo."
+    },
+    "COL_ACTIONS": "Acciones"
   }
 }

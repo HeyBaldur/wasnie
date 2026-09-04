@@ -94,6 +94,17 @@ public static class Permission
     public const string CategoryMappingsManage = "CategoryMappings.Manage";
 
     public const string ImportsExecute = "Imports.Execute";
+
+    /// <summary>
+    /// Closing a row of the Reconciliation Centre by decision: "reviewed, left as it stands".
+    ///
+    /// ★ ITS OWN PERMISSION, NOT Reports.ViewAll, for the same reason Ledger.CloseAccount is not
+    /// Ledger.Adjust. Reading the queue shows money that could not be paid; closing a row REMOVES it
+    /// from that queue and from the totals the CFO reads. Whoever may look is not automatically
+    /// whoever may decide what stops being looked at, and the two have to be revocable separately.
+    /// </summary>
+    public const string ReconciliationClose = "Reconciliation.Close";
+
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";
     public const string SettingsUpdate = "Settings.Update";

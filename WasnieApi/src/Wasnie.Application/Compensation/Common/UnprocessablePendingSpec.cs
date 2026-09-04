@@ -1,4 +1,5 @@
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Transactions;
@@ -14,7 +15,16 @@ namespace Wasnie.Application.Compensation.Common;
 /// the Pending transactions that FAIL that test, split into mutually-exclusive primary reasons.
 ///
 /// Both the dashboard "needs attention" card (counts) and the Transactions list ("attentionReason" filter)
-/// use these SAME queryables, so the dashboard count and the filtered list always agree. Composed entirely
+/// use these SAME queryables, so the dashboard count and the filtered list always agree.
+///
+/// ★★ AND THEY ALSO AGREE ABOUT WHAT SOMEBODY HAS ALREADY CLOSED (KAN-51). The exclusion lives INSIDE
+/// each queryable rather than at the two call sites, and that is the point: applying it to the card
+/// and forgetting the list would make the number on the dashboard differ from the number of rows
+/// behind it — the exact drift the paragraph above promises does not happen. One place, both callers,
+/// no way to apply it to one and not the other.
+///
+/// ★ THE FACT TIME IS IngestedAt, the same stamp the Reconciliation Centre uses as this row's
+/// OccurredAt. It has to be: a closure written from the Centre must cover the row the Centre showed. Composed entirely
 /// as IQueryable (EXISTS subqueries) so the list stays server-paginated — no in-memory materialization.
 /// All DbSets carry the tenant query filter (Rule 9).
 /// </summary>
@@ -26,26 +36,26 @@ public static class UnprocessablePendingSpec
 
     /// <summary>Pending, no payee at all → must be assigned.</summary>
     public static IQueryable<CompensationTransaction> NoPayee(IApplicationDbContext db) =>
-        db.CompensationTransactions.Where(t =>
-            t.Status == CompensationTransactionStatus.Pending && t.PayeeId == null);
+        Open(db, NoPayeeReason, db.CompensationTransactions.Where(t =>
+            t.Status == CompensationTransactionStatus.Pending && t.PayeeId == null));
 
     /// <summary>Pending, has a payee, but NO Active assignment covers the transaction date.</summary>
     public static IQueryable<CompensationTransaction> NoActiveAssignment(IApplicationDbContext db) =>
-        db.CompensationTransactions.Where(t =>
+        Open(db, NoActiveAssignmentReason, db.CompensationTransactions.Where(t =>
             t.Status == CompensationTransactionStatus.Pending
             && t.PayeeId != null
             && !db.PlanAssignments.Any(a =>
                 a.Status == AssignmentStatus.Active
                 && a.PayeeId == t.PayeeId
                 && a.EffectivePeriod.Start <= t.TransactionDate
-                && a.EffectivePeriod.End >= t.TransactionDate));
+                && a.EffectivePeriod.End >= t.TransactionDate)));
 
     /// <summary>
     /// Pending, has a payee, a covering Active assignment exists, but NONE of those covering plans is in
     /// the transaction's currency (e.g. USD transaction, EUR plan).
     /// </summary>
     public static IQueryable<CompensationTransaction> CurrencyMismatch(IApplicationDbContext db) =>
-        db.CompensationTransactions.Where(t =>
+        Open(db, CurrencyMismatchReason, db.CompensationTransactions.Where(t =>
             t.Status == CompensationTransactionStatus.Pending
             && t.PayeeId != null
             && db.PlanAssignments.Any(a =>
@@ -60,7 +70,25 @@ public static class UnprocessablePendingSpec
                      && a.EffectivePeriod.Start <= t.TransactionDate
                      && a.EffectivePeriod.End >= t.TransactionDate
                      && pl.Currency == t.Amount.Currency
-                 select 1).Any());
+                 select 1).Any()));
+
+    /// <summary>
+    /// Drops the rows a person has already reviewed and closed for THIS reason (KAN-51).
+    ///
+    /// ★ IT MATCHES ON THE REASON, so closing "no payee" does not silence a currency mismatch found on
+    /// the same sale later, and on <c>IngestedAt &lt;= FactOccurredAt</c>, so the closure covers the
+    /// fact that was reviewed and nothing newer. Same rule as everywhere else — see
+    /// <see cref="ReconciliationClosureSpec"/>.
+    /// </summary>
+    private static IQueryable<CompensationTransaction> Open(
+        IApplicationDbContext db, string reason, IQueryable<CompensationTransaction> source)
+    {
+        var closures = ReconciliationClosureSpec.For(
+            db, (int)ReconciliationEntryKind.Transaction, reason);
+
+        return source.Where(t =>
+            !closures.Any(c => c.EntityId == t.Id && t.IngestedAt <= c.FactOccurredAt));
+    }
 
     /// <summary>Resolves the queryable for a reason string, or null if the reason is unknown.</summary>
     public static IQueryable<CompensationTransaction>? ForReason(IApplicationDbContext db, string? reason) =>

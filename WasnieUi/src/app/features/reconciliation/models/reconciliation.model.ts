@@ -84,3 +84,24 @@ export const EMPTY_RECONCILIATION_FILTER: ReconciliationFilter = {
   page: 1,
   pageSize: 25,
 };
+
+/**
+ * What a close request carries: the row, and the person's stated reason. Nothing else.
+ *
+ * ★★ NO REASON CODES AND NO TIMESTAMPS TRAVEL. Which anomalies this row currently carries, and when
+ * each was detected, the SERVER reads from its own queue. A client that could name the fact time
+ * would be able to close anomalies that have not happened yet — and the closure is what decides
+ * which rows a CFO stops seeing.
+ */
+export interface CloseReconciliationRowRequest {
+  readonly kind: ReconciliationEntryKind;
+  readonly entityId: string;
+  readonly note: string;
+}
+
+/** ★ The reasons come BACK because only the server knew which ones the row carried at that moment. */
+export interface CloseReconciliationRowResult {
+  readonly entityId: string;
+  readonly kind: ReconciliationEntryKind;
+  readonly closedReasons: readonly string[];
+}

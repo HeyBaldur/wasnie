@@ -145,7 +145,7 @@
               <th scope="col">{{ 'RECONCILIATION.COL_REASONS' | translate }}</th>
               <th scope="col">{{ 'RECONCILIATION.COL_PERIOD' | translate }}</th>
               <th scope="col" class="col-amount">{{ 'RECONCILIATION.COL_AMOUNT' | translate }}</th>
-              <th scope="col" class="recon__col-resolve">{{ 'RECONCILIATION.COL_RESOLVE' | translate }}</th>
+              <th scope="col" class="recon__col-actions">{{ 'RECONCILIATION.COL_ACTIONS' | translate }}</th>
             </tr>
           </thead>
           <tbody>
@@ -247,14 +247,21 @@
                   }
                 </td>
 
-                <!-- ★★ AN UNMAPPED REASON GETS NO BUTTON, NEVER A BROKEN LINK. This is the whole
+                <!-- ★★ ONE ACTIONS COLUMN, PINNED TO THE RIGHT EDGE. Two separate action columns
+                     pushed this table 69px past its container (measured in the browser), and the
+                     whole of the second one sat outside the visible area: the Close button existed,
+                     rendered, and could only be reached by discovering a horizontal scrollbar. The
+                     column is now one cell, and it is sticky — the actions stay put whatever the
+                     table's width, so this cannot come back the next time a column is added.
+                     ★★ AN UNMAPPED REASON GETS NO BUTTON, NEVER A BROKEN LINK. This is the whole
                      safety net of KAN-49's Paso 0: `NoQuotaInEffect` has no cure screen in the app
                      today, so its rows show a dash and say why on hover, rather than a "Resolve"
                      that navigates somewhere unhelpful.
                      ★ NOTHING HERE MUTATES A ROW TO HIDE IT. A link changes no state; the reprocess
                      runs the engine. The row leaves the queue only because the queue derives from
                      the data. -->
-                <td class="recon__resolve">
+                <td class="recon__actions">
+                  <div class="recon__actions-inner">
                   @if (resolutionFor(row); as resolution) {
                     @if (resolution.kind === 'link') {
                       <a class="recon__resolve-link"
@@ -280,6 +287,23 @@
                   } @else {
                     <span class="recon__none" [title]="noResolutionKeyFor(row) | translate">—</span>
                   }
+
+                  <!-- ★★ AVAILABLE ON EVERY ROW, NOT ONLY ON THE ONES WITH NO CURE. The ticket
+                       scoped this to "filas sin cura", but the set the code declares as incurable
+                       holds one member (`CurrencyMismatch`), and the case the ticket itself cites —
+                       a deal lost after the commission was paid — has a deep link. "There is nothing
+                       to repair" is a judgement a person makes about ONE row, which is why the note
+                       is mandatory: the sentence they write is what carries the judgement.
+                       ★ RBAC HIDES, IT DOES NOT DISABLE (§5.8). Reading the queue and deciding what
+                       leaves it are different rights — see Permission.ReconciliationClose. -->
+                  @if ('Reconciliation.Close' | hasPermission) {
+                    <ws-button variant="ghost" size="sm"
+                               [title]="'RECONCILIATION.CLOSE.ACTION_HELP' | translate"
+                               (click)="openClose(row)">
+                      {{ 'RECONCILIATION.CLOSE.ACTION' | translate }}
+                    </ws-button>
+                  }
+                  </div>
                 </td>
               </tr>
             } @empty {
@@ -329,5 +353,62 @@
       [periodStart]="target.periodStart"
       [periodEnd]="target.periodEnd"
     />
+  </ws-modal>
+}
+
+<!-- ★★ THE NOTE IS THE POINT OF THIS MODAL, NOT A FIELD ON IT. Closing a row removes money from a
+     queue whose promise is that unpaid money is visible; the sentence written here is the only
+     record of why somebody decided that was correct, and it is what an auditor reads. So the
+     confirm button is disabled until there is one, and the description says what the action does
+     rather than reassuring the reader that it is safe (§C3).
+     ★ THE ROW IS NAMED IN THE MODAL. "Close this row" with no reference is an action a person can
+     take on the wrong line and never find out. -->
+@if (closeTarget(); as row) {
+  <ws-modal
+    [isOpen]="true"
+    size="md"
+    [title]="'RECONCILIATION.CLOSE.TITLE' | translate"
+    [description]="'RECONCILIATION.CLOSE.DESC' | translate"
+    (closed)="cancelClose()"
+  >
+    <div class="recon__close-body">
+      <p class="recon__close-row">
+        <span class="recon__close-row-label">{{ 'RECONCILIATION.COL_REFERENCE' | translate }}</span>
+        <span class="recon__close-row-value">{{ row.referenceNumber ?? row.planName ?? '—' }}</span>
+      </p>
+
+      <p class="recon__close-row">
+        <span class="recon__close-row-label">{{ 'RECONCILIATION.COL_REASONS' | translate }}</span>
+        <span class="recon__close-row-value">
+          @for (reason of row.reasons; track reason) {
+            <ws-badge variant="warning">{{ reasonKeyFor(reason) | translate }}</ws-badge>
+          }
+        </span>
+      </p>
+
+      <ws-textarea
+        [label]="'RECONCILIATION.CLOSE.NOTE_LABEL' | translate"
+        [placeholder]="'RECONCILIATION.CLOSE.NOTE_PLACEHOLDER' | translate"
+        [maxlength]="2000"
+        [submitOnEnter]="false"
+        (valueChange)="closeNote.set($event)"
+      />
+
+      <p class="recon__close-hint">{{ 'RECONCILIATION.CLOSE.NOTE_HELP' | translate }}</p>
+    </div>
+
+    <div slot="footer" class="recon__close-actions">
+      <ws-button variant="secondary" (click)="cancelClose()">
+        {{ 'COMMON.CANCEL' | translate }}
+      </ws-button>
+      <ws-button
+        variant="primary"
+        [disabled]="!canSubmitClose()"
+        [loading]="store.closing()"
+        (click)="confirmClose()"
+      >
+        {{ 'RECONCILIATION.CLOSE.CONFIRM' | translate }}
+      </ws-button>
+    </div>
   </ws-modal>
 }

@@ -4,6 +4,151 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-04 (b) - KAN-51: cierre auditado de filas de reconciliacion (append-only)
+
+**Rama:** KAN-38 · Ticket KAN-51 (Task, Medium, epica KAN-39 «Auditoria y evidencia») · **Sin commit.**
+Backend + frontend.
+
+**★★ LA PREMISA DE ALCANCE DEL TICKET ERA FALSA, Y SEGUIRLA HABRIA DEJADO LA FUNCION INSERVIBLE.**
+El ticket acota la accion a «filas sin cura». El conjunto sin cura que el codigo declara
+(`reconciliation-resolution.ts:87`, `WITHOUT_CURE_SCREEN`) tiene UN miembro, `CurrencyMismatch`, y
+encima es curable — solo espera KAN-45. Y el caso que el propio ticket usa de ejemplo (un deal caido
+tras pagarse la comision) **si tiene deep link** hoy (`reconciliation-resolution.ts:194-201`).
+Gatearlo por ese conjunto habria impedido cerrar exactamente lo que se pidio cerrar. **La accion se
+ofrece en TODAS las filas**, gateada por permiso: «no tiene cura» es un juicio humano sobre UNA fila,
+no una propiedad del codigo de motivo, y el texto obligatorio es lo que sostiene ese juicio.
+
+**★★ LA DECISION DE PRODUCTO PENDIENTE, RESUELTA ANTES DE CONSTRUIR (§E2), CON LA PRECISION QUE LA
+HACE IMPLEMENTABLE.** El ticket recomendaba «el cierre es inmutable; un cambio posterior es un hecho
+nuevo». La clave es `(EntryKind, EntityId, Reason)` **mas el `FactOccurredAt` del hecho cerrado**, y
+la exclusion es `OccurredAt <= FactOccurredAt`. Sin la fecha del hecho, una anomalia **nueva** sobre
+una entidad ya cerrada quedaria oculta para siempre — una fila cerrada por `DealLost` taparia un
+`CrmDrift` detectado despues, que es dinero escondido sin que nadie lo decida (§B1). Con ella, una
+deteccion posterior trae otro `DetectedAt`, cae fuera del cierre y **vuelve como fila nueva**, sin
+revivir nada y sin editar el asiento. Los dos tests que sostienen esta decision se ponen en ROJO con
+la clave simple (verificado, ver abajo).
+
+**★★ EL CLIENTE MANDA LA FILA Y EL MOTIVO ESCRITO, NUNCA LOS HECHOS — y eso es una propiedad de
+seguridad, no una comodidad.** El payload es `{kind, entityId, note}` y nada mas. QUE anomalias
+carga esa fila y CUANDO se detecto cada una lo lee el handler de la cola viva
+(`CloseReconciliationRowHandler.cs:47-55`). Un cliente capaz de declarar su propio `FactOccurredAt`
+podria mandar una fecha lejana en el futuro y silenciar anomalias que aun no han ocurrido — y el
+cierre es lo que decide que deja de ver un CFO.
+
+**★ LA EXCLUSION ES UN ANTI-JOIN EN SQL, AGUAS ARRIBA DE TODO** (`ReconciliationQuery.cs:221`,
+dentro de `Filtered`). Va antes de contar, agrupar y paginar, asi que la tabla y las tarjetas
+excluyen exactamente lo mismo. Excluir despues, en el handler y sobre una pagina, habria dejado una
+tarjeta describiendo dinero que la tabla ya no lista — la unica promesa por la que existe esta
+pantalla. **Lee `ReconciliationClosures`, nunca `AuditLogs`**; hay un test que mete una fila fantasma
+de `AuditLog` con la accion y el recurso correctos y comprueba que no mueve nada.
+
+**★ UN CIERRE POR MOTIVO, NO UNO POR FILA.** Una fila que falla por dos cosas son dos juicios; un
+solo asiento para el par haria incontestable «que anomalia revisaron realmente?».
+
+**★ PERMISO PROPIO, `Reconciliation.Close`,** siguiendo el precedente explicito de
+`Ledger.CloseAccount` (`Permission.cs:66`: «su propio permiso, no Ledger.Adjust»). Cerrar OCULTA
+dinero de la cola; leerla no. Concedido a TenantAdmin y CompManager. En el front, RBAC **oculta**, no
+deshabilita (§5.8).
+
+**★ NADA SE MUTA, Y NO ES QUE NOS ACORDARAMOS DE NO HACERLO:** el handler no carga el credito ni la
+transaccion ni el plan para modificarlos, asi que no hay bandera que poner. `ReconciliationClosure`
+no tiene `Reopen`, ni `Undo`, ni borrado logico (§B6). Migracion **B33**.
+
+**★★ TRES TOKENS CSS INEXISTENTES, DOS MIOS Y NUEVE PREEXISTENTES (§A3).** Se comprobo cada token
+nuevo contra `styles.scss` antes de usarlo: `--font-size-sm` y `--color-text-error` **no existen**
+(la escala es numerica, y el token real es `--color-danger`); corregidos en el WI. El barrido destapo
+9 usos preexistentes de `--font-size-xs` y `--color-text-danger` en esta misma pantalla y en dos
+mas — **ticket KAN-53, creado y enlazado**, no arreglado aqui (§E1). Es la misma familia que
+`--font-size-22` y `--color-border` de la sesion anterior: una variable sin definir no falla, se
+descarta en silencio, y ningun test puede verla.
+
+**★ LA COLUMNA NUEVA RESPETA UN ANCHO YA MEDIDO.** El comentario de
+`reconciliation-list.component.scss:274` documenta que esta tabla desbordo su contenedor por 8px
+cuando el enlace de Resolver gano un glifo. Por eso la cabecera es un sustantivo corto («Revision»),
+el boton es un verbo («Cerrar»), y la frase que explica la accion vive en el tooltip y en el titulo
+del modal, donde hay sitio.
+
+**★★ LOS TESTS SE VERIFICARON EN ROJO, DOS VECES (§A2).** Anulando la exclusion: 4 rojos. Y con la
+clave simplificada a `(kind, entityId)` — el diseno descartado — los 2 que sostienen la decision de
+producto se ponen en rojo y los otros siguen verdes, que es exactamente lo que debe distinguirlos.
+
+**Suites:** build exit 0 · unit **1909** (sin cambio) · integracion **871 -> 878** (+7) ·
+front **1325 -> 1328** (+3) · `ng build --configuration production` exit 0.
+
+**Sin verificar:** no se abrio el navegador. Falta comprobar el ancho real de la tabla con la columna
+nueva (el riesgo que documenta el propio SCSS) y el modal en las tres lenguas.
+
+**★★ DOS DEFECTOS ENCONTRADOS EN RUNTIME POR EL USUARIO, NO POR NINGUNA SUITE.**
+
+**(1) La migracion B33 nunca se aplico a WasnieDb.** Los tests de integracion corren sobre
+Testcontainers con `MigrateAsync`, asi que 878 verdes convivian con un `Invalid object name
+'ReconciliationClosures'` en la pantalla real. **Se genero la migracion, se verifico el fichero
+generado, y se dio por hecho el resto** — §A3 exactamente: mirar el artefacto en vez de la salida.
+Aplicada y verificada contra `INFORMATION_SCHEMA` (11 columnas + el indice), no contra la salida del
+comando.
+
+**(2) El cierre solo lo respetaba el Centro; el Dashboard seguia alertando.** La exclusion se puso
+dentro de la consulta del Centro y ahi se quedo. El Dashboard lee `db.DealLostAlerts` DIRECTAMENTE,
+asi que una fila cerrada desaparecia de una pantalla y seguia avisando en la otra: dos pantallas
+discrepando sobre el mismo dinero, que es justo lo que el Centro existe para no crear. El panel
+reportado tenia **cuatro gemelos** con el mismo defecto.
+
+La regla vive ahora en `ReconciliationClosureSpec.For(db, kind, reason)` y la aplican **seis**
+superficies: Centro, Dashboard (deal-lost, drift, planes sin reglas vivas, pendientes no procesables,
+atribucion ambigua) y el filtro `?attentionReason=` de Transactions. **★★ Las dos ultimas comparten
+`UnprocessablePendingSpec`, cuyo propio comentario promete que la tarjeta y la lista dan SIEMPRE el
+mismo numero; por eso la exclusion va DENTRO de la spec y no en los dos sitios que la llaman** —
+aplicarla a la tarjeta y olvidar la lista habria roto esa promesa en cuanto alguien hiciera clic. Hay
+un test que fija la invariante con numeros concretos (2 → 1 en las dos).
+
+**(3) Cerrar no avisaba de nada.** Ni exito ni fallo: la operacion ocurria en silencio. Toast en los
+dos desenlaces siguiendo la convencion de las otras 30 features (`ToastService`), y **se quito el
+parrafo de error inline del modal** — el mensaje vivia en dos sitios que podian divergir; el store ya
+no guarda `closeError`, devuelve un booleano y la pantalla decide que decir. El texto del error es
+**clave traducida, no la prosa inglesa del servidor** (§C1): el unico fallo alcanzable es «esta fila
+ya no esta abierta», y merece decirse en el idioma del usuario y con que hacer.
+
+**Verificado en rojo (§A2), otra vez:** quitando la exclusion del Dashboard, los 3 tests nuevos de
+esa superficie reproducen el bug reportado; quitando los toasts, los 2 nuevos del componente
+reproducen el silencio.
+
+**Suites tras las correcciones:** build exit 0 · unit **1909** · integracion **871 → 885** (+14
+respecto al Centro v1) · front **1325 → 1331** (+6) · `ng build --configuration production` exit 0 ·
+0 `outcome="Failed"` en el TRX.
+
+**(4) El boton Close estaba fuera de la pantalla, y lo dije en el informe como riesgo en vez de ir a
+mirarlo.** Medido en el navegador: la tabla queria **1197px dentro de 1150px** y desbordaba **69px**;
+la columna «Review» entera (80px) caia fuera del area visible. El boton se renderizaba, era accesible
+por teclado, y con raton habia que **adivinar que existia una barra de scroll horizontal**. La nota de
+`reconciliation-list.component.scss:274` avisaba exactamente de esto (la tabla ya habia desbordado 8px
+antes) y aun asi se anadio una segunda columna de accion.
+
+Arreglo en dos mitades, las dos medidas:
+- **Una sola columna «Acciones», fijada al borde derecho** (`position: sticky; right: 0`), con fondo
+  propio y paridad de hover — un `td` pegajoso pinta su propio fondo y si no se replica
+  `tr:hover` la columna fijada se queda oscura mientras el resto de la fila se ilumina. Dos columnas
+  de accion para una misma fila eran ademas redundantes.
+- **La columna Payee se recorta a 220px con elipsis.** Con sticky a secas el desborde bajaba a 46px
+  pero lo pagaba **la columna AMOUNT**, cortada a «€1,0» debajo de la celda fijada, en la pantalla
+  cuyo trabajo es decir importes con precision. Payee era la mas ancha (273px, nombres de hasta 62
+  caracteres) y la unica que degrada bien: el enlace ya llevaba el nombre completo en su `title`,
+  igual que `.recon__ref` hace desde siempre.
+
+**Verificado midiendo el DOM real, no el CSS (§A3):** desborde **69px → 0**, importes intactos
+(`€1,000.00`, `$50,000.00`, ninguno recortado) y el boton Close visible en todas las filas.
+
+**Leccion:** «sin verificar en navegador» escrito en un informe no es una mitigacion, es una deuda que
+paga el usuario. Cuando el propio SCSS documenta que la tabla ya desbordo una vez, anadir una columna
+EXIGE abrir el navegador antes de reportar.
+
+**Leccion, para el proximo WI que anada una consulta derivada:** una regla nueva sobre datos
+derivados no se implementa en la consulta que la motivo, sino en una spec compartida, **y hay que
+buscar todas las superficies que leen esos mismos hechos**. Aqui eran seis y solo una era obvia.
+
+**Queda abierto:** la lista no muestra en ningun sitio lo que YA se cerro; no hay pantalla de
+cierres. El ticket no lo pide, pero un auditor que quiera leer las notas hoy tiene que ir a la tabla.
+
+
 ## 2026-09-04 - KAN-34: el AuditLog deja de registrar acciones que nunca ocurrieron
 
 **Rama:** KAN-38 · Ticket KAN-34 (Bug, Highest, epica KAN-39 «Auditoria y evidencia») · **Sin commit.**

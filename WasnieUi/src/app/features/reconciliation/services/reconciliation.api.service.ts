@@ -2,7 +2,12 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { HttpParams } from '@angular/common/http';
-import { ReconciliationFilter, ReconciliationPage } from '../models/reconciliation.model';
+import {
+  CloseReconciliationRowRequest,
+  CloseReconciliationRowResult,
+  ReconciliationFilter,
+  ReconciliationPage,
+} from '../models/reconciliation.model';
 
 /**
  * ★ ONLY THE SET KEYS TRAVEL. A null sent as the string "null" is a filter the server would try to
@@ -39,6 +44,17 @@ export class ReconciliationApiService {
     });
   }
 
+
+  /**
+   * Close one row by decision (KAN-51).
+   *
+   * ★ THE NOTE IS REQUIRED BY THE SERVER TOO, not only by the modal. The form blocking an empty box
+   * is a courtesy; the invariant lives in `ReconciliationClosure.Create`, because this endpoint is
+   * reachable without the form.
+   */
+  close(request: CloseReconciliationRowRequest): Observable<CloseReconciliationRowResult> {
+    return this.http.post<CloseReconciliationRowResult>(`${this.base}/close`, request);
+  }
   /** The vocabulary the filter offers. Served by the API so a new engine reason is filterable at once. */
   reasons(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/reasons`);

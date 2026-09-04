@@ -55,6 +55,42 @@ export class ReconciliationStore {
   /** Any money at all in the filtered set — decides whether the money cards are worth showing. */
   readonly hasMoney = computed(() => this._summary().byCurrency.length > 0);
 
+
+  // ── Closing a row by decision (KAN-51) ──────────────────────────────────────
+
+  private readonly _closing = signal(false);
+
+  readonly closing = this._closing.asReadonly();
+
+  /**
+   * Record the decision, then RELOAD.
+   *
+   * ★★ IT DOES NOT SPLICE THE ROW OUT OF `_rows`. Removing it locally would leave the money cards —
+   * which the server computed over the whole filtered set — describing a row the table no longer
+   * shows, and the guarantee this screen exists for is that the two agree. The reload is one request
+   * and it keeps them the same query.
+   *
+   * ★ IT RETURNS WHETHER IT WORKED, so the modal stays open on failure with the note still in the
+   * box. Closing the modal on an error would lose what the person wrote.
+   *
+   * ★ THE MESSAGE IS THE COMPONENT'S, NOT THE STORE'S. Every action in this app reports through a
+   * toast raised by the screen (assignments, plans, transactions); a second error signal here would
+   * be a second place the same failure is announced, and the two would drift.
+   */
+  async closeRow(row: ReconciliationRow, note: string): Promise<boolean> {
+    this._closing.set(true);
+
+    try {
+      await firstValueFrom(this.api.close({ kind: row.kind, entityId: row.entityId, note }));
+      await this.load();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      this._closing.set(false);
+    }
+  }
+
   async load(filter?: Partial<ReconciliationFilter>): Promise<void> {
     const next = { ...this._filter(), ...filter };
     this._filter.set(next);

@@ -75,6 +75,7 @@ public sealed class ApplicationDbContext(
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping> CrmOwnerMappings => Set<Wasnie.Domain.Integrations.Crm.CrmOwnerMapping>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Integrations.Crm.CrmDriftAlert> CrmDriftAlerts => Set<Wasnie.Domain.Integrations.Crm.CrmDriftAlert>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Integrations.Crm.DealLostAlert> DealLostAlerts => Set<Wasnie.Domain.Integrations.Crm.DealLostAlert>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure> ReconciliationClosures => Set<Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -98,6 +99,7 @@ public sealed class ApplicationDbContext(
         builder.ApplyConfiguration(new CompensationTransactionConfiguration());
         builder.ApplyConfiguration(new CategoryMappingConfiguration());
         builder.ApplyConfiguration(new CreditConfiguration());
+        builder.ApplyConfiguration(new ReconciliationClosureConfiguration());
         builder.ApplyConfiguration(new CompensationPayoutConfiguration());
         builder.ApplyConfiguration(new PayoutLineConfiguration());
         builder.ApplyConfiguration(new PayRunConfiguration());
@@ -136,6 +138,7 @@ public sealed class ApplicationDbContext(
         builder.Entity<PayRunSettlement>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Entities.ImportAudit>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<AuditLog>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<BackgroundJobRecord>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<UserSubscription>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // Assistant chat. The tenant filter is a FLOOR, not the isolation: a conversation also belongs
