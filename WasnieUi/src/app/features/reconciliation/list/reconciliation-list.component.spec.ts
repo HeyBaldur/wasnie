@@ -279,6 +279,10 @@ describe('ReconciliationStore — closing a row', () => {
     await settle();
     http.expectOne((r) => r.url === '/api/reconciliation').flush(emptyPage);
     await closing;
+
+    // ★ Closing also tells the sidebar its count changed — see SidebarBadgesStore.
+    await settle();
+    http.expectOne('/api/sidebar-badges').flush({ reconciliation: 0, terminatedAccounts: null, financialsTotal: 0 });
   });
 
   /**
@@ -303,6 +307,9 @@ describe('ReconciliationStore — closing a row', () => {
     await expectAsync(closing).toBeResolvedTo(true);
     expect(store.rows()).toEqual([]);
     expect(store.summary().totalRows).toBe(0);
+
+    await settle();
+    http.expectOne('/api/sidebar-badges').flush({ reconciliation: 0, terminatedAccounts: null, financialsTotal: 0 });
   });
 
   /**
@@ -390,6 +397,9 @@ describe('ReconciliationListComponent — closing a row announces both outcomes'
 
     expect(toast.show).toHaveBeenCalledWith('RECONCILIATION.CLOSE.TOAST_SUCCESS', 'success');
     expect(component.closeTarget()).toBeNull();
+
+    await settle();
+    http.expectOne('/api/sidebar-badges').flush({ reconciliation: 0, terminatedAccounts: null, financialsTotal: 0 });
   });
 
   /** ★ And the modal STAYS OPEN with the note intact, so the person can retry without retyping. */

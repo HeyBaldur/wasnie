@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs/operators';
@@ -6,6 +6,8 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { SidebarStateService } from '../../../core/services/sidebar-state.service';
+import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
+import { SidebarGroupsService } from '../../../core/services/sidebar-groups.service';
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
@@ -42,12 +44,45 @@ interface NavSection {
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.scss',
 })
-export class SidebarComponent {
+export class SidebarComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   readonly sidebarState = inject(SidebarStateService);
   private readonly subscriptionState = inject(SubscriptionStateService);
+  private readonly badgesStore = inject(SidebarBadgesStore);
+
+  // ★ THE OPEN GROUPS LIVE OUTSIDE THIS COMPONENT. The sidebar is rebuilt on every navigation (each
+  // feature template renders its own app-shell), so a signal held here started empty each time and
+  // the auto-expand effect reopened the active group a frame later — the group visibly collapsed and
+  // sprang back on every click. See SidebarGroupsService.
+  private readonly groups = inject(SidebarGroupsService);
+
+  ngOnInit(): void {
+    // ★ STARTED HERE, NOT ON EVERY NAVIGATION. The sidebar is built once per session; the store loads
+    // the counts now and refreshes them on its own slow timer, or when a screen says a count changed.
+    this.badgesStore.start();
+  }
+
+  /**
+   * The number to draw beside a nav path, or null for none.
+   *
+   * ★ AN EXPLICIT MAP, NOT A LOOKUP BUILT FROM THE PATH (§C2, the same rule as the translation
+   * whitelist). A route this build has never heard of gets no badge, rather than an undefined read
+   * silently rendering nothing while looking like it works.
+   */
+  badgeFor(path: string): number | null {
+    switch (path) {
+      case '/reconciliation': return this.badgesStore.reconciliation();
+      case '/terminated-accounts': return this.badgesStore.terminatedAccounts();
+      default: return null;
+    }
+  }
+
+  /** The group row's own badge: the sum of what this user can see, and nothing when it is zero. */
+  groupBadgeFor(key: string): number | null {
+    return key === 'pay-financials' ? this.badgesStore.financialsTotal() : null;
+  }
 
   // Reads from the same root-singleton already loaded by AppShellComponent.
   // To revert logo gradient: remove the @if overlay blocks in the template.
@@ -62,7 +97,6 @@ export class SidebarComponent {
     { initialValue: this.router.url.split('?')[0] },
   );
 
-  readonly expandedGroups = signal<Set<string>>(new Set<string>());
 
   constructor() {
     // Auto-expand any group that contains the active route
@@ -75,12 +109,7 @@ export class SidebarComponent {
             c => url === c.path || url.startsWith(c.path + '/'),
           );
           if (hasActiveChild) {
-            this.expandedGroups.update(s => {
-              if (s.has(entry.key)) return s;
-              const next = new Set(s);
-              next.add(entry.key);
-              return next;
-            });
+            this.groups.open(entry.key);
           }
         }
       }
@@ -92,15 +121,11 @@ export class SidebarComponent {
   }
 
   toggleGroup(key: string): void {
-    this.expandedGroups.update(s => {
-      const next = new Set(s);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
+    this.groups.toggle(key);
   }
 
   isGroupExpanded(key: string): boolean {
-    return this.expandedGroups().has(key);
+    return this.groups.isExpanded(key);
   }
 
   isGroupActive(children: NavItem[]): boolean {

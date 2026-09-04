@@ -35,6 +35,9 @@ public sealed class ListAssignmentsByPayeeSqlTests(PayoutEngineFixture fixture, 
     private sealed class AllowAll : IAuthorizationService
     {
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;
+        // Added with IAuthorizationService.HasAsync: this double allows everything, so the
+        // question answers the same way the enforcement does.
+        public Task<bool> HasAsync(string permission, CancellationToken ct = default) => Task.FromResult(true);
     }
 
     private sealed class FixedTenant(Guid id) : ITenantContext

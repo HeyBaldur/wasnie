@@ -51,7 +51,7 @@ public sealed class CloseReconciliationRowHandler(
         var open = await ReconciliationQuery
             .ExcludeClosed(db, ReconciliationQuery.Seeds(db))
             .Where(s => s.Kind == kind && s.EntityId == request.EntityId)
-            .Select(s => new { s.Reason, s.OccurredAt, s.PayeeId })
+            .Select(s => new { s.Reason, s.OccurredAt, s.PayeeId, s.FactKey })
             .Distinct()
             .ToListAsync(ct);
 
@@ -78,6 +78,9 @@ public sealed class CloseReconciliationRowHandler(
                 entityId: request.EntityId,
                 reason: fact.Reason,
                 factOccurredAt: fact.OccurredAt,
+                // ★ The identity when the fact has one. Without it a re-observed alert would expire
+                // this closure on the next CRM sync — see ReconciliationQuery.ExcludeClosed.
+                factKey: fact.FactKey,
                 note: request.Note,
                 payeeId: fact.PayeeId,
                 closedAt: now,

@@ -17,6 +17,7 @@ public sealed class ReconciliationClosureConfiguration : IEntityTypeConfiguratio
         builder.Property(c => c.EntityId).IsRequired();
         builder.Property(c => c.Reason).IsRequired().HasMaxLength(64);
         builder.Property(c => c.FactOccurredAt).IsRequired();
+        builder.Property(c => c.FactKey);
 
         // Long enough for a real explanation. An auditor's question is answered in a paragraph, not
         // in a tweet, and truncating the one field that carries the human reasoning would be the

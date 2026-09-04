@@ -31,6 +31,7 @@ const LINE_PAYMENT_BADGE: Readonly<Record<PayoutLinePaymentState, { variant: Bad
   Unpaid: { variant: 'neutral', key: 'PAYOUTS.DETAIL.LINE_UNPAID' },
 };
 import { ToastService } from '../../../shared/services/toast.service';
+import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
 import { OverlapRow } from '../../../shared/models/overlap-row.model';
 import {
   WsButtonComponent,
@@ -63,6 +64,7 @@ export class PayoutDetailComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly api = inject(PayoutsApiService);
   private readonly toast = inject(ToastService);
+  private readonly sidebarBadges = inject(SidebarBadgesStore);
 
   readonly payoutId = this.route.snapshot.paramMap.get('id')!;
   readonly payout = signal<PayoutDetail | null>(null);
@@ -256,6 +258,9 @@ export class PayoutDetailComponent implements OnInit {
       this.discardConfirmOpen.set(false);
       this.discardReason.set('');
       this.toast.show('PAYOUTS.DETAIL.DISCARD_SUCCESS', 'success');
+      // Discarding does not move either sidebar count today (neither badge counts payouts), but the
+      // refresh is cheap and keeps this screen honest if one ever does.
+      void this.sidebarBadges.refresh();
       await this._load();
     } catch (err) {
       const httpErr = err as { error?: { message?: string } };

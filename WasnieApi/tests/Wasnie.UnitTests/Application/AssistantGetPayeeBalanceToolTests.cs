@@ -48,6 +48,10 @@ public sealed class AssistantGetPayeeBalanceToolTests
             _granted.Contains(permission)
                 ? Task.CompletedTask
                 : throw new ForbiddenException(permission);
+
+        // Same set, asked instead of enforced.
+        public Task<bool> HasAsync(string permission, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_granted.Contains(permission));
     }
 
     /// <summary>Dispatches to the REAL handlers so no guard can be skipped.</summary>

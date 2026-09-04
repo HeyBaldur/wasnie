@@ -13,6 +13,16 @@ public sealed class AuthorizationService(
     IAuditService auditService)
     : Wasnie.Application.Common.Interfaces.IAuthorizationService
 {
+    /// <summary>
+    /// ★ THE SAME ROLE LOOKUP RequireAsync USES, without the throw or the audit entry. Reading the
+    /// role twice through two different paths is how the two would eventually disagree.
+    /// </summary>
+    public Task<bool> HasAsync(string permission, CancellationToken cancellationToken = default)
+    {
+        var role = claimsService.GetRole();
+        return Task.FromResult(role is not null && RolePermissions.HasPermission(role, permission));
+    }
+
     public async Task RequireAsync(string permission, CancellationToken cancellationToken = default)
     {
         var role = claimsService.GetRole();

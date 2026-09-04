@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
@@ -112,6 +113,7 @@ export class TerminatedAccountsComponent {
   // authority. The modal therefore shows exactly what is about to end, in figures, before it asks.
 
   private readonly api = inject(LedgerApiService);
+  private readonly sidebarBadges = inject(SidebarBadgesStore);
 
   readonly closing = signal(false);
   readonly closeTarget = signal<TerminatedPayeeBalance | null>(null);
@@ -196,6 +198,9 @@ export class TerminatedAccountsComponent {
 
       this.closeTarget.set(null);
       await this.load();
+
+      // ★ Closing an account removes a row from this queue, which is the sidebar's other badge.
+      void this.sidebarBadges.refresh();
     } catch (err) {
       const response = err as HttpErrorResponse;
 

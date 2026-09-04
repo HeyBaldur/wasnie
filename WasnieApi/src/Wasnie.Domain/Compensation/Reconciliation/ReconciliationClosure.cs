@@ -68,6 +68,22 @@ public sealed class ReconciliationClosure : Entity
     public DateTimeOffset FactOccurredAt { get; private set; }
 
     /// <summary>
+    /// The identity of the fact that was reviewed, when it has one — an alert id, a credit id.
+    ///
+    /// ★★ IT EXISTS BECAUSE <see cref="FactOccurredAt"/> ALONE WAS WRONG FOR HALF THE QUEUE. An open
+    /// deal-lost alert is re-observed by the hourly CRM sync, which refreshes its DetectedAt without
+    /// anything having changed; the timestamp comparison read that as a new fact and un-hid the row
+    /// every hour. Four closures were already void this way. Where a key is present the exclusion
+    /// compares keys, so only a genuinely NEW alert — a new id — surfaces again.
+    ///
+    /// ★ NULL IS NOT A GAP. A transaction missing a payee, or an Active plan with no live rules, is a
+    /// condition rather than an event and has no identity to carry; those keep comparing timestamps,
+    /// where the comparison still says what it means. Historical rows written before this column
+    /// existed are null too, and keep behaving exactly as they did.
+    /// </summary>
+    public Guid? FactKey { get; private set; }
+
+    /// <summary>
     /// Why the person left it as it stands. MANDATORY — see <see cref="Create"/>.
     ///
     /// ★ PROSE ON PURPOSE, AND THE ONE PLACE IT BELONGS. §C1 bans prose the SYSTEM emits, because a
@@ -97,6 +113,7 @@ public sealed class ReconciliationClosure : Entity
         Guid entityId,
         string reason,
         DateTimeOffset factOccurredAt,
+        Guid? factKey,
         string note,
         Guid? payeeId,
         DateTimeOffset closedAt,
@@ -122,6 +139,7 @@ public sealed class ReconciliationClosure : Entity
             EntityId = entityId,
             Reason = reason,
             FactOccurredAt = factOccurredAt,
+            FactKey = factKey,
             Note = note.Trim(),
             PayeeId = payeeId,
             ClosedAt = closedAt,

@@ -17,6 +17,7 @@ import { ToastService } from '../../shared/services/toast.service';
 import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
 import { RelativeTimePipe } from '../../shared/pipes/relative-time.pipe';
 import { HubSpotApiService } from './services/hubspot.api.service';
+import { HubSpotStatusStore } from './services/hubspot-status.store';
 import { HubSpotConnectionStatus, HubSpotStatus } from './models/hubspot.model';
 
 /** One numbered step of the connection tutorial. See `tutorialSteps` for what the flags mean. */
@@ -48,6 +49,7 @@ interface TutorialStep {
 })
 export class IntegrationsComponent implements OnInit {
   private readonly api = inject(HubSpotApiService);
+  private readonly statusStore = inject(HubSpotStatusStore);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -159,6 +161,10 @@ export class IntegrationsComponent implements OnInit {
     this.api.getStatus().subscribe({
       next: s => {
         this.status.set(s);
+        // ★ The sidebar banner reads a session-wide cache, and this page is the ONLY place the
+        // connection changes. Pushing every fresh status through keeps the banner from surviving a
+        // disconnect — without it, the cache would only be right until the user unplugged HubSpot.
+        this.statusStore.set(s);
         this.categoryPropValue = s.categoryPropertyName ?? '';
         this.loading.set(false);
       },

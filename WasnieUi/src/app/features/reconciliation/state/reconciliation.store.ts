@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ReconciliationApiService } from '../services/reconciliation.api.service';
+import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
 import {
   EMPTY_RECONCILIATION_FILTER,
   ReconciliationFilter,
@@ -14,6 +15,7 @@ const EMPTY_SUMMARY: ReconciliationSummary = { totalRows: 0, byCurrency: [], byR
 @Injectable({ providedIn: 'root' })
 export class ReconciliationStore {
   private readonly api = inject(ReconciliationApiService);
+  private readonly sidebarBadges = inject(SidebarBadgesStore);
 
   private readonly _rows = signal<readonly ReconciliationRow[]>([]);
   private readonly _summary = signal<ReconciliationSummary>(EMPTY_SUMMARY);
@@ -83,6 +85,11 @@ export class ReconciliationStore {
     try {
       await firstValueFrom(this.api.close({ kind: row.kind, entityId: row.entityId, note }));
       await this.load();
+
+      // ★ THE BADGE IS TOLD, NOT LEFT TO NOTICE. Closing a row is precisely an action that changes the
+      // sidebar's count; without this the number would stay wrong until the five-minute timer, and the
+      // user would be looking straight at the proof that it is wrong.
+      void this.sidebarBadges.refresh();
       return true;
     } catch {
       return false;

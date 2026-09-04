@@ -24,6 +24,23 @@ internal sealed record ReconciliationSeed
     public required int MoneyKind { get; init; }
     public DateOnly? PeriodDate { get; init; }
     public required DateTimeOffset OccurredAt { get; init; }
+
+    /// <summary>
+    /// The IDENTITY of the fact behind this seed, when it has one of its own.
+    ///
+    /// ★★ IT EXISTS BECAUSE A TIMESTAMP IS NOT AN IDENTITY, and reading one as the other cost this
+    /// feature its whole purpose for two reasons. A deal-lost alert is re-observed by the hourly
+    /// HubSpot sync, which calls Refresh() and moves DetectedAt forward on the SAME alert. The
+    /// closure rule "hide it while the fact is no newer than the one reviewed" then expired every
+    /// hour, and a row the user had closed came back — four closures were already invalidated this
+    /// way before anybody noticed.
+    ///
+    /// ★ NULL WHERE THE FACT HAS NO IDENTITY. A transaction that lacks a payee, or a plan whose rules
+    /// are all stopped, is not an event somebody raised: it is a condition the data is in. Those keep
+    /// comparing timestamps, which works for them precisely because nothing re-stamps them on a
+    /// schedule — and for the plan, an edit SHOULD ask for a fresh look.
+    /// </summary>
+    public Guid? FactKey { get; init; }
 }
 
 /// <summary>
@@ -83,6 +100,9 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyBase,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = c.AllocatedAt,
+                // The credit IS the fact: a recalculation supersedes it and allocates a new one with
+                // a new id, which is a new fact and comes back.
+                FactKey = c.Id,
             };
 
         // ── The three unprocessable-pending reasons, from the shared spec ────────────────────
@@ -122,6 +142,9 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyClawback,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = a.DetectedAt,
+                // ★ THE ALERT, NOT ITS DetectedAt. The sync refreshes this alert every hour without
+                // anything having changed; a genuinely new loss is a NEW alert with a new id.
+                FactKey = a.Id,
             };
 
         // ── A deal that CHANGED in the CRM after its commission was calculated or paid ───────
@@ -146,6 +169,8 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyNone,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = a.DetectedAt,
+                // Same rule as deal-lost: the drift alert is the fact, its stamp is only its last sighting.
+                FactKey = a.Id,
             };
 
         // ── An Active plan whose every rule is stopped ───────────────────────────────────────
@@ -167,6 +192,9 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyNone,
                 PeriodDate = null,
                 OccurredAt = p.UpdatedAt,
+                // A condition, not an event: no identity of its own. Editing the plan afterwards
+                // moves UpdatedAt and legitimately asks for a fresh look.
+                FactKey = null,
             };
 
         return refusedCredits
@@ -193,6 +221,10 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyBase,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = t.IngestedAt,
+                // ★ EXPLICITLY NULL, NOT OMITTED. EF cannot translate a Concat whose sides assign
+                // different sets of properties — leaving this out took the whole queue down with
+                // "Unable to translate set operations…". Every seed states every field.
+                FactKey = null,
             });
     }
 
@@ -224,7 +256,16 @@ internal static class ReconciliationQuery
             c.EntryKind == s.Kind &&
             c.EntityId == s.EntityId &&
             c.Reason == s.Reason &&
-            s.OccurredAt <= c.FactOccurredAt));
+            (s.FactKey != null
+                // ★★ THE FACT HAS AN IDENTITY: compare identities, never stamps. The hourly CRM sync
+                // re-observes an open alert and moves its DetectedAt forward; comparing stamps read
+                // that as a new fact and expired the closure every hour. A genuinely new loss is a
+                // NEW alert with a new id, and that is what comes back.
+                ? c.FactKey == s.FactKey
+                // ★ NO IDENTITY — a condition rather than an event. Nothing re-stamps these on a
+                // schedule, so "no newer than what was reviewed" still means what it says: a plan
+                // edited after being closed asks for a fresh look, which is correct.
+                : s.OccurredAt <= c.FactOccurredAt)));
 
     /// <summary>
     /// The filtered seeds, minus the ones somebody has already reviewed and closed.

@@ -7,6 +7,9 @@ using Wasnie.Domain.Common.Results;
 using Wasnie.IntegrationTests.TestDoubles;
 using Wasnie.Application.Compensation.Handlers.Dashboard;
 using Wasnie.Application.Compensation.Queries.Dashboard;
+using Wasnie.Application.Compensation.Handlers.Sidebar;
+using Wasnie.Application.Compensation.Queries.Sidebar;
+using Wasnie.Domain.Authorization;
 using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Handlers.Reconciliation;
@@ -803,7 +806,7 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
     /// for ever, which is money disappearing without anybody deciding it should (§B1).
     /// </summary>
     [Fact]
-    public async Task A_later_detection_of_the_same_anomaly_returns_as_a_new_row()
+    public async Task A_reobserved_alert_stays_closed_but_a_new_alert_returns()
     {
         var tenantId = Guid.NewGuid();
         var payeeId = Guid.NewGuid();
@@ -833,8 +836,13 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
 
         (await RunAsync(tenantId)).Items.Should().BeEmpty();
 
-        // The same deal is detected as lost again, later. Refresh moves DetectedAt forward — a new
-        // fact about the same money.
+        // ★★ THE SYNC RE-OBSERVES THE SAME ALERT. Refresh() moves DetectedAt forward without anything
+        // having changed — the hourly HubSpot job does this to every open alert. This is NOT a new
+        // fact, and the row must stay closed.
+        //
+        // This test used to assert the opposite, and that is how the defect shipped: the first design
+        // compared timestamps, so every sync expired every closure and a row the user had closed came
+        // back within the hour. Four real closures were void before anybody noticed.
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
             var alert = await db.DealLostAlerts.SingleAsync(a => a.Id == alertId);
@@ -842,8 +850,24 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
             await db.SaveChangesAsync();
         }
 
+        (await RunAsync(tenantId)).Items.Should().BeEmpty(
+            "re-observing an open alert is the same fact seen again, not a new one");
+
+        // ★ A GENUINELY NEW LOSS IS A NEW ALERT. Resolve the old one and raise another: different id,
+        // different fact, and it surfaces — which is the property the timestamp was reaching for.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var alert = await db.DealLostAlerts.SingleAsync(a => a.Id == alertId);
+            alert.Resolve("test", Now.AddDays(40));
+
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                Guid.NewGuid(), tenantId, "HubSpot", "deal-1", txId, "REF-LOST-TWICE",
+                CompensationTransactionStatus.Paid, 450m, EUR, Now.AddDays(45), "sync"));
+            await db.SaveChangesAsync();
+        }
+
         var after = await RunAsync(tenantId);
-        after.Items.Should().ContainSingle("a newer detection is a new fact, not a revival");
+        after.Items.Should().ContainSingle("a NEW alert is a new fact");
         after.Items[0].Reasons.Should().Equal(ReconciliationReason.DealLost);
 
         await using (var db = fixture.CreateDbForTenant(tenantId))
@@ -851,6 +875,7 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
             var closure = await db.ReconciliationClosures.SingleAsync();
             closure.FactOccurredAt.Should().Be(Now,
                 "the closure records the fact it reviewed and is never edited");
+            closure.FactKey.Should().Be(alertId, "and it remembers WHICH alert it closed");
         }
     }
 
@@ -1249,6 +1274,209 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
         var query = UnprocessablePendingSpec.ForReason(db, reason);
         query.Should().NotBeNull();
         return await query!.CountAsync();
+    }
+
+
+    // ══ KAN-54: los conteos del sidebar ══════════════════════════════════════════════════════
+
+    private sealed class PermissionSetAuthorization(params string[] granted)
+        : Wasnie.Application.Common.Interfaces.IAuthorizationService
+    {
+        private readonly HashSet<string> _granted = new(granted, StringComparer.Ordinal);
+
+        public Task RequireAsync(string permission, CancellationToken ct = default) =>
+            _granted.Contains(permission)
+                ? Task.CompletedTask
+                : throw new Wasnie.Application.Common.Exceptions.ForbiddenException(permission);
+
+        public Task<bool> HasAsync(string permission, CancellationToken ct = default) =>
+            Task.FromResult(_granted.Contains(permission));
+    }
+
+    /// <summary>
+    /// A sender that answers the terminated-accounts query with a fixed result, so this test can drive
+    /// the badge without standing up that whole handler and its access guard — which has its own tests.
+    /// </summary>
+    private sealed class StubTerminatedSender(int rowCount) : ISender
+    {
+        public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken ct = default)
+        {
+            var rows = Enumerable.Range(0, rowCount)
+                .Select(i => new TerminatedPayeeBalanceDto(
+                    Guid.NewGuid(), $"Payee {i}", $"EMP-{i}", new DateOnly(2026, 1, 1),
+                    0m, "EUR", null, null, 0m, []))
+                .ToList();
+
+            var result = Result<TerminatedAccountsDto>.Success(new TerminatedAccountsDto(rows, []));
+            return Task.FromResult((TResponse)(object)result);
+        }
+
+        public Task<object?> Send(object request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task Send<TRequest>(TRequest request, CancellationToken ct = default)
+            where TRequest : IRequest =>
+            throw new NotSupportedException();
+
+        public IAsyncEnumerable<TResponse> CreateStream<TResponse>(
+            IStreamRequest<TResponse> request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
+    private async Task<SidebarBadgesDto> BadgesAsync(
+        Guid tenantId, int terminatedRows, params string[] permissions)
+    {
+        await using var db = fixture.CreateDbForTenant(tenantId);
+        var handler = new GetSidebarBadgesHandler(
+            db, new StubTerminatedSender(terminatedRows), new PermissionSetAuthorization(permissions));
+
+        var result = await handler.Handle(new GetSidebarBadgesQuery(), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        return result.Value!;
+    }
+
+    /// <summary>
+    /// ★★ THE ACCEPTANCE CRITERION THAT MATTERS MOST: the badge and the Centre agree. They agree
+    /// because they are the SAME query — this asserts it on real data rather than on inspection, so a
+    /// future edit to one that forgets the other shows up here.
+    /// </summary>
+    [Fact]
+    public async Task The_sidebar_count_equals_the_reconciliation_centre_count()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-1", null, 1_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-2", null, 2_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-3", null, 3_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var centre = await RunAsync(tenantId);
+        var badges = await BadgesAsync(tenantId, terminatedRows: 0, Permission.ReportsViewAll);
+
+        centre.Summary.TotalRows.Should().Be(3);
+        badges.Reconciliation.Should().Be(centre.Summary.TotalRows);
+    }
+
+    /// <summary>
+    /// ★ A CLOSED ROW LEAVES THE BADGE TOO. It comes for free from sharing the query — which is the
+    /// whole argument for sharing it — but "for free" is exactly the kind of claim worth pinning.
+    ///
+    /// ★★ IT USES A DEAL-LOST ROW ON PURPOSE, AND THE FIRST VERSION DID NOT. Closure exclusion lives
+    /// in TWO layers: inside UnprocessablePendingSpec for the pending-transaction reasons (so the
+    /// dashboard card and the Transactions filter inherit it), and in ReconciliationQuery.ExcludeClosed
+    /// for everything else. A test built on NoPayee therefore passes even if the badge skips
+    /// ExcludeClosed entirely — it did, and the mutation went unnoticed until it was tried. Deal-lost
+    /// depends only on ExcludeClosed, so this actually exercises the layer the badge relies on.
+    /// </summary>
+    [Fact]
+    public async Task Closing_a_row_lowers_the_badge()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-BADGE"));
+
+            var lost = PaidTx(tenantId, "REF-BADGE-CLOSE", payeeId, 9_000m);
+            txId = lost.Id;
+            db.CompensationTransactions.Add(lost);
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                Guid.NewGuid(), tenantId, "HubSpot", "deal-badge", lost.Id, "REF-BADGE-CLOSE",
+                CompensationTransactionStatus.Paid, 450m, EUR, Now, "sync"));
+
+            // A second, untouched row so the badge has something left to report.
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-KEEP", null, 500m));
+            await db.SaveChangesAsync();
+        }
+
+        (await BadgesAsync(tenantId, 0, Permission.ReportsViewAll)).Reconciliation.Should().Be(2);
+
+        var closed = await CloseAsync(
+            tenantId, ReconciliationEntryKind.Transaction, txId,
+            "Commission already paid; the clawback is applied.");
+        closed.IsSuccess.Should().BeTrue(closed.Error);
+
+        (await BadgesAsync(tenantId, 0, Permission.ReportsViewAll)).Reconciliation.Should().Be(1);
+    }
+
+    /// <summary>
+    /// ★★ NO PERMISSION MEANS NO BADGE — null, NOT ZERO. A 0 would tell a user who may not see the
+    /// queue that it is empty, which is a statement about the tenant's money they were not cleared to
+    /// receive. The other badge still arrives: one missing permission removes a part of the answer,
+    /// never the whole of it.
+    /// </summary>
+    [Fact]
+    public async Task A_user_without_the_permission_gets_no_reconciliation_badge_at_all()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-HIDDEN", null, 4_000m));
+            await db.SaveChangesAsync();
+        }
+
+        // Holds Ledger.Read but not Reports.ViewAll.
+        var badges = await BadgesAsync(tenantId, terminatedRows: 2, Permission.LedgerRead);
+
+        badges.Reconciliation.Should().BeNull("a 0 would describe money this user may not see");
+        badges.TerminatedAccounts.Should().Be(2, "the permission they DO hold still answers");
+        badges.FinancialsTotal.Should().Be(2, "the group total counts only what is visible");
+    }
+
+    [Fact]
+    public async Task The_financials_total_adds_the_badges_the_user_can_see()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-T1", null, 100m));
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-BADGE-T2", null, 200m));
+            await db.SaveChangesAsync();
+        }
+
+        var badges = await BadgesAsync(
+            tenantId, terminatedRows: 3, Permission.ReportsViewAll, Permission.LedgerRead);
+
+        badges.Reconciliation.Should().Be(2);
+        badges.TerminatedAccounts.Should().Be(3);
+        badges.FinancialsTotal.Should().Be(5);
+    }
+
+    /// <summary>
+    /// ★ Each tenant counts only its own. The query filter does this, but the badge is a number a user
+    /// reads without context, so a leak here would be believed.
+    /// </summary>
+    [Fact]
+    public async Task Each_tenant_counts_only_its_own_rows()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantA))
+        {
+            db.CompensationTransactions.Add(Tx(tenantA, "REF-A-1", null, 100m));
+            db.CompensationTransactions.Add(Tx(tenantA, "REF-A-2", null, 200m));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantB))
+        {
+            db.CompensationTransactions.Add(Tx(tenantB, "REF-B-1", null, 300m));
+            await db.SaveChangesAsync();
+        }
+
+        (await BadgesAsync(tenantA, 0, Permission.ReportsViewAll)).Reconciliation.Should().Be(2);
+        (await BadgesAsync(tenantB, 0, Permission.ReportsViewAll)).Reconciliation.Should().Be(1);
     }
 
     private sealed class FixedCurrentUser : Wasnie.Application.Common.Interfaces.ICurrentUserService

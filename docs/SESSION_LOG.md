@@ -4,6 +4,161 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-04 (e) - KAN-54: badges de conteo en el sidebar
+
+**Rama:** KAN-38 · Ticket KAN-54 (Task, Medium, epica KAN-43) · **Sin commit.** Backend + frontend.
+
+**★★ EL TICKET SE CORRIGIO SOLO ENTRE LA PREGUNTA Y LA RESPUESTA.** La version original exigia un
+**stored procedure**. El Paso 0 encontro que eso chocaba con tres cosas: (1) obligaria a duplicar
+~690 lineas (los 9 seeds de `ReconciliationQuery` + 4 specs) en T-SQL, una **tercera** definicion de
+«impagable» — y `AmbiguousAttributionSpec.Queryable` ya es la segunda de una regla del motor; (2) la
+cola de terminated **no es un conteo por tenant**: se filtra con `PayeeAccessGuard`, asi que un SP que
+reciba solo `TenantId` le daria a un Rep el numero de cuentas de sus companeros; (3) el propio ticket
+decia «reusar esa logica, no inventar otra». Se reporto, el usuario reescribio el ticket con esa
+correccion, y se construyo el endpoint que reusa.
+
+**Construido:** `GET /api/sidebar-badges` → `GetSidebarBadgesHandler`, que **no cuenta nada propio**:
+reconciliacion sale de `ReconciliationQuery.Filtered(...)` (la misma expresion que pagina el Centro) y
+terminated de **enviar la query existente por `ISender`**, con su guard puesto. Front: `SidebarBadgesStore`
++ badges en el sidebar.
+
+**★★ `null` NO ES `0`.** Un permiso ausente devuelve **null** y el sidebar no dibuja badge; un 0 es una
+medicion real («la cola esta limpia») y SI se dibuja. Un 0 en lugar de null le diria a alguien sin
+permiso que el tenant no tiene dinero impagable — una afirmacion sobre dinero que no le corresponde
+recibir. Y `HasAsync`, no `RequireAsync`: un permiso que falta quita **una parte** de la respuesta,
+nunca la respuesta entera.
+
+**★ `IAuthorizationService.HasAsync` es nuevo, y no audita a proposito.** Preguntar no es denegar;
+expresarlo con `RequireAsync` + catch convertiria el 403 en control de flujo y llenaria `AuditLogs` de
+`PERMISSION_DENIED` por permisos que nadie pidio realmente. Anadir el miembro rompio **27 dobles de
+test**, actualizados respetando la semantica de cada uno (los que permiten todo devuelven true, los que
+deniegan false, los que llevan lista consultan la lista).
+
+**★★ Y UN TEST QUE NACIO VERDE MUERTO, CAZADO POR LA MUTACION.** `Closing_a_row_lowers_the_badge` usaba
+una fila `NoPayee`, y **paso igual con el badge mutado para saltarse `ExcludeClosed`**. Motivo: la
+exclusion de cierres vive en **DOS capas** — dentro de `UnprocessablePendingSpec` para los motivos de
+transaccion pendiente (para que la tarjeta del Dashboard y el filtro de Transactions la hereden), y en
+`ReconciliationQuery.ExcludeClosed` para todo lo demas. Un test sobre `NoPayee` no toca la segunda. Se
+reescribio sobre **deal-lost**, que solo depende de `ExcludeClosed`, y entonces si se pone en rojo.
+
+**★ Antes de creer la mutacion, se comprobo que el binario se reconstruia** (rompiendo la compilacion a
+proposito): si no, «los tests siguen verdes» habria significado otra cosa.
+
+**Refresco:** el store carga al iniciar, refresca cada 5 minutos, y **se le avisa** tras cerrar una fila
+de reconciliacion y tras cerrar una cuenta terminada — nunca en cada navegacion. Un fallo de refresco
+**conserva los numeros anteriores**: un sidebar que se vacia ante un error parece trabajo desapareciendo.
+
+**Suites:** unit **1909 / 0** · front **1345 → 1356** (+11) · `ng build --configuration production`
+exit 0 · integracion **+5** en el fichero (30/30). Una corrida completa dio 90 rojos por
+**`NamedPipeClientStream` timeout** — saturacion de Docker, no codigo.
+
+**★★ TRES AJUSTES TRAS VERLO EN PANTALLA, y dos eran defectos reales.**
+
+**(1) Los badges van en ROJO.** Los hice del tono hover del sidebar razonando que «una cola con filas
+es normal, no un fallo». Decision de producto que no me tocaba: son conteos de dinero impagado y
+cuentas sin resolver, y estan para tirar del ojo. `--color-danger` sobre `--color-text-inverse`, y el
+punto del rail plegado tambien.
+
+**(2) El badge del grupo se iba al centro de la fila.** Causa exacta: `.sidebar__nav-chevron` YA lleva
+`margin-left: auto`, y yo le puse otro al badge — **con dos elementos reclamando el espacio libre,
+flexbox lo REPARTE entre ambos** y el numero aterriza a media fila, huerfano del control al que
+pertenece. Solo uno puede reclamarlo: el badge cede (`margin-left: 0`) y queda pegado al carret.
+
+**(3b) LA CAUSA MAYOR DEL BLINK: EL BANNER DE HUBSPOT.** Localizada por el usuario en pantalla. Mismo
+defecto que (3) y que el de los badges, un piso mas abajo: `HubSpotSyncBannerComponent` pedia su
+estado por HTTP en `ngOnInit`, y vive DENTRO del sidebar. En cada navegacion: `status` arranca en
+null → `@if (connected())` falso → **el banner no esta en el DOM** → el aside mide corto → llega la
+respuesta → aparece la tarjeta y el aside crece de golpe. Eso es el «se hace corto y luego se ajusta
+rapidamente», y ademas era una peticion por clic para un valor que cambia dos veces al año.
+
+Arreglado con `HubSpotStatusStore` (root singleton, `ensureLoaded()` idempotente): despues de la
+primera carga, cada reconstruccion pinta el banner **en el primer frame**. El hueco de la primera
+carga se queda — es inevitable y no es lo que se veia; lo que se veia era ese hueco repitiendose en
+cada clic.
+
+**★ El riesgo que introduce una cache y como se cierra:** un «Connected» cacheado que sobreviva a un
+disconnect diria al usuario que sus deals siguen sincronizando cuando no. La pagina de Integrations
+es el UNICO sitio donde el estado cambia y ya tiene un embudo unico (`load()`), asi que empuja cada
+estado fresco al store. Test que lo fija.
+
+**Verificado en rojo (§A2):** quitada la guarda de `ensureLoaded()` → 3 rojos, entre ellos
+«does not ask again when the sidebar is rebuilt».
+
+**(3) EL BLINK DEL SIDEBAR — y no era el fetch, era estado en el sitio equivocado.** Cada una de las
+**41 plantillas de feature** renderiza su propio `<app-shell>`, y el shell contiene el sidebar: **cada
+navegacion destruye y reconstruye el aside entero**. Con `expandedGroups` como signal DEL COMPONENTE,
+cada reconstruccion empezaba con todos los grupos CERRADOS y el `effect` de auto-expandir reabria el
+de la ruta activa un frame despues — el grupo colapsaba y volvia de un salto en cada clic. Y un grupo
+que el usuario hubiera abierto a mano se perdia. Movido a `SidebarGroupsService` (root singleton): el
+conjunto sigue ahi, no hay colapso, no hay blink.
+
+**★★ Y esa misma reconstruccion destapo un defecto MIO: una peticion por navegacion.** `start()` vivia
+en el `ngOnInit` del sidebar y refrescaba SIEMPRE, asi que se pedian los badges en cada clic —
+exactamente lo que el ticket prohibe («nunca en cada navegacion»). `start()` es ahora idempotente
+tambien para la carga inicial. Test que lo fija, **verificado en rojo** quitando la guarda.
+
+**No se toco `<app-shell>`:** que 41 plantillas lo repitan en vez de vivir en un layout de rutas es
+deuda estructural preexistente y un refactor de otro tamano; queda reportado, no arreglado (§E1).
+
+**Verificado en el BUNDLE compilado**, no en el fuente: `background:var(--color-danger)` en el badge y
+en el punto, y `margin-left:0;margin-right:var(--space-1)` en el badge del grupo.
+
+**front 1356 → 1360** (+4: el spec de `SidebarGroupsService`) · `ng build --configuration production`
+exit 0.
+
+**Sin verificar:** navegador.
+
+## 2026-09-04 (d) - KAN-51 corregido: el cierre se invalidaba CADA HORA (bug propio, reportado por el usuario)
+
+**Rama:** KAN-38 · Corrige el mecanismo de KAN-51 · **Sin commit.** Migracion **B35**.
+
+**★★ EL SINTOMA: «cierro esta fila y vuelve a aparecer».** Y no era casualidad: **cada hora**.
+
+**★★ LA CAUSA, Y ES UN ERROR CONCEPTUAL MIO: CONFUNDÍ LA MARCA DE LA ULTIMA OBSERVACION CON LA
+IDENTIDAD DEL HECHO.** La exclusion de KAN-51 ocultaba la fila mientras `OccurredAt <= FactOccurredAt`.
+Para `DealLost`/`CrmDrift`, `OccurredAt` es `alert.DetectedAt` — y el sync horario de HubSpot llama a
+`alert.Refresh(...)` (`DealLostReconciler.cs:119`, `CrmDriftPolicy.cs:203`) sobre el **mismo alert sin
+resolver**, que **pisa `DetectedAt`**. Cada sync, el hecho parecia «mas nuevo», el cierre dejaba de
+cubrirlo y la fila volvia.
+
+**Medido en la base:** el alert `4541997D` (uno solo, `ResolvedAt` NULL) con `DetectedAt` avanzando a
+`2026-09-04 12:00:12` por `hubspot-auto-sync`, contra dos cierres del usuario a las `2026-09-03
+15:00:26` y `2026-09-04 09:00:28`. **4 cierres invalidados** en total, y los 4 alerts vivos comparten
+el mismo `DetectedAt` — el job los refresca a todos a la vez.
+
+**★★ Y EL TEST FIJABA EL BUG COMO SI FUERA LA FUNCIONALIDAD.**
+`A_later_detection_of_the_same_anomaly_returns_as_a_new_row` usaba `Refresh()` para simular «hecho
+nuevo» y afirmaba que la fila DEBIA volver. Verde, y describiendo exactamente el defecto. Renombrado a
+`A_reobserved_alert_stays_closed_but_a_new_alert_returns` y ahora afirma las dos mitades: refrescar
+NO reabre, un alert **nuevo** si.
+
+**Arreglo: `FactKey`, la identidad del hecho, junto al timestamp.**
+- El seed publica `FactKey` donde el hecho tiene identidad propia: `alert.Id` para deal-lost y drift,
+  `credit.Id` para las refusals del motor. **Null** para plan-sin-reglas y pendientes — son
+  CONDICIONES, no eventos, y ahi el timestamp sigue siendo la comparacion correcta (editar el plan
+  SI debe pedir una revision nueva).
+- La exclusion compara **clave si existe, timestamp si no**.
+- `ReconciliationClosure.FactKey` (migracion **B35**, columna nullable), verificada contra
+  `INFORMATION_SCHEMA`.
+
+**★ Trampa de EF que tumbo TODA la cola:** anadir `FactKey` a 3 de los 9 seeds dio
+`Unable to translate set operations when both sides don't assign values to the same properties`. Un
+`Concat` exige que **todos** los lados asignen **todas** las propiedades; hay que poner
+`FactKey = null` explicito, no omitirlo.
+
+**★★ SIN BACKFILL, Y A PROPOSITO.** Los 4 cierres historicos quedan con `FactKey` null, asi que no
+cubren un seed que si trae clave: **el usuario tendra que cerrar esas filas una vez mas**, y esta vez
+se quedaran cerradas. No se rellenan porque `DealLostAlert` **no guarda cuando se creo** (solo
+`DetectedAt`, que es mutable), asi que no hay forma de demostrar que el alert vivo es el mismo que se
+cerro; rellenarlo seria asumirlo, y si el alert hubiera sido reemplazado se ocultaria un hecho nuevo
+(§B1). Las filas historicas no se borran (§B6): quedan como evidencia de que se decidio.
+
+**Verificado en ROJO:** volviendo la comparacion al timestamp, el test nuevo se pone en rojo.
+
+**Suites:** unit **1909 / 0** · integracion **892 / 0**, 0 `outcome="Failed"` en TRX · front **1350 / 0**.
+
+**Sin verificar:** navegador. **Hay que reiniciar el API** para que el cierre nuevo escriba `FactKey`.
+
 ## 2026-09-04 (c) - KAN-52: salida para un payout Approved que nunca podra pagarse
 
 **Rama:** KAN-38 · Ticket KAN-52 (Bug, High, epica KAN-38) · **Sin commit.** Backend + frontend.
