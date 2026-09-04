@@ -141,6 +141,94 @@ Arreglo en dos mitades, las dos medidas:
 paga el usuario. Cuando el propio SCSS documenta que la tabla ya desbordo una vez, anadir una columna
 EXIGE abrir el navegador antes de reportar.
 
+**(5) `ws-toast` rediseñado — primitiva, no pantalla.** El usuario pidio un toast "mas minimalista y
+profesional" pasando dos ejemplos de Flowbite/Tailwind. **La referencia era Tailwind y hex otra vez**
+(`bg-neutral-primary-soft`, `text-fg-brand`, `rounded-base`, `shadow-xs`, `ms-2.5`), y §5.5 prohibe
+las dos cosas: **se copio la anatomia, no la hoja de estilos**. De los dos ejemplos se tomo el
+primero; el segundo (avatar + dos botones de accion) es una tarjeta de notificacion, no un toast, y
+no mapea a un sistema cuyo unico contenido es una frase.
+
+Cambios: **fuera la barra de acento de 4px** (a 340px de ancho era una franja de color puro
+compitiendo con la frase) y **entra un icono por tipo** que lleva el color; **una regla vertical de
+1px** separa icono y texto, que es el truco entero del layout de la referencia; sombra de
+`--shadow-lg` a `--shadow-sm` (`--shadow-xs` NO existe) porque un aviso de 4s no puede tener la
+elevacion de un modal; boton de descarte de 24 a 28px con `aria-label` traducido (`COMMON.DISMISS`,
+nuevo en EN/ES/PL). **Afecta a las ~30 features que usan `ToastService`**, no solo a reconciliacion.
+
+**★★ EL SPEC NACIO VERDE MUERTO Y SE CORRIGIO (§A2).** El primer intento afirmaba
+`querySelector('.ws-toast__icon svg') !== null`. Al romper el mapa a proposito (`x-circle` →
+`error-circle`) **siguio en verde**: `IconComponent` renderiza SIEMPRE el `<svg>` y solo rellena su
+`innerHTML` desde el diccionario, asi que un nombre inexistente da un svg vacio, no ausente. La
+asercion pasa a ser sobre **las formas de dentro** (`path, circle, line, ...`), y con eso la mutacion
+si se pone en rojo. Es exactamente el fallo silencioso que el test existia para cazar, y casi lo
+deja pasar.
+
+**Suites:** front **1331 → 1335** (+4, el primer spec de `ws-toast`) · `ng build --configuration
+production` exit 0. Verificado en navegador: los 4 tipos con su icono y su color, la regla visible,
+360px de ancho, `--shadow-sm` aplicado.
+
+**(6) El toast se para mientras se lee.** Pedido por el usuario: algunos avisos llevan tres lineas
+("no se pudo cerrar la entrada, puede que ya se haya cerrado o corregido...") y 4s no dan para
+leerlo y decidir. Hover pausa la cuenta atras; al salir el raton, **sigue con el tiempo que le
+quedaba, no con cuatro segundos nuevos** — eso ultimo es la version facil y esta mal en la direccion
+que importa: un mensaje largo que el lector mira de reojo se reiniciaria para siempre.
+
+`WsToastService` pasa de un `setTimeout` de usar y tirar a un `Map<id, {handle, remainingMs,
+startedAt}>`; `pause` descuenta lo transcurrido y `resume` reengancha con el resto. **`pause` es
+idempotente a proposito**: el navegador reemite `mouseenter` al cruzar un hijo en algunos layouts y
+restar dos veces dejaria al lector con menos tiempo del que le corresponde.
+
+**★ Tambien pausa con el FOCO de teclado** (`focusin`/`focusout`), que no es decoracion: quien tabula
+al boton de descarte esta leyendo igual, y sin ese par el toast se le iria debajo del cursor.
+`mouseenter`/`mouseleave` y no `mouseover`/`mouseout`, que se reemiten por cada hijo.
+
+**★★ El reloj del spec simula tambien `Date`.** `pause` mide con `Date.now()`, asi que un test que
+solo falsease `setTimeout` calcularia un transcurrido de cero y pasaria **hiciera lo que hiciera la
+resta** — verde y ciego a la unica linea que valia la pena probar. Con `mockDate`, al mutar la resta
+los dos tests que la cubren se ponen en rojo.
+
+**Verificado en navegador, no solo en test:** 9s con el raton encima y seguia visible (se habria ido
+a los 4s); al salir, presente a 3,5s y ausente a 4,4s.
+
+**Suites:** front **1335 → 1345** (+10) · `ng build --configuration production` exit 0. Nota: una
+corrida dio 3 rojos de KaTeX; son los **flaky preexistentes ya documentados** — aparecieron tambien
+con el codigo mutado y 5 corridas seguidas posteriores dieron 1345 limpio.
+
+**(7) El asistente pasa de «Tally» a «Zeke»** (ya existe un producto llamado Tally).
+
+**★★ LA PREMISA ERA FALSA EN LA MITAD QUE IMPORTA: el prompt NUNCA dijo «Tally».** Decia "You are the
+Incentra AI Assistant... That is your name". O sea, la barra lateral ponia Tally y el asistente, si le
+preguntabas como se llamaba, respondia otra cosa: la pantalla y el sistema llevaban tiempo diciendo
+cosas distintas (§C3), y un renombrado ciego de cadenas lo habria dejado igual de roto con otro
+nombre. Decision del usuario: que diga **"Soy Zeke, el asistente de Incentra"**.
+
+Cambiado: `NAV.ASSISTANT` y `ASSISTANT.TRIGGER_LABEL` en EN/ES/PL, y el bloque `IdentityRules` de
+`AssistantPrompt.cs:54-56` y `:92`. **Un solo `const` cubre las TRES variantes de prompt** (se usa en
+las lineas 135, 369 y 391), asi que no hay que tocarlo tres veces. **Ninguna de las prohibiciones del
+bloque se altero** — no ser humano, no nombrar al proveedor, no prometer documentos; el nombre propio
+convive con ellas igual que "Incentra" ya lo hacia.
+
+**★ `TRIGGER_LABEL` era "Quick Tally" y era un juego de palabras** (un *tally* es un recuento rapido)
+que muere con el rebautizo. Pasa a decir lo que el boton hace: "Ask Zeke" / "Preguntar a Zeke" /
+"Zapytaj Zeke". De paso **deja de estar sin traducir**: las tres lenguas tenian la MISMA cadena
+inglesa.
+
+**Sin tocar, y a proposito:** los identificadores internos `tally-mark-topbar`, `tally-mark-sidebar` y
+la clase `sidebar__tally-icon`. Son ids de degradado SVG y una clase CSS, sin superficie de usuario;
+misma frontera que [[rebrand-incentra]] (el codigo sigue diciendo Wasnie). Nota util para quien los
+lea: **el icono NO son marcas de conteo**, son destellos (*sparkles*) genericos — el nombre venia del
+producto, no del dibujo, asi que el rebautizo no obliga a redibujar nada.
+
+`TITLE`/`SUBTITLE` del panel siguen siendo genericos ("Assistant" / "Asistente de Incentra"): nunca
+dijeron Tally, y cambiarlos era una decision de diseno que nadie pidio.
+
+**Suites:** `Wasnie.Application` compila exit 0 (la solucion completa no: el API del usuario estaba
+levantada y bloqueaba los DLL — **no se mato**, la levanto el a proposito) · front **1345** ·
+`ng build --configuration production` exit 0.
+
+**OJO AL DESPLEGAR:** el cambio del prompt **exige reiniciar el API**; hasta entonces el asistente
+sigue presentandose con el texto viejo.
+
 **Leccion, para el proximo WI que anada una consulta derivada:** una regla nueva sobre datos
 derivados no se implementa en la consulta que la motivo, sino en una spec compartida, **y hay que
 buscar todas las superficies que leen esos mismos hechos**. Aqui eran seis y solo una era obvia.

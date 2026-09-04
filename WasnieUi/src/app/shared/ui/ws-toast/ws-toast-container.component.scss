@@ -8,50 +8,61 @@
   @apply flex flex-col;
   gap: var(--space-2);
   pointer-events: none;
-  width: 340px;
+  width: 360px;
   max-width: calc(100vw - 40px);
 }
 
+// ★★ A CARD THAT SITS ON THE PAGE, NOT A BANNER THAT LANDS ON IT. The weight comes from the border
+// and a small shadow, exactly like every other surface in this app; the previous toast used
+// `--shadow-lg`, which is the modal's elevation — a four-second notification does not outrank a
+// dialog. There is no `--shadow-xs` token, so `--shadow-sm` is the lightest real step.
 .ws-toast {
   @apply flex items-center;
-  position: relative;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
+  box-shadow: var(--shadow-sm);
   pointer-events: all;
   animation: ws-toast-in var(--transition-slow) ease;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-3) var(--space-3) calc(var(--space-3) + 4px);
+  padding: var(--space-3) var(--space-4);
 }
 
-.ws-toast__accent {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
+// ★ THE ICON CARRIES THE MEANING AND THE COLOUR, and it is the only coloured thing here. A toast
+// that tints its whole surface, or paints a slab of hue down one edge, spends the reader's attention
+// on the frame instead of the sentence.
+.ws-toast__icon {
+  @apply flex items-center justify-center;
+  flex-shrink: 0;
 }
 
-.ws-toast--success .ws-toast__accent { background: var(--color-success); }
-.ws-toast--error   .ws-toast__accent { background: var(--color-danger); }
-.ws-toast--warning .ws-toast__accent { background: var(--color-warning); }
-.ws-toast--info    .ws-toast__accent { background: var(--color-info); }
+.ws-toast--success .ws-toast__icon { color: var(--color-success); }
+.ws-toast--error   .ws-toast__icon { color: var(--color-danger); }
+.ws-toast--warning .ws-toast__icon { color: var(--color-warning); }
+.ws-toast--info    .ws-toast__icon { color: var(--color-info); }
 
+// ★ THE RULE IS THE WHOLE TRICK OF THIS LAYOUT. One hairline turns "icon then words" into two
+// deliberate parts, and it costs nothing: no background, no second surface, no extra padding beyond
+// the gap that was already there.
 .ws-toast__message {
   flex: 1;
+  min-width: 0;
+  border-left: 1px solid var(--color-border-default);
+  padding-left: var(--space-3);
   font-size: var(--font-size-13);
+  line-height: 1.45;
   color: var(--color-text-primary);
-  line-height: 1.4;
 }
 
+// ★ A REAL 28px HIT TARGET, pushed to the end by `margin-left: auto` rather than by a spacer. It is
+// quiet until hovered, because dismissing is never the point of a toast — reading it is.
 .ws-toast__close {
   @apply flex items-center justify-center;
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border: none;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
   background: transparent;
   border-radius: var(--radius-sm);
   color: var(--color-text-tertiary);
@@ -61,6 +72,11 @@
   &:hover {
     background: var(--color-bg-surface-sunken);
     color: var(--color-text-primary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: var(--color-border-focus);
   }
 }
 

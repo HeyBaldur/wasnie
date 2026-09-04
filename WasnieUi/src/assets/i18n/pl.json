@@ -195,7 +195,7 @@
     "ASSIGNMENTS": "Przypisania",
     "PAYEES": "Beneficjenci",
     "CATEGORY_MAPPINGS": "Kategorie",
-    "ASSISTANT": "Tally",
+    "ASSISTANT": "Zeke",
     "TRANSACTIONS": "Transakcje",
     "CREDITS": "Kredyty",
     "PAYOUTS": "Wypłaty",
@@ -451,7 +451,8 @@
     "CONTINUE": "Kontynuuj",
     "DONE": "Gotowe",
     "RETRY": "Spróbuj ponownie",
-    "NO_RESULTS": "Brak wyników"
+    "NO_RESULTS": "Brak wyników",
+    "DISMISS": "Zamknij"
   },
   "ERRORS": {
     "GENERIC": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -2161,7 +2162,7 @@
     "TITLE": "Asystent",
     "SUBTITLE": "Asystent Incentry",
     "UNTITLED": "Nowa rozmowa",
-    "TRIGGER_LABEL": "Quick Tally",
+    "TRIGGER_LABEL": "Zapytaj Zeke",
     "OPEN": "Otwórz asystenta",
     "CLOSE": "Zamknij",
     "HISTORY": "Historia rozmów",

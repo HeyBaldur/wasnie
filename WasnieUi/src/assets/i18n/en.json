@@ -195,7 +195,7 @@
     "ASSIGNMENTS": "Assignments",
     "PAYEES": "Payees",
     "CATEGORY_MAPPINGS": "Categories",
-    "ASSISTANT": "Tally",
+    "ASSISTANT": "Zeke",
     "TRANSACTIONS": "Transactions",
     "CREDITS": "Credits",
     "PAYOUTS": "Payouts",
@@ -451,7 +451,8 @@
     "CONTINUE": "Continue",
     "DONE": "Done",
     "RETRY": "Try again",
-    "NO_RESULTS": "No results found"
+    "NO_RESULTS": "No results found",
+    "DISMISS": "Dismiss"
   },
   "ERRORS": {
     "GENERIC": "Something went wrong. Please try again.",
@@ -2161,7 +2162,7 @@
     "TITLE": "Assistant",
     "SUBTITLE": "Incentra assistant",
     "UNTITLED": "New conversation",
-    "TRIGGER_LABEL": "Quick Tally",
+    "TRIGGER_LABEL": "Ask Zeke",
     "OPEN": "Open the assistant",
     "CLOSE": "Close",
     "HISTORY": "Conversation history",

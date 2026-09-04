@@ -1,17 +1,36 @@
 <div class="ws-toast-stack" aria-live="polite" aria-atomic="false">
   @for (toast of toastService.toasts(); track trackToast($index, toast)) {
-    <div class="ws-toast ws-toast--{{ toast.type }}" role="alert">
-      <span class="ws-toast__accent"></span>
+    <!-- ★★ ICON, RULE, MESSAGE, DISMISS — and the colour lives in the ICON, not in a slab. The
+         previous toast painted a 4px bar down its left edge; at 340px wide that is a stripe of pure
+         hue competing with the sentence beside it. An icon says the same thing (success, failure,
+         warning) in the same colour, in a shape a reader already recognises, and the thin rule that
+         separates it from the text is what makes the row read as two parts instead of one crowded
+         line. Same anatomy as the reference, expressed in tokens. -->
+    <!-- ★★ HOVER HOLDS THE COUNTDOWN, AND KEYBOARD FOCUS HOLDS IT TOO. A toast that disappears
+         mid-sentence is a message that was never delivered — some of these carry three lines. The
+         focus pair is not decoration: a reader who tabs to the dismiss button is reading just as
+         much as one holding a mouse over it, and without `focusin`/`focusout` the toast would slide
+         away under their cursor. `mouseenter`/`mouseleave` rather than `mouseover`/`mouseout`
+         because the latter fire again for every child element crossed. -->
+    <div
+      class="ws-toast ws-toast--{{ toast.type }}"
+      role="alert"
+      (mouseenter)="pause(toast.id)"
+      (mouseleave)="resume(toast.id)"
+      (focusin)="pause(toast.id)"
+      (focusout)="resume(toast.id)"
+    >
+      <app-icon class="ws-toast__icon" [name]="iconFor(toast.type)" [size]="20" />
+
       <span class="ws-toast__message">{{ toast.message | translate: toast.params }}</span>
+
       <button
         class="ws-toast__close"
         type="button"
         (click)="dismiss(toast.id)"
-        aria-label="Dismiss"
+        [attr.aria-label]="'COMMON.DISMISS' | translate"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <app-icon name="x" [size]="16" />
       </button>
     </div>
   }

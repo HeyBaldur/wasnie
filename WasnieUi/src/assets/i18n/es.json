@@ -195,7 +195,7 @@
     "ASSIGNMENTS": "Asignaciones",
     "PAYEES": "Beneficiarios",
     "CATEGORY_MAPPINGS": "Categorías",
-    "ASSISTANT": "Tally",
+    "ASSISTANT": "Zeke",
     "TRANSACTIONS": "Transacciones",
     "CREDITS": "Créditos",
     "PAYOUTS": "Pagos",
@@ -451,7 +451,8 @@
     "CONTINUE": "Continuar",
     "DONE": "Listo",
     "RETRY": "Intentar de nuevo",
-    "NO_RESULTS": "Sin resultados"
+    "NO_RESULTS": "Sin resultados",
+    "DISMISS": "Descartar"
   },
   "ERRORS": {
     "GENERIC": "Algo salió mal. Por favor, inténtalo de nuevo.",
@@ -2161,7 +2162,7 @@
     "TITLE": "Asistente",
     "SUBTITLE": "Asistente de Incentra",
     "UNTITLED": "Nueva conversación",
-    "TRIGGER_LABEL": "Quick Tally",
+    "TRIGGER_LABEL": "Preguntar a Zeke",
     "OPEN": "Abrir el asistente",
     "CLOSE": "Cerrar",
     "HISTORY": "Historial de conversaciones",
