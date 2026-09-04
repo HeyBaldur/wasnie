@@ -64,6 +64,42 @@ punto del rail plegado tambien.
 flexbox lo REPARTE entre ambos** y el numero aterriza a media fila, huerfano del control al que
 pertenece. Solo uno puede reclamarlo: el badge cede (`margin-left: 0`) y queda pegado al carret.
 
+**(5) EL MENU «⋮» DE LAS FILAS SE QUEDABA CLAVADO EN PANTALLA AL HACER SCROLL — en CUATRO listados.**
+Reportado en /quotas; el mismo codigo estaba duplicado tal cual en **quotas, payees, plans y
+assignments** (los bloques `toggleMenu` son identicos byte a byte en tres de ellos, y el cuarto solo
+cambia un comentario). El menu es `position: fixed`, o sea coordenadas de VIEWPORT, medidas una sola
+vez al abrir: en cuanto algo hace scroll quedan viejas y el menu se queda colgado en medio de la
+pantalla mientras su fila se va. Solo cerraba por `document:click`.
+
+Extraido a `shared/utils/row-menu.ts` (`RowMenuController`) y cableado en los cuatro. Las plantillas no
+se tocaron: los componentes siguen exponiendo `openMenuId` / `menuPosition` / `toggleMenu` / `closeMenu`,
+ahora delegando.
+
+**★★ El listener va en `window` en fase de CAPTURA, y las dos mitades importan.** Los eventos de scroll
+NO burbujean, y en esta app la pagina no scrollea en `window`: scrollea dentro de
+`main.shell__content`. Un `window:scroll` o `document:scroll` en fase de burbuja no se entera nunca —
+que es justo lo que hace que este fallo parezca imposible de arreglar desde fuera. Mismo razonamiento
+que ya estaba escrito en `ws-date-picker` y en `find-scroll-container.ts`.
+
+**★ El scroll NO cierra el menu** (un desplegable que desaparece al primer clic de rueda es otra
+molestia); lo unico que lo cierra, ademas del clic fuera, es que el trigger salga del viewport, porque
+si no el menu se queda flotando sobre filas que no son la suya. Reposicionado coalescido a una medicion
+por frame con `requestAnimationFrame`, porque `getBoundingClientRect()` fuerza layout y medir en cada
+evento haria tartamudear el propio scroll del usuario.
+
+**★★ VERIFICADO EN LA PAGINA REAL, y hubo que insistir para verlo.** Las dos primeras mediciones por
+consola dijeron que el menu NO seguia — y era un artefacto del entorno: `requestAnimationFrame` esta
+estrangulado en pestañas en segundo plano, asi que la reprogramacion nunca corria (es lo mismo que
+congelo una llamada anterior con un timeout de 45s). Con entrada real (rueda del raton) sobre la
+pestaña activa: hueco constante de **4px** y alineacion derecha **exacta** tras 166px de scroll, en
+/quotas y en /payees; y con la fila fuera de pantalla, **0 dropdowns en el DOM** y ningun trigger
+marcado como abierto.
+
+**Nota de metodo:** medir por consola en una pestaña de fondo es un falso negativo con pinta de
+defecto. Si lo que se mide depende de `requestAnimationFrame`, hay que conducirlo con entrada real.
+
+`ng build --configuration production` exit 0.
+
 **(4) EL HUECO DE ABAJO DE LA PAGINA DEL ASISTENTE: un numero magico que nunca pudo ser correcto.**
 `.assistant-page` se daba `height: calc(100vh - var(--space-20))` — una estimacion a mano de 80px del
 cromo de arriba. El topbar mide **56px**, asi que la caja terminaba 24px antes de tiempo y dejaba por

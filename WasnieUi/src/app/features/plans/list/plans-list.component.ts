@@ -1,4 +1,5 @@
 import { Component, DestroyRef, HostListener, OnInit, computed, inject, signal } from '@angular/core';
+import { createRowMenu } from '../../../shared/utils/row-menu';
 import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { extractApiError } from '../../../shared/utils/api-error';
@@ -91,8 +92,11 @@ export class PlansListComponent implements OnInit {
     void this.router.navigate(['new'], { relativeTo: this.route });
   }
 
-  readonly openMenuId = signal<string | null>(null);
-  readonly menuPosition = signal<{ top?: number; bottom?: number; right: number } | null>(null);
+  // ★ The "⋯" menu follows its row while the page scrolls — see RowMenuController. These four
+  // list screens each carried an identical measure-once copy, and so the identical defect.
+  private readonly rowMenu = createRowMenu();
+  readonly openMenuId = this.rowMenu.openMenuId;
+  readonly menuPosition = this.rowMenu.menuPosition;
 
   readonly deleteOpen = signal(false);
   readonly deleteSaving = signal(false);
@@ -160,26 +164,11 @@ export class PlansListComponent implements OnInit {
   }
 
   toggleMenu(id: string, event: Event): void {
-    event.stopPropagation();
-    const isOpening = this.openMenuId() !== id;
-    this.openMenuId.update((cur) => (cur === id ? null : id));
-    if (isOpening) {
-      const btn = event.currentTarget as HTMLElement;
-      const rect = btn.getBoundingClientRect();
-      const right = window.innerWidth - rect.right;
-      if (window.innerHeight - rect.bottom < 108) {
-        this.menuPosition.set({ bottom: window.innerHeight - rect.top + 4, right });
-      } else {
-        this.menuPosition.set({ top: rect.bottom + 4, right });
-      }
-    } else {
-      this.menuPosition.set(null);
-    }
+    this.rowMenu.toggle(id, event);
   }
 
   closeMenu(): void {
-    this.openMenuId.set(null);
-    this.menuPosition.set(null);
+    this.rowMenu.close();
   }
 
   @HostListener('document:click')
