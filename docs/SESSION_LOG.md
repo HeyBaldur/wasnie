@@ -64,6 +64,31 @@ punto del rail plegado tambien.
 flexbox lo REPARTE entre ambos** y el numero aterriza a media fila, huerfano del control al que
 pertenece. Solo uno puede reclamarlo: el badge cede (`margin-left: 0`) y queda pegado al carret.
 
+**(4) EL HUECO DE ABAJO DE LA PAGINA DEL ASISTENTE: un numero magico que nunca pudo ser correcto.**
+`.assistant-page` se daba `height: calc(100vh - var(--space-20))` — una estimacion a mano de 80px del
+cromo de arriba. El topbar mide **56px**, asi que la caja terminaba 24px antes de tiempo y dejaba por
+debajo un hueco del **doble** que los 12px de arriba. El padding no era el culpable: era
+`var(--space-3)` arriba y **0** abajo.
+
+**★ Y la estimacion no podia acertar nunca:** `<app-past-due-banner>` se renderiza ENTRE el topbar y el
+contenido, asi que para un tenant con el pago vencido la pagina se pasaba de largo por el alto entero
+del banner y empujaba el composer por debajo del pliegue. Un 56px en vez de 80px habria arreglado la
+foto y dejado ese caso roto.
+
+Arreglado tomando la altura del padre en vez de adivinarla: `.shell__content` es `flex-1` dentro de una
+columna flex de `h-screen`, o sea que su altura ya es exacta — `height: 100%` es el espacio real que
+queda, haya lo que haya encima. Padding simetrico (`--space-3` arriba y abajo), descontado por
+border-box. El comentario que decia que el area de contenido «ya trae su propio padding» era **falso**:
+`.shell__content` no tiene padding ninguno.
+
+**Sin test de geometria, y a proposito.** Karma corre Chrome de verdad, asi que la geometria SI se
+puede medir (hay precedente en `ws-modal.component.spec.ts`), pero la afirmacion aqui — que
+`height: 100%` resuelve contra la cadena del shell — solo se sostiene con el shell REAL montado, y el
+spec del asistente stubbea la plantilla justamente para no arrastrar sidebar, topbar y timers. Un host
+de mentira que copie las tres clases del shell probaria la copia, no el producto, y quedaria verde el
+dia que el shell cambie (§A2). Evidencia aportada en su lugar: la regla en el bundle compilado y la
+aritmetica 80−56=24 vs 12. **Queda una mirada de runtime.**
+
 **(3b) LA CAUSA MAYOR DEL BLINK: EL BANNER DE HUBSPOT.** Localizada por el usuario en pantalla. Mismo
 defecto que (3) y que el de los badges, un piso mas abajo: `HubSpotSyncBannerComponent` pedia su
 estado por HTTP en `ngOnInit`, y vive DENTRO del sidebar. En cada navegacion: `status` arranca en

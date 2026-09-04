@@ -11,14 +11,20 @@
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: var(--space-4);
-  // The shell's content area already carries its own padding, so this takes the viewport minus the
-  // chrome above it rather than 100%: 100% of an auto-height parent is not a height at all.
+  // ★★ THE HEIGHT IS TAKEN FROM THE PARENT, NEVER GUESSED FROM THE VIEWPORT. This used to be
+  // `calc(100vh - var(--space-20))`, an 80px estimate of the chrome above. The chrome is 56px, so the
+  // box ended 24px short and left a bottom gap twice the 12px inset at the top — visibly lopsided.
+  // Worse, the estimate cannot be right: `<app-past-due-banner>` renders BETWEEN the topbar and the
+  // content, so for a tenant behind on payment the page overflowed by the whole banner and pushed the
+  // composer below the fold.
   //
-  // The chat box now keeps its own inset (see below), so the grid gives that back here — otherwise the
-  // two margins would stack and the panes would end up shorter than the space they have.
-  height: calc(100vh - var(--space-20));
+  // `.shell__content` is `flex-1` inside a `h-screen` flex column, so its height is already exact:
+  // 100% of it is the true remaining space whatever sits above.
+  height: 100%;
   min-height: 0;
-  padding: var(--space-3) var(--space-3) 0 0;
+  // ★ Symmetric on purpose — the inset at the bottom must match the one at the top. Borrowed from the
+  // height by border-box, so the panes shrink by it rather than overflowing.
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
 }
 
 /**
@@ -35,8 +41,8 @@
   border-radius: var(--radius-lg);
   // The inset is the whole "it breathes" fix: rows now sit inside the rail instead of touching it.
   padding: var(--space-3);
-  // Bottom only: the grid's padding already supplies the top, and both panes must share one baseline.
-  margin-bottom: var(--space-3);
+  // ★ NO BOTTOM MARGIN. The container's padding is symmetric and supplies BOTH insets; a margin here
+  // as well made the gap under the panes twice the one above them.
 }
 
 .assistant-page__rail-head {
@@ -87,9 +93,7 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  // Matches the grid's top padding, so the box sits with equal air above and below rather than hanging
-  // from the top of the screen.
-  margin-bottom: var(--space-3);
+  // ★ NO BOTTOM MARGIN — same reason as the rail: the container owns the inset on all four sides.
 }
 
 // ── The active conversation's header ────────────────────────────────────────
