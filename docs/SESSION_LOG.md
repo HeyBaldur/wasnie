@@ -4,6 +4,81 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-04 - KAN-34: el AuditLog deja de registrar acciones que nunca ocurrieron
+
+**Rama:** KAN-38 · Ticket KAN-34 (Bug, Highest, epica KAN-39 «Auditoria y evidencia») · **Sin commit.**
+Solo backend.
+
+**★★ LA PREMISA DEL TICKET ERA FALSA, Y EN LA MITAD QUE MAS IMPORTA.** El ticket afirmaba que «el
+camino critico de dinero esta protegido por transaccion; el defecto vive en el resto de comandos». No.
+`AuditBehavior.HandleMoneyCriticalAsync` tampoco miraba el `Result`. La transaccion defiende contra el
+fallo de la ESCRITURA DE AUDITORIA — si `DispatchAsync` lanza, el `await using` revierte el negocio.
+Pero un `Result.Failure` no lanza: viaja de vuelta como valor de retorno, `CommitAsync` confirma tan
+contento, y la fila fantasma queda escrita igual que en el camino no-money. El defecto cubria los
+**15** comandos auditables, no un subconjunto. La memoria del repo repetia la misma premisa falsa
+(venia del diagnostico de KAN-31) y quedo corregida.
+
+**★★ DIEZ FILAS FANTASMA MEDIDAS, NO ESTIMADAS (§E5).** Contraste fila a fila de `AuditLogs` contra el
+estado real de cada entidad, por tenant: 4 `deal_lost_commission_reverted` (ids 24087-24090),
+1 `PLAN_ARCHIVED` (14229, el «EU Accelerator Q2 2026» del ticket, confirmado en `Draft`), 2
+`PLAN_ARCHIVED` duplicadas sobre `Plan Test Flat 5%`, 2 `PLAN_ACTIVATED` sobre planes en `Draft`
+(13525, 35275) y 1 `TRANSACTION_INGESTED` (13555). Ninguna se toco (ledger append-only).
+
+**★★ LA PUERTA DE PARADA SE DISPARO, Y SE REPORTO ANTES DE TOCAR NADA.** Las 4 filas 24087-24090
+afirman que la comision de `HUBSPOT-512460112106-473111097540` (**2.980,00 EUR**) fue revertida; la
+reversion real ocurrio UNA vez, a las 13:20:49 (fila 24093). El log decia cinco. Matiz que se
+verifico antes de seguir: **no se movio dinero de mas** — los cuatro intentos fallaron sin escribir
+nada en el ledger, el saldo del payee es correcto, lo contaminado es exclusivamente la evidencia. Se
+publico el informe completo del Paso 0 en el ticket y se pidio decision antes de escribir codigo.
+
+**★★ DOS FALSOS POSITIVOS DESCARTADOS, QUE HABRIAN INFLADO LA CIFRA POR 280.** El primer barrido daba
+**2.804** `TRANSACTION_INGESTED` cuyo `ResourceId` no existe en `CompensationTransactions`. No son
+fantasmas: son transacciones borradas despues. El discriminador valido no es el GUID huerfano sino el
+`ResourceId` VACIO, porque `IngestTransactionHandler.cs:140` solo se ejecuta en exito. Y las 2
+`CREDITS_RECALCULATED` sin `ResourceId` (34999, 35159) tampoco: ese handler devuelve `Success` en las
+lineas 43, 57 y 115, ANTES de fijar el `AuditResourceId` en la 188 — son recalculos vacios legitimos.
+Sin leer los dos handlers, el informe habria dicho 2.812 en vez de 10.
+
+**★ EL ARREGLO NO REFACTORIZA `Result`.** `Result` y `Result<T>` son dos clases selladas sin ancestro
+comun, y un `IPipelineBehavior` solo ve un `TResponse` abierto: no tenia forma de preguntar «esto
+salio bien?». Se anadio `IResultOutcome` (`IsSuccess` + `Error`), que ambas ya exponian — la interfaz
+solo los nombra. Cero call sites tocados. `AuditBehavior` despacha unicamente si `Succeeded(response)`,
+en LOS DOS caminos.
+
+**★ TRES DECISIONES, CON SU ALTERNATIVA DESCARTADA:**
+1. **No se escribe fila en fallo**, en vez de escribirla marcada como fallida. Marcarla exige columna
+   nueva + migracion y tocar todos los lectores del log para que no cuenten fallos como exitos: es un
+   WI aparte por §E1. Decidido ANTES de construir (§E2), no por quien ejecuta.
+2. **El commit del camino money se mantiene en fallo.** Un handler que persistio algo deliberadamente
+   camino al `Failure` («ingerir y marcar», §B2) conserva esa escritura; solo se suprime la fila de
+   auditoria. Revertir la transaccion habria cambiado el comportamiento de negocio de 8 comandos, y
+   eso no es este WI (§E1).
+3. **Una respuesta que NO es `Result` se sigue auditando.** Varios comandos auditables devuelven un
+   DTO o `Unit` y senalan el fallo lanzando; suprimirles la fila habria sido el bug contrario.
+
+**★★ LOS TESTS SE VERIFICARON EN ROJO (§A2).** Verde no prueba nada: se revirtio `Succeeded` a `true`
+(el comportamiento previo), se recompilo y los tres que capturan el defecto se pusieron en ROJO; los
+otros tres son guardas y pasan en ambas versiones, que es justo lo que deben hacer. La regresion del
+ticket se probo **sobre el endpoint HTTP real** (`POST /api/plans/{id}/archive` dos veces sobre un
+plan en `Draft`), no contra un doble: es la fila real la que decide (§A3).
+
+**★ EL UNICO LECTOR DEL LOG NO NECESITA CAMBIO.** `GetDashboardSummaryHandler.cs:731` (feed de
+actividad) solo lista las filas mas recientes: con el arreglo deja de mostrar actividad que nunca
+ocurrio. Las 9 escrituras directas de `db.AuditLogs.Add(...)` estan en caminos de exito explicitos y
+no pasan por el behavior.
+
+**Suites:** build exit 0 · unit **1909** (0 rojos, sin cambio: no se anadieron unit) · integracion
+**865 -> 871** (+6, 0 rojos, 2 skipped). Una corrida intermedia dio 8 rojos y era **flake de carga**
+(Docker recien arrancado): la rerun con TRX sobre el mismo binario dio 871/0 y 0 `outcome="Failed"`.
+
+**Sin verificar:** no se comprobo en runtime (navegador) que el feed de actividad del dashboard deje
+de mostrar las entradas fantasma — exige provocar un fallo en la UI y las filas historicas siguen
+ahi por diseno.
+
+**Queda abierto:** como marcar las 10 filas fantasma historicas (decision aparte, el ticket la separa
+explicitamente); y registrar intentos fallidos como evento de seguridad, si se quiere.
+
+
 ## 2026-09-03 (h) - Wizards de importacion: el uploader de Untitled UI, traducido a tokens
 
 **Rama:** KAN-38 · Cambio visual pedido por el usuario, sin ticket · **Sin commit.** Solo frontend.

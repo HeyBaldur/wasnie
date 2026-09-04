@@ -1,6 +1,6 @@
 namespace Wasnie.Domain.Common.Results;
 
-public sealed class Result<T>
+public sealed class Result<T> : IResultOutcome
 {
     public bool IsSuccess { get; }
     public T? Value { get; }
@@ -17,7 +17,7 @@ public sealed class Result<T>
     public static Result<T> Failure(string error) => new(false, default, error);
 }
 
-public sealed class Result
+public sealed class Result : IResultOutcome
 {
     public bool IsSuccess { get; }
     public string? Error { get; }
