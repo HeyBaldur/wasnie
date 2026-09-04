@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Commands.Payouts;
+using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Handlers.Payouts;
 using Wasnie.Application.Compensation.Queries.Payouts;
 using Wasnie.Domain.Common.Results;
@@ -13,6 +14,7 @@ using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payees;
+using Wasnie.Domain.Compensation.Payouts;
 using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Domain.Compensation.Rules;
 using Wasnie.Domain.Compensation.Transactions;
@@ -34,6 +36,366 @@ public sealed class AntiDoublePayTests(PayoutEngineFixture fixture)
     private const string Eur = "EUR";
 
     // ── Test doubles ──────────────────────────────────────────────────────────
+
+
+    // ══ KAN-52: la salida para un payout Approved que nunca podrá pagarse ═════════════════════
+
+    private static DiscardPayoutHandler DiscardHandler(ApplicationDbContext db) =>
+        new(db, new FixedCurrentUser(), new FakeClock(Now.UtcDateTime), AlwaysAllowAuth.Instance);
+
+    /// <summary>
+    /// Builds the exact shape the ticket describes: two payouts over overlapping periods for the same
+    /// payee and plan. The first is paid — consuming the credits — and the second is left Approved,
+    /// holding credits that can never be paid again.
+    ///
+    /// ★ IT IS SEEDED THE WAY PRODUCTION MADE IT. Measured in the real database, every stuck payout
+    /// had this same origin: a period recalculated after a shorter one had already been paid. Seeding
+    /// a payout with a hand-set "already consumed" flag would have tested the flag, not the situation.
+    /// </summary>
+    private async Task<(Guid stuckId, Guid payerId)> SeedStuckPayoutAsync(
+        Guid tenantId, int creditCount = 2, int unpaidExtra = 0)
+    {
+        var planId = Guid.NewGuid();
+        Guid stuckId;
+        Guid payerId;
+
+        await using var db = fixture.CreateDbForTenant(tenantId);
+
+        var payee = MakePayee(tenantId, "EMP-STUCK");
+        var plan = MakePlan(tenantId, planId, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+        db.Payees.Add(payee);
+        db.CompensationPlans.Add(plan);
+        db.PlanAssignments.Add(MakeAssignment(tenantId, planId, payee,
+            new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
+
+        var rule = plan.Rules.First();
+        var snapshot = RuleSnapshot.Freeze(rule.Id, planId, 1, "Commission",
+            RateTable.Flat(0.10m), Trigger.Always(), Now,
+            measurement: new Measurement { Type = MeasurementType.Revenue });
+
+        var shared = new List<Credit>();
+        for (var i = 0; i < creditCount; i++)
+        {
+            var (tx, credit) = MakeTxWithCredit(tenantId, payee.Id, planId, rule.Id, snapshot,
+                $"REF-SHARED-{i}", new DateOnly(2026, 3, 10), 1_000m);
+            db.CompensationTransactions.Add(tx);
+            db.Credits.Add(credit);
+            shared.Add(credit);
+        }
+
+        // Credits that ONLY the stuck payout carries — nobody has paid these.
+        var extras = new List<Credit>();
+        for (var i = 0; i < unpaidExtra; i++)
+        {
+            var (tx, credit) = MakeTxWithCredit(tenantId, payee.Id, planId, rule.Id, snapshot,
+                $"REF-ONLY-{i}", new DateOnly(2026, 3, 20), 500m);
+            db.CompensationTransactions.Add(tx);
+            db.Credits.Add(credit);
+            extras.Add(credit);
+        }
+
+        CompensationPayout Build(IEnumerable<Credit> credits, DateOnly start, DateOnly end)
+        {
+            var specs = credits
+                // ★ FRESH Money VALUES, not the credit's own. Money is an owned type already tracked
+                // against the Credit; handing the same instance to a PayoutLine makes EF write NULL
+                // into BaseAmount. The existing tests build new ones for exactly this reason.
+                .Select(c => new PayoutLineSpec(
+                    CreditId: c.Id,
+                    RuleId: rule.Id,
+                    RuleName: "Commission",
+                    BaseAmount: Money.Of(c.OriginalAmount.Amount, c.OriginalAmount.Currency),
+                    CommissionAmount: Money.Of(c.CreditedAmount.Amount, c.CreditedAmount.Currency),
+                    AppliedModifiers: []))
+                .ToList();
+
+            return CompensationPayout.Calculate(
+                tenantId, payee.Id, planId,
+                PayeeReference.Snapshot(payee.Id, payee.FullName, payee.EmployeeCode),
+                DateRange.Of(start, end), specs, Eur, "test",
+                Guid.NewGuid(), Now, Guid.NewGuid(), Guid.NewGuid);
+        }
+
+        // The payer covers the SHORTER period and gets paid first.
+        var payer = Build(shared, new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 15));
+        payer.Approve("test", Now, Guid.NewGuid());
+        db.CompensationPayouts.Add(payer);
+        payerId = payer.Id;
+
+        // The stuck one covers the LONGER period and picks the same credits up again.
+        var stuck = Build(shared.Concat(extras), new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 31));
+        stuck.Approve("test", Now, Guid.NewGuid());
+        db.CompensationPayouts.Add(stuck);
+        stuckId = stuck.Id;
+
+        await db.SaveChangesAsync();
+
+        // Pay the first one for real: this is what consumes the credits.
+        foreach (var credit in shared)
+            credit.Consume(payerId, Now, Guid.NewGuid());
+
+        payer.MarkPaid("test", Now);
+        await db.SaveChangesAsync();
+
+        return (stuckId, payerId);
+    }
+
+    /// <summary>
+    /// The ticket's main acceptance criterion: the stuck payout gets a way out, reaches a terminal
+    /// state, leaves the payable queue, and nothing that was already paid changes.
+    /// </summary>
+    [Fact]
+    public async Task Discard_closes_an_unpayable_payout_without_touching_the_money_already_paid()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stuckId, payerId) = await SeedStuckPayoutAsync(tenantId, creditCount: 3);
+
+        Result<DiscardPayoutResult> result;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            result = await DiscardHandler(db).Handle(
+                new DiscardPayoutCommand(stuckId, "Period recalculated after the shorter one was paid."),
+                CancellationToken.None);
+        }
+
+        result.IsSuccess.Should().BeTrue(result.Error);
+        result.Value!.CreditsAlreadyPaidElsewhere.Should().Be(3);
+
+        await using (var verify = fixture.CreateDbForTenant(tenantId))
+        {
+            var stuck = await verify.CompensationPayouts.FirstAsync(p => p.Id == stuckId);
+            stuck.Status.Should().Be(CompensationPayoutStatus.Discarded);
+            stuck.DiscardReason.Should().Be("Period recalculated after the shorter one was paid.");
+            stuck.DiscardedBy.Should().Be("test-user");
+            stuck.DiscardedAt.Should().NotBeNull();
+
+            // ★★ NOTHING THAT WAS PAID MOVED. The payer keeps its status and its cash date, the
+            // credits stay consumed BY IT, and no transaction was returned.
+            var payer = await verify.CompensationPayouts.FirstAsync(p => p.Id == payerId);
+            payer.Status.Should().Be(CompensationPayoutStatus.Paid);
+            payer.PaidAt.Should().NotBeNull();
+
+            var consumed = await verify.Credits
+                .Where(c => c.ConsumedByPayoutId == payerId)
+                .CountAsync();
+            consumed.Should().Be(3, "the credits stay consumed by the payout that really paid them");
+        }
+    }
+
+    /// <summary>
+    /// ★★ THE MONEY GUARD, AND THE REASON THIS TEST EXISTS. Measured in the real database, three of
+    /// the five stuck payouts were only PARTIALLY blocked — one held 71 credits already paid and 139
+    /// that nobody had paid, the larger part of €34,567.64. Discarding that would retire a real debt
+    /// to a real person on the strength of a button whose label says the money was already paid.
+    /// </summary>
+    [Fact]
+    public async Task Discard_refuses_a_payout_that_still_carries_unpaid_commission()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stuckId, _) = await SeedStuckPayoutAsync(tenantId, creditCount: 2, unpaidExtra: 3);
+
+        Result<DiscardPayoutResult> result;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            result = await DiscardHandler(db).Handle(
+                new DiscardPayoutCommand(stuckId, "Looks stuck."), CancellationToken.None);
+        }
+
+        result.IsSuccess.Should().BeFalse("3 of its credits have not been paid by anybody");
+        result.Error.Should().Contain("3");
+
+        await using (var verify = fixture.CreateDbForTenant(tenantId))
+        {
+            var stuck = await verify.CompensationPayouts.FirstAsync(p => p.Id == stuckId);
+            stuck.Status.Should().Be(CompensationPayoutStatus.Approved, "a refused discard changes nothing");
+            stuck.DiscardedAt.Should().BeNull();
+        }
+    }
+
+    /// <summary>
+    /// ★ A PAID PAYOUT IS NOT DISCARDABLE. Discarding one would erase the record of a payment while
+    /// the cash stayed gone; reversing a payment is RevertPaidToApproved, a different operation.
+    /// </summary>
+    [Fact]
+    public async Task Discard_refuses_a_payout_that_was_already_paid()
+    {
+        var tenantId = Guid.NewGuid();
+        var (_, payerId) = await SeedStuckPayoutAsync(tenantId);
+
+        Result<DiscardPayoutResult> result;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            result = await DiscardHandler(db).Handle(
+                new DiscardPayoutCommand(payerId, "Trying to erase a payment."), CancellationToken.None);
+        }
+
+        result.IsSuccess.Should().BeFalse();
+
+        await using (var verify = fixture.CreateDbForTenant(tenantId))
+        {
+            var payer = await verify.CompensationPayouts.FirstAsync(p => p.Id == payerId);
+            payer.Status.Should().Be(CompensationPayoutStatus.Paid);
+            payer.PaidAt.Should().NotBeNull("the cash date survives a refused discard");
+        }
+    }
+
+    /// <summary>
+    /// ★ THE REASON IS A SERVER INVARIANT, NOT ONLY A DISABLED BUTTON (§D2). The endpoint is reachable
+    /// without the modal, and a discard with no stated reason is the row an auditor would ask about.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Discard_refuses_without_a_stated_reason(string reason)
+    {
+        var tenantId = Guid.NewGuid();
+        var (stuckId, _) = await SeedStuckPayoutAsync(tenantId);
+
+        Result<DiscardPayoutResult> result;
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            result = await DiscardHandler(db).Handle(
+                new DiscardPayoutCommand(stuckId, reason), CancellationToken.None);
+        }
+
+        result.IsSuccess.Should().BeFalse();
+
+        await using (var verify = fixture.CreateDbForTenant(tenantId))
+        {
+            var stuck = await verify.CompensationPayouts.FirstAsync(p => p.Id == stuckId);
+            stuck.Status.Should().Be(CompensationPayoutStatus.Approved);
+        }
+    }
+
+    /// <summary>
+    /// ★★ AND IT LEAVES THE QUEUE. The point of the whole ticket: the payable list is what the ticket
+    /// says these payouts were clogging. Asserted against the real list query rather than by reading
+    /// the status back, because "it has a terminal status" and "it stopped being listed" are two
+    /// different claims and only the second one is what the user complained about.
+    /// </summary>
+    [Fact]
+    public async Task A_discarded_payout_no_longer_appears_among_the_approved()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stuckId, _) = await SeedStuckPayoutAsync(tenantId);
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var approvedBefore = await db.CompensationPayouts
+                .CountAsync(p => p.Status == CompensationPayoutStatus.Approved);
+            approvedBefore.Should().Be(1);
+        }
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var r = await DiscardHandler(db).Handle(
+                new DiscardPayoutCommand(stuckId, "Already paid by the shorter period."),
+                CancellationToken.None);
+            r.IsSuccess.Should().BeTrue(r.Error);
+        }
+
+        await using (var verify = fixture.CreateDbForTenant(tenantId))
+        {
+            var approvedAfter = await verify.CompensationPayouts
+                .CountAsync(p => p.Status == CompensationPayoutStatus.Approved);
+            approvedAfter.Should().Be(0, "the queue of payouts waiting to be paid is finally clean");
+        }
+    }
+
+
+    /// <summary>
+    /// ★★ THE STATEMENT NOW ANSWERS "is this wholly or partly duplicated?" WITHOUT PRESSING ANYTHING.
+    /// The server has always known which credits another payout consumed — it is the payment guard —
+    /// but the statement did not show it, so the only way to find out was to press Discard and read
+    /// the refusal. Asserted on the DTO the screen actually receives, and with a MIXED payout, because
+    /// a payout where every line says the same thing would pass even if the flag were hard-coded.
+    /// </summary>
+    [Fact]
+    public async Task The_statement_says_which_lines_another_payout_already_paid()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stuckId, payerId) = await SeedStuckPayoutAsync(tenantId, creditCount: 2, unpaidExtra: 3);
+
+        await using var db = fixture.CreateDbForTenant(tenantId);
+        var stuck = await db.CompensationPayouts
+            .Include(p => p.Lines)
+            .FirstAsync(p => p.Id == stuckId);
+
+        var lines = await GetPayoutByIdHandler.BuildLinesAsync(
+            stuck.Lines, db, stuck.Id, CancellationToken.None);
+
+        lines.Count(l => l.PaidInPayoutId != null).Should().Be(2);
+        lines.Count(l => l.PaidInPayoutId == null).Should().Be(3, "nobody has paid these three");
+
+        var duplicated = lines.First(l => l.PaidInPayoutId != null);
+        duplicated.PaidInPayoutId.Should().Be(payerId);
+        duplicated.PaidInPayoutPeriodStart.Should().Be(new DateOnly(2026, 3, 1));
+        duplicated.PaidInPayoutPeriodEnd.Should().Be(new DateOnly(2026, 3, 15),
+            "the period is what shows the overlap that created the duplicate");
+    }
+
+    /// <summary>
+    /// ★★ AND A PAYOUT DOES NOT ACCUSE ITSELF. Once a payout is paid, every one of its credits carries
+    /// a ConsumedByPayoutId — its own. Without comparing against the payout being rendered, every line
+    /// of every paid statement would claim to be a duplicate of itself.
+    /// </summary>
+    [Fact]
+    public async Task A_paid_payout_does_not_report_its_own_lines_as_paid_elsewhere()
+    {
+        var tenantId = Guid.NewGuid();
+        var (_, payerId) = await SeedStuckPayoutAsync(tenantId, creditCount: 3);
+
+        await using var db = fixture.CreateDbForTenant(tenantId);
+        var payer = await db.CompensationPayouts
+            .Include(p => p.Lines)
+            .FirstAsync(p => p.Id == payerId);
+
+        payer.Status.Should().Be(CompensationPayoutStatus.Paid);
+
+        var lines = await GetPayoutByIdHandler.BuildLinesAsync(
+            payer.Lines, db, payer.Id, CancellationToken.None);
+
+        lines.Should().OnlyContain(l => l.PaidInPayoutId == null,
+            "these credits were consumed by THIS payout, which is not a duplicate");
+
+        // ★★ AND THE STATE SAYS "PAID", NOT "UNPAID". This is the bug the binary version shipped: the
+        // absence of ANOTHER payout's id was read as nobody having paid, so a settled statement
+        // called every one of its own lines unpaid while the Transactions list called the same
+        // transactions Paid. Asserting the id alone would still pass today — the state is the claim.
+        lines.Should().OnlyContain(l => l.PaymentState == PayoutLinePaymentState.PaidByThisPayout,
+            "this payout paid them, so the statement must say so");
+    }
+
+    /// <summary>
+    /// ★★ THE THREE STATES ON ONE STATEMENT, which is the only arrangement that can catch a mapping
+    /// that collapses two of them. A payout carrying only duplicates, or only unpaid lines, passes
+    /// even when the rule behind the badge is wrong.
+    /// </summary>
+    [Fact]
+    public async Task A_statement_tells_paid_here_from_paid_elsewhere_from_unpaid()
+    {
+        var tenantId = Guid.NewGuid();
+        var (stuckId, payerId) = await SeedStuckPayoutAsync(tenantId, creditCount: 2, unpaidExtra: 3);
+
+        await using var db = fixture.CreateDbForTenant(tenantId);
+
+        // The stuck payout: 2 credits another payout paid, 3 nobody has.
+        var stuck = await db.CompensationPayouts.Include(p => p.Lines).FirstAsync(p => p.Id == stuckId);
+        var stuckLines = await GetPayoutByIdHandler.BuildLinesAsync(
+            stuck.Lines, db, stuck.Id, CancellationToken.None);
+
+        stuckLines.Count(l => l.PaymentState == PayoutLinePaymentState.PaidByAnotherPayout).Should().Be(2);
+        stuckLines.Count(l => l.PaymentState == PayoutLinePaymentState.Unpaid).Should().Be(3);
+        stuckLines.Should().NotContain(l => l.PaymentState == PayoutLinePaymentState.PaidByThisPayout,
+            "this payout has paid nothing");
+
+        // The payer: the same two credits, settled by itself.
+        var payer = await db.CompensationPayouts.Include(p => p.Lines).FirstAsync(p => p.Id == payerId);
+        var payerLines = await GetPayoutByIdHandler.BuildLinesAsync(
+            payer.Lines, db, payer.Id, CancellationToken.None);
+
+        payerLines.Should().OnlyContain(l => l.PaymentState == PayoutLinePaymentState.PaidByThisPayout);
+    }
 
     private sealed class AlwaysAllowAuth : IAuthorizationService
     {

@@ -4,6 +4,201 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-04 (c) - KAN-52: salida para un payout Approved que nunca podra pagarse
+
+**Rama:** KAN-38 · Ticket KAN-52 (Bug, High, epica KAN-38) · **Sin commit.** Backend + frontend.
+
+**★★ SE MIDIO SIN FILTRAR POR TENANT Y EL CUADRO SALIO ENGANOSO — lo corrigio el usuario.** La primera
+consulta daba 5 payouts atorados y 3 de ellos parciales; el usuario, que veia 2 en pantalla, pregunto
+por que. Filtrando: en SU tenant (`Wasnie LDTA Polska`) hay exactamente **2**, y los **dos totalmente
+bloqueados**. Los 3 parciales son del tenant `Wasnie`. **KAN-34 ya avisaba de esto por escrito** («hay
+tenants de prueba con miles de filas; no mezclar») y aun asi se midio en toda la base.
+
+**Las 4 preguntas del Paso 0:**
+1. **Bloqueo:** `BulkMarkPaidHandler.cs:98-111`. El discriminador real es `credit.ConsumedAt != null`,
+   no el estado de la transaccion.
+2. **Estado terminal:** `Disputed` YA existe y todos los cascades lo respetan. Y
+   **`CompensationPayout.Dispute()` esta escrito y no lo llama nadie** — salida construida y nunca
+   conectada.
+3. **Origen: camino REAL.** Mismo payee, mismo plan, **periodos solapados**; el pagador se calculo 35
+   segundos antes. El indice unico solo impide el periodo EXACTO. → **ticket KAN-57**, creado y
+   enlazado.
+4. **No es regresion.** `git log -S "Dispute("` no devuelve nada: el endpoint nunca existio. La
+   etiqueta `regresion` del ticket es incorrecta.
+
+**★★ LA GUARDA DE DINERO, QUE ES EL HALLAZGO QUE JUSTIFICA EL PASO 0.** El ticket asume «el dinero ya
+se pago por otro payout». Para los 3 parciales del otro tenant **es falso**: uno lleva 71 creditos
+pagados y **139 sin pagar**, la mayor parte de €34.567,64. El descarte solo se permite cuando **cada
+credito vivo** ya fue consumido por otro payout; si queda uno, se rechaza diciendo cuantos. Sin esa
+guarda, el boton habria retirado una deuda real a una persona real.
+
+**★★ ESTADO TERMINAL `Discarded`, NO una entidad `PayoutClosure`** — la nota del ticket proponia calcar
+KAN-51 y **el ciclo de vida no encaja igual**. En KAN-51 la cola DERIVABA y no habia fila que mutar;
+aqui el payout ya tiene estado mutable por diseno. Los **13 lectores** de `Status == Approved` filtran
+explicitamente: un estado terminal los corrige a todos de golpe, mientras que una tabla paralela
+habria dejado el payout en `Approved` y obligado a excluirlo lector por lector — **el defecto que
+KAN-51 tuvo que volver a arreglar en el Dashboard**. La prueba de que era la eleccion correcta llego
+sola: **TypeScript encontro un segundo `switch` exhaustivo** en `pay-run-detail` que ninguna busqueda
+manual habria listado.
+
+**★ Se descarto reusar `Disputed`** pese a estar construido: `GetPayeeLedgerSummaryHandler:101` lo suma
+como `DisputedInPeriod` en el resumen **que ve el propio payee**, y habria mostrado €9.520 «en disputa»
+que nadie disputa (§B3).
+
+**★ La migracion B34 toca el indice unico.** `IX_CompensationPayouts_Live` excluye los estados
+terminales por nombre; sin anadir `Discarded`, un payout descartado seguiria ocupando el hueco y
+bloqueando el recalculo que es el arreglo real del periodo — la cola limpia y el trabajo igual de
+imposible. Verificado contra `sys.indexes`, no contra la salida del comando.
+
+**★★ EL REBAUTIZO A ZEKE HABIA DEJADO 4 TESTS EN ROJO Y NO SE VIO.** `AssistantIdentityTests` fija el
+texto del bloque de identidad y afirmaba el literal `"Incentra AI Assistant"`. En esa tarea solo se
+COMPILO `Wasnie.Application` (el API del usuario bloqueaba la solucion) y no se corrio la suite unitaria:
+§4 del CLAUDE.md dice construir antes de fiarse de los tests, pero no correrlos no es una opcion. La
+asercion se actualizo a `"Zeke"`, que ademas la hace mas fuerte: un renombrado futuro que se olvide del
+prompt falla aqui.
+
+**★ Tests verificados en ROJO (§A2):** con la guarda de dinero neutralizada, el test del payout parcial
+se pone en rojo y los otros 4 siguen verdes. (Un primer intento de mutacion con `if (false)` no compila
+— warnings as errors.)
+
+**Trampa de compilacion:** con el API del usuario corriendo, el bin de `Wasnie.Api` esta bloqueado. Se
+compilo y ejecuto con `-p:BaseOutputPath` a `%TEMP%`. **Efecto secundario a recordar:**
+`ToolSelectionInstructionsTests` sube por el arbol de directorios buscando `src/` y falla desde ahi —
+es artefacto del metodo, no un defecto.
+
+**Suites:** unit **1909 / 0** (build normal) · front **1345 / 0** · `ng build --configuration
+production` exit 0 · integracion **+5** tests nuevos, 15/15 en el fichero.
+
+**★★ DOS AJUSTES DE UX PEDIDOS EN EL TICKET, DESPUES DE VERLO EN RUNTIME.** «La logica del descarte
+esta bien; la pantalla es ciega.»
+
+**(1) Estado de pago por Commission Line.** El servidor SIEMPRE supo que creditos habia consumido otro
+payout — es la guarda del pago y la del descarte — pero el statement no lo mostraba, asi que la unica
+forma de saber si un payout estaba total o parcialmente duplicado era **pulsar Discard y leer el
+rechazo**. Ahora cada linea lleva badge «Ya pagada» / «Sin pagar». **El dato NO se recalcula:**
+`BuildLinesAsync` ya cargaba los creditos enteros, solo habia que exponerlos
+(`PayoutLineDto.PaidInPayoutId` + periodo).
+
+**★★ Y HUBO QUE PASARLE EL `payoutId` A `BuildLinesAsync`.** Sin comparar contra el payout que se esta
+pintando, **un payout pagado acusaria a todas sus lineas de ser duplicados de si mismas**: al pagarse,
+cada credito queda con `ConsumedByPayoutId` apuntando a el. Hay test para eso, y con la comparacion
+neutralizada se pone en rojo.
+
+**★ El tooltip lleva el PERIODO del payout que pago, no su id.** «Ya pagada en 7839C4D2» no dice nada;
+el periodo es lo que muestra el solape que creo el duplicado. Misma forma que `PaymentConflictItem`,
+que el banner de doble-paga ya hablaba.
+
+**(2) «Discard payout» pasa de banner a menu ⋯.** Era una tarjeta a todo lo ancho compitiendo con
+«Mark as paid»: le daba a una accion rara y de un solo sentido el mismo peso que a la que la gente
+viene a hacer. Sigue a un clic, sin gritar. Solo aparece en `Approved` — un `Calculated` se recalcula
+y un `Paid` se revierte, asi que ofrecerlo seria ofrecer un rechazo.
+
+**★ El copy se hizo honesto**, como pedia el comentario: ya no dice «si todas fueron pagadas…» como
+condicion previa, sino que la accion esta disponible y **el servidor rechaza indicando cuantas lineas
+siguen sin pagar**. EN/ES/PL.
+
+**★★ UN GREP ESCONDIO UN FALLO DE COMPILACION.** `dotnet test | grep -E "^Passed!|^Failed!"` no
+imprime nada cuando el proyecto **no compila**, y asi paso: un test unitario llamaba a
+`BuildLinesAsync` con la firma vieja y la corrida «no dijo nada». Es §A5 con otra cara — el filtro se
+comio el error. Corregido (4 llamadas) y **la ausencia de salida hay que tratarla como fallo, no como
+silencio**.
+
+**★ Y el `tfoot` se quedo con una celda de menos.** Al anadir la columna Payment se actualizaron
+`thead`, `tbody` y el `colspan` de la fila expandible, **pero no el pie**: 5 celdas para 6 columnas.
+No es cosmetico por casualidad — `ws-table` pone `border-bottom: none` en la ultima fila del cuerpo
+porque la linea de cierre la aporta el `border-top` de la fila de Total; sin celda de pie, la ultima
+columna se queda **sin esa linea** y el badge flota. La celda va vacia a proposito (un estado de pago
+no se suma) y lleva comentario explicando por que tiene que existir. Barrido del repo: es la **unica**
+tabla con `tfoot`, y ahora cuadra 6=6.
+
+**★★ BUG PROPIO EN EL BADGE, REPORTADO POR EL USUARIO: LO HICE BINARIO.** El estado de pago salía de
+un solo campo nullable (`PaidInPayoutId`), y su AUSENCIA se leía como «sin pagar». Pero en el
+statement del payout que SÍ pagó esos créditos, ese id es null **por la razón honesta de que el
+pagador no es otro** — así que un payout `Paid` mostraba todas sus líneas como «Not paid»,
+contradiciendo la lista de Transactions a tres clics. Un null significaba dos cosas a la vez: **§B3
+exacto, y lo cometí yo dos horas después de escribir un informe citando §B3.**
+
+**Arreglo: el estado viaja como ESTADO, no se deriva.** `PayoutLinePaymentState` con tres miembros
+(`Unpaid` / `PaidByThisPayout` / `PaidByAnotherPayout`), decidido en el servidor, que es donde vive la
+comparación contra el payout actual. En el front, **mapa exhaustivo tipado sobre la unión** (§C2), no
+un ternario: un cuarto estado sería error de compilación en vez de un badge mal puesto. La guarda del
+descarte ya distinguía bien los dos casos (`c.ConsumedByPayoutId != payout.Id`) — el defecto estaba
+sólo en el mapeo del statement, como señalaba el ticket.
+
+**★★ Y EL TEST TAMBIÉN NACÍÓ MUERTO: la primera mutación no llegó a aplicarse** (patrón con `
+`
+contra un fichero CRLF) y leí el 18/18 como «no lo caza». Repetida bien, los **2** tests se ponen en
+rojo. La leccion no es el CRLF: es que **una mutación que no cambia el fichero se parece exactamente a
+un test que no sirve**, y hay que comprobar que la mutación se aplicó antes de interpretar el
+resultado.
+
+**★★ Y AL AÑADIR EL ENUM SE ROMPIERON 4 TESTS DE ENDPOINT — §A4 EN VIVO.** El API serializa enums como
+**string** (`JsonStringEnumConverter` en `Program.cs:69`), pero `PayoutsEndpointsTests` deserializaba
+`PayoutDto` con las opciones por defecto de `ReadFromJsonAsync`, que no lo llevan: `JsonException` en
+`$.lines[0].paymentState`. El fixture consumía el contrato real con ajustes distintos a los del cliente
+real. Arreglado alineando las opciones con las del API, **no** debilitando el DTO. Falló ruidosamente,
+que es el buen desenlace.
+
+**Ajustes de tabla pedidos en el mismo comentario:**
+- **La celda de origen se reparte en tres columnas** (Referencia / Descripción / Fecha). Estaban
+  apiladas dentro de una sola celda, lo que hacía cada fila de tres líneas y obligaba a leer hacia
+  abajo en vez de a lo ancho. La descripción se recorta con elipsis: si envuelve, vuelve la fila alta.
+- **Densidad compacta**, con la receta que este producto ya fijó en el Centro de Reconciliación: 12px
+  y `--space-1` en `td`, 11px en `th`, **acotado con `::ng-deep` detrás de `.payout-detail__table`**
+  para no restilar las otras nueve listas que heredan los 14px de `ws-table`.
+- El `tfoot` pasó de 6 a 8 celdas, verificado por conteo (thead 8 = tfoot 8).
+- **La fila expandible también baja de densidad** — y hubo que hacerlo DOS veces. La primera pasada la
+  dejó en `--space-2` razonando que «un panel merece más aire que una línea»: **una decisión de diseño
+  que nadie había pedido**, contra una instrucción explicita («también deben ser compact»), y que dejaba
+  la tabla cambiando de densidad al abrir una fila. Ahora es `--space-1`, igual que el resto. La regla
+  `&__detail-row td` declara su propio padding (12/16px) y **gana en especificidad** al bloque
+  `::ng-deep` de densidad, así que abrir una línea hacía saltar la tabla de compacta a aireada — leía
+  como otra tabla. Ahora `--space-2` arriba y abajo (sigue teniendo más aire que una fila normal:
+  es un panel, no una línea), gap del panel a `--space-2`, cadena de modificadores a `--space-1`, y
+  los textos que seguían a 13px (`__calc-rate`, `__calc-amount`) bajan a 12. **Dos más dentro de la
+  tabla hacían lo mismo** y se corrigieron al pasar: `__source-ref` y `__source-none` declaraban 13px
+  y ganaban sobre la densidad, así que la referencia se veía un punto mayor que las cifras de al
+  lado.
+- **`overlap-warning` (componente compartido) también pasa a la misma densidad**: 12px sobre
+  `--space-1`, cabecera 11px. Estaba a 13px y `--space-2`, así que se veía un tamaño y un escalón de
+  padding por encima de aquello donde se incrusta — un panel pegado, no parte de la página. **Se usa
+  en tres pantallas** (payout detail, pay-run detail, assignments), y el cambio las alcanza a las
+  tres; es coherente, porque las tres lo incrustan dentro de tablas de esta misma densidad.
+
+**★★ VERIFICADO EN EL CSS COMPILADO, no en el fuente.** Tras decir «arreglado» una vez y que no lo
+estuviera, el chequeo pasa a ser `grep` sobre el bundle de `dist/`: las tres reglas salen con
+`--space-1` (`payout-detail__detail-row td`, `payout-detail__table … .ws-table-wrap td`,
+`overlap-warning__row td`). El fuente puede estar bien y la regla no llegar; el bundle es lo que
+recibe el navegador.
+
+**★★ CHECKBOXES SÓLO DONDE UNA ACCIÓN MASIVA PUEDE ACTUAR — y la premisa del comentario estaba
+incompleta.** Pedía checkbox sólo en `Approved`, razonando que la acción masiva es «Mark as paid».
+Pero esta lista tiene **DOS**: `bulkApprove` actúa sobre `Calculated` y `bulkMarkPaid` sobre
+`Approved` (`payouts.store.ts`, `selectedCalculatedIds` / `selectedApprovedIds`). Aplicarlo al pie de
+la letra **habría dejado a bulk approve sin nada que seleccionar jamás**.
+
+Lo que se excluye son los **tres estados TERMINALES** — `Paid`, `Disputed`, `Discarded` — que es lo
+que el comentario perseguía: filas que se podían marcar y que la acción luego descartaba en silencio,
+inflando un `skippedCount` que el usuario nunca pidió crear. Mismo principio que el menú ⋯, que sólo
+ofrece Discard en `Approved`.
+
+Tres piezas: `SELECTABLE_STATUSES` + `isSelectable()` en el store; **`toggleSelect` rechaza** una fila
+no seleccionable (segunda puerta, por si llega un id viejo); `toggleSelectAll` marca sólo las
+accionables; y `allSelected` se mide contra **las seleccionables**, o el checkbox de cabecera se
+quedaría eternamente sin marcar en cualquier página con un payout pagado. La cabecera se oculta si la
+página no tiene ninguna seleccionable.
+
+**5 tests, verificados en ROJO:** ampliando `SELECTABLE_STATUSES` a los cinco estados, los cinco
+fallan. front **1345 → 1350**. `aria-label` en ambos checkboxes, EN/ES/PL.
+
+**Sin integración:** el cambio es sólo de frontend — no toca DTO, handler ni consulta — así que la
+suite de integración no aporta señal aquí y no se corrió.
+
+**Suites tras los ajustes:** unit **1909 / 0** · integracion **889 → 891 / 0** (2 tests nuevos), 0
+`outcome="Failed"` en TRX · front **1345 / 0** · `ng build --configuration production` exit 0.
+
+**Sin verificar:** no se abrio el navegador (lo verifica el usuario).
+
 ## 2026-09-04 (b) - KAN-51: cierre auditado de filas de reconciliacion (append-only)
 
 **Rama:** KAN-38 · Ticket KAN-51 (Task, Medium, epica KAN-39 «Auditoria y evidencia») · **Sin commit.**

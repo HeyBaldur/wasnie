@@ -51,6 +51,17 @@ public static class Permission
     public const string PayoutsExport = "Payouts.Export";
     public const string PayoutsDeleteDraft = "Payouts.DeleteDraft";
 
+    /// <summary>
+    /// Closing an Approved payout that can never be paid, because its credits were already paid by
+    /// another payout.
+    ///
+    /// ★ ITS OWN PERMISSION, NOT Payouts.MarkPaid, for the reason Ledger.CloseAccount is not
+    /// Ledger.Adjust: this makes a payable figure stop being owed, without any money moving. Whoever
+    /// may pay is not automatically whoever may decide that something will never be paid, and the two
+    /// have to be revocable separately.
+    /// </summary>
+    public const string PayoutsDiscard = "Payouts.Discard";
+
     // Clawback ledger. Read is deliberately broad — a rep seeing why their pay was reduced is the
     // point of the ledger, not a leak. Adjust writes a Human entry and is finance-only.
     public const string LedgerRead = "Ledger.Read";

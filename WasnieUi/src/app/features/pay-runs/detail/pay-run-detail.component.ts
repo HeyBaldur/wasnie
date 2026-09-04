@@ -296,6 +296,8 @@ export class PayRunDetailComponent implements OnInit {
       case 'Approved':   return 'brand';
       case 'Paid':       return 'success';
       case 'Disputed':   return 'danger';
+      // ★ Closed paperwork, not a problem — see the same case in the payouts list.
+      case 'Discarded':  return 'neutral';
     }
   }
 

@@ -18,6 +18,37 @@
         <app-icon name="file-pdf" [size]="16" />
         {{ 'PAYOUTS.ACTION_EXPORT_PDF' | translate }}
       </ws-button>
+
+      <!-- ★★ DISCARD LIVES IN A MENU, NOT IN A BANNER. It used to be a full-width card sitting
+           beside "Mark as paid", which gave a rare, one-way action the same weight as the one
+           people come here to perform. It is still one click away, just no longer shouting.
+           ★ ONLY ON AN Approved PAYOUT: a Calculated one is recalculated and a Paid one is
+           reverted — neither is discarded, so offering it would be offering a refusal. -->
+      @if (isApproved()) {
+        <ws-popover class="payout-detail__menu" placement="bottom-end">
+          <button
+            slot="trigger"
+            type="button"
+            class="payout-detail__menu-trigger"
+            [attr.aria-label]="'PAYOUTS.DETAIL.MORE_ACTIONS' | translate"
+            data-testid="payout-actions-menu"
+          >
+            <app-icon name="more-vertical" [size]="16" />
+          </button>
+
+          <button
+            *hasPermission="'Payouts.Discard'"
+            type="button"
+            class="payout-detail__menu-item"
+            [disabled]="discarding()"
+            (click)="openDiscardConfirm()"
+            data-testid="payout-discard-action"
+          >
+            <app-icon name="ban" [size]="14" />
+            {{ 'PAYOUTS.ACTION_DISCARD' | translate }}
+          </button>
+        </ws-popover>
+      }
     </ng-container>
 
     @if (loading()) {
@@ -88,6 +119,13 @@
         </ws-card>
       }
 
+      @if (isDiscarded()) {
+        <ws-card variant="flat" class="payout-detail__banner">
+          <p class="payout-detail__banner-title">{{ 'PAYOUTS.DETAIL.BANNER_DISCARDED_TITLE' | translate }}</p>
+          <p class="payout-detail__banner-desc">{{ 'PAYOUTS.DETAIL.BANNER_DISCARDED_DESC' | translate }}</p>
+        </ws-card>
+      }
+
       @if (isPaid()) {
         <ws-card variant="flat" accent="success" class="payout-detail__banner">
           <p class="payout-detail__banner-paid-msg">{{ 'PAYOUTS.DETAIL.BANNER_PAID_DONE' | translate }}</p>
@@ -137,15 +175,18 @@
         @if (p.lines.length === 0) {
           <p class="payout-detail__empty">{{ 'PAYOUTS.DETAIL.NO_LINES' | translate }}</p>
         } @else {
-          <ws-table>
+          <ws-table class="payout-detail__table">
             <table>
               <thead>
                 <tr>
                   <th class="payout-detail__col-expand"></th>
                   <th>{{ 'PAYOUTS.DETAIL.COL_RULE' | translate }}</th>
                   <th>{{ 'PAYOUTS.DETAIL.COL_SOURCE' | translate }}</th>
+                  <th>{{ 'PAYOUTS.DETAIL.COL_DESCRIPTION' | translate }}</th>
+                  <th>{{ 'PAYOUTS.DETAIL.COL_DATE' | translate }}</th>
                   <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_BASE' | translate }}</th>
                   <th class="payout-detail__col-right">{{ 'PAYOUTS.DETAIL.COL_COMMISSION' | translate }}</th>
+                  <th>{{ 'PAYOUTS.DETAIL.COL_PAYMENT_STATE' | translate }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,23 +204,25 @@
                       }
                     </td>
                     <td>{{ line.ruleName }}</td>
+                    <!-- ★★ THREE COLUMNS, NOT ONE STACKED CELL. Reference, label and date used to sit
+                         on top of each other inside a single cell, which made every row three lines
+                         tall and left the reader scanning down instead of across. A table's job is to
+                         line comparable things up in the same place on every row. -->
                     <td>
                       @if (line.transactionReference) {
-                        <div class="payout-detail__source-cell">
-                          <a class="payout-detail__source-ref"
-                             (click)="openTransaction(line.transactionReference)"
-                             role="button"
-                             tabindex="0">{{ line.transactionReference }}</a>
-                          @if (line.transactionDescription) {
-                            <span class="payout-detail__source-description">{{ line.transactionDescription }}</span>
-                          }
-                          @if (line.transactionDate) {
-                            <span class="payout-detail__source-date">{{ line.transactionDate | dateFormat }}</span>
-                          }
-                        </div>
+                        <a class="payout-detail__source-ref"
+                           (click)="openTransaction(line.transactionReference)"
+                           role="button"
+                           tabindex="0">{{ line.transactionReference }}</a>
                       } @else {
                         <span class="payout-detail__source-none">—</span>
                       }
+                    </td>
+                    <td class="payout-detail__source-description">
+                      {{ line.transactionDescription || '—' }}
+                    </td>
+                    <td class="payout-detail__source-date">
+                      {{ line.transactionDate ? (line.transactionDate | dateFormat) : '—' }}
                     </td>
                     <td class="payout-detail__col-right payout-detail__num">
                       {{ line.baseAmount | currencyFormat: line.baseCurrency }}
@@ -187,13 +230,26 @@
                     <td class="payout-detail__col-right payout-detail__num">
                       {{ line.commissionAmount | currencyFormat: line.commissionCurrency }}
                     </td>
+
+                    <!-- ★★ THE FACT THE PAYMENT GUARD ALREADY KNEW, FINALLY ON SCREEN. Whether this
+                         commission was paid by ANOTHER payout is what blocks the payment and gates
+                         the discard; until now the only way to find out was to press Discard and read
+                         the refusal. The period of the payout that paid it is what shows the overlap
+                         that produced the duplicate, so it goes in the tooltip rather than an id
+                         nobody can place. -->
+                    <td>
+                      <ws-badge
+                        [variant]="linePaymentVariant(line)"
+                        [title]="paidElsewhereTitle(line)"
+                      >{{ linePaymentKey(line) | translate }}</ws-badge>
+                    </td>
                   </tr>
 
                   <!-- Calculation detail row (expandable) -->
                   @if (line.calculation && isExpanded(line.id)) {
                     <tr class="payout-detail__detail-row">
                       <td></td>
-                      <td colspan="4">
+                      <td colspan="7">
                         <div class="payout-detail__calc">
 
                           <!-- Rule metadata -->
@@ -252,9 +308,18 @@
                   <td><strong>Total</strong></td>
                   <td></td>
                   <td></td>
+                  <td></td>
+                  <td></td>
                   <td class="payout-detail__col-right payout-detail__num">
                     <strong>{{ p.totalCommissionAmount | currencyFormat: p.totalCommissionCurrency }}</strong>
                   </td>
+                  <!-- ★ EMPTY, BUT IT HAS TO EXIST. The last body row has `border-bottom: none`
+                       (ws-table) because the closing line is the total row's `border-top`. A tfoot
+                       with fewer cells than the header leaves the last column without that line, and
+                       the Payment badge ends up floating with no rule under it. There is no total to
+                       show here — a payment state does not add up — so the cell is deliberately
+                       blank. -->
+                  <td></td>
                 </tr>
               </tfoot>
             </table>
@@ -341,6 +406,40 @@
     </ws-button>
     <ws-button variant="primary" [disabled]="markingPaid()" [loading]="markingPaid()" (click)="onMarkPaid()">
       {{ 'PAYOUTS.ACTION_MARK_PAID' | translate }}
+    </ws-button>
+  </ng-container>
+</ws-modal>
+
+<!-- ★★ THE REASON IS THE POINT OF THIS MODAL. Discarding makes a payable figure stop being owed;
+     the sentence written here is the only record of why somebody decided that was correct, and the
+     description says what the action does rather than reassuring the reader that it is safe (§C3). -->
+<ws-modal
+  [isOpen]="discardConfirmOpen()"
+  size="md"
+  [title]="'PAYOUTS.DETAIL.DISCARD_TITLE' | translate"
+  [description]="'PAYOUTS.DETAIL.DISCARD_DESC' | translate"
+  (closed)="cancelDiscard()"
+>
+  <ws-textarea
+    [label]="'PAYOUTS.DETAIL.DISCARD_REASON_LABEL' | translate"
+    [placeholder]="'PAYOUTS.DETAIL.DISCARD_REASON_PLACEHOLDER' | translate"
+    [maxlength]="2000"
+    [submitOnEnter]="false"
+    (valueChange)="discardReason.set($event)"
+  />
+  <p class="payout-detail__banner-desc">{{ 'PAYOUTS.DETAIL.DISCARD_REASON_HELP' | translate }}</p>
+
+  <ng-container slot="footer">
+    <ws-button variant="ghost" [disabled]="discarding()" (click)="cancelDiscard()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </ws-button>
+    <ws-button
+      variant="primary"
+      [disabled]="!canSubmitDiscard()"
+      [loading]="discarding()"
+      (click)="onDiscard()"
+    >
+      {{ 'PAYOUTS.ACTION_DISCARD' | translate }}
     </ws-button>
   </ng-container>
 </ws-modal>

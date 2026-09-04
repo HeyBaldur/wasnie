@@ -32,6 +32,19 @@ public sealed class CompensationPayout : AggregateRoot
     /// </summary>
     public DateTimeOffset? PaidAt { get; private set; }
 
+    /// <summary>
+    /// When a human closed this payout as unpayable, and why. Null for every payout that is not
+    /// <see cref="CompensationPayoutStatus.Discarded"/>.
+    ///
+    /// ★ THE REASON IS MANDATORY AND IT IS PROSE, on purpose. §C1 bans prose the SYSTEM emits,
+    /// because a machine-written sentence must be redeployed to be translated. This one is written
+    /// BY a human FOR whoever audits the payout later, and no fixed list of codes could anticipate
+    /// what they need to say about a payout worth several thousand euros.
+    /// </summary>
+    public DateTimeOffset? DiscardedAt { get; private set; }
+    public string? DiscardedBy { get; private set; }
+    public string? DiscardReason { get; private set; }
+
     public DateTimeOffset CalculatedAt { get; private set; }
     public string CalculatedBy { get; private set; } = string.Empty;
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -185,6 +198,43 @@ public sealed class CompensationPayout : AggregateRoot
         }
 
         Status = CompensationPayoutStatus.Disputed;
+        UpdatedAt = now;
+        UpdatedBy = updatedBy;
+    }
+
+    /// <summary>
+    /// Close an Approved payout that can never be paid, because every credit it carries was already
+    /// paid by another payout.
+    ///
+    /// ★★ IT REFUSES A Paid PAYOUT, AND THAT IS THE MONEY GUARD. This transition exists to clear a
+    /// queue, never to undo a payment: money that has left is reversed by RevertPaidToApproved,
+    /// which unconsumes the credits and returns the transactions — a different operation with
+    /// different consequences. Discarding a Paid payout would erase the record of a payment while
+    /// the cash stayed gone.
+    ///
+    /// ★ ONLY FROM Approved. A Calculated payout has not been approved by anyone and can simply be
+    /// recalculated; letting it be discarded would add a second way to make work disappear that
+    /// nobody needed.
+    ///
+    /// ★ WHETHER THE CREDITS ARE REALLY ALL PAID IS NOT CHECKED HERE. The aggregate cannot see other
+    /// payouts' credits, so the check lives in the handler, which can — and it MUST, because a
+    /// partially-blocked payout still owes somebody money. See DiscardPayoutHandler.
+    /// </summary>
+    public void Discard(string reason, string updatedBy, DateTimeOffset now)
+    {
+        if (Status == CompensationPayoutStatus.Paid)
+            throw new DomainException("A paid payout cannot be discarded; revert the payment instead.");
+
+        if (Status != CompensationPayoutStatus.Approved)
+            throw new DomainException("Only Approved payouts can be discarded.");
+
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new DomainException("A discarded payout must state why it is being closed.");
+
+        Status = CompensationPayoutStatus.Discarded;
+        DiscardedAt = now;
+        DiscardedBy = updatedBy;
+        DiscardReason = reason.Trim();
         UpdatedAt = now;
         UpdatedBy = updatedBy;
     }

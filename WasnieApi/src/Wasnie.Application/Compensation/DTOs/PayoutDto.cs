@@ -67,7 +67,31 @@ public sealed record PayoutLineDto(
     decimal? TransactionAmount,
     string? TransactionCurrency,
     // Calculation explanation — null if credit data unavailable
-    LineCalculationDto? Calculation);
+    LineCalculationDto? Calculation,
+
+    /// <summary>
+    /// What happened to this line's money: paid here, paid by another payout, or not paid at all.
+    /// See <see cref="PayoutLinePaymentState"/>.
+    /// </summary>
+    PayoutLinePaymentState PaymentState = PayoutLinePaymentState.Unpaid,
+
+    /// <summary>
+    /// Which payout paid it, when that payout is not this one — the duplicate that makes this payout
+    /// unpayable and is the reason the discard exists.
+    ///
+    /// ★★ IT IS THE SAME FACT THE PAYMENT GUARD USES, SURFACED. The server has always known which
+    /// credits are already consumed — it is what blocks the payment and what decides whether a payout
+    /// can be discarded. The statement did not show it, so the only way to find out whether a stuck
+    /// payout was wholly or partly duplicated was to press Discard and read the refusal. Answering it
+    /// on the line itself turns trial and error into a glance.
+    ///
+    /// ★ THE PERIOD, NOT JUST THE ID. "Already paid in 7839C4D2" tells the reader nothing; the period
+    /// of the payout that paid it is what shows the overlap that caused the duplicate. Same shape as
+    /// PaymentConflictItem, which the double-pay banner already speaks.
+    /// </summary>
+    Guid? PaidInPayoutId = null,
+    DateOnly? PaidInPayoutPeriodStart = null,
+    DateOnly? PaidInPayoutPeriodEnd = null);
 
 // ── Calculation explanation DTOs ──────────────────────────────────────────────
 
@@ -115,3 +139,27 @@ public sealed record ModifierApplicationDto(
     string AmountBeforeCurrency,
     decimal AmountAfter,
     string AmountAfterCurrency);
+
+/// <summary>
+/// What happened to one commission line's money.
+///
+/// ★★ THREE STATES, BECAUSE TWO WERE A LIE. The first cut carried only "paid somewhere else" as a
+/// nullable id, and the screen read its absence as "not paid" — so a payout that had itself paid
+/// these very credits showed every one of its lines as unpaid, contradicting the Transactions list
+/// three clicks away. A null meant two different things at once (§B3: one field, one meaning), and
+/// the fix is not a second boolean beside it but a state that can only ever be one of these.
+/// </summary>
+public enum PayoutLinePaymentState
+{
+    /// <summary>Nobody has paid this commission yet.</summary>
+    Unpaid = 0,
+
+    /// <summary>Paid by the payout being looked at — the ordinary, correct outcome.</summary>
+    PaidByThisPayout = 1,
+
+    /// <summary>
+    /// Paid by a DIFFERENT payout: the duplicate that makes this payout unpayable and is the reason
+    /// the discard exists. <c>PaidInPayoutPeriodStart/End</c> say which one.
+    /// </summary>
+    PaidByAnotherPayout = 2,
+}

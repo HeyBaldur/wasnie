@@ -441,3 +441,110 @@ describe('PayoutsListComponent — query params after the first render', () => {
     expect(queryParams.observed).withContext('no listener left behind').toBeFalse();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk selection is offered only where a bulk action can act (KAN-52).
+//
+// ★★ TWO SELECTABLE STATUSES, NOT ONE. The request was "checkboxes only on Approved", on the
+// grounds that the bulk action is Mark as paid — but this list has TWO: approve acts on Calculated
+// and mark-paid on Approved. Honouring the request literally would have left bulk approve unable to
+// select anything. What is excluded instead are the three TERMINAL states, which is what the request
+// was actually about: rows a bulk action would silently drop.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PayoutsStore — which rows can be selected', () => {
+  let store: PayoutsStore;
+
+  const page = (items: PayoutListItem[]) => ({
+    items, totalCount: items.length, page: 1, pageSize: 25, totalPages: 1,
+    hasNextPage: false, hasPreviousPage: false, unfilteredTotal: undefined,
+  });
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        PayoutsStore,
+        { provide: PayoutsApiService, useValue: jasmine.createSpyObj('PayoutsApiService', { list: of(EMPTY_PAGE) }) },
+      ],
+    });
+    store = TestBed.inject(PayoutsStore);
+  });
+
+  it('offers a checkbox on the two statuses a bulk action can act on, and on no others', () => {
+    const cases: Array<[PayoutStatus, boolean]> = [
+      ['Calculated', true],
+      ['Approved', true],
+      ['Paid', false],
+      ['Disputed', false],
+      ['Discarded', false],
+    ];
+
+    for (const [status, selectable] of cases) {
+      const item = makePayoutListItem('x', status, 'payee-1', 'Alice', 'EMP-001');
+      expect(store.isSelectable(item))
+        .withContext(`${status} should ${selectable ? '' : 'not '}be selectable`)
+        .toBe(selectable);
+    }
+  });
+
+  /** ★ The regression the request was aimed at: a Paid row must not join a "mark as paid" batch. */
+  it('refuses to select a row no bulk action can touch', () => {
+    store['pagedResult'].set(page([
+      makePayoutListItem('paid', 'Paid', 'payee-1', 'Alice', 'EMP-001'),
+      makePayoutListItem('appr', 'Approved', 'payee-2', 'Bob', 'EMP-002'),
+    ]));
+
+    store.toggleSelect('paid');
+    expect(store.selectedIds().has('paid')).toBe(false);
+
+    store.toggleSelect('appr');
+    expect(store.selectedIds().has('appr')).toBe(true);
+  });
+
+  it('selects only the actionable rows when selecting all', () => {
+    store['pagedResult'].set(page([
+      makePayoutListItem('calc', 'Calculated', 'payee-1', 'Alice', 'EMP-001'),
+      makePayoutListItem('appr', 'Approved', 'payee-2', 'Bob', 'EMP-002'),
+      makePayoutListItem('paid', 'Paid', 'payee-3', 'Carol', 'EMP-003'),
+      makePayoutListItem('disc', 'Discarded', 'payee-4', 'Dan', 'EMP-004'),
+    ]));
+
+    store.toggleSelectAll();
+
+    expect([...store.selectedIds()].sort()).toEqual(['appr', 'calc']);
+
+    // ★ And no bulk action reports anything as "skipped": nothing unusable was ever selected, which
+    // is the whole point — the skipped count used to be noise the user never asked to create.
+    expect(store.bulkApproveSummary().skippedCount).toBe(1);
+    expect(store.bulkMarkPaidSummary().skippedCount).toBe(1);
+  });
+
+  /**
+   * ★ "All" is measured against the SELECTABLE rows. Comparing against every row would leave the
+   * header checkbox permanently unticked on any page holding a Paid payout, however many rows the
+   * user had ticked — a control that looks broken.
+   */
+  it('reports all-selected once every actionable row is ticked', () => {
+    store['pagedResult'].set(page([
+      makePayoutListItem('appr', 'Approved', 'payee-1', 'Alice', 'EMP-001'),
+      makePayoutListItem('paid', 'Paid', 'payee-2', 'Bob', 'EMP-002'),
+    ]));
+
+    expect(store.allSelected()).toBe(false);
+
+    store.toggleSelect('appr');
+    expect(store.allSelected()).toBe(true);
+  });
+
+  it('has nothing to offer when the page is all terminal rows', () => {
+    store['pagedResult'].set(page([
+      makePayoutListItem('paid', 'Paid', 'payee-1', 'Alice', 'EMP-001'),
+      makePayoutListItem('disc', 'Discarded', 'payee-2', 'Bob', 'EMP-002'),
+    ]));
+
+    expect(store.hasSelectableItems()).toBe(false);
+    expect(store.allSelected()).toBe(false, 'an empty selectable set is not "all selected"');
+  });
+});

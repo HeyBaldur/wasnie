@@ -1,4 +1,19 @@
-export type PayoutStatus = 'Calculated' | 'Approved' | 'Paid' | 'Disputed';
+export type PayoutStatus = 'Calculated' | 'Approved' | 'Paid' | 'Disputed' | 'Discarded';
+
+/** Mirrors PayoutLinePaymentState on the server. Serialised as a string (JsonStringEnumConverter). */
+export type PayoutLinePaymentState = 'Unpaid' | 'PaidByThisPayout' | 'PaidByAnotherPayout';
+
+/**
+ * What a discard did. ★ The count comes BACK because only the server knew how many of the payout's
+ * credits another payout had already paid — the list never carried that.
+ */
+export interface DiscardPayoutResult {
+  readonly payoutId: string;
+  readonly payeeName: string;
+  readonly amount: number;
+  readonly currency: string;
+  readonly creditsAlreadyPaidElsewhere: number;
+}
 
 export interface PayoutListItem {
   id: string;
@@ -97,6 +112,22 @@ export interface PayoutLine {
   transactionAmount: number | null;
   transactionCurrency: string | null;
   calculation: LineCalculationDto | null;
+
+  /**
+   * What happened to this line's money.
+   *
+   * ★★ IT COMES FROM THE SERVER AS A STATE, IT IS NOT DERIVED HERE. The first cut had only the
+   * "paid by another payout" id and the screen read its absence as "not paid" — so a payout that had
+   * itself paid these credits showed every line as unpaid, contradicting the Transactions list. The
+   * three cases are decided once, on the server, where the comparison against the current payout
+   * actually lives.
+   */
+  paymentState: PayoutLinePaymentState;
+
+  /** Which payout paid it, only when that payout is NOT this one. */
+  paidInPayoutId: string | null;
+  paidInPayoutPeriodStart: string | null;
+  paidInPayoutPeriodEnd: string | null;
 }
 
 export interface PayoutDetail extends PayoutListItem {

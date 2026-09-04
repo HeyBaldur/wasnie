@@ -1642,7 +1642,7 @@
       "UPDATED_AT": "Última actualización",
       "UPDATED_BY": "Actualizado por",
       "COL_RULE": "Regla",
-      "COL_SOURCE": "Transacción de origen",
+      "COL_SOURCE": "Referencia",
       "CALC_SHOW": "Ver cálculo",
       "CALC_HIDE": "Ocultar cálculo",
       "CALC_WHEN": "Cuando",
@@ -1671,12 +1671,33 @@
       "EXPORT_SUCCESS": "PDF exportado.",
       "EXPORT_ERROR": "Error al exportar el PDF.",
       "OVERLAP_WARNING": "Advertencia: el período de este pago se superpone con {{count}} pago(s) ya aprobado(s)/realizado(s) para el mismo beneficiario. Las comisiones podrían pagarse más de una vez. Revise antes de continuar.",
-      "OVERLAP_COL_PLAN": "Plan"
+      "OVERLAP_COL_PLAN": "Plan",
+      "BANNER_DISCARDED_TITLE": "Payout descartado",
+      "BANNER_DISCARDED_DESC": "Este payout se cerró como impagable: sus comisiones ya se habían pagado en otro payout. Ya no espera pago.",
+      "DISCARD_TITLE": "Descartar este payout",
+      "DISCARD_DESC": "Use esto cuando todas las comisiones de abajo figuren ya como pagadas. El payout saldrá de la cola de pago y dejará de contar como adeudado; no se altera nada ya pagado y la decisión se registra de forma permanente. Si alguna línea sigue sin pagar, el descarte se rechaza indicando cuántas.",
+      "DISCARD_REASON_LABEL": "¿Por qué este payout no se podrá pagar nunca?",
+      "DISCARD_REASON_PLACEHOLDER": "p. ej. El periodo se recalculó después de haber pagado el más corto; las cuatro comisiones salieron en el payout 7839C4D2.",
+      "DISCARD_REASON_HELP": "Obligatorio. Es lo que leerá un auditor para entender por qué el importe dejó de adeudarse.",
+      "DISCARD_SUCCESS": "Payout descartado. Ya no espera pago.",
+      "DISCARD_ERROR": "No se pudo descartar el payout.",
+      "COL_PAYMENT_STATE": "Pago",
+      "LINE_PAID_ELSEWHERE": "Ya pagada",
+      "LINE_PAID_ELSEWHERE_IN": "Ya pagada por el payout que cubre {{start}} → {{end}}",
+      "LINE_UNPAID": "Sin pagar",
+      "MORE_ACTIONS": "Más acciones",
+      "LINE_PAID_HERE": "Pagada",
+      "COL_DESCRIPTION": "Descripción",
+      "COL_DATE": "Fecha"
     },
     "EXPORT": {
       "BUTTON": "Exportar a Excel",
       "ERROR": "Error al exportar. Inténtalo de nuevo."
-    }
+    },
+    "STATUS_DISCARDED": "Descartado",
+    "ACTION_DISCARD": "Descartar payout",
+    "SELECT_ALL": "Seleccionar todos los payouts accionables",
+    "SELECT_ROW": "Seleccionar este payout"
   },
   "PAY_RUNS": {
     "TITLE": "Ciclos de pago",

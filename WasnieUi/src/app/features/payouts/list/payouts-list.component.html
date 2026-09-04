@@ -307,13 +307,18 @@
       <table>
         <thead>
           <tr>
+            <!-- ★ HIDDEN WHEN THE PAGE HOLDS NOTHING SELECTABLE. A "select all" that can only ever
+                 select nothing is a control that looks broken; the column stays so the rows line up. -->
             <th class="payouts-list__col-check">
-              <input
-                type="checkbox"
-                [checked]="store.allSelected()"
-                [indeterminate]="store.selectedCount() > 0 && !store.allSelected()"
-                (change)="store.toggleSelectAll()"
-              />
+              @if (store.hasSelectableItems()) {
+                <input
+                  type="checkbox"
+                  [attr.aria-label]="'PAYOUTS.SELECT_ALL' | translate"
+                  [checked]="store.allSelected()"
+                  [indeterminate]="store.selectedCount() > 0 && !store.allSelected()"
+                  (change)="store.toggleSelectAll()"
+                />
+              }
             </th>
             <th>{{ 'PAYOUTS.COL_PAYEE' | translate }}</th>
             <th>{{ 'PAYOUTS.COL_PLAN' | translate }}</th>
@@ -345,12 +350,21 @@
           } @else {
             @for (payout of store.items(); track payout.id) {
               <tr [class.payouts-list__row--selected]="store.selectedIds().has(payout.id)">
+                <!-- ★★ ONLY WHERE A BULK ACTION CAN ACT. A Paid payout is done, a Discarded one is
+                     closed and a Disputed one is contested: ticking them selected rows the action
+                     would silently drop, and reported a "skipped" count for work the user never
+                     meant to ask for. Same principle as the ⋯ menu, which only offers Discard on an
+                     Approved payout. The two bulk actions between them cover Calculated (approve)
+                     and Approved (mark paid) — see PayoutsStore.SELECTABLE_STATUSES. -->
                 <td class="payouts-list__col-check">
-                  <input
-                    type="checkbox"
-                    [checked]="store.selectedIds().has(payout.id)"
-                    (change)="store.toggleSelect(payout.id)"
-                  />
+                  @if (store.isSelectable(payout)) {
+                    <input
+                      type="checkbox"
+                      [attr.aria-label]="'PAYOUTS.SELECT_ROW' | translate"
+                      [checked]="store.selectedIds().has(payout.id)"
+                      (change)="store.toggleSelect(payout.id)"
+                    />
+                  }
                 </td>
                 <td>
                   <span class="payouts-list__payee-name">{{ payout.payeeName }}</span>

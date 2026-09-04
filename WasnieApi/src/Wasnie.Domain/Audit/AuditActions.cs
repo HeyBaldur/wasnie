@@ -69,6 +69,11 @@ public static class AuditActions
     // Payouts — credit consumption (anti-double-pay Phase 3)
     public const string PayoutCreditsConsumed = "PAYOUT_CREDITS_CONSUMED";
     public const string PayoutRevertedToApproved = "PAYOUT_REVERTED_TO_APPROVED";
+
+    // A human closed an Approved payout that could never be paid: every credit it carried had already
+    // been paid by a different payout. No money moves — this records that a payable figure stopped
+    // being owed, and why.
+    public const string PayoutDiscarded = "PAYOUT_DISCARDED";
     public const string PaymentBlockedDoublePayment = "PAYMENT_BLOCKED_DOUBLE_PAYMENT";
 
     // Settings (Rule 5.1.5 — configuration changes)

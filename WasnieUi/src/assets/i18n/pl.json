@@ -1642,7 +1642,7 @@
       "UPDATED_AT": "Ostatnia aktualizacja",
       "UPDATED_BY": "Zaktualizowane przez",
       "COL_RULE": "Reguła",
-      "COL_SOURCE": "Transakcja źródłowa",
+      "COL_SOURCE": "Numer",
       "CALC_SHOW": "Pokaż obliczenie",
       "CALC_HIDE": "Ukryj obliczenie",
       "CALC_WHEN": "Gdy",
@@ -1671,12 +1671,33 @@
       "EXPORT_SUCCESS": "PDF wyeksportowany.",
       "EXPORT_ERROR": "Eksport PDF nie powiódł się.",
       "OVERLAP_WARNING": "Ostrzeżenie: okres tej wypłaty nakłada się z {{count}} już zatwierdzon(-ą/-ymi)/zrealizowaną(-ymi) wypłatą(-ami) dla tego samego beneficjenta. Prowizje mogą zostać wypłacone więcej niż raz. Sprawdź przed kontynuowaniem.",
-      "OVERLAP_COL_PLAN": "Plan"
+      "OVERLAP_COL_PLAN": "Plan",
+      "BANNER_DISCARDED_TITLE": "Wypłata odrzucona",
+      "BANNER_DISCARDED_DESC": "Ta wypłata została zamknięta jako niemożliwa do zapłaty: jej prowizje opłacono już w innej wypłacie. Nie czeka już na płatność.",
+      "DISCARD_TITLE": "Odrzuć tę wypłatę",
+      "DISCARD_DESC": "Użyj tego, gdy wszystkie poniższe prowizje są już oznaczone jako opłacone. Wypłata opuści kolejkę płatności i przestanie liczyć się jako należna; nic już opłaconego nie zostaje zmienione, a decyzja jest zapisywana na stałe. Jeśli któraś pozycja jest nieopłacona, odrzucenie zostanie zablokowane z podaniem liczby.",
+      "DISCARD_REASON_LABEL": "Dlaczego ta wypłata nigdy nie zostanie opłacona?",
+      "DISCARD_REASON_PLACEHOLDER": "np. Okres przeliczono po opłaceniu krótszego; wszystkie cztery prowizje poszły w wypłacie 7839C4D2.",
+      "DISCARD_REASON_HELP": "Wymagane. To przeczyta audytor, aby zrozumieć, dlaczego kwota przestała być należna.",
+      "DISCARD_SUCCESS": "Wypłata odrzucona. Nie czeka już na płatność.",
+      "DISCARD_ERROR": "Nie udało się odrzucić wypłaty.",
+      "COL_PAYMENT_STATE": "Płatność",
+      "LINE_PAID_ELSEWHERE": "Już opłacona",
+      "LINE_PAID_ELSEWHERE_IN": "Opłacona przez wypłatę za okres {{start}} → {{end}}",
+      "LINE_UNPAID": "Nieopłacona",
+      "MORE_ACTIONS": "Więcej akcji",
+      "LINE_PAID_HERE": "Opłacona",
+      "COL_DESCRIPTION": "Opis",
+      "COL_DATE": "Data"
     },
     "EXPORT": {
       "BUTTON": "Eksportuj do Excel",
       "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
-    }
+    },
+    "STATUS_DISCARDED": "Odrzucony",
+    "ACTION_DISCARD": "Odrzuć wypłatę",
+    "SELECT_ALL": "Zaznacz wszystkie wypłaty, na których można działać",
+    "SELECT_ROW": "Zaznacz tę wypłatę"
   },
   "PAY_RUNS": {
     "TITLE": "Cykle wypłat",

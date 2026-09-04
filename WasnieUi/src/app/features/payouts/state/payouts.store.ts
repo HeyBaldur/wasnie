@@ -61,12 +61,43 @@ export class PayoutsStore {
   readonly hasNextPage = computed(() => this.pagedResult()?.hasNextPage ?? false);
   readonly hasPreviousPage = computed(() => this.pagedResult()?.hasPreviousPage ?? false);
 
+  /**
+   * The statuses a bulk action can actually do something with.
+   *
+   * ★★ TWO, NOT ONE. The ticket asked for checkboxes on `Approved` only, on the grounds that the bulk
+   * action is "Mark as paid" — but this list has TWO bulk actions: approve works on `Calculated` and
+   * mark-paid on `Approved` (see selectedCalculatedIds / selectedApprovedIds). Restricting selection
+   * to `Approved` would have left bulk approve with nothing it could ever select. The intent behind
+   * the request — do not offer a checkbox where no action can act — is served by excluding the three
+   * TERMINAL states instead: a Paid payout is done, a Discarded one is closed, a Disputed one is
+   * contested. Those are the rows that could be ticked and then silently ignored.
+   */
+  private static readonly SELECTABLE_STATUSES: ReadonlySet<PayoutStatus> =
+    new Set<PayoutStatus>(['Calculated', 'Approved']);
+
+  /** Whether this row can take part in a bulk action at all. */
+  isSelectable(item: PayoutListItem): boolean {
+    return PayoutsStore.SELECTABLE_STATUSES.has(item.status);
+  }
+
+  /** The rows on this page a bulk action could act on. */
+  readonly selectableItems = computed(() => this.items().filter(i => this.isSelectable(i)));
+
   readonly selectedCount = computed(() => this.selectedIds().size);
+
+  /**
+   * ★ "All" MEANS ALL THE SELECTABLE ONES. Comparing against every row would leave the header
+   * checkbox permanently unticked on any page holding a Paid payout, however many rows the user had
+   * selected — the control would look broken.
+   */
   readonly allSelected = computed(() => {
-    const items = this.items();
+    const items = this.selectableItems();
     const sel = this.selectedIds();
     return items.length > 0 && items.every(i => sel.has(i.id));
   });
+
+  /** Nothing on this page can be selected — the header checkbox has nothing to offer. */
+  readonly hasSelectableItems = computed(() => this.selectableItems().length > 0);
 
   readonly selectedCalculatedIds = computed(() =>
     [...this.selectedIds()].filter(id =>
@@ -192,7 +223,15 @@ export class PayoutsStore {
   setPageSize(n: number): void { this.pageSize.set(n); this.page.set(1); }
 
   // Selection
+  /**
+   * ★ IT REFUSES A ROW NO ACTION CAN TOUCH. The template already hides those checkboxes; this is the
+   * second door — a stale id from a previous page, or a future caller, must not be able to put a
+   * Paid payout into a selection that feeds "mark as paid".
+   */
   toggleSelect(id: string): void {
+    const item = this.items().find(i => i.id === id);
+    if (item && !this.isSelectable(item)) return;
+
     this.selectedIds.update(sel => {
       const next = new Set(sel);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -204,7 +243,9 @@ export class PayoutsStore {
     if (this.allSelected()) {
       this.selectedIds.set(new Set());
     } else {
-      this.selectedIds.set(new Set(this.items().map(i => i.id)));
+      // ★ Only the selectable ones: "select all" must never hand a Paid payout to an action that
+      // would drop it on the floor and report a skipped count nobody asked for.
+      this.selectedIds.set(new Set(this.selectableItems().map(i => i.id)));
     }
   }
 

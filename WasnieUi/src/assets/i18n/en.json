@@ -1642,7 +1642,7 @@
       "UPDATED_AT": "Last updated at",
       "UPDATED_BY": "Last updated by",
       "COL_RULE": "Rule",
-      "COL_SOURCE": "Source Transaction",
+      "COL_SOURCE": "Reference",
       "CALC_SHOW": "Show calculation",
       "CALC_HIDE": "Hide calculation",
       "CALC_WHEN": "When",
@@ -1671,12 +1671,33 @@
       "EXPORT_SUCCESS": "PDF exported.",
       "EXPORT_ERROR": "PDF export failed.",
       "OVERLAP_WARNING": "Warning: this payout's period overlaps with {{count}} already approved/paid payout(s) for the same payee. Commissions may be paid more than once. Review before continuing.",
-      "OVERLAP_COL_PLAN": "Plan"
+      "OVERLAP_COL_PLAN": "Plan",
+      "BANNER_DISCARDED_TITLE": "Payout discarded",
+      "BANNER_DISCARDED_DESC": "This payout was closed as unpayable: its commissions had already been paid by another payout. It no longer waits for payment.",
+      "DISCARD_TITLE": "Discard this payout",
+      "DISCARD_DESC": "Use this when every commission below is already marked as paid. The payout will leave the payment queue and stop counting as owed; nothing already paid is altered, and the decision is recorded permanently. If any line is still unpaid, the discard is refused and tells you how many.",
+      "DISCARD_REASON_LABEL": "Why can this payout never be paid?",
+      "DISCARD_REASON_PLACEHOLDER": "e.g. The period was recalculated after the shorter one had been paid; all four commissions went out in payout 7839C4D2.",
+      "DISCARD_REASON_HELP": "Required. This is what an auditor will read to understand why the amount stopped being owed.",
+      "DISCARD_SUCCESS": "Payout discarded. It no longer waits for payment.",
+      "DISCARD_ERROR": "The payout could not be discarded.",
+      "COL_PAYMENT_STATE": "Payment",
+      "LINE_PAID_ELSEWHERE": "Already paid",
+      "LINE_PAID_ELSEWHERE_IN": "Already paid by the payout covering {{start}} → {{end}}",
+      "LINE_UNPAID": "Not paid",
+      "MORE_ACTIONS": "More actions",
+      "LINE_PAID_HERE": "Paid",
+      "COL_DESCRIPTION": "Description",
+      "COL_DATE": "Date"
     },
     "EXPORT": {
       "BUTTON": "Export to Excel",
       "ERROR": "Export failed. Please try again."
-    }
+    },
+    "STATUS_DISCARDED": "Discarded",
+    "ACTION_DISCARD": "Discard payout",
+    "SELECT_ALL": "Select all payouts that can be actioned",
+    "SELECT_ROW": "Select this payout"
   },
   "PAY_RUNS": {
     "TITLE": "Pay Runs",

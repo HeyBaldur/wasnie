@@ -13,6 +13,7 @@ import {
   OverlappingPayout,
   PayoutDetail,
   PayoutListItem,
+  DiscardPayoutResult,
 } from '../models/payout.model';
 
 export interface PayoutJobStatus {
@@ -43,6 +44,16 @@ export class PayoutsApiService {
 
   approve(id: string): Observable<void> {
     return this.http.post<void>(`${this.base}/${id}/approve`, {});
+  }
+
+  /**
+   * Close an Approved payout that can never be paid (KAN-52).
+   *
+   * ★ ONLY THE REASON TRAVELS. Whether the payout is genuinely unpayable is the server's call,
+   * against the credits — a client that could assert it could retire a debt somebody is still owed.
+   */
+  discard(id: string, reason: string): Observable<DiscardPayoutResult> {
+    return this.http.post<DiscardPayoutResult>(`${this.base}/${id}/discard`, { reason });
   }
 
   markPaid(id: string): Observable<void> {

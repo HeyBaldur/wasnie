@@ -12,7 +12,25 @@ import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { OverlapWarningComponent } from '../../../shared/components/overlap-warning/overlap-warning.component';
 import { PayoutsApiService } from '../services/payouts.api.service';
-import { OverlappingPayout, PaymentConflictItem, PayoutDetail, LineCalculationDto, RateTableDto } from '../models/payout.model';
+import { OverlappingPayout, PaymentConflictItem, PayoutDetail, PayoutLine, PayoutLinePaymentState, LineCalculationDto, RateTableDto } from '../models/payout.model';
+
+/**
+ * How each payment state is drawn.
+ *
+ * ★★ AN EXHAUSTIVE MAP, NOT A TERNARY. The bug this replaces was a two-way branch that read "no
+ * other payout paid this" as "nobody paid this", so a payout showed its own settled lines as unpaid.
+ * A record typed over the union cannot lose a case: a fourth state would be a compile error here
+ * rather than a silently wrong badge.
+ *
+ * ★ THE KEYS ARE SPELLED OUT (§C2). 'PAYOUTS.DETAIL.LINE_' + state would print an internal
+ * identifier on a money screen the day somebody added a state without a translation.
+ */
+const LINE_PAYMENT_BADGE: Readonly<Record<PayoutLinePaymentState, { variant: BadgeVariant; key: string }>> = {
+  PaidByThisPayout: { variant: 'success', key: 'PAYOUTS.DETAIL.LINE_PAID_HERE' },
+  PaidByAnotherPayout: { variant: 'warning', key: 'PAYOUTS.DETAIL.LINE_PAID_ELSEWHERE' },
+  Unpaid: { variant: 'neutral', key: 'PAYOUTS.DETAIL.LINE_UNPAID' },
+};
+import { ToastService } from '../../../shared/services/toast.service';
 import { OverlapRow } from '../../../shared/models/overlap-row.model';
 import {
   WsButtonComponent,
@@ -21,6 +39,8 @@ import {
   WsPageLayoutComponent,
   WsTableComponent,
   WsModalComponent,
+  WsTextareaComponent,
+  WsPopoverComponent,
   type BadgeVariant,
 } from '../../../shared/ui';
 
@@ -32,7 +52,7 @@ import {
     IconComponent, DateFormatPipe, CurrencyFormatPipe, HasPermissionDirective,
     OverlapWarningComponent,
     WsButtonComponent, WsBadgeComponent, WsCardComponent, WsPageLayoutComponent,
-    WsTableComponent, WsModalComponent,
+    WsTableComponent, WsModalComponent, WsTextareaComponent, WsPopoverComponent,
   ],
   templateUrl: './payout-detail.component.html',
   styleUrl: './payout-detail.component.scss',
@@ -42,6 +62,7 @@ export class PayoutDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(PayoutsApiService);
+  private readonly toast = inject(ToastService);
 
   readonly payoutId = this.route.snapshot.paramMap.get('id')!;
   readonly payout = signal<PayoutDetail | null>(null);
@@ -50,6 +71,11 @@ export class PayoutDetailComponent implements OnInit {
 
   readonly approveConfirmOpen = signal(false);
   readonly markPaidConfirmOpen = signal(false);
+
+  // ── Discard: the way out for a payout that can never be paid (KAN-52) ─────
+  readonly discardConfirmOpen = signal(false);
+  readonly discarding = signal(false);
+  readonly discardReason = signal('');
   readonly approving = signal(false);
   readonly markingPaid = signal(false);
   readonly exporting = signal(false);
@@ -82,6 +108,16 @@ export class PayoutDetailComponent implements OnInit {
   readonly isApproved = computed(() => this.payout()?.status === 'Approved');
   readonly isPaid = computed(() => this.payout()?.status === 'Paid');
   readonly isDisputed = computed(() => this.payout()?.status === 'Disputed');
+  readonly isDiscarded = computed(() => this.payout()?.status === 'Discarded');
+
+  /**
+   * ★★ THE SUBMIT IS BLOCKED ON AN EMPTY REASON. `trim()` matters: a box holding spaces is an empty
+   * justification, and this sentence is the only record of why several thousand euros stopped being
+   * owed. The server refuses it too — this is the courtesy, `CompensationPayout.Discard` is the
+   * invariant.
+   */
+  readonly canSubmitDiscard = computed(
+    () => this.discardReason().trim().length > 0 && !this.discarding());
   readonly isReadOnly = computed(() => this.isPaid() || this.isDisputed());
 
   ngOnInit(): void {
@@ -158,6 +194,74 @@ export class PayoutDetailComponent implements OnInit {
       this.actionError.set('PAYOUTS.DETAIL.APPROVE_ERROR');
     } finally {
       this.approving.set(false);
+    }
+  }
+
+  linePaymentVariant(line: PayoutLine): BadgeVariant {
+    return LINE_PAYMENT_BADGE[line.paymentState].variant;
+  }
+
+  linePaymentKey(line: PayoutLine): string {
+    return LINE_PAYMENT_BADGE[line.paymentState].key;
+  }
+
+  /**
+   * The tooltip on a "paid elsewhere" badge.
+   *
+   * ★ THE PERIOD, NOT THE ID. "Already paid in 7839C4D2" tells the reader nothing they can act on;
+   * the period of the payout that paid it is what shows the overlap that created the duplicate —
+   * which is the whole explanation of why this payout can never be paid.
+   */
+  paidElsewhereTitle(line: PayoutLine): string {
+    if (line.paymentState !== 'PaidByAnotherPayout'
+        || !line.paidInPayoutPeriodStart
+        || !line.paidInPayoutPeriodEnd) {
+      return this.translate.instant(this.linePaymentKey(line));
+    }
+
+    return this.translate.instant('PAYOUTS.DETAIL.LINE_PAID_ELSEWHERE_IN', {
+      start: line.paidInPayoutPeriodStart,
+      end: line.paidInPayoutPeriodEnd,
+    });
+  }
+
+  openDiscardConfirm(): void {
+    this.actionError.set(null);
+    this.discardReason.set('');
+    this.discardConfirmOpen.set(true);
+  }
+
+  cancelDiscard(): void {
+    this.discardConfirmOpen.set(false);
+    this.discardReason.set('');
+  }
+
+  /**
+   * ★★ THE SERVER DECIDES WHETHER THIS PAYOUT IS REALLY UNPAYABLE, and its refusal is shown
+   * verbatim. The screen offers the action on any Approved payout because the list does not carry
+   * "is it blocked" — asking the server is the only way to know, and its answer is more useful than
+   * a hidden button: it says how many credits nobody has paid yet, which is the number that decides
+   * whether this payout should be discarded or the period recalculated.
+   *
+   * ★ THE MODAL SURVIVES A REFUSAL with the reason still typed, so a second attempt does not start
+   * from a blank box.
+   */
+  async onDiscard(): Promise<void> {
+    if (!this.canSubmitDiscard()) return;
+
+    this.discarding.set(true);
+    this.actionError.set(null);
+    try {
+      await firstValueFrom(this.api.discard(this.payoutId, this.discardReason().trim()));
+      this.discardConfirmOpen.set(false);
+      this.discardReason.set('');
+      this.toast.show('PAYOUTS.DETAIL.DISCARD_SUCCESS', 'success');
+      await this._load();
+    } catch (err) {
+      const httpErr = err as { error?: { message?: string } };
+      this.toast.show(httpErr.error?.message ?? 'PAYOUTS.DETAIL.DISCARD_ERROR', 'error');
+    } finally {
+      this.discarding.set(false);
     }
   }
 

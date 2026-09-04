@@ -57,7 +57,13 @@ public sealed class AssistantIdentityTests
         var prompt = PromptFor(variant);
 
         prompt.Should().Contain("WHO YOU ARE", $"the {variant} prompt can be asked who it is");
-        prompt.Should().Contain("Incentra AI Assistant", $"the {variant} prompt must state the persona");
+
+        // ★★ THE NAME, NOT JUST THE ROLE. The assistant is called Zeke, and until 2026-09-04 only the
+        // sidebar knew: the prompt said "the Incentra AI Assistant", so asking it its name got a
+        // different answer from the one on screen (§C3). Asserting the proper name is what keeps the
+        // two from drifting apart again — a rename that misses this file now fails here.
+        prompt.Should().Contain("Zeke", $"the {variant} prompt must state the assistant's name");
+        prompt.Should().Contain("Incentra", $"the {variant} prompt must state the persona");
     }
 
     [Theory]
