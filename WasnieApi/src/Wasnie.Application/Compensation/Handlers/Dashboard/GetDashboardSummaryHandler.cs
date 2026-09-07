@@ -130,7 +130,13 @@ public sealed class GetDashboardSummaryHandler(
         // with what the engine actually does.
         // The predicate moved to PlansWithoutLiveRulesSpec so the Reconciliation Centre counts this
         // condition with the SAME query rather than a copy of it. Meaning unchanged.
+        // ★ A plan whose "it pays nothing" was reviewed and closed stops warning here too. Its fact
+        // time is Plan.UpdatedAt, so editing the plan afterwards legitimately asks for a fresh look.
+        var closures = ReconciliationClosureSpec.For(
+            db, (int)ReconciliationEntryKind.Plan, ReconciliationReason.PlanHasNoActiveRules);
+
         var candidates = await PlansWithoutLiveRulesSpec.Queryable(db)
+            .Where(p => !closures.Any(c => c.EntityId == p.Id && p.UpdatedAt <= c.FactOccurredAt))
             .Select(p => new
             {
                 p.Id,
@@ -176,10 +182,17 @@ public sealed class GetDashboardSummaryHandler(
         // Only rows that could possibly be ambiguous: Pending, with a payee, without a declared plan.
         // Projected to the three fields the rule needs — a tenant can have tens of thousands of Pending
         // rows and the dashboard must not materialise them as entities.
+        // ★ Minus the ones already reviewed and closed (KAN-51). The exclusion goes in the SQL
+        // projection, not in the in-memory loop below, so a closed row never reaches the matcher and
+        // cannot contribute to a payee's count.
+        var closures = ReconciliationClosureSpec.For(
+            db, (int)ReconciliationEntryKind.Transaction, ReconciliationReason.AmbiguousAttribution);
+
         var pending = await db.CompensationTransactions
             .Where(t => t.Status == CompensationTransactionStatus.Pending
                      && t.PayeeId != null
-                     && t.SelectedPlanAssignmentId == null)
+                     && t.SelectedPlanAssignmentId == null
+                     && !closures.Any(c => c.EntityId == t.Id && t.IngestedAt <= c.FactOccurredAt))
             .Select(t => new
             {
                 PayeeId = t.PayeeId!.Value,
@@ -273,8 +286,17 @@ public sealed class GetDashboardSummaryHandler(
     private async Task<IReadOnlyList<DriftAlertDto>> BuildDriftAlertsAsync(CancellationToken ct)
     {
         const int cap = 20;
+
+        // ★ Same rule as the deal-lost panel, identity and all: a drift somebody reviewed and closed
+        // stops alerting, and CrmDriftPolicy re-stamps an OPEN alert on every sync exactly as the
+        // deal-lost reconciler does (CrmDriftPolicy.cs:203), so the stamp cannot be the key here
+        // either. See BuildDealLostAlertsAsync for the full account.
+        var closures = ReconciliationClosureSpec.For(
+            db, (int)ReconciliationEntryKind.Transaction, ReconciliationReason.CrmDrift);
+
         var rows = await db.CrmDriftAlerts
-            .Where(a => a.ResolvedAt == null)
+            .Where(a => a.ResolvedAt == null
+                     && !closures.Any(c => c.EntityId == a.TransactionId && c.FactKey == a.Id))
             .OrderByDescending(a => a.DetectedAt)
             .Take(cap)
             .ToListAsync(ct);
@@ -306,10 +328,28 @@ public sealed class GetDashboardSummaryHandler(
         // commission paid AFTERWARDS left that snapshot claiming "not paid" — the screen then offered to
         // revert money that had already gone out. The snapshot stays (it is history); the decision moves
         // to the live row. One join, no extra round trip.
+        // ★★ AND NOT THE ONES SOMEBODY HAS ALREADY REVIEWED AND CLOSED (KAN-51). Without this the
+        // dashboard kept alerting about a deal a person had closed in the Reconciliation Centre —
+        // two screens disagreeing about the same money.
+        //
+        // ★★ THE MATCH IS ON THE ALERT'S IDENTITY, NEVER ON ITS STAMP, and that is the whole reason
+        // this panel reads FactKey. DealLostReconciler.Refresh moves DetectedAt to "now" on every
+        // OPEN alert on each hourly sync (DealLostReconciler.cs:119) without the alert, its id or
+        // anything about the loss having changed. Comparing DetectedAt <= FactOccurredAt therefore
+        // read every sync as a brand-new fact and expired every closure within the hour: the row
+        // left the Centre — which compares identities — and came back HERE, which is precisely the
+        // two-screen disagreement the paragraph above says this exclusion exists to prevent.
+        // A genuinely new loss is a NEW alert with a NEW id, and that is what still returns. This
+        // mirrors ReconciliationQuery.ExcludeClosed's FactKey branch; the DealLost seed always
+        // carries one, so identity is the only branch that can apply.
+        var closures = ReconciliationClosureSpec.For(
+            db, (int)ReconciliationEntryKind.Transaction, ReconciliationReason.DealLost);
+
         var rows = await (
             from a in db.DealLostAlerts
             join t in db.CompensationTransactions on a.TransactionId equals t.Id
             where a.ResolvedAt == null
+               && !closures.Any(c => c.EntityId == a.TransactionId && c.FactKey == a.Id)
             orderby a.DetectedAt descending
             select new
             {
@@ -738,6 +778,7 @@ public sealed class GetDashboardSummaryHandler(
                 l.ActorEmail,
                 l.Action,
                 l.ResourceType,
+                l.ResourceId,
                 l.ResourceDisplayName,
             })
             .ToListAsync(ct);
@@ -748,6 +789,7 @@ public sealed class GetDashboardSummaryHandler(
             ActorInitials: BuildInitials(l.ActorEmail),
             Action: l.Action,
             ResourceType: l.ResourceType,
+            ResourceId: l.ResourceId,
             ResourceDisplayName: l.ResourceDisplayName))
             .ToList();
     }

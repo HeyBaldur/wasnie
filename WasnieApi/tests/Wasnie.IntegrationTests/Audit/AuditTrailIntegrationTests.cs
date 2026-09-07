@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Domain.Audit;
+using Wasnie.Domain.Compensation.Plans;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
 
@@ -130,6 +131,51 @@ public sealed class AuditTrailIntegrationTests : IAsyncLifetime
             .ToListAsync();
 
         tenantBLogs.Should().BeEmpty("tenant B must not have audit logs for tenant A's resources");
+    }
+
+    // ── KAN-34: a rejected command must leave no trace of an action ───────────
+
+    /// <summary>
+    /// The regression case named in the ticket, end to end over the real endpoint: a plan still in
+    /// Draft cannot be archived (Plan.Archive throws for any status but Active, and
+    /// ArchivePlanHandler turns that into Result.Failure without rethrowing). The audit row was
+    /// written anyway — which is how «EU Accelerator Q2 2026» ended up sitting in Draft with a
+    /// PLAN_ARCHIVED entry against it (AuditLogs id 14229).
+    ///
+    /// Retried twice on purpose: the original data shows repeated attempts stacking rows, three of
+    /// them on one plan that was archived once.
+    /// </summary>
+    [Fact]
+    public async Task ArchivePlan_RejectedBecausePlanIsDraft_ProducesNoAuditLog()
+    {
+        var createResp = await _clientA.PostAsJsonAsync("/api/plans", new
+        {
+            name = "Draft Never Archived",
+            description = "KAN-34 regression",
+            effectiveStart = "2025-01-01",
+            effectiveEnd = "2025-12-31",
+            currency = "EUR",
+        });
+        createResp.EnsureSuccessStatusCode();
+        var plan = await createResp.Content.ReadFromJsonAsync<PlanIdResponse>();
+
+        var first = await _clientA.PostAsync($"/api/plans/{plan!.Id}/archive", null);
+        var second = await _clientA.PostAsync($"/api/plans/{plan.Id}/archive", null);
+
+        first.IsSuccessStatusCode.Should().BeFalse("only Active plans can be archived");
+        second.IsSuccessStatusCode.Should().BeFalse();
+
+        using (var scope = _fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var persisted = await db.CompensationPlans.IgnoreQueryFilters()
+                .FirstAsync(p => p.Id == plan.Id);
+            persisted.Status.Should().Be(PlanStatus.Draft, "the plan really was not archived");
+        }
+
+        var logs = await GetAuditLogsForResourceAsync(plan.Id.ToString(), ResourceTypes.Plan);
+        logs.Should().NotContain(l => l.Action == AuditActions.PlanArchived,
+            "the archive was refused twice; the log must not say it happened");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

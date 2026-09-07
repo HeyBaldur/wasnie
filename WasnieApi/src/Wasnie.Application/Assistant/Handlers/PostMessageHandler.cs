@@ -2,6 +2,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Wasnie.Application.Assistant.Abstractions;
 using Wasnie.Application.Assistant.Commands;
 using Wasnie.Application.Assistant.Common;
@@ -40,7 +41,8 @@ public sealed class PostMessageHandler(
     IUiNavigationMap navigation,
     AssistantSectionRouter router,
     AssistantToolRunner toolRunner,
-    IOptions<GroqOptions> options)
+    IOptions<GroqOptions> options,
+    ILogger<PostMessageHandler> logger)
     : IRequestHandler<PostMessageCommand, Result<AssistantExchangeDto>>
 {
     public async Task<Result<AssistantExchangeDto>> Handle(
@@ -162,6 +164,13 @@ public sealed class PostMessageHandler(
         // are a fact about the lookup and do not depend on whether the model finished a sentence.
         var resolvedPayload = ResolvedEntityContext.PayloadFor(toolData);
 
+        // ★★ MERGED, NEVER ASSIGNED ONE OVER THE OTHER (KAN-58). Both of these serialise a COMPLETE
+        // payload object with a single key in it, so storing whichever was computed last would silently
+        // drop the other — and losing the resolved entities breaks nothing visibly: it just makes the
+        // next turn ask for a name this thread had already resolved. See AssistantClarify.Merge.
+        var turnPayload = AssistantClarify.Merge(
+            resolvedPayload, AssistantClarify.PayloadFor(toolData));
+
         // Same prompt as the streaming path, navigation map and live data included — two paths that
         // answer differently is the drift this codebase keeps refusing.
         var prompt = AssistantPrompt.Build(
@@ -173,6 +182,13 @@ public sealed class PostMessageHandler(
         // drift this file already refuses everywhere else.
         var guard = new DegenerationGuard();
 
+        // ★★ AND THE SAME SECOND BELT (KAN-58), FOR THE SAME REASON. A fabrication guard on only one of
+        // the two answer paths is a guard with a documented way around it — and this is the path any
+        // caller that cannot hold a stream open takes, so it is not a corner. Grounded on the prompt,
+        // which is everything the model is given.
+        var fabrication = new FabricationGuard(
+            string.Join('\n', prompt.Select(m => m.Content)));
+
         try
         {
             await foreach (var fragment in provider.StreamAsync(prompt, cancellationToken))
@@ -182,11 +198,28 @@ public sealed class PostMessageHandler(
                     return Result<ComposedReply>.Failure(ChatCompletionException.Unavailable);
                 }
 
+                if (fabrication.Observe(fragment))
+                {
+                    logger.LogError(
+                        "The assistant invented an identifier and the answer was abandoned: {Token}.",
+                        fabrication.Fabricated);
+                    return Result<ComposedReply>.Failure(ChatCompletionException.Unavailable);
+                }
+
                 answer.Append(fragment);
             }
 
             if (guard.Finish())
             {
+                return Result<ComposedReply>.Failure(ChatCompletionException.Unavailable);
+            }
+
+            // The complete scan — Observe only re-reads a tail. See FabricationGuard.Finish.
+            if (fabrication.Finish())
+            {
+                logger.LogError(
+                    "The assistant invented an identifier and the answer was abandoned: {Token}.",
+                    fabrication.Fabricated);
                 return Result<ComposedReply>.Failure(ChatCompletionException.Unavailable);
             }
         }
@@ -205,6 +238,6 @@ public sealed class PostMessageHandler(
                 text.Length > AssistantMessage.MaxContentLength
                     ? text[..AssistantMessage.MaxContentLength]
                     : text,
-                resolvedPayload));
+                turnPayload));
     }
 }

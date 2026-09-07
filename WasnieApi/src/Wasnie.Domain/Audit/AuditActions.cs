@@ -69,6 +69,11 @@ public static class AuditActions
     // Payouts — credit consumption (anti-double-pay Phase 3)
     public const string PayoutCreditsConsumed = "PAYOUT_CREDITS_CONSUMED";
     public const string PayoutRevertedToApproved = "PAYOUT_REVERTED_TO_APPROVED";
+
+    // A human closed an Approved payout that could never be paid: every credit it carried had already
+    // been paid by a different payout. No money moves — this records that a payable figure stopped
+    // being owed, and why.
+    public const string PayoutDiscarded = "PAYOUT_DISCARDED";
     public const string PaymentBlockedDoublePayment = "PAYMENT_BLOCKED_DOUBLE_PAYMENT";
 
     // Settings (Rule 5.1.5 — configuration changes)
@@ -159,4 +164,11 @@ public static class AuditActions
     // A previously deal-lost-cancelled deal returned to closed-won → a fresh transaction was re-created and
     // the stale deal-lost alert resolved (lost→won recovery). The cancelled row stays as history.
     public const string CrmDealRecovered = "CRM_DEAL_RECOVERED";
+
+    // Reconciliation Centre — a human decided one anomaly is to be left as it stands (KAN-51).
+    //
+    // ★ INFORMATIONAL ONLY. The row's disappearance from the queue is decided by
+    // ReconciliationClosures, never by this entry: an audit log that has been known to record
+    // actions that did not happen may not be what hides money from a CFO. See KAN-34.
+    public const string ReconciliationRowClosed = "RECONCILIATION_ROW_CLOSED";
 }

@@ -72,6 +72,14 @@ export interface ReconciliationFilter {
   readonly reason: string | null;
   readonly from: string | null;
   readonly to: string | null;
+  /**
+   * A partial sale reference. Matched anywhere in the reference, case-insensitively by the database.
+   *
+   * ★ IT FINDS NO PLAN ROWS, AND THAT IS RIGHT. A plan is a cause, not a sale, and has no
+   * reference — so searching by one legitimately narrows the queue to entries that have one rather
+   * than matching plans on emptiness.
+   */
+  readonly reference: string | null;
   readonly page: number;
   readonly pageSize: number;
 }
@@ -81,6 +89,28 @@ export const EMPTY_RECONCILIATION_FILTER: ReconciliationFilter = {
   reason: null,
   from: null,
   to: null,
+  reference: null,
   page: 1,
   pageSize: 25,
 };
+
+/**
+ * What a close request carries: the row, and the person's stated reason. Nothing else.
+ *
+ * ★★ NO REASON CODES AND NO TIMESTAMPS TRAVEL. Which anomalies this row currently carries, and when
+ * each was detected, the SERVER reads from its own queue. A client that could name the fact time
+ * would be able to close anomalies that have not happened yet — and the closure is what decides
+ * which rows a CFO stops seeing.
+ */
+export interface CloseReconciliationRowRequest {
+  readonly kind: ReconciliationEntryKind;
+  readonly entityId: string;
+  readonly note: string;
+}
+
+/** ★ The reasons come BACK because only the server knew which ones the row carried at that moment. */
+export interface CloseReconciliationRowResult {
+  readonly entityId: string;
+  readonly kind: ReconciliationEntryKind;
+  readonly closedReasons: readonly string[];
+}

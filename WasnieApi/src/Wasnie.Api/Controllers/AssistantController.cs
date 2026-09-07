@@ -173,6 +173,35 @@ public sealed class AssistantController(IMediator mediator) : ControllerBase
             : NotFound(new { message = result.Error });
     }
 
+    /// <summary>
+    /// Records what the user did with a clarify form: picked an option, or closed it (KAN-58).
+    ///
+    /// ★ PATCH, NOT POST, AND NOT DELETE. It moves one field of an existing turn to a terminal value;
+    /// it creates nothing and it removes nothing. A DELETE would be wrong twice over — the form is not
+    /// deleted when it is closed, it stays on screen as the record of what happened.
+    ///
+    /// ★ ITS OWN REQUEST TYPE, NOT THE COMMAND (§D3). The serialiser builds an input type by
+    /// properties; binding the command straight from the body would let a caller supply the
+    /// conversation and message ids in the payload as well as the route, and the two could disagree.
+    /// </summary>
+    [HttpPatch("conversations/{conversationId:guid}/messages/{messageId:guid}/clarify")]
+    public async Task<IActionResult> ResolveClarify(
+        Guid conversationId,
+        Guid messageId,
+        [FromBody] ResolveClarifyRequest body,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new ResolveClarifyCommand(conversationId, messageId, body.State ?? string.Empty),
+            cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : NotFound(new { message = result.Error });
+    }
+
+    public sealed record ResolveClarifyRequest(string? State);
+
     [HttpDelete("conversations/{conversationId:guid}")]
     public async Task<IActionResult> DeleteConversation(Guid conversationId, CancellationToken cancellationToken)
     {

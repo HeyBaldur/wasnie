@@ -38,3 +38,17 @@ public sealed record PinConversationCommand(Guid ConversationId) : IRequest<Resu
 
 /// <summary>Unpins it for the caller. Idempotent, and the standing row survives — see the entity.</summary>
 public sealed record UnpinConversationCommand(Guid ConversationId) : IRequest<Result>;
+
+/// <summary>
+/// Records what the user did with a clarify form (KAN-58).
+///
+/// ★ THE MESSAGE IS PART OF THE KEY, NOT JUST THE CONVERSATION. A thread can hold several forms over
+/// its life, and "close the clarify form" without saying which one would close whichever the server
+/// found first.
+/// </summary>
+/// <param name="State">
+/// <c>answered</c> or <c>dismissed</c> — see ClarifyState. <c>open</c> is deliberately not accepted:
+/// a form must not be reopened by a client after the person closed it.
+/// </param>
+public sealed record ResolveClarifyCommand(Guid ConversationId, Guid MessageId, string State)
+    : IRequest<Result>;

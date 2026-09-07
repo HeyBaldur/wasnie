@@ -83,6 +83,29 @@ public sealed class PayoutsController(
         return result.IsSuccess ? NoContent() : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// Close an Approved payout that can never be paid (KAN-52).
+    ///
+    /// ★ THE BODY CARRIES THE REASON ONLY. Whether the payout is genuinely unpayable is decided by
+    /// the server against the credits — see DiscardPayoutHandler.
+    /// </summary>
+    // POST /api/payouts/{id}/discard
+    [HttpPost("{id:guid}/discard")]
+    public async Task<IActionResult> Discard(
+        Guid id, [FromBody] DiscardPayoutRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new DiscardPayoutCommand(id, body.Reason ?? string.Empty), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>
+    /// ★ ITS OWN REQUEST TYPE, NOT THE COMMAND (§D3). The serialiser builds an input type by
+    /// properties; binding straight onto the command would bypass its construction.
+    /// </summary>
+    public sealed record DiscardPayoutRequest(string? Reason);
+
     // POST /api/payouts/bulk-approve
     [HttpPost("bulk-approve")]
     public async Task<IActionResult> BulkApprove(

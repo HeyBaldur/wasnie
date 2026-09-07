@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Net.Http.Json;
 using ClosedXML.Excel;
 using FluentAssertions;
@@ -16,6 +18,18 @@ namespace Wasnie.IntegrationTests.Integration.Payouts;
 [Collection(WasnieIntegrationTestCollection.Name)]
 public sealed class PayoutsEndpointsTests : IAsyncLifetime
 {
+    /// <summary>
+    /// ★★ THE SAME OPTIONS THE API SERIALISES WITH. Program.cs registers a JsonStringEnumConverter, so
+    /// every enum leaves as a string; `ReadFromJsonAsync` with the defaults cannot read one back and
+    /// throws. Deserialising the real contract with different settings from the real client is how a
+    /// fixture ends up disagreeing with production (§A4) — here it failed loudly, which is the good
+    /// outcome, but the fix is to match the contract rather than to weaken the DTO.
+    /// </summary>
+    private static readonly JsonSerializerOptions ApiJson = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
     private readonly TestDatabaseFixture _fixture;
     private HttpClient _clientA = null!;
 
@@ -99,7 +113,7 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         var response = await _clientA.GetAsync($"/api/payouts/{payout.Id}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var dto = await response.Content.ReadFromJsonAsync<PayoutDto>();
+        var dto = await response.Content.ReadFromJsonAsync<PayoutDto>(ApiJson);
         dto.Should().NotBeNull();
         dto!.Id.Should().Be(payout.Id);
         dto.Status.Should().Be("Calculated");
@@ -127,7 +141,7 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
 
         // Verify state transition persisted
         var detail = await (await _clientA.GetAsync($"/api/payouts/{payout.Id}"))
-            .Content.ReadFromJsonAsync<PayoutDto>();
+            .Content.ReadFromJsonAsync<PayoutDto>(ApiJson);
         detail!.Status.Should().Be("Approved");
     }
 
@@ -168,7 +182,7 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var detail = await (await _clientA.GetAsync($"/api/payouts/{payout.Id}"))
-            .Content.ReadFromJsonAsync<PayoutDto>();
+            .Content.ReadFromJsonAsync<PayoutDto>(ApiJson);
         detail!.Status.Should().Be("Paid");
     }
 
@@ -230,7 +244,7 @@ public sealed class PayoutsEndpointsTests : IAsyncLifetime
 
         // Verify state persisted
         var detail = await (await _clientA.GetAsync($"/api/payouts/{p1.Id}"))
-            .Content.ReadFromJsonAsync<PayoutDto>();
+            .Content.ReadFromJsonAsync<PayoutDto>(ApiJson);
         detail!.Status.Should().Be("Paid");
     }
 

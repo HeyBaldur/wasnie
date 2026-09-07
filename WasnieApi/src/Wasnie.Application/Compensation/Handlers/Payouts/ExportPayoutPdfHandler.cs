@@ -36,7 +36,7 @@ public sealed class ExportPayoutPdfHandler(
             .Select(p => p.Name)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
-        var lines = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, db, cancellationToken);
+        var lines = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, db, payout.Id, cancellationToken);
 
         var dto = new PayoutDto(
             Id: payout.Id,

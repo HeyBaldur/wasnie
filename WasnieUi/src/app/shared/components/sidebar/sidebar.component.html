@@ -45,6 +45,11 @@
                       [title]="child.labelKey | translate"
                     >
                       <app-icon [name]="child.icon" [size]="18" />
+                      <!-- Collapsed rail: a dot, not a number — there is no room for a figure, and
+                           "there is something here" is the whole message at this width. -->
+                      @if (badgeFor(child.path)) {
+                        <span class="sidebar__badge-dot" aria-hidden="true"></span>
+                      }
                     </a>
                   </li>
                 }
@@ -59,6 +64,11 @@
                   >
                     <app-icon [name]="entry.icon" [size]="18" />
                     <span class="sidebar__nav-label">{{ entry.labelKey | translate }}</span>
+                    <!-- ★ ONLY WHEN THERE IS SOMETHING, and only while the group is CLOSED: with the
+                         children visible the total is just their sum repeated one row above. -->
+                    @if (!isGroupExpanded(entry.key) && groupBadgeFor(entry.key) !== null) {
+                      <span class="sidebar__badge">{{ groupBadgeFor(entry.key) }}</span>
+                    }
                     <app-icon
                       class="sidebar__nav-chevron"
                       [class.sidebar__nav-chevron--open]="isGroupExpanded(entry.key)"
@@ -77,6 +87,11 @@
                           >
                             <app-icon [name]="child.icon" [size]="16" />
                             <span class="sidebar__nav-label">{{ child.labelKey | translate }}</span>
+                            <!-- ★ 0 IS DRAWN, null IS NOT. A zero says "this queue is clear", which is
+                                 worth knowing; null means the user may not see the count at all. -->
+                            @if (badgeFor(child.path) !== null) {
+                              <span class="sidebar__badge">{{ badgeFor(child.path) }}</span>
+                            }
                           </a>
                         </li>
                       }

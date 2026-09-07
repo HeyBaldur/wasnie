@@ -62,6 +62,8 @@ public interface IApplicationDbContext
     DbSet<Wasnie.Domain.Integrations.Crm.CrmDriftAlert> CrmDriftAlerts { get; }
     DbSet<Wasnie.Domain.Integrations.Crm.DealLostAlert> DealLostAlerts { get; }
 
+    DbSet<Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure> ReconciliationClosures { get; }
+
     DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

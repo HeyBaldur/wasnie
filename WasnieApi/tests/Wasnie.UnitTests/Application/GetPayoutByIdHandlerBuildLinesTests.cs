@@ -120,7 +120,7 @@ public sealed class GetPayoutByIdHandlerBuildLinesTests : IDisposable
             AppliedModifiers: []);
 
         var payout = MakePayout([spec]);
-        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, default);
+        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, payout.Id, default);
 
         result.Should().HaveCount(1);
         result[0].TransactionReference.Should().Be("POL-87765312");
@@ -149,7 +149,7 @@ public sealed class GetPayoutByIdHandlerBuildLinesTests : IDisposable
             AppliedModifiers: []);
 
         var payout = MakePayout([spec]);
-        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, default);
+        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, payout.Id, default);
 
         var line = result[0];
         line.RuleName.Should().Be("Tier-2 Bonus");
@@ -176,7 +176,7 @@ public sealed class GetPayoutByIdHandlerBuildLinesTests : IDisposable
             AppliedModifiers: []);
 
         var payout = MakePayout([spec]);
-        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, default);
+        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, payout.Id, default);
 
         result.Should().HaveCount(1);
         result[0].TransactionId.Should().BeNull();
@@ -207,7 +207,7 @@ public sealed class GetPayoutByIdHandlerBuildLinesTests : IDisposable
         await _db.SaveChangesAsync();
 
         var payout = MakePayout(specs);
-        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, default);
+        var result = await GetPayoutByIdHandler.BuildLinesAsync(payout.Lines, _db, payout.Id, default);
 
         result.Should().HaveCount(3);
         result.Select(l => l.TransactionReference).Should().NotContainNulls();

@@ -47,6 +47,9 @@ public sealed class ClawbackSettlementIntegrationTests(PayoutEngineFixture fixtu
     {
         public static readonly AlwaysAllowAuth Instance = new();
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;
+        // Added with IAuthorizationService.HasAsync: this double allows everything, so the
+        // question answers the same way the enforcement does.
+        public Task<bool> HasAsync(string permission, CancellationToken ct = default) => Task.FromResult(true);
     }
 
     private sealed class NoOpAuditService : IAuditService

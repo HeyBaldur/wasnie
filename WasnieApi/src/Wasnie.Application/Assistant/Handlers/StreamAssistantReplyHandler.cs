@@ -282,6 +282,13 @@ public sealed class StreamAssistantReplyHandler(
         // end of the request.
         var resolvedPayload = ResolvedEntityContext.PayloadFor(toolData);
 
+        // ★★ MERGED, NEVER ASSIGNED ONE OVER THE OTHER (KAN-58). Both of these serialise a COMPLETE
+        // payload object with a single key in it, so storing whichever was computed last would silently
+        // drop the other — and losing the resolved entities breaks nothing visibly: it just makes the
+        // next turn ask for a name this thread had already resolved. See AssistantClarify.Merge.
+        var turnPayload = AssistantClarify.Merge(
+            resolvedPayload, AssistantClarify.PayloadFor(toolData));
+
         // The navigation map rides along with step 2 and only step 2: the router chose WHAT to say from,
         // this says WHERE the user does it. Fixed context, not routed — see IUiNavigationMap.
         var prompt = AssistantPrompt.Build(
@@ -292,6 +299,18 @@ public sealed class StreamAssistantReplyHandler(
         // ★ THE BELT. Raising the generation model is the fix for the repetition collapse; this is what
         // guarantees the user never reads one anyway. See DegenerationGuard.
         var guard = new DegenerationGuard();
+
+        // ★★ THE SECOND BELT, AND ITS GROUNDING IS THE PROMPT ITSELF (KAN-58). `prompt` is literally
+        // everything the model is given — the conversation history including the question just asked,
+        // the routed documentation, the navigation map and the tool's JSON — because it is what the
+        // provider is called with, on the line below. So "did this identifier come from somewhere?" is
+        // answerable by asking whether it occurs in here, and no separate bookkeeping can drift out of
+        // step with what was actually sent.
+        //
+        // ★ THE CONTENTS ARE CONCATENATED AND THE ROLES ARE DROPPED. The question is only ever "does
+        // this token occur?", and which turn it occurred in does not change the answer.
+        var fabrication = new FabricationGuard(
+            string.Join('\n', prompt.Select(m => m.Content)));
 
         // The last step, and the only one that is always present: something is always written, even if
         // the turn needed neither the guide nor a record.
@@ -400,6 +419,18 @@ public sealed class StreamAssistantReplyHandler(
                 yield break;
             }
 
+            // ★★ CHECKED BEFORE THE FRAGMENT IS FORWARDED, exactly like the degeneration check above.
+            // An identifier that reached the user's screen has already done its damage: they cannot
+            // tell it from the real figures beside it, which is the whole finding of KAN-58.
+            if (fabrication.Observe(fragment))
+            {
+                logger.LogError(
+                    "The assistant invented an identifier and the answer was abandoned: {Token}.",
+                    fabrication.Fabricated);
+                yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+                yield break;
+            }
+
             answer.Append(fragment);
             yield return AssistantStreamEvent.OfFragment(fragment);
         }
@@ -409,6 +440,19 @@ public sealed class StreamAssistantReplyHandler(
             // The run ended on the last word, with no trailing punctuation to close it.
             logger.LogError(
                 "The assistant's answer degenerated and was cut off: {Reason}.", guard.Reason);
+            yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
+            yield break;
+        }
+
+        // ★ THE COMPLETE SCAN. Observe only re-reads a tail, so a fabrication early in a long answer
+        // slides out of its window; this is the pass that cannot miss one. It runs before the row is
+        // persisted, which is what keeps an invented identifier out of the stored history as well as
+        // off the screen.
+        if (fabrication.Finish())
+        {
+            logger.LogError(
+                "The assistant invented an identifier and the answer was abandoned: {Token}.",
+                fabrication.Fabricated);
             yield return AssistantStreamEvent.OfError(ChatCompletionException.Unavailable);
             yield break;
         }
@@ -425,7 +469,7 @@ public sealed class StreamAssistantReplyHandler(
 
         var assistantMessage = await PersistAssistantAsync(
             conversation.Id, text, nextSequence + 1, clock.UtcNowOffset, cancellationToken,
-            resolvedPayload: resolvedPayload);
+            resolvedPayload: turnPayload);
 
         // Closes the last step for symmetry — every start this handler emits has exactly one matching
         // done, or an error frame in its place. The panel has long since swapped the steps for the

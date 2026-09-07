@@ -33,7 +33,7 @@ public sealed class GetPayoutByIdHandler(
             .Select(p => p.Name)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
-        var lines = await BuildLinesAsync(payout.Lines, db, cancellationToken);
+        var lines = await BuildLinesAsync(payout.Lines, db, payout.Id, cancellationToken);
 
         var dto = new PayoutDto(
             Id: payout.Id,
@@ -60,9 +60,15 @@ public sealed class GetPayoutByIdHandler(
     // Resolves source transactions + calculation snapshots for all lines.
     // Uses two bulk queries (no N+1). Credits loaded fully (AsNoTracking) to access
     // RuleSnapshot value-converted JSON without projection ambiguity.
+    /// <param name="thisPayoutId">
+    /// The payout these lines belong to. ★ REQUIRED TO TELL "paid here" FROM "paid somewhere else":
+    /// after this payout is itself paid, every one of its credits carries a ConsumedByPayoutId, and
+    /// without the comparison every line would announce itself as a duplicate of itself.
+    /// </param>
     public static async Task<List<PayoutLineDto>> BuildLinesAsync(
         IReadOnlyList<PayoutLine> lines,
         IApplicationDbContext db,
+        Guid thisPayoutId,
         CancellationToken ct)
     {
         var creditIds = lines.Select(l => l.CreditId).Distinct().ToList();
@@ -76,6 +82,21 @@ public sealed class GetPayoutByIdHandler(
             .Select(c => c.TransactionId)
             .Distinct()
             .ToList();
+
+        // The payouts that consumed these credits, for the period shown on the badge. Only the ones
+        // that are NOT this payout: a line paid here is not a duplicate.
+        var payerIds = creditById.Values
+            .Where(c => c.ConsumedByPayoutId != null && c.ConsumedByPayoutId != thisPayoutId)
+            .Select(c => c.ConsumedByPayoutId!.Value)
+            .Distinct()
+            .ToList();
+
+        var payerById = payerIds.Count == 0
+            ? []
+            : await db.CompensationPayouts
+                .Where(p => payerIds.Contains(p.Id))
+                .Select(p => new { p.Id, Start = p.Period.Start, End = p.Period.End })
+                .ToDictionaryAsync(p => p.Id, ct);
 
         var txById = await db.CompensationTransactions
             .Where(t => transactionIds.Contains(t.Id))
@@ -100,6 +121,20 @@ public sealed class GetPayoutByIdHandler(
                 ? MapCalculation(credit.RuleSnapshot, l.AppliedModifiers)
                 : null;
 
+            // ★★ THREE OUTCOMES, DECIDED ONCE, HERE. Deriving them on the screen from "is the other
+            // payout's id null?" is what produced the bug this replaced: a payout that had itself
+            // paid these credits reported every line as UNPAID, because the id was null for the
+            // honest reason that the payer was not somebody else.
+            var consumedBy = credit?.ConsumedByPayoutId;
+            var paymentState = consumedBy is null
+                ? PayoutLinePaymentState.Unpaid
+                : consumedBy == thisPayoutId
+                    ? PayoutLinePaymentState.PaidByThisPayout
+                    : PayoutLinePaymentState.PaidByAnotherPayout;
+
+            var payerId = paymentState == PayoutLinePaymentState.PaidByAnotherPayout ? consumedBy : null;
+            var payer = payerId is not null ? payerById.GetValueOrDefault(payerId.Value) : null;
+
             return new PayoutLineDto(
                 Id: l.Id,
                 CreditId: l.CreditId,
@@ -116,7 +151,11 @@ public sealed class GetPayoutByIdHandler(
                 TransactionDate: tx?.TransactionDate,
                 TransactionAmount: tx?.AmountValue,
                 TransactionCurrency: tx?.AmountCurrency,
-                Calculation: calculation);
+                Calculation: calculation,
+                PaymentState: paymentState,
+                PaidInPayoutId: payerId,
+                PaidInPayoutPeriodStart: payer?.Start,
+                PaidInPayoutPeriodEnd: payer?.End);
         }).ToList();
     }
 

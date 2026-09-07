@@ -56,6 +56,10 @@ public sealed class AssistantAmbiguousPayeeTests
             _granted.Contains(permission)
                 ? Task.CompletedTask
                 : throw new ForbiddenException(permission);
+
+        // Same set, asked instead of enforced.
+        public Task<bool> HasAsync(string permission, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_granted.Contains(permission));
     }
 
     /// <summary>
@@ -299,6 +303,339 @@ public sealed class AssistantAmbiguousPayeeTests
         payload.GetProperty("found").GetBoolean().Should().BeFalse();
     }
 
+    // ══ 3b. PART OF A NAME, BORNE BY SEVERAL PEOPLE ══════════════════════════
+
+    /// <summary>The second reported tenant: three people a user can reasonably call "Camille".</summary>
+    private static void SeedThreeCamilles(Harness h)
+    {
+        SeedPayee(h, "Camille Laurent", "EPO9009", terminated: true);
+        SeedPayee(h, "Camille Laurent", "EMP409");
+        SeedPayee(h, "Camille Martin", "FR-301");
+    }
+
+    /// <summary>
+    /// ★★ THE DEFECT AS REPORTED, AND IT IS THE ANNA FAILURE ARRIVING BY THE OTHER ROAD. A tenant holds
+    /// Camille Laurent (EPO9009), Camille Laurent (EMP409) and Camille Martin (FR-301). Asked for
+    /// "Camille", the assistant answered that it could not locate ANY payee by that name.
+    ///
+    /// No full name IS "Camille", so the exact pass found nothing; three rows came back from the
+    /// substring search, so the "exactly one candidate" branch did not fire; and the resolver fell
+    /// through to NOT FOUND. Three people on the user's screen, reported as zero — which is the single
+    /// worst answer this payload exists to prevent, and rule 23 could not help because the outcome
+    /// never reached it.
+    /// </summary>
+    [Fact]
+    public async Task A_first_name_borne_by_three_payees_is_ambiguous_and_never_not_found()
+    {
+        var h = Build(nameof(A_first_name_borne_by_three_payees_is_ambiguous_and_never_not_found));
+        SeedThreeCamilles(h);
+
+        var payload = await BalanceAsync(h, "Camille");
+
+        Outcome(payload).Should().Be(PayeeAmbiguity.Outcome);
+        payload.GetProperty("found").GetBoolean().Should().BeFalse();
+        payload.GetProperty("candidateCount").GetInt32().Should().Be(3);
+    }
+
+    /// <summary>
+    /// ★ THE FULL NAMES ARE THE POINT WHEN THE SHARED PART IS ONLY A FIRST NAME. Two of these people
+    /// are namesakes and the third is not, so a list that echoed back "Camille" three times would hide
+    /// the one distinction the user can actually choose on. The payload has to carry Laurent and
+    /// Martin.
+    /// </summary>
+    [Fact]
+    public async Task The_candidates_of_a_partial_name_carry_their_own_full_names()
+    {
+        var h = Build(nameof(The_candidates_of_a_partial_name_carry_their_own_full_names));
+        SeedThreeCamilles(h);
+
+        var candidates = (await BalanceAsync(h, "Camille"))
+            .GetProperty("candidates")
+            .EnumerateArray()
+            .Select(c => (
+                Name: c.GetProperty("fullName").GetString(),
+                Code: c.GetProperty("employeeCode").GetString()))
+            .ToList();
+
+        candidates.Should().HaveCount(3);
+        candidates.Should().ContainSingle(c => c.Name == "Camille Laurent" && c.Code == "EPO9009");
+        candidates.Should().ContainSingle(c => c.Name == "Camille Laurent" && c.Code == "EMP409");
+        candidates.Should().ContainSingle(c => c.Name == "Camille Martin" && c.Code == "FR-301");
+    }
+
+    /// <summary>
+    /// ★ A SURNAME BEHAVES THE SAME WAY, and this is the case that scales: in a real tenant "García"
+    /// belongs to fifteen people, and the answer is fifteen people to choose from rather than none.
+    /// </summary>
+    [Fact]
+    public async Task A_surname_borne_by_several_payees_is_ambiguous_too()
+    {
+        var h = Build(nameof(A_surname_borne_by_several_payees_is_ambiguous_too));
+        SeedThreeCamilles(h);
+
+        var payload = await BalanceAsync(h, "Laurent");
+
+        Outcome(payload).Should().Be(PayeeAmbiguity.Outcome);
+        payload.GetProperty("candidateCount").GetInt32().Should().Be(2);
+    }
+
+    /// <summary>
+    /// ★★ AND ONE BEARER IS STILL AN ANSWER, NOT A MENU. This is the half that must not regress: a
+    /// question with exactly one possible subject has to be answered, never turned into a form. The
+    /// resolver says so in `matchedBy`, which rule 19a uses to open with the person's full name.
+    /// </summary>
+    [Fact]
+    public async Task A_first_name_borne_by_ONE_payee_still_resolves_straight_to_them()
+    {
+        var h = Build(nameof(A_first_name_borne_by_ONE_payee_still_resolves_straight_to_them));
+        SeedPayee(h, "Camille Martin", "FR-301");
+
+        var payload = await BalanceAsync(h, "Camille");
+
+        payload.GetProperty("found").GetBoolean().Should().BeTrue();
+        payload.GetProperty("payeeName").GetString().Should().Be("Camille Martin");
+        payload.GetProperty("matchedBy").GetString()
+            .Should().Be(nameof(PayeeMatch.PartialNameSingleCandidate));
+    }
+
+    /// <summary>★ Both payee tools must agree about a partial name exactly as they do about a full one.</summary>
+    [Fact]
+    public async Task Both_tools_agree_on_a_partial_name_borne_by_several()
+    {
+        var h = Build(nameof(Both_tools_agree_on_a_partial_name_borne_by_several));
+        SeedThreeCamilles(h);
+
+        await AssertSameAmbiguity(h, "Camille");
+    }
+
+    // ══ 3c. THE FORM THE USER ACTUALLY SEES ══════════════════════════════════
+
+    /// <summary>
+    /// ★★ THE WHOLE POINT, END TO END: the payload the tool returns carries a clarify FORM, one option
+    /// per real person, built from the rows the lookup matched. Nothing about this depends on the
+    /// model — no prompt can fail to trigger it and no sampling can vary it, which is what the
+    /// consistency complaint asked for.
+    /// </summary>
+    [Fact]
+    public async Task The_ambiguous_payload_carries_a_form_with_one_option_per_person()
+    {
+        var h = Build(nameof(The_ambiguous_payload_carries_a_form_with_one_option_per_person));
+        SeedThreeCamilles(h);
+
+        var form = AssistantClarify.Extract(await h.Balance.RunAsync(
+            """{"payeeName":"Camille"}""", default));
+
+        form.Should().NotBeNull();
+        form!.IsEntityForm.Should().BeTrue();
+        form.Options.Should().HaveCount(3);
+
+        // ★ THE ARGUMENT IS THE EMPLOYEE CODE, NOT THE NAME. Pressing an option has to resolve to
+        // exactly one person, and the name is the very thing that did not.
+        form.Options.Select(o => o.Argument)
+            .Should().BeEquivalentTo(["EPO9009", "EMP409", "FR-301"]);
+    }
+
+    /// <summary>
+    /// ★ EACH OPTION IS DISTINGUISHABLE. Two of these three share a full name, so name alone offers a
+    /// choice nobody can make; the code separates the namesakes and the status is usually what the
+    /// reader actually knows about the person they mean.
+    /// </summary>
+    [Fact]
+    public async Task Every_option_carries_the_full_name_the_code_and_the_status()
+    {
+        var h = Build(nameof(Every_option_carries_the_full_name_the_code_and_the_status));
+        SeedThreeCamilles(h);
+
+        var entities = AssistantClarify
+            .Extract(await h.Balance.RunAsync("""{"payeeName":"Camille"}""", default))!
+            .Options.Select(o => o.Entity!)
+            .ToList();
+
+        entities.Should().ContainSingle(e =>
+            e.Name == "Camille Laurent" && e.Code == "EPO9009" && e.Status == "Terminated");
+        entities.Should().ContainSingle(e =>
+            e.Name == "Camille Laurent" && e.Code == "EMP409" && e.Status == "Active");
+        entities.Should().ContainSingle(e =>
+            e.Name == "Camille Martin" && e.Code == "FR-301" && e.Status == "Active");
+    }
+
+    /// <summary>
+    /// ★★ THE FORM OFFERS THE FUNCTION THE USER ASKED FOR, NOT THE OTHER ONE. Somebody who asked about
+    /// assignments and pressed a name must get assignments — a form that quietly switched them to a
+    /// balance would answer a question they did not ask, about the person they did choose.
+    /// </summary>
+    [Fact]
+    public async Task The_form_reruns_the_lookup_that_hit_the_ambiguity()
+    {
+        var h = Build(nameof(The_form_reruns_the_lookup_that_hit_the_ambiguity));
+        SeedThreeCamilles(h);
+
+        var balance = AssistantClarify.Extract(
+            await h.Balance.RunAsync("""{"payeeName":"Camille"}""", default))!;
+        var plans = AssistantClarify.Extract(
+            await h.Plans.RunAsync("""{"payeeName":"Camille"}""", default))!;
+
+        balance.Options.Should().AllSatisfy(o =>
+            o.Function.Should().Be(GetPayeeLedgerSummaryTool.ToolName));
+        plans.Options.Should().AllSatisfy(o =>
+            o.Function.Should().Be(GetPayeePlansTool.ToolName));
+    }
+
+    /// <summary>★ A single match resolves, so there is no form to show.</summary>
+    [Fact]
+    public async Task A_resolved_lookup_carries_no_form()
+    {
+        var h = Build(nameof(A_resolved_lookup_carries_no_form));
+        SeedPayee(h, "Camille Martin", "FR-301");
+
+        AssistantClarify.Extract(await h.Balance.RunAsync("""{"payeeName":"Camille"}""", default))
+            .Should().BeNull();
+    }
+
+    // ══ 3d. THE CODE ARRIVING IN THE WRONG FIELD ═════════════════════════════
+
+    /// <summary>
+    /// ★★ THE REPORTED CONTRADICTION, REPRODUCED. The clarify form offered "Camille Laurent · EPO9009",
+    /// the user picked it, and the next turn answered that no payee with code EPO9009 exists — about a
+    /// code the assistant itself had just printed.
+    ///
+    /// ★ AND THE CAUSE WAS NOT THE SEARCH. The runtime log said <c>UnreadableArguments</c>, not
+    /// <c>NotFound</c>: the dispatcher put the code in `payeeId` (its own rule tells it to send the id
+    /// and NOT the name), `Guid.TryParse` rejected it, and with no `payeeName` beside it the tool
+    /// refused BEFORE the resolver ran. The employee-code branch was never reached — it has always
+    /// worked, and it is tested below.
+    /// </summary>
+    [Fact]
+    public async Task An_employee_code_sent_as_the_ID_still_resolves_the_payee()
+    {
+        var h = Build(nameof(An_employee_code_sent_as_the_ID_still_resolves_the_payee));
+        SeedThreeCamilles(h);
+
+        // Exactly the shape the dispatcher produced: the code, in the id field, and nothing else.
+        var payload = JsonDocument.Parse(
+            await h.Balance.RunAsync("""{"payeeId":"EPO9009"}""", default)).RootElement;
+
+        payload.GetProperty("found").GetBoolean().Should().BeTrue();
+        payload.GetProperty("payeeName").GetString().Should().Be("Camille Laurent");
+    }
+
+    /// <summary>★ The assignments tool reached the same dead end and is salvaged the same way.</summary>
+    [Fact]
+    public async Task The_assignments_tool_also_accepts_a_code_sent_as_the_ID()
+    {
+        var h = Build(nameof(The_assignments_tool_also_accepts_a_code_sent_as_the_ID));
+        SeedThreeCamilles(h);
+
+        var payload = JsonDocument.Parse(
+            await h.Plans.RunAsync("""{"payeeId":"FR-301"}""", default)).RootElement;
+
+        payload.GetProperty("found").GetBoolean().Should().BeTrue();
+        payload.GetProperty("payeeName").GetString().Should().Be("Camille Martin");
+    }
+
+    /// <summary>
+    /// ★★ A REAL NAME STILL WINS. The salvage only fills a gap: a turn carrying both a usable name and
+    /// a junk id must behave exactly as it did before, or this fix would start overriding good input
+    /// with bad.
+    /// </summary>
+    [Fact]
+    public async Task A_real_name_is_not_overridden_by_a_junk_id()
+    {
+        var h = Build(nameof(A_real_name_is_not_overridden_by_a_junk_id));
+        SeedThreeCamilles(h);
+
+        var payload = JsonDocument.Parse(
+            await h.Balance.RunAsync("""{"payeeId":"EPO9009","payeeName":"Camille Martin"}""", default))
+            .RootElement;
+
+        payload.GetProperty("payeeName").GetString().Should().Be("Camille Martin");
+    }
+
+    /// <summary>
+    /// ★★ A PLACEHOLDER IS NOT AN IDENTIFIER. A model with no id sometimes writes one of these rather
+    /// than omitting the field; searching for the word would turn a missing argument into a confident
+    /// answer about a payee called "unknown".
+    /// </summary>
+    [Theory]
+    [InlineData("null")]
+    [InlineData("unknown")]
+    [InlineData("string")]
+    [InlineData("payeeId")]
+    public async Task A_placeholder_id_is_not_searched_for(string placeholder)
+    {
+        var h = Build($"{nameof(A_placeholder_id_is_not_searched_for)}{placeholder}");
+        SeedThreeCamilles(h);
+
+        var payload = JsonDocument.Parse(
+            await h.Balance.RunAsync($$"""{"payeeId":"{{placeholder}}"}""", default)).RootElement;
+
+        payload.GetProperty("found").GetBoolean().Should().BeFalse();
+    }
+
+    // ══ 3e. "THIS IS THE PERSON YOU ASKED FOR" ═══════════════════════════════
+
+    /// <summary>
+    /// ★★ THE FAILURE THIS PINS, OBSERVED TWICE IN ONE AFTERNOON AND ONCE BEFORE. The user picked
+    /// "Camille Martin · FR-301" off the clarify form; the lookup RESOLVED and returned her balance —
+    /// the runtime log says <c>Found</c> — and the assistant answered "I have not found any payee
+    /// matching FR-301, please check the identifier". Real money, real person, reported as
+    /// non-existent out of a SUCCESSFUL lookup. Rule 19a of the prompt says exactly the right thing
+    /// about this and had failed three times by then, so the sentence now travels WITH the data.
+    /// </summary>
+    [Fact]
+    public async Task A_code_match_carries_the_sentence_that_says_it_is_the_same_person()
+    {
+        var h = Build(nameof(A_code_match_carries_the_sentence_that_says_it_is_the_same_person));
+        SeedThreeCamilles(h);
+
+        var payload = JsonDocument.Parse(
+            await h.Balance.RunAsync("""{"payeeName":"FR-301"}""", default)).RootElement;
+
+        payload.GetProperty("found").GetBoolean().Should().BeTrue();
+        payload.GetProperty("requestedIdentifier").GetString().Should().Be("FR-301");
+
+        var disclosure = payload.GetProperty("disclosure").GetString()!;
+
+        // It has to name BOTH sides of the equivalence — the term the user gave and who it belongs to.
+        disclosure.Should().Contain("FR-301").And.Contain("Camille Martin");
+
+        // ★ AND IT HAS TO FORBID THE EXACT SENTENCE THAT WAS WRITTEN, not merely encourage a good one.
+        disclosure.Should().Contain("SUCCEEDED");
+        disclosure.Should().Contain("must NOT say the payee was not found");
+    }
+
+    /// <summary>★ The assignments tool says the same thing, so the two cannot disagree about one code.</summary>
+    [Fact]
+    public async Task The_assignments_tool_carries_the_same_sentence()
+    {
+        var h = Build(nameof(The_assignments_tool_carries_the_same_sentence));
+        SeedThreeCamilles(h);
+
+        var payload = JsonDocument.Parse(
+            await h.Plans.RunAsync("""{"payeeName":"EMP409"}""", default)).RootElement;
+
+        payload.GetProperty("disclosure").GetString()
+            .Should().Contain("EMP409").And.Contain("Camille Laurent");
+    }
+
+    /// <summary>
+    /// ★★ AND AN EXACT NAME SAYS NOTHING. The question and the payload already use the same words, so
+    /// there is nothing to reconcile — a reassurance repeated on every turn is noise that teaches the
+    /// model to skip the field, which would cost it its effect on the turns that need it.
+    /// </summary>
+    [Fact]
+    public async Task An_exact_name_needs_no_disclosure()
+    {
+        var h = Build(nameof(An_exact_name_needs_no_disclosure));
+        SeedPayee(h, "Camille Martin", "FR-301");
+
+        var payload = JsonDocument.Parse(
+            await h.Balance.RunAsync("""{"payeeName":"Camille Martin"}""", default)).RootElement;
+
+        payload.GetProperty("found").GetBoolean().Should().BeTrue();
+        payload.TryGetProperty("disclosure", out _).Should().BeFalse();
+    }
+
     // ══ 4. THE WAY OUT: THE EMPLOYEE CODE ════════════════════════════════════
 
     [Fact]
@@ -336,18 +673,41 @@ public sealed class AssistantAmbiguousPayeeTests
 
     // ══ BOTH TOOLS AGREE ═════════════════════════════════════════════════════
 
+    /// <summary>
+    /// ★ ADJACENT TURNS MUST NOT DISAGREE. "Which Anna?" for a balance and "she does not exist" for her
+    /// plans, in one conversation, would be worse than the bug being fixed.
+    ///
+    /// ★★ IT COMPARES THE AMBIGUITY, NOT THE BYTES — and that is a deliberate narrowing of what this
+    /// test asserts, not a weakening of it. It used to be `plans.Should().Be(balance)`, which was a
+    /// fine shorthand while the two payloads were identical. They are no longer supposed to be: each
+    /// now carries a clarify form whose options re-run the tool that produced it, so a user who asked
+    /// about assignments and pressed a name gets assignments. That difference is REQUIRED, and it is
+    /// pinned by <see cref="The_form_reruns_the_lookup_that_hit_the_ambiguity"/>. What must still be
+    /// identical is everything the answer is about: the outcome and the people.
+    /// </summary>
+    private static async Task AssertSameAmbiguity(Harness h, string name)
+    {
+        var balance = JsonDocument.Parse(
+            await h.Balance.RunAsync($$"""{"payeeName":"{{name}}"}""", default)).RootElement;
+        var plans = JsonDocument.Parse(
+            await h.Plans.RunAsync($$"""{"payeeName":"{{name}}"}""", default)).RootElement;
+
+        Outcome(plans).Should().Be(PayeeAmbiguity.Outcome);
+        Outcome(plans).Should().Be(Outcome(balance));
+        plans.GetProperty("found").GetBoolean().Should().Be(balance.GetProperty("found").GetBoolean());
+        plans.GetProperty("candidateCount").GetInt32()
+            .Should().Be(balance.GetProperty("candidateCount").GetInt32());
+        plans.GetProperty("candidates").GetRawText()
+            .Should().Be(balance.GetProperty("candidates").GetRawText());
+    }
+
     [Fact]
     public async Task The_assignments_tool_answers_the_same_ambiguity_the_same_way()
     {
         var h = Build(nameof(The_assignments_tool_answers_the_same_ambiguity_the_same_way));
         SeedTwoAnnas(h);
 
-        // ★ ADJACENT TURNS MUST NOT DISAGREE. "Which Anna?" for a balance and "she does not exist" for
-        // her plans, in one conversation, would be worse than the bug being fixed.
-        var balance = await h.Balance.RunAsync("""{"payeeName":"Anna Schmidt"}""", default);
-        var plans = await h.Plans.RunAsync("""{"payeeName":"Anna Schmidt"}""", default);
-
-        plans.Should().Be(balance);
+        await AssertSameAmbiguity(h, "Anna Schmidt");
     }
 }
 

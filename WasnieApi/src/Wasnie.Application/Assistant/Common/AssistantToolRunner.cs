@@ -330,6 +330,41 @@ public sealed class AssistantToolRunner(
         "how to perform an action in the interface. The documentation answers those and a lookup would " +
         "return nothing useful.\n" +
         "\n" +
+        "★★ WHEN THE SUBJECT IS CLEAR BUT THE FUNCTION IS NOT, ASK INSTEAD OF PICKING. Call " +
+        "ask_user_to_choose when the message is plainly about something you HAVE functions for and two " +
+        "of them could serve it — \"how much is owed to Aleksandra\" is about a PERSON, and both the " +
+        "balance and the assignments lookup are defensible readings. Offer those two and let the user " +
+        "say which. Guessing is how a confident answer to the wrong question gets written.\n" +
+        "\n" +
+        "★ THE THREE CASES ARE DIFFERENT AND ONLY ONE OF THEM IS THIS ONE:\n" +
+        "- ONE tool is clearly right → call that tool. Never ask a question you could answer.\n" +
+        "- TWO OR THREE could be right → ask_user_to_choose, naming only those.\n" +
+        "- NONE applies (who is on a plan, payouts, the weather) → call NO tool at all. Do NOT offer a " +
+        "menu: the answering model says honestly that it cannot do that, and a panel offering to look " +
+        "up a transaction is an absurd reply to a question about the weather.\n" +
+        "\n" +
+        "★ PASS THROUGH ONLY WHAT THE USER ACTUALLY SAID as an option's argument — the name, reference " +
+        "or id from their own message. Never invent one to make an option look complete: an option " +
+        "carrying a guessed name runs a REAL lookup on made-up input and returns a real-looking answer " +
+        "about the wrong record.\n" +
+        "\n" +
+        "★★ A BARE NAME IS A QUESTION ABOUT THAT RECORD. IT IS NEVER A GREETING AND NEVER SMALL TALK. " +
+        "A message that is just \"Aleksandra\", just \"EU Accelerator\", or just a reference number is " +
+        "somebody pointing at a record and waiting for you to ask what they want to know about it. " +
+        "Call ask_user_to_choose with the functions that fit what KIND of thing it is — a person: their " +
+        "balance and their assignments; a plan: its rules and what it would pay — and pass the name " +
+        "through as the argument.\n" +
+        "\n" +
+        "★ THIS WAS OBSERVED GOING WRONG THREE DIFFERENT WAYS ON THE SAME INPUT. The bare name " +
+        "\"Aleksandra\" was once answered with a greeting addressed TO Aleksandra — as though the user " +
+        "had introduced themselves — and once with a prose question, and once correctly. Nobody types a " +
+        "payee's name into a commission tool to say hello.\n" +
+        "\n" +
+        "★ AND WHEN THE USER ASKS FOR THE OPTIONS THEMSELVES, GIVE THEM. \"Show me the form\", \"what " +
+        "can you do\", \"show me the options\", \"qué podés hacer\" is a request for the choices, not a " +
+        "question about a record called \"form\": call ask_user_to_choose. Never send the word to a " +
+        "lookup as if it were the name of something.\n" +
+        "\n" +
         "Earlier messages in the conversation are given to you as CONTEXT. Decide about the LAST user " +
         "message, but resolve what it refers to from that context: if the user asked about a plan by " +
         "name and now says \"this plan\", \"that plan\", or asks a follow-up that plainly concerns it " +

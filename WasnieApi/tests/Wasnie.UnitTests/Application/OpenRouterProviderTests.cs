@@ -303,6 +303,73 @@ public sealed class OpenRouterProviderTests
         chosen.Should().BeNull("most questions are answered from the documentation");
     }
 
+    // ── Test 3b — the sampling temperature on the wire (KAN-58, second round) ──
+
+    /// <summary>
+    /// ★★ THE DEFECT THIS PINS, AND WHY IT IS ASSERTED ON THE BODY AND NOT ON THE CALL SITE. The
+    /// clarify form fired erratically: the same input — a bare payee name — produced the form once, a
+    /// greeting once and a prose question once. The cause was not the wording of any instruction. It
+    /// was that NO temperature was sent on any call in this file, so the tool dispatcher — a classifier
+    /// whose whole job is to pick one label from a fixed set — ran at the provider's default of 1.0.
+    ///
+    /// ★★ AND THE FIX IS A FIELD THAT CAN VANISH SILENTLY. `temperature` reaches the vendor only if the
+    /// naming policy renders it and the null-ignore rule does not drop it; a zero that never left the
+    /// process looks exactly like a zero that did, from the call site. The comment on the fix said it
+    /// was true "by construction" — which is the reasoning §A3 exists to refuse. So this reads the JSON
+    /// that actually went out.
+    /// </summary>
+    [Fact]
+    public async Task The_tool_dispatcher_is_PINNED_to_temperature_zero_on_the_wire()
+    {
+        var (provider, transport) = Build(Ok("""{"choices":[{"message":{"content":"no tool"}}]}"""));
+
+        await provider.SelectToolAsync(
+            [new ChatMessage(ChatMessage.UserRole, "Aleksandra")],
+            [new AssistantToolSchema("get_payee_balance", "…", """{"type":"object"}""")],
+            CancellationToken.None);
+
+        transport.Body.Should().Contain(
+            "\"temperature\":0",
+            "a sampled classifier is a coin flip about which function the user's question reaches");
+    }
+
+    /// <summary>
+    /// ★ THE SECTION ROUTER IS A CLASSIFIER TOO. It decides which documentation the answering model is
+    /// shown, so left sampling the same question reads different sources on different turns — the same
+    /// inconsistency one layer up.
+    /// </summary>
+    [Fact]
+    public async Task The_section_router_is_PINNED_to_temperature_zero_on_the_wire()
+    {
+        var (provider, transport) = Build(Ok("""{"choices":[{"message":{"content":"{\"sections\":[\"s4\"]}"}}]}"""));
+
+        await provider.CompleteJsonAsync(
+            [new ChatMessage(ChatMessage.SystemRole, "Return ONLY a JSON object.")], CancellationToken.None);
+
+        transport.Body.Should().Contain("\"temperature\":0");
+    }
+
+    /// <summary>
+    /// ★★ AND THE GENERATING CALL IS DELIBERATELY LEFT SAMPLING — asserted, so that pinning it later
+    /// is a decision somebody makes on purpose rather than a line that spreads. That call writes the
+    /// prose a person reads; its variety is not a defect, and flattening how the assistant WRITES was
+    /// never what this ticket asked for. Only the two classifiers are pinned.
+    /// </summary>
+    [Fact]
+    public async Task Generation_is_NOT_pinned_and_that_is_the_deliberate_half()
+    {
+        var (provider, transport) = Build(Ok("data: [DONE]\n\n", "text/event-stream"));
+
+        await foreach (var _ in provider.StreamAsync(
+            [new ChatMessage(ChatMessage.UserRole, "explain my plan")], CancellationToken.None))
+        {
+        }
+
+        transport.Body.Should().NotContain(
+            "temperature",
+            "the answer a person reads is the one call whose variety is wanted");
+    }
+
     [Fact]
     public async Task OpenRouters_attribution_headers_ride_along_and_carry_no_secret()
     {

@@ -11,6 +11,7 @@ import { IconComponent } from '../../../shared/components/icon/icon.component';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-enter.directive';
+import { ToastService } from '../../../shared/services/toast.service';
 import { ReconciliationApiService } from '../services/reconciliation.api.service';
 import { ReconciliationStore } from '../state/reconciliation.store';
 import { ReconciliationRow } from '../models/reconciliation.model';
@@ -31,11 +32,13 @@ import {
   WsCardComponent,
   WsSelectComponent,
   WsDatePickerComponent,
+  WsInputComponent,
   WsPageLayoutComponent,
   WsTableComponent,
   WsTableEmptyComponent,
   WsEmptyStateComponent,
   WsPaginationComponent,
+  WsTextareaComponent,
   type SelectOption,
 } from '../../../shared/ui';
 
@@ -56,9 +59,9 @@ import {
     AppShellComponent, RefreshOnEnterDirective, RouterLink, ReactiveFormsModule, TranslateModule, DecimalPipe,
     IconComponent, DateFormatPipe, CurrencyFormatPipe,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
-    WsSelectComponent, WsDatePickerComponent,
+    WsSelectComponent, WsDatePickerComponent, WsInputComponent,
     WsPageLayoutComponent, WsTableComponent, WsTableEmptyComponent,
-    WsEmptyStateComponent, WsPaginationComponent, WsModalComponent,
+    WsEmptyStateComponent, WsPaginationComponent, WsModalComponent, WsTextareaComponent,
     HasPermissionPipe, ProcessPendingComponent,
   ],
   templateUrl: './reconciliation-list.component.html',
@@ -67,6 +70,7 @@ import {
 export class ReconciliationListComponent implements OnInit {
   readonly store = inject(ReconciliationStore);
   private readonly api = inject(ReconciliationApiService);
+  private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
 
@@ -78,6 +82,7 @@ export class ReconciliationListComponent implements OnInit {
     reason: new FormControl<string | null>(null),
     from: new FormControl<string | null>(null),
     to: new FormControl<string | null>(null),
+    reference: new FormControl<string | null>(null),
   });
 
   /** The filter's options come from the API, so a reason the engine gained is filterable at once. */
@@ -100,6 +105,9 @@ export class ReconciliationListComponent implements OnInit {
           reason: value.reason || null,
           from: value.from || null,
           to: value.to || null,
+          // ★ A BLANK BOX IS "NO FILTER", NOT "REFERENCES EQUAL TO NOTHING". `|| null` also catches
+          // the empty string the input emits when the reader clears it.
+          reference: value.reference?.trim() || null,
           page: 1,
         });
       });
@@ -148,7 +156,12 @@ export class ReconciliationListComponent implements OnInit {
   }
 
   clearFilters(): void {
-    this.form.reset({ reason: null, from: null, to: null }, { emitEvent: false });
+    // ★ EVERY CONTROL IS NAMED. `reset` with a partial object leaves the ones it does not mention
+    // holding their values, so a forgotten field would stay typed in the box while the store's
+    // filter went empty — the screen and the query disagreeing about what is being filtered.
+    this.form.reset(
+      { reason: null, from: null, to: null, reference: null },
+      { emitEvent: false });
     void this.store.clearFilters();
   }
 
@@ -186,6 +199,58 @@ export class ReconciliationListComponent implements OnInit {
   async closeReprocess(): Promise<void> {
     this.reprocessTarget.set(null);
     await this.store.refresh();
+  }
+
+
+  // ── Closing a row by decision (KAN-51) ────────────────────────────────────
+
+  /** The row whose close modal is open, or null. */
+  readonly closeTarget = signal<ReconciliationRow | null>(null);
+
+  readonly closeNote = signal('');
+
+  /**
+   * ★★ THE SUBMIT IS BLOCKED ON AN EMPTY NOTE, WHICH IS THE TICKET'S FIRST ACCEPTANCE CRITERION.
+   * `trim()` matters: a box holding three spaces is an empty justification, and an auditor reading
+   * "  " learns nothing about why a row stopped being shown. The server refuses it too — this is the
+   * courtesy, `ReconciliationClosure.Create` is the invariant.
+   */
+  readonly canSubmitClose = computed(() => this.closeNote().trim().length > 0 && !this.store.closing());
+
+  openClose(row: ReconciliationRow): void {
+    this.closeNote.set('');
+    this.closeTarget.set(row);
+  }
+
+  cancelClose(): void {
+    this.closeTarget.set(null);
+    this.closeNote.set('');
+  }
+
+  /**
+   * ★★ BOTH OUTCOMES ARE ANNOUNCED. Closing a row removes money from a queue; a confirmation that
+   * happens in silence leaves the person unsure whether their decision was recorded, and a failure
+   * that happens in silence is worse — the modal simply stays open and looks unresponsive.
+   *
+   * ★ THE MODAL SURVIVES A FAILURE, WITH THE TEXT STILL IN IT. Closing it on an error would throw
+   * away what the person wrote and leave them believing the row was closed.
+   *
+   * ★ THE ERROR IS A TRANSLATED KEY, NOT THE SERVER'S SENTENCE (§C1). The only failure a person can
+   * actually reach here is "this row is no longer open" — somebody else closed or fixed it first —
+   * and that is worth saying in their own language, with what to do about it.
+   */
+  async confirmClose(): Promise<void> {
+    const row = this.closeTarget();
+    if (!row || !this.canSubmitClose()) return;
+
+    const ok = await this.store.closeRow(row, this.closeNote().trim());
+
+    if (ok) {
+      this.toast.show('RECONCILIATION.CLOSE.TOAST_SUCCESS', 'success');
+      this.cancelClose();
+    } else {
+      this.toast.show('RECONCILIATION.CLOSE.TOAST_ERROR', 'error');
+    }
   }
 
   /**

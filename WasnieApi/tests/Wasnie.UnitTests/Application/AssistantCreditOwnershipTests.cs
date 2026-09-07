@@ -57,6 +57,10 @@ public sealed class AssistantCreditOwnershipTests
             _granted.Contains(permission)
                 ? Task.CompletedTask
                 : throw new ForbiddenException(permission);
+
+        // Same set, asked instead of enforced.
+        public Task<bool> HasAsync(string permission, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_granted.Contains(permission));
     }
 
     /// <summary>Real handlers, so the guards and the sort order are the production ones.</summary>

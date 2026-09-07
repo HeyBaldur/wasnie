@@ -51,6 +51,17 @@ public static class Permission
     public const string PayoutsExport = "Payouts.Export";
     public const string PayoutsDeleteDraft = "Payouts.DeleteDraft";
 
+    /// <summary>
+    /// Closing an Approved payout that can never be paid, because its credits were already paid by
+    /// another payout.
+    ///
+    /// ★ ITS OWN PERMISSION, NOT Payouts.MarkPaid, for the reason Ledger.CloseAccount is not
+    /// Ledger.Adjust: this makes a payable figure stop being owed, without any money moving. Whoever
+    /// may pay is not automatically whoever may decide that something will never be paid, and the two
+    /// have to be revocable separately.
+    /// </summary>
+    public const string PayoutsDiscard = "Payouts.Discard";
+
     // Clawback ledger. Read is deliberately broad — a rep seeing why their pay was reduced is the
     // point of the ledger, not a leak. Adjust writes a Human entry and is finance-only.
     public const string LedgerRead = "Ledger.Read";
@@ -94,6 +105,32 @@ public static class Permission
     public const string CategoryMappingsManage = "CategoryMappings.Manage";
 
     public const string ImportsExecute = "Imports.Execute";
+
+    /// <summary>
+    /// Closing a row of the Reconciliation Centre by decision: "reviewed, left as it stands".
+    ///
+    /// ★ ITS OWN PERMISSION, NOT Reports.ViewAll, for the same reason Ledger.CloseAccount is not
+    /// Ledger.Adjust. Reading the queue shows money that could not be paid; closing a row REMOVES it
+    /// from that queue and from the totals the CFO reads. Whoever may look is not automatically
+    /// whoever may decide what stops being looked at, and the two have to be revocable separately.
+    /// </summary>
+    public const string ReconciliationClose = "Reconciliation.Close";
+
+    /// <summary>
+    /// Reading the tenant's audit trail: the Audit Logs page and the dashboard's "view all" link.
+    ///
+    /// ★★ ITS OWN PERMISSION, NOT Reports.ViewAll. The trail is not a report about money — it is a
+    /// record of PEOPLE: who signed in, whose permission was denied, which admin changed what and
+    /// from which IP. Whoever may read the tenant's financial totals is not automatically whoever may
+    /// read its staff's activity, and the two have to be revocable separately.
+    ///
+    /// ★ IT IS DELIBERATELY NARROW. Granted to the same two roles that hold
+    /// <see cref="LedgerAdjust"/> — the most restrictive pair the app defines — because the rows carry
+    /// actor emails, IP addresses, user agents and the before/after of money operations. Widening it
+    /// later is one line; narrowing it after people have grown used to the page is not.
+    /// </summary>
+    public const string AuditRead = "Audit.Read";
+
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";
     public const string SettingsUpdate = "Settings.Update";

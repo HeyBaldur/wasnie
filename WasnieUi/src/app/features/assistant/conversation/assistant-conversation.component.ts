@@ -16,6 +16,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import {
+  ClarifyEntity,
+  ClarifyOption,
+  clarifyEntityOf,
+  clarifyOptionKey,
+  clarifyPromptKey,
+  clarifyStatusKey,
+} from '../models/clarify';
 
 import { AssistantStore } from '../state/assistant.store';
 import {
@@ -26,6 +34,7 @@ import {
   phaseLabelKey,
 } from '../models/assistant.model';
 import { WsButtonComponent } from '../../../shared/ui/ws-button/ws-button.component';
+import { WsCardComponent } from '../../../shared/ui/ws-card/ws-card.component';
 import { WsPopoverComponent } from '../../../shared/ui';
 import { WsTextareaComponent } from '../../../shared/ui/ws-textarea/ws-textarea.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -62,6 +71,7 @@ import { formatMessageTime, plainTextOf } from './message-meta';
     FormsModule,
     TranslateModule,
     WsButtonComponent,
+    WsCardComponent,
     WsPopoverComponent,
     WsTextareaComponent,
     IconComponent,
@@ -74,6 +84,10 @@ import { formatMessageTime, plainTextOf } from './message-meta';
     '[class.assistant-conversation--wide]': 'wide()',
   },
 })
+/**
+ * KAN-58 — the clarify panel's two actions. They live on the component rather than in the template so
+ * the translation of the option's question happens once, in one place, with the whitelist.
+ */
 export class AssistantConversationComponent {
   readonly store = inject(AssistantStore);
   private readonly injector = inject(Injector);
@@ -593,6 +607,50 @@ ${this.translate.instant('ASSISTANT.CANCELLED_COPY_NOTICE')}`;
       clearTimeout(this.copiedTimer);
       this.copiedTimer = null;
     }
+  }
+
+  /** The label key for an option. Whitelisted — never the raw tool name (§C2). */
+  clarifyLabel(option: ClarifyOption): string {
+    return clarifyOptionKey(option.function) ?? '';
+  }
+
+  /**
+   * The record an option stands for, or null when it stands for a function.
+   *
+   * ★ THE TEMPLATE BRANCHES ON THIS RATHER THAN ON THE FORM'S KIND. An option that carries a record
+   * is labelled by that record whatever the form calls itself, so a form whose kind went missing
+   * still renders its people correctly instead of falling back to five identical function labels.
+   */
+  clarifyEntity(option: ClarifyOption): ClarifyEntity | null {
+    return clarifyEntityOf(option);
+  }
+
+  /** The translated status for a candidate, or '' when this build cannot name that token (§C2). */
+  clarifyStatus(entity: ClarifyEntity): string {
+    return clarifyStatusKey(entity.status) ?? '';
+  }
+
+  /** Closing the panel: nothing else changes, and the thread is untouched. */
+  async dismissClarify(): Promise<void> {
+    await this.store.dismissClarify();
+  }
+
+  /**
+   * Pressing an option asks the question the user would have typed.
+   *
+   * ★★ THE SENTENCE IS TRANSLATED AND THE ARGUMENT IS APPENDED VERBATIM. The question goes into the
+   * thread as the user's own turn, so it must be in THEIR language — an English sentence appearing in
+   * a Spanish conversation would look like the assistant had written it. The argument is whatever they
+   * already said and is never invented here.
+   */
+  async chooseClarify(option: ClarifyOption): Promise<void> {
+    const key = clarifyPromptKey(option.function);
+    if (!key) return;
+
+    const question = this.translate.instant(key) as string;
+
+    await this.store.chooseClarify(
+      option.argument ? `${question} ${option.argument}` : question);
   }
 
   async send(): Promise<void> {

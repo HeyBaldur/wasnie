@@ -181,7 +181,18 @@
 //
 // ★ EVERY TRUNCATED VALUE CARRIES A `title`. An identifier you cannot read is worse than a wide
 // table: the point of the reference column is to be copied into another system.
-.recon__payee { white-space: nowrap; }
+// ★★ CAPPED SO THE TABLE FITS, which is the other half of the pinned-actions fix. Measured: the
+// columns wanted 1197px inside a 1150px container, and the 47px difference was being paid by the
+// AMOUNT column — cut to "€1,0" underneath the pinned cell, on the screen whose entire job is to
+// state amounts precisely. The payee is the widest column (273px, names up to 62 characters) and
+// the only one that degrades gracefully: the link already carries the full name in its `title`, so
+// nothing is lost, exactly as `.recon__ref` has always done.
+.recon__payee {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 // The whole cell refuses to wrap, which is what keeps the row one line tall.
 .recon__ref {
@@ -261,14 +272,50 @@
 // ★ THE COLUMN IS AS NARROW AS ITS WIDEST LABEL AND NO WIDER. This table already lost its Amount
 // column off the right edge once by spending width on a Type column that repeated what the row said
 // (see the note above the header). A resolve cell holds one short action, on one line.
-.recon__col-resolve {
+.recon__col-actions,
+.recon__actions {
   width: 1%;
   white-space: nowrap;
+  text-align: right;
+
+  // ★★ PINNED TO THE RIGHT EDGE, AND THIS IS A FIX FOR A MEASURED DEFECT, not a flourish. With two
+  // action columns the table ran 69px past its container and the second one — the whole Close
+  // column, 80px — sat outside the visible area: the button rendered, was reachable by keyboard,
+  // and a mouse user had to discover a horizontal scrollbar to find it. Sticky means the actions
+  // stay put at any table width, so adding a column later cannot hide them again.
+  position: sticky;
+  right: 0;
+  z-index: 1;
+
+  // A sticky cell floats over the scrolling ones, so it needs its own opaque background — without
+  // it the columns underneath read straight through the buttons.
+  background: var(--color-bg-surface);
+
+  // The seam that says "this column is pinned, the rest moved". Only visible while there is
+  // something scrolled underneath, which is exactly when it is worth showing.
+  border-left: 1px solid var(--color-border-default);
 }
 
-.recon__resolve {
-  white-space: nowrap;
-  text-align: right;
+// ★ THE HEADER SITS ON THE RAISED SURFACE like every other th; repeated here because a sticky cell
+// paints its own background and would otherwise fall back to the table's.
+.recon__col-actions {
+  background: var(--color-bg-surface-raised);
+}
+
+// ★ AND IT FOLLOWS THE ROW HOVER. `tbody tr:hover` sets the row's background, which a sticky cell
+// with its own opaque fill would ignore — the pinned column would stay dark while the rest of the
+// row lit up, and read as a different row.
+.ws-table-wrap tbody tr:hover .recon__actions {
+  background: var(--color-bg-surface-raised);
+}
+
+// Both actions on one line: the deep link reads as text, the close is a quiet ghost button beside
+// it. Right-aligned so the column's edge stays flush with the pinned border.
+.recon__actions-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 // ★ IT READS AS A LINK, NOT AS A SECOND PRIMARY BUTTON. Most rows resolve by navigating somewhere,
@@ -289,4 +336,45 @@
   &:hover {
     text-decoration: underline;
   }
+}
+
+
+// ── The close modal ────────────────────────────────────────────────────────────────────────────
+.recon__close-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.recon__close-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.recon__close-row-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  min-width: 7rem;
+}
+
+.recon__close-row-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.recon__close-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.recon__close-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }

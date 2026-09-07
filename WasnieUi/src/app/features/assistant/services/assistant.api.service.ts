@@ -131,6 +131,22 @@ export class AssistantApiService {
     return this.http.post<void>(`${this.base}/conversations/${conversationId}/pin`, null);
   }
 
+  /**
+   * Records what the user did with a clarify form (KAN-58).
+   *
+   * ★ PATCH, because it moves one field of an existing turn to a terminal value. Nothing is created
+   * and nothing is removed — the form stays on the message as the record of what happened.
+   */
+  resolveClarify(
+    conversationId: string,
+    messageId: string,
+    state: 'answered' | 'dismissed',
+  ): Observable<void> {
+    return this.http.patch<void>(
+      `${this.base}/conversations/${conversationId}/messages/${messageId}/clarify`,
+      { state });
+  }
+
   unpinConversation(conversationId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/conversations/${conversationId}/pin`);
   }

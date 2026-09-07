@@ -5,6 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Router, provideRouter } from '@angular/router';
 import { TranslateModule } from '@ngx-translate/core';
 import { DashboardComponent } from './dashboard.component';
+import { DashboardActivityItem } from './models/dashboard.models';
 import { DashboardStore } from './store/dashboard.store';
 import { AuthService } from '../../core/services/auth.service';
 import { DashboardSummary, DashboardTrendBand, DashboardTrendPoint } from './models/dashboard.models';
@@ -271,14 +272,50 @@ describe('DashboardComponent helpers', () => {
     });
   });
 
-  describe('formatActivityAction', () => {
-    it('converts underscores to spaces', () => {
-      expect(component.formatActivityAction('login_success')).toBe('login success');
+  /**
+   * ★★ THESE TWO TESTS USED TO PIN THE DEFECT (KAN-19). They asserted that
+   * `formatActivityAction` turned `login_success` into "login success" and truncated anything
+   * longer to three words — which is exactly what was wrong: the feed built ENGLISH PROSE out of an
+   * action CODE in the browser, so `PLAN_CLAWBACK_POLICY_CHANGED` reached the reader as "plan
+   * clawback policy" (the verb, the entire meaning, was what got cut) and stayed English in Spanish
+   * and Polish. Both were green the whole time, because they measured the implementation rather
+   * than the requirement. They are replaced, not deleted, so the history of what changed is here.
+   */
+  describe('activityActionKey', () => {
+    it('maps an action code to a translation key, never to invented words', () => {
+      expect(component.activityActionKey('LOGIN_SUCCESS')).toBe('AUDIT.ACTION.LOGIN_SUCCESS');
     });
 
-    it('limits to 3 words for long action strings', () => {
-      expect(component.formatActivityAction('pending_transactions_processed_extra_words'))
-        .toBe('pending transactions processed');
+    /** The case the old prose builder silently mangled: the verb survives. */
+    it('keeps the whole meaning of a long code', () => {
+      expect(component.activityActionKey('PLAN_CLAWBACK_POLICY_CHANGED'))
+        .toBe('AUDIT.ACTION.PLAN_CLAWBACK_POLICY_CHANGED');
+    });
+
+    it('falls back to the generic label rather than leaking an unknown code', () => {
+      expect(component.activityActionKey('SOMETHING_NEW')).toBe('AUDIT.ACTION.UNKNOWN');
+    });
+  });
+
+  describe('activityLink', () => {
+    const item = (over: Partial<DashboardActivityItem> = {}): DashboardActivityItem => ({
+      timestampUtc: '2026-09-07T07:00:28Z',
+      actorEmail: 'admin@wasnie.test',
+      actorInitials: 'AD',
+      action: 'PLAN_ARCHIVED',
+      resourceType: 'Plan',
+      resourceId: 'plan-1',
+      resourceDisplayName: 'EU Accelerator',
+      ...over,
+    });
+
+    it('links an entry to the entity it changed', () => {
+      expect(component.activityLink(item())).toEqual(['/plans', 'plan-1']);
+    });
+
+    /** ★ A sign-in has no entity to open, so it gets no link rather than a dead one. */
+    it('gives no link where the resource type has no screen', () => {
+      expect(component.activityLink(item({ resourceType: 'Auth', action: 'LOGIN_SUCCESS' }))).toBeNull();
     });
   });
 

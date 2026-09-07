@@ -577,9 +577,66 @@
 
 // ── Activity feed ──────────────────────────────────────────────────────────────
 
+// The title and the "view all" link share the row: flex, so the link is pushed to the far edge and
+// the header keeps the height it already had rather than growing a second line (KAN-19).
 .feed__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--color-border-default);
+}
+
+// The badge and its link, kept on one line at the right of the card header.
+//
+// ★ `align-items: center` so the count and the link share a baseline band; the header itself aligns to
+//   flex-start because the title block beside it is two lines tall.
+.attention-hd__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+// ★ THE SAME LINK LANGUAGE AS `.feed__view-all` — size, weight and the two link colour tokens — with
+//   only the icon row added. A second, slightly different link style on the same screen is a thing to
+//   learn for no reason.
+.attention-hd__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-link);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: var(--radius-sm);
+  }
+}
+
+.feed__view-all {
+  flex-shrink: 0;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-link);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
 }
 
 .feed__title {
@@ -681,6 +738,18 @@
 }
 
 .feed__resource { color: var(--color-brand); font-weight: 500; margin-left: 2px; }
+
+// The linked variant of the same chip: it must LOOK identical to the plain one — the difference
+// between "this entity has a screen" and "it does not" is not something to teach through colour —
+// and only reveal itself on hover.
+.feed__resource--link {
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
 
 // ── Trend cards — TailAdmin "Average Daily Sales" pattern ─────────────────────
 // Layout: [small label + big value LEFT | delta pill RIGHT] → bleed chart → prior row

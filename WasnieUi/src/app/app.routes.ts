@@ -76,6 +76,17 @@ export const routes: Routes = [
       import('./features/reconciliation/reconciliation.routes').then((m) => m.reconciliationRoutes),
   },
   {
+    // The audit trail (KAN-19). Audit.Read, NOT Reports.ViewAll: this is a record of people — who
+    // signed in, whose permission was denied, which admin changed what and from where — rather than
+    // a view of money. The guard is what makes hiding the menu entry more than decoration: without
+    // it the page would still answer to a typed URL.
+    path: 'audit-logs',
+    title: 'NAV.AUDIT_LOGS',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Audit.Read')],
+    loadChildren: () =>
+      import('./features/audit-logs/audit-logs.routes').then((m) => m.auditLogsRoutes),
+  },
+  {
     path: 'payouts',
     title: 'NAV.PAYOUTS',
     canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Payouts.Read')],

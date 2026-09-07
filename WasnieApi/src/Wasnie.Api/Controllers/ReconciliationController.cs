@@ -2,6 +2,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Compensation.Common;
+using Wasnie.Application.Compensation.Commands.Reconciliation;
+using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Reconciliation;
 
 namespace Wasnie.Api.Controllers;
@@ -23,10 +25,11 @@ public sealed class ReconciliationController(ISender mediator) : ControllerBase
         [FromQuery] DateOnly? to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
+        [FromQuery] string? reference = null,
         CancellationToken cancellationToken = default)
     {
         var result = await mediator.Send(
-            new GetReconciliationQuery(new ReconciliationFilter(payeeId, reason, from, to, page, pageSize)),
+            new GetReconciliationQuery(new ReconciliationFilter(payeeId, reason, from, to, page, pageSize, reference)),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
@@ -48,11 +51,16 @@ public sealed class ReconciliationController(ISender mediator) : ControllerBase
         [FromQuery] string? reason,
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
+        [FromQuery] string? reference = null,
         CancellationToken cancellationToken = default)
     {
         // Page and size are deliberately not accepted: an export is the whole filtered set.
+        // ★ THE REFERENCE IS ACCEPTED HERE TOO. An export that ignored a filter the screen was
+        // showing would hand somebody a file called "reconciliation" holding rows they had just
+        // filtered out — the worst kind of wrong, because it looks complete.
         var result = await mediator.Send(
-            new ExportReconciliationQuery(new ReconciliationFilter(payeeId, reason, from, to)),
+            new ExportReconciliationQuery(
+                new ReconciliationFilter(payeeId, reason, from, to, Reference: reference)),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -65,4 +73,32 @@ public sealed class ReconciliationController(ISender mediator) : ControllerBase
         var export = result.Value!;
         return File(export.Bytes, export.ContentType, export.FileName);
     }
+
+    /// <summary>
+    /// Close one row by human decision: "reviewed, left as it stands" (KAN-51).
+    ///
+    /// ★ THE BODY CARRIES THE ROW AND THE NOTE, NOTHING ELSE. Which anomalies that row currently
+    /// carries, and when each was detected, the server reads from its own queue — see
+    /// <see cref="CloseReconciliationRowCommand"/>.
+    /// </summary>
+    [HttpPost("close")]
+    public async Task<IActionResult> Close(
+        [FromBody] CloseReconciliationRowRequest body,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.TryParse<ReconciliationEntryKind>(body.Kind, ignoreCase: true, out var kind))
+            return BadRequest(new { message = $"Unknown reconciliation entry kind '{body.Kind}'." });
+
+        var result = await mediator.Send(
+            new CloseReconciliationRowCommand(kind, body.EntityId, body.Note ?? string.Empty),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
+    /// <summary>
+    /// ★ ITS OWN REQUEST TYPE, NOT THE COMMAND (§D3). The serialiser builds an input type by
+    /// properties; letting it build the command directly would bypass the factory and the parse.
+    /// </summary>
+    public sealed record CloseReconciliationRowRequest(string Kind, Guid EntityId, string? Note);
 }

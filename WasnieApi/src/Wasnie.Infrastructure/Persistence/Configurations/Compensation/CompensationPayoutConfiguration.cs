@@ -57,6 +57,12 @@ public sealed class CompensationPayoutConfiguration : IEntityTypeConfiguration<C
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Property(p => p.DiscardedAt);
+        builder.Property(p => p.DiscardedBy).HasMaxLength(450);
+        // Long enough for a real explanation: this is the sentence an auditor reads to understand why
+        // a payout worth thousands stopped being owed.
+        builder.Property(p => p.DiscardReason).HasMaxLength(2000);
+
         builder.HasIndex(p => new { p.TenantId, p.PayeeId });
 
         // Serves the cash-flow reporting predicate (tenant + Status == Paid + PaidAt in range) used by

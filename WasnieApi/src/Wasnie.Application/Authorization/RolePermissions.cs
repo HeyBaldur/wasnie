@@ -20,11 +20,14 @@ public static class RolePermissions
             Permission.CreditsRead, Permission.CreditsExport, Permission.CreditsRecalculate,
             Permission.PayoutsRead, Permission.PayoutsCalculate, Permission.PayoutsApprove,
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
-            Permission.PayoutsDeleteDraft,
+            Permission.PayoutsDeleteDraft, Permission.PayoutsDiscard,
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
             Permission.LedgerCloseAccount,
+            // KAN-19. Deliberately the same pair as Ledger.Adjust — see Permission.AuditRead.
+            Permission.AuditRead,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
-            Permission.ImportsExecute, Permission.ReportsViewAll, Permission.SubscriptionManage,
+            Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
+            Permission.SubscriptionManage,
             Permission.SettingsUpdate, Permission.IntegrationsManage,
         };
 
@@ -44,11 +47,13 @@ public static class RolePermissions
             Permission.CreditsRead, Permission.CreditsExport, Permission.CreditsRecalculate,
             Permission.PayoutsRead, Permission.PayoutsCalculate, Permission.PayoutsApprove,
             Permission.PayoutsMarkPaid, Permission.PayoutsReopen, Permission.PayoutsExport,
-            Permission.PayoutsDeleteDraft,
+            Permission.PayoutsDeleteDraft, Permission.PayoutsDiscard,
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
             Permission.LedgerCloseAccount,
+            // KAN-19. Deliberately the same pair as Ledger.Adjust — see Permission.AuditRead.
+            Permission.AuditRead,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
-            Permission.ImportsExecute, Permission.ReportsViewAll,
+            Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
         };
 
     private static readonly IReadOnlySet<string> ManagerPermissions =

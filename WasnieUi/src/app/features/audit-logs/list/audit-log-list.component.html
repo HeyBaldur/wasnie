@@ -1,0 +1,260 @@
+<app-shell [refreshOnEnter]="store">
+  <ws-page-layout
+    icon="shield"
+    [title]="'AUDIT.TITLE' | translate"
+    [subtitle]="'AUDIT.SUBTITLE' | translate"
+  >
+
+    <!-- ── Filters ────────────────────────────────────────────────────────────── -->
+    <ws-card variant="raised" padding="sm" class="audit__filter">
+      <div class="audit__filter-header" (click)="filterOpen.set(!filterOpen())">
+        <span class="audit__filter-title">
+          <app-icon name="filter" [size]="14" />
+          {{ 'AUDIT.FILTER.TITLE' | translate }}
+        </span>
+        @if (store.activeFilterCount() > 0) {
+          <ws-badge variant="brand" size="sm">{{ store.activeFilterCount() }}</ws-badge>
+        }
+        <span class="audit__filter-spacer"></span>
+        @if (store.hasActiveFilters()) {
+          <ws-button variant="ghost" size="sm" (click)="$event.stopPropagation(); clearFilters()">
+            {{ 'AUDIT.FILTER.CLEAR' | translate }}
+          </ws-button>
+        }
+        <app-icon [name]="filterOpen() ? 'chevron-up' : 'chevron-down'" [size]="14" />
+      </div>
+
+      @if (filterOpen()) {
+        <form [formGroup]="form" class="audit__filter-body">
+          <div class="audit__filter-row">
+            <!-- ★★ SEARCHABLE, BECAUSE THE LIST IS THE WHOLE VOCABULARY OF THE LOG. The options are
+                 served from the log itself, so this dropdown holds as many entries as the tenant has
+                 distinct actions — 68 in the reference tenant, against a ceiling of 97. Scrolling
+                 that to find "Plan archived" is a worse experience than the code it replaced.
+                 ★ ws-select's own filter, NOT a second input beside it. It matches against the
+                 TRANSLATED label and normalises diacritics, so a Spanish reader types "comision" and
+                 reaches "Comisión revertida…" — filtering on the raw code would only work in English
+                 and only for somebody who knows the codes exist. Same switch the payee and rule
+                 pickers already use. -->
+            <div class="audit__filter-field">
+              <ws-select
+                formControlName="action"
+                [options]="actionOptions()"
+                [searchable]="true"
+                [label]="'AUDIT.FILTER.ACTION' | translate"
+                [placeholder]="'AUDIT.FILTER.ACTION_PLACEHOLDER' | translate"
+              />
+            </div>
+            <!-- ★ THE ACTOR LIST GROWS WITH THE TENANT'S HEADCOUNT, so it gets the same treatment.
+                 Emails are not translation keys; `translate` returns them unchanged, and the filter
+                 matches them as typed. -->
+            <div class="audit__filter-field">
+              <ws-select
+                formControlName="actor"
+                [options]="actorOptions()"
+                [searchable]="true"
+                [label]="'AUDIT.FILTER.ACTOR' | translate"
+                [placeholder]="'AUDIT.FILTER.ACTOR_PLACEHOLDER' | translate"
+              />
+            </div>
+            <div class="audit__filter-field">
+              <ws-date-picker
+                formControlName="from"
+                [label]="'AUDIT.FILTER.FROM' | translate"
+              />
+            </div>
+            <div class="audit__filter-field">
+              <ws-date-picker
+                formControlName="to"
+                [label]="'AUDIT.FILTER.TO' | translate"
+              />
+            </div>
+          </div>
+        </form>
+      }
+    </ws-card>
+
+    <!-- ── The trail ──────────────────────────────────────────────────────────── -->
+    @if (store.error()) {
+      <ws-empty-state icon="alert-triangle" [titleKey]="store.error()!" />
+    } @else {
+      <ws-table class="audit__table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{{ 'AUDIT.COL_WHEN' | translate }}</th>
+              <th scope="col">{{ 'AUDIT.COL_ACTOR' | translate }}</th>
+              <th scope="col">{{ 'AUDIT.COL_ACTION' | translate }}</th>
+              <th scope="col">{{ 'AUDIT.COL_RESOURCE' | translate }}</th>
+              <th scope="col" class="audit__col-actions">{{ 'AUDIT.COL_DETAIL' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of store.rows(); track row.id) {
+              <tr>
+                <!-- ★ THE CLOCK TIME IS PART OF THE FACT HERE. A bulk import writes many rows in
+                     the same second; with a date alone they are indistinguishable and the order the
+                     table is sorted by becomes invisible. -->
+                <td class="audit__when">{{ row.timestampUtc | dateFormat: 'medium' : 'short' }}</td>
+
+                <!-- ★ "SYSTEM" IS SPELLED OUT, NEVER LEFT BLANK. A job refreshing a token wrote
+                     these rows with no actor; an empty cell reads as missing data rather than as
+                     the fact it is. -->
+                <td class="audit__actor">
+                  @if (isSystemActor(row.actorEmail)) {
+                    <span class="audit__system">{{ 'AUDIT.ACTOR_SYSTEM' | translate }}</span>
+                  } @else {
+                    <span [title]="row.actorEmail">{{ row.actorEmail }}</span>
+                  }
+                </td>
+
+                <!-- ★ WHITELISTED KEY, NEVER THE RAW CODE (§C2). An action this build cannot name
+                     reads as the generic phrase rather than leaking `PLAN_RULE_STOPPED` at a user. -->
+                <td>{{ actionKeyFor(row.action) | translate }}</td>
+
+                <!-- ★★ A LINK ONLY WHERE THERE IS SOMEWHERE TO GO. Auth, Subscription, Integration
+                     and the rest have no per-entity screen, so they render as text — never as a
+                     link that lands on a not-found. Same rule KAN-49 settled for the Resolve
+                     column. Links open in a new tab: this is a trail somebody is reading through,
+                     and following one should not cost them their filtered place in it. -->
+                <td class="audit__resource">
+                  @if (linkFor(row); as commands) {
+                    <a class="audit__link"
+                       [routerLink]="commands"
+                       [title]="resourceLabel(row)"
+                       target="_blank"
+                       rel="noopener">{{ resourceLabel(row) }}</a>
+                  } @else {
+                    <span [title]="resourceLabel(row)">{{ resourceLabel(row) }}</span>
+                  }
+                  <span class="audit__resource-type">{{ row.resourceType }}</span>
+                </td>
+
+                <!-- ★ NO BUTTON WHERE THERE IS NO EVIDENCE. Most rows store no before/after and no
+                     metadata; offering the drawer on all of them would teach the reader that it is
+                     usually empty, and they would stop opening the ones that matter. -->
+                <td class="audit__col-actions">
+                  @if (row.hasDetail) {
+                    <ws-button variant="ghost" size="sm" (click)="openDetail(row)">
+                      {{ 'AUDIT.VIEW_DETAIL' | translate }}
+                    </ws-button>
+                  } @else {
+                    <span class="audit__none">—</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <ws-table-empty>
+                <ws-empty-state
+                  icon="shield"
+                  titleKey="AUDIT.EMPTY_TITLE"
+                  descKey="AUDIT.EMPTY_DESC"
+                />
+              </ws-table-empty>
+            }
+          </tbody>
+        </table>
+      </ws-table>
+
+      <ws-pagination
+        [currentPage]="store.filter().page"
+        [totalPages]="store.totalPages()"
+        [totalCount]="store.total()"
+        [pageSize]="store.filter().pageSize"
+        (pageChange)="goToPage($event)"
+        (pageSizeChange)="goToPageSize($event)"
+      />
+    }
+
+  </ws-page-layout>
+</app-shell>
+
+<!-- ★★ THE PAYLOADS ARE SHOWN VERBATIM, NOT PRETTIFIED INTO A TABLE OF FIELDS. The log holds
+     whatever each writer serialised, and those shapes differ per action and have changed over time;
+     rendering them through a model would mean deciding what to do with the rows that no longer fit
+     it, and the honest answer for evidence is "exactly what was recorded".
+     ★ THE @if DESTROYS THE MODAL WITH ITS CONTENT, so the next row cannot open onto the previous
+     row's JSON while its request is still in flight. -->
+@if (store.detail() || store.detailLoading() || store.detailError()) {
+  <ws-modal
+    [isOpen]="true"
+    size="lg"
+    [title]="'AUDIT.DETAIL_TITLE' | translate"
+    (closed)="closeDetail()"
+  >
+    @if (store.detailLoading()) {
+      <p class="audit__detail-loading">{{ 'COMMON.LOADING' | translate }}</p>
+    } @else if (store.detailError()) {
+      <ws-empty-state icon="alert-triangle" [titleKey]="store.detailError()!" />
+    } @else if (store.detail(); as d) {
+      <div class="audit__detail">
+        <p class="audit__detail-row">
+          <span class="audit__detail-label">{{ 'AUDIT.COL_ACTION' | translate }}</span>
+          <span class="audit__detail-value">{{ actionKeyFor(d.action) | translate }}</span>
+        </p>
+        <p class="audit__detail-row">
+          <span class="audit__detail-label">{{ 'AUDIT.COL_WHEN' | translate }}</span>
+          <span class="audit__detail-value">{{ d.timestampUtc | dateFormat: 'long' : 'medium' }}</span>
+        </p>
+        <p class="audit__detail-row">
+          <span class="audit__detail-label">{{ 'AUDIT.COL_ACTOR' | translate }}</span>
+          <span class="audit__detail-value">
+            @if (isSystemActor(d.actorEmail)) {
+              {{ 'AUDIT.ACTOR_SYSTEM' | translate }}
+            } @else {
+              {{ d.actorEmail }}
+            }
+          </span>
+        </p>
+        <p class="audit__detail-row">
+          <span class="audit__detail-label">{{ 'AUDIT.COL_RESOURCE' | translate }}</span>
+          <span class="audit__detail-value">{{ d.resourceType }} · {{ d.resourceDisplayName || d.resourceId }}</span>
+        </p>
+
+        @if (d.ipAddress) {
+          <p class="audit__detail-row">
+            <span class="audit__detail-label">{{ 'AUDIT.IP_ADDRESS' | translate }}</span>
+            <span class="audit__detail-value">{{ d.ipAddress }}</span>
+          </p>
+        }
+        @if (d.correlationId) {
+          <p class="audit__detail-row">
+            <span class="audit__detail-label">{{ 'AUDIT.CORRELATION_ID' | translate }}</span>
+            <span class="audit__detail-value audit__detail-value--mono">{{ d.correlationId }}</span>
+          </p>
+        }
+        @if (d.userAgent) {
+          <p class="audit__detail-row">
+            <span class="audit__detail-label">{{ 'AUDIT.USER_AGENT' | translate }}</span>
+            <span class="audit__detail-value audit__detail-value--wrap">{{ d.userAgent }}</span>
+          </p>
+        }
+
+        @if (d.beforeJson) {
+          <div class="audit__payload">
+            <p class="audit__payload-title">{{ 'AUDIT.BEFORE' | translate }}</p>
+            <pre class="audit__payload-body">{{ d.beforeJson }}</pre>
+          </div>
+        }
+        @if (d.afterJson) {
+          <div class="audit__payload">
+            <p class="audit__payload-title">{{ 'AUDIT.AFTER' | translate }}</p>
+            <pre class="audit__payload-body">{{ d.afterJson }}</pre>
+          </div>
+        }
+        @if (d.metadata) {
+          <div class="audit__payload">
+            <p class="audit__payload-title">{{ 'AUDIT.METADATA' | translate }}</p>
+            <pre class="audit__payload-body">{{ d.metadata }}</pre>
+          </div>
+        }
+      </div>
+    }
+
+    <div slot="footer" class="audit__detail-actions">
+      <ws-button variant="secondary" (click)="closeDetail()">
+        {{ 'COMMON.CLOSE' | translate }}
+      </ws-button>
+    </div>
+  </ws-modal>
+}

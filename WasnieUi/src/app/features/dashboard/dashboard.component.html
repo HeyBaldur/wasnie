@@ -328,9 +328,31 @@
           <h3 class="stat-card__title">{{ 'DASHBOARD.ATTENTION_TITLE' | translate }}</h3>
           <p class="pending-plan-card__sub">{{ 'DASHBOARD.ATTENTION_DESC' | translate }}</p>
         </div>
-        @if (!store.loading() && hasAttentionItems()) {
-          <ws-badge variant="warning" size="sm">{{ attentionBadgeTotal() }}</ws-badge>
-        }
+        <!--
+          ★ THE COUNT AND THE WAY OUT, TOGETHER. The badge says how many transactions need attention;
+          without a link beside it the reader is told there is a problem and left to find the screen
+          that resolves it. Same pairing as the activity feed's "view all".
+
+          ★ RBAC HIDES IT (§5.8). /reconciliation is behind `Reports.ViewAll`, so a reader without it
+          would land on the guard — offering the link would be promising a screen they cannot open.
+        -->
+        <div class="attention-hd__actions">
+          @if (!store.loading() && hasAttentionItems()) {
+            <ws-badge variant="warning" size="sm">{{ attentionBadgeTotal() }}</ws-badge>
+          }
+          @if ('Reports.ViewAll' | hasPermission) {
+            <!-- ★ `external-link` IS THE ICON THAT MATCHES THE BEHAVIOUR, and the registry says so in
+                 as many words: it "promises a new browser tab". This one opens one, so it is the
+                 honest glyph rather than an arrow that would suggest navigating in place. -->
+            <a class="attention-hd__link"
+               routerLink="/reconciliation"
+               target="_blank"
+               rel="noopener noreferrer">
+              <app-icon name="external-link" [size]="14" />
+              {{ 'DASHBOARD.ATTENTION_RECONCILE' | translate }}
+            </a>
+          }
+        </div>
       </div>
 
       @if (store.loading()) {
@@ -718,6 +740,15 @@
               <app-icon name="activity" [size]="14" />
               {{ 'DASHBOARD.ACTIVITY_FEED' | translate }}
             </span>
+            <!-- ★ THE WIDGET IS THE TEN MOST RECENT ROWS, NOT A SELECTION, and it never was — the
+                 handler has always taken the top of the whole log. What it lacked was a way OUT of
+                 those ten. RBAC hides the link (§5.8): a reader without Audit.Read would land on the
+                 guard, so the honest thing is not to offer it. -->
+            @if ('Audit.Read' | hasPermission) {
+              <a class="feed__view-all" routerLink="/audit-logs">
+                {{ 'DASHBOARD.ACTIVITY_VIEW_ALL' | translate }}
+              </a>
+            }
           </div>
 
           @if (store.activityFeed().length === 0 && !store.loading()) {
@@ -749,9 +780,20 @@
                         </span>
                         <span class="feed__time">{{ relativeTime(item.timestampUtc) }}</span>
                       </div>
+                      <!-- ★★ A WHITELISTED KEY, NOT PROSE BUILT IN THE BROWSER (§C1/§C2). This line
+                           used to read `formatActivityAction(item.action)`, which turned
+                           `PLAN_CLAWBACK_POLICY_CHANGED` into "plan clawback policy" by replacing
+                           underscores and keeping the first three words — so the VERB, which is the
+                           entire meaning, was what got cut, and it was English in every language.
+                           ★ THE RESOURCE LINKS WHERE THERE IS SOMEWHERE TO GO. A type with no
+                           per-entity screen stays plain text rather than becoming a dead link. -->
                       <div class="feed__desc">
-                        {{ formatActivityAction(item.action) }}
-                        @if (shortResource(item.resourceDisplayName); as res) {
+                        {{ activityActionKey(item.action) | translate }}
+                        @if (activityLink(item); as commands) {
+                          <a class="feed__resource feed__resource--link"
+                             [routerLink]="commands"
+                             [title]="item.resourceDisplayName">{{ activityResource(item) }}</a>
+                        } @else if (activityResource(item); as res) {
                           <span class="feed__resource">{{ res }}</span>
                         }
                       </div>

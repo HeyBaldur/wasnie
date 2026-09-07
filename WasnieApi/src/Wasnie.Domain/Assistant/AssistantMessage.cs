@@ -87,8 +87,12 @@ public sealed class AssistantMessage : Entity
     public AssistantMessageStatus Status { get; private set; } = AssistantMessageStatus.Complete;
 
     /// <summary>
-    /// Reserved for structure that later pieces attach to a turn (RAG references, screen context,
-    /// pre-fill JSON). ALWAYS null today. See the type-level note above for why it exists already.
+    /// Structure attached to a turn, as a namespaced JSON object.
+    ///
+    /// ★ NO LONGER "ALWAYS null", AND THE NAMESPACING IS WHY THAT SCALED. Two features live in here
+    /// now, each under its own key: the identifiers a turn's lookup resolved
+    /// (<c>resolvedEntities</c>), and the clarify form the assistant offered (<c>clarify</c>). They
+    /// coexist in one object rather than one overwriting the other — see AssistantClarify.Merge.
     /// </summary>
     public string? Payload { get; private set; }
 
@@ -99,6 +103,27 @@ public sealed class AssistantMessage : Entity
     public int Sequence { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>
+    /// Replaces the structure attached to this turn.
+    ///
+    /// ★★ THE ONE MUTABLE THING ON THIS ROW, AND THE EXCEPTION IS ARGUED RATHER THAN ASSUMED.
+    /// <see cref="Status"/> deliberately has no setter, and <see cref="Content"/> none either: what the
+    /// assistant SAID and how the turn ENDED are historical facts, and a product whose ledger is
+    /// append-only must not let either be rewritten.
+    ///
+    /// A clarify form is neither. It is an interactive control that the assistant offered and the
+    /// PERSON then acted on — they chose an option, or they closed it — and that action happens after
+    /// the row exists, by definition. Recording it as a new turn would put an empty assistant bubble in
+    /// the thread every time somebody dismissed a panel, and reconstructing "is this form still open?"
+    /// would mean walking the whole conversation for supersessions of a UI control. The state belongs
+    /// to the control, and the control belongs to this row.
+    ///
+    /// ★ IT CANNOT REWRITE HISTORY BECAUSE IT CANNOT REACH IT. Content and Status are untouched here,
+    /// and the only caller narrows the change to the clarify key while carrying every other key
+    /// through. What the assistant said stays exactly as it was said.
+    /// </summary>
+    public void ReplacePayload(string? payload) => Payload = payload;
 
     private AssistantMessage() { }
 

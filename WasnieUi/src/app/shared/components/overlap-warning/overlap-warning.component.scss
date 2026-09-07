@@ -35,15 +35,19 @@
     &::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
   }
 
+  // ★ THE SAME DENSITY AS THE TABLES AROUND IT: 12px rows on `--space-1`, an 11px header. This
+  // component is embedded in the payout statement and the pay-run detail, and it used to sit a size
+  // and a step of padding above whatever it was embedded in — a panel that looked bolted on rather
+  // than part of the page.
   &__table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--font-size-13);
+    font-size: var(--font-size-12);
 
     th {
       position: sticky;
       top: 0;
-      padding: var(--space-2) var(--space-3);
+      padding: var(--space-1) var(--space-3);
       background: var(--color-bg-surface-sunken);
       font-size: var(--font-size-11);
       font-weight: 600;
@@ -60,7 +64,7 @@
     cursor: pointer;
 
     td {
-      padding: var(--space-2) var(--space-3);
+      padding: var(--space-1) var(--space-3);
       border-bottom: 1px solid var(--color-border-subtle);
       color: var(--color-text-primary);
       vertical-align: middle;

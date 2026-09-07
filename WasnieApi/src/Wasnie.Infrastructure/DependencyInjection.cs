@@ -205,6 +205,10 @@ public static class DependencyInjection
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPayeeLedgerSummaryTool>();
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.GetPayeePlansTool>();
         services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.SimulatePlanRulesTool>();
+        // ★ NOT A LOOKUP, AND DELIBERATELY LAST. It reads no tenant data at all — it asks the user
+        // which of the lookups above to run (KAN-58). It is therefore absent from
+        // AssistantPrompt.CapabilityInventory, which lists what can be LOOKED UP.
+        services.AddScoped<IAssistantTool, Wasnie.Application.Assistant.Tools.AskUserToChooseTool>();
         services.AddScoped<Wasnie.Application.Assistant.Common.AssistantToolRunner>();
         services.AddScoped<ITokenEncryptionService, AesTokenEncryptionService>();
         services.AddScoped<IHubSpotOAuthClient, HubSpotOAuthClient>();

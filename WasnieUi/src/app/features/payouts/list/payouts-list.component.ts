@@ -489,6 +489,10 @@ export class PayoutsListComponent implements OnInit {
       case 'Approved': return 'brand';
       case 'Paid': return 'success';
       case 'Disputed': return 'danger';
+      // ★ NEUTRAL, NOT DANGER. A discarded payout is closed paperwork, not a problem: the money it
+      // described was already paid by another payout. Colouring it red would put an alarm on a queue
+      // that is finally clean.
+      case 'Discarded': return 'neutral';
     }
   }
 

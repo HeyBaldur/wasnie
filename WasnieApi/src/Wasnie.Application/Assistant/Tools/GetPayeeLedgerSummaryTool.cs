@@ -126,7 +126,9 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         {
             // No lookup: the guard inside the query is the check, and a name lookup here would only
             // reintroduce the failure the id exists to avoid.
-            return await SummariseAsync(id, PayeeMatch.ResolvedById, period, cancellationToken);
+            return await SummariseAsync(
+                id, PayeeMatch.ResolvedById, requested: null, employmentStatus: null, period,
+                cancellationToken);
         }
 
         // ── Name → id ────────────────────────────────────────────────────────
@@ -156,7 +158,7 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         if (resolution.Match == PayeeMatch.Ambiguous)
         {
             LogCause(AssistantToolCause.AmbiguousPayee);
-            return PayeeAmbiguity.Payload(payeeName!, resolution.Candidates);
+            return PayeeAmbiguity.Payload(payeeName!, resolution.Candidates, ToolName);
         }
 
         if (resolution.Payee is null)
@@ -166,15 +168,34 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         }
 
         return await SummariseAsync(
-            resolution.Payee.Id, resolution.Match, period, cancellationToken);
+            resolution.Payee.Id, resolution.Match, payeeName, resolution.Payee.StatusLabel, period,
+            cancellationToken);
     }
 
     /// <summary>
     /// The half that is identical whichever way the payee was identified: ask the domain, shape the
     /// answer. Both callers reach the SAME guard and the SAME refusal.
     /// </summary>
+    /// <param name="requested">
+    /// The term the USER gave — a code, part of a name — kept so the payload can state that it belongs
+    /// to the payee it resolved to. See PayeeMatchDisclosure: without that sentence the model reads a
+    /// payload naming somebody it did not type and answers that the record was not found.
+    /// </param>
+    /// <param name="employmentStatus">
+    /// The PERSON'S employment status, when this path resolved a payee record that carries it.
+    ///
+    /// ★★ NOT THE STATE OF ANY ROW. The sibling tool answered "she is active" about a TERMINATED payee
+    /// because the only status-shaped field it carried belonged to an assignment. A balance payload has
+    /// no such field to be confused with, but the question ("is this person still with us?") follows a
+    /// balance just as often, and the two tools must not answer it differently.
+    ///
+    /// ★ NULL ON THE ID PATH, DELIBERATELY. That path resolves nothing on purpose — the guard inside the
+    /// query is the check — and fetching the payee here just to label them would undo that. An ABSENT
+    /// field is honest; rule 19c below is what stops it being read as "active".
+    /// </param>
     private async Task<string> SummariseAsync(
-        Guid payeeId, PayeeMatch match, string period, CancellationToken cancellationToken)
+        Guid payeeId, PayeeMatch match, string? requested, string? employmentStatus, string period,
+        CancellationToken cancellationToken)
     {
 
         // ── The balance ──────────────────────────────────────────────────────
@@ -219,6 +240,13 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
             PayeeId: value.PayeeId,
             PayeeName: value.PayeeName,
             MatchedBy: match.ToString(),
+
+            // ★★ THE "THIS IS THEM" SENTENCE, next to the data rather than a thousand tokens up the
+            //    prompt — see PayeeMatchDisclosure for the three occasions rule 19a alone did not hold.
+            //    Null on an exact-name hit, where the question and the answer already agree.
+            RequestedIdentifier: string.IsNullOrWhiteSpace(requested) ? null : requested,
+            Disclosure: PayeeMatchDisclosure.For(match, requested, value.PayeeName),
+            PayeeEmploymentStatus: employmentStatus,
             Period: value.PeriodLabel,
             PeriodStart: value.PeriodStart?.ToString("yyyy-MM-dd"),
             PeriodEnd: value.PeriodEnd?.ToString("yyyy-MM-dd"),
@@ -257,14 +285,26 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
             // writes a placeholder, and the name it also sent is a perfectly good second chance. An id
             // that parses but belongs to nobody the caller may see is a different matter — that is the
             // guard's decision, not this method's.
-            Guid? id = root.TryGetProperty("payeeId", out var idValue)
-                       && Guid.TryParse(idValue.GetString(), out var parsed)
-                ? parsed
-                : null;
+            var rawId = root.TryGetProperty("payeeId", out var idValue) ? idValue.GetString() : null;
+
+            Guid? id = Guid.TryParse(rawId, out var parsed) ? parsed : null;
 
             var name = root.TryGetProperty("payeeName", out var nameValue)
                 ? nameValue.GetString()?.Trim()
                 : null;
+
+            // ★★ AN ID THAT IS NOT A GUID IS STILL AN IDENTIFIER — see PlanNameMatch.SalvageIdentifier.
+            //    Dropping it is what made the clarify form contradict itself: it offered "EPO9009", the
+            //    user picked it, the dispatcher sent it as payeeId because its own rule says to send the
+            //    id and NOT the name, and the tool refused with UnreadableArguments before the resolver
+            //    ran. The resolver matches employee codes; it simply never got the string.
+            //
+            // ★ THE NAME THE MODEL SENT WINS. This only fills a gap, so a turn carrying both a real name
+            //   and a junk id behaves exactly as it did before.
+            if (string.IsNullOrWhiteSpace(name) && id is null)
+            {
+                name = PlanNameMatch.SalvageIdentifier(rawId);
+            }
 
             // An unrecognised period degrades to all-time inside PeriodHelper, so nothing is validated
             // here — a model writing "Q3" must still get an answer, just a wider one.
@@ -298,6 +338,9 @@ public sealed class GetPayeeLedgerSummaryTool(ISender sender, ILogger<GetPayeeLe
         Guid PayeeId,
         string PayeeName,
         string MatchedBy,
+        string? RequestedIdentifier,
+        string? Disclosure,
+        string? PayeeEmploymentStatus,
         string Period,
         string? PeriodStart,
         string? PeriodEnd,

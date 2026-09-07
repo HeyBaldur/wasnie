@@ -943,6 +943,17 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("DiscardReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTimeOffset?>("DiscardedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DiscardedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<DateTimeOffset?>("PaidAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1269,6 +1280,61 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "PayeeId", "PlanId");
 
                     b.ToTable("Quotas", (string)null);
+                });
+
+            modelBuilder.Entity("Wasnie.Domain.Compensation.Reconciliation.ReconciliationClosure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ClosedByEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ClosedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("EntryKind")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("FactKey")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("FactOccurredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid?>("PayeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EntryKind", "EntityId", "Reason", "FactOccurredAt")
+                        .HasDatabaseName("IX_ReconciliationClosures_Tenant_Entry_Reason_Fact");
+
+                    b.ToTable("ReconciliationClosures", (string)null);
                 });
 
             modelBuilder.Entity("Wasnie.Domain.Compensation.Transactions.CompensationTransaction", b =>

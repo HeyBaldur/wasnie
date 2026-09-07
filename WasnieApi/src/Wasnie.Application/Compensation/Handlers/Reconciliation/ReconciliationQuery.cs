@@ -24,6 +24,42 @@ internal sealed record ReconciliationSeed
     public required int MoneyKind { get; init; }
     public DateOnly? PeriodDate { get; init; }
     public required DateTimeOffset OccurredAt { get; init; }
+
+    /// <summary>
+    /// The IDENTITY of the fact behind this seed, when it has one of its own.
+    ///
+    /// ★★ IT EXISTS BECAUSE A TIMESTAMP IS NOT AN IDENTITY, and reading one as the other cost this
+    /// feature its whole purpose for two reasons. A deal-lost alert is re-observed by the hourly
+    /// HubSpot sync, which calls Refresh() and moves DetectedAt forward on the SAME alert. The
+    /// closure rule "hide it while the fact is no newer than the one reviewed" then expired every
+    /// hour, and a row the user had closed came back — four closures were already invalidated this
+    /// way before anybody noticed.
+    ///
+    /// ★ NULL WHERE THE FACT HAS NO IDENTITY. A transaction that lacks a payee, or a plan whose rules
+    /// are all stopped, is not an event somebody raised: it is a condition the data is in. Those keep
+    /// comparing timestamps, which works for them precisely because nothing re-stamps them on a
+    /// schedule — and for the plan, an edit SHOULD ask for a fresh look.
+    /// </summary>
+    public Guid? FactKey { get; init; }
+
+    /// <summary>
+    /// The sale's reference, so the queue can be searched by it.
+    ///
+    /// ★★ IT IS THE TRANSACTION'S, NEVER THE ALERT'S SNAPSHOT. A deal-lost and a drift alert each
+    /// store the reference they saw when they were raised, and the ROW ON SCREEN does not use those:
+    /// <c>GetReconciliationHandler</c> reads the live transaction. Seeding from the alert would let
+    /// the filter match a value the screen never displays — a search that finds a row the reader
+    /// cannot see the search term in, which reads as a bug in the search (§A3).
+    ///
+    /// ★★ EVERY SEED OF ONE ENTITY THEREFORE CARRIES THE SAME VALUE, and that is what lets the
+    /// filter be applied to seeds directly rather than to entities the way the REASON filter has to
+    /// be. A two-reason entry cannot be half-matched: both of its seeds hold the same reference, so
+    /// either both survive the filter or neither does, and the row keeps both reasons.
+    ///
+    /// ★ NULL ON A PLAN. A plan is a CAUSE, not a sale: it has no reference, so a reference search
+    /// legitimately excludes plan rows rather than matching them on emptiness.
+    /// </summary>
+    public string? ReferenceNumber { get; init; }
 }
 
 /// <summary>
@@ -83,6 +119,10 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyBase,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = c.AllocatedAt,
+                // The credit IS the fact: a recalculation supersedes it and allocates a new one with
+                // a new id, which is a new fact and comes back.
+                FactKey = c.Id,
+                ReferenceNumber = t.ReferenceNumber,
             };
 
         // ── The three unprocessable-pending reasons, from the shared spec ────────────────────
@@ -122,6 +162,12 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyClawback,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = a.DetectedAt,
+                // ★ THE ALERT, NOT ITS DetectedAt. The sync refreshes this alert every hour without
+                // anything having changed; a genuinely new loss is a NEW alert with a new id.
+                FactKey = a.Id,
+                // ★ t, NOT a. The alert stores the reference it saw; the row on screen shows the
+                // transaction's. The filter must match what is displayed.
+                ReferenceNumber = t.ReferenceNumber,
             };
 
         // ── A deal that CHANGED in the CRM after its commission was calculated or paid ───────
@@ -146,6 +192,9 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyNone,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = a.DetectedAt,
+                // Same rule as deal-lost: the drift alert is the fact, its stamp is only its last sighting.
+                FactKey = a.Id,
+                ReferenceNumber = t.ReferenceNumber,
             };
 
         // ── An Active plan whose every rule is stopped ───────────────────────────────────────
@@ -167,6 +216,11 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyNone,
                 PeriodDate = null,
                 OccurredAt = p.UpdatedAt,
+                // A condition, not an event: no identity of its own. Editing the plan afterwards
+                // moves UpdatedAt and legitimately asks for a fresh look.
+                FactKey = null,
+                // A plan is a cause, not a sale. It has no reference and must not match one.
+                ReferenceNumber = null,
             };
 
         return refusedCredits
@@ -193,22 +247,71 @@ internal static class ReconciliationQuery
                 MoneyKind = MoneyBase,
                 PeriodDate = t.TransactionDate,
                 OccurredAt = t.IngestedAt,
+                // ★ EXPLICITLY NULL, NOT OMITTED. EF cannot translate a Concat whose sides assign
+                // different sets of properties — leaving this out took the whole queue down with
+                // "Unable to translate set operations…". Every seed states every field, which is why
+                // ReferenceNumber below is spelled out on the plan seed too.
+                FactKey = null,
+                ReferenceNumber = t.ReferenceNumber,
             });
     }
 
     /// <summary>
-    /// The filtered seeds.
+    /// The seeds a human has already reviewed and decided to leave as they stand (KAN-51).
+    ///
+    /// ★★ AN ANTI-JOIN IN SQL, NOT A FILTER IN MEMORY. It is applied to <see cref="Seeds"/> before
+    /// anything counts, groups or pages, so the cards and the table exclude exactly the same rows.
+    /// Excluding after the fact — in the handler, over a page — would make a total describe rows the
+    /// table does not show, which is the one promise this screen was built to keep.
+    ///
+    /// ★★ THE COMPARISON IS PER FACT, NOT PER ROW. A closure suppresses a seed only while the
+    /// anomaly is no NEWER than the one that was reviewed (<c>OccurredAt &lt;= FactOccurredAt</c>).
+    /// A fresh detection carries a later stamp, no closure covers it, and it returns as a new row —
+    /// the product decision "a later change is a new fact, not a revival", expressed as a predicate
+    /// rather than as a job that reopens things.
+    ///
+    /// ★ IT MATCHES ON THE REASON TOO. Closing a lost deal must not swallow a CRM drift detected on
+    /// the same transaction afterwards: those are two facts, and only the one that was judged is
+    /// hidden (§B1 — nothing disappears without someone deciding it should).
+    ///
+    /// ★ IT READS ReconciliationClosures, NEVER AuditLogs. The audit log is a record of what people
+    /// did; this exclusion is load-bearing evidence, and it comes from the table that exists to be
+    /// exactly that.
+    /// </summary>
+    internal static IQueryable<ReconciliationSeed> ExcludeClosed(
+        IApplicationDbContext db, IQueryable<ReconciliationSeed> seeds) =>
+        seeds.Where(s => !db.ReconciliationClosures.Any(c =>
+            c.EntryKind == s.Kind &&
+            c.EntityId == s.EntityId &&
+            c.Reason == s.Reason &&
+            (s.FactKey != null
+                // ★★ THE FACT HAS AN IDENTITY: compare identities, never stamps. The hourly CRM sync
+                // re-observes an open alert and moves its DetectedAt forward; comparing stamps read
+                // that as a new fact and expired the closure every hour. A genuinely new loss is a
+                // NEW alert with a new id, and that is what comes back.
+                ? c.FactKey == s.FactKey
+                // ★ NO IDENTITY — a condition rather than an event. Nothing re-stamps these on a
+                // schedule, so "no newer than what was reviewed" still means what it says: a plan
+                // edited after being closed asks for a fresh look, which is correct.
+                : s.OccurredAt <= c.FactOccurredAt)));
+
+    /// <summary>
+    /// The filtered seeds, minus the ones somebody has already reviewed and closed.
     ///
     /// ★★ THE REASON FILTER IS APPLIED TO THE ENTITY, NOT TO THE SEED, and that distinction is the
     /// whole "an entry with two reasons appears once, with BOTH" rule. Filtering seeds directly would
     /// return a row stripped of its other reason — the screen would then say a transaction failed for
     /// one thing when it failed for two. So the reason narrows WHICH entities qualify, and every seed
     /// of a qualifying entity comes back.
+    ///
+    /// ★★ THE CLOSURE EXCLUSION RUNS FIRST, BEFORE THE FILTERS. Everything downstream — the page, the
+    /// counts, the money cards, the export — goes through here, so a closed row cannot survive in one
+    /// surface and vanish from another. See <see cref="ExcludeClosed"/>.
     /// </summary>
     internal static IQueryable<ReconciliationSeed> Filtered(
         IApplicationDbContext db, ReconciliationFilter filter)
     {
-        var seeds = Seeds(db);
+        var seeds = ExcludeClosed(db, Seeds(db));
 
         if (filter.PayeeId.HasValue)
             seeds = seeds.Where(s => s.PayeeId == filter.PayeeId.Value);
@@ -218,6 +321,22 @@ internal static class ReconciliationQuery
 
         if (filter.To.HasValue)
             seeds = seeds.Where(s => s.PeriodDate != null && s.PeriodDate <= filter.To.Value);
+
+        // ★★ APPLIED TO THE SEED, UNLIKE THE REASON FILTER BELOW, and that is correct rather than
+        // inconsistent: every seed of one entity carries the SAME reference (see
+        // ReconciliationSeed.ReferenceNumber), so a two-reason entry cannot come back with one reason
+        // missing. The reason filter needs the entity round-trip precisely because its value DIFFERS
+        // between an entity's seeds.
+        //
+        // ★ Contains, AND IT IS CASE-INSENSITIVE BY THE DATABASE'S COLLATION, not by a ToLower() on
+        // the column — which would be a function on the left-hand side and would stop any index on
+        // ReferenceNumber from being used. Trimmed here so a pasted reference with trailing space
+        // still finds its row.
+        if (!string.IsNullOrWhiteSpace(filter.Reference))
+        {
+            var reference = filter.Reference.Trim();
+            seeds = seeds.Where(s => s.ReferenceNumber != null && s.ReferenceNumber.Contains(reference));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.Reason))
         {

@@ -39,6 +39,9 @@ public sealed class RecalculateCreditsHandlerTests(CreditAllocationServiceFixtur
     private sealed class AlwaysAuthorized : Wasnie.Application.Common.Interfaces.IAuthorizationService
     {
         public Task RequireAsync(string permission, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        // Added with IAuthorizationService.HasAsync: this double allows everything, so the
+        // question answers the same way the enforcement does.
+        public Task<bool> HasAsync(string permission, CancellationToken ct = default) => Task.FromResult(true);
     }
 
     private sealed class TestCurrentUser : Wasnie.Application.Common.Interfaces.ICurrentUserService

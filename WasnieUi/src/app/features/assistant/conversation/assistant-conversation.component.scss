@@ -62,8 +62,16 @@
  * never had the problem, is left alone rather than given a cap that would do nothing.
  *
  * `ch` rather than px: the limit is how many CHARACTERS fit on a line, so it should follow the font.
+ *
+ * ★★ THE CLARIFY PANEL IS IN THIS LIST BECAUSE IT IS THE COMPOSER'S SIBLING, NOT ITS CHILD. It sits
+ *    directly inside the same footer, so `> .assistant-composer` never reached it and it stretched to
+ *    the full width of the pane while the box below it stayed capped — the panel offering the choices
+ *    was visibly wider than the field it replaces. Adding it to the SAME declaration rather than
+ *    giving it a cap of its own is the point: two widths that must agree should be one number, or
+ *    they drift the next time this one is tuned.
  */
 :host(.assistant-conversation--wide) .assistant-conversation__stream,
+:host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-clarify,
 :host(.assistant-conversation--wide) .assistant-conversation__composer > .assistant-composer {
   max-width: 76ch;
   margin-inline: auto;
@@ -992,4 +1000,192 @@
     border-color: var(--color-warning);
     color: var(--color-text-inverse);
   }
+}
+
+// ── Clarify panel (KAN-58) ───────────────────────────────────────────────────
+//
+// ★★ THIS BLOCK IS LAYOUT ONLY. The surface, the border, the radius and the padding come from
+//    `ws-card variant="raised" padding="sm"`, and every option is a `ws-button`. Anything here that
+//    re-declared a colour or a radius the primitives already give would be a second definition to
+//    keep in step — which is how the panel came to look hand-rolled in the first place.
+//
+// ★★ NO box-shadow. `.ws-card--raised` sets `box-shadow: none` deliberately, and the design comment's
+//    `--shadow-card` DOES NOT EXIST in styles.scss (the real scale is --shadow-sm/md/lg/xl). Writing
+//    it would have been a silently dropped declaration, which is the same no-op trap as
+//    `--font-size-sm`. Overriding with --shadow-md instead would put this one card at a depth no
+//    other raised card in the app uses. Flagged rather than guessed.
+//
+// ★ TOKENS ONLY (§5.5), each checked against styles.scss rather than copied from a neighbour.
+
+.assistant-clarify {
+  display: block;
+  margin-bottom: var(--space-3);
+}
+
+// ★ THE HEADER STRIP OF A DIVIDED LIST. Sunken against the card's raised surface so it reads as the
+//   caption of the rows below rather than as a first row, and separated by the same hairline the rows
+//   use — one divider colour for the whole panel, or the header looks detached from what it labels.
+//   The right inset is smaller than the left because the close button carries its own 28px hit area.
+.assistant-clarify__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  background: var(--color-bg-surface-sunken);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+// The heading of a panel, one step below the body text and in the secondary ink: it names the panel
+// without competing with the actions, which are the thing to read.
+.assistant-clarify__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+// ★ WsModal's close button, to the pixel: 28×28, radius-sm, tertiary ink, sunken on hover. The hit
+//   area is the square, not the glyph — a 14px target is a miss waiting to happen on a touchpad.
+.assistant-clarify__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+
+  &:hover {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+// ★★ A LIST OF ROWS, NOT A ROW OF PILLS — and that is the whole correction. Laid out as a wrapping
+//    flex line, each option was only as wide as its own label, so three options of different lengths
+//    made three differently-sized pills that read as tags rather than as a set of choices. Choices
+//    the user is meant to COMPARE have to share a left edge and a width: the eye scans one column of
+//    labels instead of measuring shapes. They now span the panel, which is the composer's width, so
+//    the options and the box the user would otherwise type into are visibly the same control surface.
+//
+// ★ THE COUNTER IS WHY THIS NEEDED NO MARKUP CHANGE. The numbers are generated, so the template
+//   still emits nothing but the options themselves and there is no index to keep in step with the
+//   array. `counter-reset` here, `counter-increment` per option, and the value is read further down
+//   the tree — counters inherit, so the badge can live inside the button's own content wrapper.
+.assistant-clarify__options {
+  display: flex;
+  flex-direction: column;
+  counter-reset: clarify-option;
+}
+
+// The host has to be a block for the button inside it to take the full width, and it is also where
+// the counter advances: one increment per option, whatever the button renders.
+//
+// ★ SEPARATORS BETWEEN THE ROWS, NOT A GAP — and they go on the HOST rather than on the button. A gap
+//   would leave the card's background showing through in stripes, which is what makes a set of
+//   buttons rather than a list. `+` puts a line only BETWEEN rows, so the first one meets the header's
+//   own border instead of doubling it into a two-pixel rule.
+.assistant-clarify__options ws-button {
+  display: block;
+  counter-increment: clarify-option;
+
+  & + ws-button {
+    border-top: 1px solid var(--color-border-subtle);
+  }
+}
+
+// ★★ THE LABELS MUST BE ALLOWED TO WRAP, AND THAT IS THE THREE-LANGUAGE REQUIREMENT.
+//    `.ws-btn` sets `white-space: nowrap`, which is right for "Save" and wrong for "Ver las
+//    asignaciones de un beneficiario" — the Spanish and Polish labels are roughly twice the English,
+//    and inside a 420px drawer a nowrap button would run straight past the panel's edge. Scoped to
+//    this panel so no other button changes.
+//
+// ★ THE ROW IS THE FULL WIDTH OF THE PANEL AND HAS NO BOX OF ITS OWN. Border and radius are dropped
+//   rather than made transparent: the separators above are the panel's structure now, and a rounded
+//   outline inside a divided list reads as a button that happens to be in a table. The row's own
+//   inset matches the header's, so labels, caption and hint all start on one vertical line.
+.assistant-clarify__options ::ng-deep .ws-btn {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 40px;
+  padding: var(--space-3) var(--space-4);
+  justify-content: flex-start;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  white-space: normal;
+  text-align: left;
+}
+
+// The whole row lights up, which is what makes it feel like a target rather than a line of text.
+.assistant-clarify__options ::ng-deep .ws-btn:hover:not(:disabled) {
+  background: var(--color-bg-surface-sunken);
+}
+
+.assistant-clarify__options ::ng-deep .ws-btn__content {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+// ★ THE INDEX, GENERATED. Tertiary ink and a fixed width so the labels of every row start on the
+//   same vertical line however many options there are — a number that pushed its own label sideways
+//   would undo the shared left edge the stacking exists to create.
+.assistant-clarify__options ::ng-deep .ws-btn__content::before {
+  content: counter(clarify-option);
+  flex: 0 0 auto;
+  width: 16px;
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+  text-align: left;
+}
+
+.assistant-clarify__label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+// The value the user already gave: subordinate to the action, so the row reads as "do this" with
+// the subject attached rather than as two competing pieces of text.
+.assistant-clarify__argument {
+  font-size: var(--font-size-12);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+// ★ THE CLOSING STRIP, MIRRORING THE HEADER — same sunken ground, same hairline, same inset. That
+//   symmetry is what closes the list: rows in the middle, caption above, note below. It is still a
+//   HINT and not a fourth option, so it keeps the tertiary ink and the smallest step and never gains
+//   a hover state — nothing here is clickable.
+.assistant-clarify__hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-surface-sunken);
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
 }

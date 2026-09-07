@@ -43,6 +43,9 @@ public sealed class PayRunExportTests(PayoutEngineFixture fixture)
     {
         public static readonly AlwaysAllowAuth Instance = new();
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;
+        // Added with IAuthorizationService.HasAsync: this double allows everything, so the
+        // question answers the same way the enforcement does.
+        public Task<bool> HasAsync(string permission, CancellationToken ct = default) => Task.FromResult(true);
     }
 
     private sealed class AlwaysForbidAuth : IAuthorizationService
@@ -50,6 +53,9 @@ public sealed class PayRunExportTests(PayoutEngineFixture fixture)
         public static readonly AlwaysForbidAuth Instance = new();
         public Task RequireAsync(string permission, CancellationToken ct = default)
             => throw new ForbiddenException(permission);
+
+        // The question mirrors the enforcement: this double refuses everything.
+        public Task<bool> HasAsync(string permission, CancellationToken ct = default) => Task.FromResult(false);
     }
 
     private sealed class FixedUser : ICurrentUserService

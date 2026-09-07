@@ -4,6 +4,725 @@
 
 **Format:** Each session is a level-2 heading (`##`) with date and brief title. Newest entries at the TOP of the log section. Update PROJECT_STATUS.md when status changes materially.
 
+## 2026-09-04 (e) - KAN-54: badges de conteo en el sidebar
+
+**Rama:** KAN-38 · Ticket KAN-54 (Task, Medium, epica KAN-43) · **Sin commit.** Backend + frontend.
+
+**★★ EL TICKET SE CORRIGIO SOLO ENTRE LA PREGUNTA Y LA RESPUESTA.** La version original exigia un
+**stored procedure**. El Paso 0 encontro que eso chocaba con tres cosas: (1) obligaria a duplicar
+~690 lineas (los 9 seeds de `ReconciliationQuery` + 4 specs) en T-SQL, una **tercera** definicion de
+«impagable» — y `AmbiguousAttributionSpec.Queryable` ya es la segunda de una regla del motor; (2) la
+cola de terminated **no es un conteo por tenant**: se filtra con `PayeeAccessGuard`, asi que un SP que
+reciba solo `TenantId` le daria a un Rep el numero de cuentas de sus companeros; (3) el propio ticket
+decia «reusar esa logica, no inventar otra». Se reporto, el usuario reescribio el ticket con esa
+correccion, y se construyo el endpoint que reusa.
+
+**Construido:** `GET /api/sidebar-badges` → `GetSidebarBadgesHandler`, que **no cuenta nada propio**:
+reconciliacion sale de `ReconciliationQuery.Filtered(...)` (la misma expresion que pagina el Centro) y
+terminated de **enviar la query existente por `ISender`**, con su guard puesto. Front: `SidebarBadgesStore`
++ badges en el sidebar.
+
+**★★ `null` NO ES `0`.** Un permiso ausente devuelve **null** y el sidebar no dibuja badge; un 0 es una
+medicion real («la cola esta limpia») y SI se dibuja. Un 0 en lugar de null le diria a alguien sin
+permiso que el tenant no tiene dinero impagable — una afirmacion sobre dinero que no le corresponde
+recibir. Y `HasAsync`, no `RequireAsync`: un permiso que falta quita **una parte** de la respuesta,
+nunca la respuesta entera.
+
+**★ `IAuthorizationService.HasAsync` es nuevo, y no audita a proposito.** Preguntar no es denegar;
+expresarlo con `RequireAsync` + catch convertiria el 403 en control de flujo y llenaria `AuditLogs` de
+`PERMISSION_DENIED` por permisos que nadie pidio realmente. Anadir el miembro rompio **27 dobles de
+test**, actualizados respetando la semantica de cada uno (los que permiten todo devuelven true, los que
+deniegan false, los que llevan lista consultan la lista).
+
+**★★ Y UN TEST QUE NACIO VERDE MUERTO, CAZADO POR LA MUTACION.** `Closing_a_row_lowers_the_badge` usaba
+una fila `NoPayee`, y **paso igual con el badge mutado para saltarse `ExcludeClosed`**. Motivo: la
+exclusion de cierres vive en **DOS capas** — dentro de `UnprocessablePendingSpec` para los motivos de
+transaccion pendiente (para que la tarjeta del Dashboard y el filtro de Transactions la hereden), y en
+`ReconciliationQuery.ExcludeClosed` para todo lo demas. Un test sobre `NoPayee` no toca la segunda. Se
+reescribio sobre **deal-lost**, que solo depende de `ExcludeClosed`, y entonces si se pone en rojo.
+
+**★ Antes de creer la mutacion, se comprobo que el binario se reconstruia** (rompiendo la compilacion a
+proposito): si no, «los tests siguen verdes» habria significado otra cosa.
+
+**Refresco:** el store carga al iniciar, refresca cada 5 minutos, y **se le avisa** tras cerrar una fila
+de reconciliacion y tras cerrar una cuenta terminada — nunca en cada navegacion. Un fallo de refresco
+**conserva los numeros anteriores**: un sidebar que se vacia ante un error parece trabajo desapareciendo.
+
+**Suites:** unit **1909 / 0** · front **1345 → 1356** (+11) · `ng build --configuration production`
+exit 0 · integracion **+5** en el fichero (30/30). Una corrida completa dio 90 rojos por
+**`NamedPipeClientStream` timeout** — saturacion de Docker, no codigo.
+
+**★★ TRES AJUSTES TRAS VERLO EN PANTALLA, y dos eran defectos reales.**
+
+**(1) Los badges van en ROJO.** Los hice del tono hover del sidebar razonando que «una cola con filas
+es normal, no un fallo». Decision de producto que no me tocaba: son conteos de dinero impagado y
+cuentas sin resolver, y estan para tirar del ojo. `--color-danger` sobre `--color-text-inverse`, y el
+punto del rail plegado tambien.
+
+**(2) El badge del grupo se iba al centro de la fila.** Causa exacta: `.sidebar__nav-chevron` YA lleva
+`margin-left: auto`, y yo le puse otro al badge — **con dos elementos reclamando el espacio libre,
+flexbox lo REPARTE entre ambos** y el numero aterriza a media fila, huerfano del control al que
+pertenece. Solo uno puede reclamarlo: el badge cede (`margin-left: 0`) y queda pegado al carret.
+
+**(5) EL MENU «⋮» DE LAS FILAS SE QUEDABA CLAVADO EN PANTALLA AL HACER SCROLL — en CUATRO listados.**
+Reportado en /quotas; el mismo codigo estaba duplicado tal cual en **quotas, payees, plans y
+assignments** (los bloques `toggleMenu` son identicos byte a byte en tres de ellos, y el cuarto solo
+cambia un comentario). El menu es `position: fixed`, o sea coordenadas de VIEWPORT, medidas una sola
+vez al abrir: en cuanto algo hace scroll quedan viejas y el menu se queda colgado en medio de la
+pantalla mientras su fila se va. Solo cerraba por `document:click`.
+
+Extraido a `shared/utils/row-menu.ts` (`RowMenuController`) y cableado en los cuatro. Las plantillas no
+se tocaron: los componentes siguen exponiendo `openMenuId` / `menuPosition` / `toggleMenu` / `closeMenu`,
+ahora delegando.
+
+**★★ El listener va en `window` en fase de CAPTURA, y las dos mitades importan.** Los eventos de scroll
+NO burbujean, y en esta app la pagina no scrollea en `window`: scrollea dentro de
+`main.shell__content`. Un `window:scroll` o `document:scroll` en fase de burbuja no se entera nunca —
+que es justo lo que hace que este fallo parezca imposible de arreglar desde fuera. Mismo razonamiento
+que ya estaba escrito en `ws-date-picker` y en `find-scroll-container.ts`.
+
+**★ El scroll NO cierra el menu** (un desplegable que desaparece al primer clic de rueda es otra
+molestia); lo unico que lo cierra, ademas del clic fuera, es que el trigger salga del viewport, porque
+si no el menu se queda flotando sobre filas que no son la suya. Reposicionado coalescido a una medicion
+por frame con `requestAnimationFrame`, porque `getBoundingClientRect()` fuerza layout y medir en cada
+evento haria tartamudear el propio scroll del usuario.
+
+**★★ VERIFICADO EN LA PAGINA REAL, y hubo que insistir para verlo.** Las dos primeras mediciones por
+consola dijeron que el menu NO seguia — y era un artefacto del entorno: `requestAnimationFrame` esta
+estrangulado en pestañas en segundo plano, asi que la reprogramacion nunca corria (es lo mismo que
+congelo una llamada anterior con un timeout de 45s). Con entrada real (rueda del raton) sobre la
+pestaña activa: hueco constante de **4px** y alineacion derecha **exacta** tras 166px de scroll, en
+/quotas y en /payees; y con la fila fuera de pantalla, **0 dropdowns en el DOM** y ningun trigger
+marcado como abierto.
+
+**Nota de metodo:** medir por consola en una pestaña de fondo es un falso negativo con pinta de
+defecto. Si lo que se mide depende de `requestAnimationFrame`, hay que conducirlo con entrada real.
+
+`ng build --configuration production` exit 0.
+
+**(4) EL HUECO DE ABAJO DE LA PAGINA DEL ASISTENTE: un numero magico que nunca pudo ser correcto.**
+`.assistant-page` se daba `height: calc(100vh - var(--space-20))` — una estimacion a mano de 80px del
+cromo de arriba. El topbar mide **56px**, asi que la caja terminaba 24px antes de tiempo y dejaba por
+debajo un hueco del **doble** que los 12px de arriba. El padding no era el culpable: era
+`var(--space-3)` arriba y **0** abajo.
+
+**★ Y la estimacion no podia acertar nunca:** `<app-past-due-banner>` se renderiza ENTRE el topbar y el
+contenido, asi que para un tenant con el pago vencido la pagina se pasaba de largo por el alto entero
+del banner y empujaba el composer por debajo del pliegue. Un 56px en vez de 80px habria arreglado la
+foto y dejado ese caso roto.
+
+Arreglado tomando la altura del padre en vez de adivinarla: `.shell__content` es `flex-1` dentro de una
+columna flex de `h-screen`, o sea que su altura ya es exacta — `height: 100%` es el espacio real que
+queda, haya lo que haya encima. Padding simetrico (`--space-3` arriba y abajo), descontado por
+border-box. El comentario que decia que el area de contenido «ya trae su propio padding» era **falso**:
+`.shell__content` no tiene padding ninguno.
+
+**Sin test de geometria, y a proposito.** Karma corre Chrome de verdad, asi que la geometria SI se
+puede medir (hay precedente en `ws-modal.component.spec.ts`), pero la afirmacion aqui — que
+`height: 100%` resuelve contra la cadena del shell — solo se sostiene con el shell REAL montado, y el
+spec del asistente stubbea la plantilla justamente para no arrastrar sidebar, topbar y timers. Un host
+de mentira que copie las tres clases del shell probaria la copia, no el producto, y quedaria verde el
+dia que el shell cambie (§A2). Evidencia aportada en su lugar: la regla en el bundle compilado y la
+aritmetica 80−56=24 vs 12. **Queda una mirada de runtime.**
+
+**(3b) LA CAUSA MAYOR DEL BLINK: EL BANNER DE HUBSPOT.** Localizada por el usuario en pantalla. Mismo
+defecto que (3) y que el de los badges, un piso mas abajo: `HubSpotSyncBannerComponent` pedia su
+estado por HTTP en `ngOnInit`, y vive DENTRO del sidebar. En cada navegacion: `status` arranca en
+null → `@if (connected())` falso → **el banner no esta en el DOM** → el aside mide corto → llega la
+respuesta → aparece la tarjeta y el aside crece de golpe. Eso es el «se hace corto y luego se ajusta
+rapidamente», y ademas era una peticion por clic para un valor que cambia dos veces al año.
+
+Arreglado con `HubSpotStatusStore` (root singleton, `ensureLoaded()` idempotente): despues de la
+primera carga, cada reconstruccion pinta el banner **en el primer frame**. El hueco de la primera
+carga se queda — es inevitable y no es lo que se veia; lo que se veia era ese hueco repitiendose en
+cada clic.
+
+**★ El riesgo que introduce una cache y como se cierra:** un «Connected» cacheado que sobreviva a un
+disconnect diria al usuario que sus deals siguen sincronizando cuando no. La pagina de Integrations
+es el UNICO sitio donde el estado cambia y ya tiene un embudo unico (`load()`), asi que empuja cada
+estado fresco al store. Test que lo fija.
+
+**Verificado en rojo (§A2):** quitada la guarda de `ensureLoaded()` → 3 rojos, entre ellos
+«does not ask again when the sidebar is rebuilt».
+
+**(3) EL BLINK DEL SIDEBAR — y no era el fetch, era estado en el sitio equivocado.** Cada una de las
+**41 plantillas de feature** renderiza su propio `<app-shell>`, y el shell contiene el sidebar: **cada
+navegacion destruye y reconstruye el aside entero**. Con `expandedGroups` como signal DEL COMPONENTE,
+cada reconstruccion empezaba con todos los grupos CERRADOS y el `effect` de auto-expandir reabria el
+de la ruta activa un frame despues — el grupo colapsaba y volvia de un salto en cada clic. Y un grupo
+que el usuario hubiera abierto a mano se perdia. Movido a `SidebarGroupsService` (root singleton): el
+conjunto sigue ahi, no hay colapso, no hay blink.
+
+**★★ Y esa misma reconstruccion destapo un defecto MIO: una peticion por navegacion.** `start()` vivia
+en el `ngOnInit` del sidebar y refrescaba SIEMPRE, asi que se pedian los badges en cada clic —
+exactamente lo que el ticket prohibe («nunca en cada navegacion»). `start()` es ahora idempotente
+tambien para la carga inicial. Test que lo fija, **verificado en rojo** quitando la guarda.
+
+**No se toco `<app-shell>`:** que 41 plantillas lo repitan en vez de vivir en un layout de rutas es
+deuda estructural preexistente y un refactor de otro tamano; queda reportado, no arreglado (§E1).
+
+**Verificado en el BUNDLE compilado**, no en el fuente: `background:var(--color-danger)` en el badge y
+en el punto, y `margin-left:0;margin-right:var(--space-1)` en el badge del grupo.
+
+**front 1356 → 1360** (+4: el spec de `SidebarGroupsService`) · `ng build --configuration production`
+exit 0.
+
+**Sin verificar:** navegador.
+
+## 2026-09-04 (d) - KAN-51 corregido: el cierre se invalidaba CADA HORA (bug propio, reportado por el usuario)
+
+**Rama:** KAN-38 · Corrige el mecanismo de KAN-51 · **Sin commit.** Migracion **B35**.
+
+**★★ EL SINTOMA: «cierro esta fila y vuelve a aparecer».** Y no era casualidad: **cada hora**.
+
+**★★ LA CAUSA, Y ES UN ERROR CONCEPTUAL MIO: CONFUNDÍ LA MARCA DE LA ULTIMA OBSERVACION CON LA
+IDENTIDAD DEL HECHO.** La exclusion de KAN-51 ocultaba la fila mientras `OccurredAt <= FactOccurredAt`.
+Para `DealLost`/`CrmDrift`, `OccurredAt` es `alert.DetectedAt` — y el sync horario de HubSpot llama a
+`alert.Refresh(...)` (`DealLostReconciler.cs:119`, `CrmDriftPolicy.cs:203`) sobre el **mismo alert sin
+resolver**, que **pisa `DetectedAt`**. Cada sync, el hecho parecia «mas nuevo», el cierre dejaba de
+cubrirlo y la fila volvia.
+
+**Medido en la base:** el alert `4541997D` (uno solo, `ResolvedAt` NULL) con `DetectedAt` avanzando a
+`2026-09-04 12:00:12` por `hubspot-auto-sync`, contra dos cierres del usuario a las `2026-09-03
+15:00:26` y `2026-09-04 09:00:28`. **4 cierres invalidados** en total, y los 4 alerts vivos comparten
+el mismo `DetectedAt` — el job los refresca a todos a la vez.
+
+**★★ Y EL TEST FIJABA EL BUG COMO SI FUERA LA FUNCIONALIDAD.**
+`A_later_detection_of_the_same_anomaly_returns_as_a_new_row` usaba `Refresh()` para simular «hecho
+nuevo» y afirmaba que la fila DEBIA volver. Verde, y describiendo exactamente el defecto. Renombrado a
+`A_reobserved_alert_stays_closed_but_a_new_alert_returns` y ahora afirma las dos mitades: refrescar
+NO reabre, un alert **nuevo** si.
+
+**Arreglo: `FactKey`, la identidad del hecho, junto al timestamp.**
+- El seed publica `FactKey` donde el hecho tiene identidad propia: `alert.Id` para deal-lost y drift,
+  `credit.Id` para las refusals del motor. **Null** para plan-sin-reglas y pendientes — son
+  CONDICIONES, no eventos, y ahi el timestamp sigue siendo la comparacion correcta (editar el plan
+  SI debe pedir una revision nueva).
+- La exclusion compara **clave si existe, timestamp si no**.
+- `ReconciliationClosure.FactKey` (migracion **B35**, columna nullable), verificada contra
+  `INFORMATION_SCHEMA`.
+
+**★ Trampa de EF que tumbo TODA la cola:** anadir `FactKey` a 3 de los 9 seeds dio
+`Unable to translate set operations when both sides don't assign values to the same properties`. Un
+`Concat` exige que **todos** los lados asignen **todas** las propiedades; hay que poner
+`FactKey = null` explicito, no omitirlo.
+
+**★★ SIN BACKFILL, Y A PROPOSITO.** Los 4 cierres historicos quedan con `FactKey` null, asi que no
+cubren un seed que si trae clave: **el usuario tendra que cerrar esas filas una vez mas**, y esta vez
+se quedaran cerradas. No se rellenan porque `DealLostAlert` **no guarda cuando se creo** (solo
+`DetectedAt`, que es mutable), asi que no hay forma de demostrar que el alert vivo es el mismo que se
+cerro; rellenarlo seria asumirlo, y si el alert hubiera sido reemplazado se ocultaria un hecho nuevo
+(§B1). Las filas historicas no se borran (§B6): quedan como evidencia de que se decidio.
+
+**Verificado en ROJO:** volviendo la comparacion al timestamp, el test nuevo se pone en rojo.
+
+**Suites:** unit **1909 / 0** · integracion **892 / 0**, 0 `outcome="Failed"` en TRX · front **1350 / 0**.
+
+**Sin verificar:** navegador. **Hay que reiniciar el API** para que el cierre nuevo escriba `FactKey`.
+
+## 2026-09-04 (c) - KAN-52: salida para un payout Approved que nunca podra pagarse
+
+**Rama:** KAN-38 · Ticket KAN-52 (Bug, High, epica KAN-38) · **Sin commit.** Backend + frontend.
+
+**★★ SE MIDIO SIN FILTRAR POR TENANT Y EL CUADRO SALIO ENGANOSO — lo corrigio el usuario.** La primera
+consulta daba 5 payouts atorados y 3 de ellos parciales; el usuario, que veia 2 en pantalla, pregunto
+por que. Filtrando: en SU tenant (`Wasnie LDTA Polska`) hay exactamente **2**, y los **dos totalmente
+bloqueados**. Los 3 parciales son del tenant `Wasnie`. **KAN-34 ya avisaba de esto por escrito** («hay
+tenants de prueba con miles de filas; no mezclar») y aun asi se midio en toda la base.
+
+**Las 4 preguntas del Paso 0:**
+1. **Bloqueo:** `BulkMarkPaidHandler.cs:98-111`. El discriminador real es `credit.ConsumedAt != null`,
+   no el estado de la transaccion.
+2. **Estado terminal:** `Disputed` YA existe y todos los cascades lo respetan. Y
+   **`CompensationPayout.Dispute()` esta escrito y no lo llama nadie** — salida construida y nunca
+   conectada.
+3. **Origen: camino REAL.** Mismo payee, mismo plan, **periodos solapados**; el pagador se calculo 35
+   segundos antes. El indice unico solo impide el periodo EXACTO. → **ticket KAN-57**, creado y
+   enlazado.
+4. **No es regresion.** `git log -S "Dispute("` no devuelve nada: el endpoint nunca existio. La
+   etiqueta `regresion` del ticket es incorrecta.
+
+**★★ LA GUARDA DE DINERO, QUE ES EL HALLAZGO QUE JUSTIFICA EL PASO 0.** El ticket asume «el dinero ya
+se pago por otro payout». Para los 3 parciales del otro tenant **es falso**: uno lleva 71 creditos
+pagados y **139 sin pagar**, la mayor parte de €34.567,64. El descarte solo se permite cuando **cada
+credito vivo** ya fue consumido por otro payout; si queda uno, se rechaza diciendo cuantos. Sin esa
+guarda, el boton habria retirado una deuda real a una persona real.
+
+**★★ ESTADO TERMINAL `Discarded`, NO una entidad `PayoutClosure`** — la nota del ticket proponia calcar
+KAN-51 y **el ciclo de vida no encaja igual**. En KAN-51 la cola DERIVABA y no habia fila que mutar;
+aqui el payout ya tiene estado mutable por diseno. Los **13 lectores** de `Status == Approved` filtran
+explicitamente: un estado terminal los corrige a todos de golpe, mientras que una tabla paralela
+habria dejado el payout en `Approved` y obligado a excluirlo lector por lector — **el defecto que
+KAN-51 tuvo que volver a arreglar en el Dashboard**. La prueba de que era la eleccion correcta llego
+sola: **TypeScript encontro un segundo `switch` exhaustivo** en `pay-run-detail` que ninguna busqueda
+manual habria listado.
+
+**★ Se descarto reusar `Disputed`** pese a estar construido: `GetPayeeLedgerSummaryHandler:101` lo suma
+como `DisputedInPeriod` en el resumen **que ve el propio payee**, y habria mostrado €9.520 «en disputa»
+que nadie disputa (§B3).
+
+**★ La migracion B34 toca el indice unico.** `IX_CompensationPayouts_Live` excluye los estados
+terminales por nombre; sin anadir `Discarded`, un payout descartado seguiria ocupando el hueco y
+bloqueando el recalculo que es el arreglo real del periodo — la cola limpia y el trabajo igual de
+imposible. Verificado contra `sys.indexes`, no contra la salida del comando.
+
+**★★ EL REBAUTIZO A ZEKE HABIA DEJADO 4 TESTS EN ROJO Y NO SE VIO.** `AssistantIdentityTests` fija el
+texto del bloque de identidad y afirmaba el literal `"Incentra AI Assistant"`. En esa tarea solo se
+COMPILO `Wasnie.Application` (el API del usuario bloqueaba la solucion) y no se corrio la suite unitaria:
+§4 del CLAUDE.md dice construir antes de fiarse de los tests, pero no correrlos no es una opcion. La
+asercion se actualizo a `"Zeke"`, que ademas la hace mas fuerte: un renombrado futuro que se olvide del
+prompt falla aqui.
+
+**★ Tests verificados en ROJO (§A2):** con la guarda de dinero neutralizada, el test del payout parcial
+se pone en rojo y los otros 4 siguen verdes. (Un primer intento de mutacion con `if (false)` no compila
+— warnings as errors.)
+
+**Trampa de compilacion:** con el API del usuario corriendo, el bin de `Wasnie.Api` esta bloqueado. Se
+compilo y ejecuto con `-p:BaseOutputPath` a `%TEMP%`. **Efecto secundario a recordar:**
+`ToolSelectionInstructionsTests` sube por el arbol de directorios buscando `src/` y falla desde ahi —
+es artefacto del metodo, no un defecto.
+
+**Suites:** unit **1909 / 0** (build normal) · front **1345 / 0** · `ng build --configuration
+production` exit 0 · integracion **+5** tests nuevos, 15/15 en el fichero.
+
+**★★ DOS AJUSTES DE UX PEDIDOS EN EL TICKET, DESPUES DE VERLO EN RUNTIME.** «La logica del descarte
+esta bien; la pantalla es ciega.»
+
+**(1) Estado de pago por Commission Line.** El servidor SIEMPRE supo que creditos habia consumido otro
+payout — es la guarda del pago y la del descarte — pero el statement no lo mostraba, asi que la unica
+forma de saber si un payout estaba total o parcialmente duplicado era **pulsar Discard y leer el
+rechazo**. Ahora cada linea lleva badge «Ya pagada» / «Sin pagar». **El dato NO se recalcula:**
+`BuildLinesAsync` ya cargaba los creditos enteros, solo habia que exponerlos
+(`PayoutLineDto.PaidInPayoutId` + periodo).
+
+**★★ Y HUBO QUE PASARLE EL `payoutId` A `BuildLinesAsync`.** Sin comparar contra el payout que se esta
+pintando, **un payout pagado acusaria a todas sus lineas de ser duplicados de si mismas**: al pagarse,
+cada credito queda con `ConsumedByPayoutId` apuntando a el. Hay test para eso, y con la comparacion
+neutralizada se pone en rojo.
+
+**★ El tooltip lleva el PERIODO del payout que pago, no su id.** «Ya pagada en 7839C4D2» no dice nada;
+el periodo es lo que muestra el solape que creo el duplicado. Misma forma que `PaymentConflictItem`,
+que el banner de doble-paga ya hablaba.
+
+**(2) «Discard payout» pasa de banner a menu ⋯.** Era una tarjeta a todo lo ancho compitiendo con
+«Mark as paid»: le daba a una accion rara y de un solo sentido el mismo peso que a la que la gente
+viene a hacer. Sigue a un clic, sin gritar. Solo aparece en `Approved` — un `Calculated` se recalcula
+y un `Paid` se revierte, asi que ofrecerlo seria ofrecer un rechazo.
+
+**★ El copy se hizo honesto**, como pedia el comentario: ya no dice «si todas fueron pagadas…» como
+condicion previa, sino que la accion esta disponible y **el servidor rechaza indicando cuantas lineas
+siguen sin pagar**. EN/ES/PL.
+
+**★★ UN GREP ESCONDIO UN FALLO DE COMPILACION.** `dotnet test | grep -E "^Passed!|^Failed!"` no
+imprime nada cuando el proyecto **no compila**, y asi paso: un test unitario llamaba a
+`BuildLinesAsync` con la firma vieja y la corrida «no dijo nada». Es §A5 con otra cara — el filtro se
+comio el error. Corregido (4 llamadas) y **la ausencia de salida hay que tratarla como fallo, no como
+silencio**.
+
+**★ Y el `tfoot` se quedo con una celda de menos.** Al anadir la columna Payment se actualizaron
+`thead`, `tbody` y el `colspan` de la fila expandible, **pero no el pie**: 5 celdas para 6 columnas.
+No es cosmetico por casualidad — `ws-table` pone `border-bottom: none` en la ultima fila del cuerpo
+porque la linea de cierre la aporta el `border-top` de la fila de Total; sin celda de pie, la ultima
+columna se queda **sin esa linea** y el badge flota. La celda va vacia a proposito (un estado de pago
+no se suma) y lleva comentario explicando por que tiene que existir. Barrido del repo: es la **unica**
+tabla con `tfoot`, y ahora cuadra 6=6.
+
+**★★ BUG PROPIO EN EL BADGE, REPORTADO POR EL USUARIO: LO HICE BINARIO.** El estado de pago salía de
+un solo campo nullable (`PaidInPayoutId`), y su AUSENCIA se leía como «sin pagar». Pero en el
+statement del payout que SÍ pagó esos créditos, ese id es null **por la razón honesta de que el
+pagador no es otro** — así que un payout `Paid` mostraba todas sus líneas como «Not paid»,
+contradiciendo la lista de Transactions a tres clics. Un null significaba dos cosas a la vez: **§B3
+exacto, y lo cometí yo dos horas después de escribir un informe citando §B3.**
+
+**Arreglo: el estado viaja como ESTADO, no se deriva.** `PayoutLinePaymentState` con tres miembros
+(`Unpaid` / `PaidByThisPayout` / `PaidByAnotherPayout`), decidido en el servidor, que es donde vive la
+comparación contra el payout actual. En el front, **mapa exhaustivo tipado sobre la unión** (§C2), no
+un ternario: un cuarto estado sería error de compilación en vez de un badge mal puesto. La guarda del
+descarte ya distinguía bien los dos casos (`c.ConsumedByPayoutId != payout.Id`) — el defecto estaba
+sólo en el mapeo del statement, como señalaba el ticket.
+
+**★★ Y EL TEST TAMBIÉN NACÍÓ MUERTO: la primera mutación no llegó a aplicarse** (patrón con `
+`
+contra un fichero CRLF) y leí el 18/18 como «no lo caza». Repetida bien, los **2** tests se ponen en
+rojo. La leccion no es el CRLF: es que **una mutación que no cambia el fichero se parece exactamente a
+un test que no sirve**, y hay que comprobar que la mutación se aplicó antes de interpretar el
+resultado.
+
+**★★ Y AL AÑADIR EL ENUM SE ROMPIERON 4 TESTS DE ENDPOINT — §A4 EN VIVO.** El API serializa enums como
+**string** (`JsonStringEnumConverter` en `Program.cs:69`), pero `PayoutsEndpointsTests` deserializaba
+`PayoutDto` con las opciones por defecto de `ReadFromJsonAsync`, que no lo llevan: `JsonException` en
+`$.lines[0].paymentState`. El fixture consumía el contrato real con ajustes distintos a los del cliente
+real. Arreglado alineando las opciones con las del API, **no** debilitando el DTO. Falló ruidosamente,
+que es el buen desenlace.
+
+**Ajustes de tabla pedidos en el mismo comentario:**
+- **La celda de origen se reparte en tres columnas** (Referencia / Descripción / Fecha). Estaban
+  apiladas dentro de una sola celda, lo que hacía cada fila de tres líneas y obligaba a leer hacia
+  abajo en vez de a lo ancho. La descripción se recorta con elipsis: si envuelve, vuelve la fila alta.
+- **Densidad compacta**, con la receta que este producto ya fijó en el Centro de Reconciliación: 12px
+  y `--space-1` en `td`, 11px en `th`, **acotado con `::ng-deep` detrás de `.payout-detail__table`**
+  para no restilar las otras nueve listas que heredan los 14px de `ws-table`.
+- El `tfoot` pasó de 6 a 8 celdas, verificado por conteo (thead 8 = tfoot 8).
+- **La fila expandible también baja de densidad** — y hubo que hacerlo DOS veces. La primera pasada la
+  dejó en `--space-2` razonando que «un panel merece más aire que una línea»: **una decisión de diseño
+  que nadie había pedido**, contra una instrucción explicita («también deben ser compact»), y que dejaba
+  la tabla cambiando de densidad al abrir una fila. Ahora es `--space-1`, igual que el resto. La regla
+  `&__detail-row td` declara su propio padding (12/16px) y **gana en especificidad** al bloque
+  `::ng-deep` de densidad, así que abrir una línea hacía saltar la tabla de compacta a aireada — leía
+  como otra tabla. Ahora `--space-2` arriba y abajo (sigue teniendo más aire que una fila normal:
+  es un panel, no una línea), gap del panel a `--space-2`, cadena de modificadores a `--space-1`, y
+  los textos que seguían a 13px (`__calc-rate`, `__calc-amount`) bajan a 12. **Dos más dentro de la
+  tabla hacían lo mismo** y se corrigieron al pasar: `__source-ref` y `__source-none` declaraban 13px
+  y ganaban sobre la densidad, así que la referencia se veía un punto mayor que las cifras de al
+  lado.
+- **`overlap-warning` (componente compartido) también pasa a la misma densidad**: 12px sobre
+  `--space-1`, cabecera 11px. Estaba a 13px y `--space-2`, así que se veía un tamaño y un escalón de
+  padding por encima de aquello donde se incrusta — un panel pegado, no parte de la página. **Se usa
+  en tres pantallas** (payout detail, pay-run detail, assignments), y el cambio las alcanza a las
+  tres; es coherente, porque las tres lo incrustan dentro de tablas de esta misma densidad.
+
+**★★ VERIFICADO EN EL CSS COMPILADO, no en el fuente.** Tras decir «arreglado» una vez y que no lo
+estuviera, el chequeo pasa a ser `grep` sobre el bundle de `dist/`: las tres reglas salen con
+`--space-1` (`payout-detail__detail-row td`, `payout-detail__table … .ws-table-wrap td`,
+`overlap-warning__row td`). El fuente puede estar bien y la regla no llegar; el bundle es lo que
+recibe el navegador.
+
+**★★ CHECKBOXES SÓLO DONDE UNA ACCIÓN MASIVA PUEDE ACTUAR — y la premisa del comentario estaba
+incompleta.** Pedía checkbox sólo en `Approved`, razonando que la acción masiva es «Mark as paid».
+Pero esta lista tiene **DOS**: `bulkApprove` actúa sobre `Calculated` y `bulkMarkPaid` sobre
+`Approved` (`payouts.store.ts`, `selectedCalculatedIds` / `selectedApprovedIds`). Aplicarlo al pie de
+la letra **habría dejado a bulk approve sin nada que seleccionar jamás**.
+
+Lo que se excluye son los **tres estados TERMINALES** — `Paid`, `Disputed`, `Discarded` — que es lo
+que el comentario perseguía: filas que se podían marcar y que la acción luego descartaba en silencio,
+inflando un `skippedCount` que el usuario nunca pidió crear. Mismo principio que el menú ⋯, que sólo
+ofrece Discard en `Approved`.
+
+Tres piezas: `SELECTABLE_STATUSES` + `isSelectable()` en el store; **`toggleSelect` rechaza** una fila
+no seleccionable (segunda puerta, por si llega un id viejo); `toggleSelectAll` marca sólo las
+accionables; y `allSelected` se mide contra **las seleccionables**, o el checkbox de cabecera se
+quedaría eternamente sin marcar en cualquier página con un payout pagado. La cabecera se oculta si la
+página no tiene ninguna seleccionable.
+
+**5 tests, verificados en ROJO:** ampliando `SELECTABLE_STATUSES` a los cinco estados, los cinco
+fallan. front **1345 → 1350**. `aria-label` en ambos checkboxes, EN/ES/PL.
+
+**Sin integración:** el cambio es sólo de frontend — no toca DTO, handler ni consulta — así que la
+suite de integración no aporta señal aquí y no se corrió.
+
+**Suites tras los ajustes:** unit **1909 / 0** · integracion **889 → 891 / 0** (2 tests nuevos), 0
+`outcome="Failed"` en TRX · front **1345 / 0** · `ng build --configuration production` exit 0.
+
+**Sin verificar:** no se abrio el navegador (lo verifica el usuario).
+
+## 2026-09-04 (b) - KAN-51: cierre auditado de filas de reconciliacion (append-only)
+
+**Rama:** KAN-38 · Ticket KAN-51 (Task, Medium, epica KAN-39 «Auditoria y evidencia») · **Sin commit.**
+Backend + frontend.
+
+**★★ LA PREMISA DE ALCANCE DEL TICKET ERA FALSA, Y SEGUIRLA HABRIA DEJADO LA FUNCION INSERVIBLE.**
+El ticket acota la accion a «filas sin cura». El conjunto sin cura que el codigo declara
+(`reconciliation-resolution.ts:87`, `WITHOUT_CURE_SCREEN`) tiene UN miembro, `CurrencyMismatch`, y
+encima es curable — solo espera KAN-45. Y el caso que el propio ticket usa de ejemplo (un deal caido
+tras pagarse la comision) **si tiene deep link** hoy (`reconciliation-resolution.ts:194-201`).
+Gatearlo por ese conjunto habria impedido cerrar exactamente lo que se pidio cerrar. **La accion se
+ofrece en TODAS las filas**, gateada por permiso: «no tiene cura» es un juicio humano sobre UNA fila,
+no una propiedad del codigo de motivo, y el texto obligatorio es lo que sostiene ese juicio.
+
+**★★ LA DECISION DE PRODUCTO PENDIENTE, RESUELTA ANTES DE CONSTRUIR (§E2), CON LA PRECISION QUE LA
+HACE IMPLEMENTABLE.** El ticket recomendaba «el cierre es inmutable; un cambio posterior es un hecho
+nuevo». La clave es `(EntryKind, EntityId, Reason)` **mas el `FactOccurredAt` del hecho cerrado**, y
+la exclusion es `OccurredAt <= FactOccurredAt`. Sin la fecha del hecho, una anomalia **nueva** sobre
+una entidad ya cerrada quedaria oculta para siempre — una fila cerrada por `DealLost` taparia un
+`CrmDrift` detectado despues, que es dinero escondido sin que nadie lo decida (§B1). Con ella, una
+deteccion posterior trae otro `DetectedAt`, cae fuera del cierre y **vuelve como fila nueva**, sin
+revivir nada y sin editar el asiento. Los dos tests que sostienen esta decision se ponen en ROJO con
+la clave simple (verificado, ver abajo).
+
+**★★ EL CLIENTE MANDA LA FILA Y EL MOTIVO ESCRITO, NUNCA LOS HECHOS — y eso es una propiedad de
+seguridad, no una comodidad.** El payload es `{kind, entityId, note}` y nada mas. QUE anomalias
+carga esa fila y CUANDO se detecto cada una lo lee el handler de la cola viva
+(`CloseReconciliationRowHandler.cs:47-55`). Un cliente capaz de declarar su propio `FactOccurredAt`
+podria mandar una fecha lejana en el futuro y silenciar anomalias que aun no han ocurrido — y el
+cierre es lo que decide que deja de ver un CFO.
+
+**★ LA EXCLUSION ES UN ANTI-JOIN EN SQL, AGUAS ARRIBA DE TODO** (`ReconciliationQuery.cs:221`,
+dentro de `Filtered`). Va antes de contar, agrupar y paginar, asi que la tabla y las tarjetas
+excluyen exactamente lo mismo. Excluir despues, en el handler y sobre una pagina, habria dejado una
+tarjeta describiendo dinero que la tabla ya no lista — la unica promesa por la que existe esta
+pantalla. **Lee `ReconciliationClosures`, nunca `AuditLogs`**; hay un test que mete una fila fantasma
+de `AuditLog` con la accion y el recurso correctos y comprueba que no mueve nada.
+
+**★ UN CIERRE POR MOTIVO, NO UNO POR FILA.** Una fila que falla por dos cosas son dos juicios; un
+solo asiento para el par haria incontestable «que anomalia revisaron realmente?».
+
+**★ PERMISO PROPIO, `Reconciliation.Close`,** siguiendo el precedente explicito de
+`Ledger.CloseAccount` (`Permission.cs:66`: «su propio permiso, no Ledger.Adjust»). Cerrar OCULTA
+dinero de la cola; leerla no. Concedido a TenantAdmin y CompManager. En el front, RBAC **oculta**, no
+deshabilita (§5.8).
+
+**★ NADA SE MUTA, Y NO ES QUE NOS ACORDARAMOS DE NO HACERLO:** el handler no carga el credito ni la
+transaccion ni el plan para modificarlos, asi que no hay bandera que poner. `ReconciliationClosure`
+no tiene `Reopen`, ni `Undo`, ni borrado logico (§B6). Migracion **B33**.
+
+**★★ TRES TOKENS CSS INEXISTENTES, DOS MIOS Y NUEVE PREEXISTENTES (§A3).** Se comprobo cada token
+nuevo contra `styles.scss` antes de usarlo: `--font-size-sm` y `--color-text-error` **no existen**
+(la escala es numerica, y el token real es `--color-danger`); corregidos en el WI. El barrido destapo
+9 usos preexistentes de `--font-size-xs` y `--color-text-danger` en esta misma pantalla y en dos
+mas — **ticket KAN-53, creado y enlazado**, no arreglado aqui (§E1). Es la misma familia que
+`--font-size-22` y `--color-border` de la sesion anterior: una variable sin definir no falla, se
+descarta en silencio, y ningun test puede verla.
+
+**★ LA COLUMNA NUEVA RESPETA UN ANCHO YA MEDIDO.** El comentario de
+`reconciliation-list.component.scss:274` documenta que esta tabla desbordo su contenedor por 8px
+cuando el enlace de Resolver gano un glifo. Por eso la cabecera es un sustantivo corto («Revision»),
+el boton es un verbo («Cerrar»), y la frase que explica la accion vive en el tooltip y en el titulo
+del modal, donde hay sitio.
+
+**★★ LOS TESTS SE VERIFICARON EN ROJO, DOS VECES (§A2).** Anulando la exclusion: 4 rojos. Y con la
+clave simplificada a `(kind, entityId)` — el diseno descartado — los 2 que sostienen la decision de
+producto se ponen en rojo y los otros siguen verdes, que es exactamente lo que debe distinguirlos.
+
+**Suites:** build exit 0 · unit **1909** (sin cambio) · integracion **871 -> 878** (+7) ·
+front **1325 -> 1328** (+3) · `ng build --configuration production` exit 0.
+
+**Sin verificar:** no se abrio el navegador. Falta comprobar el ancho real de la tabla con la columna
+nueva (el riesgo que documenta el propio SCSS) y el modal en las tres lenguas.
+
+**★★ DOS DEFECTOS ENCONTRADOS EN RUNTIME POR EL USUARIO, NO POR NINGUNA SUITE.**
+
+**(1) La migracion B33 nunca se aplico a WasnieDb.** Los tests de integracion corren sobre
+Testcontainers con `MigrateAsync`, asi que 878 verdes convivian con un `Invalid object name
+'ReconciliationClosures'` en la pantalla real. **Se genero la migracion, se verifico el fichero
+generado, y se dio por hecho el resto** — §A3 exactamente: mirar el artefacto en vez de la salida.
+Aplicada y verificada contra `INFORMATION_SCHEMA` (11 columnas + el indice), no contra la salida del
+comando.
+
+**(2) El cierre solo lo respetaba el Centro; el Dashboard seguia alertando.** La exclusion se puso
+dentro de la consulta del Centro y ahi se quedo. El Dashboard lee `db.DealLostAlerts` DIRECTAMENTE,
+asi que una fila cerrada desaparecia de una pantalla y seguia avisando en la otra: dos pantallas
+discrepando sobre el mismo dinero, que es justo lo que el Centro existe para no crear. El panel
+reportado tenia **cuatro gemelos** con el mismo defecto.
+
+La regla vive ahora en `ReconciliationClosureSpec.For(db, kind, reason)` y la aplican **seis**
+superficies: Centro, Dashboard (deal-lost, drift, planes sin reglas vivas, pendientes no procesables,
+atribucion ambigua) y el filtro `?attentionReason=` de Transactions. **★★ Las dos ultimas comparten
+`UnprocessablePendingSpec`, cuyo propio comentario promete que la tarjeta y la lista dan SIEMPRE el
+mismo numero; por eso la exclusion va DENTRO de la spec y no en los dos sitios que la llaman** —
+aplicarla a la tarjeta y olvidar la lista habria roto esa promesa en cuanto alguien hiciera clic. Hay
+un test que fija la invariante con numeros concretos (2 → 1 en las dos).
+
+**(3) Cerrar no avisaba de nada.** Ni exito ni fallo: la operacion ocurria en silencio. Toast en los
+dos desenlaces siguiendo la convencion de las otras 30 features (`ToastService`), y **se quito el
+parrafo de error inline del modal** — el mensaje vivia en dos sitios que podian divergir; el store ya
+no guarda `closeError`, devuelve un booleano y la pantalla decide que decir. El texto del error es
+**clave traducida, no la prosa inglesa del servidor** (§C1): el unico fallo alcanzable es «esta fila
+ya no esta abierta», y merece decirse en el idioma del usuario y con que hacer.
+
+**Verificado en rojo (§A2), otra vez:** quitando la exclusion del Dashboard, los 3 tests nuevos de
+esa superficie reproducen el bug reportado; quitando los toasts, los 2 nuevos del componente
+reproducen el silencio.
+
+**Suites tras las correcciones:** build exit 0 · unit **1909** · integracion **871 → 885** (+14
+respecto al Centro v1) · front **1325 → 1331** (+6) · `ng build --configuration production` exit 0 ·
+0 `outcome="Failed"` en el TRX.
+
+**(4) El boton Close estaba fuera de la pantalla, y lo dije en el informe como riesgo en vez de ir a
+mirarlo.** Medido en el navegador: la tabla queria **1197px dentro de 1150px** y desbordaba **69px**;
+la columna «Review» entera (80px) caia fuera del area visible. El boton se renderizaba, era accesible
+por teclado, y con raton habia que **adivinar que existia una barra de scroll horizontal**. La nota de
+`reconciliation-list.component.scss:274` avisaba exactamente de esto (la tabla ya habia desbordado 8px
+antes) y aun asi se anadio una segunda columna de accion.
+
+Arreglo en dos mitades, las dos medidas:
+- **Una sola columna «Acciones», fijada al borde derecho** (`position: sticky; right: 0`), con fondo
+  propio y paridad de hover — un `td` pegajoso pinta su propio fondo y si no se replica
+  `tr:hover` la columna fijada se queda oscura mientras el resto de la fila se ilumina. Dos columnas
+  de accion para una misma fila eran ademas redundantes.
+- **La columna Payee se recorta a 220px con elipsis.** Con sticky a secas el desborde bajaba a 46px
+  pero lo pagaba **la columna AMOUNT**, cortada a «€1,0» debajo de la celda fijada, en la pantalla
+  cuyo trabajo es decir importes con precision. Payee era la mas ancha (273px, nombres de hasta 62
+  caracteres) y la unica que degrada bien: el enlace ya llevaba el nombre completo en su `title`,
+  igual que `.recon__ref` hace desde siempre.
+
+**Verificado midiendo el DOM real, no el CSS (§A3):** desborde **69px → 0**, importes intactos
+(`€1,000.00`, `$50,000.00`, ninguno recortado) y el boton Close visible en todas las filas.
+
+**Leccion:** «sin verificar en navegador» escrito en un informe no es una mitigacion, es una deuda que
+paga el usuario. Cuando el propio SCSS documenta que la tabla ya desbordo una vez, anadir una columna
+EXIGE abrir el navegador antes de reportar.
+
+**(5) `ws-toast` rediseñado — primitiva, no pantalla.** El usuario pidio un toast "mas minimalista y
+profesional" pasando dos ejemplos de Flowbite/Tailwind. **La referencia era Tailwind y hex otra vez**
+(`bg-neutral-primary-soft`, `text-fg-brand`, `rounded-base`, `shadow-xs`, `ms-2.5`), y §5.5 prohibe
+las dos cosas: **se copio la anatomia, no la hoja de estilos**. De los dos ejemplos se tomo el
+primero; el segundo (avatar + dos botones de accion) es una tarjeta de notificacion, no un toast, y
+no mapea a un sistema cuyo unico contenido es una frase.
+
+Cambios: **fuera la barra de acento de 4px** (a 340px de ancho era una franja de color puro
+compitiendo con la frase) y **entra un icono por tipo** que lleva el color; **una regla vertical de
+1px** separa icono y texto, que es el truco entero del layout de la referencia; sombra de
+`--shadow-lg` a `--shadow-sm` (`--shadow-xs` NO existe) porque un aviso de 4s no puede tener la
+elevacion de un modal; boton de descarte de 24 a 28px con `aria-label` traducido (`COMMON.DISMISS`,
+nuevo en EN/ES/PL). **Afecta a las ~30 features que usan `ToastService`**, no solo a reconciliacion.
+
+**★★ EL SPEC NACIO VERDE MUERTO Y SE CORRIGIO (§A2).** El primer intento afirmaba
+`querySelector('.ws-toast__icon svg') !== null`. Al romper el mapa a proposito (`x-circle` →
+`error-circle`) **siguio en verde**: `IconComponent` renderiza SIEMPRE el `<svg>` y solo rellena su
+`innerHTML` desde el diccionario, asi que un nombre inexistente da un svg vacio, no ausente. La
+asercion pasa a ser sobre **las formas de dentro** (`path, circle, line, ...`), y con eso la mutacion
+si se pone en rojo. Es exactamente el fallo silencioso que el test existia para cazar, y casi lo
+deja pasar.
+
+**Suites:** front **1331 → 1335** (+4, el primer spec de `ws-toast`) · `ng build --configuration
+production` exit 0. Verificado en navegador: los 4 tipos con su icono y su color, la regla visible,
+360px de ancho, `--shadow-sm` aplicado.
+
+**(6) El toast se para mientras se lee.** Pedido por el usuario: algunos avisos llevan tres lineas
+("no se pudo cerrar la entrada, puede que ya se haya cerrado o corregido...") y 4s no dan para
+leerlo y decidir. Hover pausa la cuenta atras; al salir el raton, **sigue con el tiempo que le
+quedaba, no con cuatro segundos nuevos** — eso ultimo es la version facil y esta mal en la direccion
+que importa: un mensaje largo que el lector mira de reojo se reiniciaria para siempre.
+
+`WsToastService` pasa de un `setTimeout` de usar y tirar a un `Map<id, {handle, remainingMs,
+startedAt}>`; `pause` descuenta lo transcurrido y `resume` reengancha con el resto. **`pause` es
+idempotente a proposito**: el navegador reemite `mouseenter` al cruzar un hijo en algunos layouts y
+restar dos veces dejaria al lector con menos tiempo del que le corresponde.
+
+**★ Tambien pausa con el FOCO de teclado** (`focusin`/`focusout`), que no es decoracion: quien tabula
+al boton de descarte esta leyendo igual, y sin ese par el toast se le iria debajo del cursor.
+`mouseenter`/`mouseleave` y no `mouseover`/`mouseout`, que se reemiten por cada hijo.
+
+**★★ El reloj del spec simula tambien `Date`.** `pause` mide con `Date.now()`, asi que un test que
+solo falsease `setTimeout` calcularia un transcurrido de cero y pasaria **hiciera lo que hiciera la
+resta** — verde y ciego a la unica linea que valia la pena probar. Con `mockDate`, al mutar la resta
+los dos tests que la cubren se ponen en rojo.
+
+**Verificado en navegador, no solo en test:** 9s con el raton encima y seguia visible (se habria ido
+a los 4s); al salir, presente a 3,5s y ausente a 4,4s.
+
+**Suites:** front **1335 → 1345** (+10) · `ng build --configuration production` exit 0. Nota: una
+corrida dio 3 rojos de KaTeX; son los **flaky preexistentes ya documentados** — aparecieron tambien
+con el codigo mutado y 5 corridas seguidas posteriores dieron 1345 limpio.
+
+**(7) El asistente pasa de «Tally» a «Zeke»** (ya existe un producto llamado Tally).
+
+**★★ LA PREMISA ERA FALSA EN LA MITAD QUE IMPORTA: el prompt NUNCA dijo «Tally».** Decia "You are the
+Incentra AI Assistant... That is your name". O sea, la barra lateral ponia Tally y el asistente, si le
+preguntabas como se llamaba, respondia otra cosa: la pantalla y el sistema llevaban tiempo diciendo
+cosas distintas (§C3), y un renombrado ciego de cadenas lo habria dejado igual de roto con otro
+nombre. Decision del usuario: que diga **"Soy Zeke, el asistente de Incentra"**.
+
+Cambiado: `NAV.ASSISTANT` y `ASSISTANT.TRIGGER_LABEL` en EN/ES/PL, y el bloque `IdentityRules` de
+`AssistantPrompt.cs:54-56` y `:92`. **Un solo `const` cubre las TRES variantes de prompt** (se usa en
+las lineas 135, 369 y 391), asi que no hay que tocarlo tres veces. **Ninguna de las prohibiciones del
+bloque se altero** — no ser humano, no nombrar al proveedor, no prometer documentos; el nombre propio
+convive con ellas igual que "Incentra" ya lo hacia.
+
+**★ `TRIGGER_LABEL` era "Quick Tally" y era un juego de palabras** (un *tally* es un recuento rapido)
+que muere con el rebautizo. Pasa a decir lo que el boton hace: "Ask Zeke" / "Preguntar a Zeke" /
+"Zapytaj Zeke". De paso **deja de estar sin traducir**: las tres lenguas tenian la MISMA cadena
+inglesa.
+
+**Sin tocar, y a proposito:** los identificadores internos `tally-mark-topbar`, `tally-mark-sidebar` y
+la clase `sidebar__tally-icon`. Son ids de degradado SVG y una clase CSS, sin superficie de usuario;
+misma frontera que [[rebrand-incentra]] (el codigo sigue diciendo Wasnie). Nota util para quien los
+lea: **el icono NO son marcas de conteo**, son destellos (*sparkles*) genericos — el nombre venia del
+producto, no del dibujo, asi que el rebautizo no obliga a redibujar nada.
+
+`TITLE`/`SUBTITLE` del panel siguen siendo genericos ("Assistant" / "Asistente de Incentra"): nunca
+dijeron Tally, y cambiarlos era una decision de diseno que nadie pidio.
+
+**Suites:** `Wasnie.Application` compila exit 0 (la solucion completa no: el API del usuario estaba
+levantada y bloqueaba los DLL — **no se mato**, la levanto el a proposito) · front **1345** ·
+`ng build --configuration production` exit 0.
+
+**OJO AL DESPLEGAR:** el cambio del prompt **exige reiniciar el API**; hasta entonces el asistente
+sigue presentandose con el texto viejo.
+
+**Leccion, para el proximo WI que anada una consulta derivada:** una regla nueva sobre datos
+derivados no se implementa en la consulta que la motivo, sino en una spec compartida, **y hay que
+buscar todas las superficies que leen esos mismos hechos**. Aqui eran seis y solo una era obvia.
+
+**Queda abierto:** la lista no muestra en ningun sitio lo que YA se cerro; no hay pantalla de
+cierres. El ticket no lo pide, pero un auditor que quiera leer las notas hoy tiene que ir a la tabla.
+
+
+## 2026-09-04 - KAN-34: el AuditLog deja de registrar acciones que nunca ocurrieron
+
+**Rama:** KAN-38 · Ticket KAN-34 (Bug, Highest, epica KAN-39 «Auditoria y evidencia») · **Sin commit.**
+Solo backend.
+
+**★★ LA PREMISA DEL TICKET ERA FALSA, Y EN LA MITAD QUE MAS IMPORTA.** El ticket afirmaba que «el
+camino critico de dinero esta protegido por transaccion; el defecto vive en el resto de comandos». No.
+`AuditBehavior.HandleMoneyCriticalAsync` tampoco miraba el `Result`. La transaccion defiende contra el
+fallo de la ESCRITURA DE AUDITORIA — si `DispatchAsync` lanza, el `await using` revierte el negocio.
+Pero un `Result.Failure` no lanza: viaja de vuelta como valor de retorno, `CommitAsync` confirma tan
+contento, y la fila fantasma queda escrita igual que en el camino no-money. El defecto cubria los
+**15** comandos auditables, no un subconjunto. La memoria del repo repetia la misma premisa falsa
+(venia del diagnostico de KAN-31) y quedo corregida.
+
+**★★ DIEZ FILAS FANTASMA MEDIDAS, NO ESTIMADAS (§E5).** Contraste fila a fila de `AuditLogs` contra el
+estado real de cada entidad, por tenant: 4 `deal_lost_commission_reverted` (ids 24087-24090),
+1 `PLAN_ARCHIVED` (14229, el «EU Accelerator Q2 2026» del ticket, confirmado en `Draft`), 2
+`PLAN_ARCHIVED` duplicadas sobre `Plan Test Flat 5%`, 2 `PLAN_ACTIVATED` sobre planes en `Draft`
+(13525, 35275) y 1 `TRANSACTION_INGESTED` (13555). Ninguna se toco (ledger append-only).
+
+**★★ LA PUERTA DE PARADA SE DISPARO, Y SE REPORTO ANTES DE TOCAR NADA.** Las 4 filas 24087-24090
+afirman que la comision de `HUBSPOT-512460112106-473111097540` (**2.980,00 EUR**) fue revertida; la
+reversion real ocurrio UNA vez, a las 13:20:49 (fila 24093). El log decia cinco. Matiz que se
+verifico antes de seguir: **no se movio dinero de mas** — los cuatro intentos fallaron sin escribir
+nada en el ledger, el saldo del payee es correcto, lo contaminado es exclusivamente la evidencia. Se
+publico el informe completo del Paso 0 en el ticket y se pidio decision antes de escribir codigo.
+
+**★★ DOS FALSOS POSITIVOS DESCARTADOS, QUE HABRIAN INFLADO LA CIFRA POR 280.** El primer barrido daba
+**2.804** `TRANSACTION_INGESTED` cuyo `ResourceId` no existe en `CompensationTransactions`. No son
+fantasmas: son transacciones borradas despues. El discriminador valido no es el GUID huerfano sino el
+`ResourceId` VACIO, porque `IngestTransactionHandler.cs:140` solo se ejecuta en exito. Y las 2
+`CREDITS_RECALCULATED` sin `ResourceId` (34999, 35159) tampoco: ese handler devuelve `Success` en las
+lineas 43, 57 y 115, ANTES de fijar el `AuditResourceId` en la 188 — son recalculos vacios legitimos.
+Sin leer los dos handlers, el informe habria dicho 2.812 en vez de 10.
+
+**★ EL ARREGLO NO REFACTORIZA `Result`.** `Result` y `Result<T>` son dos clases selladas sin ancestro
+comun, y un `IPipelineBehavior` solo ve un `TResponse` abierto: no tenia forma de preguntar «esto
+salio bien?». Se anadio `IResultOutcome` (`IsSuccess` + `Error`), que ambas ya exponian — la interfaz
+solo los nombra. Cero call sites tocados. `AuditBehavior` despacha unicamente si `Succeeded(response)`,
+en LOS DOS caminos.
+
+**★ TRES DECISIONES, CON SU ALTERNATIVA DESCARTADA:**
+1. **No se escribe fila en fallo**, en vez de escribirla marcada como fallida. Marcarla exige columna
+   nueva + migracion y tocar todos los lectores del log para que no cuenten fallos como exitos: es un
+   WI aparte por §E1. Decidido ANTES de construir (§E2), no por quien ejecuta.
+2. **El commit del camino money se mantiene en fallo.** Un handler que persistio algo deliberadamente
+   camino al `Failure` («ingerir y marcar», §B2) conserva esa escritura; solo se suprime la fila de
+   auditoria. Revertir la transaccion habria cambiado el comportamiento de negocio de 8 comandos, y
+   eso no es este WI (§E1).
+3. **Una respuesta que NO es `Result` se sigue auditando.** Varios comandos auditables devuelven un
+   DTO o `Unit` y senalan el fallo lanzando; suprimirles la fila habria sido el bug contrario.
+
+**★★ LOS TESTS SE VERIFICARON EN ROJO (§A2).** Verde no prueba nada: se revirtio `Succeeded` a `true`
+(el comportamiento previo), se recompilo y los tres que capturan el defecto se pusieron en ROJO; los
+otros tres son guardas y pasan en ambas versiones, que es justo lo que deben hacer. La regresion del
+ticket se probo **sobre el endpoint HTTP real** (`POST /api/plans/{id}/archive` dos veces sobre un
+plan en `Draft`), no contra un doble: es la fila real la que decide (§A3).
+
+**★ EL UNICO LECTOR DEL LOG NO NECESITA CAMBIO.** `GetDashboardSummaryHandler.cs:731` (feed de
+actividad) solo lista las filas mas recientes: con el arreglo deja de mostrar actividad que nunca
+ocurrio. Las 9 escrituras directas de `db.AuditLogs.Add(...)` estan en caminos de exito explicitos y
+no pasan por el behavior.
+
+**Suites:** build exit 0 · unit **1909** (0 rojos, sin cambio: no se anadieron unit) · integracion
+**865 -> 871** (+6, 0 rojos, 2 skipped). Una corrida intermedia dio 8 rojos y era **flake de carga**
+(Docker recien arrancado): la rerun con TRX sobre el mismo binario dio 871/0 y 0 `outcome="Failed"`.
+
+**Sin verificar:** no se comprobo en runtime (navegador) que el feed de actividad del dashboard deje
+de mostrar las entradas fantasma — exige provocar un fallo en la UI y las filas historicas siguen
+ahi por diseno.
+
+**Queda abierto:** como marcar las 10 filas fantasma historicas (decision aparte, el ticket la separa
+explicitamente); y registrar intentos fallidos como evento de seguridad, si se quiere.
+
+
 ## 2026-09-03 (h) - Wizards de importacion: el uploader de Untitled UI, traducido a tokens
 
 **Rama:** KAN-38 · Cambio visual pedido por el usuario, sin ticket · **Sin commit.** Solo frontend.

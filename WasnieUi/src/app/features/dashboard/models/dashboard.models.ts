@@ -150,10 +150,14 @@ export interface DashboardTrendBand {
 
 export interface DashboardActivityItem {
   timestampUtc: string;
+  /** Empty means a background job did it — no human was signed in. */
   actorEmail: string;
   actorInitials: string;
+  /** A CODE. Never rendered raw — translated through the audit-logs whitelist (§C2). */
   action: string;
   resourceType: string;
+  /** Needed to link the entry to what it changed; the type decides whether there is a route. */
+  resourceId: string;
   resourceDisplayName: string | null;
 }
 

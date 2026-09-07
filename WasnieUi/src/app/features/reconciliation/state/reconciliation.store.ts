@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ReconciliationApiService } from '../services/reconciliation.api.service';
+import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
 import {
   EMPTY_RECONCILIATION_FILTER,
   ReconciliationFilter,
@@ -14,6 +15,7 @@ const EMPTY_SUMMARY: ReconciliationSummary = { totalRows: 0, byCurrency: [], byR
 @Injectable({ providedIn: 'root' })
 export class ReconciliationStore {
   private readonly api = inject(ReconciliationApiService);
+  private readonly sidebarBadges = inject(SidebarBadgesStore);
 
   private readonly _rows = signal<readonly ReconciliationRow[]>([]);
   private readonly _summary = signal<ReconciliationSummary>(EMPTY_SUMMARY);
@@ -47,13 +49,55 @@ export class ReconciliationStore {
 
   readonly activeFilterCount = computed(() => {
     const f = this._filter();
-    return [f.payeeId, f.reason, f.from, f.to].filter((v) => v !== null && v !== '').length;
+    return [f.payeeId, f.reason, f.from, f.to, f.reference]
+      .filter((v) => v !== null && v !== '').length;
   });
 
   readonly hasActiveFilters = computed(() => this.activeFilterCount() > 0);
 
   /** Any money at all in the filtered set — decides whether the money cards are worth showing. */
   readonly hasMoney = computed(() => this._summary().byCurrency.length > 0);
+
+
+  // ── Closing a row by decision (KAN-51) ──────────────────────────────────────
+
+  private readonly _closing = signal(false);
+
+  readonly closing = this._closing.asReadonly();
+
+  /**
+   * Record the decision, then RELOAD.
+   *
+   * ★★ IT DOES NOT SPLICE THE ROW OUT OF `_rows`. Removing it locally would leave the money cards —
+   * which the server computed over the whole filtered set — describing a row the table no longer
+   * shows, and the guarantee this screen exists for is that the two agree. The reload is one request
+   * and it keeps them the same query.
+   *
+   * ★ IT RETURNS WHETHER IT WORKED, so the modal stays open on failure with the note still in the
+   * box. Closing the modal on an error would lose what the person wrote.
+   *
+   * ★ THE MESSAGE IS THE COMPONENT'S, NOT THE STORE'S. Every action in this app reports through a
+   * toast raised by the screen (assignments, plans, transactions); a second error signal here would
+   * be a second place the same failure is announced, and the two would drift.
+   */
+  async closeRow(row: ReconciliationRow, note: string): Promise<boolean> {
+    this._closing.set(true);
+
+    try {
+      await firstValueFrom(this.api.close({ kind: row.kind, entityId: row.entityId, note }));
+      await this.load();
+
+      // ★ THE BADGE IS TOLD, NOT LEFT TO NOTICE. Closing a row is precisely an action that changes the
+      // sidebar's count; without this the number would stay wrong until the five-minute timer, and the
+      // user would be looking straight at the proof that it is wrong.
+      void this.sidebarBadges.refresh();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      this._closing.set(false);
+    }
+  }
 
   async load(filter?: Partial<ReconciliationFilter>): Promise<void> {
     const next = { ...this._filter(), ...filter };
