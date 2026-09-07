@@ -173,8 +173,8 @@ public sealed class GetPayeePlansTool(
             }
 
             return await DescribeAsync(
-                id, confirmed.FullName, confirmed.EmployeeCode, PayeeMatch.ResolvedById, includeEnded,
-                cancellationToken);
+                id, confirmed.FullName, confirmed.EmployeeCode, PayeeMatch.ResolvedById,
+                requested: null, confirmed.StatusLabel, includeEnded, cancellationToken);
         }
 
         // ── Name → id ────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ public sealed class GetPayeePlansTool(
         if (resolution.Match == PayeeMatch.Ambiguous)
         {
             LogCause(AssistantToolCause.AmbiguousPayee);
-            return PayeeAmbiguity.Payload(payeeName!, resolution.Candidates);
+            return PayeeAmbiguity.Payload(payeeName!, resolution.Candidates, ToolName);
         }
 
         if (resolution.Payee is null)
@@ -215,7 +215,8 @@ public sealed class GetPayeePlansTool(
 
         return await DescribeAsync(
             resolution.Payee.Id, resolution.Payee.FullName, resolution.Payee.EmployeeCode,
-            resolution.Match, includeEnded, cancellationToken);
+            resolution.Match, payeeName, resolution.Payee.StatusLabel, includeEnded,
+            cancellationToken);
     }
 
     /// <summary>
@@ -227,11 +228,28 @@ public sealed class GetPayeePlansTool(
     /// one through the name resolver and one through <c>GetPayeeByIdQuery</c>. That is what makes the
     /// empty answer below able to name the person it is about.
     /// </param>
+    /// <param name="requested">
+    /// The term the USER gave — a code, part of a name — kept so the payload can state that it belongs
+    /// to <paramref name="knownName"/>. See PayeeMatchDisclosure: without that sentence the model reads
+    /// a payload naming somebody it did not type and answers that the record was not found.
+    /// </param>
+    /// <param name="employmentStatus">
+    /// The PERSON'S employment status — Active, OnLeave, Terminated.
+    ///
+    /// ★★ IT IS NOT THE ASSIGNMENT'S STATUS, AND CONFLATING THEM IS THE DEFECT THIS PARAMETER EXISTS TO
+    /// END. Asked "is this person active? what is her status?", the assistant answered "she is active,
+    /// her assignment to EU Standard Commission 2026 shows Active" about a payee who is TERMINATED and
+    /// appears under "Terminated with balance" on screen. The payload carried exactly one field that
+    /// looked like a status — the ASSIGNMENT's — so the model answered a question about a person with
+    /// the state of a row. No prompt rule could have prevented it: the fact was not in the payload.
+    /// </param>
     private async Task<string> DescribeAsync(
         Guid payeeId,
         string knownName,
         string? knownCode,
         PayeeMatch match,
+        string? requested,
+        string? employmentStatus,
         bool includeEnded,
         CancellationToken cancellationToken)
     {
@@ -254,6 +272,8 @@ public sealed class GetPayeePlansTool(
                     PayeeName: knownName,
                     PayeeEmployeeCode: knownCode,
                     MatchedBy: match.ToString(),
+                    Disclosure: PayeeMatchDisclosure.For(match, requested, knownName),
+                    PayeeEmploymentStatus: employmentStatus,
                     Message:
                         "This payee exists, but THIS USER MAY NOT READ THEIR PLAN ASSIGNMENTS, so none "
                         + "were looked at. Nothing whatsoever is known here about whether they have "
@@ -318,6 +338,8 @@ public sealed class GetPayeePlansTool(
                     PayeeName: knownName,
                     PayeeEmployeeCode: knownCode,
                     MatchedBy: match.ToString(),
+                    Disclosure: PayeeMatchDisclosure.For(match, requested, knownName),
+                    PayeeEmploymentStatus: employmentStatus,
                     IncludedEnded: includeEnded,
                     Message: includeEnded
                         ? "This user CAN see this payee's assignments, and there are none of any "
@@ -349,6 +371,13 @@ public sealed class GetPayeePlansTool(
                 PayeeName: payeeName,
                 PayeeEmployeeCode: rows[0].PayeeEmployeeCode,
                 MatchedBy: match.ToString(),
+                // ★ The sibling of the balance tool's field, and it is here so the two cannot diverge:
+                //   the same user, the same code, must not be recognised for one lookup and denied for
+                //   the other. Null on an exact-name hit, where nothing needs reconciling.
+                Disclosure: PayeeMatchDisclosure.For(match, requested, knownName),
+                // ★ THE PERSON'S state, beside the ROWS' state. Two fields whose names cannot be read
+                //   as each other — see the parameter's note for the answer that made this necessary.
+                PayeeEmploymentStatus: employmentStatus,
                 IncludedEnded: includeEnded,
                 AssignmentCount: rows.Count,
                 // The domain's own count, so a payee on more plans than the cap is reported as truncated
@@ -388,14 +417,26 @@ public sealed class GetPayeePlansTool(
             // writes a placeholder, and the name it also sent is a perfectly good second chance. An id
             // that parses but belongs to nobody the caller may see is a different matter — that is the
             // guard's decision, not this method's.
-            Guid? id = root.TryGetProperty("payeeId", out var idValue)
-                       && Guid.TryParse(idValue.GetString(), out var parsed)
-                ? parsed
-                : null;
+            var rawId = root.TryGetProperty("payeeId", out var idValue) ? idValue.GetString() : null;
+
+            Guid? id = Guid.TryParse(rawId, out var parsed) ? parsed : null;
 
             var name = root.TryGetProperty("payeeName", out var nameValue)
                 ? nameValue.GetString()?.Trim()
                 : null;
+
+            // ★★ AN ID THAT IS NOT A GUID IS STILL AN IDENTIFIER — see PlanNameMatch.SalvageIdentifier.
+            //    Dropping it is what made the clarify form contradict itself: it offered "EPO9009", the
+            //    user picked it, the dispatcher sent it as payeeId because its own rule says to send the
+            //    id and NOT the name, and the tool refused with UnreadableArguments before the resolver
+            //    ran. The resolver matches employee codes; it simply never got the string.
+            //
+            // ★ THE NAME THE MODEL SENT WINS. This only fills a gap, so a turn carrying both a real name
+            //   and a junk id behaves exactly as it did before.
+            if (string.IsNullOrWhiteSpace(name) && id is null)
+            {
+                name = PlanNameMatch.SalvageIdentifier(rawId);
+            }
 
             // ★ THE DEFAULT IS THE NARROW ANSWER. "What plans is Ana on" means now; answering with three
             // assignments that ended last year reads as three current plans, and the handler's own
@@ -449,6 +490,8 @@ public sealed class GetPayeePlansTool(
         string PayeeName,
         string? PayeeEmployeeCode,
         string MatchedBy,
+        string? Disclosure,
+        string? PayeeEmploymentStatus,
         bool IncludedEnded,
         int AssignmentCount,
         int TotalAssignments,
@@ -476,6 +519,8 @@ public sealed class GetPayeePlansTool(
         string PayeeName,
         string? PayeeEmployeeCode,
         string MatchedBy,
+        string? Disclosure,
+        string? PayeeEmploymentStatus,
         bool IncludedEnded,
         string Message);
 
@@ -491,6 +536,8 @@ public sealed class GetPayeePlansTool(
         string PayeeName,
         string? PayeeEmployeeCode,
         string MatchedBy,
+        string? Disclosure,
+        string? PayeeEmploymentStatus,
         string Message);
 
     private sealed record RefusalPayload(string Outcome, bool Found, string Message);

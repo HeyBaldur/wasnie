@@ -588,6 +588,43 @@
   border-bottom: 1px solid var(--color-border-default);
 }
 
+// The badge and its link, kept on one line at the right of the card header.
+//
+// ★ `align-items: center` so the count and the link share a baseline band; the header itself aligns to
+//   flex-start because the title block beside it is two lines tall.
+.attention-hd__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+// ★ THE SAME LINK LANGUAGE AS `.feed__view-all` — size, weight and the two link colour tokens — with
+//   only the icon row added. A second, slightly different link style on the same screen is a thing to
+//   learn for no reason.
+.attention-hd__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-link);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: var(--radius-sm);
+  }
+}
+
 .feed__view-all {
   flex-shrink: 0;
   font-size: var(--font-size-12);

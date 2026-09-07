@@ -951,7 +951,8 @@
     "DEAL_LOST_CONFIRM_TITLE": "¿Revertir esta comisión?",
     "DEAL_LOST_CONFIRM_MSG": "El deal de {{ref}} se perdió en el CRM. Esto hace supersede de su crédito ({{amount}}) y cancela la transacción, sacándola de cualquier pay run futuro. No se puede deshacer con un clic.",
     "DEAL_LOST_REVERTED": "Comisión revertida.",
-    "ACTIVITY_VIEW_ALL": "Ver todo"
+    "ACTIVITY_VIEW_ALL": "Ver todo",
+    "ATTENTION_RECONCILE": "Reconciliar"
   },
   "QUOTAS": {
     "TITLE": "Cuotas",
@@ -2257,7 +2258,28 @@
     "JUMP_TO_LATEST": "Ir al último mensaje",
     "COPY_ANSWER": "Copiar respuesta",
     "COPY_MARKDOWN": "Copiar markdown",
-    "COPY_FAILED": "No se pudo copiar — revisá los permisos del navegador."
+    "COPY_FAILED": "No se pudo copiar — revisá los permisos del navegador.",
+    "CLARIFY": {
+      "TITLE": "No sé qué buscar exactamente",
+      "DISMISS": "Cerrar",
+      "OR_TYPE": "O reformulá tu pregunta abajo.",
+      "OPTION_TRANSACTION": "Buscar una transacción",
+      "OPTION_PLAN_RULES": "Ver las reglas de un plan",
+      "OPTION_PAYEE_BALANCE": "Ver el balance de un beneficiario",
+      "OPTION_PAYEE_PLANS": "Ver las asignaciones de un beneficiario",
+      "OPTION_SIMULATE": "Calcular cuánto pagaría un plan",
+      "ASK_TRANSACTION": "Buscá la transacción",
+      "ASK_PLAN_RULES": "Mostrame las reglas del plan",
+      "ASK_PAYEE_BALANCE": "Mostrame el balance de",
+      "ASK_PAYEE_PLANS": "Mostrame las asignaciones de",
+      "ASK_SIMULATE": "Calculá cuánto pagaría este plan",
+      "STATUS_ACTIVE": "Activo",
+      "STATUS_ON_LEAVE": "De licencia",
+      "STATUS_TERMINATED": "Baja",
+      "STATUS_DRAFT": "Borrador",
+      "STATUS_ARCHIVED": "Archivado",
+      "MORE_MATCHES": "Se muestran {{ shown }} de {{ total }} coincidencias. Afiná el nombre para acotar."
+    }
   },
   "RECONCILIATION": {
     "TITLE": "Centro de Reconciliación",

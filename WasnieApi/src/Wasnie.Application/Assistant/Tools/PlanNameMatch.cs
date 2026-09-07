@@ -173,4 +173,46 @@ public static class PlanNameMatch
 
         return string.IsNullOrEmpty(longest) ? null : longest;
     }
+
+    /// <summary>
+    /// An id argument that did NOT parse as a GUID, handed back as something to search by — or null
+    /// when there is nothing usable in it.
+    ///
+    /// ★★ THE BUG THIS EXISTS TO END, AND IT WAS INVISIBLE FROM EVERY LAYER THAT LOOKED. The clarify
+    /// form offered "Camille Laurent · EPO9009", the user picked it, and the assistant answered that no
+    /// payee with code EPO9009 exists — one turn after showing it. The employee code is not a GUID, so
+    /// `Guid.TryParse` rejected it, the id became null, and with no `payeeName` alongside it the tool
+    /// refused before the resolver ever ran. The log said `UnreadableArguments`, not `NotFound`: the
+    /// name search was never the problem and neither was the data.
+    ///
+    /// ★ AND THE ARGUMENT THAT SENT IT THERE IS THE DISPATCHER'S OWN RULE. IdentifierRules tells the
+    /// model to pass the id and explicitly NOT to pass the name; handed "EPO9009", which reads exactly
+    /// like an identifier, it does what it was told. The tools' own comment already said an unparseable
+    /// id "falls through to the name rather than refusing" — that was true only when a name happened to
+    /// be sent too, and after a clarify form there is nothing but the code.
+    ///
+    /// ★ WHY SALVAGING IS SAFE RATHER THAN LOOSE. It grants no access: the string goes to the same
+    /// resolver every typed name goes to, which matches employee codes on purpose, and the resource
+    /// guard still decides what may be read. A GUID-shaped value never reaches here, so a real id is
+    /// never demoted to a search term. And a value that matches nothing comes back as an ordinary
+    /// not-found — the honest answer, instead of a refusal about an identifier the system itself just
+    /// printed.
+    /// </summary>
+    public static string? SalvageIdentifier(string? rawId)
+    {
+        if (string.IsNullOrWhiteSpace(rawId)) return null;
+
+        var trimmed = rawId.Trim();
+
+        // A parseable GUID is a real id and belongs on the id path, not this one.
+        if (Guid.TryParse(trimmed, out _)) return null;
+
+        // ★ PLACEHOLDERS ARE NOT IDENTIFIERS. A model that has no id sometimes writes one of these
+        //   rather than omitting the field, and searching for the word "unknown" would turn a missing
+        //   argument into a confident not-found about a payee called Unknown.
+        string[] placeholders =
+            ["null", "none", "unknown", "n/a", "na", "string", "payeeid", "planid", "id", "?", "-"];
+
+        return placeholders.Contains(trimmed, StringComparer.OrdinalIgnoreCase) ? null : trimmed;
+    }
 }

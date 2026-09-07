@@ -121,19 +121,54 @@ public sealed class AssistantMissingCapabilityTests
         AssistantPrompt.CapabilityInventory.Should().Contain("scenario 2D and never 2C");
     }
 
-    // One line per registered tool (Infrastructure DependencyInjection registers exactly four). A
-    // capability listed here that does not exist is an invented feature; one missing sends an answerable
-    // question into 2D.
+    /// <summary>
+    /// One line per registered tool. A capability listed here that does not exist is an invented
+    /// feature; one that exists and is missing sends an answerable question into 2D.
+    ///
+    /// ★★ THIS TEST USED TO ASSERT "exactly four lookups", AND THAT IS HOW THE DRIFT SURVIVED.
+    /// <c>simulate_plan_rules</c> had been registered in DependencyInjection and never added here, so
+    /// the model held five tool schemas while the prompt told it it had four capabilities — and every
+    /// "what would this pay?" question was a candidate for "I do not have that capability yet", about
+    /// something it could answer exactly. The test was green throughout, because it was pinning the
+    /// number the constant happened to say rather than the number of tools that exist.
+    ///
+    /// ★ SO IT COUNTS THE BULLETS NOW. The literal is still asserted — a prompt that says "five" and
+    /// lists four is its own bug — but the count is what makes the two halves impossible to separate.
+    /// </summary>
     [Fact]
-    public void The_inventory_lists_the_four_real_lookups()
+    public void The_inventory_lists_every_real_lookup()
     {
         var inventory = AssistantPrompt.CapabilityInventory;
 
-        inventory.Should().Contain("exactly four lookups");
+        inventory.Should().Contain("exactly five lookups");
         inventory.Should().Contain("ONE TRANSACTION");
         inventory.Should().Contain("CONFIGURATION");
         inventory.Should().Contain("BALANCE");
         inventory.Should().Contain("PLAN ASSIGNMENTS");
+        inventory.Should().Contain("commission engine");
+
+        var bullets = inventory
+            .Split('\n')
+            .Count(line => line.StartsWith("- ", StringComparison.Ordinal));
+
+        // ★ ONE BULLET PER REGISTERED *LOOKUP*, WHICH IS NOT THE SAME AS PER REGISTERED TOOL.
+        // `ask_user_to_choose` (KAN-58) is registered as an IAssistantTool and reads no tenant data at
+        // all — it asks the user which of these five to run — so it is absent from this list on
+        // purpose. Listing it here would tell the model it can "look up" a question it is supposed to
+        // ask, which is the sort of muddle that produces a menu instead of an answer.
+        bullets.Should().Be(5, "the inventory lists one capability per registered LOOKUP tool");
+    }
+
+    /// <summary>
+    /// ★★ THE CAPABILITY THAT WAS REGISTERED AND UNMENTIONED. Named on its own so that removing it from
+    /// the inventory again fails with the reason rather than with an off-by-one on a bullet count.
+    /// </summary>
+    [Fact]
+    public void The_inventory_mentions_the_engine_simulation_that_used_to_be_missing()
+    {
+        AssistantPrompt.CapabilityInventory.Should().Contain(
+            "worked out by the real commission engine",
+            "simulate_plan_rules is registered, so a prompt that omits it denies a real capability");
     }
 
     // ── The dispatcher must not mis-route in the first place ─────────────────

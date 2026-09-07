@@ -951,7 +951,8 @@
     "DEAL_LOST_CONFIRM_TITLE": "Cofnąć tę prowizję?",
     "DEAL_LOST_CONFIRM_MSG": "Transakcja {{ref}} została utracona w CRM. Spowoduje to zastąpienie jej kredytu ({{amount}}) i anulowanie transakcji, usuwając ją z przyszłych wypłat. Nie można tego cofnąć jednym kliknięciem.",
     "DEAL_LOST_REVERTED": "Prowizja cofnięta.",
-    "ACTIVITY_VIEW_ALL": "Zobacz wszystko"
+    "ACTIVITY_VIEW_ALL": "Zobacz wszystko",
+    "ATTENTION_RECONCILE": "Uzgodnij"
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -2257,7 +2258,28 @@
     "JUMP_TO_LATEST": "Przejdź do najnowszej wiadomości",
     "COPY_ANSWER": "Kopiuj odpowiedź",
     "COPY_MARKDOWN": "Kopiuj markdown",
-    "COPY_FAILED": "Nie udało się skopiować — sprawdź uprawnienia przeglądarki."
+    "COPY_FAILED": "Nie udało się skopiować — sprawdź uprawnienia przeglądarki.",
+    "CLARIFY": {
+      "TITLE": "Nie wiem dokładnie, czego szukać",
+      "DISMISS": "Zamknij",
+      "OR_TYPE": "Albo przeformułuj pytanie poniżej.",
+      "OPTION_TRANSACTION": "Znajdź transakcję",
+      "OPTION_PLAN_RULES": "Zobacz reguły planu",
+      "OPTION_PAYEE_BALANCE": "Zobacz saldo odbiorcy",
+      "OPTION_PAYEE_PLANS": "Zobacz przypisania odbiorcy",
+      "OPTION_SIMULATE": "Oblicz, ile zapłaciłby plan",
+      "ASK_TRANSACTION": "Znajdź transakcję",
+      "ASK_PLAN_RULES": "Pokaż mi reguły planu",
+      "ASK_PAYEE_BALANCE": "Pokaż mi saldo",
+      "ASK_PAYEE_PLANS": "Pokaż mi przypisania",
+      "ASK_SIMULATE": "Oblicz, ile zapłaciłby ten plan",
+      "STATUS_ACTIVE": "Aktywny",
+      "STATUS_ON_LEAVE": "Na urlopie",
+      "STATUS_TERMINATED": "Zakończony",
+      "STATUS_DRAFT": "Wersja robocza",
+      "STATUS_ARCHIVED": "Zarchiwizowany",
+      "MORE_MATCHES": "Wyświetlono {{ shown }} z {{ total }} dopasowań. Doprecyzuj nazwę, aby zawęzić wyniki."
+    }
   },
   "RECONCILIATION": {
     "TITLE": "Centrum uzgodnień",

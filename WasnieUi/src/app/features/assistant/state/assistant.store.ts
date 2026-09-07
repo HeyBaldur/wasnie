@@ -3,6 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { AssistantApiService } from '../services/assistant.api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { DraftMap, draftKeyFor, readDrafts, writeDrafts } from './draft-storage';
+import { openClarify } from '../models/clarify';
 import {
   AssistantConversation,
   AssistantConversationSummary,
@@ -683,6 +684,100 @@ export class AssistantStore {
    * for the assistant, and leaving half an answer on screen would show the user something that does not
    * exist and will not be there when they come back.
    */
+  /**
+   * The clarify form the composer should offer, or null (KAN-58).
+   *
+   * ★ DERIVED FROM THE MESSAGES, NEVER STORED SEPARATELY. The form's state lives on its own turn, so
+   * a refresh restores it with no client-side memory — and a form the user answered or closed cannot
+   * come back, because `openClarify` only returns one whose state is still `open`.
+   *
+   * ★ PER CONVERSATION FOR FREE. `messages()` is this conversation's; opening another thread reads
+   * another list, so a form raised in chat A cannot appear in chat B. That is the ticket's third
+   * comment satisfied by where the data lives rather than by a rule somebody has to remember.
+   */
+  readonly clarify = computed(() => openClarify(this.messages()));
+
+  /**
+   * The user closed the form because none of the options helped.
+   *
+   * ★ THE PANEL GOES FIRST AND THE REQUEST FOLLOWS. Waiting for the round trip would leave a panel
+   * they just dismissed sitting under their cursor; the state is written on the message locally so the
+   * derived signal stops returning it immediately. A failed request is not worth interrupting them
+   * over — the worst case is the panel returning on the next full load, which is recoverable and
+   * silent, whereas a toast about a dismissed menu is noise about nothing.
+   */
+  async dismissClarify(): Promise<void> {
+    const target = this.clarify();
+    const conversationId = this.conversation()?.id;
+    if (!target || !conversationId) return;
+
+    this.markClarify(target.message.id, 'dismissed');
+
+    try {
+      await firstValueFrom(
+        this.api.resolveClarify(conversationId, target.message.id, 'dismissed'));
+    } catch {
+      // Deliberately silent — see above.
+    }
+  }
+
+  /**
+   * The user picked an option: the form is marked answered and the question is asked as a message.
+   *
+   * ★★ IT SENDS A SENTENCE, IT DOES NOT CALL A TOOL. The client has no route to a tool and must not
+   * have one: the dispatcher chooses which lookup runs, and a client that named the tool itself would
+   * be a second dispatcher with none of the prompt's rules about which identifier goes where. The
+   * option becomes the question the user would have typed, and the ordinary turn does the rest —
+   * including the guard that stops the answer inventing anything.
+   */
+  async chooseClarify(question: string): Promise<void> {
+    const target = this.clarify();
+    const conversationId = this.conversation()?.id;
+    if (!target || !conversationId) return;
+
+    this.markClarify(target.message.id, 'answered');
+
+    try {
+      await firstValueFrom(
+        this.api.resolveClarify(conversationId, target.message.id, 'answered'));
+    } catch {
+      // The answer matters more than the bookkeeping; the question is still worth asking.
+    }
+
+    await this.send(question);
+  }
+
+  /**
+   * Rewrites one message's clarify state in the loaded conversation.
+   *
+   * ★ IT EDITS THE PAYLOAD RATHER THAN KEEPING A PARALLEL FLAG. The panel is derived from the
+   * payload, so a second source of truth for "is this form open?" would be a second thing to keep in
+   * step — and the one that went stale would be the one deciding whether a dismissed panel comes back.
+   */
+  private markClarify(messageId: string, state: 'answered' | 'dismissed'): void {
+    const conversation = this.conversation();
+    if (!conversation) return;
+
+    this.conversation.set({
+      ...conversation,
+      messages: conversation.messages.map((m) => {
+        if (m.id !== messageId || !m.payload) return m;
+
+        try {
+          const payload = JSON.parse(m.payload) as Record<string, unknown> & { clarify?: object };
+          if (!payload.clarify) return m;
+
+          return {
+            ...m,
+            payload: JSON.stringify({ ...payload, clarify: { ...payload.clarify, state } }),
+          };
+        } catch {
+          return m;
+        }
+      }),
+    });
+  }
+
   async send(content: string): Promise<void> {
     const trimmed = content.trim();
     if (trimmed.length === 0 || this.sending()) {

@@ -328,9 +328,31 @@
           <h3 class="stat-card__title">{{ 'DASHBOARD.ATTENTION_TITLE' | translate }}</h3>
           <p class="pending-plan-card__sub">{{ 'DASHBOARD.ATTENTION_DESC' | translate }}</p>
         </div>
-        @if (!store.loading() && hasAttentionItems()) {
-          <ws-badge variant="warning" size="sm">{{ attentionBadgeTotal() }}</ws-badge>
-        }
+        <!--
+          ★ THE COUNT AND THE WAY OUT, TOGETHER. The badge says how many transactions need attention;
+          without a link beside it the reader is told there is a problem and left to find the screen
+          that resolves it. Same pairing as the activity feed's "view all".
+
+          ★ RBAC HIDES IT (§5.8). /reconciliation is behind `Reports.ViewAll`, so a reader without it
+          would land on the guard — offering the link would be promising a screen they cannot open.
+        -->
+        <div class="attention-hd__actions">
+          @if (!store.loading() && hasAttentionItems()) {
+            <ws-badge variant="warning" size="sm">{{ attentionBadgeTotal() }}</ws-badge>
+          }
+          @if ('Reports.ViewAll' | hasPermission) {
+            <!-- ★ `external-link` IS THE ICON THAT MATCHES THE BEHAVIOUR, and the registry says so in
+                 as many words: it "promises a new browser tab". This one opens one, so it is the
+                 honest glyph rather than an arrow that would suggest navigating in place. -->
+            <a class="attention-hd__link"
+               routerLink="/reconciliation"
+               target="_blank"
+               rel="noopener noreferrer">
+              <app-icon name="external-link" [size]="14" />
+              {{ 'DASHBOARD.ATTENTION_RECONCILE' | translate }}
+            </a>
+          }
+        </div>
       </div>
 
       @if (store.loading()) {

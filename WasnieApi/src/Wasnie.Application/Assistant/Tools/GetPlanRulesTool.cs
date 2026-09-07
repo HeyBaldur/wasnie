@@ -231,16 +231,34 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
                 // candidates are all inside the user's own tenant and behind Plans.Read — the same
                 // disclosure the plans screen makes — and the assistant asks which one.
                 logger.LogInformation("{Tool} finished: ambiguous partial name.", ToolName);
+
+                var choices = candidateNames
+                    .Select(name => partial.First(p => PlanNameMatch.AreSame(p.Name, name)))
+                    .Select(p => new PlanChoice(p.Name, p.Version, p.Status))
+                    .ToList();
+
                 return JsonSerializer.Serialize(
                     new PlanNameRequired(
                         Outcome: nameof(PlanRulesOutcome.PlanNameRequired),
                         Found: false,
-                        Message: "No plan has exactly that name, and more than one could be meant. Ask "
-                                 + "the user which of these they mean.",
-                        AvailablePlans: candidateNames
-                            .Select(name => partial.First(p => PlanNameMatch.AreSame(p.Name, name)))
-                            .Select(p => new PlanChoice(p.Name, p.Version, p.Status))
-                            .ToList()),
+                        Message: "No plan has exactly that name, and more than one could be meant. A "
+                                 + "FORM listing them has ALREADY been shown to the user, so do NOT "
+                                 + "repeat the list: write ONE short sentence asking which they mean.",
+                        AvailablePlans: choices,
+
+                        // ★ THE SECOND ENTITY, AND IT NEEDED NO NEW MACHINERY — which is the test of
+                        //   whether the form is really generic. A plan is resolved by NAME, so that is
+                        //   what the option carries; the version is what tells two candidates apart,
+                        //   exactly as an employee code does for two namesakes.
+                        Clarify: AssistantClarify.EntityForm(
+                            choices
+                                .Take(ClarifyForm.MaxEntityOptions)
+                                .Select(c => new ClarifyOption(
+                                    ToolName,
+                                    c.Name,
+                                    new ClarifyEntity(c.Name, $"v{c.Version}", c.Status)))
+                                .ToList(),
+                            choices.Count)),
                     Json);
             }
 
@@ -380,9 +398,21 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
         try
         {
             using var document = JsonDocument.Parse(argumentsJson);
-            return document.RootElement.TryGetProperty("planName", out var value)
+            var root = document.RootElement;
+
+            var name = root.TryGetProperty("planName", out var value)
                 ? value.GetString()?.Trim()
                 : null;
+
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+
+            // ★★ THE SAME SALVAGE THE PAYEE TOOLS DO, for the same reason and with the same helper: a
+            //    planId that is not a GUID is not nothing, it is a name the model filed under the wrong
+            //    key. Here the cost of dropping it was quieter than a refusal — the tool answered "which
+            //    plan did you mean?" about a plan the user had just named — but it is the same defect.
+            //    Only reached when no planName was sent, so a real name always wins.
+            return PlanNameMatch.SalvageIdentifier(
+                root.TryGetProperty("planId", out var idValue) ? idValue.GetString() : null);
         }
         catch (JsonException)
         {
@@ -474,7 +504,10 @@ public sealed class GetPlanRulesTool(ISender sender, ILogger<GetPlanRulesTool> l
     private sealed record RefusalPayload(string Outcome, bool Found, string Message);
 
     private sealed record PlanNameRequired(
-        string Outcome, bool Found, string Message, IReadOnlyList<PlanChoice> AvailablePlans);
+        string Outcome, bool Found, string Message, IReadOnlyList<PlanChoice> AvailablePlans,
+        // Same key and same reason as the payee ambiguity: a name that matched several records opens
+        // the entity form. Null on the "no name given at all" branch, which has nothing to choose from.
+        [property: JsonPropertyName(AssistantClarify.PayloadKey)] ClarifyForm? Clarify = null);
 
     private sealed record PlanRules(
         string Outcome,

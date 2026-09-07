@@ -401,6 +401,122 @@
 -->
 <footer class="assistant-conversation__composer">
   <!--
+    ★★ THE CLARIFY PANEL (KAN-58). It appears ONLY when the assistant could not answer as asked and
+    at least one of its functions is worth offering — never permanently, and never as the full
+    catalogue. When NO function applies the server sends no form at all and Zeke simply says it cannot
+    help, which is why there is no "nothing matches" state to render here.
+
+    ★ ONLY AN OPEN FORM REACHES THIS POINT. `store.clarify()` reads the state off the message it
+    belongs to, so a form the user answered or closed does not come back after a refresh, and a form
+    raised in another conversation is not in this one's messages to begin with.
+
+    ★ THE TEXTAREA BELOW IS NOT SHRUNK TO MAKE ROOM, deliberately. Its [minHeight] of 62px is
+    documented as one line plus the send button's strip — "exactly as tall as it has to be and not a
+    pixel more" — so lowering it would put the floor under the natural height and the clamp would
+    silently stop doing anything. The panel takes its own space above instead.
+  -->
+  @if (store.clarify(); as clarify) {
+    <!--
+      ★ ws-card variant="raised", NOT A HAND-STYLED DIV. The primitive already carries the three
+      things this panel needs — the raised surface, the default border and the radius — so the
+      stylesheet below adds layout and nothing else. A panel of actions sitting over the composer is
+      exactly the raised level (§5.3).
+
+      ★ NO box-shadow IS SET HERE, AND THAT IS THE PRIMITIVE'S DECISION, NOT AN OMISSION.
+      `.ws-card--raised` declares `box-shadow: none` deliberately; overriding it from this stylesheet
+      would make one card in the app sit at a depth no other raised card uses.
+    -->
+    <!--
+      ★ padding="none" IS THE PRIMITIVE'S OWN OPTION, not a padding override from the stylesheet. The
+      panel is a DIVIDED LIST: its header strip, its rows and its footer each run edge to edge and
+      carry their own inset, so a padding on the card would inset the separators too and they would
+      stop short of the border on both sides. `.ws-card` already sets `overflow: hidden`, so the first
+      and last strips clip themselves against the radius with nothing added here.
+    -->
+    <ws-card variant="raised" padding="none" class="assistant-clarify" data-testid="assistant-clarify">
+      <div class="assistant-clarify__head">
+        <span class="assistant-clarify__title">
+          <app-icon name="help-circle" [size]="14" />
+          {{ 'ASSISTANT.CLARIFY.TITLE' | translate }}
+        </span>
+        <!--
+          ★ DISMISSIBLE, AND CLOSING IT BREAKS NOTHING. The user keeps the composer and the thread; the
+          only thing that changes is that this panel stops offering options that did not help.
+
+          ★ THE GEOMETRY IS WsModal's CLOSE BUTTON, COPIED ON PURPOSE: 28×28, radius-sm, tertiary ink,
+          sunken on hover. Two dismiss affordances that differ in size are two things to learn, and
+          this one sits a few hundred pixels from the modal's.
+        -->
+        <button
+          type="button"
+          class="assistant-clarify__close"
+          [attr.aria-label]="'ASSISTANT.CLARIFY.DISMISS' | translate"
+          [title]="'ASSISTANT.CLARIFY.DISMISS' | translate"
+          (click)="dismissClarify()"
+          data-testid="assistant-clarify-dismiss"
+        >
+          <app-icon name="x" [size]="16" />
+        </button>
+      </div>
+
+      <div class="assistant-clarify__options">
+        @for (option of clarify.form.options; track option.function) {
+          <!-- ★ WsButton secondary, not a styled div: focus ring, disabled handling and hover states
+               come from the primitive rather than being re-invented per screen (§5.4). -->
+          <ws-button
+            variant="secondary"
+            size="sm"
+            (click)="chooseClarify(option)"
+            data-testid="assistant-clarify-option"
+          >
+            @if (clarifyEntity(option); as entity) {
+              <!--
+                ★★ A RECORD, NOT A FUNCTION. Every option on this form runs the SAME lookup, so
+                labelling them by function would print the same sentence three times and offer a
+                choice nobody could make. What distinguishes them is the record: the FULL name (two
+                candidates can share a first name and differ in the surname), then the code that
+                separates outright namesakes, then the status — which is usually the thing the reader
+                actually knows about the person they mean.
+              -->
+              <span class="assistant-clarify__label">{{ entity.name }}</span>
+              @if (entity.code) {
+                <span class="assistant-clarify__argument">{{ entity.code }}</span>
+              }
+              <!-- ★ TRANSLATED FROM A TOKEN, and omitted entirely if this build cannot name it —
+                   never the raw `OnLeave` in front of a user (§C2). -->
+              @if (clarifyStatus(entity); as statusKey) {
+                <span class="assistant-clarify__argument">{{ statusKey | translate }}</span>
+              }
+            } @else {
+              <span class="assistant-clarify__label">{{ clarifyLabel(option) | translate }}</span>
+              @if (option.argument) {
+                <!-- ★ SUBORDINATE TO THE ACTION, and only ever what the USER already said. An option
+                     never carries a guessed name: it would run a real lookup on invented input and
+                     answer confidently about the wrong record. -->
+                <span class="assistant-clarify__argument">{{ option.argument }}</span>
+              }
+            }
+          </ws-button>
+        }
+      </div>
+
+      <!-- ★ A HINT, NOT A FOURTH OPTION. Separated by a rule so the eye stops at the end of the
+           buttons; tertiary ink and the smallest step so it never competes with them.
+
+           ★★ AND WHEN THE LIST IS TRUNCATED IT SAYS SO. A name like "García" can belong to more
+           people than fit above the composer; showing some while implying they are all of them
+           would be a confident partial answer — the exact shape of failure this ticket is about.
+           The count only appears when it exceeds what is listed. -->
+      @if (clarify.form.totalMatches; as total) {
+        <p class="assistant-clarify__hint">
+          {{ 'ASSISTANT.CLARIFY.MORE_MATCHES'
+             | translate: { shown: clarify.form.options.length, total: total } }}
+        </p>
+      }
+      <p class="assistant-clarify__hint">{{ 'ASSISTANT.CLARIFY.OR_TYPE' | translate }}</p>
+    </ws-card>
+  }
+  <!--
     ★ ONE ATTRIBUTE, ON ONE ELEMENT, AND EVERY CHILD HANGS OFF IT. The shape used to be a modifier class
     on the inner row, and across four attempts we could never tell from the outside whether the state
     was failing to compute or the class was failing to apply. A single data attribute on the card, read

@@ -145,15 +145,40 @@ public static class PayeeResolver
         // code is a data problem someone needs to see, not a missing person.
         if (byCode.Count > 1) return PayeeResolution.Ambiguous(byCode);
 
-        // No exact hit: accept a single substring candidate, which is how "Ana" finds "Ana García" when
-        // she is the only Ana.
+        // ★★ WHO ACTUALLY BEARS THE NAME THE USER TYPED — and this is the distinction whose ABSENCE
+        //    was the defect. The branch below used to be "exactly one substring candidate resolves,
+        //    anything else is NOT FOUND", and it defended that with the Zoe example: "Zoe Schmidt"
+        //    against a tenant holding Anna and Sergio Schmidt is not two people the user might have
+        //    meant. That reasoning is right, and it does not cover the case that broke.
         //
-        // ★ AND SEVERAL SUBSTRING CANDIDATES STAY "NOT FOUND", DELIBERATELY. This branch is reached when
-        // NOTHING carries the name the user typed — "Zoe Schmidt" against a tenant holding Anna and
-        // Sergio Schmidt. Those are not people the user might have meant; they merely share a word with
-        // a name that does not exist, and offering them as "did you mean" would be the resolver
-        // guessing out loud. Ambiguity is reserved for the case where the name the user typed genuinely
-        // belongs to more than one person.
+        //    A tenant with Camille Laurent (EPO9009), Camille Laurent (EMP409) and Camille Martin
+        //    (FR-301) was asked for "Camille". No full name IS "Camille", so the exact pass found
+        //    nothing; three rows came back from the substring search, so the count was not one; and the
+        //    resolver answered NOT FOUND. The user was told no payee called Camille exists while three
+        //    of them were on their screen — the same lie the Ambiguous outcome was built to end, taking
+        //    the other road into it.
+        //
+        // ★ THE TWO CASES ARE SEPARATED BY WHOLE-WORD CONTAINMENT, WHICH IS WHY IsPartialNameOf DOES IT
+        //   RATHER THAN A NEW RULE. "Camille" is a complete word of "Camille Laurent", so each of those
+        //   three genuinely IS a Camille and every one of them is a person the user might have meant.
+        //   "Zoe Schmidt" is not a whole-word part of "Anna Schmidt" and "Anna Schmidt" is not one of
+        //   it, so the Zoe case still bears nobody and still lands on NotFound, unchanged.
+        var bearers = candidates.Where(p => PlanNameMatch.IsPartialNameOf(p.FullName, name)).ToList();
+
+        // One Ana in the tenant still resolves straight to Ana García: a question with one possible
+        // subject must never become a menu (§the clarify rule — never ask what you could answer).
+        if (bearers.Count == 1) return PayeeResolution.Of(bearers[0], PayeeMatch.PartialNameSingleCandidate);
+
+        // ★ N > 1 IS THE SAME REFUSAL AS TWO EXACT NAMESAKES, AND IT MUST PRODUCE THE SAME PAYLOAD.
+        //   Fifteen Garcías is an ordinary state of a real company; the answer is fifteen people to
+        //   choose from, never "no existe". Routing it through Ambiguous rather than a new outcome is
+        //   what makes rule 23 cover it for free, for BOTH payee tools, with nothing to keep in step.
+        if (bearers.Count > 1) return PayeeResolution.Ambiguous(bearers);
+
+        // Nobody bears the name. The pre-existing fallback is left exactly as it was: a lone row from
+        // the database's own substring search still resolves, so "Ana" finding only "Mariana López"
+        // behaves today as it did yesterday. Narrowing the change to the N>1 branch keeps this fix off
+        // every path that was not broken.
         return candidates.Count == 1
             ? PayeeResolution.Of(candidates[0], PayeeMatch.PartialNameSingleCandidate)
             : PayeeResolution.NotFound;
@@ -182,6 +207,60 @@ public static class PayeeResolver
 /// what is in this list. A user who cannot list payees never reaches here; one who can is being shown
 /// names they can already read on that screen.
 /// </summary>
+/// <summary>
+/// THE SENTENCE THAT SAYS "THIS IS THE PERSON YOU ASKED FOR" — carried in the payload, next to the data.
+///
+/// ★★ THE FAILURE IT ENDS, OBSERVED THREE TIMES AND TWICE IN ONE AFTERNOON. The user picks an option
+/// off the clarify form, the lookup RESOLVES and returns the balance (the log says <c>Found</c>), and
+/// the assistant answers "I could not find any payee matching FR-301". Real money, for a real person,
+/// reported as non-existent out of a SUCCESSFUL lookup. The same shape was recorded for NB-2001 in
+/// <see cref="PayeeMatch"/>: asked for a code, handed a payload naming somebody, the model decides the
+/// answer is about a different person and falls back to scenario 2C.
+///
+/// ★★ WHY THIS IS IN THE PAYLOAD AND NOT A SIXTH PROMPT RULE. Rule 19a already says exactly this —
+/// "if found is true you FOUND the person; matchedBy tells you how; open with their full name" — and it
+/// has now failed three times. A rule sitting a thousand tokens up the prompt competes with everything
+/// else there; a sentence sitting INSIDE the JSON the model is reading at that moment does not. The
+/// evidence for the difference is in this very file: <see cref="PayeeAmbiguity"/> embeds its
+/// instruction the same way and its behaviour has been correct in every runtime test.
+///
+/// ★ IT IS ONLY EMITTED WHEN THE NAMES CANNOT MATCH. On an exact-name hit the payload already agrees
+/// with the question and there is nothing to reconcile, so nothing is said — a reassurance repeated on
+/// every turn is noise that teaches the model to skip the field.
+/// </summary>
+public static class PayeeMatchDisclosure
+{
+    /// <summary>
+    /// The instruction for this match, or null when the answer needs none.
+    /// </summary>
+    /// <param name="match">How the resolver identified the payee.</param>
+    /// <param name="requested">The term the user actually gave — a code, a partial name.</param>
+    /// <param name="resolvedName">The payee's real full name, as the payload reports it.</param>
+    public static string? For(PayeeMatch match, string? requested, string resolvedName)
+    {
+        if (string.IsNullOrWhiteSpace(requested)) return null;
+
+        // ★ ExactName needs nothing: the question and the answer already use the same words.
+        //   ResolvedById needs nothing either — an id the model copied from its own context is not a
+        //   term it can mistake for somebody else's name.
+        var kind = match switch
+        {
+            PayeeMatch.EmployeeCode => "employee code",
+            PayeeMatch.PartialNameSingleCandidate => "part of the name",
+            _ => null,
+        };
+
+        if (kind is null) return null;
+
+        return $"\"{requested}\" IS the {kind} of {resolvedName}, and the figures below are THEIRS. "
+            + "This lookup SUCCEEDED. You must NOT say the payee was not found, that nothing matched, "
+            + $"that \"{requested}\" does not exist, or ask the user to check the spelling — they gave "
+            + "a correct identifier and this is the person it belongs to. Open your answer with "
+            + $"{resolvedName}'s full name so the user can see who it resolved to, then give the "
+            + "figures.";
+    }
+}
+
 public static class PayeeAmbiguity
 {
     /// <summary>The token the system prompt branches on. Distinct from every refusal outcome.</summary>
@@ -202,7 +281,16 @@ public static class PayeeAmbiguity
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public static string Payload(string requestedName, IReadOnlyList<PayeeDto> candidates) =>
+    /// <param name="function">
+    /// The tool that hit the ambiguity, so each option on the form re-runs THAT lookup once the user
+    /// picks a person.
+    ///
+    /// ★ IT IS PASSED IN RATHER THAN ASSUMED, because both payee tools reach this same payload and the
+    /// two must not offer each other's function: a user who asked for assignments and pressed a name
+    /// must get assignments, not a balance.
+    /// </param>
+    public static string Payload(
+        string requestedName, IReadOnlyList<PayeeDto> candidates, string function) =>
         JsonSerializer.Serialize(
             new AmbiguousPayeePayload(
                 Outcome: Outcome,
@@ -219,10 +307,24 @@ public static class PayeeAmbiguity
                 Message:
                     "More than one payee answers to that name, so no balance, assignment or figure has "
                     + "been read for any of them. This is NOT a missing record: every person listed "
-                    + "below exists. Tell the user which people share the name — giving each one's "
-                    + "employee code and employment status — and ask them to reply with the employee "
-                    + "code of the one they mean. Do not choose for them and do not answer about any of "
-                    + "them until they say which."),
+                    + "below exists. A FORM listing these people has ALREADY been shown to the user, so "
+                    + "do NOT repeat the list in your answer: write ONE short sentence saying the name "
+                    + "matches several people and asking which one they mean. Do not choose for them "
+                    + "and do not answer about any of them until they say which.",
+
+                // ★★ THE FORM IS BUILT HERE, FROM THE ROWS THE LOOKUP ACTUALLY MATCHED. Every option
+                // carries an EMPLOYEE CODE as its argument rather than the name the user typed —
+                // pressing one has to resolve to exactly one person, and the name is the very thing
+                // that did not.
+                Clarify: AssistantClarify.EntityForm(
+                    candidates
+                        .Take(ClarifyForm.MaxEntityOptions)
+                        .Select(p => new ClarifyOption(
+                            function,
+                            p.EmployeeCode,
+                            new ClarifyEntity(p.FullName, p.EmployeeCode, p.StatusLabel)))
+                        .ToList(),
+                    candidates.Count)),
             Json);
 
     private sealed record AmbiguousPayeePayload(
@@ -231,7 +333,11 @@ public static class PayeeAmbiguity
         string RequestedName,
         int CandidateCount,
         IReadOnlyList<PayeeCandidate> Candidates,
-        string Message);
+        string Message,
+        // The key the screen reads the panel from. Named explicitly rather than left to the camelCase
+        // policy: this one has to equal AssistantClarify.PayloadKey, and a naming convention agreeing
+        // with it today is not the same as it being the same string.
+        [property: JsonPropertyName(AssistantClarify.PayloadKey)] ClarifyForm? Clarify);
 
     /// <summary>Name to recognise them by, code to answer with, status to tell them apart.</summary>
     private sealed record PayeeCandidate(string FullName, string EmployeeCode, string Status);

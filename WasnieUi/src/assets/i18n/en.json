@@ -951,7 +951,8 @@
     "DEAL_LOST_CONFIRM_TITLE": "Revert this commission?",
     "DEAL_LOST_CONFIRM_MSG": "The deal for {{ref}} was lost in the CRM. This supersedes its credit ({{amount}}) and cancels the transaction, removing it from any future pay run. It cannot be undone with one click.",
     "DEAL_LOST_REVERTED": "Commission reverted.",
-    "ACTIVITY_VIEW_ALL": "View all"
+    "ACTIVITY_VIEW_ALL": "View all",
+    "ATTENTION_RECONCILE": "Reconcile"
   },
   "IMPORTS": {
     "STEPS": {
@@ -2257,7 +2258,28 @@
     "JUMP_TO_LATEST": "Jump to the latest message",
     "COPY_ANSWER": "Copy answer",
     "COPY_MARKDOWN": "Copy markdown",
-    "COPY_FAILED": "Could not copy — check your browser permissions."
+    "COPY_FAILED": "Could not copy — check your browser permissions.",
+    "CLARIFY": {
+      "TITLE": "I am not sure what to look up",
+      "DISMISS": "Close",
+      "OR_TYPE": "Or rephrase your question below.",
+      "OPTION_TRANSACTION": "Look up a transaction",
+      "OPTION_PLAN_RULES": "See a plan’s rules",
+      "OPTION_PAYEE_BALANCE": "See a payee’s balance",
+      "OPTION_PAYEE_PLANS": "See a payee’s assignments",
+      "OPTION_SIMULATE": "Work out what a plan would pay",
+      "ASK_TRANSACTION": "Look up the transaction",
+      "ASK_PLAN_RULES": "Show me the rules of the plan",
+      "ASK_PAYEE_BALANCE": "Show me the balance of",
+      "ASK_PAYEE_PLANS": "Show me the plan assignments of",
+      "ASK_SIMULATE": "Work out what this plan would pay",
+      "STATUS_ACTIVE": "Active",
+      "STATUS_ON_LEAVE": "On leave",
+      "STATUS_TERMINATED": "Terminated",
+      "STATUS_DRAFT": "Draft",
+      "STATUS_ARCHIVED": "Archived",
+      "MORE_MATCHES": "Showing {{ shown }} of {{ total }} matches. Refine the name to narrow it down."
+    }
   },
   "RECONCILIATION": {
     "TITLE": "Reconciliation Centre",
