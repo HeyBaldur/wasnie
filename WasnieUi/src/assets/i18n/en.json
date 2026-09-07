@@ -2488,5 +2488,11 @@
       "TWO_FACTOR_LOGIN_SUCCESS": "Two-factor sign-in",
       "UNKNOWN": "Unrecognised action"
     }
+  },
+  "LANGUAGE": {
+    "LABEL": "Language",
+    "EN": "English",
+    "ES": "Español",
+    "PL": "Polski"
   }
 }

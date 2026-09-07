@@ -2488,5 +2488,11 @@
       "TWO_FACTOR_LOGIN_SUCCESS": "Inicio de sesión en dos pasos",
       "UNKNOWN": "Acción no reconocida"
     }
+  },
+  "LANGUAGE": {
+    "LABEL": "Idioma",
+    "EN": "English",
+    "ES": "Español",
+    "PL": "Polski"
   }
 }

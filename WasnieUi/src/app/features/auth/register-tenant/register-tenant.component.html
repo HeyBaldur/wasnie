@@ -2,6 +2,9 @@
   <!-- LEFT: form panel -->
   <div class="auth-page__form">
     <div class="auth-page__form-top">
+      <!-- ★ THE LANGUAGE PICKER BELONGS ON THE SIGNED-OUT PAGES, and until now it only existed in
+           admin — behind the login. A Polish user could not read the form that would let them in. -->
+      <app-language-toggle />
       <app-theme-toggle />
     </div>
 

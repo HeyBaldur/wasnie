@@ -1,7 +1,9 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { HttpClientTestingModule, HttpTestingController, TestRequest } from '@angular/common/http/testing';
+import { firstValueFrom } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import { InactivityService } from './inactivity.service';
 import { AuthService } from './auth.service';
 import { TabSyncService, TabSyncMessage } from './tab-sync.service';
@@ -283,5 +285,204 @@ describe('AuthService — cross-tab broadcast', () => {
 
     expect(auth.isAuthenticated()).toBeFalse();
     expect(localStorage.removeItem).toHaveBeenCalledWith('wasnie_session');
+  });
+});
+
+// ─── AuthService.refresh() — one renewal per browser (KAN-1) ──────────────────
+//
+// ★★ THE DEFECT THESE PIN. The server rotates the refresh token — it revokes the presented one before
+// issuing the new pair — so a refresh token is single-use. Tabs deliberately never share tokens over
+// BroadcastChannel, and nothing re-read `wasnie_session` when another tab wrote it. So the second tab
+// spent a token the first had already used, its renewal was rejected, it called forceLogout, and the
+// `session-expired` broadcast threw EVERY tab out, including the one whose session was perfectly fine.
+describe('AuthService.refresh — cross-tab token rotation', () => {
+  const KEY = 'wasnie_session';
+
+  function session(accessToken: string, refreshToken: string, expiresInMs: number): string {
+    return JSON.stringify({
+      tenantId: 't1',
+      tokens: {
+        accessToken,
+        refreshToken,
+        accessTokenExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
+        refreshTokenExpiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
+      },
+    });
+  }
+
+  /**
+   * Waits until the renewal has actually reached the transport, then returns that request.
+   *
+   * ★★ POLLING, NOT A FIXED DELAY, AND THE REASON IS THE LOCK. The renewal runs inside a Web Lock —
+   * a real async API that Zone.js does not patch — so its callback lands outside Angular's zone and a
+   * single zone-patched turn can run BEFORE it. A fixed `setTimeout(0)` therefore asserted against a
+   * request that had not been made yet and failed for a reason that had nothing to do with the code.
+   * Waiting for the condition instead of guessing its duration is what makes this deterministic.
+   */
+  async function awaitRefreshRequest(): Promise<TestRequest> {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const matches = http.match(`${environment.apiBaseUrl}/auth/refresh`);
+      if (matches.length === 1) return matches[0];
+      await new Promise<void>(resolve => setTimeout(resolve, 5));
+    }
+    throw new Error('the renewal never reached the transport');
+  }
+
+  const settle = () => new Promise<void>(resolve => setTimeout(resolve, 20));
+
+  let auth: AuthService;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    localStorage.removeItem(KEY);
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [{ provide: TabSyncService, useValue: makeTabSyncMock().service }],
+    });
+  });
+
+  afterEach(() => localStorage.removeItem(KEY));
+
+  /**
+   * ★★ THE FIX ITSELF: a tab that finds a usable session already in storage ADOPTS it and spends
+   * nothing. This is the request that used to be rejected and take every tab down with it.
+   */
+  it('adopts a session another tab already renewed, without calling the server', async () => {
+    localStorage.setItem(KEY, session('fresh-access', 'fresh-refresh', 10 * 60_000));
+
+    TestBed.runInInjectionContext(() => { auth = TestBed.inject(AuthService); });
+    http = TestBed.inject(HttpTestingController);
+
+    const tokens = await firstValueFrom(auth.refresh());
+    await settle();
+
+    expect(tokens.accessToken).toBe('fresh-access');
+    http.expectNone(`${environment.apiBaseUrl}/auth/refresh`);
+    http.verify();
+  });
+
+  /** ★ And when nothing usable is stored, it really does renew — the adoption must not swallow the call. */
+  it('renews against the server when the stored access token is spent', async () => {
+    localStorage.setItem(KEY, session('stale-access', 'stored-refresh', -1000));
+
+    auth = TestBed.inject(AuthService);
+    http = TestBed.inject(HttpTestingController);
+
+    const pending = firstValueFrom(auth.refresh());
+    const req = await awaitRefreshRequest();
+
+    // ★ THE TOKEN SENT COMES FROM STORAGE, not from this tab's older in-memory copy.
+    expect(req.request.body.refreshToken).toBe('stored-refresh');
+
+    req.flush({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+      refreshTokenExpiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
+    });
+
+    expect((await pending).accessToken).toBe('new-access');
+
+    // The renewed pair is published where the other tabs will look for it.
+    expect(JSON.parse(localStorage.getItem(KEY)!).tokens.accessToken).toBe('new-access');
+    http.verify();
+  });
+
+  /** ★ A token about to expire is not worth adopting: it would 401 on the very next request. */
+  it('does not adopt a token that is within the skew of expiring', async () => {
+    localStorage.setItem(KEY, session('nearly-dead', 'stored-refresh', 5_000));
+
+    auth = TestBed.inject(AuthService);
+    http = TestBed.inject(HttpTestingController);
+
+    const pending = firstValueFrom(auth.refresh());
+    const req = await awaitRefreshRequest();
+    req.flush({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+      refreshTokenExpiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
+    });
+
+    expect((await pending).accessToken).toBe('new-access');
+    http.verify();
+  });
+});
+
+// ─── The two remaining ACs: proactive renewal and the surviving draft (KAN-1) ──
+describe('AuthService — proactive renewal and draft survival', () => {
+  const KEY = 'wasnie_session';
+  const DRAFT = 'wasnie:draft:assistant:c1';
+
+  function store(expiresInMs: number): void {
+    localStorage.setItem(KEY, JSON.stringify({
+      tenantId: 't1',
+      tokens: {
+        accessToken: 'a', refreshToken: 'r',
+        accessTokenExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
+        refreshTokenExpiresAt: new Date(Date.now() + 7 * 864e5).toISOString(),
+      },
+    }));
+  }
+
+  beforeEach(() => {
+    localStorage.removeItem(KEY);
+    sessionStorage.removeItem(DRAFT);
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [{ provide: TabSyncService, useValue: makeTabSyncMock().service }],
+    });
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(KEY);
+    sessionStorage.removeItem(DRAFT);
+  });
+
+  /** ★ The happy-path AC: a token near the end of its life is renewed BEFORE the request goes out. */
+  it('reports a token inside the skew as needing renewal', () => {
+    store(5_000);
+    expect(TestBed.inject(AuthService).accessTokenNeedsRenewal()).toBeTrue();
+  });
+
+  it('leaves a healthy token alone', () => {
+    store(10 * 60_000);
+    expect(TestBed.inject(AuthService).accessTokenNeedsRenewal()).toBeFalse();
+  });
+
+  /**
+   * ★★ THE FAIL-SAFE AC. An expiry is not a decision the user made, so the half-written adjustment they
+   * were in the middle of has to still be there when they sign back in. This path was DELETING it.
+   */
+  it('keeps unsent drafts when the session expires involuntarily', () => {
+    store(-1000);
+    sessionStorage.setItem(DRAFT, 'half a manual adjustment');
+
+    TestBed.inject(AuthService).forceLogout(true);
+
+    expect(sessionStorage.getItem(DRAFT)).toBe('half a manual adjustment');
+  });
+
+  /**
+   * ★ AND SIGNING OUT STILL CLEARS THEM. The shared-machine argument in `clearFeatureDrafts` is intact:
+   * this fix distinguishes the two cases, it does not weaken the deliberate one.
+   */
+  it('still clears drafts on a deliberate sign-out', () => {
+    store(10 * 60_000);
+    sessionStorage.setItem(DRAFT, 'half a manual adjustment');
+
+    TestBed.inject(AuthService).logout();
+
+    expect(sessionStorage.getItem(DRAFT)).toBeNull();
+  });
+
+  /** ★ The forced sign-out button is a decision too, so it clears as well. */
+  it('clears drafts when the user presses sign out on the idle warning', () => {
+    store(10 * 60_000);
+    sessionStorage.setItem(DRAFT, 'half a manual adjustment');
+
+    TestBed.inject(AuthService).forceLogout(false);
+
+    expect(sessionStorage.getItem(DRAFT)).toBeNull();
   });
 });

@@ -2488,5 +2488,11 @@
       "TWO_FACTOR_LOGIN_SUCCESS": "Logowanie dwuskładnikowe",
       "UNKNOWN": "Nierozpoznane działanie"
     }
+  },
+  "LANGUAGE": {
+    "LABEL": "Język",
+    "EN": "English",
+    "ES": "Español",
+    "PL": "Polski"
   }
 }

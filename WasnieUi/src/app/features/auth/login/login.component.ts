@@ -6,12 +6,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
+import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent, WsInputComponent, WsButtonComponent],
+  imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent,
+    LanguageToggleComponent, WsInputComponent, WsButtonComponent],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss',
 })
