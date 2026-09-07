@@ -72,6 +72,14 @@ export interface ReconciliationFilter {
   readonly reason: string | null;
   readonly from: string | null;
   readonly to: string | null;
+  /**
+   * A partial sale reference. Matched anywhere in the reference, case-insensitively by the database.
+   *
+   * ★ IT FINDS NO PLAN ROWS, AND THAT IS RIGHT. A plan is a cause, not a sale, and has no
+   * reference — so searching by one legitimately narrows the queue to entries that have one rather
+   * than matching plans on emptiness.
+   */
+  readonly reference: string | null;
   readonly page: number;
   readonly pageSize: number;
 }
@@ -81,6 +89,7 @@ export const EMPTY_RECONCILIATION_FILTER: ReconciliationFilter = {
   reason: null,
   from: null,
   to: null,
+  reference: null,
   page: 1,
   pageSize: 25,
 };

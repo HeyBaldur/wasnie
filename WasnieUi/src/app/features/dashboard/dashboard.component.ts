@@ -11,7 +11,10 @@ import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
 import { HasPermissionPipe } from '../../shared/pipes/has-permission.pipe';
 import { DashboardStore } from './store/dashboard.store';
-import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee, PlanWithoutLiveRules } from './models/dashboard.models';
+import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee, PlanWithoutLiveRules, DashboardActivityItem } from './models/dashboard.models';
+// ★ THE WIDGET AND THE AUDIT LOGS PAGE SHARE ONE MAP. The same action must not read one way here
+// and another way on the page this widget links to.
+import { actionKey, resourceLink } from '../audit-logs/models/audit-action';
 import { TransactionsApiService } from '../transactions/services/transactions.api.service';
 import { ProfileService } from '../profile/services/profile.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -464,9 +467,34 @@ export class DashboardComponent {
     return name.length > 18 ? `${name.slice(0, 17)}…` : name;
   }
 
-  /** "pending_transactions_processed" → "pending transactions" (max 3 words). */
-  formatActivityAction(raw: string): string {
-    return raw.replace(/_/g, ' ').split(' ').slice(0, 3).join(' ');
+  /**
+   * The translation key for an audit action code (KAN-19).
+   *
+   * ★★ IT REPLACED A FUNCTION THAT INVENTED ENGLISH. The previous body was
+   * `raw.replace(/_/g,' ').split(' ').slice(0,3).join(' ')`: it built a phrase out of the CODE and
+   * truncated it to three words, so `PLAN_CLAWBACK_POLICY_CHANGED` reached the reader as "plan
+   * clawback policy" and `CRM_DRIFT_AUTO_RESOLVED` as "crm drift auto" — the verb, which carries the
+   * whole meaning, was the part it cut. It also stayed English in Spanish and Polish.
+   *
+   * ★ THE MAP IS SHARED WITH THE AUDIT LOGS PAGE, so the same action cannot read one way in the
+   * widget and another way on the page it links to.
+   */
+  readonly activityActionKey = actionKey;
+
+  /** The entity this entry changed, or null when its resource type has no screen (§ audit-action.ts). */
+  activityLink(item: DashboardActivityItem): readonly string[] | null {
+    return resourceLink(item.resourceType, item.resourceId);
+  }
+
+  /**
+   * What the resource chip reads.
+   *
+   * ★ THE TRUNCATION STAYS, THE INVENTION DOES NOT. A display name is real text somebody typed and
+   * the feed column is narrow, so 28 characters is still the cap; that is a layout decision, unlike
+   * cutting an action code down to three words, which was a meaning decision made by accident.
+   */
+  activityResource(item: DashboardActivityItem): string | null {
+    return this.shortResource(item.resourceDisplayName);
   }
 
   /** Truncate resource display name to 28 chars. */

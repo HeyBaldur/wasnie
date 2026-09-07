@@ -4,6 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { reasonKey, isKnownReason, UNKNOWN_REASON_KEY } from '../models/reconciliation-reason';
 import { ReconciliationStore } from '../state/reconciliation.store';
+import { ReconciliationApiService } from '../services/reconciliation.api.service';
 import { ReconciliationListComponent } from './reconciliation-list.component';
 import { ToastService } from '../../../shared/services/toast.service';
 import { ReconciliationPage, ReconciliationRow } from '../models/reconciliation.model';
@@ -95,6 +96,85 @@ describe('ReconciliationStore', () => {
     expect(store.summary().byCurrency[0].affectedBaseAmount).toBe(45_000);
     expect(store.summary().totalRows).toBe(900);
     expect(store.total()).toBe(900);
+  });
+
+  // ══ The reference filter ═══════════════════════════════════════════════════════════════
+
+  /**
+   * ★ THE SEARCH TERM HAS TO REACH THE SERVER. This queue pages on the server, so a reference typed
+   * into the box and filtered in the browser would search one page of twenty-five and report
+   * "nothing found" for a reference sitting on page nine.
+   */
+  it('sends the reference to the server as a query parameter', async () => {
+    const load = store.load({ reference: 'HUBSPOT-5136' });
+    const req = http.expectOne((r) => r.url === '/api/reconciliation');
+
+    expect(req.request.params.get('reference')).toBe('HUBSPOT-5136');
+    req.flush(page);
+    await load;
+  });
+
+  /**
+   * ★★ AN EMPTY BOX IS NOT A SEARCH FOR THE EMPTY STRING. The params builder drops null and '', so
+   * the key must be absent entirely — a `reference=` on the URL is a filter the server would try to
+   * match, and every row would have to contain "" to survive it.
+   */
+  it('omits the reference entirely when it is not set', async () => {
+    const load = store.load();
+    const req = http.expectOne((r) => r.url === '/api/reconciliation');
+
+    expect(req.request.params.has('reference')).toBe(false);
+    req.flush(page);
+    await load;
+  });
+
+  it('counts the reference among the active filters', async () => {
+    const load = store.load({ reference: 'REF-1' });
+    http.expectOne((r) => r.url === '/api/reconciliation').flush(page);
+    await load;
+
+    expect(store.activeFilterCount()).toBe(1);
+    expect(store.hasActiveFilters()).toBe(true);
+  });
+
+  /**
+   * ★★ THE EXPORT CARRIES IT TOO. An export that ignored a filter the screen was showing would hand
+   * somebody a file named "reconciliation" holding rows they had just filtered out — the worst kind
+   * of wrong, because it looks complete.
+   */
+  it('carries the reference into the export request', async () => {
+    const load = store.load({ reference: 'HUBSPOT-5136' });
+    http.expectOne((r) => r.url === '/api/reconciliation').flush(page);
+    await load;
+
+    const api = TestBed.inject(ReconciliationApiService);
+    api.exportToExcel(store.filter()).subscribe();
+
+    const req = http.expectOne((r) => r.url === '/api/reconciliation/export');
+    expect(req.request.params.get('reference')).toBe('HUBSPOT-5136');
+    // ★ And still no paging: an export is the whole filtered set.
+    expect(req.request.params.has('page')).toBe(false);
+    req.flush(new Blob());
+  });
+
+  /**
+   * ★ CLEARING RESETS EVERY FIELD. The store's `clearFilters` restores the empty filter wholesale,
+   * so a field added to the model without being added to EMPTY_RECONCILIATION_FILTER would survive
+   * a clear and keep filtering invisibly.
+   */
+  it('clearing the filters drops the reference', async () => {
+    const load = store.load({ reference: 'REF-1' });
+    http.expectOne((r) => r.url === '/api/reconciliation').flush(page);
+    await load;
+
+    const cleared = store.clearFilters();
+    const req = http.expectOne((r) => r.url === '/api/reconciliation');
+    expect(req.request.params.has('reference')).toBe(false);
+    req.flush(page);
+    await cleared;
+
+    expect(store.filter().reference).toBeNull();
+    expect(store.activeFilterCount()).toBe(0);
   });
 
   /** ★ Two figures, and no third: nothing in the model can hold their net. */

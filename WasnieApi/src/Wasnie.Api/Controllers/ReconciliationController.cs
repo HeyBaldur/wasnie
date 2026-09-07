@@ -25,10 +25,11 @@ public sealed class ReconciliationController(ISender mediator) : ControllerBase
         [FromQuery] DateOnly? to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
+        [FromQuery] string? reference = null,
         CancellationToken cancellationToken = default)
     {
         var result = await mediator.Send(
-            new GetReconciliationQuery(new ReconciliationFilter(payeeId, reason, from, to, page, pageSize)),
+            new GetReconciliationQuery(new ReconciliationFilter(payeeId, reason, from, to, page, pageSize, reference)),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
@@ -50,11 +51,16 @@ public sealed class ReconciliationController(ISender mediator) : ControllerBase
         [FromQuery] string? reason,
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
+        [FromQuery] string? reference = null,
         CancellationToken cancellationToken = default)
     {
         // Page and size are deliberately not accepted: an export is the whole filtered set.
+        // ★ THE REFERENCE IS ACCEPTED HERE TOO. An export that ignored a filter the screen was
+        // showing would hand somebody a file called "reconciliation" holding rows they had just
+        // filtered out — the worst kind of wrong, because it looks complete.
         var result = await mediator.Send(
-            new ExportReconciliationQuery(new ReconciliationFilter(payeeId, reason, from, to)),
+            new ExportReconciliationQuery(
+                new ReconciliationFilter(payeeId, reason, from, to, Reference: reference)),
             cancellationToken);
 
         if (!result.IsSuccess)

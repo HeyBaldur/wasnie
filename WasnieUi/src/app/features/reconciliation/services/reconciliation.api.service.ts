@@ -38,6 +38,7 @@ export class ReconciliationApiService {
         reason: filter.reason,
         from: filter.from,
         to: filter.to,
+        reference: filter.reference,
         page: filter.page,
         pageSize: filter.pageSize,
       }),
@@ -65,9 +66,11 @@ export class ReconciliationApiService {
    * that says "reconciliation" would be the worst kind of wrong, because it looks complete.
    */
   exportToExcel(filter: ReconciliationFilter): Observable<Blob> {
-    const { payeeId, reason, from, to } = filter;
+    // ★ THE REFERENCE GOES WITH IT. An export that dropped a filter the screen was showing would
+    // hand somebody more rows than they asked for, under a filename that says otherwise.
+    const { payeeId, reason, from, to, reference } = filter;
     return this.http.get(`${this.base}/export`, {
-      params: params({ payeeId, reason, from, to }),
+      params: params({ payeeId, reason, from, to, reference }),
       responseType: 'blob' as const,
     });
   }

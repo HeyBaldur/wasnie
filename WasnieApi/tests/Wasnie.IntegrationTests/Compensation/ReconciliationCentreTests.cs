@@ -1560,6 +1560,206 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
         public bool IsAuthenticated => true;
     }
 
+    // ══ The reference filter ═════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// ★ A PARTIAL MATCH, CASE-INSENSITIVELY, AND IT RUNS IN SQL. The queue is a Concat-ed union, so
+    /// a `Contains` over a projected column is exactly the kind of expression that translates or does
+    /// not; asserting it in memory would prove nothing (§A2).
+    /// </summary>
+    [Fact]
+    public async Task A_partial_reference_finds_the_entry_and_ignores_the_others()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "HUBSPOT-513636220111", null, 5_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "HUBSPOT-999999999999", null, 3_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "MANUAL-0001", null, 1_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId, new ReconciliationFilter(Reference: "5136362", PageSize: 100));
+
+        page.Items.Should().ContainSingle();
+        page.Items[0].ReferenceNumber.Should().Be("HUBSPOT-513636220111");
+
+        var lower = await RunAsync(tenantId, new ReconciliationFilter(Reference: "hubspot-5136362", PageSize: 100));
+        lower.Items.Should().ContainSingle("the database collation is case-insensitive");
+    }
+
+    /// <summary>
+    /// ★★ THE TOTALS FOLLOW THE FILTER. The card and the table describing the same set is this
+    /// screen's one promise, and a filter added to the row query but not to the summary is the
+    /// classic way to break it — both go through Filtered(), and this is what proves it.
+    /// </summary>
+    [Fact]
+    public async Task The_cards_describe_only_what_the_reference_filter_selected()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "FIND-ME-01", null, 7_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "OTHER-01", null, 2_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "OTHER-02", null, 4_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var all = await RunAsync(tenantId, new ReconciliationFilter(PageSize: 100));
+        all.Summary.TotalRows.Should().Be(3);
+
+        var filtered = await RunAsync(tenantId, new ReconciliationFilter(Reference: "FIND-ME", PageSize: 100));
+
+        filtered.Summary.TotalRows.Should().Be(1);
+        filtered.Summary.ByCurrency.Single().AffectedBaseAmount.Should().Be(7_000m,
+            "the card is computed over the filtered set, not over the page");
+        filtered.TotalCount.Should().Be(1);
+    }
+
+    /// <summary>
+    /// ★★ AN ENTRY WITH TWO REASONS KEEPS BOTH. This is why the reference filter may be applied to
+    /// the SEED while the reason filter may not: every seed of one entity carries the same reference,
+    /// so the entry is either wholly in or wholly out. If somebody ever seeds the reference from a
+    /// per-seed source, this goes red — the row would come back missing a reason, and the screen would
+    /// say a sale failed for one thing when it failed for two.
+    /// </summary>
+    [Fact]
+    public async Task An_entry_found_by_reference_still_carries_all_of_its_reasons()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-REF"));
+            // Pending, with a payee, no assignment and no declared plan: NoActiveAssignment AND
+            // ProcessableWithoutCredit are not both true, but NoActiveAssignment plus ambiguity is a
+            // fragile setup — so this asserts against whatever the queue genuinely reports, and only
+            // that the COUNT of reasons survives the filter unchanged.
+            db.CompensationTransactions.Add(Tx(tenantId, "TWO-REASONS-01", payeeId, 5_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var unfiltered = await RunAsync(tenantId, new ReconciliationFilter(PageSize: 100));
+        unfiltered.Items.Should().ContainSingle();
+        var expected = unfiltered.Items[0].Reasons;
+
+        var filtered = await RunAsync(tenantId, new ReconciliationFilter(Reference: "TWO-REASONS", PageSize: 100));
+
+        filtered.Items.Should().ContainSingle();
+        filtered.Items[0].Reasons.Should().Equal(expected,
+            "filtering by reference must not strip a reason from the entry");
+    }
+
+    /// <summary>
+    /// ★★ THE SEARCH MATCHES WHAT THE SCREEN SHOWS, NOT THE ALERT'S SNAPSHOT. A deal-lost alert
+    /// stores the reference it saw when it was raised; the ROW renders the live transaction's, which
+    /// <c>GetReconciliationHandler</c> looks up separately. Seeding the filter from the alert would
+    /// let a search match a row whose visible reference does not contain the term — and miss one
+    /// whose does. Both halves are asserted, because only the second one fails loudly.
+    /// </summary>
+    [Fact]
+    public async Task A_deal_lost_row_is_found_by_the_reference_the_screen_displays()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-STALE"));
+            var tx = PaidTx(tenantId, "LIVE-REF-777", payeeId, 9_000m);
+            db.CompensationTransactions.Add(tx);
+
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                Guid.NewGuid(), tenantId, "HubSpot", "deal-stale", tx.Id,
+                // The alert remembers a DIFFERENT reference — history, not the current value.
+                "STALE-REF-000",
+                CompensationTransactionStatus.Paid, 450m, EUR, Now, "sync"));
+            await db.SaveChangesAsync();
+        }
+
+        var shown = await RunAsync(tenantId, new ReconciliationFilter(PageSize: 100));
+        shown.Items.Should().ContainSingle();
+        shown.Items[0].ReferenceNumber.Should().Be("LIVE-REF-777", "this is what the row displays");
+
+        var byLive = await RunAsync(tenantId, new ReconciliationFilter(Reference: "LIVE-REF", PageSize: 100));
+        byLive.Items.Should().ContainSingle("the search must find what the reader can see");
+
+        var byStale = await RunAsync(tenantId, new ReconciliationFilter(Reference: "STALE-REF", PageSize: 100));
+        byStale.Items.Should().BeEmpty(
+            "matching the alert's snapshot would find a row the search term is not visible in");
+    }
+
+    /// <summary>
+    /// ★ A PLAN HAS NO REFERENCE, SO A REFERENCE SEARCH EXCLUDES IT. The null must not be treated as
+    /// "matches everything" — a `Contains` on a null column returning true would put every dead plan
+    /// into every search.
+    /// </summary>
+    [Fact]
+    public async Task A_plan_row_never_matches_a_reference_search()
+    {
+        var tenantId = Guid.NewGuid();
+        var planId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var plan = MakePlan(tenantId, planId, "Dead Plan");
+            plan.Activate("test", Now, Guid.NewGuid());
+            plan.StopRule(plan.Rules.First().Id, "test", "no longer paying", Now);
+            db.CompensationPlans.Add(plan);
+
+            db.CompensationTransactions.Add(Tx(tenantId, "REF-KEEPS-ME", null, 1_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var all = await RunAsync(tenantId, new ReconciliationFilter(PageSize: 100));
+        all.Items.Should().HaveCount(2, "the dead plan and the payee-less sale are both in the queue");
+
+        var filtered = await RunAsync(tenantId, new ReconciliationFilter(Reference: "REF", PageSize: 100));
+
+        filtered.Items.Should().ContainSingle();
+        filtered.Items[0].Kind.Should().Be(ReconciliationEntryKind.Transaction);
+    }
+
+    /// <summary>★ A blank reference is not a filter: whitespace must not empty the queue.</summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task A_blank_reference_leaves_the_queue_unfiltered(string reference)
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "ANY-REF-1", null, 1_000m));
+            db.CompensationTransactions.Add(Tx(tenantId, "ANY-REF-2", null, 2_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId, new ReconciliationFilter(Reference: reference, PageSize: 100));
+
+        page.Items.Should().HaveCount(2);
+    }
+
+    /// <summary>★ A pasted reference carries a trailing space more often than not.</summary>
+    [Fact]
+    public async Task A_reference_pasted_with_surrounding_space_still_finds_its_row()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.CompensationTransactions.Add(Tx(tenantId, "PASTED-0042", null, 1_000m));
+            await db.SaveChangesAsync();
+        }
+
+        var page = await RunAsync(tenantId, new ReconciliationFilter(Reference: "  PASTED-0042 ", PageSize: 100));
+
+        page.Items.Should().ContainSingle();
+    }
+
     private sealed class AlwaysAllowAuthorization : Wasnie.Application.Common.Interfaces.IAuthorizationService
     {
         public Task RequireAsync(string permission, CancellationToken ct = default) => Task.CompletedTask;

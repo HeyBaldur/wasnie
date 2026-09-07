@@ -6,11 +6,12 @@ import { AssistantTriggerComponent } from '../../../features/assistant/trigger/a
 import { Router } from '@angular/router';
 import { SubscriptionService } from '../../../features/subscription/services/subscription.service';
 import { RouterLink } from '@angular/router';
+import { HasPermissionPipe } from '../../pipes/has-permission.pipe';
 
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent, RouterLink],
+  imports: [TranslatePipe, IconComponent, AssistantTriggerComponent, RouterLink, HasPermissionPipe],
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })
@@ -53,6 +54,18 @@ export class TopbarComponent implements OnInit {
 
   goToSettings(): void {
     void this.router.navigateByUrl('/admin');
+  }
+
+  /**
+   * The audit trail (KAN-19).
+   *
+   * ★ IT CLOSES THE DROPDOWN FIRST, like goToProfile and unlike goToSettings. Leaving the menu open
+   * over the page it just navigated to is the small bug the settings entry already has; it is not
+   * copied here.
+   */
+  goToAuditLogs(): void {
+    this.dropdownOpen.set(false);
+    void this.router.navigateByUrl('/audit-logs');
   }
 
   goToUpgrade(): void {

@@ -32,6 +32,7 @@ import {
   WsCardComponent,
   WsSelectComponent,
   WsDatePickerComponent,
+  WsInputComponent,
   WsPageLayoutComponent,
   WsTableComponent,
   WsTableEmptyComponent,
@@ -58,7 +59,7 @@ import {
     AppShellComponent, RefreshOnEnterDirective, RouterLink, ReactiveFormsModule, TranslateModule, DecimalPipe,
     IconComponent, DateFormatPipe, CurrencyFormatPipe,
     WsButtonComponent, WsBadgeComponent, WsCardComponent,
-    WsSelectComponent, WsDatePickerComponent,
+    WsSelectComponent, WsDatePickerComponent, WsInputComponent,
     WsPageLayoutComponent, WsTableComponent, WsTableEmptyComponent,
     WsEmptyStateComponent, WsPaginationComponent, WsModalComponent, WsTextareaComponent,
     HasPermissionPipe, ProcessPendingComponent,
@@ -81,6 +82,7 @@ export class ReconciliationListComponent implements OnInit {
     reason: new FormControl<string | null>(null),
     from: new FormControl<string | null>(null),
     to: new FormControl<string | null>(null),
+    reference: new FormControl<string | null>(null),
   });
 
   /** The filter's options come from the API, so a reason the engine gained is filterable at once. */
@@ -103,6 +105,9 @@ export class ReconciliationListComponent implements OnInit {
           reason: value.reason || null,
           from: value.from || null,
           to: value.to || null,
+          // ★ A BLANK BOX IS "NO FILTER", NOT "REFERENCES EQUAL TO NOTHING". `|| null` also catches
+          // the empty string the input emits when the reader clears it.
+          reference: value.reference?.trim() || null,
           page: 1,
         });
       });
@@ -151,7 +156,12 @@ export class ReconciliationListComponent implements OnInit {
   }
 
   clearFilters(): void {
-    this.form.reset({ reason: null, from: null, to: null }, { emitEvent: false });
+    // ★ EVERY CONTROL IS NAMED. `reset` with a partial object leaves the ones it does not mention
+    // holding their values, so a forgotten field would stay typed in the box while the store's
+    // filter went empty — the screen and the query disagreeing about what is being filtered.
+    this.form.reset(
+      { reason: null, from: null, to: null, reference: null },
+      { emitEvent: false });
     void this.store.clearFilters();
   }
 

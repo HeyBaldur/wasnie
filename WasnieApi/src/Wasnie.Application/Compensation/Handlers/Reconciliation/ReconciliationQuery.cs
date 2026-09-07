@@ -41,6 +41,25 @@ internal sealed record ReconciliationSeed
     /// schedule — and for the plan, an edit SHOULD ask for a fresh look.
     /// </summary>
     public Guid? FactKey { get; init; }
+
+    /// <summary>
+    /// The sale's reference, so the queue can be searched by it.
+    ///
+    /// ★★ IT IS THE TRANSACTION'S, NEVER THE ALERT'S SNAPSHOT. A deal-lost and a drift alert each
+    /// store the reference they saw when they were raised, and the ROW ON SCREEN does not use those:
+    /// <c>GetReconciliationHandler</c> reads the live transaction. Seeding from the alert would let
+    /// the filter match a value the screen never displays — a search that finds a row the reader
+    /// cannot see the search term in, which reads as a bug in the search (§A3).
+    ///
+    /// ★★ EVERY SEED OF ONE ENTITY THEREFORE CARRIES THE SAME VALUE, and that is what lets the
+    /// filter be applied to seeds directly rather than to entities the way the REASON filter has to
+    /// be. A two-reason entry cannot be half-matched: both of its seeds hold the same reference, so
+    /// either both survive the filter or neither does, and the row keeps both reasons.
+    ///
+    /// ★ NULL ON A PLAN. A plan is a CAUSE, not a sale: it has no reference, so a reference search
+    /// legitimately excludes plan rows rather than matching them on emptiness.
+    /// </summary>
+    public string? ReferenceNumber { get; init; }
 }
 
 /// <summary>
@@ -103,6 +122,7 @@ internal static class ReconciliationQuery
                 // The credit IS the fact: a recalculation supersedes it and allocates a new one with
                 // a new id, which is a new fact and comes back.
                 FactKey = c.Id,
+                ReferenceNumber = t.ReferenceNumber,
             };
 
         // ── The three unprocessable-pending reasons, from the shared spec ────────────────────
@@ -145,6 +165,9 @@ internal static class ReconciliationQuery
                 // ★ THE ALERT, NOT ITS DetectedAt. The sync refreshes this alert every hour without
                 // anything having changed; a genuinely new loss is a NEW alert with a new id.
                 FactKey = a.Id,
+                // ★ t, NOT a. The alert stores the reference it saw; the row on screen shows the
+                // transaction's. The filter must match what is displayed.
+                ReferenceNumber = t.ReferenceNumber,
             };
 
         // ── A deal that CHANGED in the CRM after its commission was calculated or paid ───────
@@ -171,6 +194,7 @@ internal static class ReconciliationQuery
                 OccurredAt = a.DetectedAt,
                 // Same rule as deal-lost: the drift alert is the fact, its stamp is only its last sighting.
                 FactKey = a.Id,
+                ReferenceNumber = t.ReferenceNumber,
             };
 
         // ── An Active plan whose every rule is stopped ───────────────────────────────────────
@@ -195,6 +219,8 @@ internal static class ReconciliationQuery
                 // A condition, not an event: no identity of its own. Editing the plan afterwards
                 // moves UpdatedAt and legitimately asks for a fresh look.
                 FactKey = null,
+                // A plan is a cause, not a sale. It has no reference and must not match one.
+                ReferenceNumber = null,
             };
 
         return refusedCredits
@@ -223,8 +249,10 @@ internal static class ReconciliationQuery
                 OccurredAt = t.IngestedAt,
                 // ★ EXPLICITLY NULL, NOT OMITTED. EF cannot translate a Concat whose sides assign
                 // different sets of properties — leaving this out took the whole queue down with
-                // "Unable to translate set operations…". Every seed states every field.
+                // "Unable to translate set operations…". Every seed states every field, which is why
+                // ReferenceNumber below is spelled out on the plan seed too.
                 FactKey = null,
+                ReferenceNumber = t.ReferenceNumber,
             });
     }
 
@@ -293,6 +321,22 @@ internal static class ReconciliationQuery
 
         if (filter.To.HasValue)
             seeds = seeds.Where(s => s.PeriodDate != null && s.PeriodDate <= filter.To.Value);
+
+        // ★★ APPLIED TO THE SEED, UNLIKE THE REASON FILTER BELOW, and that is correct rather than
+        // inconsistent: every seed of one entity carries the SAME reference (see
+        // ReconciliationSeed.ReferenceNumber), so a two-reason entry cannot come back with one reason
+        // missing. The reason filter needs the entity round-trip precisely because its value DIFFERS
+        // between an entity's seeds.
+        //
+        // ★ Contains, AND IT IS CASE-INSENSITIVE BY THE DATABASE'S COLLATION, not by a ToLower() on
+        // the column — which would be a function on the left-hand side and would stop any index on
+        // ReferenceNumber from being used. Trimmed here so a pasted reference with trailing space
+        // still finds its row.
+        if (!string.IsNullOrWhiteSpace(filter.Reference))
+        {
+            var reference = filter.Reference.Trim();
+            seeds = seeds.Where(s => s.ReferenceNumber != null && s.ReferenceNumber.Contains(reference));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.Reason))
         {

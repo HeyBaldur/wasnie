@@ -114,6 +114,15 @@
             <app-icon name="tenant" [size]="15" />
             {{ 'TOPBAR.TENANT_SETTINGS' | translate }}
           </button>
+          <!-- ★ RBAC HIDES, IT DOES NOT DISABLE (§5.8). Without Audit.Read the entry is absent — not
+               greyed out, which would advertise a page the reader may never open. The route carries
+               the same guard, so removing this button is not the security control, only the manners. -->
+          @if ('Audit.Read' | hasPermission) {
+            <button class="topbar__dropdown-item" (click)="goToAuditLogs()">
+              <app-icon name="shield" [size]="15" />
+              {{ 'TOPBAR.AUDIT_LOGS' | translate }}
+            </button>
+          }
           <div class="topbar__dropdown-divider"></div>
           <button class="topbar__dropdown-item topbar__dropdown-item--danger" (click)="logout()">
             <app-icon name="log-out" [size]="15" />

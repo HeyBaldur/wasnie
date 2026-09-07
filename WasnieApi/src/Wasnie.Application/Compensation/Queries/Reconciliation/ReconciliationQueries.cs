@@ -17,7 +17,16 @@ public sealed record ReconciliationFilter(
     DateOnly? From = null,
     DateOnly? To = null,
     int Page = 1,
-    int PageSize = 25);
+    int PageSize = 25,
+    /// <summary>
+    /// A partial sale reference. Matches anywhere in the reference, case-insensitively.
+    ///
+    /// ★ LAST IN THE LIST BECAUSE THE OTHERS ARE POSITIONAL. Several call sites already construct
+    /// this record with positional arguments (the controller, the export, a dozen tests); inserting a
+    /// parameter in the middle would silently re-bind Page and PageSize to the wrong values, and it
+    /// would still compile.
+    /// </summary>
+    string? Reference = null);
 
 public sealed record GetReconciliationQuery(ReconciliationFilter Filter)
     : IRequest<Result<ReconciliationPageDto>>;

@@ -49,7 +49,8 @@ export class ReconciliationStore {
 
   readonly activeFilterCount = computed(() => {
     const f = this._filter();
-    return [f.payeeId, f.reason, f.from, f.to].filter((v) => v !== null && v !== '').length;
+    return [f.payeeId, f.reason, f.from, f.to, f.reference]
+      .filter((v) => v !== null && v !== '').length;
   });
 
   readonly hasActiveFilters = computed(() => this.activeFilterCount() > 0);

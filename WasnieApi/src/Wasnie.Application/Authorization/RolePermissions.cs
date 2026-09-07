@@ -23,6 +23,8 @@ public static class RolePermissions
             Permission.PayoutsDeleteDraft, Permission.PayoutsDiscard,
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
             Permission.LedgerCloseAccount,
+            // KAN-19. Deliberately the same pair as Ledger.Adjust — see Permission.AuditRead.
+            Permission.AuditRead,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
             Permission.SubscriptionManage,
@@ -48,6 +50,8 @@ public static class RolePermissions
             Permission.PayoutsDeleteDraft, Permission.PayoutsDiscard,
             Permission.LedgerRead, Permission.LedgerAdjust, Permission.LedgerSummaryRead,
             Permission.LedgerCloseAccount,
+            // KAN-19. Deliberately the same pair as Ledger.Adjust — see Permission.AuditRead.
+            Permission.AuditRead,
             Permission.CategoryMappingsRead, Permission.CategoryMappingsManage,
             Permission.ImportsExecute, Permission.ReportsViewAll, Permission.ReconciliationClose,
         };

@@ -116,6 +116,21 @@ public static class Permission
     /// </summary>
     public const string ReconciliationClose = "Reconciliation.Close";
 
+    /// <summary>
+    /// Reading the tenant's audit trail: the Audit Logs page and the dashboard's "view all" link.
+    ///
+    /// ★★ ITS OWN PERMISSION, NOT Reports.ViewAll. The trail is not a report about money — it is a
+    /// record of PEOPLE: who signed in, whose permission was denied, which admin changed what and
+    /// from which IP. Whoever may read the tenant's financial totals is not automatically whoever may
+    /// read its staff's activity, and the two have to be revocable separately.
+    ///
+    /// ★ IT IS DELIBERATELY NARROW. Granted to the same two roles that hold
+    /// <see cref="LedgerAdjust"/> — the most restrictive pair the app defines — because the rows carry
+    /// actor emails, IP addresses, user agents and the before/after of money operations. Widening it
+    /// later is one line; narrowing it after people have grown used to the page is not.
+    /// </summary>
+    public const string AuditRead = "Audit.Read";
+
     public const string ReportsViewAll = "Reports.ViewAll";
     public const string SubscriptionManage = "Subscription.Manage";
     public const string SettingsUpdate = "Settings.Update";

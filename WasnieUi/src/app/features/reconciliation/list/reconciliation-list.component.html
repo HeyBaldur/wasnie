@@ -84,6 +84,19 @@
       @if (filterOpen()) {
         <form [formGroup]="form" class="recon__filter-body">
           <div class="recon__filter-row">
+            <!-- ★ FIRST IN THE ROW ON PURPOSE. A reference search is the one filter a reader arrives
+                 already knowing the answer to — "where is HUBSPOT-513636220111?" — and it is the
+                 shortest path from the queue to a single row. Debounced with the rest at 300ms
+                 (§5.7), so typing does not fire a request per keystroke. -->
+            <div class="recon__filter-field">
+              <ws-input
+                formControlName="reference"
+                type="search"
+                prefixIcon="search"
+                [label]="'RECONCILIATION.FILTER.REFERENCE' | translate"
+                [placeholder]="'RECONCILIATION.FILTER.REFERENCE_PLACEHOLDER' | translate"
+              />
+            </div>
             <div class="recon__filter-field">
               <ws-select
                 formControlName="reason"

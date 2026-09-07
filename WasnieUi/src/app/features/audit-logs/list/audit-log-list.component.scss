@@ -1,0 +1,187 @@
+// The audit trail (KAN-19).
+//
+// ★ TOKENS ONLY (§5.5). No hex, no rgba, no Tailwind palette utilities, no invented spacing — every
+//   value below resolves to something styles.scss actually defines, which was checked rather than
+//   copied: `--font-size-sm`, `--font-size-xs` and `--font-weight-medium` DO NOT EXIST. The
+//   reconciliation and transactions stylesheets reference them anyway, so those declarations are
+//   dropped by the browser and the text silently inherits instead. The real scale is numeric
+//   (--font-size-11 … --font-size-32); weights are plain numbers.
+// ★ THE FILTER CARD IS THE RECONCILIATION CENTRE'S, DELIBERATELY. Same header, same collapse, same
+//   auto-fit grid: two finance screens that filter differently are two screens to learn.
+
+.audit__filter {
+  margin-bottom: var(--space-4);
+}
+
+.audit__filter-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.audit__filter-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.audit__filter-spacer {
+  flex: 1;
+}
+
+.audit__filter-body {
+  margin-top: var(--space-3);
+}
+
+// Four fields here against the Centre's three; auto-fit keeps them on one row on a wide screen and
+// folds them to two-up rather than squeezing four unreadable dropdowns onto a laptop.
+.audit__filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+// ── The table ────────────────────────────────────────────────────────────────
+
+.audit__table {
+  margin-bottom: var(--space-3);
+}
+
+// A timestamp that wraps doubles a row's height for no gain — every value in this column is the same
+// width, so there is nothing to gain by letting it break.
+.audit__when {
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+.audit__actor {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// "System" reads as a value, not as an actor's name, so it is set apart the way a placeholder is —
+// but it is NOT the placeholder colour, because this is a fact rather than a missing one.
+.audit__system {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.audit__resource {
+  max-width: 320px;
+}
+
+.audit__link {
+  color: var(--color-text-link);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-text-link-hover);
+    text-decoration: underline;
+  }
+}
+
+// The type sits under the name rather than in its own column: it is context for the value above it,
+// and a fifth column would have pushed the detail action off the right edge on a laptop — the exact
+// failure the Reconciliation Centre measured and fixed by merging columns.
+.audit__resource-type {
+  display: block;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.audit__col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.audit__none {
+  color: var(--color-text-placeholder);
+}
+
+// ── The evidence drawer ──────────────────────────────────────────────────────
+
+.audit__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.audit__detail-loading {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.audit__detail-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+  margin: 0;
+}
+
+.audit__detail-label {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.audit__detail-value {
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  word-break: break-word;
+
+  &--mono {
+    font-family: var(--font-mono);
+  }
+
+  // A user agent is one long unbroken token and would otherwise stretch the modal past the viewport.
+  &--wrap {
+    word-break: break-all;
+  }
+}
+
+.audit__payload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.audit__payload-title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+// ★★ THE PAYLOAD SCROLLS INSIDE ITS OWN BOX, IT DOES NOT STRETCH THE MODAL. The orphan-account
+// closure writes every closed credit id with its amount, so this text has no upper bound; without
+// the cap and the overflow, one such row would push the modal's footer — and its Close button — off
+// the bottom of the screen. That is the ws-modal `min-height: 0` bug all over again, and this is the
+// content that would reintroduce it.
+.audit__payload-body {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 240px;
+  overflow: auto;
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-12);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.audit__detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

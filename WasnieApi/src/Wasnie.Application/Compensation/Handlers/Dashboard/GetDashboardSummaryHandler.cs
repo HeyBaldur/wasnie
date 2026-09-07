@@ -778,6 +778,7 @@ public sealed class GetDashboardSummaryHandler(
                 l.ActorEmail,
                 l.Action,
                 l.ResourceType,
+                l.ResourceId,
                 l.ResourceDisplayName,
             })
             .ToListAsync(ct);
@@ -788,6 +789,7 @@ public sealed class GetDashboardSummaryHandler(
             ActorInitials: BuildInitials(l.ActorEmail),
             Action: l.Action,
             ResourceType: l.ResourceType,
+            ResourceId: l.ResourceId,
             ResourceDisplayName: l.ResourceDisplayName))
             .ToList();
     }

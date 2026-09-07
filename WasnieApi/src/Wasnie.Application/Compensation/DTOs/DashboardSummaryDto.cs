@@ -185,10 +185,25 @@ public sealed record DashboardTrendPointDto(
 
 // ── Activity feed ───────────────────────────────────────────────────────────
 
+/// <summary>
+/// One line of the dashboard's Recent Activity feed.
+///
+/// ★★ Action IS A CODE AND THE SCREEN TRANSLATES IT (§C1/§C2). It used to reach the browser and be
+/// turned into English there — `raw.replace(/_/g,' ')` truncated to three words — so
+/// `PLAN_CLAWBACK_POLICY_CHANGED` was shown as "plan clawback policy" and `CRM_DRIFT_AUTO_RESOLVED`
+/// as "crm drift auto": the verb, which carries the whole meaning, was the part that got cut. The
+/// code travels; the words come from the front's whitelist.
+///
+/// ★ ResourceId TRAVELS SO THE ENTRY CAN LINK TO WHAT IT CHANGED. Without it the feed could name a
+/// plan and offer no way to reach it, and the reader's next question — "which plan?" — had no answer
+/// on the page. Whether a given ResourceType HAS a screen is the front's decision: a type with no
+/// route renders as plain text rather than as a link that goes nowhere.
+/// </summary>
 public sealed record DashboardActivityItemDto(
     DateTime TimestampUtc,
     string ActorEmail,
     string ActorInitials,
     string Action,
     string ResourceType,
+    string ResourceId,
     string? ResourceDisplayName);
