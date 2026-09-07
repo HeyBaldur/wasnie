@@ -287,13 +287,16 @@ public sealed class GetDashboardSummaryHandler(
     {
         const int cap = 20;
 
-        // ★ Same rule as the deal-lost panel: a drift somebody reviewed and closed stops alerting.
+        // ★ Same rule as the deal-lost panel, identity and all: a drift somebody reviewed and closed
+        // stops alerting, and CrmDriftPolicy re-stamps an OPEN alert on every sync exactly as the
+        // deal-lost reconciler does (CrmDriftPolicy.cs:203), so the stamp cannot be the key here
+        // either. See BuildDealLostAlertsAsync for the full account.
         var closures = ReconciliationClosureSpec.For(
             db, (int)ReconciliationEntryKind.Transaction, ReconciliationReason.CrmDrift);
 
         var rows = await db.CrmDriftAlerts
             .Where(a => a.ResolvedAt == null
-                     && !closures.Any(c => c.EntityId == a.TransactionId && a.DetectedAt <= c.FactOccurredAt))
+                     && !closures.Any(c => c.EntityId == a.TransactionId && c.FactKey == a.Id))
             .OrderByDescending(a => a.DetectedAt)
             .Take(cap)
             .ToListAsync(ct);
@@ -327,8 +330,18 @@ public sealed class GetDashboardSummaryHandler(
         // to the live row. One join, no extra round trip.
         // ★★ AND NOT THE ONES SOMEBODY HAS ALREADY REVIEWED AND CLOSED (KAN-51). Without this the
         // dashboard kept alerting about a deal a person had closed in the Reconciliation Centre —
-        // two screens disagreeing about the same money. The rule is one expression, in
-        // ReconciliationClosureSpec, so it cannot drift between the two.
+        // two screens disagreeing about the same money.
+        //
+        // ★★ THE MATCH IS ON THE ALERT'S IDENTITY, NEVER ON ITS STAMP, and that is the whole reason
+        // this panel reads FactKey. DealLostReconciler.Refresh moves DetectedAt to "now" on every
+        // OPEN alert on each hourly sync (DealLostReconciler.cs:119) without the alert, its id or
+        // anything about the loss having changed. Comparing DetectedAt <= FactOccurredAt therefore
+        // read every sync as a brand-new fact and expired every closure within the hour: the row
+        // left the Centre — which compares identities — and came back HERE, which is precisely the
+        // two-screen disagreement the paragraph above says this exclusion exists to prevent.
+        // A genuinely new loss is a NEW alert with a NEW id, and that is what still returns. This
+        // mirrors ReconciliationQuery.ExcludeClosed's FactKey branch; the DealLost seed always
+        // carries one, so identity is the only branch that can apply.
         var closures = ReconciliationClosureSpec.For(
             db, (int)ReconciliationEntryKind.Transaction, ReconciliationReason.DealLost);
 
@@ -336,7 +349,7 @@ public sealed class GetDashboardSummaryHandler(
             from a in db.DealLostAlerts
             join t in db.CompensationTransactions on a.TransactionId equals t.Id
             where a.ResolvedAt == null
-               && !closures.Any(c => c.EntityId == a.TransactionId && a.DetectedAt <= c.FactOccurredAt)
+               && !closures.Any(c => c.EntityId == a.TransactionId && c.FactKey == a.Id)
             orderby a.DetectedAt descending
             select new
             {

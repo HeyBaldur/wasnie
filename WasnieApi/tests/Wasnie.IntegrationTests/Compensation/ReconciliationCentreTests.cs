@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Compensation.Commands.Reconciliation;
@@ -1082,13 +1082,19 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
     }
 
     /// <summary>
-    /// ★ AND IT STILL COMES BACK ON THE DASHBOARD WHEN THE FACT IS NEWER. The dashboard honours the
-    /// same <c>fact &lt;= FactOccurredAt</c> comparison as the Centre, so a re-detection alerts again
-    /// rather than staying silently suppressed. Pinning it on this surface too is what stops the two
-    /// from drifting apart the next time one of them is edited.
+    /// ★★ THE DASHBOARD TWIN OF <see cref="A_reobserved_alert_stays_closed_but_a_new_alert_returns"/>,
+    /// AND IT USED TO ASSERT THE OPPOSITE OF IT. When the closure key gained a FactKey the Centre's
+    /// test was rewritten and this one was not: it kept calling <c>Refresh()</c> — the hourly sync's
+    /// own operation — and demanding that the row come BACK. Two green tests, the same action, contrary
+    /// assertions, and the dashboard handler faithfully implementing the wrong one. A user closed four
+    /// deal-lost rows in the Centre and watched all four reappear on the dashboard within the hour.
+    ///
+    /// ★ IT ASSERTS THE DASHBOARD'S OWN OUTPUT ACROSS BOTH HALVES (§A3): the re-observation must NOT
+    /// bring the row back, and a genuinely new alert must. Pinning only the first half would leave a
+    /// closure that silences a real second loss for ever (§B1).
     /// </summary>
     [Fact]
-    public async Task A_re_detected_deal_alerts_on_the_dashboard_again()
+    public async Task A_reobserved_deal_alert_stays_closed_on_the_dashboard_but_a_new_alert_returns()
     {
         var tenantId = Guid.NewGuid();
         var payeeId = Guid.NewGuid();
@@ -1113,6 +1119,8 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
             .IsSuccess.Should().BeTrue();
         (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts.Should().BeEmpty();
 
+        // ★★ THE HOURLY SYNC, EXACTLY AS DealLostReconciler.cs:119 PERFORMS IT: the same alert, the
+        // same id, a stamp moved forward only because it was looked at again.
         await using (var db = fixture.CreateDbForTenant(tenantId))
         {
             var alert = await db.DealLostAlerts.SingleAsync(a => a.Id == alertId);
@@ -1120,8 +1128,74 @@ public sealed class ReconciliationCentreTests(CreditAllocationServiceFixture fix
             await db.SaveChangesAsync();
         }
 
+        (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts.Should().BeEmpty(
+            "re-observing an open alert is the same fact seen again, and the dashboard must agree "
+            + "with the Centre about that");
+        (await RunAsync(tenantId)).Items.Should().BeEmpty("and the Centre still hides it too");
+
+        // ★ A GENUINELY NEW LOSS: a new alert with a new id. No closure covers it, on either surface.
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var alert = await db.DealLostAlerts.SingleAsync(a => a.Id == alertId);
+            alert.Resolve("test", Now.AddDays(40));
+
+            db.DealLostAlerts.Add(DealLostAlert.Create(
+                Guid.NewGuid(), tenantId, "HubSpot", "deal-again", txId, "REF-DASH-AGAIN",
+                CompensationTransactionStatus.Paid, 300m, EUR, Now.AddDays(45), "sync"));
+            await db.SaveChangesAsync();
+        }
+
         (await DashboardAsync(tenantId)).ActionBand.DealLostAlerts
-            .Should().ContainSingle("a newer detection is a new fact on every surface");
+            .Should().ContainSingle("a NEW alert is a new fact on every surface");
+        (await RunAsync(tenantId)).Items.Should().ContainSingle("and the Centre says the same");
+    }
+
+    /// <summary>
+    /// ★ THE DRIFT PANEL HAS THE SAME RE-STAMPING PROBLEM AND HAD NO TEST FOR IT. CrmDriftPolicy
+    /// refreshes an open drift alert on every sync just as the deal-lost reconciler does
+    /// (CrmDriftPolicy.cs:203), so the panel fixed alongside deal-lost is pinned alongside it too — the
+    /// twin defect stayed invisible only because no test had ever re-observed a drift.
+    /// </summary>
+    [Fact]
+    public async Task A_reobserved_drift_alert_stays_closed_on_the_dashboard()
+    {
+        var tenantId = Guid.NewGuid();
+        var payeeId = Guid.NewGuid();
+        Guid txId;
+        Guid alertId;
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            db.Payees.Add(MakePayee(tenantId, payeeId, "EMP-DRIFT2"));
+            var tx = PaidTx(tenantId, "REF-DRIFT-AGAIN", payeeId, 5_000m);
+            txId = tx.Id;
+            db.CompensationTransactions.Add(tx);
+
+            alertId = Guid.NewGuid();
+            db.CrmDriftAlerts.Add(CrmDriftAlert.Create(
+                alertId, tenantId, "hubspot", "deal-drift-again", tx.Id, "REF-DRIFT-AGAIN",
+                CompensationTransactionStatus.Paid,
+                amountChanged: true, oldAmount: 5_000m, oldCurrency: EUR,
+                newAmount: 4_900m, newCurrency: EUR,
+                dateChanged: false, oldCloseDate: TxDate, newCloseDate: TxDate,
+                detectedAt: Now, detectedBy: "test"));
+            await db.SaveChangesAsync();
+        }
+
+        (await CloseAsync(tenantId, ReconciliationEntryKind.Transaction, txId, "Immaterial change."))
+            .IsSuccess.Should().BeTrue();
+        (await DashboardAsync(tenantId)).ActionBand.DriftAlerts.Should().BeEmpty();
+
+        await using (var db = fixture.CreateDbForTenant(tenantId))
+        {
+            var alert = await db.CrmDriftAlerts.SingleAsync(a => a.Id == alertId);
+            alert.Refresh(true, 4_900m, EUR, false, TxDate, Now.AddDays(30), "sync");
+            await db.SaveChangesAsync();
+        }
+
+        (await DashboardAsync(tenantId)).ActionBand.DriftAlerts.Should().BeEmpty(
+            "a re-stamped drift alert is the same drift, on the dashboard as in the Centre");
+        (await RunAsync(tenantId)).Items.Should().BeEmpty();
     }
 
     /// <summary>
