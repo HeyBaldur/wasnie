@@ -1,6 +1,7 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Credits;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -76,7 +77,10 @@ public sealed class ExportCreditsHandler(
                 AllocatedBy: c.AllocatedBy,
                 Status: c.SupersededAt.HasValue ? "Superseded" : "Active",
                 SupersededAt: c.SupersededAt,
-                SupersededBy: c.SupersededBy);
+                SupersededBy: c.SupersededBy,
+                Settlement: CreditSettlement.Of(c),
+                PaidAt: c.ConsumedAt,
+                ClosureReason: c.ClosureReason?.ToString());
         }).ToList();
 
         var tenant = await db.Tenants

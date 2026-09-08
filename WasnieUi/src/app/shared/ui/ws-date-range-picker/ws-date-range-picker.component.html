@@ -17,7 +17,7 @@
   </div>
 
   @if (isOpen()) {
-    <div class="ws-drp__popover">
+    <div class="ws-drp__popover" [class.ws-drp__popover--end]="align() === 'end'">
       <div class="ws-drp__months">
         <div class="ws-drp__month">
           <div class="ws-drp__nav">

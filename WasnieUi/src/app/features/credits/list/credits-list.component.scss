@@ -192,3 +192,12 @@
 .col-primary { color: var(--color-text-primary); font-weight: 600; }
 .col-unassigned { color: var(--color-text-tertiary); font-style: italic; }
 .col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+// The reason a Closed credit was closed, beside its badge. Muted and small: it qualifies the badge,
+// it is not a second status.
+.credits-list__closure-reason {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}

@@ -815,30 +815,19 @@
   overflow: hidden;
 }
 
-.trend-card__prior {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
+// The sentence that says what this card's figure actually is. Keeps the rule and the position of the
+// footer it replaces, so the card's geometry is unchanged — only the content is now an explanation
+// rather than a second bare number.
+//
+// It WRAPS, unlike the label it replaces: that one was one line with an ellipsis, which is right for a
+// period name and wrong for a sentence — a truncated explanation explains nothing.
+.trend-card__note {
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border-subtle);
   margin-top: var(--space-2);
-}
-
-.trend-card__prior-lbl {
   font-size: var(--font-size-11);
+  line-height: 1.5;
   color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 60%;
-}
-
-.trend-card__prior-amt {
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
 }
 
 // ── Skeleton ───────────────────────────────────────────────────────────────────
@@ -870,9 +859,83 @@
 }
 
 
-// Period filter. The dropdown panel is sized to its trigger, and a trigger sized to "This Month" made
-// the option rows too narrow once the selected-state check icon claimed space — "This Mo…". 160px is the
-// same floor the credits list uses for its filter selects, so the two screens stay consistent.
-.period-select {
-  min-width: 160px;
+// Date range filter. Wider floor than the retired period select: the trigger now states two dates
+// rather than one preset name, and at 160px "1 Sept 2026 – 30 Sept 2026" was ellipsised to nothing
+// useful.
+.range-picker {
+  min-width: 260px;
+}
+
+// The disclosure control for the "needs attention" panel. A real button, so it is reachable by
+// keyboard and announces its state — reset to look like the heading it replaces rather than like a
+// button, because visually nothing about that header changed.
+.attention-hd__lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.attention-hd__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+
+  &:hover {
+    color: var(--color-text-primary);
+  }
+
+  // The focus treatment of this design system is an outline offset from the control, not a ring.
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+}
+
+// The new-tab glyph beside a commission card's title. Muted and small: it is a promise about what the
+// click does, not a second thing to read.
+.metric-card__ext {
+  display: inline-flex;
+  margin-left: var(--space-1);
+  color: var(--color-text-tertiary);
+  vertical-align: middle;
+}
+
+// The three commission figures. They lead the page, so they are the largest numbers on it and the only
+// ones set in the display face.
+//
+// ★ THE FACE IS OPTED INTO EXPLICITLY, because this figure is a <div> and not a heading. The global
+//   rule that puts Source Serif 4 on titles covers `h1..h4` only — deliberately, so a component that
+//   needs it elsewhere says so itself rather than the rule growing a selector per exception.
+// ★ `tabular-nums` IS INHERITED FROM .metric-card__value AND MUST STAY. Proportional digits make the
+//   three figures jitter against each other as the range changes, and these three are read as a sum.
+.commission-card__value {
+  font-family: var(--font-display);
+  font-size: var(--font-size-32);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+// The commissions omitted from the three cards. A note, not a card: it explains an absence, and giving
+// it a card of its own would read as a fourth figure of the same rank.
+.commissions-closed-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-4)) 0 var(--space-8);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+
+  strong {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
 }

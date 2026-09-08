@@ -1,3 +1,7 @@
+/** The settlement axis of a credit — whether the commission was paid, is still owed, or left the
+ *  payable cycle another way. Mirrors the backend's CreditSettlement vocabulary. */
+export type CreditSettlement = 'Paid' | 'Unpaid' | 'Closed';
+
 export interface RecalculateCreditsResult {
   supersededCount: number;
   skippedPaidCount: number;
@@ -29,6 +33,16 @@ export interface CreditListItem {
   creditedCurrency: string;
   allocatedAt: string;
   isSuperseded: boolean;
+  /**
+   * "Paid" | "Unpaid" | "Closed" — whether the money reached the payee. A CODE (§C1).
+   *
+   * A SECOND AXIS, not a refinement of `isSuperseded`: that one answers "was this replaced by a
+   * reallocation?", which is why every row of this list used to read "Active" and said nothing about
+   * what is still owed.
+   */
+  settlement: CreditSettlement;
+  /** "WrittenOff" | "ExternalSettlement" for a Closed credit; null otherwise. */
+  closureReason: string | null;
 }
 
 export interface CurrencyTotal {

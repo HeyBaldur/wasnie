@@ -1,5 +1,6 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom, Subject } from 'rxjs';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { debounceTime } from 'rxjs/operators';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CategoryMappingsApiService } from '../services/category-mappings.api.service';
@@ -46,6 +47,14 @@ export class CategoryMappingsStore {
     });
   }
 
+  /**
+   * Makes the last-REQUESTED response win rather than the last-ARRIVED one. Without it, two loads
+   * racing (a filter changed while a fetch was in flight) leave whichever the network returns last on
+   * screen — typically the older, wider query, so the user stares at unfiltered rows under a filtered
+   * UI until they press reload.
+   */
+  private readonly _latest = new LatestRequestGuard();
+
   private async _loadInternal(
     page: number,
     pageSize: number,
@@ -53,6 +62,7 @@ export class CategoryMappingsStore {
     sortOrder: 'asc' | 'desc',
     search: string,
   ): Promise<void> {
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -64,11 +74,13 @@ export class CategoryMappingsStore {
         search: search || undefined,
       };
       const data = await firstValueFrom(this.api.list(params));
+      if (this._latest.isStale(token)) return;   // superseded by a newer load — discard
       this.pagedResult.set(data);
     } catch {
+      if (this._latest.isStale(token)) return;   // don't let a stale failure clobber a fresh result
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

@@ -3,14 +3,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { DecimalPipe, LowerCasePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AppShellComponent } from '../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { RefreshOnEnterDirective } from '../../shared/directives/refresh-on-enter.directive';
 import { CurrencyFormatPipe } from '../../shared/pipes/currency-format.pipe';
 import { DateFormatPipe } from '../../shared/pipes/date-format.pipe';
 import { HasPermissionPipe } from '../../shared/pipes/has-permission.pipe';
-import { DashboardStore } from './store/dashboard.store';
+import { DashboardStore, currentMonthRange, type DashboardRange } from './store/dashboard.store';
 import { CurrencyTotal, DashboardTrendPoint, UnprocessablePendingItem, DriftAlertItem, DealLostAlertItem, AmbiguousAttributionPayee, PlanWithoutLiveRules, DashboardActivityItem } from './models/dashboard.models';
 // ★ THE WIDGET AND THE AUDIT LOGS PAGE SHARE ONE MAP. The same action must not read one way here
 // and another way on the page this widget links to.
@@ -25,7 +25,7 @@ import {
   WsCardComponent,
   WsBadgeComponent,
   WsPageLayoutComponent,
-  WsSelectComponent,
+  WsDateRangePickerComponent,
   WsStatCardComponent,
   WsGaugeComponent,
   WsBarChartComponent,
@@ -33,9 +33,9 @@ import {
   WsHBarChartComponent,
   WsButtonComponent,
   WsConfirmationModalComponent,
-  type SelectOption,
   type CardAccent,
   type BarChartPoint,
+  type DateRange,
 } from '../../shared/ui';
 
 @Component({
@@ -56,7 +56,7 @@ import {
     WsBadgeComponent,
     WsPageLayoutComponent,
     ReactiveFormsModule,
-    WsSelectComponent,
+    WsDateRangePickerComponent,
     WsStatCardComponent,
     WsGaugeComponent,
     WsBarChartComponent,
@@ -88,13 +88,30 @@ export class DashboardComponent {
   readonly terminated = inject(TerminatedAccountsStore);
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly translate = inject(TranslateService);
 
   /**
-   * The period filter's control. WsSelect is a ControlValueAccessor — it has no [value]/(valueChange)
-   * pair — so the binding goes through a FormControl, which is how every other WsSelect in the app is
-   * driven. Seeded from the store so the control shows the period already in effect.
+   * The range filter's control. WsDateRangePicker is a ControlValueAccessor — no [value]/(valueChange)
+   * pair — so the binding goes through a FormControl, as every other Ws form control in the app does.
+   * Seeded from the store so the picker opens showing the range already in effect.
    */
-  readonly periodControl = new FormControl<string>(this.store.period(), { nonNullable: true });
+  readonly rangeControl = new FormControl<DateRange>(
+    { start: this.store.range().from, end: this.store.range().to },
+    { nonNullable: true }
+  );
+
+  /**
+   * Whether the "transactions that need attention" panel is open.
+   *
+   * ★ NOT PERSISTED, ON PURPOSE. It reopens collapsed on every load. Remembering it would mean a
+   * reader who expanded it once keeps arriving at a dashboard whose largest panel is unfurled, and
+   * the header already carries the two things that matter when it is shut: the count and the way out.
+   */
+  readonly attentionExpanded = signal(false);
+
+  toggleAttention(): void {
+    this.attentionExpanded.update(open => !open);
+  }
 
   /**
    * The person the header greets. The name is NOT on `/auth/me` (CurrentUser carries identity and
@@ -156,9 +173,9 @@ export class DashboardComponent {
 
     // Selecting an option routes to the SAME handler the segmented control called. No period logic
     // moved into this component: the store still owns the period and the reload.
-    this.periodControl.valueChanges
+    this.rangeControl.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(value => this.onPeriodChange(value));
+      .subscribe(value => this.onRangeChange(value));
   }
 
   // The deal-lost alert the admin is confirming a revert for (drives the confirmation modal), and whether
@@ -215,9 +232,8 @@ export class DashboardComponent {
   }
 
   readonly payoutsLinkParams = computed<Record<string, string>>(() => {
-    const key = this.store.period();
-    const { from, to } = this._periodDates(key);
-    return { period: key, ...this.payoutsLinkParamsFor(from, to) };
+    const { from, to } = this.store.range();
+    return this.payoutsLinkParamsFor(from, to);
   });
 
   /**
@@ -241,95 +257,126 @@ export class DashboardComponent {
   }
 
   readonly transactionsLinkParams = computed(() => {
-    const { from, to } = this._periodDates(this.store.period());
-    const p: Record<string, string> = {};
-    if (from) p['txFrom'] = from;
-    if (to) p['txTo'] = to;
-    return p;
+    const { from, to } = this.store.range();
+    return { txFrom: from, txTo: to };
   });
 
   readonly creditsLinkParams = computed(() => {
-    const { from, to } = this._periodDates(this.store.period());
-    const p: Record<string, string> = {};
-    if (from) p['allocFrom'] = from;
-    if (to) p['allocTo'] = to;
-    return p;
+    const { from, to } = this.store.range();
+    return { allocFrom: from, allocTo: to };
   });
 
   /**
-   * Mirrors PeriodHelper.ComputeDateRange on the backend — these values only build the deep links to
-   * the list screens; the dashboard's own figures come from the backend, which computes the same
-   * ranges. If one side changes, both must (PeriodHelperQuarterAndYearTests pins the backend).
-   *
-   *   this-month   : first of month      → today
-   *   last-month   : first of prev month → last day of prev month
-   *   this-quarter : first of quarter    → today (quarter TO DATE)
-   *   last-quarter : previous quarter, in full
-   *   ytd          : Jan 1               → today
-   *   last-year    : previous calendar year, in full
-   *
-   * Quarters are calendar quarters (Q1 Jan–Mar … Q4 Oct–Dec); Wasnie has no fiscal-year concept.
+   * Deep link for a commission card: the credits allocated in the range. Same window and same date
+   * field (allocation) the card sums on, so the list adds up to the figure that was clicked.
    */
-  _periodDates(key: string): { from: string | null; to: string | null } {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${yyyy}-${mm}-${dd}`;
-
-    // Local-time formatting on purpose: toISOString() converts to UTC and shifts the date by a day for
-    // anyone west of Greenwich, which would silently pick the wrong month or quarter.
-    const fmt = (d: Date): string =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-    // Month index (0-11) of the first month of the quarter containing `today`.
-    const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
-
-    switch (key) {
-      case 'this-month':
-        return { from: `${yyyy}-${mm}-01`, to: todayStr };
-      case 'last-month': {
-        const first = new Date(yyyy, today.getMonth() - 1, 1);
-        const last = new Date(yyyy, today.getMonth(), 0);
-        return { from: fmt(first), to: fmt(last) };
-      }
-      case 'this-quarter':
-        return { from: fmt(new Date(yyyy, quarterStartMonth, 1)), to: todayStr };
-      case 'last-quarter': {
-        // Day 0 of a month is the last day of the previous one, and the Date constructor rolls a
-        // negative month back into the previous year — so Q1 correctly yields Q4 of last year.
-        const first = new Date(yyyy, quarterStartMonth - 3, 1);
-        const last = new Date(yyyy, quarterStartMonth, 0);
-        return { from: fmt(first), to: fmt(last) };
-      }
-      case 'ytd':
-        return { from: `${yyyy}-01-01`, to: todayStr };
-      case 'last-year':
-        return { from: `${yyyy - 1}-01-01`, to: `${yyyy - 1}-12-31` };
-      default:
-        // Unknown keys (including the retired 'all-time', which may still sit in a bookmarked URL)
-        // degrade to no date filter rather than throwing.
-        return { from: null, to: null };
-    }
+  commissionsLinkParams(settlement: 'Payable' | 'Paid' | 'Unpaid'): Record<string, string> {
+    const { from, to } = this.store.range();
+    // `settlement` is the credits screen's own filter name and vocabulary — the link is only useful if
+    // the destination can actually apply it. It used to send `paid=true|false`, a parameter nothing
+    // read, so all three cards opened the same unfiltered list.
+    //
+    // 'Payable' for Total: the card sums paid + unpaid and excludes closed credits, so the list must
+    // exclude them too, or the rows will not add up to the figure that was clicked.
+    return { allocFrom: from, allocTo: to, settlement };
   }
 
   /**
-   * "All time" was removed deliberately: as a quick filter it is an analytics anti-pattern (it blends
-   * years run under different plans into one number) and an unbounded scan that degrades as data grows.
-   * The default is 'this-month' (see DashboardStore), so removing it does not orphan the initial state.
+   * The picker orders the two ends itself (it swaps them when the second click lands before the
+   * first), so a backwards range cannot leave this control. The store refuses one anyway and the
+   * server refuses it again — three layers, because the range decides what money the page reports.
    */
-  readonly periodOptions: SelectOption[] = [
-    { value: 'this-month', label: 'DASHBOARD.PERIOD_THIS_MONTH' },
-    { value: 'last-month', label: 'DASHBOARD.PERIOD_LAST_MONTH' },
-    { value: 'this-quarter', label: 'DASHBOARD.PERIOD_THIS_QUARTER' },
-    { value: 'last-quarter', label: 'DASHBOARD.PERIOD_LAST_QUARTER' },
-    { value: 'ytd', label: 'DASHBOARD.PERIOD_YTD' },
-    { value: 'last-year', label: 'DASHBOARD.PERIOD_LAST_YEAR' },
+  onRangeChange(value: DateRange): void {
+    if (!value?.start || !value?.end) return;
+    this.store.setRange({ from: value.start, to: value.end });
+  }
+
+  /** Back to the range the dashboard opens on, without a page reload. */
+  resetRange(): void {
+    const range = currentMonthRange();
+    this.rangeControl.setValue({ start: range.from, end: range.to });
+  }
+
+  /**
+   * The three commission cards read one currency at a time, and they must all read the SAME one — a
+   * Total in euros beside a Paid in zlotys would not add up and nothing on screen would say why.
+   * The currency comes from the Total card, which is the only list guaranteed to contain every
+   * currency present in the other two.
+   */
+  readonly commissionsCurrency = computed<string | null>(() =>
+    this.store.commissionsBand()?.totalByCurrency?.[0]?.currency ?? null
+  );
+
+  /** The amount for `currency` in a per-currency list; 0 when that currency is absent, never blank. */
+  amountFor(totals: CurrencyTotal[] | undefined, currency: string | null): number {
+    if (!currency) return 0;
+    return totals?.find(t => t.currency === currency)?.amount ?? 0;
+  }
+
+  /** Currencies beyond the primary one, so a multi-currency tenant still sees the rest. */
+  secondaryCurrencies(totals: CurrencyTotal[] | undefined): CurrencyTotal[] {
+    return (totals ?? []).slice(1);
+  }
+
+  /**
+   * The three commission cards, declared once and rendered by one loop.
+   *
+   * ★ A LOOP RATHER THAN THREE COPIES OF THE MARKUP. The acceptance criterion is that the three are
+   * structurally identical; three hand-written blocks satisfy it on the day they are written and drift
+   * the first time somebody adjusts one of them. Here they cannot differ, because there is only one
+   * block.
+   */
+  readonly commissionCards: ReadonlyArray<{
+    key: 'total' | 'paid' | 'unpaid';
+    titleKey: string;
+    descKey: string;
+    /** The settlement filter the credits screen must apply for its rows to add up to this card. */
+    settlement: 'Payable' | 'Paid' | 'Unpaid';
+  }> = [
+    { key: 'total', titleKey: 'DASHBOARD.COMMISSIONS_TOTAL', descKey: 'DASHBOARD.COMMISSIONS_TOTAL_DESC', settlement: 'Payable' },
+    { key: 'paid', titleKey: 'DASHBOARD.COMMISSIONS_PAID', descKey: 'DASHBOARD.COMMISSIONS_PAID_DESC', settlement: 'Paid' },
+    { key: 'unpaid', titleKey: 'DASHBOARD.COMMISSIONS_UNPAID', descKey: 'DASHBOARD.COMMISSIONS_UNPAID_DESC', settlement: 'Unpaid' },
   ];
 
-  onPeriodChange(value: string): void {
-    this.store.setPeriod(value);
+  /** The per-currency totals behind one of the three cards. */
+  commissionTotals(key: 'total' | 'paid' | 'unpaid'): CurrencyTotal[] {
+    const band = this.store.commissionsBand();
+    if (!band) return [];
+    if (key === 'paid') return band.paidByCurrency;
+    if (key === 'unpaid') return band.unpaidByCurrency;
+    return band.totalByCurrency;
   }
+
+  /**
+   * The two window labels the trend band used to receive as English prose from the server.
+   *
+   * ★ BUILT HERE FROM THE DATES, IN THE READER'S LOCALE. A free range has no name ("July 2026" was
+   * only ever possible because the period was a preset), so the honest label is the window itself —
+   * and formatting it in the browser is the only way it can be Spanish for a Spanish reader.
+   * The dates come from the trend band, so both labels describe the windows the SERVER compared, not
+   * the ones the picker happens to hold.
+   */
+  readonly trendCurrentLabel = computed(() => {
+    const band = this.store.trendBand();
+    return band ? this.formatWindow(band.currentFrom, band.currentTo) : '';
+  });
+
+  readonly trendPriorLabel = computed(() => {
+    const band = this.store.trendBand();
+    return band ? this.formatWindow(band.priorFrom, band.priorTo) : '';
+  });
+
+  private formatWindow(from: string, to: string): string {
+    const fmt = (iso: string) =>
+      new Intl.DateTimeFormat(this.translate.currentLang || 'en', { day: 'numeric', month: 'short' })
+        .format(new Date(`${iso}T00:00:00`));
+    return `${fmt(from)} – ${fmt(to)}`;
+  }
+
+  /** True when commissions of the range were written off or settled outside Wasnie. */
+  readonly hasClosedCommissions = computed(() =>
+    (this.store.commissionsBand()?.closedTotalByCurrency?.length ?? 0) > 0
+  );
 
   actionCardAccent(count: number): CardAccent {
     return count > 0 ? 'warning' : 'none';
@@ -419,10 +466,6 @@ export class DashboardComponent {
       : {};
   }
 
-  /** Footer wording: "Prior: June 2026" for a closed period, "July 2026 total" for a baseline. */
-  footerLabel(): string {
-    return this.isPacing ? 'DASHBOARD.PACING_BASELINE' : 'DASHBOARD.TREND_PRIOR';
-  }
 
   /** Safe formatted change % — only call when trendIsNoBase() returns false. */
   trendChangeFormatted(point: DashboardTrendPoint): string {
@@ -435,12 +478,15 @@ export class DashboardComponent {
    * €5,929,711,576,736 → €5.93T  |  €94,564 → €94.56K  |  €1,234,567 → €1.23M
    */
   fmtCompact(amount: number, currency: string): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      notation: 'compact',
-      maximumFractionDigits: 2,
-    }).format(amount);
+    // ★ A BLANK CURRENCY IS A REAL STATE, NOT A BUG TO LET THROUGH. When a range holds no money at all
+    // there is no currency to name, and Intl throws a RangeError on an empty code — which took the
+    // whole dashboard down rather than showing the zero it was asked for. The figure still has to
+    // appear: "nothing in this range" and "we could not work it out" must not look the same (§B3).
+    const options: Intl.NumberFormatOptions = currency
+      ? { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 2 }
+      : { notation: 'compact', maximumFractionDigits: 2 };
+
+    return new Intl.NumberFormat('en-US', options).format(amount);
   }
 
   /** Two-bar chart data: [current, prior] for a trend point. */

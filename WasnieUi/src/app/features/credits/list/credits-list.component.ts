@@ -16,7 +16,7 @@ import { RefreshOnEnterDirective } from '../../../shared/directives/refresh-on-e
 import { PayeesApiService } from '../../payees/services/payees.api.service';
 import { PlansApiService } from '../../plans/services/plans.api.service';
 import { CreditsApiService } from '../services/credits.api.service';
-import { CreditsStore, CreditFilter, CreditStatus, EMPTY_CREDIT_FILTER } from '../state/credits.store';
+import { CreditsStore, CreditFilter, CreditStatus, CreditSettlementFilter, EMPTY_CREDIT_FILTER } from '../state/credits.store';
 import { CreditByPayee } from '../models/credit.model';
 import {
   WsButtonComponent,
@@ -96,6 +96,22 @@ export class CreditsListComponent implements OnInit {
     { value: 'All', label: 'CREDITS.FILTER.STATUS_ALL' },
   ];
 
+  /**
+   * The SETTLEMENT filter — the one this screen was missing. Without it, "what is still owed?" had no
+   * answer here: every row read "Active" (the supersession axis) and the only way to find an unpaid
+   * commission was to open credits one at a time.
+   *
+   * 'Payable' is offered as well as Paid and Unpaid because it is what the dashboard's Total card sums;
+   * arriving from that card must land on a filter the reader can also see and change.
+   */
+  readonly settlementOptions: SelectOption[] = [
+    { value: 'All', label: 'CREDITS.FILTER.SETTLEMENT_ALL' },
+    { value: 'Payable', label: 'CREDITS.FILTER.SETTLEMENT_PAYABLE' },
+    { value: 'Paid', label: 'CREDITS.FILTER.SETTLEMENT_PAID' },
+    { value: 'Unpaid', label: 'CREDITS.FILTER.SETTLEMENT_UNPAID' },
+    { value: 'Closed', label: 'CREDITS.FILTER.SETTLEMENT_CLOSED' },
+  ];
+
   readonly form = new FormGroup({
     reference: new FormControl('', { nonNullable: true }),
     allocatedFrom: new FormControl<string | null>(null),
@@ -103,6 +119,7 @@ export class CreditsListComponent implements OnInit {
     amountMin: new FormControl<string>('', { nonNullable: true }),
     amountMax: new FormControl<string>('', { nonNullable: true }),
     status: new FormControl<string>('Active', { nonNullable: true }),
+    settlement: new FormControl<string>('All', { nonNullable: true }),
     payeeSearch: new FormControl<string | number>('', { nonNullable: true }),
     planSearch: new FormControl<string | number>('', { nonNullable: true }),
     currencySearch: new FormControl<string | number>('', { nonNullable: true }),
@@ -157,6 +174,7 @@ export class CreditsListComponent implements OnInit {
       amountMin: f.amountMin !== null ? String(f.amountMin) : '',
       amountMax: f.amountMax !== null ? String(f.amountMax) : '',
       status: f.status,
+      settlement: f.settlement,
     }, { emitEvent: false });
     this.selectedPayees.set(f.payeeIds.map(id => ({ id, label: this._payeeCache.get(id) ?? id })));
     this.selectedPlans.set(f.planIds.map(id => ({ id, label: this._planLabelCache.get(id) ?? id })));
@@ -191,6 +209,9 @@ export class CreditsListComponent implements OnInit {
 
     c.status.valueChanges.pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
       .subscribe(v => this._setFilter({ status: (v as CreditStatus) }));
+
+    c.settlement.valueChanges.pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(v => this._setFilter({ settlement: (v as CreditSettlementFilter) }));
 
     c.payeeSearch.valueChanges.pipe(distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
       .subscribe(v => {
@@ -364,6 +385,33 @@ export class CreditsListComponent implements OnInit {
 
   statusLabel(isSuperseded: boolean): string {
     return isSuperseded ? 'CREDITS.STATUS_SUPERSEDED' : 'CREDITS.STATUS_ACTIVE';
+  }
+
+  /**
+   * The settlement badge. A WHITELIST, never `SETTLEMENT.${code}`: an unknown code from a newer API
+   * would otherwise print an internal identifier at the user (§C2).
+   *
+   * Colour carries the meaning the reader is looking for — paid is settled, unpaid is money still
+   * owed — using the semantic badge variants that already exist rather than invented colours (§5.5).
+   */
+  settlementBadge(settlement: string): BadgeVariant {
+    if (settlement === 'Paid') return 'success';
+    if (settlement === 'Unpaid') return 'warning';
+    return 'neutral';   // Closed, and anything this build does not recognise
+  }
+
+  /** Whitelisted like the settlement code itself — never assembled into a key (§C2). */
+  closureReasonLabel(reason: string): string {
+    if (reason === 'WrittenOff') return 'CREDITS.CLOSURE_WRITTEN_OFF';
+    if (reason === 'ExternalSettlement') return 'CREDITS.CLOSURE_EXTERNAL_SETTLEMENT';
+    return 'CREDITS.CLOSURE_UNKNOWN';
+  }
+
+  settlementLabel(settlement: string): string {
+    if (settlement === 'Paid') return 'CREDITS.SETTLEMENT_PAID';
+    if (settlement === 'Unpaid') return 'CREDITS.SETTLEMENT_UNPAID';
+    if (settlement === 'Closed') return 'CREDITS.SETTLEMENT_CLOSED';
+    return 'CREDITS.SETTLEMENT_UNKNOWN';
   }
 
   private _syncUrl(): void {

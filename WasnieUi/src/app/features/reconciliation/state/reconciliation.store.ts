@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { ReconciliationApiService } from '../services/reconciliation.api.service';
 import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
 import {
@@ -99,24 +100,35 @@ export class ReconciliationStore {
     }
   }
 
+  /**
+   * Makes the last-REQUESTED response win rather than the last-ARRIVED one. Without it, two loads
+   * racing (a filter changed while a fetch was in flight) leave whichever the network returns last on
+   * screen — typically the older, wider query, so the user stares at unfiltered rows under a filtered
+   * UI until they press reload.
+   */
+  private readonly _latest = new LatestRequestGuard();
+
   async load(filter?: Partial<ReconciliationFilter>): Promise<void> {
     const next = { ...this._filter(), ...filter };
     this._filter.set(next);
+    const token = this._latest.begin();
     this._loading.set(true);
     this._error.set(null);
 
     try {
       const page: ReconciliationPage = await firstValueFrom(this.api.list(next));
+      if (this._latest.isStale(token)) return;   // superseded by a newer load — discard
       this._rows.set(page.items);
       this._summary.set(page.summary);
       this._total.set(page.totalCount);
     } catch {
+      if (this._latest.isStale(token)) return;   // don't let a stale failure clobber a fresh result
       this._error.set('RECONCILIATION.LOAD_ERROR');
       this._rows.set([]);
       this._summary.set(EMPTY_SUMMARY);
       this._total.set(0);
     } finally {
-      this._loading.set(false);
+      if (!this._latest.isStale(token)) this._loading.set(false);
     }
   }
 

@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Compensation.DTOs;
+﻿namespace Wasnie.Application.Compensation.DTOs;
 
 // List row — joins: Transaction (ref), Payee (name/code), Plan (name from batch lookup)
 public sealed record CreditListDto(
@@ -19,7 +19,18 @@ public sealed record CreditListDto(
     decimal CreditedAmount,
     string CreditedCurrency,
     DateTimeOffset AllocatedAt,
-    bool IsSuperseded);
+    bool IsSuperseded,
+    /// <summary>
+    /// "Paid" | "Unpaid" | "Closed" — whether the money reached the payee. A CODE, translated by the
+    /// screen (§C1).
+    ///
+    /// ★ IT HAD TO BE ADDED. The row already carried IsSuperseded and nothing else, so every line of
+    /// the credits list showed the same "Active" and a reader asking "what is still owed?" had to open
+    /// credits one at a time. The figure was on the dashboard; the rows behind it were not reachable.
+    /// </summary>
+    string Settlement,
+    /// <summary>Why a Closed credit was closed ("WrittenOff" | "ExternalSettlement"); null otherwise.</summary>
+    string? ClosureReason);
 
 // By-Payee aggregate row
 public sealed record CreditByPayeeDto(

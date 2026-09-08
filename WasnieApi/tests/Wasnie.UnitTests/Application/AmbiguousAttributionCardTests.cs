@@ -92,7 +92,7 @@ public sealed class AmbiguousAttributionCardTests
         SeedAssignment(db, planB, rudolph.Id);
         for (var i = 0; i < 3; i++) SeedPendingTx(db, rudolph.Id);
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         var rows = result.Value!.ActionBand.AmbiguousAttributionPayees;
         rows.Should().ContainSingle();               // ONE row, not three
@@ -111,7 +111,7 @@ public sealed class AmbiguousAttributionCardTests
         SeedAssignment(db, plan, payee.Id);
         SeedPendingTx(db, payee.Id);
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         result.Value!.ActionBand.AmbiguousAttributionPayees.Should().BeEmpty();
     }
@@ -130,7 +130,7 @@ public sealed class AmbiguousAttributionCardTests
         SeedPendingTx(db, payee.Id);                          // ambiguous
         SeedPendingTx(db, payee.Id, selected: assignmentA);   // resolved by the admin
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         var rows = result.Value!.ActionBand.AmbiguousAttributionPayees;
         rows.Should().ContainSingle();
@@ -154,7 +154,7 @@ public sealed class AmbiguousAttributionCardTests
         SeedAssignment(db, planB, many.Id);
         for (var i = 0; i < 4; i++) SeedPendingTx(db, many.Id);
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         var rows = result.Value!.ActionBand.AmbiguousAttributionPayees;
         rows.Should().HaveCount(2);
@@ -175,7 +175,7 @@ public sealed class AmbiguousAttributionCardTests
         SeedAssignment(db, planB, payee.Id, active: false);   // the overlap already resolved
         SeedPendingTx(db, payee.Id);
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         result.Value!.ActionBand.AmbiguousAttributionPayees.Should().BeEmpty();
     }

@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { PayRunsApiService } from '../services/pay-runs.api.service';
 import { PayRunDetail, PayRunPayoutsDetailFilter, EMPTY_PAYOUTS_DETAIL_FILTER } from '../models/pay-run.model';
 
@@ -63,19 +64,30 @@ export class PayRunDetailStore {
     await this._fetch();
   }
 
+  /**
+   * Makes the last-REQUESTED response win rather than the last-ARRIVED one — two loads racing must not
+   * leave whichever the network returns last on screen.
+   */
+  private readonly _latest = new LatestRequestGuard();
+
   private async _fetch(): Promise<void> {
+    // setFilter/setPage call _fetch() directly, so two can be in flight at once — the same shape as
+    // the payouts list defect.
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
       const data = await firstValueFrom(
         this.api.getById(this._runId, this.filter(), this.page(), this.pageSize())
       );
+      if (this._latest.isStale(token)) return;
       this.run.set(data);
       this._lastLoadedFilter.set({ ...this.filter() });
     } catch {
+      if (this._latest.isStale(token)) return;
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

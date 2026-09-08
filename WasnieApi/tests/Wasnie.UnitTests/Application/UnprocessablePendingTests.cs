@@ -98,7 +98,7 @@ public sealed class UnprocessablePendingTests
         // Unassigned transaction → NoPayee.
         SeedPendingTx(db, null, "USD", new DateOnly(2026, 5, 4));
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         result.IsSuccess.Should().BeTrue();
         var items = result.Value!.ActionBand.UnprocessablePendingItems
@@ -119,7 +119,7 @@ public sealed class UnprocessablePendingTests
         SeedAssignment(db, eurPlan, p1, active: true, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
         SeedPendingTx(db, p1, "EUR", new DateOnly(2026, 5, 1));  // fully processable
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.ActionBand.UnprocessablePendingItems.Should().BeEmpty();
@@ -135,7 +135,7 @@ public sealed class UnprocessablePendingTests
         SeedAssignment(db, eurPlan, p1, active: true, new DateOnly(2026, 4, 1), new DateOnly(2026, 6, 30));
         SeedPendingTx(db, p1, "EUR", new DateOnly(2026, 8, 1));
 
-        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery("all-time"), default);
+        var result = await NewHandler(db).Handle(new GetDashboardSummaryQuery(), default);
 
         var items = result.Value!.ActionBand.UnprocessablePendingItems.ToDictionary(i => i.Reason, i => i);
         items.Should().ContainKey("NoActiveAssignment");

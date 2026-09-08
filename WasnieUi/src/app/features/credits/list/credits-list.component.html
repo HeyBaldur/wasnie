@@ -56,6 +56,15 @@
                 [label]="'CREDITS.FILTER.STATUS' | translate"
               />
             </div>
+            <!-- The SETTLEMENT axis, beside the supersession one. Two separate questions, two separate
+                 controls: "was this replaced?" and "has this been paid?" (§B3). -->
+            <div class="credits-list__filter-field">
+              <ws-select
+                formControlName="settlement"
+                [options]="settlementOptions"
+                [label]="'CREDITS.FILTER.SETTLEMENT' | translate"
+              />
+            </div>
             <div class="credits-list__filter-field credits-list__filter-field--wide">
               <ws-input
                 type="search"
@@ -240,6 +249,7 @@
               <th class="col-num">{{ 'CREDITS.COL_ORIGINAL' | translate }}</th>
               <th class="col-num">{{ 'CREDITS.COL_CREDITED' | translate }}</th>
               <th>{{ 'CREDITS.COL_ALLOCATED_AT' | translate }}</th>
+              <th>{{ 'CREDITS.COL_SETTLEMENT' | translate }}</th>
               <th>{{ 'CREDITS.COL_STATUS' | translate }}</th>
             </tr>
           </thead>
@@ -258,7 +268,7 @@
               }
             } @else if (store.items().length === 0) {
               <tr>
-                <td colspan="7">
+                <td colspan="8">
                   <ws-table-empty messageKey="CREDITS.EMPTY_FILTER" />
                 </td>
               </tr>
@@ -302,6 +312,18 @@
                   <td class="col-num col-secondary">{{ credit.originalAmount | currencyFormat: credit.originalCurrency }}</td>
                   <td class="col-num col-primary">{{ credit.creditedAmount | currencyFormat: credit.creditedCurrency }}</td>
                   <td class="col-secondary">{{ credit.allocatedAt | dateFormat }}</td>
+                  <td>
+                    <ws-badge [variant]="settlementBadge(credit.settlement)">
+                      {{ settlementLabel(credit.settlement) | translate }}
+                    </ws-badge>
+                    @if (credit.closureReason; as reason) {
+                      <!-- A write-off and a payroll settlement are different facts about the business,
+                           and a CFO has to be able to tell them apart without opening the row. -->
+                      <span class="credits-list__closure-reason">
+                        {{ closureReasonLabel(reason) | translate }}
+                      </span>
+                    }
+                  </td>
                   <td>
                     <ws-badge [variant]="statusBadge(credit.isSuperseded)">
                       {{ statusLabel(credit.isSuperseded) | translate }}

@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { LedgerApiService } from '../services/ledger.api.service';
 import {
   CreateAdjustmentRequest,
@@ -36,7 +37,15 @@ export class LedgerStore {
 
   readonly hasLedger = computed(() => this.statements().length > 0 || this.entries().length > 0);
 
+  /**
+   * Makes the last-REQUESTED response win rather than the last-ARRIVED one — two loads racing must not
+   * leave whichever the network returns last on screen.
+   */
+  private readonly _latest = new LatestRequestGuard();
+
   async load(payeeId: string): Promise<void> {
+    // Keyed by PAYEE here, so a superseded answer is not merely stale — it belongs to somebody else.
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -44,15 +53,17 @@ export class LedgerStore {
         firstValueFrom(this.api.getStatements(payeeId)),
         firstValueFrom(this.api.getEntries(payeeId)),
       ]);
+      if (this._latest.isStale(token)) return;   // a different payee's ledger is on screen now
       this.statements.set(statements);
       this.entries.set(entries);
       if (!this.selectedCurrency() && statements.length > 0) {
         this.selectedCurrency.set(statements[0].currency);
       }
     } catch {
+      if (this._latest.isStale(token)) return;
       this.error.set('LEDGER.LOAD_ERROR');
     } finally {
-      this.loading.set(false);
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

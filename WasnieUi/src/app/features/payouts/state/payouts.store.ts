@@ -1,5 +1,6 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { PayoutsApiService } from '../services/payouts.api.service';
 import { PayoutListItem, PayoutStatus } from '../models/payout.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
@@ -44,6 +45,22 @@ export class PayoutsStore {
   readonly pageSize = signal(10);
   readonly sortBy = signal('calculatedAt');
   readonly sortOrder = signal<'asc' | 'desc'>('desc');
+  /**
+   * Makes the last-REQUESTED response win rather than the last-ARRIVED one.
+   *
+   * ★ THE BUG IT FIXES, reproduced in payouts-store-stale-load.spec.ts: entering
+   * /payouts?status=Approved from the dashboard for the FIRST time in a session starts two loads —
+   * the store is created and its constructor effect fires with the empty (unfiltered) filter, then the
+   * component applies the URL and it fires again with status=Approved. Both were written straight into
+   * `pagedResult`, so whichever response landed LAST won, and the unfiltered query is the bigger,
+   * slower one: the whole list appeared under a URL that said Approved. Clicking through a second time
+   * worked, because by then the store already held the filter and both loads asked the same question.
+   *
+   * The shared guard, not a private counter: CreditsStore and TransactionsStore already use it, and
+   * this is the same defect the class was extracted for.
+   */
+  private readonly _latest = new LatestRequestGuard();
+
   readonly filter = signal<PayoutFilter>({ ...EMPTY_PAYOUT_FILTER });
 
   readonly pagedResult = signal<PagedResult<PayoutListItem> | null>(null);
@@ -184,6 +201,7 @@ export class PayoutsStore {
   private async _loadList(
     page: number, pageSize: number, sortBy: string, sortOrder: 'asc' | 'desc', f: PayoutFilter
   ): Promise<void> {
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -193,6 +211,11 @@ export class PayoutsStore {
         filters: Object.keys(filters).length > 0 ? filters : undefined,
       };
       const data = await firstValueFrom(this.api.list(params));
+
+      // Superseded while in flight: this answer describes a question the screen has already moved on
+      // from. Dropping it is the whole fix — everything below would otherwise overwrite newer state.
+      if (this._latest.isStale(token)) return;
+
       this.pagedResult.set(data);
       this._lastLoadedFilter.set({ ...f });
       // Clear selection for rows no longer on screen
@@ -203,9 +226,14 @@ export class PayoutsStore {
         return updated;
       });
     } catch {
+      // Same rule for failures: an error from a request nobody is waiting for must not cover a newer
+      // load that is still running, or that succeeded.
+      if (this._latest.isStale(token)) return;
       this.error.set('ERRORS.GENERIC');
     } finally {
-      this.loading.set(false);
+      // And the spinner belongs to the NEWEST load. Clearing it here from a superseded one told the
+      // user the screen was ready while the real request was still out.
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 

@@ -2,12 +2,46 @@
 
 // ── Top-level response ──────────────────────────────────────────────────────
 
+/// <param name="From">The range actually applied, echoed back so the screen labels what it is showing
+/// with the window the server used rather than the one the browser believes it asked for.</param>
 public sealed record DashboardSummaryDto(
-    string PeriodLabel,
+    DateOnly From,
+    DateOnly To,
     DashboardActionBandDto ActionBand,
     DashboardPeriodBandDto PeriodBand,
+    DashboardCommissionsBandDto CommissionsBand,
     DashboardTrendBandDto? TrendBand,
     IReadOnlyList<DashboardActivityItemDto> ActivityFeed);
+
+// ── Commissions band — Total / Paid / Unpaid over the selected range ────────
+
+/// <summary>
+/// The three commission figures, per currency, for the selected range.
+///
+/// ★★ ONE QUERY, PARTITIONED — NEVER THREE QUERIES. <c>Total = Paid + Unpaid</c> has to hold to the
+/// cent, and three independent aggregations over the same table are three chances to drift: one of
+/// them acquires a filter the others do not, and the dashboard starts showing money that does not add
+/// up. The handler reads the credits of the range ONCE and splits that single set, so the invariant is
+/// a property of the code rather than something a test has to keep watching.
+///
+/// ★★ CLOSED CREDITS ARE NOT IN ANY OF THE THREE. A credit can end a third way — written off, or
+/// settled outside Wasnie through payroll (<c>CreditClosureReason</c>) — and that ending is neither
+/// paid nor outstanding. Counting it as Unpaid would tell the reader the company still owes money it
+/// has decided not to pay; counting it as Paid would claim a write-off as a payment. Both are lies
+/// about money, so the three cards describe the PAYABLE cycle and <see cref="ClosedTotalByCurrency"/>
+/// carries the remainder separately, for a reader who needs the full generated figure.
+/// </summary>
+/// <param name="TotalByCurrency">Paid + Unpaid, per currency. Never includes closed credits.</param>
+/// <param name="ClosedTotalByCurrency">
+/// Credits of the range that left circulation without a payout. Reported so the omission above is
+/// visible rather than silent — a figure nobody can see is indistinguishable from money that vanished
+/// (§B1).
+/// </param>
+public sealed record DashboardCommissionsBandDto(
+    IReadOnlyList<CurrencyTotalDto> TotalByCurrency,
+    IReadOnlyList<CurrencyTotalDto> PaidByCurrency,
+    IReadOnlyList<CurrencyTotalDto> UnpaidByCurrency,
+    IReadOnlyList<CurrencyTotalDto> ClosedTotalByCurrency);
 
 // ── Banda 1 — "Requires action" (period-independent) ───────────────────────
 
@@ -151,21 +185,30 @@ public sealed record DashboardPeriodBandDto(
 
 // ── Banda 3 — Trend (current vs prior period) ──────────────────────────────
 
+/// <remarks>
+/// The period LABELS used to travel from here as English prose built by <c>PeriodHelper</c>. They are
+/// gone: a free range has no name to translate, and the four dates below already say exactly what the
+/// two bars cover, so the screen renders them in the reader's own locale (§C1).
+/// </remarks>
 public sealed record DashboardTrendBandDto(
-    string CurrentPeriodLabel,
-    string PriorPeriodLabel,
     IReadOnlyList<DashboardTrendPointDto> CommissionTrend,
     // True when the selected period is still RUNNING. The band then reports PACING — how far the period
     // has got against the previous period's total — instead of a change percentage. Both cases compare
     // against the same window; only the presentation differs.
-    bool IsPacing = false,
     // The exact windows the two bars represent, so the UI can drill from either bar down to the payouts
-    // that make it up. Sent from here rather than recomputed in the browser: PeriodHelper is the single
-    // source of truth for what a period covers, and a second implementation would drift from it.
-    DateOnly? CurrentFrom = null,
-    DateOnly? CurrentTo = null,
-    DateOnly? PriorFrom = null,
-    DateOnly? PriorTo = null);
+    // that make it up, and can label both in the reader's locale. The PRIOR window is computed on the
+    // server (DashboardRangeHelper.PriorRange) and never re-derived in the browser: a second
+    // implementation of "the same length, immediately before" would drift from this one.
+    // No longer nullable — a range always has a predecessor, unlike "all-time", which the dashboard
+    // no longer offers.
+    DateOnly CurrentFrom,
+    DateOnly CurrentTo,
+    DateOnly PriorFrom,
+    DateOnly PriorTo,
+    // True when the selected range is still RUNNING. The band then reports PACING — how far the range
+    // has got against the previous window's total — instead of a change percentage. Both cases compare
+    // against the same window; only the presentation differs.
+    bool IsPacing = false);
 
 // One row per currency: current amount, prior amount, and either a % change (closed period) or a pacing
 // percentage (running period) — never both.
