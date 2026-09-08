@@ -1,4 +1,4 @@
-namespace Wasnie.Application.Common.Interfaces;
+﻿namespace Wasnie.Application.Common.Interfaces;
 
 public interface IEmailService
 {
@@ -13,6 +13,17 @@ public interface IEmailService
         string to,
         string firstName,
         string resetUrl,
+        string language,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Warns the account holder that their account was locked after repeated failed sign-ins.
+    /// </summary>
+    Task SendAccountLockedAsync(
+        string to,
+        string firstName,
+        string forgotPasswordUrl,
+        int minutes,
         string language,
         CancellationToken cancellationToken = default);
 

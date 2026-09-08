@@ -61,6 +61,9 @@ public sealed class ProfileController(IMediator mediator) : ControllerBase
 
     [HttpGet("confirm-email-change")]
     [AllowAnonymous]
+    // ★ Anonymous by necessity (it is a link in an email), so the limit is what stands between the
+    //   token in the query string and someone walking the space. See the policy in Program.cs.
+    [EnableRateLimiting("auth-confirm")]
     public async Task<IActionResult> ConfirmEmailChange(
         [FromQuery] string userId,
         [FromQuery] string token,

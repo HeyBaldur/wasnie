@@ -34,6 +34,8 @@
     "REGISTER_HERO_TITLE": "Buduj zaufanie do wynagrodzeń sprzedażowych.",
     "REGISTER_HERO_SUBTITLE": "Jesteśmy firmą działającą w modelu bootstrap (samofinansującą się). Nie polegamy na funduszach inwestycyjnych ani zewnętrznych naciskach, co pozwala nam skupić się wyłącznie na rentowności naszych klientów i długoterminowej stabilności naszej infrastruktury. Nasz zespół techniczny działa w 100% zdalnie w Europie.",
     "FOOTER_RIGHTS": "© 2025 Incentra. Wszelkie prawa zastrzeżone.",
+    "ACCOUNT_LOCKED": "Zbyt wiele nieudanych prób logowania. Dostęp jest tymczasowo zablokowany — spróbuj ponownie za {{minutes}} minut.",
+    "ACCOUNT_LOCKED_GENERIC": "Zbyt wiele nieudanych prób logowania. Dostęp jest tymczasowo zablokowany — spróbuj ponownie za kilka minut.",
     "EMAIL_NOT_CONFIRMED": "Potwierdź swój adres e-mail przed zalogowaniem.",
     "RESEND_CONFIRMATION": "Wyślij ponownie e-mail potwierdzający",
     "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej.",

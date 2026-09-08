@@ -24,6 +24,14 @@
             <div class="auth-form__confirmed">
               <p>{{ 'AUTH.ALREADY_CONFIRMED' | translate }}</p>
             </div>
+          } @else if (accountLocked(); as lock) {
+            <div class="auth-form__error">
+              @if (lock.minutes !== null) {
+                {{ 'AUTH.ACCOUNT_LOCKED' | translate: { minutes: lock.minutes } }}
+              } @else {
+                {{ 'AUTH.ACCOUNT_LOCKED_GENERIC' | translate }}
+              }
+            </div>
           } @else if (emailNotConfirmed()) {
             <div class="auth-form__unconfirmed">
               <p>{{ 'AUTH.EMAIL_NOT_CONFIRMED' | translate }}

@@ -18,6 +18,43 @@ internal static class EmailTemplates
             _ => PasswordResetEn(firstName, resetUrl),
         };
 
+    /// <param name="forgotPasswordUrl">
+    /// The ordinary "forgot password" screen — no token, no one-off link. A security warning
+    /// that carries a freshly minted action link is the exact shape a phishing message imitates,
+    /// so this one points at a page the recipient can also reach by typing the address themselves.
+    /// </param>
+    public static (string Subject, string Html) AccountLocked(string firstName, string forgotPasswordUrl, int minutes, string language) =>
+        language switch
+        {
+            "es" => AccountLockedEs(firstName, forgotPasswordUrl, minutes),
+            "pl" => AccountLockedPl(firstName, forgotPasswordUrl, minutes),
+            _ => AccountLockedEn(firstName, forgotPasswordUrl, minutes),
+        };
+
+    private static (string, string) AccountLockedEn(string firstName, string url, int minutes) => (
+        "Unusual sign-in activity on your Incentra account",
+        Layout($"Hi {Escape(firstName)},",
+            $"We blocked access to your Incentra account after several failed sign-in attempts. It will unlock automatically in about {minutes} minutes. "
+            + "If those attempts were not yours, someone may know or be guessing your email address — we recommend changing your password.",
+            "Change your password", url,
+            "If it was you and you simply mistyped your password, no action is needed. We will not send another notice for this block."));
+
+    private static (string, string) AccountLockedEs(string firstName, string url, int minutes) => (
+        "Actividad de acceso inusual en su cuenta de Incentra",
+        Layout($"Hola {Escape(firstName)},",
+            $"Se ha bloqueado el acceso a su cuenta de Incentra tras varios intentos fallidos de inicio de sesión. Se desbloqueará automáticamente en unos {minutes} minutos. "
+            + "Si esos intentos no fueron suyos, es posible que alguien conozca o esté probando su dirección de correo; recomendamos cambiar la contraseña.",
+            "Cambiar la contraseña", url,
+            "Si fue usted y simplemente se equivocó al escribir la contraseña, no hace falta hacer nada. No se enviará otro aviso por este bloqueo."));
+
+    private static (string, string) AccountLockedPl(string firstName, string url, int minutes) => (
+        "Nietypowa aktywność logowania na koncie Incentra",
+        Layout($"Cześć {Escape(firstName)},",
+            $"Zablokowaliśmy dostęp do Twojego konta Incentra po kilku nieudanych próbach logowania. Odblokuje się automatycznie za około {minutes} minut. "
+            + "Jeśli to nie Ty podejmowałeś te próby, ktoś może znać lub zgadywać Twój adres e-mail — zalecamy zmianę hasła.",
+            "Zmień hasło", url,
+            "Jeśli to Ty i po prostu pomyliłeś hasło, nie musisz nic robić. Nie wyślemy kolejnego powiadomienia o tej blokadzie."));
+
     private static (string, string) ConfirmationEn(string firstName, string url) => (
         "Confirm your Incentra account",
         Layout($"Hi {Escape(firstName)},",

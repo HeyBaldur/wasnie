@@ -8,6 +8,43 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="512x512" href="wasnie_logo.png">
 
+  <!--
+    Content Security Policy for the SPA (KAN-21).
+
+    The API sends its own CSP, but that one governs JSON responses; it never reaches the document the
+    browser actually executes. Until now this page declared none at all.
+
+    WHY EACH SOURCE IS HERE — anything not on this list is a finding, not a default:
+      script-src   'self' plus a HASH of the inline theme script below. It cannot become an external
+                   file: it must run before first paint or the wrong theme flashes. A hash keeps
+                   'unsafe-inline' OUT of script-src, which is the directive that actually stops XSS.
+                   If that script is edited the hash must be recomputed, and the symptom is a theme
+                   flash plus a console violation.
+      style-src    'unsafe-inline' is unavoidable here and is the one exception: Angular injects
+                   component styles as <style> elements at runtime, and the nonce mechanism that would
+                   replace it needs a server rendering the document, which a static SPA has not.
+                   fonts.googleapis.com serves the Source Serif 4 stylesheet.
+      font-src     fonts.gstatic.com, where that stylesheet fetches the faces from.
+      connect-src  'self' only. The API is same-origin ('/api'), and the assistant's model provider is
+                   called from the BACKEND — no browser ever talks to it, so it needs no entry here.
+      NO 'unsafe-eval' anywhere: the production build is AOT and nothing evaluates strings.
+
+    frame-ancestors is declared for completeness but a <meta> CSP cannot enforce it; the clickjacking
+    control that works is the X-Frame-Options / CSP response header from whatever serves this file.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'sha256-Yi8QJsEihJQdrFmLJH3Kv3ZOpdbIUAA0Ys/s4Krh4EA=';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob:;
+    connect-src 'self';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+  ">
+
   <!-- POC: Source Serif 4 is the display face for titles (token `--font-display`). `display=swap` so a
        slow font never blanks a heading, and the token's serif fallback carries the first paint. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">

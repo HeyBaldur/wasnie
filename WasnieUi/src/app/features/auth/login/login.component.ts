@@ -28,6 +28,8 @@ export class LoginComponent {
   readonly isSubmitting = signal(false);
   readonly error = signal<string | null>(null);
   readonly emailNotConfirmed = signal(false);
+  /** null = not locked. minutes === null = locked, but the API did not give a usable countdown. */
+  readonly accountLocked = signal<{ minutes: number | null } | null>(null);
   readonly alreadyConfirmed = signal(
     this.route.snapshot.queryParamMap.has('alreadyConfirmed')
   );
@@ -55,6 +57,7 @@ export class LoginComponent {
     this.isSubmitting.set(true);
     this.error.set(null);
     this.emailNotConfirmed.set(false);
+    this.accountLocked.set(null);
 
     this.authService.login(this.form.getRawValue()).subscribe({
       next: (result) => {
@@ -69,14 +72,33 @@ export class LoginComponent {
         });
       },
       error: (err: HttpErrorResponse) => {
-        if (err?.error?.message === 'EMAIL_NOT_CONFIRMED') {
+        const message: string = err?.error?.message ?? '';
+        const lock = LoginComponent.parseAccountLocked(message);
+
+        if (message === 'EMAIL_NOT_CONFIRMED') {
           this.emailNotConfirmed.set(true);
+        } else if (lock !== null) {
+          this.accountLocked.set(lock);
         } else {
-          this.error.set(err?.error?.message ?? this.translate.instant('AUTH.INVALID_CREDENTIALS'));
+          this.error.set(message || this.translate.instant('AUTH.INVALID_CREDENTIALS'));
         }
         this.isSubmitting.set(false);
       },
     });
+  }
+
+  /**
+   * Recognises the one coded message this screen understands, and nothing else.
+   * The code is matched against a literal — never used to build a translation key — so an
+   * unknown code from the API can only fall through to the generic message, never print an
+   * internal identifier at the user.
+   */
+  private static parseAccountLocked(message: string): { minutes: number | null } | null {
+    if (!message.startsWith('ACCOUNT_LOCKED:')) return null;
+    const minutes = Number.parseInt(message.slice('ACCOUNT_LOCKED:'.length), 10);
+    // A malformed countdown still means the account is locked. Falling through to the generic
+    // branch here would print the raw code on screen, which is the one thing it must never do.
+    return { minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null };
   }
 
   goToConfirmPending(): void {

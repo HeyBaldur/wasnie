@@ -34,6 +34,8 @@
     "RECOVERY_HERO_TITLE": "Your Data. Your Security. Your Control.",
     "RECOVERY_HERO_SUBTITLE": "Your incentive compensation data is important. We’re committed to keeping your account secure while making it easy to get back to the tools you rely on to manage performance, compensation, and results.",
     "FOOTER_RIGHTS": "© 2025 Incentra. All rights reserved.",
+    "ACCOUNT_LOCKED": "Too many failed sign-in attempts. Access is temporarily blocked — please try again in {{minutes}} minutes.",
+    "ACCOUNT_LOCKED_GENERIC": "Too many failed sign-in attempts. Access is temporarily blocked — please try again shortly.",
     "EMAIL_NOT_CONFIRMED": "Please confirm your email address before signing in.",
     "RESEND_CONFIRMATION": "Resend confirmation email",
     "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below.",

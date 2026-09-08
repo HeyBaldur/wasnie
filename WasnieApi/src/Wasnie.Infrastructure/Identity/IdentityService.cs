@@ -9,6 +9,17 @@ public sealed class IdentityService(
     SignInManager<IdentityUser> signInManager)
     : IIdentityService
 {
+    // Computed once for the lifetime of the process, against a value nobody can sign in with.
+    // Its only job is to give the unknown-address branch of ValidateCredentialsAsync the same
+    // work to do as the known-address branch. Uses Identity's default hasher, which is the one
+    // configured here — no custom IPasswordHasher is registered.
+    private static readonly Lazy<string> DummyHash = new(() =>
+        new PasswordHasher<IdentityUser>().HashPassword(
+            new IdentityUser(),
+            Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))));
+
+    private static string DummyPasswordHash => DummyHash.Value;
+
     public async Task<(bool Succeeded, string? UserId, IList<string> Errors)> CreateUserAsync(
         string email,
         string password,
@@ -52,6 +63,11 @@ public sealed class IdentityService(
         var user = await userManager.FindByEmailAsync(email);
         if (user is null)
         {
+            // Hash the supplied password against a throwaway hash anyway. Without this the
+            // unknown-address path returns without ever running the (deliberately slow) hasher,
+            // and the difference in response time answers "is this address registered?" just as
+            // plainly as a different error message would.
+            userManager.PasswordHasher.VerifyHashedPassword(new IdentityUser(), DummyPasswordHash, password);
             return (false, null, null);
         }
 

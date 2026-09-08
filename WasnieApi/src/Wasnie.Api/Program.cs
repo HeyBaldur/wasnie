@@ -102,29 +102,58 @@ try
                 token);
         };
 
-        options.AddFixedWindowLimiter("auth-login", o =>
-        {
-            o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:PermitLimit", 5);
-            o.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:WindowSeconds", 60));
-            o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            o.QueueLimit = 0;
-        });
+        // ★★ PARTITIONED BY IP, AND THE PREVIOUS SHAPE WAS A DENIAL OF SERVICE ON OUR OWN LOGIN (KAN-21).
+        //    These three used AddFixedWindowLimiter, which gives the POLICY one bucket shared by every
+        //    caller in the world. Five requests in sixty seconds — one script, or a busy morning — and
+        //    nobody could sign in to the product at all. It was also neither of the two things the
+        //    acceptance criterion asks for: not per IP, not per account.
+        //
+        // ★ THE FILE ALREADY KNEW. `auth-resend` below says "Separate from auth-login so an attacker
+        //   cannot burn the shared login bucket" — the shared bucket was named as a hazard and worked
+        //   around, rather than fixed. These now use the same partitioned shape as its neighbours.
+        //
+        // ★★ PER-ACCOUNT IS ALREADY COVERED AND IS NOT DUPLICATED HERE. ASP.NET Identity locks an
+        //    account after 5 failed attempts for 15 minutes (DependencyInjection.cs:321-323) and the
+        //    login path opts in with `lockoutOnFailure: true` (IdentityService.cs:58). Re-implementing
+        //    it in the limiter would be a second, competing answer to "is this account under attack",
+        //    and the two would drift. IP is the half that was missing; this supplies it.
+        options.AddPolicy("auth-login", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:PermitLimit", 5),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthLogin:WindowSeconds", 60)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
 
-        options.AddFixedWindowLimiter("auth-register", o =>
-        {
-            o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthRegister:PermitLimit", 3);
-            o.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthRegister:WindowSeconds", 60));
-            o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            o.QueueLimit = 0;
-        });
+        options.AddPolicy("auth-register", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthRegister:PermitLimit", 3),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthRegister:WindowSeconds", 60)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
 
-        options.AddFixedWindowLimiter("auth-refresh", o =>
-        {
-            o.PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthRefresh:PermitLimit", 10);
-            o.Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthRefresh:WindowSeconds", 60));
-            o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            o.QueueLimit = 0;
-        });
+        // ★ REFRESH IS PARTITIONED BY THE CALLER'S IDENTITY WHERE THERE IS ONE. A refresh arrives with an
+        //   expired access token, so the principal is usually absent — the IP is then the only honest
+        //   key. Falling back rather than branching keeps one bucket per caller either way.
+        options.AddPolicy("auth-refresh", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                    ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthRefresh:PermitLimit", 10),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthRefresh:WindowSeconds", 60)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
 
         // Resend-confirmation: partitioned by IP (3 requests / 5 minutes per IP).
         // Separate from auth-login so an attacker cannot burn the shared login bucket.
@@ -135,6 +164,22 @@ try
                 {
                     PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthResend:PermitLimit", 3),
                     Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthResend:WindowSeconds", 300)),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0,
+                }));
+
+        // ★ EMAIL-CHANGE CONFIRMATION: partitioned by IP (KAN-21). The endpoint is anonymous by
+        //   necessity — it is the target of a link in an email — and it carries a token in the query
+        //   string, so without a limit the token space is open to being walked. Its own bucket rather
+        //   than a shared one: a user confirming an address must not consume the quota that protects
+        //   password resets, and vice versa.
+        options.AddPolicy("auth-confirm", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = builder.Configuration.GetValue<int>("RateLimiting:AuthConfirm:PermitLimit", 10),
+                    Window = TimeSpan.FromSeconds(builder.Configuration.GetValue<int>("RateLimiting:AuthConfirm:WindowSeconds", 300)),
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                     QueueLimit = 0,
                 }));

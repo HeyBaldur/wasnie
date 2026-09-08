@@ -34,6 +34,8 @@
     "REGISTER_HERO_TITLE": "Genera confianza en tu compensación de ventas.",
     "REGISTER_HERO_SUBTITLE": "Somos una compañía operada bajo el modelo Bootstrap (autofinanciada). No dependemos de fondos de inversión ni de presiones externas, lo que nos permite concentrarnos exclusivamente en la rentabilidad de nuestros clientes y en la estabilidad a largo plazo de nuestra infraestructura. Nuestro equipo técnico opera de forma 100% remota en Europa.",
     "FOOTER_RIGHTS": "© 2025 Incentra. Todos los derechos reservados.",
+    "ACCOUNT_LOCKED": "Demasiados intentos fallidos de inicio de sesión. El acceso está bloqueado temporalmente; inténtalo de nuevo en {{minutes}} minutos.",
+    "ACCOUNT_LOCKED_GENERIC": "Demasiados intentos fallidos de inicio de sesión. El acceso está bloqueado temporalmente; inténtalo de nuevo en unos minutos.",
     "EMAIL_NOT_CONFIRMED": "Por favor confirma tu correo electrónico antes de iniciar sesión.",
     "RESEND_CONFIRMATION": "Reenviar correo de confirmación",
     "ALREADY_CONFIRMED": "Tu cuenta ya está confirmada. Inicia sesión a continuación.",

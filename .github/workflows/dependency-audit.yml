@@ -1,0 +1,61 @@
+# Dependency CVE gate (KAN-21).
+#
+# The acceptance criterion asks that a known critical CVE in either stack make the build fail or warn
+# visibly. Nothing did: the workflows directory existed and was empty, so a vulnerable dependency could
+# reach main with nobody told.
+#
+# It is a SEPARATE workflow from any build on purpose. An advisory is published against code that has
+# not changed, so this has to run on a schedule as well as on a push — a gate that only fires when
+# somebody edits a file never catches the dependency that became vulnerable overnight.
+name: Dependency audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so an advisory published against unchanged code is still found.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: .NET vulnerable packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore WasnieApi/Wasnie.sln
+
+      # ★ `dotnet list package --vulnerable` ALWAYS EXITS 0, even when it finds something. Reading the
+      #   output is the only way to fail on it — trusting the exit code here is the exact shape of a
+      #   green pipeline that reports nothing.
+      - name: Fail on vulnerable packages
+        run: |
+          dotnet list WasnieApi/Wasnie.sln package --vulnerable --include-transitive > audit.txt 2>&1
+          cat audit.txt
+          if grep -qiE '\b(High|Critical)\b' audit.txt; then
+            echo "::error::A .NET dependency has a High or Critical advisory."
+            exit 1
+          fi
+
+  frontend:
+    name: npm audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: WasnieUi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ★ PRODUCTION DEPENDENCIES ONLY. A CVE in a build-time tool is not shipped to a user's browser,
+      #   and failing on it trains people to ignore this job — which costs the finding that matters.
+      - name: Fail on high/critical production advisories
+        run: npm audit --omit=dev --audit-level=high
