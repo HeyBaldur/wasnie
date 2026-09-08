@@ -853,11 +853,6 @@
     "VIEW_ALL": "View all",
     "END_OF_LIST": "End of list",
     "LOAD_MORE": "Load more",
-    "PERIOD_ALL_TIME": "All Time",
-    "COUNTER_THIS_MONTH": "in this month",
-    "COUNTER_LAST_MONTH": "in last month",
-    "COUNTER_YTD": "year to date",
-    "COUNTER_ALL_TIME": "all time",
     "CHIP_IN_PROGRESS": "In Progress",
     "CHIP_UPCOMING": "Upcoming",
     "CHIP_CLOSED": "Closed",
@@ -956,7 +951,8 @@
     "COMMISSIONS_CLOSED_NOTE": "Not counted above — written off or settled outside Incentra:",
     "RANGE_INVALID": "The end date cannot be earlier than the start date.",
     "TREND_NOTE_PACING": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Baseline: {{amount}} in {{period}}.",
-    "TREND_NOTE_CLOSED": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Previous window ({{period}}): {{amount}}."
+    "TREND_NOTE_CLOSED": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Previous window ({{period}}): {{amount}}.",
+    "COUNTER_IN_RANGE": "in this range"
   },
   "IMPORTS": {
     "STEPS": {

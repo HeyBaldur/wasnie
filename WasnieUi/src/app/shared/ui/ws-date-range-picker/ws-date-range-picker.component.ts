@@ -62,6 +62,16 @@ export class WsDateRangePickerComponent implements ControlValueAccessor {
    */
   readonly align = input<'start' | 'end'>('start');
 
+  /**
+   * Where the label sits.
+   *
+   * 'top' is the form convention and stays the default, so the four form callers (plans, quotas,
+   * assignments, design system) keep the layout they have. 'inline' puts it beside the control, which
+   * is what a filter in a page header needs: a stacked label there adds a second row to a toolbar and
+   * makes the control read like a form field on a page that has no form.
+   */
+  readonly labelPosition = input<'top' | 'inline'>('top');
+
   readonly isOpen = signal(false);
   readonly isDisabled = signal(false);
 

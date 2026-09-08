@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
@@ -26,22 +26,28 @@ public sealed class GetPayeeCreditsHandler(
 
         var payeeId = request.PayeeId;
         var today = DateOnly.FromDateTime(clock.UtcNow);
-        var (from, to) = PeriodHelper.ComputeDateRange(request.Period, today);
+        var (defaultFrom, defaultTo) = DashboardRangeHelper.DefaultRange(today);
+        var from = request.From ?? defaultFrom;
+        var to = request.To ?? defaultTo;
 
         var query = db.Credits
             .Where(c => c.PayeeId == payeeId && c.SupersededAt == null);
 
-        // Period filter: scope credits by the underlying transaction's TransactionDate.
-        // This is consistent with how quotas and assignments are scoped.
-        if (from.HasValue || to.HasValue)
-        {
-            var validTxIds = db.CompensationTransactions
-                .Where(t =>
-                    (!from.HasValue || t.TransactionDate >= from.Value) &&
-                    (!to.HasValue || t.TransactionDate <= to.Value))
-                .Select(t => t.Id);
-            query = query.Where(c => validTxIds.Contains(c.TransactionId));
-        }
+        // ★★ SCOPED BY AllocatedAt — CHANGED FROM THE TRANSACTION'S DATE (KAN-63).
+        //
+        // This list used to filter on the underlying transaction's TransactionDate. Two things were
+        // wrong with that. It disagreed with everywhere else the product counts commission — the main
+        // credits screen filters on allocation, and so do the Total/Paid/Unpaid cards — so the same
+        // payee's commission for the same range had two different answers depending on which screen
+        // asked. And a transaction date MOVES: a CRM deal's close date can change after the fact, which
+        // is what the drift alerts report, so money would silently relocate between ranges after it had
+        // been read. Allocation is the moment the commission came into existence and cannot move.
+        //
+        // The cards sitting directly above this list are built from the same field, so the rows here
+        // are the rows those figures are made of.
+        var fromDto = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toDto = to.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        query = query.Where(c => c.AllocatedAt >= fromDto && c.AllocatedAt <= toDto);
 
         var totalCount = await query.CountAsync(cancellationToken);
         var credits = await query

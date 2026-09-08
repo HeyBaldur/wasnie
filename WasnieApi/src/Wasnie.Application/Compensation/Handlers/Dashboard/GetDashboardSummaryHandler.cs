@@ -65,7 +65,9 @@ public sealed class GetDashboardSummaryHandler(
             AmbiguousAttributionPayees = ambiguousAttribution,
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
-        var commissionsBand = await BuildCommissionsBandAsync(from, to, cancellationToken);
+        // Built by the shared spec, so this band and the payee page's cannot answer differently
+        // about the same money. `payeeId: null` = the whole tenant.
+        var commissionsBand = await CommissionsBandSpec.BuildAsync(db, from, to, payeeId: null, cancellationToken);
         var trendBand = await BuildTrendBandAsync(from, to, priorFrom, priorTo, isPacing, cancellationToken);
         var activityFeed = await BuildActivityFeedAsync(cancellationToken);
 
@@ -585,64 +587,6 @@ public sealed class GetDashboardSummaryHandler(
             ActiveQuotasCount: activeQuotas,
             PayeesActiveCount: payeesActive,
             PayeesInactiveCount: payeesInactive);
-    }
-
-    // ── Commissions band — Total / Paid / Unpaid over the range ──────────────
-
-    /// <summary>
-    /// Reads the credits of the range ONCE and splits that single set three ways, so
-    /// <c>Total = Paid + Unpaid</c> cannot drift.
-    ///
-    /// ★★ "PAID" IS <c>ConsumedAt</c>, AND IT NEEDS NO JOIN TO THE PAYOUT. Only the three mark-paid
-    /// handlers ever call <c>Credit.Consume</c> (MarkPayoutPaid, MarkPayRunPaid, BulkMarkPaid), and
-    /// <c>Unconsume</c> clears it when a payment is reverted — so the column already means "money
-    /// actually left". Joining CompensationPayouts to re-check Status would add a second opinion about
-    /// the same fact, and two opinions eventually disagree.
-    ///
-    /// ★ SUPERSEDED CREDITS ARE EXCLUDED, exactly as the existing Credits card excludes them
-    /// (BuildPeriodBandAsync). A superseded credit was replaced by a reallocation that is itself in the
-    /// set; counting both would double the commission of every recalculated sale.
-    ///
-    /// ★ THE RANGE IS MATCHED ON <c>AllocatedAt</c> — the moment the commission came into existence —
-    /// and NOT on the transaction's date. Two reasons, and the second is the one that matters: it is
-    /// the same date the Credits card already uses, so the two cannot disagree; and a transaction date
-    /// can MOVE, because a CRM deal's close date can change after the fact (that is what the drift
-    /// alerts on this same screen report). Attributing money by a date that moves would silently
-    /// relocate commissions between ranges after they were read.
-    /// </summary>
-    private async Task<DashboardCommissionsBandDto> BuildCommissionsBandAsync(
-        DateOnly from, DateOnly to, CancellationToken ct)
-    {
-        var fromDto = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toDto = to.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
-
-        var credits = await db.Credits
-            .Where(c => c.SupersededAt == null)
-            .Where(c => c.AllocatedAt >= fromDto && c.AllocatedAt <= toDto)
-            .Select(c => new
-            {
-                c.CreditedAmount.Amount,
-                c.CreditedAmount.Currency,
-                IsPaid = c.ConsumedAt != null,
-                IsClosed = c.ClosedAt != null,
-            })
-            .ToListAsync(ct);
-
-        // Closed credits — written off, or settled outside Wasnie — are neither paid nor still owed.
-        // They come out of the three cards and are reported on their own so the omission is visible.
-        var payable = credits.Where(c => !c.IsClosed).ToList();
-
-        static List<CurrencyTotalDto> ByCurrency<T>(IEnumerable<T> rows, Func<T, decimal> amount, Func<T, string> currency) =>
-            rows.GroupBy(currency)
-                .Select(g => new CurrencyTotalDto(g.Sum(amount), g.Key))
-                .OrderBy(t => t.Currency)
-                .ToList();
-
-        return new DashboardCommissionsBandDto(
-            TotalByCurrency: ByCurrency(payable, c => c.Amount, c => c.Currency),
-            PaidByCurrency: ByCurrency(payable.Where(c => c.IsPaid), c => c.Amount, c => c.Currency),
-            UnpaidByCurrency: ByCurrency(payable.Where(c => !c.IsPaid), c => c.Amount, c => c.Currency),
-            ClosedTotalByCurrency: ByCurrency(credits.Where(c => c.IsClosed), c => c.Amount, c => c.Currency));
     }
 
     // ── Banda 3 — trend (current vs prior) ───────────────────────────────────

@@ -853,11 +853,6 @@
     "VIEW_ALL": "Zobacz wszystkie",
     "END_OF_LIST": "Koniec listy",
     "LOAD_MORE": "Załaduj więcej",
-    "PERIOD_ALL_TIME": "Cały Okres",
-    "COUNTER_THIS_MONTH": "w tym miesiącu",
-    "COUNTER_LAST_MONTH": "w poprzednim miesiącu",
-    "COUNTER_YTD": "od początku roku",
-    "COUNTER_ALL_TIME": "łącznie",
     "CHIP_IN_PROGRESS": "W toku",
     "CHIP_UPCOMING": "Nadchodzący",
     "CHIP_CLOSED": "Zakończony",
@@ -956,7 +951,8 @@
     "COMMISSIONS_CLOSED_NOTE": "Nieuwzględnione powyżej — umorzone lub rozliczone poza Incentrą:",
     "RANGE_INVALID": "Data końcowa nie może być wcześniejsza niż początkowa.",
     "TREND_NOTE_PACING": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Punkt odniesienia: {{amount}} w {{period}}.",
-    "TREND_NOTE_CLOSED": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Poprzednie okno ({{period}}): {{amount}}."
+    "TREND_NOTE_CLOSED": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Poprzednie okno ({{period}}): {{amount}}.",
+    "COUNTER_IN_RANGE": "w tym zakresie"
   },
   "QUOTAS": {
     "TITLE": "Kwoty",

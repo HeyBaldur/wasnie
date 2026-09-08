@@ -1,4 +1,4 @@
-<div class="ws-drp" (click)="stopProp($event)">
+<div class="ws-drp" [class.ws-drp--inline]="labelPosition() === 'inline'" (click)="stopProp($event)">
   @if (label()) {
     <label class="ws-drp__label">{{ label() | translate }}</label>
   }

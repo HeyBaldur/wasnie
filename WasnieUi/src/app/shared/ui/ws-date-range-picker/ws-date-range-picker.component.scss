@@ -17,6 +17,26 @@
   color: var(--color-text-secondary);
 }
 
+// Label BESIDE the control instead of above it, for a filter that lives in a page header.
+//
+// The trigger also stops stretching here: `:host` is a block, so in a header it grew to the full width
+// of the row and read as one enormous input. Its content is two dates — it should be as wide as that.
+.ws-drp--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+
+  .ws-drp__label {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .ws-drp__trigger {
+    min-width: 220px;
+  }
+}
+
 .ws-drp__trigger {
   @apply flex items-center;
   gap: var(--space-2);

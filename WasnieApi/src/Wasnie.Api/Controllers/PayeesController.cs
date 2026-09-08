@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wasnie.Application.Common.Models;
@@ -90,18 +90,18 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("{payeeId:guid}/dashboard")]
-    public async Task<IActionResult> GetDashboard(Guid payeeId, [FromQuery] string period = "this-month", CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetDashboard(Guid payeeId, [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, CancellationToken cancellationToken = default)
     {
-        var result = await mediator.Send(new GetPayeeDashboardQuery(payeeId, period), cancellationToken);
+        var result = await mediator.Send(new GetPayeeDashboardQuery(payeeId, from, to), cancellationToken);
         // NotFound rather than BadRequest for the same reason as the ledger endpoints: this query's
         // only failure is "no such payee, or not yours", and the two must look identical.
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
     }
 
     [HttpGet("{payeeId:guid}/credits")]
-    public async Task<IActionResult> GetCredits(Guid payeeId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string period = "active", CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetCredits(Guid payeeId, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, CancellationToken cancellationToken = default)
     {
-        var result = await mediator.Send(new GetPayeeCreditsQuery(payeeId, page, pageSize, period), cancellationToken);
+        var result = await mediator.Send(new GetPayeeCreditsQuery(payeeId, page, pageSize, from, to), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 

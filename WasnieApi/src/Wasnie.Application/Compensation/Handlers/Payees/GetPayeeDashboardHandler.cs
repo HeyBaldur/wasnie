@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Authorization;
@@ -6,6 +6,8 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Calculation;
+using Wasnie.Application.Compensation.Common;
+using Wasnie.Application.Compensation.Handlers.Dashboard;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Payees;
 using Wasnie.Domain.Authorization;
@@ -41,7 +43,19 @@ public sealed class GetPayeeDashboardHandler(
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
         var payeeId = request.PayeeId;
-        var (rangeFrom, rangeTo) = PeriodHelper.ComputeDateRange(request.Period, today);
+
+        // A free [from, to] range, defaulted to the whole current month — the same shape and the same
+        // default as the main dashboard (KAN-62). The presets this replaced were also what put the
+        // untranslated DASHBOARD.PERIOD_* keys on screen.
+        var (defaultFrom, defaultTo) = DashboardRangeHelper.DefaultRange(today);
+        var rangeFrom = request.From ?? defaultFrom;
+        var rangeTo = request.To ?? defaultTo;
+
+        // Refused rather than silently swapped: swapping answers a question the user did not ask.
+        if (rangeTo < rangeFrom)
+        {
+            return Result<PayeeDashboardDto>.Failure(GetDashboardSummaryHandler.InvalidRangeCode);
+        }
 
         // ── Load quotas (period filter in-memory — owned DateRange) ───────────
         var allQuotas = await db.Quotas
@@ -51,8 +65,8 @@ public sealed class GetPayeeDashboardHandler(
 
         // Intersection filter: quota period [Start, End] intersects selected range [rangeFrom, rangeTo]
         var quotas = allQuotas.Where(q =>
-            (!rangeFrom.HasValue || q.Period.End >= rangeFrom.Value) &&
-            (!rangeTo.HasValue || q.Period.Start <= rangeTo.Value))
+            q.Period.End >= rangeFrom &&
+            q.Period.Start <= rangeTo)
             .ToList();
 
         // ── Load plan names + currencies for quotas ───────────────────────────
@@ -125,10 +139,18 @@ public sealed class GetPayeeDashboardHandler(
             .OrderBy(p => p.Year).ThenBy(p => p.Month)
             .ToList();
 
+        // Same spec the main dashboard calls, narrowed to this payee — so the payee's three figures and
+        // the tenant-wide ones cannot answer differently about the same money.
+        var commissionsBand = await CommissionsBandSpec.BuildAsync(
+            db, rangeFrom, rangeTo, payeeId, cancellationToken);
+
         return Result<PayeeDashboardDto>.Success(new PayeeDashboardDto(
-            attainmentItems,
-            trend,
-            Array.Empty<QuotaSummaryDto>(),
-            Array.Empty<PlanAssignmentSummaryDto>()));
+            From: rangeFrom,
+            To: rangeTo,
+            CommissionsBand: commissionsBand,
+            AttainmentItems: attainmentItems,
+            SalesTrend: trend,
+            RecentQuotas: Array.Empty<QuotaSummaryDto>(),
+            RecentAssignments: Array.Empty<PlanAssignmentSummaryDto>()));
     }
 }

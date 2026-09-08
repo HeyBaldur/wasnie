@@ -36,7 +36,13 @@ export class PayeesStore {
     { initialValue: '' }
   );
 
-  private _rawSearch = '';
+  /**
+   * The term as typed, before the debounce. A SIGNAL, not a plain field: `listParams()` is a computed
+   * that reads it, and a computed only recomputes when a SIGNAL it read changes. As a field it was
+   * invisible to the reactive graph, so `listParams().search` went stale whenever nothing else
+   * happened to change — and the empty state, which reads it, judged on a term the list no longer had.
+   */
+  private readonly _rawSearch = signal('');
 
   readonly pagedResult = signal<PagedResult<Payee> | null>(null);
 
@@ -51,7 +57,7 @@ export class PayeesStore {
   readonly listParams = computed<{ page: number; pageSize: number; search: string; status: PayeeStatus | null }>(() => ({
     page: this.page(),
     pageSize: this.pageSize(),
-    search: this._rawSearch,
+    search: this._rawSearch(),
     status: this.status(),
   }));
 
@@ -180,9 +186,25 @@ export class PayeesStore {
   }
 
   setSearch(value: string): void {
-    this._rawSearch = value;
+    this._rawSearch.set(value);
     this.page.set(1);
     this.searchSubject$.next(value);
+  }
+
+  /**
+   * Puts the screen back to its default: the UNFILTERED list.
+   *
+   * ★★ THE BUG THIS EXISTS FOR. This store is `providedIn: 'root'`, so a search term outlives the
+   * component that set it — but the search box does not. Coming back to the list rendered an EMPTY box
+   * over a list still filtered to one person, and the reader could not undo it: there was nothing in
+   * the box to clear, so no event ever fired. The two disagreed and only the list was right.
+   *
+   * Status is deliberately NOT touched here: it is carried in the URL and `bindFiltersToUrl` owns it,
+   * so clearing it too would fight the URL on every entry.
+   */
+  resetForEntry(): void {
+    if (this._rawSearch() === '') return;   // nothing to undo; do not fire a needless reload
+    this.setSearch('');
   }
 
   setStatus(value: PayeeStatus | null): void {

@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Helpers;
@@ -49,8 +49,12 @@ public sealed class ListQuotasByPayeeHandler(
             filtered = filtered.Where(q => q.Status == status);
 
         // Apply period intersection filter — quota period [Start, End] must intersect [from, to]
+        // An explicit range wins over the preset, exactly as ListAssignmentsByPayeeHandler already does.
+        // The payee page now sends dateFrom/dateTo; PeriodHelper stays for whoever still sends a preset.
         var today = DateOnly.FromDateTime(clock.UtcNow);
-        var (from, to) = PeriodHelper.ComputeDateRange(p.Period, today);
+        var (from, to) = p.DateFrom.HasValue || p.DateTo.HasValue
+            ? (p.DateFrom, p.DateTo)
+            : PeriodHelper.ComputeDateRange(p.Period, today);
         if (from.HasValue || to.HasValue)
             filtered = filtered.Where(q =>
                 (!from.HasValue || q.Period.End >= from.Value) &&

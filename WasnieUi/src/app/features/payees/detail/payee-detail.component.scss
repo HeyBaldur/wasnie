@@ -145,7 +145,11 @@
 
 // ── Period filter ────────────────────────────────────────────────────────────
 
+/* The range filter sits at the RIGHT of the row, as it does in the dashboard header — the control is
+   inline-sized now, so without an alignment rule the flex row leaves it hanging on the left. */
 .pd-period-filter {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: var(--space-4);
 }
 
@@ -546,4 +550,38 @@
 @keyframes shimmer {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
+}
+
+// ── KAN-63: range picker, commission cards, collapsible blocks ────────────────
+
+// The control sizes itself (labelPosition="inline" gives it width: fit-content). A min-width here
+// only made it stretch, which is what turned it into one enormous input.
+.pd-range-picker {
+  flex-shrink: 0;
+}
+
+// The disclosure control of a block. A real button reset to look like the heading it replaces, because
+// visually nothing about these headers changed — only their behaviour.
+.bento-card__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+
+  &:hover {
+    color: var(--color-text-primary);
+  }
+
+  // The focus treatment here is an outline offset from the control, not a ring.
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
 }

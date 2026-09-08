@@ -853,11 +853,6 @@
     "VIEW_ALL": "Ver todo",
     "END_OF_LIST": "Fin de la lista",
     "LOAD_MORE": "Cargar más",
-    "PERIOD_ALL_TIME": "Todo el Tiempo",
-    "COUNTER_THIS_MONTH": "en este mes",
-    "COUNTER_LAST_MONTH": "en el mes anterior",
-    "COUNTER_YTD": "en el año",
-    "COUNTER_ALL_TIME": "en total",
     "CHIP_IN_PROGRESS": "En Curso",
     "CHIP_UPCOMING": "Próximo",
     "CHIP_CLOSED": "Cerrado",
@@ -956,7 +951,8 @@
     "COMMISSIONS_CLOSED_NOTE": "No incluidas arriba — condonadas o liquidadas fuera de Incentra:",
     "RANGE_INVALID": "La fecha final no puede ser anterior a la inicial.",
     "TREND_NOTE_PACING": "Dinero que salió realmente en este rango, por fecha de pago — incluye comisión devengada en meses anteriores y liquidada ahora, así que no cuadrará con los cards de comisiones de arriba. Referencia: {{amount}} en {{period}}.",
-    "TREND_NOTE_CLOSED": "Dinero que salió realmente en este rango, por fecha de pago — incluye comisión devengada en meses anteriores y liquidada ahora, así que no cuadrará con los cards de comisiones de arriba. Ventana anterior ({{period}}): {{amount}}."
+    "TREND_NOTE_CLOSED": "Dinero que salió realmente en este rango, por fecha de pago — incluye comisión devengada en meses anteriores y liquidada ahora, así que no cuadrará con los cards de comisiones de arriba. Ventana anterior ({{period}}): {{amount}}.",
+    "COUNTER_IN_RANGE": "en este rango"
   },
   "QUOTAS": {
     "TITLE": "Cuotas",

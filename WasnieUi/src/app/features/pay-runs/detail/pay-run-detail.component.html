@@ -376,7 +376,7 @@
             <tr>
               <td colspan="5">
                 <ws-table-empty
-                  [messageKey]="store.activeFilterCount() > 0 || store.excludeZero() ? 'PAY_RUNS.DETAIL.EMPTY_FILTER' : 'PAY_RUNS.DETAIL.EMPTY_TITLE'"
+                  [messageKey]="emptyMessageKey()"
                 />
               </td>
             </tr>

@@ -354,6 +354,28 @@ export class PayRunDetailComponent implements OnInit {
     }
   }
 
+  /**
+   * Which "nothing here" message the payouts table shows.
+   *
+   * ★★ IT MUST NOT BLAME A FILTER FOR AN EMPTY RUN. `excludeZero` is ON by default ("Hiding $0
+   * payouts"), so the old condition treated every run as filtered and answered a genuinely empty run
+   * with "No payouts match the current filters" — a cause the screen had not established and which
+   * sent a reader hunting through filters for rows that do not exist. It cost a full investigation.
+   *
+   * A filter can only hide a payout that EXISTS, so the run's own counts decide: both are run-level
+   * and neither moves with the filter. When the run holds nothing at all, the honest sentence is that
+   * the run is empty — and the reason it is empty lives with the calculation (see KAN-65).
+   */
+  readonly emptyMessageKey = computed(() => {
+    const run = this.store.run();
+    const runHoldsNothing = (run?.payeeCount ?? 0) === 0 && (run?.zeroPayoutCount ?? 0) === 0;
+    if (runHoldsNothing) return 'PAY_RUNS.DETAIL.EMPTY_TITLE';
+
+    return this.store.activeFilterCount() > 0 || this.store.excludeZero()
+      ? 'PAY_RUNS.DETAIL.EMPTY_FILTER'
+      : 'PAY_RUNS.DETAIL.EMPTY_TITLE';
+  });
+
   async onRecalculate(): Promise<void> {
     if (this.recalculating()) return;
     const run = this.store.run();
