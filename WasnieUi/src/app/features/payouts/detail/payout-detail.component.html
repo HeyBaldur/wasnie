@@ -9,15 +9,43 @@
         <app-icon name="arrow-left" [size]="14" />
         {{ 'PAYOUTS.DETAIL.BACK' | translate }}
       </ws-button>
-      <ws-button
+      <!-- ONE button, two formats. PDF and Excel are the same document in two shapes, so they are one
+           choice and not two competing actions in the header. Same permission for both: a reader
+           allowed to take this payout away is allowed to take it in either form. -->
+      <ws-popover
         *hasPermission="'Payouts.Export'"
-        variant="secondary"
-        [disabled]="exporting()"
-        (click)="onExportPdf()"
+        class="payout-detail__menu"
+        placement="bottom-end"
+        [(isOpen)]="exportMenuOpen"
       >
-        <app-icon name="file-pdf" [size]="16" />
-        {{ 'PAYOUTS.ACTION_EXPORT_PDF' | translate }}
-      </ws-button>
+        <ws-button slot="trigger" variant="secondary" [disabled]="exporting()">
+          <app-icon name="download" [size]="16" />
+          {{ 'PAYOUTS.ACTION_EXPORT' | translate }}
+          <app-icon name="chevron-down" [size]="14" />
+        </ws-button>
+
+        <button
+          type="button"
+          class="payout-detail__menu-item"
+          [disabled]="exporting()"
+          (click)="onExportPdf()"
+          data-testid="payout-export-pdf"
+        >
+          <app-icon name="file-pdf" [size]="16" />
+          {{ 'PAYOUTS.ACTION_EXPORT_PDF' | translate }}
+        </button>
+
+        <button
+          type="button"
+          class="payout-detail__menu-item"
+          [disabled]="exporting()"
+          (click)="onExportExcel()"
+          data-testid="payout-export-excel"
+        >
+          <app-icon name="file-excel" [size]="16" />
+          {{ 'PAYOUTS.ACTION_EXPORT_EXCEL' | translate }}
+        </button>
+      </ws-popover>
 
       <!-- ★★ DISCARD LIVES IN A MENU, NOT IN A BANNER. It used to be a full-width card sitting
            beside "Mark as paid", which gave a rare, one-way action the same weight as the one

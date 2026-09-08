@@ -99,6 +99,15 @@
               [class.tab-btn--active]="activeTab() === 'ledger'" (click)="setTab('ledger')">
         {{ 'LEDGER.TAB' | translate }}
       </button>
+      <!-- ★ THE TAB CARRIES A BADGE WHEN THERE IS MONEY STUCK. Without it this screen is one nobody
+           opens, and the whole point is that the reader does not yet know the money exists. -->
+      <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'unreachable'"
+              (click)="setTab('unreachable')">
+        {{ 'PAYEES.UNREACHABLE.TAB' | translate }}
+        @if (hasUnreachable()) {
+          <ws-badge variant="warning" size="sm">{{ unreachableGroups().length }}</ws-badge>
+        }
+      </button>
     </div>
 
     <!-- ── Tab bodies ─────────────────────────────────────────────────────── -->
@@ -207,6 +216,27 @@
           <!-- Commissions of this range that are in NONE of the three cards: written off, or settled
                outside Incentra. Said out loud so the omission is visible rather than money quietly
                missing from the total (§B1). -->
+          <!-- How much of "Unpaid" no pay run can reach: the payee has no active assignment to that
+               plan, so the engine never considers those credits. Said out loud because the two figures can
+               differ by orders of magnitude, and only one of them is money anybody can act on (§B3). -->
+          @if (!dashboardLoading() && hasUnreachableCommissions()) {
+            <p class="commissions-closed-note">
+              <app-icon name="alert-triangle" [size]="14" />
+              <span>
+                {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_NOTE' | translate }}
+                @for (t of dashboard()!.commissionsBand.unreachableTotalByCurrency; track t.currency) {
+                  <strong>{{ t.amount | currencyFormat: t.currency }}</strong><!--
+           -->@if (!$last) {<span>, </span>}
+                }
+                <!-- An amount alone is what sent an administrator through a pay run, a credits list
+                     and a database. The tab next door already knows WHICH plan and WHAT to change. -->
+                <button type="button" class="commissions-note-link" (click)="setTab('unreachable')">
+                  {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_LINK' | translate }}
+                </button>
+              </span>
+            </p>
+          }
+
           @if (!dashboardLoading() && hasClosedCommissions()) {
             <p class="commissions-closed-note">
               <app-icon name="info" [size]="14" />
@@ -584,6 +614,85 @@
       <!-- ────────── CLAWBACK LEDGER TAB ────────────────────────────────── -->
       @if (activeTab() === 'ledger') {
         <app-payee-ledger-panel [payeeId]="payeeId" />
+      }
+
+      <!-- ────────── OWED, BUT NO ROUTE TO A PAYOUT ─────────────────────────
+           Deliberately NOT governed by the date range above: the debt is spread across periods, so any
+           window shows a slice and hides the rest — which is exactly how it stayed invisible. -->
+      @if (activeTab() === 'unreachable') {
+        @if (unreachableLoading()) {
+          <div class="bento-card bento-card--skeleton">
+            <span class="skeleton skeleton--title"></span>
+            <span class="skeleton skeleton--text"></span>
+          </div>
+        } @else if (!hasUnreachable()) {
+          <ws-card variant="default" padding="lg">
+            <div class="pd-unreachable__empty">
+              <app-icon name="check" [size]="20" />
+              <span>{{ 'PAYEES.UNREACHABLE.EMPTY' | translate }}</span>
+            </div>
+          </ws-card>
+        } @else {
+          <ws-card variant="default" padding="lg">
+            <div class="pd-unreachable__head">
+              <div>
+                <h3 class="metric-card__title">{{ 'PAYEES.UNREACHABLE.TITLE' | translate }}</h3>
+                <p class="metric-card__sub">{{ 'PAYEES.UNREACHABLE.SUBTITLE' | translate }}</p>
+              </div>
+              <div class="pd-unreachable__total">
+                @for (t of unreachableTotal(); track t.currency) {
+                  <div class="metric-card__value commission-card__value">
+                    {{ t.amount | currencyFormat: t.currency }}
+                  </div>
+                }
+              </div>
+            </div>
+
+            <div class="ws-list-group pd-unreachable__list">
+              @for (g of unreachableGroups(); track g.planId + g.currency) {
+                <div class="ws-list-group__item pd-unreachable__row">
+                  <div class="pd-unreachable__plan">
+                    <a class="credits-list__entity-link" [routerLink]="['/plans', g.planId]"
+                       target="_blank" rel="noopener noreferrer">{{ g.planName }}</a>
+                    <span class="pd-unreachable__count">
+                      {{ 'PAYEES.UNREACHABLE.CREDIT_COUNT' | translate: { count: g.creditCount } }}
+                    </span>
+                  </div>
+
+                  <div class="pd-unreachable__why">
+                    <ws-badge variant="warning" size="sm">
+                      {{ unreachableReasonKey(g.reason) | translate }}
+                    </ws-badge>
+                    <!-- ★ THE SENTENCE THAT ENDS THE HUNT: what to change, and which pay run period to
+                         run afterwards. Reactivating is not always enough — an assignment that ended
+                         before these transactions still will not pay them. -->
+                    <span class="pd-unreachable__fix">
+                      {{ unreachableFixKey(g.reason) | translate }}
+                      @if (g.coversTransactionsFrom && g.coversTransactionsTo) {
+                        {{ 'PAYEES.UNREACHABLE.RUN_PERIOD' | translate: {
+                             from: (g.coversTransactionsFrom | dateFormat),
+                             to: (g.coversTransactionsTo | dateFormat) } }}
+                      }
+                    </span>
+                  </div>
+
+                  <div class="pd-unreachable__amount">
+                    {{ g.amount | currencyFormat: g.currency }}
+                  </div>
+
+                  @if (g.assignmentId) {
+                    <a class="bento-card__link"
+                       [routerLink]="['/assignments']"
+                       [queryParams]="{ payeeId: payeeId }"
+                       target="_blank" rel="noopener noreferrer">
+                      {{ 'PAYEES.UNREACHABLE.GO_TO_ASSIGNMENT' | translate }} →
+                    </a>
+                  }
+                </div>
+              }
+            </div>
+          </ws-card>
+        }
       }
 
     </div>

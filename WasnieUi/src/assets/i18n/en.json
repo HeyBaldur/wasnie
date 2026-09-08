@@ -233,8 +233,6 @@
     "TITLE": "User manual",
     "SHORTCUTS_TITLE": "Jump straight to",
     "SHORTCUTS_BODY": "The manual is dense and technical. These are the sections of the calculation engine people come looking for.",
-    "ASK_ASSISTANT": "Ask the assistant",
-    "OPEN_PDF": "Open the printable PDF",
     "VIEW_FLOW": "View system flow",
     "EMPTY_TITLE": "The manual is not available yet",
     "EMPTY_DESC": "This installation does not have the user manual published yet. Once it is added, it will appear here.",
@@ -827,7 +825,24 @@
     "ASSIGNMENTS_TAB_HINT": "No assignments yet. Assign this payee to a compensation plan to start tracking earnings.",
     "QUOTAS_TAB_HINT": "No quotas defined for this payee. Add a quota to set their performance targets.",
     "ATTAINMENT_TAB_EMPTY": "No active quotas defined for this payee. Create a quota in the Quotas tab to start tracking attainment.",
-    "ACTION_IMPORT": "Import"
+    "ACTION_IMPORT": "Import",
+    "UNREACHABLE": {
+      "TAB": "Unpaid · no route",
+      "TITLE": "Owed, but no pay run can reach it",
+      "SUBTITLE": "This commission is genuinely owed. No pay run will pick it up until the cause below is fixed.",
+      "EMPTY": "Every unpaid commission for this payee can be reached by a pay run.",
+      "CREDIT_COUNT": "{{count}} credit(s)",
+      "REASON_ASSIGNMENT_DEACTIVATED": "Assignment deactivated",
+      "REASON_NO_ASSIGNMENT": "No assignment",
+      "REASON_PLAN_ARCHIVED": "Plan archived",
+      "REASON_UNKNOWN": "Not payable",
+      "FIX_REACTIVATE": "Reactivate this assignment, then run a pay run covering",
+      "FIX_ASSIGN": "Assign this payee to the plan for a period covering",
+      "FIX_PLAN_ARCHIVED": "The plan is archived; it must be reinstated before anything under it can be paid —",
+      "FIX_UNKNOWN": "Covers",
+      "RUN_PERIOD": "{{from}} – {{to}}.",
+      "GO_TO_ASSIGNMENT": "Open assignments"
+    }
   },
   "ATTAINMENT": {
     "TARGET": "Target",
@@ -952,7 +967,10 @@
     "RANGE_INVALID": "The end date cannot be earlier than the start date.",
     "TREND_NOTE_PACING": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Baseline: {{amount}} in {{period}}.",
     "TREND_NOTE_CLOSED": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Previous window ({{period}}): {{amount}}.",
-    "COUNTER_IN_RANGE": "in this range"
+    "COUNTER_IN_RANGE": "in this range",
+    "COMMISSIONS_UNREACHABLE_NOTE": "Of the unpaid amount, no pay run can reach:",
+    "COMMISSIONS_UNREACHABLE_LINK": "See what is stuck and why",
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Review deactivated assignments"
   },
   "IMPORTS": {
     "STEPS": {
@@ -1548,7 +1566,10 @@
     "DELETE_BLOCKED_WARNING": "{{count}} assignment(s) are blocked because they have already been used in calculations or payments. None were deleted. Remove them from your selection to delete the rest.",
     "DELETE_BLOCKED_REASON": "Used in payouts",
     "DELETE_BLOCKED_COL_ASSIGNMENT": "Payee → Plan",
-    "ERROR_LOAD": "Failed to load assignment."
+    "ERROR_LOAD": "Failed to load assignment.",
+    "STRAND_TITLE": "This will strand unpaid commission",
+    "STRAND_BODY": "This commission is already earned and still unpaid. Once the assignment is deactivated no pay run can reach it — reactivating the assignment is what makes it payable again.",
+    "STRAND_MORE": "and {{count}} more"
   },
   "PAYOUTS": {
     "TITLE": "Payouts",
@@ -1716,7 +1737,9 @@
     "STATUS_DISCARDED": "Discarded",
     "ACTION_DISCARD": "Discard payout",
     "SELECT_ALL": "Select all payouts that can be actioned",
-    "SELECT_ROW": "Select this payout"
+    "SELECT_ROW": "Select this payout",
+    "ACTION_EXPORT_EXCEL": "Export Excel",
+    "ACTION_EXPORT": "Export"
   },
   "PAY_RUNS": {
     "TITLE": "Pay Runs",
@@ -1857,12 +1880,18 @@
       "EXPORT": {
         "ACTION": "Export to Excel",
         "ERROR": "Export failed. Please try again."
-      }
+      },
+      "EMPTY_ALL_ZERO": "All {{count}} payouts in this run are worth nothing, and are hidden by \"Hiding $0 payouts\"."
     },
     "EXPORT": {
       "ACTION": "Export to Excel",
       "ERROR": "Export failed. Please try again."
-    }
+    },
+    "CALCULATE_UNREACHABLE": "No payouts were created, but this period does owe commission. It is unpaid on {{count}} payee/plan combination(s) that have no active assignment, so no pay run can reach it. Reactivate the assignment and run the period again.",
+    "SKIP_UnreachableCommission": "{{count}} payee/plan combination(s) owe unpaid commission in this period with no active assignment. No pay run can reach that money until the assignment is reactivated.",
+    "SKIP_SupplementalForNewCredits": "{{count}} payout(s) were supplemental: the period was already paid, but commission allocated since then was still unpaid and is carried by these.",
+    "SKIPPED_UNREACHABLE_HINT": "That commission stays owed; it simply has no route to a payout.",
+    "SKIPPED_UNREACHABLE_LINK": "Review deactivated assignments"
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Appearance",

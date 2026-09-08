@@ -170,6 +170,18 @@ public sealed class PayoutsController(
         var export = result.Value!;
         return File(export.Bytes, export.ContentType, export.FileName);
     }
+
+    // GET /api/payouts/{id}/export/excel
+    [HttpGet("{id:guid}/export/excel")]
+    public async Task<IActionResult> ExportExcel(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new ExportPayoutExcelQuery(id), cancellationToken);
+        if (!result.IsSuccess)
+            return NotFound(new { message = result.Error });
+
+        var export = result.Value!;
+        return File(export.Bytes, export.ContentType, export.FileName);
+    }
 }
 
 public sealed record CalculatePayoutsRequest(

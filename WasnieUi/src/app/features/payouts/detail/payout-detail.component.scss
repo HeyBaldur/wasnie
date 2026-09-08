@@ -375,6 +375,9 @@
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
+  // Same weight as `.row-menu__item` in the list screens: a menu option is a thing you are about to
+  // do, and at 13px regular it reads as a caption next to the button that opened it.
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;

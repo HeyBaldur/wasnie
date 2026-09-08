@@ -17,7 +17,6 @@ import { AppShellComponent } from '../../shared/components/app-shell/app-shell.c
 import { WsCardComponent, WsButtonComponent, WsEmptyStateComponent } from '../../shared/ui';
 import { ManualApiService } from './services/manual.api.service';
 import { ManualHeading } from './models/manual.model';
-import { AssistantStore } from '../assistant/state/assistant.store';
 import { WelcomeService } from '../../core/services/welcome.service';
 
 type ManualState = 'loading' | 'ready' | 'unavailable' | 'error';
@@ -57,7 +56,6 @@ export class ManualComponent implements OnInit {
   private readonly injector = inject(Injector);
 
   /** Root-provided, so a button here opens the panel that lives in the shell. */
-  readonly assistant = inject(AssistantStore);
   // The modal itself is rendered by the app shell; this only flips the shared signal.
   readonly welcome = inject(WelcomeService);
 
@@ -99,8 +97,6 @@ export class ManualComponent implements OnInit {
    * surviving sanitisation.
    */
   private readonly marked = new Marked({ gfm: true, breaks: false });
-
-  private pdfUrl: string | null = null;
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => this.release());
@@ -297,40 +293,7 @@ export class ManualComponent implements OnInit {
     host.scrollTo({ top: Math.max(0, top - 8), behavior: 'smooth' });
   }
 
-  /** Opens the assistant panel that lives in the shell. The manual stays on screen behind it. */
-  askAssistant(): void {
-    void this.assistant.open();
-  }
-
-  /**
-   * The printable export.
-   *
-   * ★ FETCHED ONLY WHEN ASKED. The screen no longer needs the PDF to show the manual, so downloading
-   * ~700 KB on every visit to power a button most readers never press would be pure waste. The blob is
-   * still authenticated, and it still never becomes a public URL.
-   */
-  openPdf(): void {
-    if (this.pdfUrl) {
-      window.open(this.pdfUrl, '_blank', 'noopener');
-      return;
-    }
-
-    this.api.getPdf().subscribe({
-      next: blob => {
-        this.pdfUrl = URL.createObjectURL(blob);
-        window.open(this.pdfUrl, '_blank', 'noopener');
-      },
-      // Silent by design: the manual is already on screen. A toast about the optional export would be
-      // noise about something the reader does not need.
-      error: () => undefined,
-    });
-  }
-
   private release(): void {
-    if (this.pdfUrl) {
-      URL.revokeObjectURL(this.pdfUrl);
-      this.pdfUrl = null;
-    }
     this.html.set('');
     this.headings.set([]);
   }

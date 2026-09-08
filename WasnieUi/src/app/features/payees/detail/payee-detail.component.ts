@@ -16,6 +16,7 @@ import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { QuotaStatusVariantPipe, QuotaStatusLabelPipe, QuotaPeriodExpiredPipe } from '../../../shared/pipes/quota-status.pipe';
 import { currentMonthRange, type DashboardRange } from '../../dashboard/store/dashboard.store';
 import { CurrencyTotal } from '../../dashboard/models/dashboard.models';
+import { PayeeUnreachableCommission } from '../models/payee-dashboard.model';
 import { PayeesApiService } from '../services/payees.api.service';
 import { QuotaMeasurementType, QuotaSummary } from '../../quotas/models/quota.model';
 import { PayeeDashboard, SalesTrendPoint } from '../models/payee-dashboard.model';
@@ -44,7 +45,7 @@ import {
 } from '../../../shared/ui';
 import { PayeeLedgerPanelComponent } from '../../ledger/panel/payee-ledger-panel.component';
 
-type Tab = 'overview' | 'profile' | 'ledger';
+type Tab = 'overview' | 'profile' | 'ledger' | 'unreachable';
 /** The blocks of the Overview that can be collapsed. */
 type Block = 'attainment' | 'trend' | 'quotas' | 'assignments' | 'credits';
 
@@ -180,6 +181,11 @@ export class PayeeDetailComponent implements OnInit {
     return (totals ?? []).slice(1);
   }
 
+  /** True when part of the unpaid amount is beyond the reach of any pay run. */
+  readonly hasUnreachableCommissions = computed(() =>
+    (this.dashboard()?.commissionsBand?.unreachableTotalByCurrency?.length ?? 0) > 0
+  );
+
   readonly hasClosedCommissions = computed(() =>
     (this.dashboard()?.commissionsBand?.closedTotalByCurrency?.length ?? 0) > 0
   );
@@ -207,6 +213,48 @@ export class PayeeDetailComponent implements OnInit {
   readonly invalidQuotaCount = computed(() =>
     (this.dashboard()?.attainmentItems ?? []).filter(a => !a.isCurrencyValid).length
   );
+
+  // ── Owed commission with no route to a payout ─────────────────────────────
+  //
+  // ★★ ITS OWN TAB BECAUSE IT IS ITS OWN QUESTION. Every other view of this money is scoped to a date
+  // range, and that is exactly how it stayed invisible: the debt is spread across periods, so any
+  // window shows a slice and hides the rest. This screen is "what is stuck", not a report of a month.
+  readonly unreachable = signal<PayeeUnreachableCommission | null>(null);
+  readonly unreachableLoading = signal(false);
+
+  readonly unreachableTotal = computed(() => this.unreachable()?.totalByCurrency ?? []);
+  readonly unreachableGroups = computed(() => this.unreachable()?.groups ?? []);
+  readonly hasUnreachable = computed(() => this.unreachableGroups().length > 0);
+
+  private async loadUnreachable(): Promise<void> {
+    this.unreachableLoading.set(true);
+    try {
+      this.unreachable.set(
+        await firstValueFrom(this.payeesApi.getPayeeUnreachableCommission(this.payeeId)));
+    } catch {
+      this.unreachable.set(null);
+    } finally {
+      this.unreachableLoading.set(false);
+    }
+  }
+
+  /**
+   * Why this group cannot be paid, and what to do about it. A WHITELIST — never `REASON.${code}`:
+   * an unknown code from a newer API would otherwise print an internal identifier at the user (§C2).
+   */
+  unreachableReasonKey(reason: string): string {
+    if (reason === 'AssignmentDeactivated') return 'PAYEES.UNREACHABLE.REASON_ASSIGNMENT_DEACTIVATED';
+    if (reason === 'NoAssignment') return 'PAYEES.UNREACHABLE.REASON_NO_ASSIGNMENT';
+    if (reason === 'PlanArchived') return 'PAYEES.UNREACHABLE.REASON_PLAN_ARCHIVED';
+    return 'PAYEES.UNREACHABLE.REASON_UNKNOWN';
+  }
+
+  unreachableFixKey(reason: string): string {
+    if (reason === 'AssignmentDeactivated') return 'PAYEES.UNREACHABLE.FIX_REACTIVATE';
+    if (reason === 'NoAssignment') return 'PAYEES.UNREACHABLE.FIX_ASSIGN';
+    if (reason === 'PlanArchived') return 'PAYEES.UNREACHABLE.FIX_PLAN_ARCHIVED';
+    return 'PAYEES.UNREACHABLE.FIX_UNKNOWN';
+  }
 
   readonly editModalOpen = signal(false);
   readonly terminateModalOpen = signal(false);
@@ -279,7 +327,7 @@ export class PayeeDetailComponent implements OnInit {
 
   /** Applies ?tab= / ?from= / ?to= from the URL, doing nothing when they already match. */
   private _applyUrlState(requested: Tab | undefined): void {
-    const tabs: Tab[] = ['overview', 'profile', 'ledger'];
+    const tabs: Tab[] = ['overview', 'profile', 'ledger', 'unreachable'];
     const tab: Tab = requested && tabs.includes(requested) ? requested : 'overview';
     if (tab !== this.activeTab()) this.activeTab.set(tab);
 
@@ -306,7 +354,7 @@ export class PayeeDetailComponent implements OnInit {
     // what lets a deep link land where it promised: the terminated-accounts queue sends finance
     // straight to the clawback tab to close an account, not to a page they must navigate again.
     const requested = this.route.snapshot.queryParamMap.get('tab') as Tab | null;
-    const tabs: Tab[] = ['overview', 'profile', 'ledger'];
+    const tabs: Tab[] = ['overview', 'profile', 'ledger', 'unreachable'];
     this.activeTab.set(requested && tabs.includes(requested) ? requested : 'overview');
     this.dashboard.set(null);
     this.assignments.set([]); this.assignmentsPage.set(1); this.assignmentsTotal.set(0);
@@ -316,6 +364,7 @@ export class PayeeDetailComponent implements OnInit {
     this._loadStarted = true;
     this.store.loadPayee(this.payeeId);
     this.loadOverview();
+    void this.loadUnreachable();
   }
 
   // ── Tab switching ────────────────────────────────────────────────────────
@@ -366,7 +415,8 @@ export class PayeeDetailComponent implements OnInit {
         from: this.range().from,
         to: this.range().to,
         commissionsBand: {
-          totalByCurrency: [], paidByCurrency: [], unpaidByCurrency: [], closedTotalByCurrency: [],
+          totalByCurrency: [], paidByCurrency: [], unpaidByCurrency: [],
+          closedTotalByCurrency: [], unreachableTotalByCurrency: [],
         },
         attainmentItems: [], salesTrend: [], recentQuotas: [], recentAssignments: [],
       });

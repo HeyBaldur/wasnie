@@ -54,3 +54,26 @@ export interface BulkDeleteAssignmentsResult {
   deletedCount: number;
   blocked: BlockedAssignmentDto[];
 }
+
+/**
+ * What deactivating a set of assignments would put out of reach of every pay run.
+ *
+ * ★ IT IS ASKED BEFORE THE ACT, and an empty answer is the normal one. Most deactivations strand
+ *   nothing; the dialog only grows the warning when there is money behind it, because a dialog that
+ *   warns every time stops being read.
+ */
+export interface DeactivationImpact {
+  strandedByCurrency: { amount: number; currency: string }[];
+  items: DeactivationImpactItem[];
+}
+
+export interface DeactivationImpactItem {
+  assignmentId: string;
+  payeeId: string;
+  payeeName: string;
+  planId: string;
+  planName: string;
+  creditCount: number;
+  amount: number;
+  currency: string;
+}

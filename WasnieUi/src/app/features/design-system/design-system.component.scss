@@ -45,3 +45,59 @@
   color: var(--color-text-secondary);
   margin: 0;
 }
+
+// ── Icons section ──────────────────────────────────────────────────────────────────────────────
+
+.ds-note {
+  max-width: 70ch;
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-13);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+
+  code {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size-12);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+}
+
+// The name sits next to the icon on purpose: an icon nobody can name is one the next person guesses.
+.ds-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+
+  code {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+  }
+}
+
+.ds-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  // Must match the real menus. A design page that renders the pattern differently from the screens
+  // is worse than no design page: it certifies the wrong thing.
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover { background: var(--color-bg-surface-sunken); }
+}

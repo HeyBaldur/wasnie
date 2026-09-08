@@ -233,8 +233,6 @@
     "TITLE": "Podręcznik użytkownika",
     "SHORTCUTS_TITLE": "Przejdź od razu do",
     "SHORTCUTS_BODY": "Podręcznik jest gęsty i techniczny. To są sekcje silnika obliczeniowego, których ludzie najczęściej szukają.",
-    "ASK_ASSISTANT": "Zapytaj asystenta",
-    "OPEN_PDF": "Otwórz PDF do druku",
     "VIEW_FLOW": "Zobacz przepływ systemu",
     "EMPTY_TITLE": "Podręcznik nie jest jeszcze dostępny",
     "EMPTY_DESC": "Ta instalacja nie ma jeszcze opublikowanego podręcznika użytkownika. Gdy zostanie dodany, pojawi się tutaj.",
@@ -827,7 +825,24 @@
     "ASSIGNMENTS_TAB_HINT": "Brak przypisań. Przypisz tego beneficjenta do planu wynagrodzeniowego, aby zacząć śledzić zarobki.",
     "QUOTAS_TAB_HINT": "Brak zdefiniowanych kwot dla tego beneficjenta. Dodaj kwotę, aby ustawić cele wydajnościowe.",
     "ATTAINMENT_TAB_EMPTY": "Brak aktywnych kwot dla tego beneficjenta. Utwórz kwotę w zakładce Kwoty, aby zacząć śledzić realizację.",
-    "ACTION_IMPORT": "Importuj"
+    "ACTION_IMPORT": "Importuj",
+    "UNREACHABLE": {
+      "TAB": "Niewypłacone · bez ścieżki",
+      "TITLE": "Należne, ale żaden pay run tego nie obejmie",
+      "SUBTITLE": "Ta prowizja jest faktycznie należna. Żaden pay run jej nie obejmie, dopóki przyczyna poniżej nie zostanie usunięta.",
+      "EMPTY": "Cała niewypłacona prowizja tego odbiorcy jest osiągalna przez pay run.",
+      "CREDIT_COUNT": "Prowizje: {{count}}",
+      "REASON_ASSIGNMENT_DEACTIVATED": "Przypisanie dezaktywowane",
+      "REASON_NO_ASSIGNMENT": "Brak przypisania",
+      "REASON_PLAN_ARCHIVED": "Plan zarchiwizowany",
+      "REASON_UNKNOWN": "Niemożliwe do wypłaty",
+      "FIX_REACTIVATE": "Aktywuj ponownie to przypisanie, a następnie uruchom pay run obejmujący",
+      "FIX_ASSIGN": "Przypisz odbiorcę do planu na okres obejmujący",
+      "FIX_PLAN_ARCHIVED": "Plan jest zarchiwizowany; trzeba go przywrócić, zanim cokolwiek w jego ramach zostanie wypłacone —",
+      "FIX_UNKNOWN": "Obejmuje",
+      "RUN_PERIOD": "{{from}} – {{to}}.",
+      "GO_TO_ASSIGNMENT": "Otwórz przypisania"
+    }
   },
   "ATTAINMENT": {
     "TARGET": "Cel",
@@ -952,7 +967,10 @@
     "RANGE_INVALID": "Data końcowa nie może być wcześniejsza niż początkowa.",
     "TREND_NOTE_PACING": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Punkt odniesienia: {{amount}} w {{period}}.",
     "TREND_NOTE_CLOSED": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Poprzednie okno ({{period}}): {{amount}}.",
-    "COUNTER_IN_RANGE": "w tym zakresie"
+    "COUNTER_IN_RANGE": "w tym zakresie",
+    "COMMISSIONS_UNREACHABLE_NOTE": "Z kwoty niewypłaconej żaden pay run nie może objąć:",
+    "COMMISSIONS_UNREACHABLE_LINK": "Zobacz, co jest zablokowane i dlaczego",
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Przejrzyj dezaktywowane przypisania"
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -1374,7 +1392,10 @@
     "DELETE_BLOCKED_WARNING": "{{count}} przypisanie/przypisań jest zablokowanych, ponieważ zostały już użyte w obliczeniach lub płatnościach. Żadne nie zostało usunięte. Odznacz je, aby usunąć pozostałe.",
     "DELETE_BLOCKED_REASON": "Użyte w wypłatach",
     "DELETE_BLOCKED_COL_ASSIGNMENT": "Beneficjent → Plan",
-    "ERROR_LOAD": "Nie udało się załadować przypisania."
+    "ERROR_LOAD": "Nie udało się załadować przypisania.",
+    "STRAND_TITLE": "To sprawi, że nieopłacona prowizja stanie się nieosiągalna",
+    "STRAND_BODY": "Ta prowizja została już naliczona i nadal nie została wypłacona. Po dezaktywacji przypisania żaden przebieg wypłat jej nie obejmie — ponowna aktywacja przypisania przywraca możliwość wypłaty.",
+    "STRAND_MORE": "i {{count}} więcej"
   },
   "IMPORTS": {
     "STEPS": {
@@ -1716,7 +1737,9 @@
     "STATUS_DISCARDED": "Odrzucony",
     "ACTION_DISCARD": "Odrzuć wypłatę",
     "SELECT_ALL": "Zaznacz wszystkie wypłaty, na których można działać",
-    "SELECT_ROW": "Zaznacz tę wypłatę"
+    "SELECT_ROW": "Zaznacz tę wypłatę",
+    "ACTION_EXPORT_EXCEL": "Eksportuj Excel",
+    "ACTION_EXPORT": "Eksportuj"
   },
   "PAY_RUNS": {
     "TITLE": "Cykle wypłat",
@@ -1857,12 +1880,18 @@
       "EXPORT": {
         "ACTION": "Eksportuj do Excela",
         "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
-      }
+      },
+      "EMPTY_ALL_ZERO": "Wszystkie {{count}} wypłaty w tym uruchomieniu mają zerową wartość i są ukryte przez „Hiding $0 payouts”."
     },
     "EXPORT": {
       "ACTION": "Eksportuj do Excela",
       "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
-    }
+    },
+    "CALCULATE_UNREACHABLE": "Nie utworzono żadnych wypłat, ale ten okres ma nieopłaconą prowizję. Dotyczy ona {{count}} kombinacji beneficjent/plan bez aktywnego przypisania, więc żaden przebieg wypłat jej nie obejmie. Należy ponownie aktywować przypisanie i uruchomić okres jeszcze raz.",
+    "SKIP_UnreachableCommission": "{{count}} kombinacji beneficjent/plan ma w tym okresie nieopłaconą prowizję bez aktywnego przypisania. Żaden przebieg wypłat nie obejmie tych środków, dopóki przypisanie nie zostanie ponownie aktywowane.",
+    "SKIP_SupplementalForNewCredits": "{{count}} wypłat miało charakter uzupełniający: okres był już opłacony, ale prowizja naliczona później pozostawała nieopłacona i to ją obejmują te wypłaty.",
+    "SKIPPED_UNREACHABLE_HINT": "Ta prowizja nadal jest należna; po prostu nie ma żadnej drogi do wypłaty.",
+    "SKIPPED_UNREACHABLE_LINK": "Przejrzyj dezaktywowane przypisania"
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Wygląd",

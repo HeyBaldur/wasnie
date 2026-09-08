@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Interfaces;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.PayRuns;
 using Wasnie.Application.Compensation.Queries.Transactions;
@@ -48,12 +49,34 @@ public sealed class ExportPayRunsHandler(
             PaidAt: r.PaidAt,
             TotalAmounts: r.TotalAmounts)).ToList();
 
+        // ★★ THE SHEETS THAT NAME PEOPLE. Filtering to Paid and exporting used to produce one row per
+        //    run: how much was paid in total and who pressed the button, and not a single payee. The
+        //    reader could see that four runs were paid and not who had been paid.
+        //
+        // ★ SCOPED TO THE RUNS BEING EXPORTED, so the file always agrees with the rows above it. Any
+        //   other filter here would let the first sheet and the other two describe different money.
+        var runIds = runs.Select(r => r.Id).ToList();
+
+        var payouts = await db.CompensationPayouts
+            .Where(p => p.PayRunId != null && runIds.Contains(p.PayRunId!.Value))
+            .Include(p => p.Lines)
+            .OrderBy(p => p.PayeeSnapshot.FullName)
+            .ToListAsync(cancellationToken);
+
+        var lineCount = payouts.Sum(p => p.Lines.Count);
+        if (lineCount > Payouts.ExportPayoutsHandler.MaxDetailRows)
+            return Result<ExportResult>.Failure($"EXPORT_TOO_LARGE:{lineCount}");
+
+        var planNames = await PayoutExportProjection.LoadPlanNamesAsync(db, payouts, cancellationToken);
+        var payees = PayoutExportProjection.BuildSummary(payouts, planNames);
+        var detail = await PayoutExportProjection.BuildDetailAsync(db, payouts, planNames, cancellationToken);
+
         var tenant = await db.Tenants
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
         var slug = tenant?.Slug ?? tenantContext.TenantId.ToString("N")[..8];
 
-        var bytes = excelService.GenerateExcel(rows, slug);
+        var bytes = excelService.GenerateExcel(rows, payees, detail, slug);
         var fileName = $"pay-runs-export-{DateTime.UtcNow:yyyy-MM-dd}-{slug}.xlsx";
 
         return Result<ExportResult>.Success(

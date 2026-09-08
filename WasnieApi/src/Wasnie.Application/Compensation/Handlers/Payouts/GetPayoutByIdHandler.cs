@@ -126,11 +126,7 @@ public sealed class GetPayoutByIdHandler(
             // paid these credits reported every line as UNPAID, because the id was null for the
             // honest reason that the payer was not somebody else.
             var consumedBy = credit?.ConsumedByPayoutId;
-            var paymentState = consumedBy is null
-                ? PayoutLinePaymentState.Unpaid
-                : consumedBy == thisPayoutId
-                    ? PayoutLinePaymentState.PaidByThisPayout
-                    : PayoutLinePaymentState.PaidByAnotherPayout;
+            var paymentState = ResolvePaymentState(consumedBy, thisPayoutId);
 
             var payerId = paymentState == PayoutLinePaymentState.PaidByAnotherPayout ? consumedBy : null;
             var payer = payerId is not null ? payerById.GetValueOrDefault(payerId.Value) : null;
@@ -158,6 +154,25 @@ public sealed class GetPayoutByIdHandler(
                 PaidInPayoutPeriodEnd: payer?.End);
         }).ToList();
     }
+
+    /// <summary>
+    /// The three outcomes, decided in ONE place.
+    ///
+    /// ★★ IT IS A METHOD AND NOT THREE LINES INLINE BECAUSE A SECOND READER EXISTS. The payouts export
+    /// answers the same question for a whole pay run, and a copy of this rule there would eventually
+    /// disagree with the screen — the accounting file would call a line unpaid that the screen calls
+    /// paid, or the reverse, and there would be no way to tell which one to believe.
+    ///
+    /// ★ `thisPayoutId` IS WHAT MAKES IT ANSWERABLE. Once a payout is paid, every credit it consumed
+    /// carries a ConsumedByPayoutId; without the comparison every line would announce itself as a
+    /// duplicate of itself.
+    /// </summary>
+    public static PayoutLinePaymentState ResolvePaymentState(Guid? consumedByPayoutId, Guid thisPayoutId) =>
+        consumedByPayoutId is null
+            ? PayoutLinePaymentState.Unpaid
+            : consumedByPayoutId == thisPayoutId
+                ? PayoutLinePaymentState.PaidByThisPayout
+                : PayoutLinePaymentState.PaidByAnotherPayout;
 
     public static LineCalculationDto MapCalculation(
         RuleSnapshot snapshot,

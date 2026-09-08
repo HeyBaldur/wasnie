@@ -368,13 +368,26 @@ export class PayRunDetailComponent implements OnInit {
    */
   readonly emptyMessageKey = computed(() => {
     const run = this.store.run();
-    const runHoldsNothing = (run?.payeeCount ?? 0) === 0 && (run?.zeroPayoutCount ?? 0) === 0;
+    const zeros = run?.zeroPayoutCount ?? 0;
+    const runHoldsNothing = (run?.payeeCount ?? 0) === 0 && zeros === 0;
     if (runHoldsNothing) return 'PAY_RUNS.DETAIL.EMPTY_TITLE';
+
+    // ★ NAME THE ACTUAL CAUSE. A run whose payouts are ALL zero, hidden by a toggle that is on by
+    //   default, is the commonest way this table comes up empty — and "no payouts match the current
+    //   filters" sends the reader hunting through filters instead of telling them the one fact that
+    //   explains it: every payout in this run is worth nothing. The header saying "15 total" over an
+    //   empty table is exactly the contradiction this removes.
+    if (this.store.excludeZero() && zeros > 0 && this.store.activeFilterCount() === 0) {
+      return 'PAY_RUNS.DETAIL.EMPTY_ALL_ZERO';
+    }
 
     return this.store.activeFilterCount() > 0 || this.store.excludeZero()
       ? 'PAY_RUNS.DETAIL.EMPTY_FILTER'
       : 'PAY_RUNS.DETAIL.EMPTY_TITLE';
   });
+
+  /** How many payouts of this run are worth nothing — the number the message above quotes. */
+  readonly zeroPayoutCount = computed(() => this.store.run()?.zeroPayoutCount ?? 0);
 
   async onRecalculate(): Promise<void> {
     if (this.recalculating()) return;

@@ -32,7 +32,7 @@ function dashboard(over: Partial<PayeeDashboard> = {}): PayeeDashboard {
       totalByCurrency: [{ amount: 150, currency: 'EUR' }],
       paidByCurrency: [{ amount: 100, currency: 'EUR' }],
       unpaidByCurrency: [{ amount: 50, currency: 'EUR' }],
-      closedTotalByCurrency: [],
+      closedTotalByCurrency: [], unreachableTotalByCurrency: [],
     },
     attainmentItems: [],
     salesTrend: [],
@@ -225,7 +225,7 @@ describe('PayeeDetailComponent — date range, cards and collapsible blocks', ()
   it('a payee with no commissions shows zero rather than blowing up on a missing currency', async () => {
     api.getPayeeDashboard.and.returnValue(of(dashboard({
       commissionsBand: {
-        totalByCurrency: [], paidByCurrency: [], unpaidByCurrency: [], closedTotalByCurrency: [],
+        totalByCurrency: [], paidByCurrency: [], unpaidByCurrency: [], closedTotalByCurrency: [], unreachableTotalByCurrency: [],
       },
     })) as never);
 

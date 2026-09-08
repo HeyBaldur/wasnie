@@ -47,7 +47,7 @@ public sealed class LoginAttemptTracker(IMemoryCache cache, IClock clock) : ILog
             // This is what keeps a sustained attack from firing a warning email per attempt.
             if (entry.LockedUntil is { } until && until > now)
             {
-                Store(key, entry, until);
+                Store(key, entry);
                 return new LoginAttemptState(true, JustLocked: false, RetryAfterMinutes: MinutesUntil(until, now));
             }
 
@@ -62,13 +62,13 @@ public sealed class LoginAttemptTracker(IMemoryCache cache, IClock clock) : ILog
 
             if (entry.FailureCount < MaxFailedAttempts)
             {
-                Store(key, entry, now.Add(LockoutWindow));
+                Store(key, entry);
                 return new LoginAttemptState(false, false, 0);
             }
 
             var lockedUntil = now.Add(LockoutWindow);
             entry.LockedUntil = lockedUntil;
-            Store(key, entry, lockedUntil);
+            Store(key, entry);
             return new LoginAttemptState(true, JustLocked: true, RetryAfterMinutes: MinutesUntil(lockedUntil, now));
         }
     }
@@ -81,8 +81,26 @@ public sealed class LoginAttemptTracker(IMemoryCache cache, IClock clock) : ILog
         }
     }
 
-    private void Store(string key, Entry entry, DateTimeOffset expiresAt) =>
-        cache.Set(key, entry, new MemoryCacheEntryOptions { AbsoluteExpiration = expiresAt });
+    /// <summary>
+    /// Keeps the entry alive long enough for the logical window to run out, then lets the cache reclaim
+    /// it.
+    ///
+    /// ★★ THE EXPIRY IS A MEMORY HINT, NEVER THE DECISION. `MemoryCache` measures absolute expiry
+    /// against the REAL clock, while every rule in this class is decided by the INJECTED one. Handing
+    /// the cache a deadline computed from the injected clock made the two disagree the moment they
+    /// differed: under a test clock the deadline was already in the past, the entry evaporated on
+    /// write, and the tracker silently counted nothing. It also meant the suite rotted as the real day
+    /// advanced past the fake one — green in the morning, red after lunch, with no change in between.
+    ///
+    /// So the TTL is relative to real now, and generous: whether a row still counts is decided by
+    /// <c>LockedUntil</c> against <see cref="IClock"/>, never by whether the cache still holds it. An
+    /// entry evicted early costs the user the explanatory message, never the block itself.
+    /// </summary>
+    private void Store(string key, Entry entry) =>
+        cache.Set(key, entry, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = LockoutWindow + LockoutWindow,
+        });
 
     private static int MinutesUntil(DateTimeOffset until, DateTimeOffset now) =>
         Math.Max(1, (int)Math.Ceiling((until - now).TotalMinutes));

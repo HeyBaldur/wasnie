@@ -962,7 +962,7 @@ function buildMockSummary(
       totalByCurrency: [],
       paidByCurrency: [],
       unpaidByCurrency: [],
-      closedTotalByCurrency: [],
+      closedTotalByCurrency: [], unreachableTotalByCurrency: [],
     },
     actionBand: {
       draftPayRunsCount: 0,

@@ -86,6 +86,28 @@
     <!-- Commissions that ended a third way: written off, or settled outside Wasnie through payroll.
          In NONE of the three cards above — neither paid nor still owed — and said out loud here so the
          omission is visible instead of money quietly missing from the total (§B1). -->
+    <!-- How much of "Unpaid" no pay run can reach: the payee has no active assignment to that
+         plan, so the engine never considers those credits. Said out loud because the two figures can
+         differ by orders of magnitude, and only one of them is money anybody can act on (§B3). -->
+    @if (!store.loading() && hasUnreachableCommissions()) {
+      <p class="commissions-closed-note">
+        <app-icon name="alert-triangle" [size]="14" />
+        <span>
+          {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_NOTE' | translate }}
+          @for (t of store.commissionsBand()!.unreachableTotalByCurrency; track t.currency) {
+            <strong>{{ t.amount | currencyFormat: t.currency }}</strong><!--
+     -->@if (!$last) {<span>, </span>}
+          }
+          <!-- Straight to the cause. A deactivated assignment is the reason in almost every case, and
+               reactivating it is a single action. -->
+          <a class="commissions-note-link"
+             routerLink="/assignments" [queryParams]="{ status: 'Deactivated' }">
+            {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK' | translate }}
+          </a>
+        </span>
+      </p>
+    }
+
     @if (!store.loading() && hasClosedCommissions()) {
       <p class="commissions-closed-note">
         <app-icon name="info" [size]="14" />

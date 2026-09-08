@@ -7,6 +7,7 @@ import {
   BulkAssignmentOperationResult,
   BulkDeleteAssignmentsResult,
   CreateAssignmentRequest,
+  DeactivationImpact,
 } from '../models/assignment.model';
 import { PagedResult, PaginationParams } from '../../../shared/models/pagination.models';
 import { buildHttpParams } from '../../../shared/utils/build-http-params';
@@ -56,6 +57,14 @@ export class AssignmentsApiService {
 
   bulkDeactivate(body: BulkAssignmentIdsRequest): Observable<BulkAssignmentOperationResult> {
     return this.http.post<BulkAssignmentOperationResult>(`${this.base}/bulk-deactivate`, body);
+  }
+
+  /**
+   * How much unpaid commission this deactivation would strand. Read-only despite the POST: the bulk
+   * dialog asks about a list of ids, which does not fit a URL.
+   */
+  deactivationImpact(body: BulkAssignmentIdsRequest): Observable<DeactivationImpact> {
+    return this.http.post<DeactivationImpact>(`${this.base}/deactivation-impact`, body);
   }
 
   bulkDelete(body: BulkAssignmentIdsRequest): Observable<BulkDeleteAssignmentsResult> {

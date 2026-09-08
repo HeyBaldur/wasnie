@@ -96,9 +96,19 @@ describe('PayRunDetailComponent — the "nothing here" message', () => {
     expect(component.emptyMessageKey()).toBe('PAY_RUNS.DETAIL.EMPTY_FILTER');
   });
 
-  it('zero-value payouts hidden by the default toggle DO count as filtered', () => {
-    // Here the toggle really is the cause: the payouts exist, they are just worth nothing.
-    build(run({ payeeCount: 0, zeroPayoutCount: 3 }), { filters: 0, excludeZero: true });
+  it('names the real cause when every payout in the run is worth nothing', () => {
+    // ★ THE REPORTED CASE, SECOND ROUND. The header said "0 paid · 15 total" over an empty table and
+    //   the message blamed "the current filters" — leaving the reader to hunt through filters for the
+    //   one fact that explains it: all fifteen payouts are zero.
+    build(run({ payeeCount: 0, zeroPayoutCount: 15 }), { filters: 0, excludeZero: true });
+
+    expect(component.emptyMessageKey()).toBe('PAY_RUNS.DETAIL.EMPTY_ALL_ZERO');
+    expect(component.zeroPayoutCount()).toBe(15);
+  });
+
+  it('falls back to the filter message when a real filter is also applied', () => {
+    // With a filter of their own on top, "they are all zero" is no longer the whole story.
+    build(run({ payeeCount: 0, zeroPayoutCount: 15 }), { filters: 2, excludeZero: true });
 
     expect(component.emptyMessageKey()).toBe('PAY_RUNS.DETAIL.EMPTY_FILTER');
   });

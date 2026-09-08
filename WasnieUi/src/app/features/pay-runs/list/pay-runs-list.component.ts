@@ -305,6 +305,10 @@ export class PayRunsListComponent implements OnInit {
     'TerminatedPayee',
     'PlanNotPayable',
     'ExistingPayout',
+    // Not skips — the run explaining itself. They share this list because they travel in the same
+    // field, and leaving them out would print the neutral fallback over a sentence the engine had.
+    'SupplementalForNewCredits',
+    'UnreachableCommission',
   ];
 
   skipLabelKey(code: string): string {
@@ -321,9 +325,53 @@ export class PayRunsListComponent implements OnInit {
    *  - considered and all discarded — the reasons are listed underneath;
    *  - the neutral fallback, which claims no cause whatsoever.
    */
+  /**
+   * The way out of one skip reason: the sentence and the screen where a person can act on it.
+   *
+   * * A WHITELIST, like skipLabelKey. Deriving a route from a code would send the reader somewhere
+   *   invented the first time a new code ships; a reason with no way out simply has none, and the row
+   *   then states the fact and stops.
+   */
+  skipHint(code: string): { textKey: string; linkKey: string; route: string; queryParams?: Record<string, string> } | null {
+    if (code === 'TerminatedPayee') {
+      return {
+        textKey: 'PAY_RUNS.SKIPPED_TERMINATED_HINT',
+        linkKey: 'PAY_RUNS.SKIPPED_TERMINATED_LINK',
+        route: '/terminated-accounts',
+      };
+    }
+    if (code === 'UnreachableCommission') {
+      return {
+        textKey: 'PAY_RUNS.SKIPPED_UNREACHABLE_HINT',
+        linkKey: 'PAY_RUNS.SKIPPED_UNREACHABLE_LINK',
+        route: '/assignments',
+        queryParams: { status: 'Deactivated' },
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Did the run leave behind commission no pay run can reach? Read off the engine's own code, never
+   * inferred from a zero — a zero has several causes and this is only one of them.
+   */
+  hasUnreachableCommission(result: CalculatePayRunResult): boolean {
+    return (result.diagnostics?.skipped ?? [])
+      .some(s => s.code === 'UnreachableCommission' && s.count > 0);
+  }
+
+  unreachableCommissionCount(result: CalculatePayRunResult): number {
+    return (result.diagnostics?.skipped ?? [])
+      .find(s => s.code === 'UnreachableCommission')?.count ?? 0;
+  }
+
   noPayoutsHeadlineKey(result: CalculatePayRunResult): string {
     const d = result.diagnostics;
     if (!d) return 'PAY_RUNS.CALCULATE_NO_PAYOUTS_NEUTRAL';
+    // ★ THE ONE ANSWER THE RUN COULD NEVER GIVE. "Nothing to consider" is true and useless when the
+    //   period does owe money: an administrator read it while three other screens said €385,731.02 was
+    //   Unpaid, and spent a day finding out that six deactivated assignments were the whole story.
+    if (this.hasUnreachableCommission(result)) return 'PAY_RUNS.CALCULATE_UNREACHABLE';
     if (d.assignmentsConsidered === 0) return 'PAY_RUNS.CALCULATE_NOTHING_TO_CONSIDER';
     if (d.skipped.length > 0) return 'PAY_RUNS.CALCULATE_ALL_SKIPPED';
     return 'PAY_RUNS.CALCULATE_NO_PAYOUTS_NEUTRAL';

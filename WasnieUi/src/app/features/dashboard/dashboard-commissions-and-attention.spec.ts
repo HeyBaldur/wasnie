@@ -29,7 +29,7 @@ function band(over: Partial<DashboardCommissionsBand> = {}): DashboardCommission
     totalByCurrency: [],
     paidByCurrency: [],
     unpaidByCurrency: [],
-    closedTotalByCurrency: [],
+    closedTotalByCurrency: [], unreachableTotalByCurrency: [],
     ...over,
   };
 }

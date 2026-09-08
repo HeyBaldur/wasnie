@@ -76,6 +76,17 @@ public sealed class AssignmentsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// What a deactivation would strand, asked BEFORE it happens so the confirmation dialog can say it.
+    /// POST because the bulk dialog asks about a list of ids; it writes nothing.
+    /// </summary>
+    [HttpPost("deactivation-impact")]
+    public async Task<IActionResult> DeactivationImpact([FromBody] BulkAssignmentIdsRequest body, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetDeactivationImpactQuery(body.AssignmentIds), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
+
     [HttpPost("bulk-deactivate")]
     public async Task<IActionResult> BulkDeactivate([FromBody] BulkAssignmentIdsRequest body, CancellationToken cancellationToken)
     {

@@ -194,12 +194,50 @@ describe('PayRunsListComponent — explaining a run that created nothing', () =>
     expect(component.terminatedSkipCount(r)).toBe(0);
   });
 
+  /**
+   * ** "NOTHING TO CONSIDER" IS TRUE AND USELESS WHEN THE PERIOD OWES MONEY. An administrator read
+   *    that sentence while three other screens reported 385,731.02 EUR as Unpaid, and spent a day
+   *    finding out that six deactivated assignments were the whole story. The specific answer wins.
+   */
+  it('says the period owes commission no run can reach, in preference to "nothing to consider"', () => {
+    const r = result({
+      diagnostics: {
+        assignmentsConsidered: 0,
+        skipped: [{ code: 'UnreachableCommission', count: 6 }],
+      },
+    });
+    expect(component.noPayoutsHeadlineKey(r)).toBe('PAY_RUNS.CALCULATE_UNREACHABLE');
+    expect(component.hasUnreachableCommission(r)).toBeTrue();
+    expect(component.unreachableCommissionCount(r)).toBe(6);
+  });
+
+  it('does not claim unreachable commission when the engine reported none', () => {
+    const r = result({
+      diagnostics: { assignmentsConsidered: 4, skipped: [{ code: 'ExistingPayout', count: 4 }] },
+    });
+    expect(component.hasUnreachableCommission(r)).toBeFalse();
+    expect(component.unreachableCommissionCount(r)).toBe(0);
+    expect(component.noPayoutsHeadlineKey(r)).toBe('PAY_RUNS.CALCULATE_ALL_SKIPPED');
+  });
+
+  it('reads the fact off the engine code, never off a zero count', () => {
+    // A code present with count 0 is not a claim. Treating it as one would warn about nothing.
+    const r = result({
+      diagnostics: { assignmentsConsidered: 0, skipped: [{ code: 'UnreachableCommission', count: 0 }] },
+    });
+    expect(component.hasUnreachableCommission(r)).toBeFalse();
+  });
+
   // ── The reason codes ───────────────────────────────────────────────────────
 
   it('maps every reason code the engine can emit', () => {
     expect(component.skipLabelKey('TerminatedPayee')).toBe('PAY_RUNS.SKIP_TerminatedPayee');
     expect(component.skipLabelKey('PlanNotPayable')).toBe('PAY_RUNS.SKIP_PlanNotPayable');
     expect(component.skipLabelKey('ExistingPayout')).toBe('PAY_RUNS.SKIP_ExistingPayout');
+    expect(component.skipLabelKey('SupplementalForNewCredits'))
+      .toBe('PAY_RUNS.SKIP_SupplementalForNewCredits');
+    expect(component.skipLabelKey('UnreachableCommission'))
+      .toBe('PAY_RUNS.SKIP_UnreachableCommission');
   });
 
   /**

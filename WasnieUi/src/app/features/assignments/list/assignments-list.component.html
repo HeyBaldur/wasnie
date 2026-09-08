@@ -42,7 +42,7 @@
             <app-icon name="check-circle" [size]="14" />
             {{ 'ASSIGNMENTS.BULK_ACTIVATE' | translate }}
           </ws-button>
-          <ws-button *hasPermission="'Assignments.Update'" variant="secondary" size="sm" (click)="bulkDeactivateOpen.set(true)">
+          <ws-button *hasPermission="'Assignments.Update'" variant="secondary" size="sm" (click)="onBulkDeactivate()">
             <app-icon name="x-circle" [size]="14" />
             {{ 'ASSIGNMENTS.BULK_DEACTIVATE' | translate }}
           </ws-button>
@@ -226,7 +226,40 @@
   [loading]="deactivateSaving()"
   (confirmed)="onConfirmDeactivate()"
   (cancelled)="deactivateOpen.set(false)"
-/>
+>
+  <!--
+    The consequence, stated before the click. It appears ONLY when the server found money at stake:
+    a warning that fires on every deactivation is one nobody reads by the time it matters.
+  -->
+  @if (hasImpact()) {
+    <div class="asg-strand">
+      <div class="asg-strand__head">
+        <app-icon name="alert-triangle" [size]="16" />
+        <span>{{ 'ASSIGNMENTS.STRAND_TITLE' | translate }}</span>
+      </div>
+      <div class="asg-strand__totals">
+        @for (t of impactTotals(); track t.currency) {
+          <span class="asg-strand__amount">{{ t.amount | currencyFormat: t.currency }}</span>
+        }
+      </div>
+      <p class="asg-strand__body">{{ 'ASSIGNMENTS.STRAND_BODY' | translate }}</p>
+      <ul class="ws-list-group asg-strand__list">
+        @for (i of impactShownItems(); track i.assignmentId + i.currency) {
+          <li class="ws-list-group__item">
+            <span class="asg-strand__who">{{ i.payeeName }}</span>
+            <span class="asg-strand__plan">{{ i.planName }}</span>
+            <span class="asg-strand__row-amount">{{ i.amount | currencyFormat: i.currency }}</span>
+          </li>
+        }
+      </ul>
+      @if (impactHiddenCount() > 0) {
+        <p class="asg-strand__more">
+          {{ 'ASSIGNMENTS.STRAND_MORE' | translate: { count: impactHiddenCount() } }}
+        </p>
+      }
+    </div>
+  }
+</ws-confirmation-modal>
 
 <!-- Bulk activate confirmation -->
 <ws-confirmation-modal
@@ -252,7 +285,40 @@
   [loading]="bulkSaving()"
   (confirmed)="onConfirmBulkDeactivate()"
   (cancelled)="bulkDeactivateOpen.set(false)"
-/>
+>
+  <!--
+    The consequence, stated before the click. It appears ONLY when the server found money at stake:
+    a warning that fires on every deactivation is one nobody reads by the time it matters.
+  -->
+  @if (hasImpact()) {
+    <div class="asg-strand">
+      <div class="asg-strand__head">
+        <app-icon name="alert-triangle" [size]="16" />
+        <span>{{ 'ASSIGNMENTS.STRAND_TITLE' | translate }}</span>
+      </div>
+      <div class="asg-strand__totals">
+        @for (t of impactTotals(); track t.currency) {
+          <span class="asg-strand__amount">{{ t.amount | currencyFormat: t.currency }}</span>
+        }
+      </div>
+      <p class="asg-strand__body">{{ 'ASSIGNMENTS.STRAND_BODY' | translate }}</p>
+      <ul class="ws-list-group asg-strand__list">
+        @for (i of impactShownItems(); track i.assignmentId + i.currency) {
+          <li class="ws-list-group__item">
+            <span class="asg-strand__who">{{ i.payeeName }}</span>
+            <span class="asg-strand__plan">{{ i.planName }}</span>
+            <span class="asg-strand__row-amount">{{ i.amount | currencyFormat: i.currency }}</span>
+          </li>
+        }
+      </ul>
+      @if (impactHiddenCount() > 0) {
+        <p class="asg-strand__more">
+          {{ 'ASSIGNMENTS.STRAND_MORE' | translate: { count: impactHiddenCount() } }}
+        </p>
+      }
+    </div>
+  }
+</ws-confirmation-modal>
 
 <!-- Bulk delete confirmation -->
 <ws-confirmation-modal

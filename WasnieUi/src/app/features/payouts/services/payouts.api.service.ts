@@ -86,6 +86,13 @@ export class PayoutsApiService {
     });
   }
 
+  /** ONE payout as a workbook. The list-level `exportToExcel` below answers a different question. */
+  exportSingleExcel(id: string): Observable<Blob> {
+    return this.http.get(`${this.base}/${id}/export/excel`, {
+      responseType: 'blob',
+    });
+  }
+
   exportToExcel(filters: Record<string, string>): Observable<Blob> {
     let params = new HttpParams();
     Object.entries(filters).forEach(([k, v]) => { params = params.set(k, v); });

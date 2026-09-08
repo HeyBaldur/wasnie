@@ -168,6 +168,15 @@ export interface DashboardCommissionsBand {
   paidByCurrency: CurrencyTotal[];
   unpaidByCurrency: CurrencyTotal[];
   closedTotalByCurrency: CurrencyTotal[];
+  /**
+   * The part of `unpaidByCurrency` that NO pay run can reach: the payee has no active assignment to
+   * that plan, so the engine never considers those credits.
+   *
+   * ★ A SUBSET OF UNPAID, NOT A FOURTH BUCKET — it is deliberately not subtracted. The money IS owed
+   * and belongs in the debt figure; this only says how much of that debt the system can act on. One
+   * payee showed €391,736 owed of which €6,005 could actually leave through a pay run.
+   */
+  unreachableTotalByCurrency: CurrencyTotal[];
 }
 
 export interface DashboardActivityItem {

@@ -105,6 +105,18 @@ public sealed class PayeesController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 
+    /// <summary>
+    /// Commission this payee is owed that no pay run can reach, and what would unstick each part.
+    /// Deliberately unscoped by date — a window is how this money stayed invisible.
+    /// </summary>
+    [HttpGet("{payeeId:guid}/unreachable-commission")]
+    public async Task<IActionResult> GetUnreachableCommission(Guid payeeId, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetPayeeUnreachableCommissionQuery(payeeId), cancellationToken);
+        // NotFound, not Forbid: "no such payee" and "not yours" must look identical.
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
     [HttpPost("{payeeId:guid}/deactivate")]
     public async Task<IActionResult> Deactivate(Guid payeeId, CancellationToken cancellationToken)
     {

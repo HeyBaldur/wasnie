@@ -585,3 +585,90 @@
     border-radius: var(--radius-sm);
   }
 }
+
+// ── "Owed, but no route to a payout" tab ─────────────────────────────────────
+
+.pd-unreachable__empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+}
+
+.pd-unreachable__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  margin-bottom: var(--space-4);
+}
+
+.pd-unreachable__total {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* The frame (background, hairlines, rounded ends) comes from .ws-list-group in styles/_list-group.scss. */
+/* Only what is specific to this screen lives here. */
+.pd-unreachable__list {
+  margin-top: var(--space-2);
+}
+
+// One row per plan. The FIX sits on the same line as the amount on purpose: the reader must not have to
+// hold "how much" in their head while they go looking for "what do I do".
+//
+// `display: grid` overrides the shared class's flex — that is the point of composing: the frame is
+// shared, the inner layout is this screen's own.
+.pd-unreachable__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  // Two lines tall in both of the wide columns, so the table's 4px would crowd them. Everything
+  // else — ground, hairline, radius, 12px text — still comes from the shared class.
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+@media (max-width: 900px) {
+  .pd-unreachable__row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}
+
+.pd-unreachable__plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.pd-unreachable__count {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.pd-unreachable__why {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.pd-unreachable__fix {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.pd-unreachable__amount {
+  font-size: var(--font-size-15);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

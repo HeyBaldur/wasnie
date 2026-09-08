@@ -37,11 +37,21 @@ public sealed record DashboardSummaryDto(
 /// visible rather than silent — a figure nobody can see is indistinguishable from money that vanished
 /// (§B1).
 /// </param>
+/// <param name="UnreachableTotalByCurrency">
+/// The part of <see cref="UnpaidByCurrency"/> that NO pay run can reach: the payee has no active
+/// assignment to that plan, so the engine never considers it.
+///
+/// ★★ A SUBSET OF UNPAID, NOT A FOURTH BUCKET. It is deliberately NOT subtracted from Unpaid: the money
+/// is genuinely owed and must stay in the debt figure. What it adds is how much of that debt the system
+/// can actually act on — one payee showed €391,736 owed of which €6,005 could leave through a pay run,
+/// and nothing on screen distinguished the two (§B3).
+/// </param>
 public sealed record DashboardCommissionsBandDto(
     IReadOnlyList<CurrencyTotalDto> TotalByCurrency,
     IReadOnlyList<CurrencyTotalDto> PaidByCurrency,
     IReadOnlyList<CurrencyTotalDto> UnpaidByCurrency,
-    IReadOnlyList<CurrencyTotalDto> ClosedTotalByCurrency);
+    IReadOnlyList<CurrencyTotalDto> ClosedTotalByCurrency,
+    IReadOnlyList<CurrencyTotalDto> UnreachableTotalByCurrency);
 
 // ── Banda 1 — "Requires action" (period-independent) ───────────────────────
 

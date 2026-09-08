@@ -233,8 +233,6 @@
     "TITLE": "Manual de usuario",
     "SHORTCUTS_TITLE": "Ir directo a",
     "SHORTCUTS_BODY": "El manual es denso y técnico. Estas son las secciones del motor de cálculo que la gente viene a buscar.",
-    "ASK_ASSISTANT": "Preguntar al asistente",
-    "OPEN_PDF": "Abrir el PDF para imprimir",
     "VIEW_FLOW": "Ver flujo del sistema",
     "EMPTY_TITLE": "El manual todavía no está disponible",
     "EMPTY_DESC": "Esta instalación aún no tiene publicado el manual de usuario. Cuando se agregue, aparecerá acá.",
@@ -827,7 +825,24 @@
     "ASSIGNMENTS_TAB_HINT": "Aún no hay asignaciones. Asigna este beneficiario a un plan de compensación para comenzar a rastrear sus ganancias.",
     "QUOTAS_TAB_HINT": "No hay cuotas definidas para este beneficiario. Añade una cuota para fijar sus objetivos de rendimiento.",
     "ATTAINMENT_TAB_EMPTY": "No hay cuotas activas definidas para este beneficiario. Crea una cuota en la pestaña Cuotas para comenzar a seguir el cumplimiento.",
-    "ACTION_IMPORT": "Importar"
+    "ACTION_IMPORT": "Importar",
+    "UNREACHABLE": {
+      "TAB": "Sin pagar · sin ruta",
+      "TITLE": "Se debe, pero ningún pay run puede alcanzarlo",
+      "SUBTITLE": "Esta comisión se debe de verdad. Ningún pay run la recogerá hasta que se corrija la causa.",
+      "EMPTY": "Toda la comisión sin pagar de este payee es alcanzable por un pay run.",
+      "CREDIT_COUNT": "{{count}} crédito(s)",
+      "REASON_ASSIGNMENT_DEACTIVATED": "Asignación desactivada",
+      "REASON_NO_ASSIGNMENT": "Sin asignación",
+      "REASON_PLAN_ARCHIVED": "Plan archivado",
+      "REASON_UNKNOWN": "No pagable",
+      "FIX_REACTIVATE": "Reactive esta asignación y lance un pay run que cubra",
+      "FIX_ASSIGN": "Asigne el payee al plan con un período que cubra",
+      "FIX_PLAN_ARCHIVED": "El plan está archivado; hay que restituirlo antes de poder pagar nada bajo él —",
+      "FIX_UNKNOWN": "Cubre",
+      "RUN_PERIOD": "{{from}} – {{to}}.",
+      "GO_TO_ASSIGNMENT": "Abrir asignaciones"
+    }
   },
   "ATTAINMENT": {
     "TARGET": "Objetivo",
@@ -952,7 +967,10 @@
     "RANGE_INVALID": "La fecha final no puede ser anterior a la inicial.",
     "TREND_NOTE_PACING": "Dinero que salió realmente en este rango, por fecha de pago — incluye comisión devengada en meses anteriores y liquidada ahora, así que no cuadrará con los cards de comisiones de arriba. Referencia: {{amount}} en {{period}}.",
     "TREND_NOTE_CLOSED": "Dinero que salió realmente en este rango, por fecha de pago — incluye comisión devengada en meses anteriores y liquidada ahora, así que no cuadrará con los cards de comisiones de arriba. Ventana anterior ({{period}}): {{amount}}.",
-    "COUNTER_IN_RANGE": "en este rango"
+    "COUNTER_IN_RANGE": "en este rango",
+    "COMMISSIONS_UNREACHABLE_NOTE": "De lo no pagado, ningún pay run puede alcanzar:",
+    "COMMISSIONS_UNREACHABLE_LINK": "Ver qué está bloqueado y por qué",
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Revisar asignaciones desactivadas"
   },
   "QUOTAS": {
     "TITLE": "Cuotas",
@@ -1374,7 +1392,10 @@
     "DELETE_BLOCKED_WARNING": "{{count}} asignación(es) están bloqueadas porque ya se han usado en cálculos o pagos. No se eliminó ninguna. Quítalas de la selección para poder eliminar el resto.",
     "DELETE_BLOCKED_REASON": "Usada en pagos",
     "DELETE_BLOCKED_COL_ASSIGNMENT": "Beneficiario → Plan",
-    "ERROR_LOAD": "Error al cargar la asignación."
+    "ERROR_LOAD": "Error al cargar la asignación.",
+    "STRAND_TITLE": "Esto dejará comisión sin pagar fuera de alcance",
+    "STRAND_BODY": "Esta comisión ya está generada y sigue sin pagarse. Una vez desactivada la asignación, ningún pay run podrá alcanzarla; reactivar la asignación es lo que la vuelve pagable.",
+    "STRAND_MORE": "y {{count}} más"
   },
   "IMPORTS": {
     "STEPS": {
@@ -1716,7 +1737,9 @@
     "STATUS_DISCARDED": "Descartado",
     "ACTION_DISCARD": "Descartar payout",
     "SELECT_ALL": "Seleccionar todos los payouts accionables",
-    "SELECT_ROW": "Seleccionar este payout"
+    "SELECT_ROW": "Seleccionar este payout",
+    "ACTION_EXPORT_EXCEL": "Exportar Excel",
+    "ACTION_EXPORT": "Exportar"
   },
   "PAY_RUNS": {
     "TITLE": "Ciclos de pago",
@@ -1857,12 +1880,18 @@
       "EXPORT": {
         "ACTION": "Exportar a Excel",
         "ERROR": "Error al exportar. Inténtelo de nuevo."
-      }
+      },
+      "EMPTY_ALL_ZERO": "Los {{count}} payouts de este run son de importe cero y están ocultos por «Hiding $0 payouts»."
     },
     "EXPORT": {
       "ACTION": "Exportar a Excel",
       "ERROR": "Error al exportar. Inténtelo de nuevo."
-    }
+    },
+    "CALCULATE_UNREACHABLE": "No se creó ningún pago, pero este período sí debe comisión. Está sin pagar en {{count}} combinación(es) de beneficiario/plan que no tienen asignación activa, por lo que ningún pay run puede alcanzarla. Reactive la asignación y vuelva a ejecutar el período.",
+    "SKIP_UnreachableCommission": "{{count}} combinación(es) de beneficiario/plan deben comisión sin pagar en este período y no tienen asignación activa. Ningún pay run alcanzará ese dinero hasta que se reactive la asignación.",
+    "SKIP_SupplementalForNewCredits": "{{count}} pago(s) fueron suplementarios: el período ya estaba pagado, pero había comisión asignada después que seguía sin pagarse y es la que llevan estos pagos.",
+    "SKIPPED_UNREACHABLE_HINT": "Esa comisión sigue debiéndose; sencillamente no tiene ninguna vía hacia un pago.",
+    "SKIPPED_UNREACHABLE_LINK": "Revisar asignaciones desactivadas"
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Apariencia",

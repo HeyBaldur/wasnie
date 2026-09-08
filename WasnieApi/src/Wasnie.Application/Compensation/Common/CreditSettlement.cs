@@ -1,4 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Interfaces;
+using Wasnie.Domain.Compensation.Assignments;
 using Wasnie.Domain.Compensation.Credits;
+using Wasnie.Domain.Compensation.Enums;
 
 namespace Wasnie.Application.Compensation.Common;
 
@@ -44,6 +48,21 @@ public static class CreditSettlement
     public const string All = "All";
 
     /// <summary>
+    /// Unpaid, and NO pay run can reach it: the payee has no ACTIVE assignment to the credit's plan
+    /// covering the credit's period, so <c>CalculatePayoutsForPeriodHandler</c> never even considers it.
+    ///
+    /// ★★ IT IS A SEPARATE ANSWER BECAUSE "UNPAID" WAS ANSWERING TWO QUESTIONS (§B3). It meant both
+    /// "we owe this" and "we owe this and can pay it", and the two are wildly different numbers: one
+    /// payee showed €391,736 owed of which €6,005 could actually leave through a pay run. A CFO reading
+    /// the first figure is reading a debt sixty-five times the one the system can act on.
+    ///
+    /// ★ DERIVED ON EVERY READ, NEVER STORED (§B5). Reassigning the payee to the plan makes the same
+    /// credit payable again with no migration and no flag to forget; a stored marker would go stale the
+    /// moment somebody fixed the assignment.
+    /// </summary>
+    public const string Unreachable = "Unreachable";
+
+    /// <summary>
     /// The state of one credit, as the code the screen renders. Derived on every read rather than
     /// stored — a stored flag drifts the moment a payout is reverted or a credit is closed.
     /// </summary>
@@ -65,4 +84,43 @@ public static class CreditSettlement
             "payable" => query.Where(c => c.ClosedAt == null),
             _ => query,
         };
+
+    /// <summary>
+    /// Of a set of unpaid credits, which ones no pay run can reach — because the payee has no ACTIVE
+    /// assignment to that plan covering the credit's window.
+    ///
+    /// ★ MIRRORS THE ENGINE'S OWN GATE. <c>CalculatePayoutsForPeriodHandler</c> starts from
+    /// <c>AssignmentStatus.Active</c> assignments whose effective period overlaps the run; a credit
+    /// whose plan has no such assignment is never considered, however long it waits. If this drifted
+    /// from that gate the screen would promise money the engine will not pay, or hide money it would.
+    ///
+    /// Returns the ids of the unreachable credits, so the caller can split its own set without a
+    /// second trip to the database.
+    /// </summary>
+    public static async Task<HashSet<Guid>> UnreachableCreditIdsAsync(
+        IApplicationDbContext db,
+        IReadOnlyCollection<Credit> unpaidCredits,
+        CancellationToken ct)
+    {
+        if (unpaidCredits.Count == 0) return [];
+
+        var payeeIds = unpaidCredits.Select(c => c.PayeeId).Distinct().ToList();
+        var planIds = unpaidCredits.Select(c => c.PlanId).Distinct().ToList();
+
+        var activeAssignments = await db.PlanAssignments
+            .Where(a => a.Status == AssignmentStatus.Active
+                     && payeeIds.Contains(a.PayeeId)
+                     && planIds.Contains(a.PlanId))
+            .Select(a => new { a.PayeeId, a.PlanId })
+            .ToListAsync(ct);
+
+        var reachable = activeAssignments
+            .Select(a => (a.PayeeId, a.PlanId))
+            .ToHashSet();
+
+        return unpaidCredits
+            .Where(c => !reachable.Contains((c.PayeeId, c.PlanId)))
+            .Select(c => c.Id)
+            .ToHashSet();
+    }
 }

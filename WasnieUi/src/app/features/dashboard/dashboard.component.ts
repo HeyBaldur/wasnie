@@ -374,6 +374,11 @@ export class DashboardComponent {
   }
 
   /** True when commissions of the range were written off or settled outside Wasnie. */
+  /** True when part of the unpaid amount is beyond the reach of any pay run. */
+  readonly hasUnreachableCommissions = computed(() =>
+    (this.store.commissionsBand()?.unreachableTotalByCurrency?.length ?? 0) > 0
+  );
+
   readonly hasClosedCommissions = computed(() =>
     (this.store.commissionsBand()?.closedTotalByCurrency?.length ?? 0) > 0
   );

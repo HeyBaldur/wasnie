@@ -51,17 +51,25 @@ public static class CommissionsBandSpec
             query = query.Where(c => c.PayeeId == id);
         }
 
-        var credits = await query
+        var rows = await query.ToListAsync(ct);
+
+        var credits = rows
             .Select(c => new
             {
+                c.Id,
                 c.CreditedAmount.Amount,
                 c.CreditedAmount.Currency,
                 IsPaid = c.ConsumedAt != null,
                 IsClosed = c.ClosedAt != null,
             })
-            .ToListAsync(ct);
+            .ToList();
 
         var payable = credits.Where(c => !c.IsClosed).ToList();
+
+        // How much of the unpaid part no pay run can reach. Derived from the assignments as they stand
+        // right now — reassigning the payee makes the same credits payable again, with nothing to undo.
+        var stillOwed = rows.Where(c => c.ConsumedAt == null && c.ClosedAt == null).ToList();
+        var unreachableIds = await CreditSettlement.UnreachableCreditIdsAsync(db, stillOwed, ct);
 
         static List<CurrencyTotalDto> ByCurrency<T>(
             IEnumerable<T> rows, Func<T, decimal> amount, Func<T, string> currency) =>
@@ -74,6 +82,8 @@ public static class CommissionsBandSpec
             TotalByCurrency: ByCurrency(payable, c => c.Amount, c => c.Currency),
             PaidByCurrency: ByCurrency(payable.Where(c => c.IsPaid), c => c.Amount, c => c.Currency),
             UnpaidByCurrency: ByCurrency(payable.Where(c => !c.IsPaid), c => c.Amount, c => c.Currency),
-            ClosedTotalByCurrency: ByCurrency(credits.Where(c => c.IsClosed), c => c.Amount, c => c.Currency));
+            ClosedTotalByCurrency: ByCurrency(credits.Where(c => c.IsClosed), c => c.Amount, c => c.Currency),
+            UnreachableTotalByCurrency: ByCurrency(
+                credits.Where(c => unreachableIds.Contains(c.Id)), c => c.Amount, c => c.Currency));
     }
 }
