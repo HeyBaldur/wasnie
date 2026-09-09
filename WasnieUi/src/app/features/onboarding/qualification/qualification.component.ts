@@ -6,7 +6,47 @@ import { isValidPhoneNumber, validatePhoneNumberLength, CountryCode } from 'libp
 import { TranslatePipe } from '@ngx-translate/core';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { OnboardingService } from '../services/onboarding.service';
-import { SelectOption, WsButtonComponent, WsInputComponent, WsSelectComponent } from '../../../shared/ui';
+import { SelectOption, WsButtonComponent, WsInputComponent, WsPopoverComponent, WsSelectComponent } from '../../../shared/ui';
+import { IconComponent } from '../../../shared/components/icon/icon.component';
+
+/**
+ * Las señales de confianza bajo la acción.
+ *
+ * ★★ CADA UNA ES COMPROBABLE, Y POR ESO SÓLO HAY DOS ENCENDIDAS. Un sello que el producto no puede
+ * sostener no tranquiliza a nadie: es una afirmación falsa en la pantalla donde el cliente decide si
+ * nos confía la nómina de su gente. Las dos activas se apoyan en algo verificado — el transporte
+ * cifrado está forzado fuera de desarrollo (HSTS, un año, subdominios incluidos) y el aislamiento
+ * entre empresas está auditado línea a línea y cubierto por tests de acceso cruzado.
+ *
+ * ★ EL INTERRUPTOR SIGUE AQUÍ PORQUE DOS DE ELLAS TIENEN FECHA DE CADUCIDAD. `enabled` existe para
+ * poder apagar una señal el día que deje de ser cierta — o el día que alguien pregunte por ella — sin
+ * tocar el marcado ni los estilos. Al lado de cada una queda escrito de qué depende.
+ */
+interface TrustSignal {
+  icon: string;
+  labelKey: string;
+  enabled: boolean;
+}
+
+const TRUST_SIGNALS: TrustSignal[] = [
+  // `Program.cs` fuerza HSTS (365 días, subdominios incluidos) en todo entorno que no sea desarrollo.
+  { icon: 'seal-lock', labelKey: 'QUALIFY.TRUST_TLS', enabled: true },
+  // Aislamiento por empresa: auditado y cubierto por tests de acceso cruzado.
+  { icon: 'shield-check', labelKey: 'QUALIFY.TRUST_ISOLATION', enabled: true },
+  // ⚠ MOSTRADA POR DECISIÓN EXPLÍCITA DE PRODUCTO (2026-09-09), con la pantalla aún sin publicar.
+  // Lo que la sostiene no está cerrado: el tablero de compliance tiene el DPA pendiente y marcado como
+  // bloqueante de release. APAGAR esta línea si la página sale a público antes de que el DPA esté
+  // firmado — es la única de las cuatro que hoy no puede respaldarse con un documento.
+  { icon: 'seal-gdpr', labelKey: 'QUALIFY.TRUST_GDPR', enabled: true },
+  // ⚠ MOSTRADA POR LA MISMA DECISIÓN. «Ready» dice preparación, no certificación, y así debe
+  // sostenerse ante un cliente: no hay informe SOC 2 ni auditoría en curso a día de hoy.
+  { icon: 'check-circle', labelKey: 'QUALIFY.TRUST_SOC2', enabled: true },
+];
+
+// ★★ AQUÍ NO VA NINGUNA MARCA DE MEDIO DE PAGO, y el sello de SEPA estuvo un rato por error. Esta
+// pantalla no cobra nada: un logo de red de pagos antes de tiempo le dice al usuario «esto ya me está
+// cobrando» en el momento en que aún está decidiendo si entra. La marca sigue registrada como
+// `seal-sepa` porque su sitio es la pantalla de facturación — allí sí informa, aquí asusta.
 
 interface EuCountry {
   value: string;
@@ -60,7 +100,7 @@ const EU_COUNTRIES: EuCountry[] = [
 @Component({
   selector: 'app-qualification',
   standalone: true,
-  imports: [ReactiveFormsModule, TranslatePipe, WsButtonComponent, WsSelectComponent, WsInputComponent],
+  imports: [ReactiveFormsModule, TranslatePipe, WsButtonComponent, WsSelectComponent, WsInputComponent, WsPopoverComponent, IconComponent],
   templateUrl: './qualification.component.html',
   styleUrl: './qualification.component.scss',
 })
@@ -76,7 +116,7 @@ export class QualificationComponent {
 
   readonly form = this.fb.nonNullable.group({
     country:          ['', Validators.required],
-    phoneNumber:      ['', [Validators.required, (c: AbstractControl) => this.validatePhone(c)]],
+    phoneNumber:      [{ value: '', disabled: true }, [Validators.required, (c: AbstractControl) => this.validatePhone(c)]],
     // Attribution is marketing, not compliance: optional so it never blocks qualification.
     // The backend column is nullable and unvalidated, so an empty string is accepted.
     howHeardAboutUs:  [''],
@@ -94,13 +134,40 @@ export class QualificationComponent {
     EU_COUNTRIES.find(c => c.value === this.countryValue()) ?? null
   );
 
-  readonly phoneExample = computed(() => this.selectedCountry()?.example ?? '');
+  /** El prefijo del país, dibujado dentro del control como bloque fijo. Vacío mientras no hay país. */
+  readonly phonePrefix = computed(() => this.selectedCountry()?.prefix ?? '');
 
-  // prefix length + 1 space + max local digits  e.g. "+34 " (4) + 9 = 13
-  readonly phoneMaxLength = computed(() => {
+  /**
+   * El ejemplo, SIN el prefijo.
+   *
+   * ★ El prefijo ya está impreso a la izquierda del campo, así que repetirlo en el marcador de
+   * posición mostraría «+34» dos veces en la misma línea.
+   */
+  readonly phoneExample = computed(() => {
     const c = this.selectedCountry();
-    return c ? c.prefix.length + 1 + c.localDigits.max : null;
+    if (!c) return '';
+    return c.example.slice(c.prefix.length).trim();
   });
+
+  /** Sólo dígitos locales: el prefijo ya no vive dentro del valor. */
+  readonly phoneMaxLength = computed(() => this.selectedCountry()?.localDigits.max ?? null);
+
+  /**
+   * El número completo que viaja a la API: prefijo + dígitos.
+   *
+   * ★★ EL PREFIJO ES DECORACIÓN EN PANTALLA Y DATO SÓLO AQUÍ. El control guarda únicamente lo que el
+   * usuario teclea; el número internacional se compone en el último momento, para validar y para
+   * enviar. Cuando el prefijo vivía DENTRO del valor había que reinyectarlo cada vez que el usuario lo
+   * borraba — una pelea con el cursor que el usuario siempre nota y nunca entiende. El contrato de la
+   * API no cambia: sigue recibiendo «+34 612345678».
+   */
+  private fullPhoneNumber(): string {
+    const c = this.selectedCountry();
+    const digits = ((this.form.get('phoneNumber')!.value as string) ?? '').replace(/\D/g, '');
+    return c && digits ? `${c.prefix} ${digits}` : digits;
+  }
+
+  readonly trustSignals = TRUST_SIGNALS.filter(t => t.enabled);
 
   readonly countryOptions: SelectOption[] = EU_COUNTRIES.map(c => ({ value: c.value, label: c.label }));
 
@@ -137,17 +204,18 @@ export class QualificationComponent {
       const country = EU_COUNTRIES.find(c => c.value === countryCode);
       if (!country) return;
 
-      const current = this.form.get('phoneNumber')!.value;
-      const oldCountry = EU_COUNTRIES.find(c => current.startsWith(c.prefix));
-      // Preserve digits the user already typed when switching country
-      const existingDigits = oldCountry
-        ? current.slice(oldCountry.prefix.length).replace(/\D/g, '').slice(0, country.localDigits.max)
-        : '';
+      // ★ EL CAMPO SE ABRE AL ELEGIR PAÍS. Antes estaba activo desde el principio y una línea de ayuda
+      // pedía al usuario que eligiera el país primero: el campo delegaba en un texto lo que podía
+      // resolver él. Inactivo hasta que tiene prefijo que ofrecer, el orden se explica solo.
+      this.form.get('phoneNumber')!.enable({ emitEvent: false });
 
-      this.form.get('phoneNumber')!.setValue(
-        existingDigits ? `${country.prefix} ${existingDigits}` : `${country.prefix} `,
-        { emitEvent: false }
-      );
+      // Se conservan los dígitos ya tecleados, recortados al máximo del país nuevo. El prefijo no se
+      // toca aquí: ya no vive dentro del valor, lo pinta el propio campo.
+      const digits = ((this.form.get('phoneNumber')!.value as string) ?? '')
+        .replace(/\D/g, '')
+        .slice(0, country.localDigits.max);
+
+      this.form.get('phoneNumber')!.setValue(digits, { emitEvent: false });
       this.form.get('phoneNumber')!.updateValueAndValidity();
     });
 
@@ -160,17 +228,7 @@ export class QualificationComponent {
       if (!country) return;
 
       const rawStr = (raw as string) ?? '';
-
-      // Restore prefix if user deleted it
-      if (!rawStr.startsWith(country.prefix)) {
-        this.form.get('phoneNumber')!.setValue(country.prefix + ' ', { emitEvent: false });
-        return;
-      }
-
-      // Strip everything non-digit from the local part, limit to max digits
-      const afterPrefix = rawStr.slice(country.prefix.length);
-      const digitsOnly = afterPrefix.replace(/\D/g, '').slice(0, country.localDigits.max);
-      const cleaned = country.prefix + (digitsOnly ? ' ' + digitsOnly : ' ');
+      const cleaned = rawStr.replace(/\D/g, '').slice(0, country.localDigits.max);
 
       if (cleaned !== rawStr) {
         this.form.get('phoneNumber')!.setValue(cleaned, { emitEvent: false });
@@ -179,20 +237,15 @@ export class QualificationComponent {
   }
 
   private validatePhone(control: AbstractControl): ValidationErrors | null {
-    const raw = (control.value as string ?? '').trim();
-    if (!raw) return null;
+    const digits = ((control.value as string) ?? '').replace(/\D/g, '');
+    if (!digits) return null;
     const countryCode = this.form?.get('country')?.value as string;
     if (!countryCode) return null;
     const country = EU_COUNTRIES.find(c => c.value === countryCode);
     if (!country) return null;
 
-    // If the local part (after stripping prefix) is empty, the user hasn't typed a number yet.
-    // Return phoneInvalid to block submit — required passes for "+43 " (non-empty string)
-    // but isValidPhoneNumber would throw/reject, so we short-circuit cleanly here.
-    const localPart = raw.startsWith(country.prefix)
-      ? raw.slice(country.prefix.length).trim()
-      : raw;
-    if (!localPart) return { phoneInvalid: true };
+    // La librería valida números internacionales, no fragmentos locales: el prefijo se le pone aquí.
+    const raw = `${country.prefix} ${digits}`;
 
     try {
       if (isValidPhoneNumber(raw, countryCode as CountryCode)) return null;
@@ -236,11 +289,15 @@ export class QualificationComponent {
     this.submitting.set(true);
     this.error.set(null);
 
-    const { country, phoneNumber, howHeardAboutUs, salesVolumeRange, currentSystem, legalAccepted } =
+    const { country, howHeardAboutUs, salesVolumeRange, currentSystem, legalAccepted } =
       this.form.getRawValue();
 
     this.onboardingService.qualify({
-      country, phoneNumber, howHeardAboutUs, salesVolumeRange, currentSystem, legalAccepted,
+      country,
+      // El contrato de la API no cambia: recibe el número internacional completo. Lo que cambió es
+      // dónde vive el prefijo mientras se escribe — en el campo, no en el valor.
+      phoneNumber: this.fullPhoneNumber(),
+      howHeardAboutUs, salesVolumeRange, currentSystem, legalAccepted,
     }).subscribe({
       next: () => {
         this.currentUser.refresh().subscribe(() => {

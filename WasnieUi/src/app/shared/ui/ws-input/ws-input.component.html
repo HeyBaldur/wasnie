@@ -12,6 +12,11 @@
       </span>
     }
 
+    <!-- Bloque fijo: se ve como parte del control, pero no se escribe ni se selecciona con el tabulador. -->
+    @if (prefixText()) {
+      <span class="ws-input__prefix-text" aria-hidden="true">{{ prefixText() }}</span>
+    }
+
     <input
       class="ws-input__native"
       [id]="inputId()"

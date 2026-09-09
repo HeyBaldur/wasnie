@@ -6,33 +6,40 @@
   align-items: flex-start;
   justify-content: center;
   background: var(--color-bg-page);
-  padding: var(--space-10) var(--space-6);
+  padding: var(--space-12) var(--space-6);
 }
 
+/* ★ LA TARJETA NO TENÍA SOMBRA. Pedía `--shadow-card`, que no existe entre los tokens: una propiedad
+   personalizada indefinida invalida la declaración entera, así que el navegador no pintaba nada y la
+   tarjeta quedaba plana contra la página — el mismo defecto que hace que una pantalla parezca sin
+   terminar sin que se vea nada raro en el código. */
 .qualify-page__card {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-lg);
   border-radius: var(--radius-lg);
-  padding: var(--space-10) var(--space-10);
+  padding: var(--space-10);
   width: 100%;
-  max-width: 680px;
+  max-width: 640px;
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
 }
 
+/* La cabecera se cierra con una línea: separa lo que se lee de lo que se rellena. */
 .qualify-page__header {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .qualify-page__brand {
-  font-size: var(--font-size-14);
+  font-size: var(--font-size-11);
   font-weight: 700;
   color: var(--color-brand);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -40,28 +47,55 @@
   margin: 0;
   font-size: var(--font-size-24);
   font-weight: 700;
+  line-height: 1.2;
   color: var(--color-text-primary);
 }
 
 .qualify-page__subtitle {
   margin: 0;
+  max-width: 54ch;
   font-size: var(--font-size-14);
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
+/* El botón hereda este hueco por encima; el consentimiento se acerca con su propio margen. */
 .qualify-page__form {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
 }
 
+.qualify-page__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+
+  /* Entre grupos hace falta más aire que entre las filas de un mismo grupo, o los rótulos dejan de
+     separar nada. Un solo escalón por encima del ritmo base. */
+  + .qualify-page__section {
+    margin-top: var(--space-2);
+  }
+}
+
+/* El rótulo del grupo: mismo lenguaje que las secciones del rail lateral. */
+.qualify-page__section-label {
+  margin: 0;
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+/* La rejilla canónica del design system: columna 20, fila 16. No se inventan medidas por pantalla. */
 .ws-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
 
-  @media (max-width: 540px) {
+  @media (max-width: 640px) {
     grid-template-columns: 1fr;
   }
 }
@@ -70,45 +104,113 @@
   grid-column: 1 / -1;
 }
 
-.qualify-page__legal {
+/* ─── Teléfono ─── */
+
+/* Las dos columnas de la primera fila comparten estructura: control + nota. Con eso los controles se
+   apoyan en la misma línea y las notas también. */
+.qualify-page__field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  background: var(--color-bg-surface-sunken);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
+  gap: var(--space-1);
+}
+
+/* Una línea, y el enlace no se parte: el disparador del popover es un elemento en línea dentro del
+   párrafo, no un hermano compitiendo por el ancho — que es lo que lo tiraba contra el margen derecho
+   partido en dos renglones. */
+.qualify-page__field-note {
+  margin: 0;
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+}
+
+.qualify-page__note-pop {
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.qualify-page__note-link {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--color-text-link);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: underline;
+}
+
+/* ★ EL PADDING LO PONE EL CONTENIDO, NO EL POPOVER. `ws-pop__panel` no lleva relleno a propósito:
+   está hecho para menús, donde cada fila debe llegar hasta el borde del panel (por eso además recorta
+   con `overflow: hidden`). Un panel de texto tiene que poner el suyo, y sin él el párrafo quedaba
+   pegado a los cuatro lados. */
+.qualify-page__note-panel {
   padding: var(--space-4);
+  /* ★ ANCHO FIJO, NO MÁXIMO. El panel se posiciona en absoluto dentro del disparador, que es un
+     enlace de dos palabras: con `max-width` el bloque contenedor le marcaba unos 145px y el texto
+     bajaba en una columna estrechísima. Un panel absoluto necesita que alguien le diga cuánto mide. */
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.qualify-page__note-panel-title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.qualify-page__note-panel-body {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* ─── Consentimiento y la única acción ─── */
+
+/* El párrafo y su casilla son UN grupo: separación mínima entre ellos, aire grande por fuera. Esa
+   diferencia es lo único que hace falta para que se lean juntos, sin caja ni línea. */
+.qualify-page__consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
 .qualify-page__legal-notice {
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
+  margin: 0;
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
   line-height: 1.6;
-
-  p { margin: 0; }
 }
 
 .qualify-page__checkbox-label {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  font-size: var(--font-size-14);
+  font-size: var(--font-size-13);
   color: var(--color-text-primary);
   cursor: pointer;
-  line-height: 1.4;
-
-  &--error {
-    color: var(--color-danger);
-  }
+  line-height: 1.5;
 }
 
 .qualify-page__checkbox {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   margin-top: 2px;
   accent-color: var(--color-brand);
   cursor: pointer;
+
+  /* El error se marca en el control, no en el párrafo que hay al lado. */
+  &--error {
+    outline: 2px solid var(--color-danger);
+    outline-offset: 1px;
+    border-radius: var(--radius-xs);
+  }
 }
 
 .qualify-page__field-error {
@@ -127,68 +229,26 @@
   padding: var(--space-3) var(--space-4);
 }
 
-.qualify-page__actions {
+/* Texto pelado bajo la acción: sin fondo, sin contorno, sin forma de control. */
+.qualify-page__trust {
   display: flex;
-  justify-content: flex-end;
-}
-
-/* ─── GDPR notice ─── */
-
-.qualify-page__gdpr {
-  display: flex;
-  gap: var(--space-4);
-  background: color-mix(in srgb, var(--color-brand) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-brand) 25%, transparent);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-5);
-}
-
-.qualify-page__gdpr-icon {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  color: var(--color-brand);
-  margin-top: 2px;
-
-  svg { display: block; }
-}
-
-.qualify-page__gdpr-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.qualify-page__gdpr-title {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  list-style: none;
   margin: 0;
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-brand);
+  padding: 0;
 }
 
-.qualify-page__gdpr-body {
-  margin: 0;
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-  font-weight: 600;
-  line-height: 1.6;
-}
+.qualify-page__trust-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
 
-/* ─── Phone field ─── */
-
-.qualify-page__phone-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.qualify-page__phone-hint {
-  margin: 0;
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-
-  &--muted {
-    font-style: italic;
+  app-icon {
+    color: var(--color-text-tertiary);
   }
 }

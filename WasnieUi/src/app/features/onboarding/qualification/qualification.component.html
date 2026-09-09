@@ -1,107 +1,158 @@
 <div class="qualify-page">
   <div class="qualify-page__card">
+
     <header class="qualify-page__header">
       <span class="qualify-page__brand">{{ 'APP.NAME' | translate }}</span>
       <h1 class="qualify-page__title">{{ 'QUALIFY.TITLE' | translate }}</h1>
       <p class="qualify-page__subtitle">{{ 'QUALIFY.SUBTITLE' | translate }}</p>
     </header>
 
-    <!-- GDPR security notice -->
-    <div class="qualify-page__gdpr">
-      <div class="qualify-page__gdpr-icon" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3"/>
-          <path d="M9 12l2 2l4 -4"/>
-        </svg>
-      </div>
-      <div class="qualify-page__gdpr-content">
-        <p class="qualify-page__gdpr-title">{{ 'QUALIFY.GDPR_TITLE' | translate }}</p>
-        <p class="qualify-page__gdpr-body">{{ 'QUALIFY.GDPR_BODY' | translate }}</p>
-      </div>
-    </div>
-
     <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="qualify-page__form">
-      <div class="ws-form-grid">
 
-        <ws-select
-          formControlName="country"
-          [label]="'QUALIFY.COUNTRY' | translate"
-          [placeholder]="'QUALIFY.SELECT_COUNTRY' | translate"
-          [error]="fieldError('country')"
-          [options]="countryOptions"
-          [searchable]="true" />
+      <!--
+        ★★ DOS GRUPOS, Y LA DIVISIÓN DICE ALGO. Arriba, quién es la empresa y cómo se la localiza:
+        son datos de la cuenta. Abajo, cómo trabaja hoy: son respuestas de contexto, no identidad.
+        Antes era una pila de cinco campos sin jerarquía, que es lo que hace que un formulario parezca
+        un borrador interno por muy bien alineado que esté.
+      -->
+      <section class="qualify-page__section">
+        <p class="qualify-page__section-label">{{ 'QUALIFY.SECTION_COMPANY' | translate }}</p>
 
-        <div class="qualify-page__phone-group">
-          <ws-input
-            formControlName="phoneNumber"
-            [label]="'QUALIFY.PHONE' | translate"
-            [placeholder]="phoneExample() || ('QUALIFY.PHONE_PH' | translate)"
-            type="text"
-            [maxlength]="phoneMaxLength()"
-            [error]="fieldError('phoneNumber')" />
-          @if (selectedCountry()) {
-            <p class="qualify-page__phone-hint">
-              {{ 'QUALIFY.PHONE_HINT' | translate : { example: phoneExample() } }}
+        <div class="ws-form-grid">
+          <!--
+            ★ LA RESTRICCIÓN BAJA A SU SITIO. «País de registro (solo estados miembros de la UE)» partía
+            la etiqueta en dos renglones y empujaba el desplegable medio campo por debajo del teléfono
+            de al lado: dos controles de la misma fila desalineados. La etiqueta nombra el campo y la
+            condición va de nota, que además empareja esta columna con la del teléfono.
+          -->
+          <div class="qualify-page__field">
+            <ws-select
+              formControlName="country"
+              [label]="'QUALIFY.COUNTRY' | translate"
+              [placeholder]="'QUALIFY.SELECT_COUNTRY' | translate"
+              [error]="fieldError('country')"
+              [options]="countryOptions"
+              [searchable]="true" />
+            <p class="qualify-page__field-note">{{ 'QUALIFY.COUNTRY_NOTE' | translate }}</p>
+          </div>
+
+          <!--
+            ★ EL CAMPO SE EXPLICA SOLO. Sin país elegido no hay prefijo que poner, así que el campo
+            está inactivo y su marcador lo dice; en cuanto hay país, el prefijo aparece dentro y sólo
+            quedan los dígitos por escribir. La pista «elige primero el país» desaparece: era el campo
+            pidiéndole al usuario que compensara lo que él mismo debía resolver.
+          -->
+          <div class="qualify-page__field">
+            <ws-input
+              formControlName="phoneNumber"
+              [label]="'QUALIFY.PHONE' | translate"
+              [prefixText]="phonePrefix()"
+              [placeholder]="phoneExample() || ('QUALIFY.PHONE_PH_EMPTY' | translate)"
+              type="text"
+              [maxlength]="phoneMaxLength()"
+              [error]="fieldError('phoneNumber')" />
+
+            <!--
+              La nota de privacidad vive junto al dato que explica, no encima del formulario, y el
+              texto completo sale flotando en un popover: no empuja nada al abrirse.
+            -->
+            <p class="qualify-page__field-note">
+              {{ 'QUALIFY.PHONE_PRIVACY' | translate }}
+              <!-- `bottom-end` para que el panel crezca hacia dentro de la tarjeta: anclado a la izquierda se
+                     saldría por el borde derecho, y el popover sólo voltea en vertical. -->
+                <ws-popover placement="bottom-end" class="qualify-page__note-pop">
+                <button slot="trigger" type="button" class="qualify-page__note-link">
+                  {{ 'QUALIFY.GDPR_SHOW' | translate }}
+                </button>
+                <div class="qualify-page__note-panel">
+                  <p class="qualify-page__note-panel-title">{{ 'QUALIFY.GDPR_TITLE' | translate }}</p>
+                  <p class="qualify-page__note-panel-body">{{ 'QUALIFY.GDPR_BODY' | translate }}</p>
+                </div>
+              </ws-popover>
             </p>
-          } @else {
-            <p class="qualify-page__phone-hint qualify-page__phone-hint--muted">
-              {{ 'QUALIFY.PHONE_SELECT_COUNTRY_FIRST' | translate }}
-            </p>
-          }
+          </div>
         </div>
+      </section>
 
-        <ws-select
-          formControlName="howHeardAboutUs"
-          [label]="'QUALIFY.HOW_HEARD' | translate"
-          [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
-          [error]="fieldError('howHeardAboutUs')"
-          [options]="howHeardOptions"
-          class="qualify-page__full-row" />
+      <section class="qualify-page__section">
+        <p class="qualify-page__section-label">{{ 'QUALIFY.SECTION_CONTEXT' | translate }}</p>
 
-        <ws-select
-          formControlName="salesVolumeRange"
-          [label]="'QUALIFY.SALES_VOLUME' | translate"
-          [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
-          [error]="fieldError('salesVolumeRange')"
-          [options]="salesVolumeOptions" />
+        <div class="ws-form-grid">
+          <ws-select
+            formControlName="howHeardAboutUs"
+            [label]="'QUALIFY.HOW_HEARD' | translate"
+            [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
+            [error]="fieldError('howHeardAboutUs')"
+            [options]="howHeardOptions"
+            class="qualify-page__full-row" />
 
-        <ws-select
-          formControlName="currentSystem"
-          [label]="'QUALIFY.CURRENT_SYSTEM' | translate"
-          [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
-          [error]="fieldError('currentSystem')"
-          [options]="currentSystemOptions" />
+          <ws-select
+            formControlName="salesVolumeRange"
+            [label]="'QUALIFY.SALES_VOLUME' | translate"
+            [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
+            [error]="fieldError('salesVolumeRange')"
+            [options]="salesVolumeOptions" />
 
-      </div>
-
-      <!-- Legal notice + acceptance -->
-      <div class="qualify-page__legal">
-        <div class="qualify-page__legal-notice">
-          <p>{{ 'QUALIFY.LEGAL_NOTICE' | translate }}</p>
+          <ws-select
+            formControlName="currentSystem"
+            [label]="'QUALIFY.CURRENT_SYSTEM' | translate"
+            [placeholder]="'QUALIFY.SELECT_OPTION' | translate"
+            [error]="fieldError('currentSystem')"
+            [options]="currentSystemOptions" />
         </div>
-        <label class="qualify-page__checkbox-label" [class.qualify-page__checkbox-label--error]="fieldError('legalAccepted')">
+      </section>
+
+      <!--
+        ★★ LA CASILLA PERTENECE AL PÁRRAFO QUE ACEPTA. Con la separación uniforme quedaba a la misma
+        distancia del texto legal que del botón, y por proximidad se leía como parte de la acción: se
+        marcaba una casilla que apuntaba a un texto que parecía de otro bloque. Aquí van pegados — un
+        solo grupo — y el aire grande queda para separar ese grupo del botón.
+
+        ★ SIN CAJA NI LÍNEA QUE LOS ENVUELVA: el pie no es una zona aparte, es el final del flujo. Lo
+        que separa es el espacio.
+      -->
+      <div class="qualify-page__consent">
+        <p class="qualify-page__legal-notice">{{ 'QUALIFY.LEGAL_NOTICE' | translate }}</p>
+
+        <label class="qualify-page__checkbox-label">
           <input
             type="checkbox"
             formControlName="legalAccepted"
             class="qualify-page__checkbox"
+            [class.qualify-page__checkbox--error]="fieldError('legalAccepted') && form.controls.legalAccepted.touched"
             [attr.aria-describedby]="fieldError('legalAccepted') ? 'legal-error' : null" />
           <span>{{ 'QUALIFY.LEGAL_ACCEPT' | translate }}</span>
         </label>
+
         @if (fieldError('legalAccepted') && form.controls.legalAccepted.touched) {
           <p id="legal-error" class="qualify-page__field-error">{{ 'QUALIFY.LEGAL_REQUIRED' | translate }}</p>
         }
+
       </div>
 
       @if (error()) {
         <p class="qualify-page__error">{{ error() }}</p>
       }
 
-      <div class="qualify-page__actions">
-        <ws-button type="submit" variant="primary" [loading]="submitting()">
-          {{ 'QUALIFY.SUBMIT' | translate }}
-        </ws-button>
-      </div>
+      <ws-button type="submit" variant="primary" [fullWidth]="true" [loading]="submitting()">
+        {{ 'QUALIFY.SUBMIT' | translate }}
+      </ws-button>
+
+      <!--
+        ★ SEÑALES, NO ETIQUETAS. Con fondo y contorno parecían chips pulsables — filtros activos — y
+        competían con el botón justo encima. Sin fondo y en el gris más bajo están para quien las busca
+        y no le gritan a quien no.
+      -->
+      @if (trustSignals.length > 0) {
+        <ul class="qualify-page__trust">
+          @for (signal of trustSignals; track signal.labelKey) {
+            <li class="qualify-page__trust-item">
+              <app-icon [name]="signal.icon" [size]="14" />
+              <span>{{ signal.labelKey | translate }}</span>
+            </li>
+          }
+        </ul>
+      }
     </form>
   </div>
 </div>

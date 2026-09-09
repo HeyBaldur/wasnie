@@ -159,6 +159,29 @@ const ICONS: Record<string, string> = {
 const IMAGE_ICONS: Record<string, string> = {
   'file-excel': '/icons/excel.png',
   'file-pdf': '/icons/pdf.png',
+
+  /**
+   * Sellos de confianza. Nombres propios (`seal-*`) para no pisar los iconos de línea que ya existen
+   * con esos nombres — `lock` es un trazo que hereda el color del texto y se usa en otras pantallas;
+   * `seal-lock` es la marca en color, y son cosas distintas aunque dibujen lo mismo.
+   */
+  'seal-lock': '/icons/lock.png',
+  'seal-gdpr': '/icons/gdpr.png',
+  'seal-sepa': '/icons/sepa_logo_en.jpg',
+};
+
+/**
+ * Marcas que NO son cuadradas, con su proporción ancho/alto.
+ *
+ * ★★ SIN ESTO UN LOGO APAISADO SE VUELVE ILEGIBLE. El componente dibuja la imagen en una caja
+ * cuadrada de `size`×`size` con `object-fit: contain`, que es lo correcto para un icono: así ninguno
+ * empuja la línea base de sus vecinos. Pero el logo de SEPA mide casi tres veces más de ancho que de
+ * alto: encajado en un cuadrado de 14px quedaba en cinco píxeles de alto, una mancha. Aquí se declara
+ * la proporción y la caja crece a lo ancho, nunca a lo alto — la altura sigue siendo `size` y por eso
+ * la fila no se descuadra.
+ */
+const IMAGE_ICON_ASPECT: Record<string, number> = {
+  'seal-sepa': 2.84,
 };
 
 @Component({
@@ -167,7 +190,7 @@ const IMAGE_ICONS: Record<string, string> = {
   template: `@if (imageSrc(); as src) {
     <img
       [src]="src"
-      [attr.width]="size()"
+      [attr.width]="imageWidth()"
       [attr.height]="size()"
       alt=""
       aria-hidden="true"
@@ -223,4 +246,9 @@ export class IconComponent {
 
   /** The artwork for this name, or null when it is an ordinary line icon. */
   readonly imageSrc = computed<string | null>(() => IMAGE_ICONS[this.name()] ?? null);
+
+  /** El ancho que le toca a esta marca: cuadrada salvo que declare proporción. */
+  readonly imageWidth = computed<number>(() =>
+    Math.round(this.size() * (IMAGE_ICON_ASPECT[this.name()] ?? 1))
+  );
 }

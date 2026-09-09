@@ -31,6 +31,20 @@ export class WsInputComponent implements ControlValueAccessor, AfterViewInit {
   readonly type = input<'text' | 'email' | 'password' | 'number' | 'search'>('text');
   readonly placeholder = input('');
   readonly prefixIcon = input('');
+
+  /**
+   * Un texto fijo pegado al borde izquierdo del control, dentro de él y separado por una línea.
+   *
+   * ★★ ES EL SIMÉTRICO DE `suffixText`, QUE YA EXISTÍA. Se añade porque el teléfono del alta necesita
+   * mostrar el prefijo del país («+34») como algo que el usuario NO escribe ni puede borrar, dejando el
+   * campo sólo para los dígitos locales. Sin esto la alternativa era pegar un `span` al lado del
+   * control y maquillarlo para que pareciera el mismo control: una copia local que se separa del
+   * original al primer cambio de tema.
+   *
+   * ★ ES DECORACIÓN, NO VALOR. No entra en lo que el formulario envía; quien lo use compone el valor
+   * final. Un prefijo que se colara en el valor haría que el mismo dato viajara dos veces.
+   */
+  readonly prefixText = input('');
   readonly suffixText = input('');
   readonly clearable = input(false);
   readonly error = input('');
