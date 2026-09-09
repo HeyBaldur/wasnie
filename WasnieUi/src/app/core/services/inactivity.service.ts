@@ -1,9 +1,8 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AuthService } from './auth.service';
-import { ToastService } from '../../shared/services/toast.service';
 import { TabSyncService, TabSyncMessage } from './tab-sync.service';
+import { SessionExitService } from './session-exit.service';
 
 const IDLE_MS = 28 * 60 * 1000;
 const COUNTDOWN_S = 2 * 60;
@@ -14,8 +13,7 @@ const ACTIVITY_BROADCAST_INTERVAL_MS = 5_000;
 @Injectable({ providedIn: 'root' })
 export class InactivityService {
   private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly toast = inject(ToastService);
+  private readonly sessionExit = inject(SessionExitService);
   private readonly tabSync = inject(TabSyncService);
 
   readonly warningOpen = signal(false);
@@ -65,7 +63,7 @@ export class InactivityService {
     this.warningOpen.set(false);
     this.clearTimers();
     this.authService.forceLogout(false);
-    this.router.navigateByUrl('/auth/login');
+    this.sessionExit.toLogin();
   }
 
   private resetTimer(): void {
@@ -117,10 +115,9 @@ export class InactivityService {
     //   also the right answer to "did this user choose to end the session?" — and therefore to whether
     //   their unsent drafts survive.
     this.authService.clearSessionSilent(showExpiredToast);
-    if (showExpiredToast) {
-      this.toast.show('SESSION.EXPIRED_TOAST', 'error');
-    }
-    this.router.navigateByUrl('/auth/login');
+    // ★ EL AVISO VIAJA, NO SE MUESTRA AQUÍ. La salida recarga el documento, así que un toast pintado
+    // ahora se lo lleva por delante la recarga. Se guarda y lo muestra la pantalla de acceso.
+    this.sessionExit.toLogin(showExpiredToast ? 'expired' : null);
   }
 
   private scheduleWarning(): void {
@@ -144,8 +141,7 @@ export class InactivityService {
     this.warningOpen.set(false);
     this.clearTimers();
     this.authService.forceLogout(true);
-    this.toast.show('SESSION.EXPIRED_TOAST', 'error');
-    this.router.navigateByUrl('/auth/login');
+    this.sessionExit.toLogin('expired');
   }
 
   private clearTimers(): void {

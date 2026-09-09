@@ -238,27 +238,146 @@
   text-align: left;
 }
 
+// ★ EL CHEVRON YA NO GIRA. Apunta siempre a la derecha porque eso es lo que hace la fila ahora: el
+// submenú sale al costado, no debajo. Un chevron que rota hacia abajo prometía un acordeón.
 .sidebar__nav-chevron {
   margin-left: auto;
   flex-shrink: 0;
   color: var(--color-sidebar-muted);
-  transition: transform 200ms ease;
+}
 
-  &--open {
-    transform: rotate(90deg);
+.sidebar__nav-group-toggle--open {
+  background-color: var(--color-sidebar-hover-bg);
+  color: var(--color-sidebar-active-text);
+}
+
+// ─── Submenú del grupo (flyout) ───────────────────────────────────────────────
+//
+// ★★ `position: fixed`, NO `absolute`. `.sidebar` tiene `overflow: hidden` y `.sidebar__scroll`
+// `overflow-y: auto`: un panel absoluto colgado del `li` quedaría recortado en el borde del rail y no
+// se vería nada. Un elemento fijo se posiciona contra el viewport y ningún `overflow` de sus
+// ancestros lo recorta — a cambio, `top`/`left` los calcula el componente desde el rect del trigger.
+//
+// ★ SUPERFICIE ELEVADA, NO EL FONDO DEL SIDEBAR. Es una capa por encima (DESIGN_SYSTEM §5.3:
+// modales y dropdowns viven en `--color-bg-surface-raised`), y por eso lleva borde y sombra: tiene
+// que leerse como algo que flota sobre el contenido, no como una continuación del rail.
+// ★★ LA ANIMACIÓN NO LLEVA `fill-mode`, Y ESA ES LA PARTE QUE IMPORTA. Con `both`/`forwards` el
+// valor final del keyframe sigue aplicándose para siempre y GANA sobre cualquier `transition`
+// posterior: la clase `--leaving` cambiaría opacidad y transform y no se vería moverse nada. Sin
+// fill-mode, terminada la entrada el elemento queda en los valores base y la salida sí transiciona.
+//
+// El desplazamiento es de 8px sobre X y nace del borde izquierdo (`transform-origin`): el panel
+// tiene que leerse como algo que SALE de su fila, no como algo que aparece en el aire.
+@keyframes ws-sidebar-flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
-// ─── Sub-navigation (inside an expanded group) ────────────────────────────────
-.sidebar__nav--sub {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 2px;
+.sidebar__flyout {
+  @apply fixed flex flex-col;
+  z-index: 50;
+  min-width: 216px;
+  padding: var(--space-1);
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  transform-origin: left center;
+  animation: ws-sidebar-flyout-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 120ms ease, transform 120ms ease;
+
+  // ★ EL ESTADO DE SALIDA. El componente lo mantiene montado estos 120ms a propósito (ver
+  // FLYOUT_LEAVE_MS); `pointer-events: none` evita que un click alcance un menú que ya se está yendo.
+  &--leaving {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.98);
+    pointer-events: none;
+  }
 }
 
-.sidebar__nav-link--sub {
-  padding-left: 36px;
+.sidebar__flyout-title {
+  @apply block truncate;
+  padding: var(--space-1) var(--space-2) var(--space-1);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.sidebar__flyout-list {
+  @apply flex flex-col;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 1px;
+}
+
+// ★ LA ENTRADA ESCALONADA VA EN EL SCSS, NO EN EL TEMPLATE. Son cuatro filas como mucho; un
+// `nth-child` las retrasa sin que el componente tenga que llevar índices ni estilos en línea (§5.5).
+.sidebar__flyout:not(.sidebar__flyout--leaving) .sidebar__flyout-link {
+  animation: ws-sidebar-flyout-in 200ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@for $i from 1 through 4 {
+  .sidebar__flyout-list li:nth-child(#{$i}) .sidebar__flyout-link {
+    animation-delay: #{$i * 20}ms;
+  }
+}
+
+.sidebar__flyout-link {
+  @apply flex items-center gap-3 no-underline relative;
+  padding: 8px 12px 8px 14px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
   font-size: 13px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+
+  &:hover {
+    background-color: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+
+  // ★ MISMO LENGUAJE QUE EL RAIL: la fila activa se marca con la barra de la marca a la izquierda,
+  // igual que `.sidebar__nav-item:has(--active)`. Dos formas distintas de decir "estás aquí" en dos
+  // sitios que se ven a la vez es exactamente lo que hace dudar al usuario.
+  &--active {
+    background-color: var(--color-bg-surface-sunken);
+    color: var(--color-text-link);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 9999px;
+      background: var(--gradient-brand);
+    }
+  }
+}
+
+// ★ SIN MOVIMIENTO PARA QUIEN LO PIDIÓ. El panel sigue apareciendo y desapareciendo; lo que se va es
+// el desplazamiento, que es la parte que molesta.
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__flyout,
+  .sidebar__flyout-link {
+    animation: none;
+    transition: none;
+  }
+
+  .sidebar__flyout--leaving {
+    transform: none;
+  }
 }
 
 .sidebar__footer {

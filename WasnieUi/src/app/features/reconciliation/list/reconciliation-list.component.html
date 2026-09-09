@@ -162,6 +162,26 @@
             </tr>
           </thead>
           <tbody>
+            <!--
+              ★★ EL SKELETON NO ES DECORACIÓN AQUÍ: SIN ÉL LA PANTALLA MENTÍA. Mientras cargaba, la
+              tabla estaba vacía y el `@empty` de abajo pintaba el estado "todo en orden" — un tilde
+              verde diciendo que no hay nada pendiente, justo antes de que aparezcan las filas que sí
+              hay. En una cola de dinero sin conciliar eso no es un parpadeo feo, es una afirmación
+              falsa (§C3). Las filas fantasma ocupan el sitio y no afirman nada.
+            -->
+            @if (store.loading()) {
+              @for (row of skeletonRows; track row) {
+                <tr class="skeleton-row">
+                  <td><span class="skeleton skeleton--text-wide"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--text"></span></td>
+                  <td><span class="skeleton skeleton--badge"></span></td>
+                  <td><span class="skeleton skeleton--short"></span></td>
+                  <td class="col-amount"><span class="skeleton skeleton--short"></span></td>
+                  <td class="recon__col-actions"><span class="skeleton skeleton--text"></span></td>
+                </tr>
+              }
+            } @else {
             @for (row of store.rows(); track trackRow($index, row)) {
               <tr>
                 <!-- ★ THERE IS NO "TYPE" COLUMN, AND NOTHING IS LOST BY THAT. Every reason belongs
@@ -327,6 +347,7 @@
                   descKey="RECONCILIATION.EMPTY_DESC"
                 />
               </ws-table-empty>
+            }
             }
           </tbody>
         </table>

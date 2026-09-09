@@ -8,6 +8,8 @@ import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
 import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
+import { ToastService } from '../../../shared/services/toast.service';
+import { SESSION_EXPIRED_NOTICE_KEY } from '../../../core/services/session-exit.service';
 
 @Component({
   selector: 'app-login',
@@ -41,6 +43,24 @@ export class LoginComponent {
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
   });
+
+  private readonly toast = inject(ToastService);
+
+  constructor() {
+    // ★ EL AVISO DE SESIÓN CADUCADA SE MUESTRA AQUÍ, Y SÓLO UNA VEZ. Terminar una sesión recarga el
+    // documento (es lo único que garantiza que no sobreviva en memoria nada del tenant anterior), y
+    // esa recarga se lleva por delante cualquier toast pintado antes de salir. Quien terminó la
+    // sesión deja la marca; esta pantalla la lee, la muestra y la borra — si no la borrara,
+    // reaparecería en el siguiente inicio de sesión hablando de una caducidad que no ocurrió.
+    try {
+      if (sessionStorage.getItem(SESSION_EXPIRED_NOTICE_KEY)) {
+        sessionStorage.removeItem(SESSION_EXPIRED_NOTICE_KEY);
+        this.toast.show('SESSION.EXPIRED_TOAST', 'error');
+      }
+    } catch {
+      // Sin almacenamiento no hay aviso; la pantalla de acceso funciona igual.
+    }
+  }
 
   fieldError(name: string): string {
     const ctrl = this.form.get(name);

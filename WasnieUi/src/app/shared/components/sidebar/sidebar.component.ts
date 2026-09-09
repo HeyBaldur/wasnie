@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map, startWith } from 'rxjs/operators';
@@ -7,7 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { SidebarStateService } from '../../../core/services/sidebar-state.service';
 import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.store';
-import { SidebarGroupsService } from '../../../core/services/sidebar-groups.service';
+import { SessionExitService } from '../../../core/services/session-exit.service';
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
@@ -37,6 +37,22 @@ interface NavSection {
   items: NavEntry[];
 }
 
+/** Separación entre el rail y el panel del submenú. El SCSS no puede saberla: la posición se calcula aquí. */
+const FLYOUT_GAP_PX = 6;
+
+/** Margen para cruzar ese hueco con el puntero antes de que el panel empiece a cerrarse. */
+const FLYOUT_CLOSE_DELAY_MS = 160;
+
+/**
+ * Lo que dura la animación de salida, y por eso existe.
+ *
+ * ★★ SIN ESTO NO HAY SALIDA ANIMADA. Un `@if` desmonta el nodo en el acto: la animación de entrada se
+ * ve y la de cierre no existe, porque el elemento que debería desvanecerse ya no está en el DOM. El
+ * panel se queda montado con la clase `--leaving` durante estos milisegundos y recién entonces se
+ * desmonta. Debe coincidir con la duración de la transición del SCSS.
+ */
+const FLYOUT_LEAVE_MS = 120;
+
 @Component({
   selector: 'app-sidebar',
   standalone: true,
@@ -51,12 +67,34 @@ export class SidebarComponent implements OnInit {
   readonly sidebarState = inject(SidebarStateService);
   private readonly subscriptionState = inject(SubscriptionStateService);
   private readonly badgesStore = inject(SidebarBadgesStore);
+  private readonly sessionExit = inject(SessionExitService);
 
-  // ★ THE OPEN GROUPS LIVE OUTSIDE THIS COMPONENT. The sidebar is rebuilt on every navigation (each
-  // feature template renders its own app-shell), so a signal held here started empty each time and
-  // the auto-expand effect reopened the active group a frame later — the group visibly collapsed and
-  // sprang back on every click. See SidebarGroupsService.
-  private readonly groups = inject(SidebarGroupsService);
+  // ─── El submenú de un grupo (Financials) ──────────────────────────────────────────────────────
+  //
+  // ★★ FLYOUT AL HOVER, NO ACORDEÓN. El grupo ya no empuja el resto del rail hacia abajo: sus hijos
+  // salen en un panel al costado. Eso hace que el estado deje de tener que sobrevivir a la navegación
+  // (antes vivía en `SidebarGroupsService` porque el sidebar se reconstruye en cada navegación y un
+  // acordeón abierto se cerraba de golpe). Un panel de hover es efímero por definición: se abre con
+  // el puntero, se cierra al elegir. Por eso el estado vuelve a ser LOCAL, y por eso ya no hay efecto
+  // de auto-expandir — reabrir el panel solo porque la ruta activa está dentro del grupo dejaría un
+  // menú abierto que nadie pidió.
+  //
+  // ★ POSICIÓN FIJA, CALCULADA DEL TRIGGER. `.sidebar` tiene `overflow: hidden` y `.sidebar__scroll`
+  // `overflow-y: auto`: un panel `absolute` quedaría recortado por ambos. Fijo respecto al viewport no
+  // lo recorta nadie, a cambio de tener que anclarlo a mano y de cerrarlo cuando algo scrollea.
+  private readonly flyoutKey = signal<string | null>(null);
+  readonly flyoutTop = signal(0);
+  readonly flyoutLeft = signal(0);
+
+  /** El panel sigue montado, pero ya se está yendo: es el estado que hace posible la animación de salida. */
+  readonly flyoutLeaving = signal(false);
+
+  // ★ EL CIERRE ES DIFERIDO, y sin esto el menú es inusable. Entre el rail y el panel hay un hueco de
+  // unos pocos píxeles: al cruzarlo el puntero pasa por encima del sidebar, que NO es descendiente del
+  // `li`, y dispara su `mouseleave`. Un cierre inmediato mataría el panel justo cuando el usuario va
+  // hacia él. El temporizador da el margen para llegar; entrar al panel lo cancela.
+  private hideTimer: ReturnType<typeof setTimeout> | null = null;
+  private leaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
     // ★ STARTED HERE, NOT ON EVERY NAVIGATION. The sidebar is built once per session; the store loads
@@ -99,20 +137,20 @@ export class SidebarComponent implements OnInit {
 
 
   constructor() {
-    // Auto-expand any group that contains the active route
-    effect(() => {
-      const url = this.currentUrl();
-      for (const section of this.navSections) {
-        for (const entry of section.items) {
-          if (!this.isNavGroup(entry)) continue;
-          const hasActiveChild = entry.children.some(
-            c => url === c.path || url.startsWith(c.path + '/'),
-          );
-          if (hasActiveChild) {
-            this.groups.open(entry.key);
-          }
-        }
-      }
+    // ★ EN CAPTURA, Y SOBRE `window`. El panel está anclado a coordenadas de viewport, así que
+    // cualquier scroll lo deja flotando lejos de su fila. El scroll NO burbujea y quien scrollea aquí
+    // es `.sidebar__scroll` (o la página), no `window`: sin `capture: true` este listener no se entera
+    // nunca. Mismo motivo por el que el menú ⋮ de los listados escucha así.
+    const dismiss = (): void => {
+      if (this.flyoutKey() !== null) this.closeFlyout();
+    };
+    window.addEventListener('scroll', dismiss, { capture: true, passive: true });
+    window.addEventListener('resize', dismiss);
+
+    inject(DestroyRef).onDestroy(() => {
+      window.removeEventListener('scroll', dismiss, { capture: true });
+      window.removeEventListener('resize', dismiss);
+      this.clearTimers();
     });
   }
 
@@ -120,12 +158,66 @@ export class SidebarComponent implements OnInit {
     return (entry as NavGroupEntry).type === 'group';
   }
 
-  toggleGroup(key: string): void {
-    this.groups.toggle(key);
+  isFlyoutOpen(key: string): boolean {
+    return this.flyoutKey() === key;
   }
 
-  isGroupExpanded(key: string): boolean {
-    return this.groups.isExpanded(key);
+  /**
+   * Abre el panel del grupo junto a su fila. Idempotente: re-entrar sólo reancla y cancela el cierre.
+   *
+   * ★ VOLVER SOBRE UN PANEL QUE SE IBA LO TRAE DE VUELTA, no lo reinicia. Se limpia `--leaving` y el
+   * panel vuelve a su sitio con la transición de la clase; desmontarlo y remontarlo para relanzar la
+   * animación de entrada daría un parpadeo justo cuando el usuario corrigió el rumbo.
+   */
+  openFlyout(key: string, trigger: HTMLElement): void {
+    this.clearTimers();
+    this.flyoutLeaving.set(false);
+    const rect = trigger.getBoundingClientRect();
+    this.flyoutTop.set(rect.top);
+    this.flyoutLeft.set(rect.right + FLYOUT_GAP_PX);
+    this.flyoutKey.set(key);
+  }
+
+  /** El click sobre la fila del grupo: para el táctil y el teclado, donde no hay hover. */
+  toggleFlyout(key: string, trigger: HTMLElement): void {
+    if (this.isFlyoutOpen(key)) this.closeFlyout();
+    else this.openFlyout(key, trigger);
+  }
+
+  /** Cierre inmediato (elegir una opción, Escape, scroll): arranca la salida, no desmonta de golpe. */
+  closeFlyout(): void {
+    this.clearTimers();
+    this.startLeaving();
+  }
+
+  /** Ver la nota de `hideTimer`: el hueco entre el rail y el panel dispara `mouseleave`. */
+  scheduleCloseFlyout(): void {
+    if (this.hideTimer) clearTimeout(this.hideTimer);
+    this.hideTimer = setTimeout(() => {
+      this.hideTimer = null;
+      this.startLeaving();
+    }, FLYOUT_CLOSE_DELAY_MS);
+  }
+
+  private startLeaving(): void {
+    if (this.flyoutKey() === null) return;
+    this.flyoutLeaving.set(true);
+    this.leaveTimer = setTimeout(() => {
+      this.leaveTimer = null;
+      this.flyoutKey.set(null);
+      this.flyoutLeaving.set(false);
+    }, FLYOUT_LEAVE_MS);
+  }
+
+  private clearTimers(): void {
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+    if (this.leaveTimer) {
+      clearTimeout(this.leaveTimer);
+      this.leaveTimer = null;
+    }
   }
 
   isGroupActive(children: NavItem[]): boolean {
@@ -199,9 +291,14 @@ export class SidebarComponent implements OnInit {
   readonly integrationsItem: NavItem = { path: '/integrations', labelKey: 'NAV.INTEGRATIONS', icon: 'link-2', permission: 'Integrations.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
 
+  /**
+   * ★★ SALE RECARGANDO, NO NAVEGANDO. Vaciar el token no vacía la aplicación: los servicios de raíz
+   * siguen vivos con los datos del tenant anterior — este mismo sidebar mostraba el contador de otra
+   * empresa después de cambiar de sesión. Ver `SessionExitService`.
+   */
   logout(): void {
     this.currentUser.clear();
     this.authService.logout();
-    this.router.navigateByUrl('/auth/login');
+    this.sessionExit.toLogin();
   }
 }

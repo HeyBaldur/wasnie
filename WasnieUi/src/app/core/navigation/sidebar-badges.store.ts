@@ -43,9 +43,13 @@ export class SidebarBadgesStore {
   readonly terminatedAccounts = computed(() => this._badges().terminatedAccounts);
 
   /**
-   * ★ ZERO IS NOT WORTH A BADGE ON A GROUP. The Financials row is a container: a "0" beside it says
-   * nothing the children do not already say, and it would sit there permanently on a healthy tenant.
-   * The individual links still show their own 0.
+   * ★ ZERO IS NOT WORTH A BADGE. The Financials row is a container, and a "0" beside it would sit
+   * there permanently on a healthy tenant saying nothing.
+   *
+   * ★ LOS HIJOS SIGUEN LA MISMA REGLA, y desde el rail no se pinta ningún cero: el badge es rojo y
+   * significa "esto necesita atención", así que un cero permanente es una alarma que no alarma de
+   * nada. Aquí abajo se conserva la diferencia entre null (no cargado, o el usuario no lo ve) y 0
+   * (cola limpia) porque son hechos distintos; lo que no se dibuja es ninguno de los dos.
    */
   readonly financialsTotal = computed(() => {
     const total = this._badges().financialsTotal;

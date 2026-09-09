@@ -274,4 +274,14 @@ export class ReconciliationListComponent implements OnInit {
       this.exporting.set(false);
     }
   }
+
+  /**
+   * Las filas fantasma que ocupan la tabla mientras carga.
+   *
+   * Ocho, como en el resto de los listados: es el alto que ya tiene la tabla con datos, así que el
+   * contenido de abajo no salta cuando llegan las filas de verdad.
+   */
+  get skeletonRows(): number[] {
+    return Array.from({ length: 8 }, (_, i) => i);
+  }
 }

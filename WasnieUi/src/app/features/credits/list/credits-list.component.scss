@@ -147,19 +147,21 @@
     &:hover { text-decoration: underline; }
   }
 
-  &__plan-rule {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
+  // `.credits-list__plan-rule` cae sobre un `td` y llevaba `display: flex`. Eso saca a la celda del
+  // modelo de bordes colapsados de la tabla: pinta su fondo POR ENCIMA del borde compartido con la
+  // fila de arriba y, al hacer hover, el borde superior desaparecía sólo en esta columna. La celda
+  // vuelve a ser celda (sin regla propia) y los dos enlaces se apilan como bloques: el hueco de 2px
+  // que daba el `gap` pasa a ser el margen de abajo.
   &__plan-name {
+    display: block;
     font-size: var(--font-size-13);
     color: var(--color-text-primary);
     font-weight: 500;
   }
 
   &__rule-name {
+    display: block;
+    margin-top: 2px;
     font-size: var(--font-size-11);
     color: var(--color-text-tertiary);
   }
