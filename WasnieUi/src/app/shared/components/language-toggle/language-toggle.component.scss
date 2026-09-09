@@ -10,24 +10,9 @@
   }
 
   // ★ A FIXED BOX WITH THE FLAG'S OWN RATIO, so the trigger does not change width when the language
-  //   changes and the three options stay on one vertical line. `overflow: hidden` is what keeps the
-  //   Union Jack's diagonals inside the rounded corners.
-  &__flag {
-    display: inline-flex;
-    flex-shrink: 0;
-    width: 1.125rem;
-    height: 0.75rem;
-    overflow: hidden;
-    border-radius: 2px;
-    // The border keeps the white half of the Polish flag visible against a light surface.
-    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
-
-    svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-  }
+  //   changes and the three options stay on one vertical line. Ahora vive en `app-language-flag`,
+  //   junto con el `overflow: hidden` que mantiene las diagonales de la Union Jack dentro de las
+  //   esquinas redondeadas: la caja y el dibujo son la misma decisión y se separaban al copiarse.
 
   &__popover {
     position: absolute;

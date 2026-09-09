@@ -40,10 +40,14 @@ describe('SidebarBadgesStore', () => {
   });
 
   /**
-   * ★★ null AND 0 ARE DIFFERENT ANSWERS. Null is "you may not see this count" and draws no badge; 0
-   * is a real measurement — "this queue is clear" — and is worth showing. Collapsing them would tell
-   * a user without the permission that the tenant has no unpaid money, which is a statement about
-   * money they were not cleared to receive.
+   * ★★ null AND 0 ARE DIFFERENT ANSWERS, AND THE STORE KEEPS THEM APART. Null is "you may not see this
+   * count"; 0 is a real measurement — "this queue is clear". Collapsing them here would tell a user
+   * without the permission that the tenant has no unpaid money, which is a statement about money they
+   * were not cleared to receive.
+   *
+   * ★ NEITHER DRAWS A BADGE, and that is the rail's decision, not this store's. The badge is red and
+   * means "this needs attention": a permanent 0 is an alarm that alarms about nothing. The store still
+   * has to know which of the two it is holding.
    */
   it('keeps a withheld count apart from a count of zero', async () => {
     const loading = store.refresh();
@@ -51,8 +55,8 @@ describe('SidebarBadgesStore', () => {
       .flush(badges({ reconciliation: null, terminatedAccounts: 0, financialsTotal: 0 }));
     await loading;
 
-    expect(store.reconciliation()).toBeNull('withheld: no badge at all');
-    expect(store.terminatedAccounts()).toBe(0, 'measured: the badge shows 0');
+    expect(store.reconciliation()).toBeNull('withheld: the count is not available at all');
+    expect(store.terminatedAccounts()).toBe(0, 'measured: the queue is known to be clear');
   });
 
   /** ★ The group row carries no badge when there is nothing — a permanent "0" on a container says nothing. */

@@ -1,42 +1,8 @@
 <!--
-  ★★ THE FLAGS ARE INLINE SVG, NOT EMOJI, AND THAT IS A FIX RATHER THAN A PREFERENCE. The first version
-  used 🇬🇧 🇪🇸 🇵🇱 and on Windows it rendered as the letter pairs "GB", "ES", "PL": Windows ships no
-  regional-indicator glyphs, so the browser falls back to the two letters the emoji is built from. The
-  control asked for by the ticket is a flag picker, and on the platform this is developed on there were
-  no flags at all. Verified on screen — it is not visible from the code.
-
-  ★ AND THEY ARE NOT IN THE ICON REGISTRY. That registry is single-colour, stroke-based, 24×24
-  `currentColor` line icons; a flag is filled, multi-colour and has its own aspect ratio. Putting one
-  there would make every other icon's contract a lie.
+  Las banderas viven en `app-language-flag` (shared/components/language-flag). Estaban dibujadas aquí
+  dentro; se mudaron cuando Ajustes → Apariencia tuvo que mostrar las mismas, para que no queden dos
+  juegos que se separen con el tiempo. El porqué de que sean SVG y no emoji está en ese componente.
 -->
-<ng-template #flag let-code>
-  <span class="language-toggle__flag" aria-hidden="true">
-    @switch (code) {
-      @case ('es') {
-        <svg viewBox="0 0 24 16" role="presentation">
-          <rect width="24" height="16" fill="#c60b1e" />
-          <rect y="4" width="24" height="8" fill="#ffc400" />
-        </svg>
-      }
-      @case ('pl') {
-        <svg viewBox="0 0 24 16" role="presentation">
-          <rect width="24" height="16" fill="#fff" />
-          <rect y="8" width="24" height="8" fill="#dc143c" />
-        </svg>
-      }
-      @default {
-        <svg viewBox="0 0 24 16" role="presentation">
-          <rect width="24" height="16" fill="#012169" />
-          <path d="M0 0 L24 16 M24 0 L0 16" stroke="#fff" stroke-width="3.2" />
-          <path d="M0 0 L24 16 M24 0 L0 16" stroke="#c8102e" stroke-width="1.8" />
-          <path d="M12 0 V16 M0 8 H24" stroke="#fff" stroke-width="5.3" />
-          <path d="M12 0 V16 M0 8 H24" stroke="#c8102e" stroke-width="3.2" />
-        </svg>
-      }
-    }
-  </span>
-</ng-template>
-
 <div class="language-toggle">
   <button
     class="language-toggle__trigger btn-action btn-action--ghost"
@@ -45,7 +11,7 @@
     aria-haspopup="listbox"
     (click)="toggle()"
   >
-    <ng-container [ngTemplateOutlet]="flag" [ngTemplateOutletContext]="{ $implicit: currentLang() }" />
+    <app-language-flag [code]="currentLang()" />
   </button>
 
   @if (isOpen()) {
@@ -65,7 +31,7 @@
         >
           <!-- ★ The flag is decorative; the endonym beside it is the accessible label. A flag announced
                as a country name is not what the option means. -->
-          <ng-container [ngTemplateOutlet]="flag" [ngTemplateOutletContext]="{ $implicit: option.code }" />
+          <app-language-flag [code]="option.code" />
           <span class="language-toggle__option-label">{{ option.labelKey | translate }}</span>
         </button>
       }

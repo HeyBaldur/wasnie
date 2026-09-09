@@ -8,6 +8,7 @@ import { InactivityService } from './inactivity.service';
 import { AuthService } from './auth.service';
 import { TabSyncService, TabSyncMessage } from './tab-sync.service';
 import { ToastService } from '../../shared/services/toast.service';
+import { SessionExitService } from './session-exit.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,22 +42,25 @@ describe('InactivityService — cross-tab sync reactions', () => {
   let inactivity: InactivityService;
   let tabSyncMock: ReturnType<typeof makeTabSyncMock>;
   let authSpy: jasmine.SpyObj<AuthService>;
-  let routerSpy: jasmine.SpyObj<Router>;
   let toastSpy: jasmine.SpyObj<ToastService>;
+  let exitSpy: jasmine.SpyObj<SessionExitService>;
 
   beforeEach(() => {
     tabSyncMock = makeTabSyncMock();
     authSpy = makeAuthSpy();
-    routerSpy = jasmine.createSpyObj<Router>('Router', ['navigateByUrl']);
     toastSpy = jasmine.createSpyObj<ToastService>('ToastService', ['show']);
+    // ★ LA SALIDA SE ESPÍA, NUNCA SE EJECUTA. En producción hace `window.location.assign`: dejarla
+    // correr aquí recargaría el propio ejecutor de tests a mitad de la suite.
+    exitSpy = jasmine.createSpyObj<SessionExitService>('SessionExitService', ['toLogin']);
 
     TestBed.configureTestingModule({
       providers: [
         InactivityService,
         { provide: TabSyncService, useValue: tabSyncMock.service },
-        { provide: AuthService,    useValue: authSpy },
-        { provide: Router,         useValue: routerSpy },
-        { provide: ToastService,   useValue: toastSpy },
+        { provide: AuthService,        useValue: authSpy },
+        { provide: SessionExitService, useValue: exitSpy },
+        { provide: Router,             useValue: jasmine.createSpyObj('Router', ['navigateByUrl']) },
+        { provide: ToastService,       useValue: toastSpy },
       ],
     });
 
@@ -68,22 +72,27 @@ describe('InactivityService — cross-tab sync reactions', () => {
     inactivity.stop(); // clears the real 28-min timer
   });
 
-  it('receiving "logout" calls clearSessionSilent (not logout) and redirects without toast', () => {
+  it('receiving "logout" calls clearSessionSilent (not logout) and leaves without a notice', () => {
     tabSyncMock.messages$.next({ type: 'logout' });
 
     expect(authSpy.clearSessionSilent).toHaveBeenCalledTimes(1);
     expect(authSpy.logout).not.toHaveBeenCalled();
     expect(toastSpy.show).not.toHaveBeenCalled();
-    expect(routerSpy.navigateByUrl).toHaveBeenCalledOnceWith('/auth/login');
+    expect(exitSpy.toLogin).toHaveBeenCalledOnceWith(null);
   });
 
-  it('receiving "session-expired" calls clearSessionSilent and shows the expiry toast', () => {
+  /**
+   * ★ EL AVISO SE ENCARGA, NO SE PINTA. Salir recarga el documento — lo único que garantiza que no
+   * sobreviva en memoria el tenant anterior — y un toast pintado aquí moriría con la recarga. Este
+   * test fija esa frontera: aquí se pide `'expired'`, y quien lo muestra es la pantalla de acceso.
+   */
+  it('receiving "session-expired" clears the session and carries the expiry notice through the reload', () => {
     tabSyncMock.messages$.next({ type: 'session-expired' });
 
     expect(authSpy.clearSessionSilent).toHaveBeenCalledTimes(1);
     expect(authSpy.logout).not.toHaveBeenCalled();
-    expect(toastSpy.show).toHaveBeenCalledOnceWith('SESSION.EXPIRED_TOAST', 'error');
-    expect(routerSpy.navigateByUrl).toHaveBeenCalledOnceWith('/auth/login');
+    expect(toastSpy.show).not.toHaveBeenCalled();
+    expect(exitSpy.toLogin).toHaveBeenCalledOnceWith('expired');
   });
 
   it('receiving "logout" does NOT re-broadcast to the channel', () => {
@@ -101,7 +110,7 @@ describe('InactivityService — cross-tab sync reactions', () => {
     tabSyncMock.messages$.next({ type: 'logout' });
 
     expect(authSpy.clearSessionSilent).not.toHaveBeenCalled();
-    expect(routerSpy.navigateByUrl).not.toHaveBeenCalled();
+    expect(exitSpy.toLogin).not.toHaveBeenCalled();
   });
 });
 
@@ -121,9 +130,10 @@ describe('InactivityService — cross-tab timer reactions', () => {
       providers: [
         InactivityService,
         { provide: TabSyncService, useValue: tabSyncMock.service },
-        { provide: AuthService,    useValue: authSpy },
-        { provide: Router,         useValue: jasmine.createSpyObj('Router', ['navigateByUrl']) },
-        { provide: ToastService,   useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        { provide: AuthService,        useValue: authSpy },
+        { provide: SessionExitService, useValue: jasmine.createSpyObj('SessionExitService', ['toLogin']) },
+        { provide: Router,             useValue: jasmine.createSpyObj('Router', ['navigateByUrl']) },
+        { provide: ToastService,       useValue: jasmine.createSpyObj('ToastService', ['show']) },
       ],
     });
 
@@ -176,9 +186,10 @@ describe('InactivityService — activity broadcast throttle', () => {
       providers: [
         InactivityService,
         { provide: TabSyncService, useValue: tabSyncMock.service },
-        { provide: AuthService,    useValue: makeAuthSpy() },
-        { provide: Router,         useValue: jasmine.createSpyObj('Router', ['navigateByUrl']) },
-        { provide: ToastService,   useValue: jasmine.createSpyObj('ToastService', ['show']) },
+        { provide: AuthService,        useValue: makeAuthSpy() },
+        { provide: SessionExitService, useValue: jasmine.createSpyObj('SessionExitService', ['toLogin']) },
+        { provide: Router,             useValue: jasmine.createSpyObj('Router', ['navigateByUrl']) },
+        { provide: ToastService,       useValue: jasmine.createSpyObj('ToastService', ['show']) },
       ],
     });
 

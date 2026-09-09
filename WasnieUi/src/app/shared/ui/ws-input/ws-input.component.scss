@@ -89,6 +89,23 @@
   @apply flex items-center;
 }
 
+/* El bloque del prefijo: fondo hundido y una línea vertical que lo separa de lo que sí se escribe.
+   Así se lee como "esto ya está puesto" y no como el principio del texto del usuario. */
+.ws-input__prefix-text {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border-right: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
 .ws-input__suffix-text {
   padding-right: var(--space-3);
   font-size: var(--font-size-13);

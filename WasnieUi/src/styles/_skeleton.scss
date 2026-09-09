@@ -1,0 +1,47 @@
+/* ─── Skeletons de carga ──────────────────────────────────────────────────────────────────────────
+ *
+ * ★★ GLOBAL, PORQUE COPIAR EL MARCADO NO ALCANZA. Este lenguaje estaba redefinido en el
+ * `.component.scss` de cada listado (payees, plans, quotas, assignments…), y la encapsulación de
+ * vistas de Angular limita esas reglas a su componente: la pantalla que copiaba el HTML no heredaba
+ * ni una. Así estaba `/credits`, que pinta filas `.skeleton` sin tener una sola regla que las dibuje
+ * — spans invisibles de altura cero mientras carga.
+ *
+ * Los `.component.scss` que todavía definen su propio `.skeleton` siguen ganando: los estilos de
+ * componente llevan el atributo de encapsulación y por lo tanto más especificidad. Este partial es el
+ * piso, no una imposición; se puede ir borrando la copia local de cada pantalla sin apuro.
+ *
+ * ★ ESTE ARCHIVO LO PROCESA POSTCSS, NO SASS. Los comentarios de una línea con dos barras rompen el
+ * build (un apóstrofo dentro se lee como cadena sin cerrar) y su `@import` va pegado a los otros, sin
+ * comentario en medio. Sólo comentarios de bloque aquí.
+ */
+
+.skeleton-row td {
+  padding: 14px 16px;
+}
+
+.skeleton {
+  display: inline-block;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  background: var(--color-bg-surface-sunken);
+  animation: ws-skeleton-shimmer 1.4s ease infinite;
+}
+
+.skeleton--text { width: 140px; }
+.skeleton--text-wide { width: 180px; }
+.skeleton--short { width: 40px; }
+.skeleton--badge { width: 60px; height: 20px; border-radius: var(--radius-full); }
+
+/* El nombre lleva prefijo a propósito: varios componentes tienen su propio `shimmer` y dos keyframes
+   con el mismo nombre en el CSS servido es una moneda al aire sobre cuál gana. */
+@keyframes ws-skeleton-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Quien pidió menos movimiento sigue viendo el bloque gris: lo que se va es el latido. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

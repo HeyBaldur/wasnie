@@ -5,11 +5,10 @@ import {
   HttpErrorResponse,
 } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { Router } from '@angular/router';
 import { catchError, switchMap, take, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { SessionRefreshService } from '../services/session-refresh.service';
-import { ToastService } from '../../shared/services/toast.service';
+import { SessionExitService } from '../services/session-exit.service';
 
 export const errorInterceptor: HttpInterceptorFn = (
   req: HttpRequest<unknown>,
@@ -17,8 +16,7 @@ export const errorInterceptor: HttpInterceptorFn = (
 ) => {
   const authService = inject(AuthService);
   const sessionRefresh = inject(SessionRefreshService);
-  const router = inject(Router);
-  const toast = inject(ToastService);
+  const sessionExit = inject(SessionExitService);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -51,8 +49,9 @@ export const errorInterceptor: HttpInterceptorFn = (
           sessionRefresh.isRefreshing = false;
           sessionRefresh.broadcast(null);
           authService.forceLogout(true);
-          toast.show('SESSION.EXPIRED_TOAST', 'error');
-          router.navigateByUrl('/auth/login');
+          // El aviso lo muestra la pantalla de acceso: esta salida recarga el documento y un toast
+          // pintado aquí no sobreviviría a la recarga.
+          sessionExit.toLogin('expired');
           return throwError(() => refreshErr);
         })
       );

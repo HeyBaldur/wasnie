@@ -6,14 +6,25 @@
 
     <div class="appearance-row">
       <span class="appearance-row__label">{{ 'SETTINGS.LANGUAGE' | translate }}</span>
+      <!--
+        ★ LA MISMA BANDERA QUE EN SIGN IN / SIGN UP, del mismo componente. Aquí sólo se leían los
+        códigos EN/ES/PL: dos selectores del mismo ajuste, uno antes de entrar y otro dentro, que no
+        se parecían en nada.
+
+        ★ EL NOMBRE VA EN SU PROPIO IDIOMA (endónimo), igual que en el popover de las pantallas sin
+        sesión: quien busca "Polski" no reconoce "Polish". Son las claves LANGUAGE.*, que resuelven a
+        la misma cadena en los tres archivos de i18n.
+      -->
       <div class="lang-switcher">
-        @for (lang of supportedLangs; track lang) {
+        @for (option of languageOptions; track option.code) {
           <button
             class="lang-btn"
-            [class.lang-btn--active]="currentLang() === lang"
-            (click)="switchLanguage(lang)"
+            [class.lang-btn--active]="currentLang() === option.code"
+            [attr.aria-pressed]="currentLang() === option.code"
+            (click)="switchLanguage(option.code)"
           >
-            {{ lang.toUpperCase() }}
+            <app-language-flag [code]="option.code" />
+            <span>{{ option.labelKey | translate }}</span>
           </button>
         }
       </div>

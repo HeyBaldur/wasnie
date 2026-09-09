@@ -1,0 +1,24 @@
+// El tamaño y el recorte se mudaron aquí desde `language-toggle`: la bandera se dibuja igual en las
+// pantallas sin sesión y en Ajustes, y ese "igual" tiene que estar en un solo archivo.
+:host {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.language-flag {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 0.75rem;
+  overflow: hidden;
+  border-radius: 2px;
+  // ★ El borde es lo que mantiene visible la mitad blanca de la bandera polaca sobre una superficie
+  // clara. Sin él, en el tema claro Polonia es media bandera.
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+
+  svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+}

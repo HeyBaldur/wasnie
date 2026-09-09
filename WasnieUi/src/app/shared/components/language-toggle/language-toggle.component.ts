@@ -4,8 +4,8 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { LanguageFlagComponent } from '../language-flag/language-flag.component';
 
 interface LanguageOption {
   /** The ngx-translate language code. */
@@ -49,7 +49,7 @@ const LANG_STORAGE_KEY = 'wasnie_lang';
 @Component({
   selector: 'app-language-toggle',
   standalone: true,
-  imports: [CommonModule, TranslateModule],
+  imports: [TranslateModule, LanguageFlagComponent],
   templateUrl: './language-toggle.component.html',
   styleUrl: './language-toggle.component.scss',
 })

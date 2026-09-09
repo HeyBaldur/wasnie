@@ -38,6 +38,7 @@ the behaviour disagree, the behaviour is what is written here, and the differenc
 | Permissions and roles | [18](#18-permissions-and-roles) |
 | Zeke, the assistant | [19](#19-zeke-the-assistant) |
 | Reading what is owed, and what has no route to payment | [20](#20-reading-commission-the-date-range-and-the-three-cards), [21](#21-commission-with-no-route-to-payment) |
+| What the company owes right now, for accounting | [28](#28-what-do-we-owe-right-now--the-answer-for-accounting) |
 | Exports, and what to send accounting | [23](#23-exports--what-to-send-accounting) |
 | Reconciliation, refusals and the audit trail | [24](#24-the-reconciliation-centre), [25](#25-when-a-rule-stops-paying), [26](#26-the-audit-trail), [27](#27-discarding-a-payout-that-can-never-be-paid) |
 
@@ -1289,6 +1290,18 @@ been consumed by a payout.
 The pay run says which of its payouts are supplemental and why, so a period you know was closed does
 not suddenly show a new payout with no explanation.
 
+> ⚠️ **There is one case a supplemental does not cover, and it is worth knowing before you promise
+> anyone a figure.** A supplemental picks up payees and plans that were *absent* from the earlier
+> runs. If a payee **was already paid for that exact period on that plan**, and commission is
+> allocated into the same window afterwards, no future run reaches it: the protection against paying
+> twice works period by period, not commission by commission. The money stays counted as **Unpaid**
+> and simply waits.
+>
+> How to spot it: commission that is unpaid, on a period whose pay run is already marked paid.
+> Until this is resolved, the two ways out are a manual balance adjustment on the payee's ledger, or
+> paying it in a later period through an assignment that covers those dates. Neither is automatic —
+> raise it with whoever owns your pay-run calendar rather than waiting for the next run to pick it up.
+
 ---
 
 ## 23. Exports — what to send accounting
@@ -1324,8 +1337,9 @@ the level you were looking at down to the individual sale.
 set and zero-value rows hidden. Use `Paid` instead of `Approved` for what has already gone out.
 
 > ⚠️ **Period means the compensation period, not the payment date.** A payout for August that was
-> paid on 3 September belongs to August in these filters. There is no screen filter for "what left
-> the bank in September" today.
+> paid on 3 September belongs to August in these filters. There is no way to *filter the rows* by
+> what left the bank in September — for that **total**, use the *Payouts* card on the dashboard,
+> which counts by payment date (see [section 28](#28-what-do-we-owe-right-now--the-answer-for-accounting)).
 
 ---
 
@@ -1421,3 +1435,81 @@ nothing is deleted.
 The payout detail lists, per line, whether that money was paid here, paid by another payout, or is
 still outstanding — and names the period of the payout that paid it. Before, the only way to find
 out was to press Discard and read the refusal.
+
+---
+
+## 28. "What do we owe right now?" — the answer for accounting
+
+Accounting almost always asks this in one sentence, and that one sentence hides **two different
+questions**. Answering the wrong one is how a month closes with a figure nobody can reconcile.
+
+| They mean | The figure | Where |
+|---|---|---|
+| *"What have we earned that we still owe our people?"* | **Unpaid Commissions** | Dashboard, top cards — for the **date range** you selected |
+| *"How much has to leave the bank now?"* | **Approved · Not Paid** | Dashboard, *Requires action* — **every open period**, not just the range |
+
+Both are for the **whole company**: every payee, every plan. Neither needs you to add anything up by
+hand, and neither lives behind a payee's name.
+
+### 28.1 The accrual answer — what we owe
+
+*Dashboard.* The date range at the top governs the three cards underneath it:
+
+- **Total Commissions** — everything created in that range, paid or not.
+- **Paid Commissions** — the part that has already reached the payee.
+- **Unpaid Commissions** — **the part still owed.** This is the accrual figure.
+
+Total = Paid + Unpaid, to the cent. Click any card and it opens the exact rows behind it in a new
+tab, so the number can be checked rather than trusted — which is what you want when someone else is
+going to put it in a ledger.
+
+### 28.2 The treasury answer — what has to be paid
+
+Below the cards, in **Requires action**:
+
+- **Pending Approval** — calculated, waiting for somebody to approve it. Committed to nobody yet.
+- **Approved · Not Paid** — **approved and still not paid.** This is the money that has to go out.
+- **Draft Pay Runs** — periods still being prepared.
+- **Terminated · Account Open** — people who have left with an account still open.
+
+> ★ **This band ignores the date range on purpose.** It answers *"what is outstanding, full stop"*,
+> across every open period. A payout approved in June and still unpaid belongs in this month's
+> payment, and a date filter is exactly how it would disappear from view.
+
+And for the opposite direction — *what actually went out* — the **Payouts** card in *Period state*
+counts money genuinely transferred inside the range, **by payment date**. It is the only figure on
+the page that follows the bank rather than the compensation calendar.
+
+### 28.3 Five things to say alongside the number
+
+Give accounting the figure **and** these, or the figure will be questioned later:
+
+1. **Which question it answers.** Accrual (a range) or treasury (everything outstanding). Say which.
+2. **One figure per currency, never added together.** Incentra never merges currencies, and neither
+   should the answer.
+3. **Part of Unpaid may have no way out.** Some commission is genuinely owed and no pay run can reach
+   it — the assignment behind it was deactivated, or the plan was archived. It is stated right under
+   the cards, with a link to what is stuck and why. See
+   [section 21](#21-commission-with-no-route-to-payment); a total that quietly includes money nobody
+   can pay is the figure that comes back as a question.
+4. **Written-off and payroll-settled commission is in none of the three cards.** It is neither paid
+   nor owed, so it is called out in a note underneath them instead of being folded into a total.
+5. **"Period" means the compensation period, not the payment date.** A payout for August paid on
+   3 September belongs to August everywhere except the *Payouts* card described above.
+
+### 28.4 What to actually send them
+
+The number is the headline; accounting will want the rows. Those come from the exports in
+[section 23](#23-exports--what-to-send-accounting) — typically **Pay runs → open the month's run →
+Export**, or **Payouts** filtered to `Approved` with the period set. Use `Paid` for what has already
+gone out.
+
+### 28.5 A complete answer, as an example
+
+> *"As of today we owe **€148,300** in commission for September, of which **€12,050** currently has no
+> route to a payout because two assignments were deactivated — I have the list. Separately,
+> **€96,400** is approved and waiting to be paid across all open periods; that is the figure for this
+> month's payment run. Both are EUR only. The line-by-line detail is in the attached export."*
+
+That answer takes about a minute to assemble from the Dashboard, and it survives being read back to
+you a week later.

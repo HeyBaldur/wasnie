@@ -5,6 +5,33 @@ import { environment } from '../../../environments/environment';
 import { AuthResult, LoginRequest, RegisterTenantRequest, TokenPair } from '../models/auth.model';
 import { TabSyncService } from './tab-sync.service';
 
+/**
+ * Trabajo a medias que una pantalla dejó guardado, barrido por PREFIJO.
+ *
+ * ★ EL CONTRATO ES LA FORMA DE LA CLAVE, NO UN IMPORT: así este servicio no necesita saber qué
+ * pantallas guardan borradores, y no apunta desde el núcleo hacia una feature.
+ *
+ * ★★ EL ASISTENTE DE IMPORTACIÓN ENTRÓ AQUÍ DESPUÉS, y no guarda un borrador cualquiera: guarda un
+ * fichero de payees o de transacciones a medio subir. Sobrevivir al cierre de sesión significaba
+ * ofrecerle a la SIGUIENTE empresa que entrara en ese navegador el fichero de la anterior.
+ */
+const DRAFT_PREFIXES = ['wasnie:draft:', 'wasnie:import-wizard:'] as const;
+
+/**
+ * Marcas que pertenecen a UNA PERSONA y no al equipo.
+ *
+ * ★ SON GLOBALES AL NAVEGADOR AUNQUE DESCRIBAN A UN USUARIO, y por eso hay que borrarlas: si no, la
+ * siguiente persona que entre en este equipo hereda que ya vio la bienvenida y que ya descartó el
+ * aviso de doble factor — o sea, deja de recibir un aviso de seguridad que nadie le enseñó.
+ * Las preferencias del EQUIPO — idioma, tema, sidebar plegado — no están aquí a propósito: no
+ * describen a nadie y se quedan.
+ */
+const PER_USER_LOCAL_KEYS = [
+  'wasnie:welcome-seen',
+  'wasnie:2fa-reminder-snooze',
+  'wasnie:2fa-reminder-dismissed',
+] as const;
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -206,8 +233,10 @@ export class AuthService {
   private static clearFeatureDrafts(): void {
     try {
       Object.keys(sessionStorage)
-        .filter((key) => key.startsWith('wasnie:draft:'))
+        .filter((key) => DRAFT_PREFIXES.some((prefix) => key.startsWith(prefix)))
         .forEach((key) => sessionStorage.removeItem(key));
+
+      PER_USER_LOCAL_KEYS.forEach((key) => localStorage.removeItem(key));
     } catch {
       // Storage being unavailable is not a reason a logout can fail.
     }
