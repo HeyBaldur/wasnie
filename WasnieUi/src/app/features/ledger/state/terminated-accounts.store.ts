@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 import { LedgerApiService } from '../services/ledger.api.service';
 import { TerminatedAccountsTotal, TerminatedPayeeBalance } from '../models/ledger.model';
 
@@ -46,19 +47,29 @@ export class TerminatedAccountsStore {
     () => this.rows().filter((r) => r.unsettledCredits.length > 0).length,
   );
 
+  /**
+   * Makes the last-REQUESTED response win rather than the last-ARRIVED one — two loads racing must not
+   * leave whichever the network returns last on screen.
+   */
+  private readonly _latest = new LatestRequestGuard();
+
   async load(): Promise<void> {
+    // Loaded by the dashboard AND by its own screen, so two calls can easily overlap.
+    const token = this._latest.begin();
     this.loading.set(true);
     this.error.set(null);
     try {
       const queue = await firstValueFrom(this.api.getTerminatedWithBalance());
+      if (this._latest.isStale(token)) return;
       this.rows.set(queue.rows);
       this.totals.set(queue.totals);
     } catch {
+      if (this._latest.isStale(token)) return;
       this.error.set('ERRORS.GENERIC');
       this.rows.set([]);
       this.totals.set([]);
     } finally {
-      this.loading.set(false);
+      if (!this._latest.isStale(token)) this.loading.set(false);
     }
   }
 }

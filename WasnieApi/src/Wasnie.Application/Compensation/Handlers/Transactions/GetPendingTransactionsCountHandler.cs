@@ -44,16 +44,24 @@ public sealed class GetPendingTransactionsCountHandler(
     private static async Task<int> CountByAssignment(IApplicationDbContext db, Guid assignmentId, CancellationToken ct)
     {
         // Load full entity — EF Core owned-type (DateRange) cannot be projected in Select.
+        // ★★ NO IgnoreQueryFilters HERE, AND ITS ABSENCE IS THE SECURITY CONTROL (KAN-21). It used
+        //    to be present, which lifted the tenant filter off this read: an assignment or plan id
+        //    belonging to ANOTHER tenant resolved, and the endpoint answered 200 with a count
+        //    instead of refusing. No foreign rows ever crossed — the transaction queries below keep
+        //    the caller's filter — but it was an existence oracle for another tenant's ids.
+        //
+        // ★ THE FILTER IS ENOUGH BECAUSE EVERY CALLER IS AN HTTP REQUEST (the transactions
+        //   controller and ProcessPendingTransactions), so the ambient tenant is always set. A
+        //   background caller would need the explicit `TenantId ==` form instead — never the
+        //   unfiltered read that was here.
         var assignment = await db.PlanAssignments
-            .IgnoreQueryFilters()
             .Where(a => a.Id == assignmentId)
             .FirstOrDefaultAsync(ct);
 
         if (assignment is null || assignment.EffectivePeriod is null) return 0;
 
-        // Pattern B: load plan currency — only transactions in this currency are eligible.
+        // Load the plan currency: only transactions in this currency are eligible.
         var plan = await db.CompensationPlans
-            .IgnoreQueryFilters()
             .Where(p => p.Id == assignment.PlanId)
             .Select(p => new { p.Currency })
             .FirstOrDefaultAsync(ct);
@@ -75,9 +83,8 @@ public sealed class GetPendingTransactionsCountHandler(
 
     private static async Task<int> CountByPlan(IApplicationDbContext db, Guid planId, CancellationToken ct)
     {
-        // Pattern B: load plan currency — only transactions in this currency are eligible.
+        // Load the plan currency: only transactions in this currency are eligible.
         var plan = await db.CompensationPlans
-            .IgnoreQueryFilters()
             .Where(p => p.Id == planId)
             .Select(p => new { p.Currency })
             .FirstOrDefaultAsync(ct);
@@ -86,7 +93,6 @@ public sealed class GetPendingTransactionsCountHandler(
 
         // Load full entities — EF Core owned-type (DateRange) cannot be projected in Select.
         var assignments = await db.PlanAssignments
-            .IgnoreQueryFilters()
             .Where(a => a.PlanId == planId && a.Status == AssignmentStatus.Active)
             .ToListAsync(ct);
 

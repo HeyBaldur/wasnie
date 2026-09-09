@@ -25,6 +25,27 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    // The dashboard takes a date RANGE now; the presets it used to accept are gone from this screen.
+    // These three stand in for the preset each test used to pass, so every assertion below keeps asking
+    // the question it was written to ask.
+    //   · WideRange        — was "all-time": wide enough to hold anything a test seeds.
+    //   · YearToDateRange  — was "ytd": the current calendar year.
+    //   · CurrentMonthRange— was "this-month": the whole current month, which is also the default.
+    private static string WideRange => "/api/dashboard?from=2000-01-01&to=2099-12-31";
+
+    private static string YearToDateRange =>
+        $"/api/dashboard?from={DateTime.UtcNow.Year}-01-01&to={DateTime.UtcNow.Year}-12-31";
+
+    private static string CurrentMonthRange
+    {
+        get
+        {
+            var today = DateTime.UtcNow;
+            var first = new DateOnly(today.Year, today.Month, 1);
+            return $"/api/dashboard?from={first:yyyy-MM-dd}&to={first.AddMonths(1).AddDays(-1):yyyy-MM-dd}";
+        }
+    }
+
     // ── Auth ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -40,7 +61,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task GetDashboard_EmptyTenant_Returns200WithZeroKpis()
     {
-        var response = await _clientA.GetAsync("/api/dashboard?period=this-month");
+        var response = await _clientA.GetAsync(CurrentMonthRange);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
@@ -72,8 +93,8 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         // Create a plan in Tenant A
         await CreateActivePlanAsync(_clientA, "EUR");
 
-        var responseA = await _clientA.GetAsync("/api/dashboard?period=ytd");
-        var responseB = await _clientB.GetAsync("/api/dashboard?period=ytd");
+        var responseA = await _clientA.GetAsync(YearToDateRange);
+        var responseB = await _clientB.GetAsync(YearToDateRange);
 
         responseA.StatusCode.Should().Be(HttpStatusCode.OK);
         responseB.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -91,8 +112,8 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         await CreatePayeeAsync(_clientA, "DASH-MT-001");
         await CreatePayeeAsync(_clientA, "DASH-MT-002");
 
-        var responseA = await _clientA.GetAsync("/api/dashboard?period=ytd");
-        var responseB = await _clientB.GetAsync("/api/dashboard?period=ytd");
+        var responseA = await _clientA.GetAsync(YearToDateRange);
+        var responseB = await _clientB.GetAsync(YearToDateRange);
 
         var bodyA = await responseA.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
         var bodyB = await responseB.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
@@ -134,7 +155,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         for (var i = 0; i < 10; i++)
         {
             await Task.Delay(500);
-            var resp = await _clientA.GetAsync("/api/dashboard?period=ytd");
+            var resp = await _clientA.GetAsync(YearToDateRange);
             body = await resp.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
             if (body?.PeriodBand.AvgQuotaAttainmentPercent.HasValue == true) break;
         }
@@ -154,23 +175,28 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task GetDashboard_TrendBand_IsPresentForThisMonth()
     {
-        var response = await _clientA.GetAsync("/api/dashboard?period=this-month");
+        var response = await _clientA.GetAsync(CurrentMonthRange);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
-        body!.TrendBand.Should().NotBeNull("this-month has a prior period (last-month)");
-        body.TrendBand!.PriorPeriodLabel.Should().NotBeNullOrEmpty();
-        body.TrendBand.CurrentPeriodLabel.Should().NotBeNullOrEmpty();
+        body!.TrendBand.Should().NotBeNull("every range has a preceding window to compare against");
+        // The prose labels are gone (§C1): a free range has no name, so the band carries the two
+        // WINDOWS and the screen renders them in the reader's locale.
+        body.TrendBand!.PriorTo.Should().BeBefore(body.TrendBand.CurrentFrom,
+            "the comparison window must not overlap the range it is compared with");
+        body.TrendBand.CurrentTo.Should().BeOnOrAfter(body.TrendBand.CurrentFrom);
     }
 
     [Fact]
-    public async Task GetDashboard_TrendBand_IsNullForAllTime()
+    public async Task GetDashboard_TrendBand_IsPresentForEveryRange()
     {
-        var response = await _clientA.GetAsync("/api/dashboard?period=all-time");
+        // It used to be null for "all-time", which had no predecessor. A date range always has one —
+        // the same length immediately before — so the band no longer has a null case to handle.
+        var response = await _clientA.GetAsync(WideRange);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
-        body!.TrendBand.Should().BeNull("all-time has no comparable prior period");
+        body!.TrendBand.Should().NotBeNull();
     }
 
     // ── PendingByPlanItems ──────────────────────────────────────────────────
@@ -178,7 +204,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
     [Fact]
     public async Task GetDashboard_PendingByPlanItems_IsEmptyWhenNoAssignmentsOrTransactions()
     {
-        var response = await _clientA.GetAsync("/api/dashboard?period=this-month");
+        var response = await _clientA.GetAsync(CurrentMonthRange);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
@@ -195,9 +221,9 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         await CreateTransactionAsync(_clientA, payeeId, planId, amount: 1_000m, currency: "EUR",
             processImmediately: false);
 
-        var bodyA = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
+        var bodyA = await (await _clientA.GetAsync(WideRange))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
-        var bodyB = await (await _clientB.GetAsync("/api/dashboard?period=all-time"))
+        var bodyB = await (await _clientB.GetAsync(WideRange))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
 
         bodyA!.ActionBand.PendingByPlanItems.Should().HaveCount(1,
@@ -226,7 +252,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         await CreateTransactionAsync(_clientA, payeeId2, planId2, amount: 700m, currency: "EUR",
             processImmediately: false);
 
-        var body = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
+        var body = await (await _clientA.GetAsync(WideRange))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
 
         body!.ActionBand.PendingByPlanItems.Should().HaveCount(2,
@@ -272,7 +298,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         (await _clientA.PostAsJsonAsync("/api/pay-runs/calculate", calcReq))
             .EnsureSuccessStatusCode();
 
-        var resp = await _clientA.GetAsync("/api/dashboard?period=all-time");
+        var resp = await _clientA.GetAsync(WideRange);
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
 
@@ -309,9 +335,9 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         (await _clientA.PostAsJsonAsync("/api/pay-runs/calculate",
             new { periodStart = "2026-01-01", periodEnd = "2026-06-30" })).EnsureSuccessStatusCode();
 
-        var dashA = await (await _clientA.GetAsync("/api/dashboard?period=all-time"))
+        var dashA = await (await _clientA.GetAsync(WideRange))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
-        var dashB = await (await _clientB.GetAsync("/api/dashboard?period=all-time"))
+        var dashB = await (await _clientB.GetAsync(WideRange))
             .Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
 
         dashA!.ActionBand.PayoutsPendingApprovalCount.Should().Be(1,
@@ -332,7 +358,7 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
 
         await VoidTransactionAsync(_clientA, cancelledTxId);
 
-        var resp = await _clientA.GetAsync("/api/dashboard?period=ytd");
+        var resp = await _clientA.GetAsync(YearToDateRange);
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<DashboardResponse>(JsonOptions);
 
@@ -504,9 +530,11 @@ public sealed class DashboardEndpointsTests : IAsyncLifetime
         int PayeesInactiveCount);
 
     private sealed record TrendBandResponse(
-        string CurrentPeriodLabel,
-        string PriorPeriodLabel,
-        object[] CommissionTrend);
+        object[] CommissionTrend,
+        DateOnly CurrentFrom,
+        DateOnly CurrentTo,
+        DateOnly PriorFrom,
+        DateOnly PriorTo);
 
     private sealed record CurrencyTotalResponse(decimal Amount, string Currency);
 }

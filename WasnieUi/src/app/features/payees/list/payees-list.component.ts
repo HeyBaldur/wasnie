@@ -125,6 +125,13 @@ export class PayeesListComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // ★ THE SEARCH TERM DOES NOT SURVIVE LEAVING THIS SCREEN. The store is `providedIn: 'root'`, so it
+    //   outlives this component — but the search box does not. Coming back rendered an EMPTY box over a
+    //   list still filtered to one person, and the reader could not undo it: there was nothing in the
+    //   box to clear, so no event ever fired. Clearing it on entry is what keeps the two honest.
+    //   Status is not cleared here — it lives in the URL and bindFiltersToUrl owns it.
+    this.store.resetForEntry();
+
     // SUBSCRIBE, don't snapshot — see bindFiltersToUrl. Loop-safe: this screen never writes filter
     // params to the URL, so re-applying cannot re-trigger itself.
     bindFiltersToUrl(this.route, this.destroyRef, {

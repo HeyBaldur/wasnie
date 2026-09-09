@@ -89,6 +89,34 @@ public static class PayoutSkipReason
     /// to pay twice; the individual rows are also in <see cref="CalculatePayoutsResult.Conflicts"/>.
     /// </summary>
     public const string ExistingPayout = "ExistingPayout";
+
+    /// <summary>
+    /// This payee, plan and period were ALREADY paid, but credits have been allocated since that
+    /// payment and are still unpaid — so a supplemental payout was created carrying only those.
+    ///
+    /// ★★ NOT A SKIP: it is the opposite, and it is here because this list is where the run explains
+    /// itself. Without a name of its own, an administrator opening a period they know was already
+    /// paid would find a brand-new payout on it and no statement of why that is legitimate.
+    ///
+    /// ★ THE ALREADY-PAID MONEY IS NEVER TOUCHED. The credit query excludes anything with
+    /// <c>ConsumedAt</c> set, so a supplemental can only ever carry commission that was never paid.
+    /// </summary>
+    public const string SupplementalForNewCredits = "SupplementalForNewCredits";
+
+    /// <summary>
+    /// There IS unpaid commission in this period that the run never even looked at, because the payee
+    /// has no ACTIVE assignment to that plan. Nothing was skipped: the money was never in the
+    /// population the engine starts from.
+    ///
+    /// ★★ IT IS THE LOUDEST SILENCE THE ENGINE HAD. An administrator saw €385,731.02 reported as
+    /// Unpaid on three screens, ran the period it belonged to, and got a run with no payouts and no
+    /// explanation — because all six assignments had been deactivated and the engine only ever walks
+    /// Active ones. The run had the facts to say so and said nothing (§B1).
+    ///
+    /// ★ THE COUNT IS PAYEE+PLAN PAIRS, NOT ASSIGNMENTS. There is no assignment to count: that is
+    /// precisely the problem being reported.
+    /// </summary>
+    public const string UnreachableCommission = "UnreachableCommission";
 }
 
 public sealed record PayoutConflict(

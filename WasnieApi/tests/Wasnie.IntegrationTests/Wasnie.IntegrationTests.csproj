@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.14" />
     <PackageReference Include="Testcontainers.MsSql" Version="3.10.0" />
+    <!-- Explicit: pins the transitive SSH.NET that Testcontainers drags in at 2023.0.0 (GHSA-q939-rpr3-3284). -->
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
@@ -25,12 +27,24 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.14" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <!-- Explicit: same transitive pin as Infrastructure (GHSA-f32c-w444-8ppv). -->
+    <PackageReference Include="System.IO.Packaging" Version="8.0.1" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Wasnie.Api\Wasnie.Api.csproj" />
     <ProjectReference Include="..\..\src\Wasnie.Infrastructure\Wasnie.Infrastructure.csproj" />
+  </ItemGroup>
+
+
+  <!-- ★ THE INTEGRATION SUITE SPINS ONE SQL SERVER CONTAINER PER PARALLEL COLLECTION.
+       Unbounded, xUnit ran enough of them to hold SEVEN SQL Servers at once, which on a 16 GB machine
+       exhausted memory: containers failed to start, tests failed at 1 ms with nothing wrong in the
+       code, and two whole runs were killed outright. The suite also took 17-23 minutes instead of 5.
+       Three is enough to keep the machine busy without competing with itself. -->
+  <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

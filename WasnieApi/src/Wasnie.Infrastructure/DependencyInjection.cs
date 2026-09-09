@@ -75,6 +75,9 @@ public static class DependencyInjection
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
+        // Singleton: the failed-attempt counters must outlive the request that wrote them,
+        // or every attempt would start from zero and the lockout notice would never appear.
+        services.AddSingleton<ILoginAttemptTracker, LoginAttemptTracker>();
 
         services.AddOptions<ImportOptions>()
             .Bind(configuration.GetSection(ImportOptions.SectionName))

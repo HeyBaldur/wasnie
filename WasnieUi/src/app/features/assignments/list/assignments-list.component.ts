@@ -12,8 +12,11 @@ import { HasPermissionPipe } from '../../../shared/pipes/has-permission.pipe';
 import { AssignmentsStore } from '../state/assignments.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
-import { AssignmentStatus, BlockedAssignmentDto } from '../models/assignment.model';
+import { AssignmentStatus, BlockedAssignmentDto, DeactivationImpact } from '../models/assignment.model';
+import { AssignmentsApiService } from '../services/assignments.api.service';
+import { firstValueFrom } from 'rxjs';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
+import { CurrencyFormatPipe } from '../../../shared/pipes/currency-format.pipe';
 import { OverlapRow } from '../../../shared/models/overlap-row.model';
 import {
   WsButtonComponent,
@@ -40,6 +43,7 @@ import {
     RouterLink,
     TranslateModule,
     DateFormatPipe,
+    CurrencyFormatPipe,
     HasPermissionDirective,
     HasPermissionPipe,
     OverlapWarningComponent,
@@ -63,6 +67,7 @@ export class AssignmentsListComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly assignmentsApi = inject(AssignmentsApiService);
 
   // ★ The "⋯" menu follows its row while the page scrolls — see RowMenuController. These four
   // list screens each carried an identical measure-once copy, and so the identical defect.
@@ -199,12 +204,67 @@ export class AssignmentsListComponent implements OnInit {
     }
   }
 
+  // ── What a deactivation would strand ───────────────────────────────────────
+
+  /**
+   * The unpaid commission the pending deactivation would put out of reach of every pay run.
+   *
+   * ★★ WHY THE DIALOG ASKS. Deactivating is instant and silent, and the consequence only surfaces
+   *   later as a pay run that produces nothing. One administrator lost a day to €385,731.02 that three
+   *   screens agreed was owed and no run would pay, because six assignments had been switched off at
+   *   some point nobody remembered. The confirmation is the last moment where saying the number costs
+   *   nothing.
+   *
+   * ★ NULL AND EMPTY ARE DIFFERENT. Null is "not asked yet / could not ask"; an empty
+   *   `strandedByCurrency` is the server saying nothing is at stake. The dialog must not invent a
+   *   reassurance it has not been given (§B1), so it stays quiet in both cases and only speaks when
+   *   there is money behind it.
+   */
+  readonly deactivationImpact = signal<DeactivationImpact | null>(null);
+  readonly impactLoading = signal(false);
+
+  readonly impactTotals = computed(() => this.deactivationImpact()?.strandedByCurrency ?? []);
+  readonly impactItems = computed(() => this.deactivationImpact()?.items ?? []);
+  readonly hasImpact = computed(() => this.impactTotals().length > 0);
+
+  /** At most this many rows in the dialog; the rest are summarised. A dialog is not a report. */
+  private static readonly IMPACT_ROWS = 5;
+
+  readonly impactShownItems = computed(() =>
+    this.impactItems().slice(0, AssignmentsListComponent.IMPACT_ROWS));
+  readonly impactHiddenCount = computed(() =>
+    Math.max(0, this.impactItems().length - AssignmentsListComponent.IMPACT_ROWS));
+
+  /**
+   * Asked as the dialog opens. A failure leaves the impact null and the dialog reads exactly as it did
+   * before this feature existed — the warning is an addition, never a gate on the action.
+   */
+  private async loadDeactivationImpact(assignmentIds: string[]): Promise<void> {
+    this.deactivationImpact.set(null);
+    if (!assignmentIds.length) return;
+    this.impactLoading.set(true);
+    try {
+      this.deactivationImpact.set(
+        await firstValueFrom(this.assignmentsApi.deactivationImpact({ assignmentIds })));
+    } catch {
+      this.deactivationImpact.set(null);
+    } finally {
+      this.impactLoading.set(false);
+    }
+  }
+
   // ── Single deactivate ──────────────────────────────────────────────────────
 
   onDeactivate(assignmentId: string): void {
     this.closeMenu();
     this.pendingDeactivateId.set(assignmentId);
     this.deactivateOpen.set(true);
+    void this.loadDeactivationImpact([assignmentId]);
+  }
+
+  onBulkDeactivate(): void {
+    this.bulkDeactivateOpen.set(true);
+    void this.loadDeactivationImpact([...this.store.selectedIds()]);
   }
 
   async onConfirmDeactivate(): Promise<void> {

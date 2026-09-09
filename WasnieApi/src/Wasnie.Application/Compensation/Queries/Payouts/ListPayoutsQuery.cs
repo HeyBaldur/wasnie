@@ -50,6 +50,13 @@ public sealed record GetPayoutByIdQuery(Guid Id)
 public sealed record ExportPayoutPdfQuery(Guid Id)
     : IRequest<Result<ExportResult>>;
 
+/// <summary>
+/// The same payout as a spreadsheet. Beside the PDF query on purpose: they are two renderings of one
+/// document, and separating them in the codebase is how they start disagreeing.
+/// </summary>
+public sealed record ExportPayoutExcelQuery(Guid Id)
+    : IRequest<Result<ExportResult>>;
+
 public sealed record BulkApprovePayoutsCommand(IReadOnlyList<Guid> PayoutIds)
     : IRequest<Result<BulkApproveResult>>;
 

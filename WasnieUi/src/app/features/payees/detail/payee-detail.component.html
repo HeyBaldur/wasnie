@@ -99,6 +99,15 @@
               [class.tab-btn--active]="activeTab() === 'ledger'" (click)="setTab('ledger')">
         {{ 'LEDGER.TAB' | translate }}
       </button>
+      <!-- ★ THE TAB CARRIES A BADGE WHEN THERE IS MONEY STUCK. Without it this screen is one nobody
+           opens, and the whole point is that the reader does not yet know the money exists. -->
+      <button class="tab-btn" [class.tab-btn--active]="activeTab() === 'unreachable'"
+              (click)="setTab('unreachable')">
+        {{ 'PAYEES.UNREACHABLE.TAB' | translate }}
+        @if (hasUnreachable()) {
+          <ws-badge variant="warning" size="sm">{{ unreachableGroups().length }}</ws-badge>
+        }
+      </button>
     </div>
 
     <!-- ── Tab bodies ─────────────────────────────────────────────────────── -->
@@ -107,12 +116,17 @@
       <!-- ────────── OVERVIEW TAB ───────────────────────────────────────── -->
       @if (activeTab() === 'overview') {
 
-        <!-- Period selector -->
+        <!-- Date range filter — the presets are gone. They could not express an arbitrary window, and
+             their labels were untranslated keys reaching the screen (DASHBOARD.PERIOD_*, §C2).
+             `align="end"` because the control sits at the right: the two-month panel would otherwise
+             hang off the viewport and give the page a horizontal scrollbar. -->
         <div class="pd-period-filter">
-          <ws-segmented-control
-            [options]="periodOptions"
-            [value]="period()"
-            (valueChange)="setPeriod($event)"
+          <ws-date-range-picker
+            class="pd-range-picker"
+            align="end"
+            labelPosition="inline"
+            [formControl]="rangeControl"
+            [label]="'DASHBOARD.RANGE_LABEL' | translate"
           />
         </div>
 
@@ -134,22 +148,134 @@
             </div>
           }
 
+          <!-- ── This payee's commissions: Total / Paid / Unpaid ────────────────
+               MONEY RULE: total = paid + unpaid, to the cent. Built by the SAME server-side spec as the
+               dashboard's three cards (CommissionsBandSpec), narrowed to this payee — so this page and
+               the dashboard cannot answer differently about the same person's money.
+
+               Structural twins of the dashboard's, and of each other: same WsCard, same blocks, same
+               figure typography. Neither Paid nor Unpaid gets a colour or a chart the other lacks —
+               they are two halves of one number. -->
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-3 w-full max-w-full mb-8">
+
+            @for (card of commissionCards; track card.key) {
+              <ws-card variant="interactive" padding="md">
+                <!-- ★ OPENS A NEW TAB, AND THE ICON SAYS SO. These three lead the page and are read
+                     together as a sum; sending the reader away in place would cost them the other two
+                     figures and the range they were looking at. -->
+                <a [routerLink]="['/credits']"
+                   [queryParams]="commissionsLinkParams(card.settlement)"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="metric-card">
+                  <div class="metric-card__hd">
+                    <h3 class="metric-card__title">
+                      {{ card.titleKey | translate }}
+                      <app-icon name="external-link" [size]="12" class="metric-card__ext" />
+                    </h3>
+                    <p class="metric-card__sub">{{ card.descKey | translate }}</p>
+                  </div>
+                  <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+                    <div class="flex flex-col gap-1 min-w-0 flex-1">
+                      @if (dashboardLoading()) {
+                        <span class="skeleton skeleton--num"></span>
+                      } @else {
+                        <!-- Zero is rendered as a figure, never as an em-dash or a blank: "no
+                             commissions in this range" and "we could not work it out" must not look
+                             the same (§B3). -->
+                        <div class="metric-card__value commission-card__value">
+                          {{ fmtCompact(amountFor(commissionTotals(card.key), commissionsCurrency()), commissionsCurrency() ?? '') }}
+                        </div>
+                        <!-- The exact amount and the currency chip only exist when there IS a currency.
+                             With none to name, currencyFormat renders "??? 0" — its signal for corrupt
+                             data, which an empty range is not. -->
+                        @if (commissionsCurrency(); as ccy) {
+                          <span class="metric-card__value--full">
+                            {{ amountFor(commissionTotals(card.key), ccy) | currencyFormat: ccy }}
+                          </span>
+                          <span class="metric-card__ccy">{{ ccy }}</span>
+                        }
+                        @if (secondaryCurrencies(commissionTotals(card.key)).length > 0) {
+                          <div class="metric-card__secondary-ccys flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                            @for (t of secondaryCurrencies(commissionTotals(card.key)); track t.currency) {
+                              <div class="flex items-center gap-1">
+                                <span class="metric-card__ccy">{{ t.currency }}</span>
+                                <span class="metric-card__amt">{{ fmtCompact(t.amount, t.currency) }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
+                      }
+                    </div>
+                  </div>
+                </a>
+              </ws-card>
+            }
+          </div>
+
+          <!-- Commissions of this range that are in NONE of the three cards: written off, or settled
+               outside Incentra. Said out loud so the omission is visible rather than money quietly
+               missing from the total (§B1). -->
+          <!-- How much of "Unpaid" no pay run can reach: the payee has no active assignment to that
+               plan, so the engine never considers those credits. Said out loud because the two figures can
+               differ by orders of magnitude, and only one of them is money anybody can act on (§B3). -->
+          @if (!dashboardLoading() && hasUnreachableCommissions()) {
+            <p class="commissions-closed-note">
+              <app-icon name="alert-triangle" [size]="14" />
+              <span>
+                {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_NOTE' | translate }}
+                @for (t of dashboard()!.commissionsBand.unreachableTotalByCurrency; track t.currency) {
+                  <strong>{{ t.amount | currencyFormat: t.currency }}</strong><!--
+           -->@if (!$last) {<span>, </span>}
+                }
+                <!-- An amount alone is what sent an administrator through a pay run, a credits list
+                     and a database. The tab next door already knows WHICH plan and WHAT to change. -->
+                <button type="button" class="commissions-note-link" (click)="setTab('unreachable')">
+                  {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_LINK' | translate }}
+                </button>
+              </span>
+            </p>
+          }
+
+          @if (!dashboardLoading() && hasClosedCommissions()) {
+            <p class="commissions-closed-note">
+              <app-icon name="info" [size]="14" />
+              <span>
+                {{ 'DASHBOARD.COMMISSIONS_CLOSED_NOTE' | translate }}
+                @for (t of dashboard()!.commissionsBand.closedTotalByCurrency; track t.currency) {
+                  <strong>{{ t.amount | currencyFormat: t.currency }}</strong><!--
+               -->@if (!$last) {<span>, </span>}
+                }
+              </span>
+            </p>
+          }
+
           <div class="bento-grid">
 
             <!-- Card 1 — Attainment Gauges -->
             <div class="bento-card">
               <div class="bento-card__header">
+                <!-- The caret IS the button and it carries the title — the same disclosure shape the
+                     dashboard's attention panel uses, so the two screens behave identically. Wrapping the
+                     whole header instead would swallow the "view all" link, which must stay separately
+                     reachable while the block is shut. -->
+                <button type="button" class="bento-card__toggle"
+                        [attr.aria-expanded]="isBlockOpen('attainment')"
+                        aria-controls="pd-block-attainment"
+                        (click)="toggleBlock('attainment')">
+                  <app-icon [name]="isBlockOpen('attainment') ? 'chevron-up' : 'chevron-down'" [size]="16" />
                 <span class="bento-card__title">
                   {{ 'DASHBOARD.GAUGES_TITLE' | translate }}
-                  <span class="bento-card__counter">· {{ dashboard()?.attainmentItems?.length ?? 0 }} {{ periodCounterLabel() | translate }}</span>
+                  <span class="bento-card__counter">· {{ dashboard()?.attainmentItems?.length ?? 0 }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</span>
                 </span>
+                </button>
                 <a class="bento-card__link" [routerLink]="['/quotas']" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
-              <div class="bento-card__body">
+              <div class="bento-card__body" id="pd-block-attainment" [hidden]="!isBlockOpen('attainment')">
                 @if (!dashboard()?.attainmentItems?.length) {
-                  <p class="bento-empty">{{ 'DASHBOARD.ATTAINMENT_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
+                  <p class="bento-empty">{{ 'DASHBOARD.ATTAINMENT_EMPTY' | translate }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</p>
                 } @else {
                   @for (a of dashboard()!.attainmentItems; track a.quotaId) {
                     <a class="bento-gauge-row"
@@ -214,9 +340,19 @@
             <!-- Card 2 — Earnings Trend -->
             <div class="bento-card bento-card--chart">
               <div class="bento-card__header">
+                <!-- The caret IS the button and it carries the title — the same disclosure shape the
+                     dashboard's attention panel uses, so the two screens behave identically. Wrapping the
+                     whole header instead would swallow the "view all" link, which must stay separately
+                     reachable while the block is shut. -->
+                <button type="button" class="bento-card__toggle"
+                        [attr.aria-expanded]="isBlockOpen('trend')"
+                        aria-controls="pd-block-trend"
+                        (click)="toggleBlock('trend')">
+                  <app-icon [name]="isBlockOpen('trend') ? 'chevron-up' : 'chevron-down'" [size]="16" />
                 <span class="bento-card__title">{{ 'DASHBOARD.TREND_TITLE' | translate }}</span>
+                </button>
               </div>
-              <div class="bento-card__body">
+              <div class="bento-card__body" id="pd-block-trend" [hidden]="!isBlockOpen('trend')">
                 <ws-bar-chart
                   [points]="trendBarPoints(dashboard()?.salesTrend ?? [])"
                   [emptyLabel]="'DASHBOARD.TREND_EMPTY' | translate"
@@ -227,17 +363,27 @@
             <!-- Card 3 — Quotas virtual scroll -->
             <div class="bento-card">
               <div class="bento-card__header">
+                <!-- The caret IS the button and it carries the title — the same disclosure shape the
+                     dashboard's attention panel uses, so the two screens behave identically. Wrapping the
+                     whole header instead would swallow the "view all" link, which must stay separately
+                     reachable while the block is shut. -->
+                <button type="button" class="bento-card__toggle"
+                        [attr.aria-expanded]="isBlockOpen('quotas')"
+                        aria-controls="pd-block-quotas"
+                        (click)="toggleBlock('quotas')">
+                  <app-icon [name]="isBlockOpen('quotas') ? 'chevron-up' : 'chevron-down'" [size]="16" />
                 <span class="bento-card__title">
                   {{ 'DASHBOARD.QUOTAS_TITLE' | translate }}
-                  <span class="bento-card__counter">· {{ quotasTotal() }} {{ periodCounterLabel() | translate }}</span>
+                  <span class="bento-card__counter">· {{ quotasTotal() }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</span>
                 </span>
+                </button>
                 <a class="bento-card__link" [routerLink]="['/quotas']" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
-              <div class="bento-card__body">
+              <div class="bento-card__body" id="pd-block-quotas" [hidden]="!isBlockOpen('quotas')">
                 @if (!quotas().length && !quotasLoading()) {
-                  <p class="bento-empty">{{ 'DASHBOARD.QUOTAS_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
+                  <p class="bento-empty">{{ 'DASHBOARD.QUOTAS_EMPTY' | translate }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</p>
                 }
                 @for (q of quotas(); track q.id) {
                   <a class="bento-list-row clickable"
@@ -290,17 +436,27 @@
             <!-- Card 4 — Assignments virtual scroll -->
             <div class="bento-card">
               <div class="bento-card__header">
+                <!-- The caret IS the button and it carries the title — the same disclosure shape the
+                     dashboard's attention panel uses, so the two screens behave identically. Wrapping the
+                     whole header instead would swallow the "view all" link, which must stay separately
+                     reachable while the block is shut. -->
+                <button type="button" class="bento-card__toggle"
+                        [attr.aria-expanded]="isBlockOpen('assignments')"
+                        aria-controls="pd-block-assignments"
+                        (click)="toggleBlock('assignments')">
+                  <app-icon [name]="isBlockOpen('assignments') ? 'chevron-up' : 'chevron-down'" [size]="16" />
                 <span class="bento-card__title">
                   {{ 'DASHBOARD.ASSIGNMENTS_TITLE' | translate }}
-                  <span class="bento-card__counter">· {{ assignmentsTotal() }} {{ periodCounterLabel() | translate }}</span>
+                  <span class="bento-card__counter">· {{ assignmentsTotal() }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</span>
                 </span>
+                </button>
                 <a class="bento-card__link" [routerLink]="['/assignments']" [queryParams]="{ payeeId: payee.id }" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
-              <div class="bento-card__body">
+              <div class="bento-card__body" id="pd-block-assignments" [hidden]="!isBlockOpen('assignments')">
                 @if (!assignments().length && !assignmentsLoading()) {
-                  <p class="bento-empty">{{ 'DASHBOARD.ASSIGNMENTS_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
+                  <p class="bento-empty">{{ 'DASHBOARD.ASSIGNMENTS_EMPTY' | translate }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</p>
                 }
                 @for (a of assignments(); track a.id) {
                   <a class="bento-list-row clickable"
@@ -334,17 +490,27 @@
             <!-- Card 5 — Recent Credits -->
             <div class="bento-card">
               <div class="bento-card__header">
+                <!-- The caret IS the button and it carries the title — the same disclosure shape the
+                     dashboard's attention panel uses, so the two screens behave identically. Wrapping the
+                     whole header instead would swallow the "view all" link, which must stay separately
+                     reachable while the block is shut. -->
+                <button type="button" class="bento-card__toggle"
+                        [attr.aria-expanded]="isBlockOpen('credits')"
+                        aria-controls="pd-block-credits"
+                        (click)="toggleBlock('credits')">
+                  <app-icon [name]="isBlockOpen('credits') ? 'chevron-up' : 'chevron-down'" [size]="16" />
                 <span class="bento-card__title">
                   {{ 'DASHBOARD.CREDITS_TITLE' | translate }}
-                  <span class="bento-card__counter">· {{ creditsTotal() }} {{ periodCounterLabel() | translate }}</span>
+                  <span class="bento-card__counter">· {{ creditsTotal() }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</span>
                 </span>
+                </button>
                 <a class="bento-card__link" [routerLink]="['/credits']" [queryParams]="{ payeeIds: payee.id }" target="_blank" rel="noopener noreferrer">
                   {{ 'DASHBOARD.VIEW_ALL' | translate }} →
                 </a>
               </div>
-              <div class="bento-card__body">
+              <div class="bento-card__body" id="pd-block-credits" [hidden]="!isBlockOpen('credits')">
                 @if (!credits().length && !creditsLoading()) {
-                  <p class="bento-empty">{{ 'DASHBOARD.CREDITS_EMPTY' | translate }} {{ periodCounterLabel() | translate }}</p>
+                  <p class="bento-empty">{{ 'DASHBOARD.CREDITS_EMPTY' | translate }} {{ 'DASHBOARD.COUNTER_IN_RANGE' | translate }}</p>
                 }
                 @for (c of credits(); track c.id) {
                   <div class="bento-list-row clickable" role="link" tabindex="0"
@@ -448,6 +614,85 @@
       <!-- ────────── CLAWBACK LEDGER TAB ────────────────────────────────── -->
       @if (activeTab() === 'ledger') {
         <app-payee-ledger-panel [payeeId]="payeeId" />
+      }
+
+      <!-- ────────── OWED, BUT NO ROUTE TO A PAYOUT ─────────────────────────
+           Deliberately NOT governed by the date range above: the debt is spread across periods, so any
+           window shows a slice and hides the rest — which is exactly how it stayed invisible. -->
+      @if (activeTab() === 'unreachable') {
+        @if (unreachableLoading()) {
+          <div class="bento-card bento-card--skeleton">
+            <span class="skeleton skeleton--title"></span>
+            <span class="skeleton skeleton--text"></span>
+          </div>
+        } @else if (!hasUnreachable()) {
+          <ws-card variant="default" padding="lg">
+            <div class="pd-unreachable__empty">
+              <app-icon name="check" [size]="20" />
+              <span>{{ 'PAYEES.UNREACHABLE.EMPTY' | translate }}</span>
+            </div>
+          </ws-card>
+        } @else {
+          <ws-card variant="default" padding="lg">
+            <div class="pd-unreachable__head">
+              <div>
+                <h3 class="metric-card__title">{{ 'PAYEES.UNREACHABLE.TITLE' | translate }}</h3>
+                <p class="metric-card__sub">{{ 'PAYEES.UNREACHABLE.SUBTITLE' | translate }}</p>
+              </div>
+              <div class="pd-unreachable__total">
+                @for (t of unreachableTotal(); track t.currency) {
+                  <div class="metric-card__value commission-card__value">
+                    {{ t.amount | currencyFormat: t.currency }}
+                  </div>
+                }
+              </div>
+            </div>
+
+            <div class="ws-list-group pd-unreachable__list">
+              @for (g of unreachableGroups(); track g.planId + g.currency) {
+                <div class="ws-list-group__item pd-unreachable__row">
+                  <div class="pd-unreachable__plan">
+                    <a class="credits-list__entity-link" [routerLink]="['/plans', g.planId]"
+                       target="_blank" rel="noopener noreferrer">{{ g.planName }}</a>
+                    <span class="pd-unreachable__count">
+                      {{ 'PAYEES.UNREACHABLE.CREDIT_COUNT' | translate: { count: g.creditCount } }}
+                    </span>
+                  </div>
+
+                  <div class="pd-unreachable__why">
+                    <ws-badge variant="warning" size="sm">
+                      {{ unreachableReasonKey(g.reason) | translate }}
+                    </ws-badge>
+                    <!-- ★ THE SENTENCE THAT ENDS THE HUNT: what to change, and which pay run period to
+                         run afterwards. Reactivating is not always enough — an assignment that ended
+                         before these transactions still will not pay them. -->
+                    <span class="pd-unreachable__fix">
+                      {{ unreachableFixKey(g.reason) | translate }}
+                      @if (g.coversTransactionsFrom && g.coversTransactionsTo) {
+                        {{ 'PAYEES.UNREACHABLE.RUN_PERIOD' | translate: {
+                             from: (g.coversTransactionsFrom | dateFormat),
+                             to: (g.coversTransactionsTo | dateFormat) } }}
+                      }
+                    </span>
+                  </div>
+
+                  <div class="pd-unreachable__amount">
+                    {{ g.amount | currencyFormat: g.currency }}
+                  </div>
+
+                  @if (g.assignmentId) {
+                    <a class="bento-card__link"
+                       [routerLink]="['/assignments']"
+                       [queryParams]="{ payeeId: payeeId }"
+                       target="_blank" rel="noopener noreferrer">
+                      {{ 'PAYEES.UNREACHABLE.GO_TO_ASSIGNMENT' | translate }} →
+                    </a>
+                  }
+                </div>
+              }
+            </div>
+          </ws-card>
+        }
       }
 
     </div>

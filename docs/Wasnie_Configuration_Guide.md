@@ -1,4 +1,4 @@
-# Incentra — Configuration Guide
+# Incentra — User Handbook
 
 **What this is:** a walkthrough of how Incentra is configured and how it calculates, with worked
 numbers and what appears on screen at each step.
@@ -7,56 +7,48 @@ numbers and what appears on screen at each step.
 - **Operators / owner** — a reference for how the system actually behaves.
 - **New customers** — a first-use guide, in the order you'd really do it.
 
-**Verified against the code on 2026-07-30.** Every statement about Incentra's behaviour in this
-document was checked by reading the source, not from memory, and cites `file:line` so you can
-re-check it. (The 2026-07-27 pass reconciled the trigger, plan-attribution, transaction-lifecycle and
-deal-lost/recovery sections. The 2026-07-30 pass documented the **clawback subsystem, termination /
-orphaned accounts, the ledger & statement, and permissions** — all four shipped after the previous
-pass and are new sections [15](#15-clawback)–[18](#18-permissions-and-roles).) **If the calculation
-engine changes, this document must be re-verified** — a guide that misdescribes the engine is worse
-than no guide. The highest-risk sections are [Rate tables](#5-rate-tables),
+**Verified against the product on 2026-09-08.** Every statement here was checked against what
+Incentra actually does, not against what it was meant to do. **If the calculation engine changes,
+this document must be re-verified** — a guide that misdescribes the engine is worse than no guide.
+The sections most likely to drift are [Rate tables](#5-rate-tables),
 [SplitAtQuota](#6-splitatquota--the-accelerator-question), [Attainment](#7-attainment) and
 [Clawback](#15-clawback).
 
-**Related docs:** `Pay_Run_Model.md` (why pay runs exist — design rationale),
-`Wasnie_Product_Master_Specification.md` (product scope), `ARCHITECTURE.md` (engineering rules).
-This guide describes **as-built behaviour**; where it disagrees with the spec, this document
-reflects what the code does and says so explicitly.
+The 2026-09-08 pass removed the internal code references this guide used to carry and added
+sections [19](#19-zeke-the-assistant)–[27](#27-discarding-a-payout-that-can-never-be-paid), covering
+everything that shipped since the previous pass.
+
+This guide describes **as-built behaviour** — what the product does today. Where an intention and
+the behaviour disagree, the behaviour is what is written here, and the difference is said out loud.
 
 ---
 
-## Coverage checklist (this document is written in passes)
+## What this covers
 
-Documenting every area of Incentra against the real code is more than one sitting. This checklist is
-the resume point: each pass takes the next unticked area, documents it **completely** — what it is,
-how to configure it, use cases (happy path + edges) with concrete numbers, validations/errors, and
-permissions — and ticks it here. Areas already covered by the older narrative sections are marked
-with the section that covers them.
+| Area | Where |
+|---|---|
+| Plans, rules, rate tables, accelerators | [4](#4-plan-and-rules), [5](#5-rate-tables), [6](#6-splitatquota--the-accelerator-question) |
+| Attainment and quotas | [7](#7-attainment), [8](#8-quotas) |
+| Transactions and how a sale becomes commission | [9](#9-transactions), [12](#12-end-to-end-one-deal-all-the-way-through) |
+| Measurement period vs payment period | [10](#10-measurement-period-vs-payment-period) |
+| Pay runs, payouts and supplementals | [11](#11-pay-runs-and-payouts), [22](#22-supplemental-payouts) |
+| Clawback | [15](#15-clawback) |
+| Termination and orphaned accounts | [16](#16-termination-and-orphaned-accounts) |
+| Ledger and statement | [17](#17-ledger-and-statement) |
+| Permissions and roles | [18](#18-permissions-and-roles) |
+| Zeke, the assistant | [19](#19-zeke-the-assistant) |
+| Reading what is owed, and what has no route to payment | [20](#20-reading-commission-the-date-range-and-the-three-cards), [21](#21-commission-with-no-route-to-payment) |
+| Exports, and what to send accounting | [23](#23-exports--what-to-send-accounting) |
+| Reconciliation, refusals and the audit trail | [24](#24-the-reconciliation-centre), [25](#25-when-a-rule-stops-paying), [26](#26-the-audit-trail), [27](#27-discarding-a-payout-that-can-never-be-paid) |
 
-| Area | Status | Where |
-|---|---|---|
-| Plans (create, version/clone, activate, period, currency) | [x] | [4](#4-plan-and-rules), [4.5](#45-plan-lifecycle-and-assignments) |
-| Plan clawback policy (maturation + cap %) | [x] | [15.1](#151-configuration-the-policy-is-opt-in-per-plan) |
-| Rules (trigger, measurement, rate tables, modifier/cap/floor) | [x] | [4](#4-plan-and-rules), [5](#5-rate-tables), [6](#6-splitatquota--the-accelerator-question) |
-| Quotas | [x] | [8](#8-quotas) |
-| Payees (creation, required fields) | [~] | [3](#3-payees) — **states and the Terminated lifecycle still to document** |
-| Assignments (exact-period match, explicit status/date contract) | [~] | [1](#1-the-model-on-one-page), [4.5](#45-plan-lifecycle-and-assignments) — **the list contract (`status`, `dateFrom`/`dateTo`, no magic default) not yet written up** |
-| Transactions (ingest, lifecycle, deal-lost / recovery) | [~] | [9](#9-transactions) — **`ProcessImmediately`, the sort whitelist + 400, and the compensation-period filters not yet written up** |
-| Pay runs and payouts | [~] | [11](#11-pay-runs-and-payouts) — **terminated exclusion and the residual payout are in [16](#16-termination-and-orphaned-accounts); the period-filter fix not yet written up** |
-| **Clawback (the whole subsystem)** | [x] | [15](#15-clawback) |
-| **Termination and orphaned accounts** | [x] | [16](#16-termination-and-orphaned-accounts) |
-| **Ledger / statement** | [x] | [17](#17-ledger-and-statement) |
-| **Permissions and roles** | [x] | [18](#18-permissions-and-roles) |
-| Dashboard (Requires action, alerts, metrics) | [ ] | — |
-| CRM integration (HubSpot OAuth, sync, mapping, deal-lost → churn) | [ ] | `HUBSPOT_INTEGRATION_DESIGN.md` covers the design; the **operator-facing** use cases are not written |
-| Imports (Excel wizards, field requirements, consent) | [ ] | — |
-| Settings (field requirements, category mappings) | [ ] | — |
-| Subscription / billing (tiers, limits, portal) | [ ] | — |
+**Not covered yet:** the CRM integration, the Excel import wizards, Settings, and subscription and
+billing. Those areas work; they are simply not written up here.
 
-**Numbering note.** Sections added in later passes are appended (15, 16, …) rather than inserted in
-narrative order, so existing links and any circulated PDF page references stay valid. Read
-[15](#15-clawback)–[17](#17-ledger-and-statement) directly after [11](#11-pay-runs-and-payouts) if you
-are reading front to back.
+**Numbering note.** Later sections are appended (15, 16, …) rather than inserted in narrative order,
+so existing links and printed page references stay valid. Reading front to back, the natural order is
+[15](#15-clawback)–[17](#17-ledger-and-statement) after [11](#11-pay-runs-and-payouts), then
+[20](#20-reading-commission-the-date-range-and-the-three-cards)–[23](#23-exports--what-to-send-accounting)
+for everything to do with reading and exporting what is owed.
 
 ---
 
@@ -100,8 +92,8 @@ The two halves are worth separating in your head:
 
 | Relationship | Rule | Where |
 |---|---|---|
-| Assignment ↔ Plan | **exact equality**, enforced | `AssignPlanToPayeeHandler.cs:40-46` |
-| Quota ⊆ Plan | **containment** (partial overlap rejected) | `QuotaPeriodGuard.cs:19-33` |
+| Assignment ↔ Plan | **exact equality**, enforced when the assignment is saved |
+| Quota ⊆ Plan | **containment** — a quota that only partly overlaps its plan is rejected |
 | Pay Run ↔ Quota | **no relationship at all** | see [section 10](#10-measurement-period-vs-payment-period) |
 
 That asymmetry is the reason "monthly quotas inside a quarterly plan" works: the quota may be
@@ -131,8 +123,7 @@ The app's own empty states describe this order, and it's the order to follow:
 they are not configurable and cannot be turned off. Everything else (email, hire date, role,
 manager, employment type, location) is governed per tenant in *Settings → Field requirements*.
 
-Full name and employee code are absent from the configurable catalog entirely
-(`PayeeFieldNames.cs`), so they can't be relaxed even via the API — the update endpoint rejects
+Full name and employee code are absent from the configurable catalog entirely, so they cannot be relaxed at all — the system rejects
 them with *"not in the configurable catalog"*.
 
 **On screen.** *Settings → Field requirements* lists each configurable field with a
@@ -164,23 +155,20 @@ one or more conditions; the rule then fires only on transactions that satisfy th
 The screen's own tooltip on that section states the same rule: *"If enabled, this rule only applies when
 the conditions are met. Without a trigger, the rule always runs on every matching transaction."*
 
-> ✅ **"Applies to all" is the absence of conditions, not a setting.** With the toggle off the form
-> sends no trigger at all and the domain substitutes `Trigger.Always()`
-> (`Plan.cs:97,136` — `trigger ?? Trigger.Always()`), which is a trigger with an empty condition list;
-> the engine then short-circuits to fire on everything (`CommissionCalculator.cs:33` —
-> `if (trigger.Conditions.Count == 0) return true`). Turning the toggle **on** but adding **no**
-> conditions lands on that same empty list and behaves identically — so the rule is "all transactions"
-> whenever it has zero conditions, however you got there. Read-only screens render this state as
-> *"Applies to all transactions (no conditions)."*
+> ✅ **"Applies to all" is the absence of conditions, not a setting.** With the toggle off, the rule
+> is saved with no conditions at all, and a rule with no conditions fires on everything. Turning the
+> toggle **on** but adding **no** conditions produces exactly the same thing — so a rule is "all
+> transactions" whenever it has zero conditions, however you got there. Read-only screens show this
+> state as *"Applies to all transactions (no conditions)."*
 
 > ✅ **The condition Field is a dropdown fed by the engine's own catalog** — not free text. The list
-> comes from `GET /api/plans/trigger-fields` (`TriggerFieldCatalog.cs:39-66`), so the UI can only offer
+> comes from the plan's own catalogue of usable fields, so the screen can only offer
 > a field the engine actually reads; a name the engine never heard of can no longer be typed. The eight
 > fields are: `transactionamount`, `transactiondate`, `quantity`, `source`, `currency`, `productsku`,
 > `productname`, and `category`.
 >
 > ✅ **Operators are derived from the field's value type**, so the UI never offers one the engine
-> ignores (`TriggerFieldCatalog.cs:80-97`):
+> ignores:
 > - **String** fields (`source`, `currency`, `productsku`, `productname`, `category`) →
 >   `Equal` / `NotEqual` / **`In`** / **`NotIn`** (`In` / `NotIn` read a value *set*, e.g.
 >   `productsku In {LAP-12, DELL-01}`).
@@ -198,15 +186,14 @@ the conditions are met. Without a trigger, the rule always runs on every matchin
 ### 4.2 Measurement — what is being measured
 
 > ✅ **Revenue** (uses the transaction amount) and **Units** (uses the transaction quantity) are the
-> only two offered, by a deliberate allowlist (`rule-form.component.ts:87-93`).
+> only two offered, deliberately.
 
-The underlying enum also contains `Margin`, `Attainment` and `Custom`, but they are not selectable,
-and if injected via the API they compute as Revenue — the engine only branches on `Units`
-(`CreditAllocationService.cs:207,225-227`). `MeasurementType.Attainment` is **not** how
+Three further measurements — Margin, Attainment and Custom — are reserved for future use and cannot be chosen,
+and if injected via the API they compute as Revenue — the engine only branches on `Units`. `MeasurementType.Attainment` is **not** how
 attainment plans work; that is the rate table's job (see 5.3).
 
 **Units restriction:** Units measurement only supports a **Flat** rate table. The domain rejects
-anything else (`Rule.cs:34-40`), and the UI disables the other rate-table buttons and forces Flat.
+anything else, and the UI disables the other rate-table buttons and forces Flat.
 
 > ⚠️ **Aggregation and Source field do nothing.** `Measurement` carries `Aggregation`
 > (Sum/Average/Max/Min/Count) and `SourceField`, but **neither is read by the engine anywhere**.
@@ -223,25 +210,23 @@ See [section 5](#5-rate-tables).
 
 ### 4.4 Modifier, Cap, Floor — applied in that order
 
-Applied after the rate table, in sequence: **modifier → cap → floor**
-(`CreditAllocationService.cs:252-254`).
+Applied after the rate table, in sequence: **modifier → cap → floor**.
 
 > ⚠️ **All three modifier types behave identically.** `ModifierType` is
 > `Accelerator | Multiplier | Spiff`, and `ApplyModifier` multiplies the commission by `Factor`
-> regardless of which you pick (`CommissionCalculator.cs:244-250`, comment: *"Spiff: V1 stub —
+> regardless of which you pick (the engine's own note reads: *"Spiff: V1 stub —
 > treat Factor as multiplier"*). The type is a label with no behavioural effect today.
 >
-> *(The master spec lists a "decelerator" type — it does not exist in the code. To decelerate, use a
-> factor below 1.0.)*
+> *(A "decelerator" type does not exist. To decelerate, use a factor below 1.0.)*
 
 > ⚠️ **Cap is always per-transaction.** The rule form now offers **only "Per transaction"** as the
-> scope and defaults to it (`rule-form.component.ts:116-117,156`), so there is nothing to get wrong —
+> scope and defaults to it, so there is nothing to get wrong —
 > the old "set the scope explicitly or it does nothing" trap is gone. The engine applies a cap only
-> for the per-transaction scope (`CommissionCalculator.cs:252-264`). The backend enum still carries
+> for the per-transaction scope. The product still reserves
 > *Per period* and *Total* for future use, but they are not selectable and any request with a
 > non-per-transaction scope is rejected outright — *"Only Per Transaction cap scope is currently
-> supported."* (`AddRuleToPlanHandler.cs:31-33`, `UpdateRuleHandler.cs:31-33`). A cap in a different
-> currency to the commission is still skipped silently (`CommissionCalculator.cs:258-259`).
+> supported."*. A cap in a different
+> currency to the commission is still skipped silently.
 
 **Floor** works as expected (raises commission up to the floor amount).
 
@@ -253,18 +238,18 @@ floor — off is the normal state, not an incomplete one.
 ### 4.5 Plan lifecycle and assignments
 
 **Archiving a plan deactivates its assignments.** Archiving sets every Active assignment of the plan
-to Deactivated in the same operation (`ArchivePlanHandler.cs:43-49`), so an archived plan drops out
+to Deactivated in the same operation, so an archived plan drops out
 of processing and out of the "pending eligible" lists — a payee is no longer resolved against it.
 
 > ✅ **A payee can be assigned to several active plans at once** (e.g. a base plan plus another).
 > When a transaction for that payee is processed it is **credited to EVERY applicable plan**, not one:
-> the allocator iterates all eligible assignments (`CreditAllocationService.cs:183` `ResolveAssignments`,
+> the engine considers every eligible assignment,
 > which returns a list) and writes one credit per plan. The old "one plan by shortest-period tie-break"
 > rule was removed — it silently decided how much commission was paid, which was a real bug.
 >
 > ✅ **When there is genuine ambiguity — a payee on 2+ eligible plans and no plan stated — the admin
 > chooses.** Manual entry requires picking the plan (`SelectedPlanAssignmentId`, re-validated server-side;
-> `CreditAllocationService.cs:190-192` `ResolveSelected`). Excel and HubSpot, where no human is present at
+> Excel and HubSpot, where no human is present at
 > load time, **fail loud** instead of guessing: the transaction is left Pending and uncredited and appears
 > on the dashboard's "needs attention" card under **ambiguous attribution**, grouped by payee — the fix is
 > to deactivate the assignment that should not apply.
@@ -288,22 +273,23 @@ Three types, all selectable.
 >
 > Entering `5` does not mean 5% — it means **500%**. Entering `100` means **ten thousand per cent**.
 >
-> This is not a UI convention, it is what the engine computes: `CommissionCalculator.cs:166` does
+> This is not a screen convention, it is what the engine computes:
 > `baseAmount.Multiply(rateTable.FlatRate)`, tiered does `inTier * tier.Rate`
-> (`CommissionCalculator.cs:193`), and attainment does `baseAmount.Multiply(tier.Rate)`
-> (`CommissionCalculator.cs:214`). The rate is a multiplier in all three. The form's own hint says the
+>, and attainment does `baseAmount.Multiply(tier.Rate)`
+>. The rate is a multiplier in all three. The form's own hint says the
 > same thing: *"Enter as decimal, e.g. 0.05 = 5%"*.
 >
 > **The percentages written throughout this document — "10% flat", "8.2% up to quota" — describe what a
 > rate MEANS, not the keystrokes.** A rate meaning 10% is typed `0.10`.
 >
-> **Two different fractions, and neither needs converting.** §5.3's `AttainmentFrom` / `AttainmentTo`
-> are fractions of the QUOTA (`1.0` = 100% of quota) — a different quantity from the Rate, expressed in
-> the same decimal convention. There is nowhere in Incentra where a rate or a threshold is typed as a
+> **Two different fractions, and neither needs converting.** The attainment bounds of an
+> attainment-based table ([5.3](#53-attainment-based--fractions-of-quota)) are fractions of the
+> QUOTA (`1.0` = 100% of quota) — a different quantity from the rate, written in the same decimal
+> convention. There is nowhere in Incentra where a rate or a threshold is typed as a
 > whole percentage, so there is no conversion to remember and no place to get it backwards.
 >
 > **One exception, and it is not a percentage at all:** when a rule's Measurement is **Units**, the Flat
-> rate is **money per unit** (`ComputeUnitsCommission`, `CreditAllocationService.cs:356`). `2.00` there
+> rate is **money per unit**. `2.00` there
 > means €2.00 per unit, not 200%.
 
 ### 5.1 Flat
@@ -316,9 +302,9 @@ One rate applied to the whole base amount.
 
 `RateTier` is `From` / `To` / `Rate`, where From and To are **absolute currency amounts**, not
 percentages. The calculation is **marginal**: each tier's rate applies only to the portion of the
-amount inside that tier's band (`CommissionCalculator.cs:162-187`).
+amount inside that tier's band.
 
-**Example** (from the engine's own test, `CommissionCalculatorTests.cs:149-163`):
+**Example** (taken from the engine's own regression test, so the figures are the ones it produces):
 
 | Tier | Rate | Portion of an €800 deal | Commission |
 |---|---|---|---|
@@ -335,12 +321,12 @@ Not €80 (which is what a single-bracket lookup would give).
 >
 > Also, `From` is used only to derive each tier's width. A gap between tiers, or a first tier that
 > doesn't start at 0, will silently mis-bracket — the model validates ascending non-overlap but not
-> contiguity (`RateTable.cs:23-34`).
+> contiguity.
 
 > ### ⚠️ Tiered is NOT available when Measurement is Units
 >
 > **You cannot band by quantity.** A rule with `Measurement = Units` and any rate table other than Flat
-> is rejected by the domain when you try to save it (`Rule.cs:36-39`):
+> is rejected by the domain when you try to save it:
 >
 > > *"Units measurement only supports a Flat rate table. Tiered and Attainment rate tables are not
 > > supported for unit-based commission."*
@@ -358,7 +344,7 @@ Not €80 (which is what a single-bracket lookup would give).
 > units.
 >
 > **What Units does support:** exactly one rate per unit, applied to the whole quantity —
-> `ratePerUnit × quantity` (`ComputeUnitsCommission`, `CommissionCalculator.cs:159-160`). Ten units at
+> rate per unit × quantity. Ten units at
 > `2.00` is €20.00; a hundred units at `2.00` is €200.00. The rate never changes with volume.
 >
 > **The nearest supported alternatives**, both of which change what is being measured:
@@ -371,16 +357,15 @@ Not €80 (which is what a single-bracket lookup would give).
 >
 > **If a Units rule ever ends up with a non-Flat table** — the domain blocks it, so this would mean data
 > written around the domain — the engine does **not** fail loudly. It logs an error and sets that
-> commission to **zero** (`CreditAllocationService.cs:358-365`). The symptom is someone being paid
+> commission to **zero**. The symptom is someone being paid
 > nothing, not an error message, which is why the restriction is worth knowing before configuring
 > rather than after a pay run.
 
 
 ### 5.3 Attainment-based — fractions of quota
 
-`AttainmentTier` is `AttainmentFrom` / `AttainmentTo` / `Rate`, where From/To are **fractions of the
-quota**: `1.0` = 100% of quota. They are multiplied by the quota target to get absolute money
-(`CommissionCalculator.cs:227-230`).
+Each tier is a **from**, a **to** and a **rate**, where from and to are **fractions of the quota**:
+`1.0` = 100% of quota. They are multiplied by the quota target to get absolute money.
 
 This type **requires a quota** for the payee+plan. How it behaves depends entirely on the
 **Split commission at quota** toggle — see the next section.
@@ -397,8 +382,7 @@ Take an accelerator of **8.2% up to quota, 9.2% above it**, a quota of **48,000*
 
 ### Toggle ON — only the excess is accelerated
 
-The engine splits the revenue at the quota boundary and pays each tier's rate on its own slice
-(`CommissionCalculator.cs:212-240`).
+The engine splits the revenue at the quota boundary and pays each tier's rate on its own slice.
 
 | Slice | Rate | Commission |
 |---|---|---|
@@ -409,8 +393,8 @@ The engine splits the revenue at the quota boundary and pays each tier's rate on
 ### Toggle OFF — one bracket rate for the whole transaction
 
 The engine looks up the single tier matching the attainment reached **before** this transaction, and
-applies that one rate to the entire transaction (`CommissionCalculator.cs:189-204`;
-`attainmentPct` is sourced at `CreditAllocationService.cs:176-178` from credits already committed).
+applies that one rate to the entire transaction. The attainment it reads is the one built from
+commissions already committed at that moment.
 
 As one €50,000 deal with no prior revenue: attainment before the deal is 0, so the 8.2% bracket
 applies to all of it → **4,100.00**.
@@ -440,7 +424,7 @@ against real data. The same revenue under a whole-amount policy would be €19,4
 
 > ⚠️ **ON with no quota pays zero.** If SplitAtQuota is on and the payee has no Active or Closed
 > quota covering the transaction date, commission is **zero** with a logged warning
-> (`CreditAllocationService.cs:230-238`). The quota becomes mandatory for earning.
+>. The quota becomes mandatory for earning.
 
 **On screen.** The toggle is labelled **"Split commission at quota"** with an info icon whose
 tooltip explains both states accurately. It's a hover tooltip, so the distinction isn't visible at
@@ -450,7 +434,7 @@ a glance while toggling.
 
 ## 7. Attainment
 
-**Formula** (`AttainmentPercentage.cs:26-31`):
+**Formula**:
 
 ```
 attainment = achieved ÷ target
@@ -461,10 +445,10 @@ represented as `1.20`.
 
 **`achieved`** is the sum of `Transaction.Amount` (the gross sale, *not* the commission) across
 non-superseded credits for that payee+plan whose transaction date falls in the quota period; for
-Units quotas it sums `Quantity` instead (`QuotaAttainmentService.cs:83-104,143-162`).
+Units quotas it sums `Quantity` instead.
 
 > ⚠️ **The sum covers the whole quota period, not "up to today."** The as-of date selects *which
-> quota applies*, but does not bound the sum (`QuotaAttainmentService.cs:98-99` vs `:56`). It
+> quota applies*, but does not bound the sum itself. It
 > behaves like a running to-date figure only because later-dated transactions usually haven't been
 > ingested yet. **Backdating a deal, or importing out of date order, changes attainment for
 > transactions already processed.** The batch job processes in transaction-date order so the normal
@@ -484,21 +468,19 @@ Units quotas it sums `Quantity` instead (`QuotaAttainmentService.cs:83-104,143-1
 - The period is a free start/end date range and **must fall entirely within the plan's period**.
   Partial overlap is rejected.
 - Measurement is **Revenue** or **Units** (`QuotaMeasurementType`, Revenue/Units exposed;
-  Margin/ACV/Bookings exist in the enum but are not selectable).
+  Margin/ACV/Bookings are reserved for future use and cannot be chosen).
 - Currency is locked to the plan's currency.
 
 > Note: `QuotaMeasurementType` and the rule's `MeasurementType` are **different enums with different
 > numeric values**. Don't conflate them.
 
-**Lifecycle: Draft → Active → Closed.** Strictly linear — no reopening, no un-closing
-(`Quota.cs:106-132`).
+**Lifecycle: Draft → Active → Closed.** Strictly linear — no reopening, no un-closing.
 
 **Status is never derived from dates.** Only the explicit *Activate* and *Close* actions change it.
 A quota whose period has ended stays Active until someone closes it. Attainment queries include
 every non-Draft quota, so Draft quotas contribute nothing.
 
-**Quotas are immutable after Draft.** `UpdateDraft` throws for any non-Draft status
-(`Quota.cs:84-87`). The UI states this up front: *"Quotas cannot be modified after creation."*
+**Quotas are immutable after Draft.** `UpdateDraft` throws for any non-Draft status. The UI states this up front: *"Quotas cannot be modified after creation."*
 To change a target, close the quota and create a new one.
 
 **On screen.** The quota detail page shows a status badge, employee code, period chip and amount
@@ -507,8 +489,7 @@ only for Draft; **Close Quota** only for Active; neither once Closed. There is n
 anywhere, matching the Draft-only guard.
 
 **Overlapping quotas.** Nothing prevents several quotas covering the same date. If more than one
-matches, the engine picks the **narrowest** period, then the most recently created
-(`QuotaAttainmentService.cs:61-65`). Monthly quotas sitting inside a quarterly plan work this way —
+matches, the engine picks the **narrowest** period, then the most recently created. Monthly quotas sitting inside a quarterly plan work this way —
 but it's a usage convention, not a modelled parent/child relationship, and nothing validates that
 they tile the period without gaps.
 
@@ -517,7 +498,7 @@ they tile the period without gaps.
 ## 9. Transactions
 
 **What they represent.** Closed-won sales. HubSpot enforces this — the sync filters on HubSpot's
-calculated `hs_is_closed_won` property (`HubSpotCrmDealSource.cs:19` class doc, `:479` search filter).
+calculated *closed won* property.
 **Excel import and manual entry do not filter**: whatever you provide is accepted. The UI states this as
 an expectation, not a rule.
 
@@ -584,8 +565,7 @@ are decoupled because nothing connects them, not because the relationship is mod
 validation or report expresses "this run covers part of that measurement period."
 
 **What a pay run actually gathers:** transactions whose `TransactionDate` falls inside
-(**pay run period ∩ assignment period**) — never the quota period
-(`CalculatePayoutsForPeriodHandler.cs:144-152`).
+(**pay run period ∩ assignment period**) — never the quota period.
 
 **How attainment behaves when they differ.** Attainment is consumed earlier, at credit-allocation
 time, against the quota's own period. A monthly pay run over a quarterly quota simply pays that
@@ -597,7 +577,7 @@ The pay run does not recalculate attainment.
 > period end. Incentra has none of these. There is no advance, no recovery, no reconciliation step.
 
 > 📚 **Named frequency (monthly / quarterly / annual) — effectively NOT implemented.** A
-> `PlanPeriodType` enum exists on Plan, but it is optional, read by nothing, exposed by no DTO or
+> A plan carries an optional *period type* field, but nothing reads it: it is not shown on any screen or
 > screen, and consumed by no calculation. Periods are free-form dates everywhere. Quotas and
 > assignments have no frequency field at all.
 
@@ -634,7 +614,7 @@ part-way through.
 
 > ⚠️ **Overlapping pay runs are possible.** Uniqueness is on *exact* period dates plus sequence, so
 > Jan 1–31 and Jan 15–Feb 15 can both exist. An overlaps query exists but is advisory — it is
-> exposed on a detail endpoint and is never consulted when creating or calculating. The real
+> shown on the detail screen and is never consulted when creating or calculating. The real
 > protection against paying the overlap twice is the credit-consumption guard, not a period
 > constraint.
 
@@ -709,11 +689,11 @@ accidentally presents them as features.
 | **Splits / overlays (1:N)** | Schema-only. `Credit` carries `SplitPercentage` and `Role` (Primary/Overlay/Split), but the allocator always writes **Primary at 100%**. No UI, no multi-payee split. |
 | **SPIFFs as distinct behaviour** | Name only. `Spiff` is a `ModifierType` value, but it multiplies by `Factor` exactly like the others. |
 | **Windfall / materiality thresholds** | Not implemented. No outsized-deal detection or capping by threshold. |
-| **Named frequency** (monthly/quarterly as a formal concept) | Not implemented. `PlanPeriodType` exists but is inert metadata. |
+| **Named frequency** (monthly/quarterly as a formal concept) | Not implemented. A plan can carry a *period type* label, but nothing acts on it. |
 | **Weighted averages** | Not implemented anywhere. |
 | **Second KPI unlocking a rate** (e.g. margin gate on a revenue rate) | Not implemented. One measurement per rule (a rule's Trigger can filter on eight fields, but that gates whether the rule fires — it does not blend a second KPI into the rate). |
 | ~~**Clawback of a *paid* commission**~~ | ✅ **NOW IMPLEMENTED** (2026-07-28/29) — moved out of this table. Proportional churn clawback, an append-only payee ledger with a negative-balance model, and deduction from future pay runs bounded by a per-plan cap. See [section 15](#15-clawback). |
-| **Period-scoped caps** | Not offered in the UI and rejected by the API — only per-transaction caps apply (the backend enum keeps *Per period* / *Total* for future use). See 4.4. |
+| **Period-scoped caps** | Not offered on screen and rejected if attempted — only per-transaction caps apply (*Per period* and *Total* are reserved for future use). See 4.4. |
 | **Tier accumulation across a period (Tiered tables)** | Tiered restarts per transaction. Period accumulation exists only via attainment + SplitAtQuota. |
 
 ---
@@ -760,17 +740,17 @@ The pieces:
 Deal lost in the CRM, commission already Paid
         │
         ▼
-ClawbackDebit  (Origin = System)  ──►  PayeeLedgerEntry (append-only)
+Clawback  (Origin = System)  ──►  PayeeLedgerEntry (append-only)
         │                                      │
         │                                      ▼
         │                               PayeeBalance   (one per payee + currency)
         ▼                                      │
-next pay run marked Paid  ──►  withholds up to each plan's cap  ──►  ClawbackAppliedCredit
+next pay run marked Paid  ──►  withholds up to each plan's cap  ──►  Withheld from pay run
 ```
 
 ### 15.1 Configuration: the policy is opt-in per plan
 
-*Plans → open a plan → **Clawback** tab.* Two fields, both nullable (`Plan.cs:33,40`):
+*Plans → open a plan → **Clawback** tab.* Two fields, both optional:
 
 | Field | Meaning | Empty means |
 |---|---|---|
@@ -779,14 +759,14 @@ next pay run marked Paid  ──►  withholds up to each plan's cap  ──► 
 
 > ✅ **The subsystem is born inert.** Both fields are null on every pre-existing plan, so nothing
 > changes for anyone until a tenant deliberately sets a maturation window
-> (`RegisterDealChurnClawbackHandler.cs:131-137`: a credit whose plan has no window is skipped and
+> (a credit whose plan has no window is skipped and
 > the outcome is reported as *no policy*, which is a configuration state, not a failure).
 
 > ✅ **A renewed plan inherits the policy.** `CloneAsNewVersion` copies both fields — a new version
 > silently dropping the clawback would have turned a renewal into an amnesty.
 
 **Validations:** maturation days must be > 0; cap must be between 0 and 100; an **archived** plan
-rejects the change outright (`Plan.cs:150-157`).
+rejects the change outright.
 
 ### 15.2 The formula
 
@@ -794,24 +774,23 @@ rejects the change outright (`Plan.cs:150-157`).
 clawback = commissionPaid × (maturationDays − daysActive) ÷ maturationDays      floored at 0
 ```
 
-`ClawbackCalculator.cs:28-45`. Two properties are deliberate and worth stating to a customer:
+Two properties of it are deliberate and worth stating to a customer:
 
 - **One multiplication, then one division.** Computing the ratio first (`1 − 30/90 = 0.6666…`)
   rounds before it multiplies and loses cents on large commissions. This form keeps
   `900 × 60 ÷ 90` at exactly `600.00`.
 - **Floored at zero.** A deal that outlived its window gives back **nothing** — a clawback can never
-  turn into a bonus (`:41-42`).
+  turn into a bonus.
 
 `daysActive` runs from the transaction (close-won) date to the CRM loss date, floored at 0: a loss
 dated *before* the close is bad CRM data, not a negative lifetime, and is treated as 0 days active
-— i.e. the full clawback (`ClawbackCalculator.cs:66-70`).
+— i.e. the full clawback.
 
-**Origin error** (the contract was never real) uses `Full` — 100%, not proportional
-(`ClawbackCalculator.cs:51-59`). There is no time earned on a sale that never existed.
+**Origin error** (the contract was never real) uses `Full` — 100%, not proportional. There is no time earned on a sale that never existed.
 
 > ⚠️ Today only the **churn** trigger is wired to a live event (deal lost in HubSpot). The
 > origin-error method exists and is tested but has no automatic trigger; the equivalent correction is
-> made by hand as a `DataCorrectionDebit` ([17.4](#174-manual-adjustments)).
+> made by hand as a **Data correction** ([17.4](#174-manual-adjustments)).
 
 ### 15.3 Use cases
 
@@ -820,7 +799,7 @@ Plan with **maturation 180 days**, cap 50%. A deal closed on 1 Feb paid a commis
 HubSpot reports it lost on **1 May** → 89 days active.
 
 ```
-1,000 × (180 − 89) ÷ 180 = 505.5556  →  ClawbackDebit −€505.5556, balance −€505.5556
+1,000 × (180 − 89) ÷ 180 = 505.5556  →  Clawback −€505.5556, balance −€505.5556
 ```
 
 The payee's next pay run pays €2,000 of commission with a 50% cap:
@@ -832,60 +811,56 @@ net paid = 2,000 − 505.5556 = €1,494.4444        balance → 0, carryover 0
 ```
 
 **Edge — the deal outlived its window.** Same plan, deal lost after **200** days: `180 − 200 < 0`
-→ nothing is written at all, and the outcome is reported as *matured*
-(`RegisterDealChurnClawbackHandler.cs:156-157,195-197`). No zero-value entry pollutes the ledger.
+→ nothing is written at all, and the outcome is reported as *matured*. No zero-value entry pollutes the ledger.
 
 **Edge — the cap does not let the debt be collected in full.** Debt **€900**, payout **€1,000**,
-plan cap **50%**: the ceiling is €500, so €500 is withheld and **€400 carries over** as debt
-(`PayeeSettlementCalculator.cs:62-77`). The payee always takes home at least (100 − cap)% of what
+plan cap **50%**: the ceiling is €500, so €500 is withheld and **€400 carries over** as debt. The payee always takes home at least (100 − cap)% of what
 they earned. The statement says so explicitly ([17.1](#171-the-two-equations)).
 
 **Edge — the payee owes more than they will ever earn.** The balance simply goes further negative;
-there is **no floor at zero** (`RegisterDealChurnClawbackHandler.cs:37-40`). A balance of +€100 hit
+there is **no floor at zero**. A balance of +€100 hit
 by a clawback of €988.8889 becomes **−€888.8889**, which carries over and nets against later
 commissions. A floor would reward timing a churn against an empty account.
 
-**Edge — one transaction credited under two plans.** One entry is written **per (plan, currency)**
-(`:150`), because maturation is a plan setting: two plans mean two different windows, and collapsing
+**Edge — one transaction credited under two plans.** One entry is written **per (plan, currency)**, because maturation is a plan setting: two plans mean two different windows, and collapsing
 them would produce a row nobody can explain. Both debits land on the **same** balance — the debt is
 global per (payee, currency), only the *cap* is per plan.
 
 **Edge — the same lost deal is seen on every sync.** Idempotent: a transaction that already has a
-churn debit is a no-op (`:88-98`), backed by a unique filtered index on
+churn debit does nothing at all, backed by a uniqueness guarantee on
 (`SourceTransactionId`, `SourcePlanId`) so the guard holds even against a race a read-then-write
 check cannot see.
 
 **Edge — the deal was lost in March but nobody synced until July.** The **event date** drives the
-formula; the entry is **booked in the currently open period** (`:173`). A closed, already-paid run is
+formula; the entry is **booked in the currently open period**. A closed, already-paid run is
 never reopened to receive a retroactive debit.
 
-**Edge — the sync fires while finance is closing a pay run.** `PayeeBalance.RowVersion` is a real SQL
-rowversion. On conflict the handler re-reads the balance and re-applies its entries on top of the
-other writer's figure, up to 3 attempts (`:282-316`). The outcome is always *"the debit made it into
-the run"* or *"the debit waits for the next run"* — never lost, never doubled.
+**Edge — the sync fires while finance is closing a pay run.** Two writers touching the same balance
+at the same moment cannot overwrite each other: the second one re-reads the balance and re-applies
+its entries on top of the first one's figure, retrying a few times. The outcome is always *"the debit
+made it into the run"* or *"the debit waits for the next run"* — never lost, never doubled.
 
-**Edge — the commission was calculated but never paid.** No debt is created: the handler only counts
-credits that are **consumed by a paid payout** (`:103-119`), and it refuses outright if the
-transaction is not `Paid` (`:79-82`). Money that never left the company is corrected by *reverting*
-the commission, not by inventing a debt.
+**Edge — the commission was calculated but never paid.** No debt is created: only commissions that
+were actually paid out can be clawed back, and a sale that is not marked Paid is refused outright.
+Money that never left the company is corrected by *reverting* the commission, not by inventing a
+debt.
 
 **Edge — the CRM gave no loss date.** Nothing is generated; the deal-lost alert stays open for a
 human. Inventing a date would charge the salesperson for Incentra's own sync latency.
 
 ### 15.4 Netting inside a pay run
 
-Settlement runs at **Mark as paid**, not at calculation (`PayRunSettlementService.cs:30-41`), for two
+Settlement runs at **Mark as paid**, not at calculation, for two
 reasons that both cost money if ignored: calculation deletes and rebuilds Calculated payouts on every
 re-run (a ledger write there would duplicate), and a payout that is calculated but never paid must
 not reduce anyone's debt.
 
 - The debt is **global per (payee, currency)**; the **cap is per plan**. A payee with two plans has
-  their single debt collected from both payouts, each limited by its own plan's ceiling
-  (`PayeeSettlementCalculator.cs:7-13`).
-- Withholding order is deterministic — by plan id, then payout id (`:62`) — so two runs over the same
+  their single debt collected from both payouts, each limited by its own plan's ceiling.
+- Withholding order is deterministic — by plan id, then payout id — so two runs over the same
   data always withhold from the same payouts in the same sequence.
-- Cross-currency is refused, not converted: Incentra holds no exchange rates (`:46-49`).
-- Everything the settlement writes lands in the **same `SaveChanges`** as `Credit.Consume()`. That
+- Cross-currency is refused, not converted: Incentra holds no exchange rates.
+- Everything the settlement writes is saved in the **same single write** as the payment itself. That
   atomicity is what stops a credit being consumed while its settlement is lost, or the reverse.
 
 ### 15.5 Validations and errors
@@ -903,7 +878,7 @@ not reduce anyone's debt.
 
 ### 15.6 Permissions
 
-The churn trigger is **System**: no human can invoke it over HTTP — there is no endpoint, it fires
+The churn trigger is **System**: no human can invoke it — there is no button and no screen, it fires
 from the CRM sync. Reading the resulting ledger needs `Ledger.Read`; writing a manual entry needs
 `Ledger.Adjust` ([section 18](#18-permissions-and-roles)).
 
@@ -936,8 +911,7 @@ behaviour below is automatic.
 ### 16.2 Use cases
 
 **Happy path — a terminated payee leaves the engine.** From the next calculation on, every
-assignment belonging to a terminated payee is dropped before the payout loop
-(`CalculatePayoutsForPeriodHandler.cs:76-96`), with a log line naming how many were skipped. If that
+assignment belonging to a terminated payee is dropped before the payout loop, with a log line naming how many were skipped. If that
 leaves nothing, the run returns zero payouts rather than failing.
 
 > ✅ **The switch lives on the `Payee` aggregate, not on the ledger.** A mutable "frozen" flag on the
@@ -950,8 +924,8 @@ residual payout is still paid and **still nets against their debt** at settlemen
 real chance to recover it.
 
 **Happy path — the queue.** *Financials → Terminated accounts* (`/terminated-accounts`), backed by
-`GET /api/payees/ledger/terminated-with-balance`. It lists every terminated payee whose balance is
-**≠ 0**, deepest debt first (`ListTerminatedPayeesWithBalanceHandler.cs:37-50`).
+*Financials → Terminated accounts.* It lists every terminated payee whose balance is
+**≠ 0**, deepest debt first.
 
 > ✅ **A positive balance appears too.** Money Incentra still owes someone who has left is exactly as
 > unfinished as money they owe. Hiding it would be the same mistake in the other direction.
@@ -968,43 +942,41 @@ are not the same task.
 
 All three are written through the ordinary manual-adjustment flow on the payee's ledger; there is
 deliberately no second write path. The UI offers only the ones that make sense for the sign of the
-balance (`payee-ledger-panel.component.ts:78-91`) — offering both directions would let someone "write
-off" money the company **owes**, which is not a write-off, it is not paying somebody.
+balance — offering both directions would let someone "write off" money the company **owes**, which
+is not a write-off, it is not paying somebody.
 
 | Balance | Type | Meaning | Amount rule |
 |---|---|---|---|
-| Negative (they owe) | **ExternalSettlementCredit** | Recovered outside Incentra — typically deducted from the final paycheck by payroll | **Partial allowed** |
-| Negative (they owe) | **WriteOffCredit** | The company absorbed the loss; the debt is uncollectable | **Partial allowed** |
-| Positive (we owe) | **FinalSettlementDebit** | Treasury paid the departed payee what they were owed, outside Incentra | **Must equal the balance exactly** |
+| Negative (they owe) | **Settled externally** | Recovered outside Incentra — typically deducted from the final paycheck by payroll | **Partial allowed** |
+| Negative (they owe) | **Written off** | The company absorbed the loss; the debt is uncollectable | **Partial allowed** |
+| Positive (we owe) | **Final settlement** | Treasury paid the departed payee what they were owed, outside Incentra | **Must equal the balance exactly** |
 
 Two credits and not one generic "closing credit", because *"how much we recovered through HR"* and
 *"how much we ate"* are different facts about the business, and a CFO must be able to total each
 without mining free text.
 
-> ★ **`FinalSettlementDebit` requires strict equality** (`PayeeBalance.cs:84-113`). It exists to
+> ★ **A final settlement must equal the balance exactly.** It exists to
 > **extinguish** the account so it leaves the queue, so:
 > - the balance must be **positive** — against zero there is nothing to settle, and against a
->   negative one the entry would sink the debt deeper under a label claiming the account closed
->   (`FinalSettlementRequiresPositiveBalance`);
+>   negative one the entry would sink the debt deeper under a label claiming the account closed;
 > - the amount must **equal** the balance — a partial payment leaves a positive remainder, the
->   account is still orphaned, and the entry has not done the one job its name claims
->   (`FinalSettlementMustEqualBalance`).
+>   account is still orphaned, and the entry has not done the one job its name claims.
 >
 > Incentra does not orchestrate instalments; that is an ERP's accounts payable. **A closing is total, or
 > it is not a closing.** Because the amount is typed by a person, the form fills it in from the live
-> balance and **locks the field** — but the guarantee is the domain rule, not the read-only input: the
-> API rejects a wrong amount with **400** whatever the browser did.
+> balance and **locks the field** — but the guarantee is the rule itself, not the locked input: a
+> wrong amount is refused however it reaches Incentra.
 
 **Worked example.** A departed payee ends **+€500** (a pay run withheld more than they actually
 owed, later corrected):
 
-- €500 `FinalSettlementDebit` → balance **0.0000**, the row leaves the queue. ✅
-- €600 → **400**, `FinalSettlementMustEqualBalance`, nothing written, balance still +€500. A typo
-  would otherwise have flipped the balance to −€100 and invented a debt against someone who has
-  already left — which then reappears in this very queue asking for a write-off to "fix" it.
-- €300 → **400**, same code: partial closings are refused.
+- A **final settlement of €500** → balance **0.0000**, the row leaves the queue. ✅
+- €600 → **refused**, nothing written, balance still +€500. A typo would otherwise have flipped the
+  balance to −€100 and invented a debt against someone who has already left — which then reappears in
+  this very queue asking for a write-off to "fix" it.
+- €300 → **refused** for the same reason: a partial closing is not a closing.
 
-And a departed payee at **−€250**: a €250 `WriteOffCredit` (or `ExternalSettlementCredit`) takes them
+And a departed payee at **−€250**: a €250 **write-off** (or **external settlement**) takes them
 to zero; **€150 is also accepted**, leaving −€100 still owed. The form pre-fills the debt but leaves
 the field editable, and says so.
 
@@ -1012,11 +984,11 @@ the field editable, and says so.
 
 | Situation | Result |
 |---|---|
-| `FinalSettlementDebit` against balance ≤ 0 | 400 — `FinalSettlementRequiresPositiveBalance` |
-| `FinalSettlementDebit` ≠ balance (over **or** under) | 400 — `FinalSettlementMustEqualBalance` |
-| Closing entry with no justification or no actor | 400 — an entry nobody signed is not a decision |
-| A Rep tries to close an account | **403** — hidden in the UI and refused by the API |
-| Closing type that contradicts the sign of the balance | Not offered in the UI; the domain still governs the outcome |
+| A final settlement against a balance of zero or less | Rejected — there is nothing to settle |
+| A final settlement that is not the whole balance (over **or** under) | Rejected — a final settlement closes the account in full |
+| A closing entry with no justification or no author | Rejected — an entry nobody signed is not a decision |
+| A Rep tries to close an account | Refused — and the action is hidden from them in the first place |
+| A closing type that contradicts the sign of the balance | Not offered on screen, and refused if attempted |
 
 **Nothing is ever deleted.** A closing entry sits *next to* the debit that created the debt; both
 stay visible and the ledger sums to zero.
@@ -1068,11 +1040,11 @@ nothing is recalculated in the browser — if the settlement says €500 was wit
 | **Current balance** | The sum of the payee's **whole ledger**, right now (`PayeeBalance`) | Every entry, including ones added after the last run |
 | **Carryover at that run** | What was left **at the close of that payment** | Never — it is history |
 
-They are separate fields in the DTO (`PayeeStatementDto.cs:37,43-46`) and the screen leads with the
+They are two separate figures and the screen leads with the
 live one. **When they differ the screen says why**: *"There have been movements after this pay run
 (−€333.33), which is why the current balance is −€833.33."*
 
-> ⚠️ Everything belonging to the settled run is **nullable and shown as an em dash when absent** —
+> ⚠️ Everything belonging to the settled run is **optional and shown as an em dash when absent** —
 > never as `0`. A zero would claim "this person earned nothing and took nothing home" when the truth
 > is "no pay run has closed against this balance yet".
 
@@ -1094,22 +1066,22 @@ and the sign/colour of the amount — colour alone is not a distinction a colour
 | Detail | The justification, plus the author for manual entries |
 | Amount | Signed: negative reduces what the payee is owed |
 
-**The nine types** (`LedgerEnums.cs`). The **sign is derived from the type**, so a debit stored as a
-positive amount is unrepresentable:
+**The nine kinds of entry**, exactly as the ledger labels them. The **sign belongs to the kind**, so
+an entry can never be recorded with the wrong one:
 
-| Type | Sign | Who may write it |
+| Entry | Sign | Who may write it |
 |---|---|---|
-| `ClawbackDebit` | − | **Engine only** — a person must never hand-write a clawback |
-| `ClawbackAppliedCredit` | + | **Engine only** — written by the pay run that actually withheld |
-| `ClawbackForgivenessCredit` | + | Human — a **business** decision to let a real debt go |
-| `ManualBonusCredit` | + | Human |
-| `DataCorrectionDebit` | − | Human — bad data inflated a payment |
-| `DataCorrectionCredit` | + | Human — neutralising an entry a **technical** fault produced |
-| `ExternalSettlementCredit` | + | Human — debt recovered outside Incentra |
-| `WriteOffCredit` | + | Human — the company absorbed the loss |
-| `FinalSettlementDebit` | − | Human — cash paid to a departed payee |
+| **Clawback** | − | **Engine only** — a person must never hand-write a clawback |
+| **Withheld from pay run** | + | **Engine only** — written by the pay run that actually withheld |
+| **Forgiveness** | + | Human — a **business** decision to let a real debt go |
+| **Manual bonus** | + | Human |
+| **Data correction** | − | Human — bad data inflated a payment |
+| **Data correction (credit)** | + | Human — neutralising an entry a **technical** fault produced |
+| **Settled externally** | + | Human — debt recovered outside Incentra |
+| **Written off** | + | Human — the company absorbed the loss |
+| **Final settlement** | − | Human — cash paid to a departed payee |
 
-> ✅ **`DataCorrectionCredit` is not `ClawbackForgivenessCredit`, and the difference is not
+> ✅ **A data correction is not a forgiveness, and the difference is not
 > cosmetic.** Forgiveness is a business decision: someone with authority let a **real** debt go.
 > Using it to erase a bad import would tell the CFO the company forgave money it never charged, and
 > no amount of free-text justification recovers that distinction once the totals are added up.
@@ -1125,7 +1097,7 @@ the four general corrections are always available.
 - The **payee** comes from the URL, not the body — the entry lands on the resource the caller was
   authorised against.
 - **Justification is mandatory** and enforced in the domain, not just the form.
-- The engine-only types (`ClawbackDebit`, `ClawbackAppliedCredit`) are **rejected** over HTTP.
+- The engine-only types (**Clawback**, **Withheld from pay run**) are **rejected** over HTTP.
 - Everything is **append-only**: an adjustment adds an entry, it never edits or deletes one. A
   mistake is corrected by a counter-entry, and both rows stay.
 - After saving, the screen **re-reads from the server** instead of patching the balance locally — the
@@ -1135,14 +1107,14 @@ the four general corrections are always available.
 
 | Situation | Result |
 |---|---|
-| Empty justification | 400, nothing written |
-| Engine-only type | 400 |
+| Empty justification | Refused, nothing written |
+| A type only the engine may post | Rejected |
 | Amount ≤ 0 | Rejected — the magnitude is always positive; the **type** carries the sign |
-| Unknown type name | 400, *"Unknown adjustment type"* |
-| Anonymous request | 401 |
-| Rep or Manager posting an adjustment | 403 |
-| Entry currency ≠ balance currency | 400 — balances are per currency, no FX |
-| Adjustment landing while a pay run settles | The pay run's write fails on the rowversion instead of overwriting a stale balance |
+| Unrecognised adjustment type | Refused — *"Unknown adjustment type"* |
+| Not signed in | Refused |
+| A Rep or Manager posting an adjustment | Refused — they may read the ledger, not change it |
+| Entry currency ≠ balance currency | Rejected — balances are held per currency and Incentra does not convert |
+| Adjustment landing while a pay run settles | The pay run's write is rejected and retried rather than overwriting a stale balance |
 
 ### 17.6 Permissions
 
@@ -1153,7 +1125,7 @@ seeing *why* a payment shrank is the point of the feature. `Ledger.Adjust` to wr
 
 ## 18. Permissions and roles
 
-Four roles, mapped to explicit permissions (`RolePermissions.cs`). The UI follows one rule
+Four roles, mapped to explicit permissions. The UI follows one rule
 throughout: **forbidden actions are hidden, never shown-and-disabled** — the screen shows what you
 can do, and the API enforces it regardless of what the browser rendered.
 
@@ -1174,25 +1146,278 @@ can do, and the API enforces it regardless of what the browser rendered.
 > ✅ **Why a Rep can read the ledger.** Transparency is the differentiator: the rep sees their own
 > balance and why it moved. A deduction the person cannot examine is how trust in a comp system dies.
 > **Why a Manager can.** They have to be able to explain a reduced payment to their rep
-> (`RolePermissions.cs:56-57,66-67`).
+>.
 
-> ⚠️ **`Ledger.Read` is not row-scoped.** Anyone holding it can read any payee's ledger in their
-> tenant; there is no "own records only" filter today. Tenant isolation is enforced (global query
-> filters), payee-level scoping is not.
+> ⚠️ **Ledger access is not narrowed to your own records.** Anyone with permission to read the
+> ledger can read any payee's ledger in their company; there is no "own records only" filter today.
+> Separation between companies is enforced; separation between payees inside one company is not.
 
-**Verified behaviours:** a Rep gets **403** on `POST /ledger/adjustments` and **200** on
-`GET /ledger/statement`; a Manager gets 403 on the adjustment; an anonymous request gets **401**
-(`LedgerEndpointsTests.cs`).
+**Verified behaviours:** a Rep can open a statement but is refused when trying to post an
+adjustment; a Manager is refused the adjustment too; a signed-out visitor gets nothing at all.
 
 ---
 
-## Maintenance
+## 19. Zeke, the assistant
 
-When the calculation engine, rate tables, quota/payout lifecycles, the pay-run aggregation or the
-clawback ledger change, **re-verify this document against the code and update the verification date
-at the top.** The sections most likely to drift are 5, 6, 7, 11 and 15. Prefer deleting a claim over
-leaving one that may have become false.
+Zeke is the assistant built into Incentra. It answers questions about **your** data — payees, plans,
+credits, payouts, balances — by looking them up, and it explains how the product works by reading
+this handbook.
 
-**This guide is written in passes.** Update the [coverage checklist](#coverage-checklist-this-document-is-written-in-passes)
-in the same commit as the section you add, and leave partially covered areas marked `[~]` with a note
-saying what is still missing — an area silently marked done is worse than one openly marked pending.
+*Open it from the sidebar.* Conversations are kept, so you can come back to one.
+
+### 19.1 What Zeke can do
+
+| Ask it | It answers by |
+|---|---|
+| "What is Rudolph's balance?" | Reading the ledger and the live balance |
+| "Which plans is Ana on?" | Listing the assignments, with their status and period |
+| "Why did this deal pay €600?" | Reading the stored calculation for that commission |
+| "What is a clawback maturation window?" | Explaining from this handbook |
+| "Create a plan with a quota" | Walking you through it and preparing the values |
+
+Answers stream in as they are produced. There is a **stop button**: press it and the answer ends
+where it is. A cancelled answer stays in the conversation marked *Response cancelled*, so the
+transcript still shows what happened rather than a gap.
+
+### 19.2 What Zeke will not do
+
+> ✅ **It does not invent.** If Zeke has no way to look something up, it says so and tells you which
+> of three things is true: the question is outside what it can reach, the answer is in the handbook,
+> or it needs a name or a reference from you to continue. It will not produce a payout id, a
+> transaction or a relationship that it has not read.
+
+> ✅ **It asks when a name is ambiguous.** "Rudolph" matching three payees produces a short form
+> asking which one, not a guess. The form is raised by the lookup itself, so it cannot be talked out
+> of it.
+
+> ⚠️ **It reads, it does not sign off.** Zeke can tell you what a payout contains; approving or
+> marking it paid is still done by a person on the payout screen.
+
+### 19.3 Access
+
+Zeke is a **paid feature** and access is granted per user, not per role. A user without it does not
+see the assistant in the sidebar at all — it is hidden rather than shown-and-refused.
+
+---
+
+## 20. Reading commission: the date range and the three cards
+
+Both the **Dashboard** and a **payee's Overview** are governed by one date-range control at the top
+of the page. Everything below it — the cards, the charts, the lists — answers for that range.
+
+### 20.1 The range
+
+Pick any two dates. There are no fixed presets: *1 February to 15 April* is as valid as a calendar
+month. The page opens on the **whole current month**, first to last day, not on the month so far.
+
+### 20.2 The three cards
+
+| Card | What it is |
+|---|---|
+| **Total Commissions** | Everything earned in the range that is still inside the payable cycle |
+| **Paid** | The part that has reached the payee through a paid payout |
+| **Unpaid** | The part still owed |
+
+**Total = Paid + Unpaid, to the cent.** Click any card and it opens the exact rows that add up to it,
+in a new tab, so you can check the figure rather than trust it.
+
+> ⚠️ **Commissions that left the cycle are not in these three.** Money written off, or settled
+> outside Incentra through payroll, is neither paid nor owed. It is stated in a note underneath the
+> cards rather than hidden — if something is missing from a total, the page says so.
+
+### 20.3 The trend card is a different question
+
+The trend under the cards answers *"how much has been paid over time"*, over its own window, and it
+does not reconcile with the three cards on purpose. The cards answer about the range you selected;
+the trend answers about payment activity. Each says which question it is answering underneath it.
+
+---
+
+## 21. Commission with no route to payment
+
+This is the most important thing in this handbook for anyone reconciling money.
+
+**"Unpaid" answers two different questions at once**: *we owe this*, and *we owe this and we can pay
+it*. They can be wildly different numbers. In a real case a payee showed **€391,736.02** owed, of
+which only **€6,005.00** could actually leave through a pay run.
+
+### 21.1 Why it happens
+
+A pay run only ever walks assignments that are **Active** on a plan that is not archived. Commission
+already earned on a plan whose assignment was later deactivated is still owed — and no pay run will
+ever reach it. Nothing is lost and nothing is wrong; there is simply no route.
+
+### 21.2 Where Incentra now tells you
+
+**Under the cards.** The dashboard and the payee page state how much of Unpaid has no route to a
+payout, with a link straight to the deactivated assignments causing it.
+
+**On the payee, the *Unpaid – no route* tab.** After Ledger. One row per plan, with:
+
+- the amount and how many commissions make it up,
+- **why** — the assignment was deactivated, there never was one, or the plan is archived,
+- **what to change** to unstick it,
+- and the dates the underlying sales fall in.
+
+> ★ **Reactivating is not always enough.** An assignment whose period ended *before* those sales
+> still will not pay them. That is why the tab shows the sales window: in the real case, five plans
+> became payable by a July run and a sixth needed a **June** one.
+
+> This tab is deliberately **not** filtered by the page's date range. The debt is spread across
+> periods, and a window is exactly how it stayed invisible.
+
+**Before you deactivate.** The confirmation dialog now states the unpaid commission that
+deactivating would strand, naming the payee and the plan. It only warns when the assignment is the
+last active link between that payee and that plan — a renewal overlapping the one it replaces
+strands nothing, and a dialog that cries wolf stops being read.
+
+**In the pay run.** A run that finds owed commission it cannot reach says so, with the count of
+payee/plan combinations affected — including runs that *did* pay other people. A run that pays five
+and silently strands a sixth is the dangerous case.
+
+---
+
+## 22. Supplemental payouts
+
+A period that was already paid can legitimately gain new commission: a late sale is imported, or a
+correction allocates a new credit inside a window that was already settled.
+
+Incentra creates a **supplemental payout** carrying only the commission that was never paid. The
+already-paid money is never touched — the calculation only ever considers commissions that have not
+been consumed by a payout.
+
+The pay run says which of its payouts are supplemental and why, so a period you know was closed does
+not suddenly show a new payout with no explanation.
+
+---
+
+## 23. Exports — what to send accounting
+
+Every export is a real Excel workbook. Where a document has more than one level, the sheets go from
+the level you were looking at down to the individual sale.
+
+| Where you click | Sheets you get |
+|---|---|
+| **Pay runs** (list) → Export | `Runs` · `Payees` · `Detail` |
+| **A pay run** → Export, above the payouts table | `Summary` · `Detail` |
+| **Payouts** (list) → Export | `Summary` · `Detail` |
+| **A payout** → Export → Excel or PDF | `Summary` · `Detail` |
+
+- **`Runs`** — one row per pay run: period, status, how many payees, who approved and paid it and
+  when, and the total per currency.
+- **`Summary` / `Payees`** — one row per payee: code, name, plan, period, **the amount to pay in
+  bold**, currency, status. This is the sheet a payment is raised from.
+- **`Detail`** — one row per commission: payee and code on every row, invoice, date, description,
+  base amount, rule, **commission in bold**, and the payment state. This is the sheet that answers
+  *"where does this figure come from?"*.
+
+> ★ **Read the payment-state column before paying.** It says, for each line, whether the money is
+> outstanding, was paid by this payout, or **was already paid by a different payout**. Without it
+> two payouts covering the same sale look identical, and the same commission gets paid twice.
+
+> ⚠️ **The export follows the filters on screen, not the page you can see.** It exports the whole
+> filtered result, not the visible rows — which is right, and also means a wrong filter produces a
+> wrong file without complaining.
+
+**Which one does accounting want?** *"The commissions processed this month"* is usually
+**Pay runs → open the month's run → Export**, or **Payouts** filtered to `Approved` with the period
+set and zero-value rows hidden. Use `Paid` instead of `Approved` for what has already gone out.
+
+> ⚠️ **Period means the compensation period, not the payment date.** A payout for August that was
+> paid on 3 September belongs to August in these filters. There is no screen filter for "what left
+> the bank in September" today.
+
+---
+
+## 24. The Reconciliation Centre
+
+*Financials → Reconciliation.* Every sale that produced no payable commission, gathered in one place
+with the reason. For a CFO it is the difference between *"I don't know what I owe"* and *"I owe
+exactly this, and here is why it is stuck."*
+
+Rows arrive here when a sale was processed and produced nothing — no matching rule, a rate table
+that does not cover the amount, a plan with no assignment, and so on. A sale that simply matched
+nothing used to leave no trace at all; it now lands here.
+
+> ★ **The amount shown is the SALE, not a commission.** There is no commission to show — that is the
+> whole point of the row. A column of commission figures here would be a column of zeros.
+
+**Two ways to empty the queue:**
+
+1. **Fix the source and reprocess.** Each row links straight to the thing that is wrong — the plan,
+   the rule, the assignment — and once corrected the sale can be reprocessed by hand.
+2. **Close it with a reason.** Some rows have no cure: a deal that fell through after the commission
+   was already paid and clawed back is a legitimate anomaly, not a defect. Closing records **who,
+   when, why, and the date of the fact** — never a bare "resolved" stamp, because a closure without
+   a reason hides money just as effectively as a missing row.
+
+Closures are append-only. Nothing is deleted and nothing is edited; a reopened row shows both events.
+
+---
+
+## 25. When a rule stops paying
+
+Incentra is **fail-closed** on money: when it cannot compute an amount it can defend, it refuses and
+records the refusal, rather than quietly paying zero or paying something plausible.
+
+### 25.1 The refusals you will actually meet
+
+| What you did | What happens |
+|---|---|
+| A tiered table that leaves a gap | Sales landing in the gap are **refused**, not paid at the nearest rate |
+| A rate typed as `5` meaning 5 % | **Rejected on save** — a rate above 1 is a typo, not a 500 % commission |
+| A cap in a different currency to the commission | The cap is skipped; the commission is not capped |
+| A tiered rule with no quota on an attainment table | Refused — there is nothing to measure attainment against |
+
+Overlapping tiers still pay (the first matching tier wins); **gaps do not**. The difference is
+deliberate: an overlap has an answer, a gap does not.
+
+### 25.2 The kill switch
+
+A rule that is paying wrong can be **stopped on an active plan**, without cloning the plan and
+without touching its assignments or quotas. *Plans → the plan → the rule → deactivate.*
+
+> ★ **Editing a stopped rule creates a new one; it does not revive the old.** The stopped rule stays
+> in the record exactly as it was when it paid, because commissions already calculated point at it.
+
+### 25.3 Why a commission is the amount it is
+
+Every commission stores **how it was calculated at the moment it was calculated** — the rule as it
+then read, the rate table, the attainment used, the modifiers applied, and, when nothing was paid,
+the reason.
+
+This is what lets you answer in November why someone was paid a given amount in March. Quota
+attainment moves; the stored trace does not.
+
+---
+
+## 26. The audit trail
+
+*Recent activity* on the dashboard, and the full **Audit logs** screen, show every audited
+operation — not a selection of them. Filter by user, by action, by date.
+
+> ✅ **Failed attempts are not recorded as if they had happened.** An action that was refused leaves
+> no row claiming it succeeded. A log containing operations that never occurred is worse than no log,
+> because it is the first thing an auditor asks for.
+
+Operations performed by the system itself, with no person behind them, are attributed to the system
+rather than to whoever happened to be signed in.
+
+---
+
+## 27. Discarding a payout that can never be paid
+
+A payout can become permanently unpayable: its sales were already paid inside a different payout.
+Incentra blocks the double payment, which is correct — but the payout then sits `Approved` for ever,
+counted in every total, and there was no way to clear it.
+
+*Open the payout → the ⋮ menu → Discard.* It is a terminal state: the payout stops counting, and
+nothing is deleted.
+
+> ★ **It refuses to discard real debt.** If any of the payout's commissions are genuinely still
+> unpaid, the discard is rejected — discarding is for a duplicate, never a way to make an
+> obligation disappear.
+
+The payout detail lists, per line, whether that money was paid here, paid by another payout, or is
+still outstanding — and names the period of the payout that paid it. Before, the only way to find
+out was to press Discard and read the refusal.

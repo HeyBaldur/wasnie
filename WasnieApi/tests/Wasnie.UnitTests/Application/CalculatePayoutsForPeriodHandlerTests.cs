@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -434,9 +434,12 @@ public sealed class CalculatePayoutsForPeriodHandlerTests
     public async Task Existing_approved_or_paid_payout_for_the_same_period_blocks_and_reports_a_conflict(
         CompensationPayoutStatus status)
     {
+        // ★ NOTHING LEFT TO PAY: the credit of this period was already consumed by the existing payout.
+        //   THIS is the anti-double-pay guarantee — the engine must not manufacture a second payout out
+        //   of money that has already gone out.
         var h = Build($"{nameof(Existing_approved_or_paid_payout_for_the_same_period_blocks_and_reports_a_conflict)}_{status}");
         var s = SeedJuneScenario(h);
-        SeedCredit(h, s.Tx.Id, s.PayeeId, s.Plan.Id, 100m);
+        SeedCredit(h, s.Tx.Id, s.PayeeId, s.Plan.Id, 100m, consumed: true);
         SeedExistingPayout(h, s.PayeeId, s.Plan.Id,
             new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), status, amount: 42m);
 
@@ -449,6 +452,49 @@ public sealed class CalculatePayoutsForPeriodHandlerTests
         // The pre-existing payout is untouched — no second payout for the same period.
         var payout = await h.Db.CompensationPayouts.SingleAsync();
         payout.TotalCommission.Amount.Should().Be(42m);
+    }
+
+    /// <summary>
+    /// KAN-66 — a paid period that has since accrued UNPAID credits gets a supplemental payout for
+    /// exactly those.
+    ///
+    /// ★★ THE MONEY THIS UNSTRANDS. The gate used to end on the period alone, so commission allocated
+    /// after a period was paid — a late CRM sync, a transaction ingested days later — fell into a
+    /// window that was now closed and no run would ever pick it up. The screen kept calling it unpaid
+    /// and nothing could pay it. A real payee had €6,005 in that state.
+    /// </summary>
+    [Theory]
+    [InlineData(CompensationPayoutStatus.Approved)]
+    [InlineData(CompensationPayoutStatus.Paid)]
+    public async Task Already_paid_period_with_credits_that_arrived_later_gets_a_supplemental_payout(
+        CompensationPayoutStatus status)
+    {
+        var h = Build($"{nameof(Already_paid_period_with_credits_that_arrived_later_gets_a_supplemental_payout)}_{status}");
+        var s = SeedJuneScenario(h);
+        SeedCredit(h, s.Tx.Id, s.PayeeId, s.Plan.Id, 100m, consumed: true);   // paid by the run below
+        SeedCredit(h, s.Tx.Id, s.PayeeId, s.Plan.Id, 60m);                    // arrived afterwards
+        SeedExistingPayout(h, s.PayeeId, s.Plan.Id,
+            new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), status, amount: 100m);
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.PayoutsCreated.Should().Be(1);
+
+        var payouts = await h.Db.CompensationPayouts.ToListAsync();
+        payouts.Should().HaveCount(2);
+
+        // ★ THE SUPPLEMENTAL CARRIES ONLY THE UNPAID CREDIT. If it carried the consumed one too, the
+        //   company would pay the same commission twice — the whole reason the old gate existed.
+        var supplemental = payouts.Single(p => p.Id != payouts.Single(x => x.Status == status).Id);
+        supplemental.TotalCommission.Amount.Should().Be(60m);
+
+        // And the already-paid payout is untouched.
+        payouts.Single(p => p.Status == status).TotalCommission.Amount.Should().Be(100m);
+
+        // The run says why a paid period grew a new payout, instead of doing it silently (§B1).
+        result.Value.Diagnostics.Skipped
+            .Should().ContainSingle(x => x.Code == PayoutSkipReason.SupplementalForNewCredits);
     }
 
     [Fact]
@@ -768,5 +814,198 @@ public sealed class CalculatePayoutsForPeriodHandlerTests
         var payout = await h.Db.CompensationPayouts.SingleAsync();
         payout.PayeeId.Should().Be(stayer);
         payout.TotalCommission.Amount.Should().Be(250m);
+    }
+
+    // == Commission the run can never reach =====================================
+    // The engine only ever walks ACTIVE assignments. Money on a plan with none was not skipped - it was
+    // never in the population - and the run used to end in three lines saying nothing at all about it.
+
+    [Fact]
+    public async Task A_run_with_no_active_assignment_reports_the_commission_it_cannot_reach()
+    {
+        var h = Build(nameof(A_run_with_no_active_assignment_reports_the_commission_it_cannot_reach));
+        var payeeId = SeedPayee(h, terminated: false);
+        var plan = SeedPlan(h);
+        var assignmentId = SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+
+        // The whole incident in one line: the link is switched off, so the run has nothing to walk.
+        var assignment = await h.Db.PlanAssignments.SingleAsync(a => a.Id == assignmentId);
+        assignment.Deactivate("admin", Now, Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.PayoutsCreated.Should().Be(0);
+        result.Value.Diagnostics.Should().NotBeNull();
+        result.Value.Diagnostics!.AssignmentsConsidered.Should().Be(0);
+        result.Value.Diagnostics.Skipped.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(
+                new PayoutSkipCount(PayoutSkipReason.UnreachableCommission, 1));
+    }
+
+    [Fact]
+    public async Task A_run_that_pays_normally_says_nothing_about_unreachable_commission()
+    {
+        // * The counter must not fire on a healthy run: a warning that appears every time is one nobody
+        //   reads by the time it is true.
+        var h = Build(nameof(A_run_that_pays_normally_says_nothing_about_unreachable_commission));
+        var (payeeId, plan, tx) = SeedJuneScenario(h);
+        SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.PayoutsCreated.Should().Be(1);
+        result.Value.Diagnostics!.Skipped
+            .Should().NotContain(s => s.Code == PayoutSkipReason.UnreachableCommission);
+    }
+
+    [Fact]
+    public async Task A_run_that_pays_one_payee_still_reports_another_it_cannot_reach()
+    {
+        // The dangerous shape: the run succeeds, so nobody looks - and a second payee is stranded.
+        var h = Build(nameof(A_run_that_pays_one_payee_still_reports_another_it_cannot_reach));
+        var plan = SeedPlan(h);
+
+        var paid = SeedPayee(h, terminated: false, code: "PAID");
+        SeedAssignment(h, paid, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var paidTx = SeedTransaction(h, paid, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, paidTx.Id, paid, plan.Id, 100m);
+
+        var stranded = SeedPayee(h, terminated: false, code: "STUCK");
+        var strandedAssignment = SeedAssignment(h, stranded, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var strandedTx = SeedTransaction(h, stranded, new DateOnly(2026, 6, 15), 5000m);
+        SeedCredit(h, strandedTx.Id, stranded, plan.Id, 500m);
+
+        var assignment = await h.Db.PlanAssignments.SingleAsync(a => a.Id == strandedAssignment);
+        assignment.Deactivate("admin", Now, Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.PayoutsCreated.Should().Be(1);
+        result.Value.Diagnostics!.Skipped
+            .Should().Contain(s => s.Code == PayoutSkipReason.UnreachableCommission && s.Count == 1);
+    }
+
+    [Fact]
+    public async Task Commission_that_was_already_paid_is_not_reported_as_unreachable()
+    {
+        // It left through a payout. Counting it would put a permanent warning on every mature plan.
+        var h = Build(nameof(Commission_that_was_already_paid_is_not_reported_as_unreachable));
+        var payeeId = SeedPayee(h, terminated: false);
+        var plan = SeedPlan(h);
+        var assignmentId = SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, tx.Id, payeeId, plan.Id, 100m, consumed: true);
+
+        var assignment = await h.Db.PlanAssignments.SingleAsync(a => a.Id == assignmentId);
+        assignment.Deactivate("admin", Now, Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.Diagnostics!.Skipped.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Commission_outside_the_requested_period_is_not_reported()
+    {
+        // This screen answers about the period the reader asked for. "What is stuck overall" is the
+        // payee own tab, which deliberately has no window.
+        var h = Build(nameof(Commission_outside_the_requested_period_is_not_reported));
+        var payeeId = SeedPayee(h, terminated: false);
+        var plan = SeedPlan(h);
+        var assignmentId = SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31));
+        var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 3, 15), 1000m);
+        SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+
+        var assignment = await h.Db.PlanAssignments.SingleAsync(a => a.Id == assignmentId);
+        assignment.Deactivate("admin", Now, Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.Diagnostics!.Skipped.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_payee_filter_narrows_what_is_reported_as_unreachable()
+    {
+        // A run scoped to one payee must not report another payee stuck money: the reader would go
+        // looking for it in a payee that has none.
+        var h = Build(nameof(The_payee_filter_narrows_what_is_reported_as_unreachable));
+        var plan = SeedPlan(h);
+
+        var asked = SeedPayee(h, terminated: false, code: "ASK");
+        var other = SeedPayee(h, terminated: false, code: "OTH");
+        foreach (var payeeId in new[] { asked, other })
+        {
+            var id = SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+            var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, 15), 1000m);
+            SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+            var a = await h.Db.PlanAssignments.SingleAsync(x => x.Id == id);
+            a.Deactivate("admin", Now, Guid.NewGuid());
+        }
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(June(asked), default);
+
+        result.Value!.Diagnostics!.Skipped
+            .Should().Contain(s => s.Code == PayoutSkipReason.UnreachableCommission && s.Count == 1);
+    }
+
+    [Fact]
+    public async Task It_counts_payee_plan_pairs_not_credits()
+    {
+        // Counting credits would put a five-figure number on a screen where it reads as an amount.
+        var h = Build(nameof(It_counts_payee_plan_pairs_not_credits));
+        var payeeId = SeedPayee(h, terminated: false);
+        var plan = SeedPlan(h);
+        var assignmentId = SeedAssignment(h, payeeId, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+
+        for (var day = 1; day <= 4; day++)
+        {
+            var tx = SeedTransaction(h, payeeId, new DateOnly(2026, 6, day), 1000m);
+            SeedCredit(h, tx.Id, payeeId, plan.Id, 100m);
+        }
+
+        var assignment = await h.Db.PlanAssignments.SingleAsync(a => a.Id == assignmentId);
+        assignment.Deactivate("admin", Now, Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        var result = await h.Handler.Handle(June(), default);
+
+        result.Value!.Diagnostics!.Skipped.Single().Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Reporting_it_does_not_change_who_gets_paid()
+    {
+        // * Section A6 in spirit: the counter is REPORTING ONLY. If this run ever produced a different
+        //   payout from the same fixture, the change stopped being a diagnostic.
+        var h = Build(nameof(Reporting_it_does_not_change_who_gets_paid));
+        var plan = SeedPlan(h);
+
+        var paid = SeedPayee(h, terminated: false, code: "PAID");
+        SeedAssignment(h, paid, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var paidTx = SeedTransaction(h, paid, new DateOnly(2026, 6, 15), 1000m);
+        SeedCredit(h, paidTx.Id, paid, plan.Id, 100m);
+
+        var stranded = SeedPayee(h, terminated: false, code: "STUCK");
+        var strandedAssignment = SeedAssignment(h, stranded, plan.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30));
+        var strandedTx = SeedTransaction(h, stranded, new DateOnly(2026, 6, 15), 5000m);
+        SeedCredit(h, strandedTx.Id, stranded, plan.Id, 500m);
+
+        var assignment = await h.Db.PlanAssignments.SingleAsync(a => a.Id == strandedAssignment);
+        assignment.Deactivate("admin", Now, Guid.NewGuid());
+        await h.Db.SaveChangesAsync();
+
+        await h.Handler.Handle(June(), default);
+
+        var payout = await h.Db.CompensationPayouts.SingleAsync();
+        payout.PayeeId.Should().Be(paid);
+        payout.TotalCommission.Amount.Should().Be(100m);
     }
 }

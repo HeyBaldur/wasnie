@@ -34,6 +34,8 @@
     "RECOVERY_HERO_TITLE": "Your Data. Your Security. Your Control.",
     "RECOVERY_HERO_SUBTITLE": "Your incentive compensation data is important. We’re committed to keeping your account secure while making it easy to get back to the tools you rely on to manage performance, compensation, and results.",
     "FOOTER_RIGHTS": "© 2025 Incentra. All rights reserved.",
+    "ACCOUNT_LOCKED": "Too many failed sign-in attempts. Access is temporarily blocked — please try again in {{minutes}} minutes.",
+    "ACCOUNT_LOCKED_GENERIC": "Too many failed sign-in attempts. Access is temporarily blocked — please try again shortly.",
     "EMAIL_NOT_CONFIRMED": "Please confirm your email address before signing in.",
     "RESEND_CONFIRMATION": "Resend confirmation email",
     "ALREADY_CONFIRMED": "Your account is already confirmed. Sign in below.",
@@ -231,8 +233,6 @@
     "TITLE": "User manual",
     "SHORTCUTS_TITLE": "Jump straight to",
     "SHORTCUTS_BODY": "The manual is dense and technical. These are the sections of the calculation engine people come looking for.",
-    "ASK_ASSISTANT": "Ask the assistant",
-    "OPEN_PDF": "Open the printable PDF",
     "VIEW_FLOW": "View system flow",
     "EMPTY_TITLE": "The manual is not available yet",
     "EMPTY_DESC": "This installation does not have the user manual published yet. Once it is added, it will appear here.",
@@ -825,7 +825,24 @@
     "ASSIGNMENTS_TAB_HINT": "No assignments yet. Assign this payee to a compensation plan to start tracking earnings.",
     "QUOTAS_TAB_HINT": "No quotas defined for this payee. Add a quota to set their performance targets.",
     "ATTAINMENT_TAB_EMPTY": "No active quotas defined for this payee. Create a quota in the Quotas tab to start tracking attainment.",
-    "ACTION_IMPORT": "Import"
+    "ACTION_IMPORT": "Import",
+    "UNREACHABLE": {
+      "TAB": "Unpaid · no route",
+      "TITLE": "Owed, but no pay run can reach it",
+      "SUBTITLE": "This commission is genuinely owed. No pay run will pick it up until the cause below is fixed.",
+      "EMPTY": "Every unpaid commission for this payee can be reached by a pay run.",
+      "CREDIT_COUNT": "{{count}} credit(s)",
+      "REASON_ASSIGNMENT_DEACTIVATED": "Assignment deactivated",
+      "REASON_NO_ASSIGNMENT": "No assignment",
+      "REASON_PLAN_ARCHIVED": "Plan archived",
+      "REASON_UNKNOWN": "Not payable",
+      "FIX_REACTIVATE": "Reactivate this assignment, then run a pay run covering",
+      "FIX_ASSIGN": "Assign this payee to the plan for a period covering",
+      "FIX_PLAN_ARCHIVED": "The plan is archived; it must be reinstated before anything under it can be paid —",
+      "FIX_UNKNOWN": "Covers",
+      "RUN_PERIOD": "{{from}} – {{to}}.",
+      "GO_TO_ASSIGNMENT": "Open assignments"
+    }
   },
   "ATTAINMENT": {
     "TARGET": "Target",
@@ -851,18 +868,6 @@
     "VIEW_ALL": "View all",
     "END_OF_LIST": "End of list",
     "LOAD_MORE": "Load more",
-    "PERIOD_LABEL": "Period",
-    "PERIOD_THIS_MONTH": "This Month",
-    "PERIOD_LAST_MONTH": "Last Month",
-    "PERIOD_THIS_QUARTER": "This Quarter",
-    "PERIOD_LAST_QUARTER": "Last Quarter",
-    "PERIOD_YTD": "Year to Date",
-    "PERIOD_LAST_YEAR": "Last Year",
-    "PERIOD_ALL_TIME": "All Time",
-    "COUNTER_THIS_MONTH": "in this month",
-    "COUNTER_LAST_MONTH": "in last month",
-    "COUNTER_YTD": "year to date",
-    "COUNTER_ALL_TIME": "all time",
     "CHIP_IN_PROGRESS": "In Progress",
     "CHIP_UPCOMING": "Upcoming",
     "CHIP_CLOSED": "Closed",
@@ -884,12 +889,12 @@
     "REQUIRES_ACTION": "requires action",
     "VIEW_FILTERED": "View filtered",
     "TRANSACTIONS_PERIOD": "Transactions",
-    "TRANSACTIONS_PERIOD_DESC": "Booked sales",
+    "TRANSACTIONS_PERIOD_DESC": "Sales booked, by transaction date",
     "PAYOUTS_PERIOD": "Payouts",
-    "PAYOUTS_PERIOD_DESC": "Paid out this period",
+    "PAYOUTS_PERIOD_DESC": "Money transferred, by payment date",
     "PAYOUTS_PERIOD_HINT": "Money actually transferred in this period, by payment date. Excludes commission that is calculated or approved but not yet paid.",
     "CREDITS_PERIOD": "Credits",
-    "CREDITS_PERIOD_DESC": "Applied credits",
+    "CREDITS_PERIOD_DESC": "Credits applied, by allocation date",
     "ACTIVE_PLANS_DESC": "Compensation plans",
     "ACTIVE_QUOTAS_DESC": "Performance targets",
     "ACTIVE_QUOTAS_INLINE": "active quotas",
@@ -903,11 +908,9 @@
     "BAND_PACING": "Progress",
     "PACING_CHIP": "{{period}} total as baseline",
     "PACING_PILL": "{{percent}}% of baseline",
-    "PACING_BASELINE": "{{period}} total",
     "PACING_METRIC": "Paid so far",
     "TREND_VS": "vs",
     "TREND_METRIC": "Total commission payouts",
-    "TREND_PRIOR": "Prior: {{period}}",
     "TREND_NO_BASE": "New",
     "ACTIVITY_FEED": "Recent Activity",
     "ACTIVITY_SYSTEM_ACTOR": "System",
@@ -952,7 +955,22 @@
     "DEAL_LOST_CONFIRM_MSG": "The deal for {{ref}} was lost in the CRM. This supersedes its credit ({{amount}}) and cancels the transaction, removing it from any future pay run. It cannot be undone with one click.",
     "DEAL_LOST_REVERTED": "Commission reverted.",
     "ACTIVITY_VIEW_ALL": "View all",
-    "ATTENTION_RECONCILE": "Reconcile"
+    "ATTENTION_RECONCILE": "Reconcile",
+    "RANGE_LABEL": "Date range",
+    "COMMISSIONS_TOTAL": "Total Commissions",
+    "COMMISSIONS_TOTAL_DESC": "Commission created in this range, by allocation date — paid or not",
+    "COMMISSIONS_PAID": "Paid Commissions",
+    "COMMISSIONS_PAID_DESC": "Of that commission, the part already paid out",
+    "COMMISSIONS_UNPAID": "Unpaid Commissions",
+    "COMMISSIONS_UNPAID_DESC": "Of that commission, the part still owed",
+    "COMMISSIONS_CLOSED_NOTE": "Not counted above — written off or settled outside Incentra:",
+    "RANGE_INVALID": "The end date cannot be earlier than the start date.",
+    "TREND_NOTE_PACING": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Baseline: {{amount}} in {{period}}.",
+    "TREND_NOTE_CLOSED": "Money that actually left in this range, by payment date — it includes commission earned in earlier months and settled now, so it will not match the commission cards above. Previous window ({{period}}): {{amount}}.",
+    "COUNTER_IN_RANGE": "in this range",
+    "COMMISSIONS_UNREACHABLE_NOTE": "Of the unpaid amount, no pay run can reach:",
+    "COMMISSIONS_UNREACHABLE_LINK": "See what is stuck and why",
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Review deactivated assignments"
   },
   "IMPORTS": {
     "STEPS": {
@@ -1434,7 +1452,13 @@
       "CURRENCY_PLACEHOLDER": "Add currency…",
       "RULE": "Rule",
       "RULE_PLACEHOLDER": "Select rule…",
-      "RULE_NO_RULES": "No active rules in selected plan(s)."
+      "RULE_NO_RULES": "No active rules in selected plan(s).",
+      "SETTLEMENT": "Payment",
+      "SETTLEMENT_ALL": "All",
+      "SETTLEMENT_PAYABLE": "Paid or unpaid",
+      "SETTLEMENT_PAID": "Paid",
+      "SETTLEMENT_UNPAID": "Unpaid",
+      "SETTLEMENT_CLOSED": "Closed without payment"
     },
     "EXPORT": {
       "BUTTON": "Export to Excel",
@@ -1475,7 +1499,15 @@
       "TRIGGER_CONDITIONS": "Conditions:",
       "VIEW_SNAPSHOT": "View raw snapshot",
       "HIDE_SNAPSHOT": "Hide raw snapshot"
-    }
+    },
+    "COL_SETTLEMENT": "Payment",
+    "SETTLEMENT_PAID": "Paid",
+    "SETTLEMENT_UNPAID": "Unpaid",
+    "SETTLEMENT_CLOSED": "Closed",
+    "SETTLEMENT_UNKNOWN": "Unknown",
+    "CLOSURE_WRITTEN_OFF": "written off",
+    "CLOSURE_EXTERNAL_SETTLEMENT": "settled outside Incentra",
+    "CLOSURE_UNKNOWN": ""
   },
   "ASSIGNMENTS": {
     "TITLE": "Assignments",
@@ -1534,7 +1566,10 @@
     "DELETE_BLOCKED_WARNING": "{{count}} assignment(s) are blocked because they have already been used in calculations or payments. None were deleted. Remove them from your selection to delete the rest.",
     "DELETE_BLOCKED_REASON": "Used in payouts",
     "DELETE_BLOCKED_COL_ASSIGNMENT": "Payee → Plan",
-    "ERROR_LOAD": "Failed to load assignment."
+    "ERROR_LOAD": "Failed to load assignment.",
+    "STRAND_TITLE": "This will strand unpaid commission",
+    "STRAND_BODY": "This commission is already earned and still unpaid. Once the assignment is deactivated no pay run can reach it — reactivating the assignment is what makes it payable again.",
+    "STRAND_MORE": "and {{count}} more"
   },
   "PAYOUTS": {
     "TITLE": "Payouts",
@@ -1702,7 +1737,9 @@
     "STATUS_DISCARDED": "Discarded",
     "ACTION_DISCARD": "Discard payout",
     "SELECT_ALL": "Select all payouts that can be actioned",
-    "SELECT_ROW": "Select this payout"
+    "SELECT_ROW": "Select this payout",
+    "ACTION_EXPORT_EXCEL": "Export Excel",
+    "ACTION_EXPORT": "Export"
   },
   "PAY_RUNS": {
     "TITLE": "Pay Runs",
@@ -1843,12 +1880,18 @@
       "EXPORT": {
         "ACTION": "Export to Excel",
         "ERROR": "Export failed. Please try again."
-      }
+      },
+      "EMPTY_ALL_ZERO": "All {{count}} payouts in this run are worth nothing, and are hidden by \"Hiding $0 payouts\"."
     },
     "EXPORT": {
       "ACTION": "Export to Excel",
       "ERROR": "Export failed. Please try again."
-    }
+    },
+    "CALCULATE_UNREACHABLE": "No payouts were created, but this period does owe commission. It is unpaid on {{count}} payee/plan combination(s) that have no active assignment, so no pay run can reach it. Reactivate the assignment and run the period again.",
+    "SKIP_UnreachableCommission": "{{count}} payee/plan combination(s) owe unpaid commission in this period with no active assignment. No pay run can reach that money until the assignment is reactivated.",
+    "SKIP_SupplementalForNewCredits": "{{count}} payout(s) were supplemental: the period was already paid, but commission allocated since then was still unpaid and is carried by these.",
+    "SKIPPED_UNREACHABLE_HINT": "That commission stays owed; it simply has no route to a payout.",
+    "SKIPPED_UNREACHABLE_LINK": "Review deactivated assignments"
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Appearance",
@@ -2488,5 +2531,11 @@
       "TWO_FACTOR_LOGIN_SUCCESS": "Two-factor sign-in",
       "UNKNOWN": "Unrecognised action"
     }
+  },
+  "LANGUAGE": {
+    "LABEL": "Language",
+    "EN": "English",
+    "ES": "Español",
+    "PL": "Polski"
   }
 }

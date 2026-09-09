@@ -23,6 +23,68 @@
   </div>
 
   <div class="ds-section">
+    <h2 class="ds-section__title">Icons</h2>
+
+    <!--
+      WHY THIS SECTION EXISTS. An export button shipped with a generic `download` glyph because
+      nothing on this page said the brand marks were here. A rule that lives only in a code comment
+      is a rule the next person rediscovers by getting it wrong.
+    -->
+    <p class="ds-note">
+      <strong>File formats are brand marks, not glyphs.</strong>
+      Excel and PDF have their own raster icons in <code>public/icons/</code>; their colour is part of
+      their meaning, so they cannot be a <code>currentColor</code> path like the rest of the set. Any
+      button that produces one of those files uses these — never <code>download</code>,
+      <code>file</code> or <code>file-text</code>.
+    </p>
+
+    <div class="ds-row">
+      <span class="ds-icon-chip"><app-icon name="file-excel" [size]="20" /><code>file-excel</code></span>
+      <span class="ds-icon-chip"><app-icon name="file-pdf" [size]="20" /><code>file-pdf</code></span>
+    </div>
+
+    <p class="ds-note">
+      Everything else is a stroked SVG that inherits the current text colour. A few of the ones that
+      get reached for most:
+    </p>
+
+    <div class="ds-row">
+      @for (name of sampleIcons; track name) {
+        <span class="ds-icon-chip"><app-icon [name]="name" [size]="18" /><code>{{ name }}</code></span>
+      }
+    </div>
+  </div>
+
+  <div class="ds-section">
+    <h2 class="ds-section__title">Export menu</h2>
+
+    <p class="ds-note">
+      One button, one choice. When a screen offers the same document in more than one format they go
+      in a menu behind a single <strong>Export</strong> — two side-by-side buttons make one document
+      look like two different actions.
+    </p>
+
+    <div class="ds-row">
+      <ws-popover placement="bottom-end" [(isOpen)]="exportMenuOpen">
+        <ws-button slot="trigger" variant="secondary">
+          <app-icon name="download" [size]="16" />
+          Export
+          <app-icon name="chevron-down" [size]="14" />
+        </ws-button>
+
+        <button type="button" class="ds-menu-item">
+          <app-icon name="file-pdf" [size]="16" />
+          Export PDF
+        </button>
+        <button type="button" class="ds-menu-item">
+          <app-icon name="file-excel" [size]="16" />
+          Export Excel
+        </button>
+      </ws-popover>
+    </div>
+  </div>
+
+  <div class="ds-section">
     <h2 class="ds-section__title">Badges</h2>
     <div class="ds-row">
       <ws-badge variant="neutral">Neutral</ws-badge>

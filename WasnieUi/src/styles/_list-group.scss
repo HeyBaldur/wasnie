@@ -1,0 +1,97 @@
+/* ── List group ───────────────────────────────────────────────────────────────────────────────── */
+/*                                                                                                  */
+/* A compact stack of hairline-separated rows: the way this app lists a handful of facts that are    */
+/* not a table. Three screens grew their own version of it in one week (the pay run result, the      */
+/* deactivate dialog, the payee's unreachable tab), so it lives HERE, global and unscoped.           */
+/*                                                                                                  */
+/* IT IS GLOBAL ON PURPOSE. Angular view encapsulation is exactly what made two "identical" card     */
+/* languages drift apart before: a copy inside a component's SCSS cannot be reached by the next      */
+/* screen, so the next screen writes its own and the two stop matching.                             */
+/*                                                                                                  */
+/* ★★ THE DENSITY IS ws-table's, NOT AN INVENTED ONE. Same 12px text, same `--space-1 / --space-4`   */
+/* padding, same hairline between rows, same rounded container. The first version of this file used  */
+/* `--space-3` padding, 13px text and a per-row border, and read as a stack of boxes sitting next    */
+/* to a table that was visibly tighter. If ws-table's density ever changes, this changes with it.    */
+/*                                                                                                  */
+/* ★★ AND IT IS SUNKEN, NOT SURFACE. It sits INSIDE a card or a modal, and `--color-bg-surface` is   */
+/* what those already are: white on white, with the whole list reading as an unbroken continuation   */
+/* of its container. `--color-bg-surface-sunken` is the level the design system gives content that   */
+/* is contained by a card (§5.3), and it is what makes the rows legible as a group at all.           */
+
+.ws-list-group {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  /* The rows are square; the container clips them, so the corners are rounded once and the two can */
+  /* never disagree about the radius. */
+  overflow: hidden;
+}
+
+/* Rows carry no ground of their own — only the line that separates them from the next. */
+.ws-list-group__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  font-size: var(--font-size-12);
+  color: var(--color-text-primary);
+}
+
+.ws-list-group__item:last-child {
+  border-bottom: none;
+}
+
+/* A row that carries a hint is two lines tall, and ws-table's 4px of padding is then too tight to
+   breathe. It applies only to that case, so single-line rows keep the table's exact density. */
+.ws-list-group__item:has(.ws-list-group__hint) {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+/* The stacked halves of a row: the fact, then what to do about it. They are one row and not two
+   because a hint floating under a list makes the reader work out which line it belonged to. */
+.ws-list-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.ws-list-group__text {
+  line-height: 1.5;
+}
+
+.ws-list-group__hint {
+  font-size: var(--font-size-11);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* Part of the sentence, not a button: it points at where the money now is, and the reader may or
+   may not want to go there right now. */
+.ws-list-group__hint a {
+  color: var(--color-brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ws-list-group__hint a:hover {
+  text-decoration: underline;
+}
+
+/* The leading marker. Deliberately not a count: every one of these sentences already starts with
+   its own number, and printing it twice makes the reader check whether they disagree. */
+.ws-list-group__marker {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+  display: inline-flex;
+}

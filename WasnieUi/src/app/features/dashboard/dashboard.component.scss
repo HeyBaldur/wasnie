@@ -376,150 +376,6 @@
   letter-spacing: -0.01em;
 }
 
-// ── Metric card — TailAdmin churn-rate card pattern ────────────────────────────
-// Layout: title + desc TOP (mb-6) | value + sub-trend BOTTOM-LEFT | amounts/link BOTTOM-RIGHT
-// Ref: TailAdmin "mb-6 flex justify-between" (header) + "flex justify-between" (footer)
-
-.metric-card {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  text-decoration: none;
-  color: inherit;
-}
-
-// Header: title + description
-.metric-card__hd { margin-bottom: var(--space-3); }
-
-.metric-card__title {
-  font-size: var(--font-size-16);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1.3;
-}
-
-// Sub-description: "text-theme-sm text-gray-500"
-.metric-card__sub {
-  font-size: var(--font-size-13);
-  color: var(--color-text-tertiary);
-  margin-top: var(--space-1);
-  line-height: 1.3;
-}
-
-// Footer row: value group LEFT, aside RIGHT (TailAdmin "flex justify-between")
-.metric-card__ft {
-  display: flex;
-  flex-wrap: wrap;        // lets aside drop below when the primary value is too wide
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex: 1;
-}
-
-// Value: "text-title-xs font-semibold" ≈ 20px 600
-.metric-card__value {
-  font-size: var(--font-size-20);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  min-width: 0;
-
-  &--amt { font-size: var(--font-size-18); font-weight: 700; }
-}
-
-// Exact full value shown below the compact notation in small muted text.
-// display: block is required — text-overflow: ellipsis only works on block-level
-// elements, not inline spans. Without it the span wraps instead of clipping.
-.metric-card__value--full {
-  display: block;
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-// Trend line below value: "text-theme-xs text-gray-500" with colored delta
-.metric-card__trend {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
-
-.metric-card__trend-val {
-  font-weight: 600;
-  color: var(--color-text-secondary);
-
-  &--up   { color: var(--color-success); }
-  &--down { color: var(--color-danger); }
-  &--warn { color: var(--color-warning); }
-}
-
-// Aside (right side): stacked currency amounts or link — kept for Avg Quota
-.metric-card__aside {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-// Secondary currency row — shown below a subtle divider when multiple currencies exist
-.metric-card__secondary-ccys {
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-2);
-}
-
-.metric-card__link {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-11);
-  font-weight: 500;
-  color: var(--color-brand);
-  white-space: nowrap;
-
-  &:hover { color: var(--color-brand-hover); }
-}
-
-.metric-card__ccy-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-1);
-}
-
-.metric-card__ccy {
-  font-size: var(--font-size-11);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--color-text-tertiary);
-}
-
-.metric-card__amt {
-  font-size: var(--font-size-12);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.metric-card__ft--col {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  width: 100%;
-}
-
 .attainment-bar {
   width: 100%;
   height: 6px;
@@ -815,30 +671,19 @@
   overflow: hidden;
 }
 
-.trend-card__prior {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
+// The sentence that says what this card's figure actually is. Keeps the rule and the position of the
+// footer it replaces, so the card's geometry is unchanged — only the content is now an explanation
+// rather than a second bare number.
+//
+// It WRAPS, unlike the label it replaces: that one was one line with an ellipsis, which is right for a
+// period name and wrong for a sentence — a truncated explanation explains nothing.
+.trend-card__note {
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border-subtle);
   margin-top: var(--space-2);
-}
-
-.trend-card__prior-lbl {
   font-size: var(--font-size-11);
+  line-height: 1.5;
   color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 60%;
-}
-
-.trend-card__prior-amt {
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
 }
 
 // ── Skeleton ───────────────────────────────────────────────────────────────────
@@ -870,9 +715,41 @@
 }
 
 
-// Period filter. The dropdown panel is sized to its trigger, and a trigger sized to "This Month" made
-// the option rows too narrow once the selected-state check icon claimed space — "This Mo…". 160px is the
-// same floor the credits list uses for its filter selects, so the two screens stay consistent.
-.period-select {
-  min-width: 160px;
+// Date range filter. The control sizes itself now (labelPosition="inline" gives it width: fit-content),
+// so it no longer needs — or wants — a min-width here: on a block host that only made it stretch.
+.range-picker {
+  flex-shrink: 0;
+}
+
+// The disclosure control for the "needs attention" panel. A real button, so it is reachable by
+// keyboard and announces its state — reset to look like the heading it replaces rather than like a
+// button, because visually nothing about that header changed.
+.attention-hd__lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.attention-hd__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+
+  &:hover {
+    color: var(--color-text-primary);
+  }
+
+  // The focus treatment of this design system is an outline offset from the control, not a ring.
+  &:focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
 }

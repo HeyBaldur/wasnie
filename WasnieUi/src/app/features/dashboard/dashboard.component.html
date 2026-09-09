@@ -5,16 +5,121 @@
     [title]="greetingKey() | translate: { name: greetingNamePart() }"
     [subtitle]="'DASHBOARD.SUBTITLE' | translate"
   >
-    <!-- Period filter. A dropdown rather than a six-item bar: the bar had no affordance (six words
-         floating in the header), its active state was a faint translucent box, and it overflowed below
-         ~640px. The select's trigger is a real bordered control that always states the current period. -->
-    <ws-select
+    <!-- Date range filter. The presets (this month / last month / YTD …) are gone: they could not
+         express "1 February to 15 April", which is the question this screen kept being unable to
+         answer. The primitive already exists and already orders the two ends itself, so a backwards
+         range never leaves it (§5.1 — mirror what is there rather than assemble two loose pickers). -->
+    <ws-date-range-picker
       slot="actions"
-      class="period-select"
-      [formControl]="periodControl"
-      [options]="periodOptions"
-      [label]="'DASHBOARD.PERIOD_LABEL' | translate"
+      class="range-picker"
+      align="end"
+      labelPosition="inline"
+      [formControl]="rangeControl"
+      [label]="'DASHBOARD.RANGE_LABEL' | translate"
     />
+
+    <!-- ── Commissions: Total / Paid / Unpaid over the range ──────────────
+         MONEY RULE: total = paid + unpaid, to the cent. All three come from ONE server-side query over
+         the same credits, so they cannot drift.
+
+         The three are STRUCTURAL TWINS of the metric cards below and of each other — same ws-card, same
+         metric-card blocks, same figure typography. Neither Paid nor Unpaid gets a colour, an arrow or a
+         chart the other does not have: they are two halves of one number, and dressing one of them
+         differently would suggest a judgement the data does not carry. -->
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-3 w-full max-w-full mb-8">
+
+      @for (card of commissionCards; track card.key) {
+        <ws-card variant="interactive" padding="md">
+          <!-- ★ OPENS A NEW TAB, AND THE ICON SAYS SO. These three lead the page and are read together
+               as a sum; sending the reader away in place would cost them the other two figures and the
+               range they were looking at. `external-link` is the glyph the icon registry reserves for
+               exactly this promise, and `rel="noopener"` is not optional on a targeted link. -->
+          <a [routerLink]="['/credits']"
+             [queryParams]="commissionsLinkParams(card.settlement)"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="metric-card">
+            <div class="metric-card__hd">
+              <h3 class="metric-card__title">
+                {{ card.titleKey | translate }}
+                <app-icon name="external-link" [size]="12" class="metric-card__ext" />
+              </h3>
+              <p class="metric-card__sub">{{ card.descKey | translate }}</p>
+            </div>
+            <div class="mt-4 flex items-end justify-between gap-4 w-full flex-1">
+              <div class="flex flex-col gap-1 min-w-0 flex-1">
+                @if (store.loading()) {
+                  <span class="skeleton skeleton--num"></span>
+                } @else {
+                  <!-- Zero is rendered as a figure, never as an em-dash or a blank: "no commissions in
+                       this range" and "we could not work it out" must not look the same (§B3). -->
+                  <div class="metric-card__value commission-card__value">
+                    {{ fmtCompact(amountFor(commissionTotals(card.key), commissionsCurrency()), commissionsCurrency() ?? '') }}
+                  </div>
+                  <!-- The exact amount and the currency chip only exist when there IS a currency. With
+                       no commissions in the range there is none to name, and currencyFormat renders a
+                       blank code as "??? 0" — its signal for corrupt data, which an empty range is not. -->
+                  @if (commissionsCurrency(); as ccy) {
+                    <span class="metric-card__value--full">
+                      {{ amountFor(commissionTotals(card.key), ccy) | currencyFormat: ccy }}
+                    </span>
+                    <span class="metric-card__ccy">{{ ccy }}</span>
+                  }
+                  @if (secondaryCurrencies(commissionTotals(card.key)).length > 0) {
+                    <div class="metric-card__secondary-ccys flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                      @for (t of secondaryCurrencies(commissionTotals(card.key)); track t.currency) {
+                        <div class="flex items-center gap-1">
+                          <span class="metric-card__ccy">{{ t.currency }}</span>
+                          <span class="metric-card__amt">{{ fmtCompact(t.amount, t.currency) }}</span>
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            </div>
+          </a>
+        </ws-card>
+      }
+    </div>
+
+    <!-- Commissions that ended a third way: written off, or settled outside Wasnie through payroll.
+         In NONE of the three cards above — neither paid nor still owed — and said out loud here so the
+         omission is visible instead of money quietly missing from the total (§B1). -->
+    <!-- How much of "Unpaid" no pay run can reach: the payee has no active assignment to that
+         plan, so the engine never considers those credits. Said out loud because the two figures can
+         differ by orders of magnitude, and only one of them is money anybody can act on (§B3). -->
+    @if (!store.loading() && hasUnreachableCommissions()) {
+      <p class="commissions-closed-note">
+        <app-icon name="alert-triangle" [size]="14" />
+        <span>
+          {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_NOTE' | translate }}
+          @for (t of store.commissionsBand()!.unreachableTotalByCurrency; track t.currency) {
+            <strong>{{ t.amount | currencyFormat: t.currency }}</strong><!--
+     -->@if (!$last) {<span>, </span>}
+          }
+          <!-- Straight to the cause. A deactivated assignment is the reason in almost every case, and
+               reactivating it is a single action. -->
+          <a class="commissions-note-link"
+             routerLink="/assignments" [queryParams]="{ status: 'Deactivated' }">
+            {{ 'DASHBOARD.COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK' | translate }}
+          </a>
+        </span>
+      </p>
+    }
+
+    @if (!store.loading() && hasClosedCommissions()) {
+      <p class="commissions-closed-note">
+        <app-icon name="info" [size]="14" />
+        <span>
+          {{ 'DASHBOARD.COMMISSIONS_CLOSED_NOTE' | translate }}
+          @for (t of store.commissionsBand()!.closedTotalByCurrency; track t.currency) {
+            <strong>{{ t.amount | currencyFormat: t.currency }}</strong><!--
+         -->@if (!$last) {<span>, </span>}
+          }
+        </span>
+      </p>
+    }
 
     <!-- ── Banda 1: Requires action ──────────────────────────────────────── -->
     <div class="band-hd band-hd--tight">
@@ -324,8 +429,20 @@
       [accent]="actionCardAccent(hasAttentionItems() ? 1 : 0)"
       class="pending-plan-card">
       <div class="stat-card__hd">
-        <div>
-          <h3 class="stat-card__title">{{ 'DASHBOARD.ATTENTION_TITLE' | translate }}</h3>
+        <!-- ★ THE CARET IS THE BUTTON, AND IT CARRIES THE TITLE. A real <button> with aria-expanded and
+             aria-controls — the same disclosure shape the payout detail already uses for its
+             calculation rows — so the panel opens from the keyboard and a screen reader is told what it
+             controls. Wrapping the whole header instead would have swallowed the Reconcile link, which
+             must stay separately reachable while the panel is shut. -->
+        <div class="attention-hd__lead">
+          <button type="button"
+                  class="attention-hd__toggle"
+                  [attr.aria-expanded]="attentionExpanded()"
+                  aria-controls="attention-detail"
+                  (click)="toggleAttention()">
+            <app-icon [name]="attentionExpanded() ? 'chevron-up' : 'chevron-down'" [size]="16" />
+            <span class="stat-card__title">{{ 'DASHBOARD.ATTENTION_TITLE' | translate }}</span>
+          </button>
           <p class="pending-plan-card__sub">{{ 'DASHBOARD.ATTENTION_DESC' | translate }}</p>
         </div>
         <!--
@@ -355,6 +472,9 @@
         </div>
       </div>
 
+      <!-- Collapsed on load, every load. The header above already carries the two things a reader
+           needs while it is shut: how many, and where to go. -->
+      <div id="attention-detail" [hidden]="!attentionExpanded()">
       @if (store.loading()) {
         <div class="pending-plan-card__list">
           @for (_ of [1,2]; track $index) {
@@ -509,13 +629,18 @@
           }
         </div>
       }
+      </div>
     </ws-card>
 
     <!-- ── Banda 2: Period KPIs + Activity feed ──────────────────────────── -->
     <div class="band-hd">
       <span class="band-hd__lbl">{{ 'DASHBOARD.BAND_PERIOD' | translate }}</span>
-      @if (store.summary()?.periodLabel) {
-        <span class="band-hd__chip">{{ store.summary()!.periodLabel }}</span>
+      @if (store.summary(); as summary) {
+        <!-- Built from the dates the SERVER echoed back, not from the picker's own value: if the two
+             ever disagree, the chip must say which window the figures below actually cover. -->
+        <span class="band-hd__chip">
+          {{ summary.from | dateFormat: 'medium' }} – {{ summary.to | dateFormat: 'medium' }}
+        </span>
       }
     </div>
 
@@ -816,11 +941,11 @@
         </span>
         <span class="band-hd__chip">
           @if (store.trendBand()!.isPacing) {
-            {{ 'DASHBOARD.PACING_CHIP' | translate: { period: store.trendBand()!.priorPeriodLabel } }}
+            {{ 'DASHBOARD.PACING_CHIP' | translate: { period: trendPriorLabel() } }}
           } @else {
-            {{ store.trendBand()!.currentPeriodLabel }}
+            {{ trendCurrentLabel() }}
             {{ 'DASHBOARD.TREND_VS' | translate }}
-            {{ store.trendBand()!.priorPeriodLabel }}
+            {{ trendPriorLabel() }}
           }
         </span>
       </div>
@@ -834,7 +959,7 @@
                 <div class="min-w-0 flex-1">
                   <span class="trend-card__label">
                     {{ (store.trendBand()!.isPacing ? 'DASHBOARD.PACING_METRIC' : 'DASHBOARD.TREND_METRIC') | translate }}
-                    · {{ store.trendBand()!.currentPeriodLabel }} · {{ point.currency }}
+                    · {{ trendCurrentLabel() }} · {{ point.currency }}
                   </span>
                   <div class="trend-card__value">
                     {{ fmtCompact(point.currentAmount, point.currency) }}
@@ -863,21 +988,26 @@
                 <!-- Each bar drills down to the payouts it is made of — every figure on screen must be
                      traceable to its rows. Same link definition as the card above it. -->
                 <ws-hbar-chart
-                  [points]="trendBarPoints(point, store.trendBand()!.currentPeriodLabel, store.trendBand()!.priorPeriodLabel)"
+                  [points]="trendBarPoints(point, trendCurrentLabel(), trendPriorLabel())"
                   (barClick)="onTrendBarClick($event)"
                 />
               </div>
 
-              <!-- ONE footer for both states: same weight, colour, size and alignment. Only the wording
-                   differs — "Prior: June 2026" for a closed period, "July 2026 total" for a baseline. -->
-              <div class="trend-card__prior">
-                <span class="trend-card__prior-lbl">
-                  {{ footerLabel() | translate: { period: store.trendBand()!.priorPeriodLabel } }}
-                </span>
-                <span class="trend-card__prior-amt">
-                  {{ fmtCompact(point.priorAmount, point.currency) }}
-                </span>
-              </div>
+              <!-- ★ THE FOOTER SAYS WHAT THE FIGURE IS, NOT JUST WHAT IT IS COMPARED WITH.
+                   This card counts money that LEFT in the range (payouts, by payment date); the three
+                   commission cards at the top count commission CREATED in the range (credits, by
+                   allocation date). Two honest numbers, two different questions — and read one under
+                   the other in the same currency they invite a comparison that will never balance,
+                   because a payment made this month usually settles commission earned in earlier ones.
+                   Nothing on screen said so, so a reader had no way to know (§C3).
+
+                   ★ THE BASELINE AMOUNT STAYS, INSIDE THE SENTENCE. The pill above reads "N% of
+                   baseline"; dropping the figure it is a percentage OF would leave that number
+                   referring to something the reader cannot see. The chart shows it only on hover. -->
+              <p class="trend-card__note">
+                {{ (store.trendBand()!.isPacing ? 'DASHBOARD.TREND_NOTE_PACING' : 'DASHBOARD.TREND_NOTE_CLOSED')
+                    | translate: { period: trendPriorLabel(), amount: fmtCompact(point.priorAmount, point.currency) } }}
+              </p>
 
             </div>
           </ws-card>

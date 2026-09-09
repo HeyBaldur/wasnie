@@ -90,8 +90,6 @@ describe('DashboardComponent helpers', () => {
     const setPacing = (isPacing: boolean) => {
       const summary = buildMockSummary();
       summary.trendBand = {
-        currentPeriodLabel: 'August 2026',
-        priorPeriodLabel: 'July 2026',
         commissionTrend: [],
         isPacing,
         currentFrom: '2026-08-01',
@@ -163,12 +161,10 @@ describe('DashboardComponent helpers', () => {
       expect(component.badgeShowsArrow(noBase)).toBeFalse();
     });
 
-    it('switches only the footer WORDING between the two states', () => {
-      setPacing(true);
-      expect(component.footerLabel()).toBe('DASHBOARD.PACING_BASELINE');
-      setPacing(false);
-      expect(component.footerLabel()).toBe('DASHBOARD.TREND_PRIOR');
-    });
+    // The footer used to be a label plus a bare amount, and its wording was the only thing that
+    // changed between the two states. It is now a sentence that says WHAT the figure is — the card
+    // counts money that moved, not commission created — and it still carries the baseline amount the
+    // pill is a percentage of. The two old label keys went with it.
 
     // The chart is the same call in both states — that is what keeps the axis and bars from moving.
     it('builds the same two-bar structure for both states', () => {
@@ -513,151 +509,81 @@ describe('DashboardComponent helpers', () => {
     });
   });
 
-  // ── Period link params ────────────────────────────────────────────────────
+  // ── Range filter and link params ──────────────────────────────────────────
 
-  describe('_periodDates', () => {
-    // 'all-time' was removed from the dashboard menu, but a bookmarked URL can still carry it, so it
-    // must keep degrading to "no date filter" instead of throwing or silently becoming this-month.
-    it('returns null dates for the retired all-time key', () => {
-      const { from, to } = component._periodDates('all-time');
-      expect(from).toBeNull();
-      expect(to).toBeNull();
+  describe('date range filter', () => {
+    // The filter is a WsDateRangePicker (a ControlValueAccessor), so the range travels through a
+    // FormControl rather than a [value]/(valueChange) pair. These pin both directions of that wiring.
+    it('the range control starts on the the current store range', () => {
+      expect(component.rangeControl.value).toEqual({
+        start: component.store.range().from,
+        end: component.store.range().to,
+      });
     });
 
-    it('returns null dates for unknown period key', () => {
-      const { from, to } = component._periodDates('unknown-key');
-      expect(from).toBeNull();
-      expect(to).toBeNull();
+    it('picking a range in the control reaches the store', () => {
+      component.rangeControl.setValue({ start: '2026-02-01', end: '2026-04-15' });
+      expect(component.store.range()).toEqual({ from: '2026-02-01', to: '2026-04-15' });
     });
 
-    it('does not offer all-time in the quick filters', () => {
-      expect(component.periodOptions.map(o => o.value)).not.toContain('all-time');
-    });
-
-    // The filter is a WsSelect (a ControlValueAccessor), so the period travels through a FormControl
-    // rather than a [value]/(valueChange) pair. These pin the two directions of that wiring: picking an
-    // option must reach the store, and the control must show the period already in effect.
-    it('selecting an option in the period control updates the store', () => {
-      component.periodControl.setValue('this-quarter');
-      expect(component.store.period()).toBe('this-quarter');
-    });
-
-    it('the period control starts on the store\'s current period', () => {
-      expect(component.periodControl.value).toBe(component.store.period());
-    });
-
-    it('every option value is a period the store accepts', () => {
-      for (const opt of component.periodOptions) {
-        component.periodControl.setValue(String(opt.value));
-        expect(component.store.period()).toBe(String(opt.value));
-      }
-    });
-
-    it('offers month, quarter and year filters', () => {
-      expect(component.periodOptions.map(o => o.value)).toEqual([
-        'this-month', 'last-month', 'this-quarter', 'last-quarter', 'ytd', 'last-year',
-      ]);
-    });
-
-    it('every quick filter has a translated label and resolves to a date range', () => {
-      for (const opt of component.periodOptions) {
-        expect(opt.label).toMatch(/^DASHBOARD\.PERIOD_/);
-        const { from, to } = component._periodDates(String(opt.value));
-        expect(from).not.toBeNull();
-        expect(to).not.toBeNull();
-      }
-    });
-
-    it('this-month: from is first of current month', () => {
-      const { from } = component._periodDates('this-month');
+    it('opens on the WHOLE current month, not the month so far', () => {
       const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      expect(from).toBe(`${yyyy}-${mm}-01`);
+      const first = new Date(today.getFullYear(), today.getMonth(), 1);
+      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const iso = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      expect(component.store.range()).toEqual({ from: iso(first), to: iso(last) });
     });
 
-    it('this-month: to is today', () => {
-      const { to } = component._periodDates('this-month');
+    // ★ A backwards range would ask the server for a window it refuses. The picker already orders the
+    //   two ends, so this is the second of three guards — pinned because it is the cheap one to lose.
+    it('a backwards range is ignored rather than applied', () => {
+      const before = component.store.range();
+      component.store.setRange({ from: '2026-04-15', to: '2026-02-01' });
+      expect(component.store.range()).toEqual(before);
+    });
+
+    it('an incomplete range is ignored', () => {
+      const before = component.store.range();
+      component.onRangeChange({ start: '2026-02-01', end: null });
+      expect(component.store.range()).toEqual(before);
+    });
+
+    it('resetting returns to the current month', () => {
+      component.store.setRange({ from: '2026-02-01', to: '2026-04-15' });
+      component.resetRange();
+
       const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
-      expect(to).toBe(`${yyyy}-${mm}-${dd}`);
+      expect(component.store.range().from)
+        .toBe(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`);
     });
 
-    it('ytd: from is Jan 1 of current year', () => {
-      const { from } = component._periodDates('ytd');
-      expect(from).toBe(`${new Date().getFullYear()}-01-01`);
-    });
-
-    // Quarters are calendar quarters and must match PeriodHelper on the backend exactly — these link
-    // params drive the list screens the dashboard cards open, so a mismatch shows the user a list that
-    // disagrees with the card they clicked.
-    it('this-quarter: from is the first day of the calendar quarter, to is today', () => {
-      const { from, to } = component._periodDates('this-quarter');
-      const today = new Date();
-      const qMonth = Math.floor(today.getMonth() / 3) * 3 + 1;
-      const yyyy = today.getFullYear();
-      expect(from).toBe(`${yyyy}-${String(qMonth).padStart(2, '0')}-01`);
-      expect(to).toBe(
-        `${yyyy}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      );
-    });
-
-    it('last-quarter: ends the day before this quarter starts', () => {
-      const lastQ = component._periodDates('last-quarter');
-      const thisQ = component._periodDates('this-quarter');
-
-      const dayAfterLastEnds = new Date(`${lastQ.to}T00:00:00`);
-      dayAfterLastEnds.setDate(dayAfterLastEnds.getDate() + 1);
-      const asStr =
-        `${dayAfterLastEnds.getFullYear()}-` +
-        `${String(dayAfterLastEnds.getMonth() + 1).padStart(2, '0')}-` +
-        `${String(dayAfterLastEnds.getDate()).padStart(2, '0')}`;
-
-      expect(asStr).toBe(thisQ.from!);
-    });
-
-    it('last-quarter: spans exactly three months and starts on the 1st', () => {
-      const { from, to } = component._periodDates('last-quarter');
-      expect(from).toMatch(/-(01|04|07|10)-01$/);
-      expect(to).toMatch(/-(03|06|09|12)-(30|31)$/);
-    });
-
-    it('last-year: is the previous calendar year in full', () => {
-      const { from, to } = component._periodDates('last-year');
-      const prev = new Date().getFullYear() - 1;
-      expect(from).toBe(`${prev}-01-01`);
-      expect(to).toBe(`${prev}-12-31`);
+    it('a single-day range is accepted', () => {
+      component.store.setRange({ from: '2026-03-09', to: '2026-03-09' });
+      expect(component.store.range()).toEqual({ from: '2026-03-09', to: '2026-03-09' });
     });
   });
 
   describe('payoutsLinkParams', () => {
-    it('includes period key', () => {
-      component.store.setPeriod('last-month');
-      expect(component.payoutsLinkParams()['period']).toBe('last-month');
-    });
-
-    it('retired all-time key: no payFrom or payTo', () => {
-      component.store.setPeriod('all-time');
+    it('carries the selected range as the payment window', () => {
+      component.store.setRange({ from: '2026-02-01', to: '2026-04-15' });
       const p = component.payoutsLinkParams();
-      expect(p['payFrom']).toBeUndefined();
-      expect(p['payTo']).toBeUndefined();
+
+      expect(p['payFrom']).toBe('2026-02-01');
+      expect(p['payTo']).toBe('2026-04-15');
     });
 
-    it('this-month: payFrom is first of month', () => {
-      component.store.setPeriod('this-month');
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      expect(component.payoutsLinkParams()['payFrom']).toBe(`${yyyy}-${mm}-01`);
+    it('no longer sends a period key — there is no period to send', () => {
+      component.store.setRange({ from: '2026-02-01', to: '2026-04-15' });
+      expect(component.payoutsLinkParams()['period']).toBeUndefined();
     });
 
     // The card is cash flow, so the list it opens has to be filtered the same way the card sums: by
     // PAYMENT date and Paid only. Linking with the compensation period (pFrom/pTo) instead would open a
     // list whose total contradicts the figure the user just clicked.
     it('filters the destination list by payment date, not by compensation period', () => {
-      component.store.setPeriod('last-month');
+      component.store.setRange({ from: '2026-07-01', to: '2026-07-31' });
       const p = component.payoutsLinkParams();
 
       expect(p['payFrom']).toBeDefined();
@@ -670,7 +596,7 @@ describe('DashboardComponent helpers', () => {
     // the link carries the PAYMENT window plus Status=Paid. A silent loss of any of these three is the
     // difference between a list that matches the number clicked and one that does not.
     it('carries exactly the three params the list needs to match the card', () => {
-      component.store.setPeriod('last-month');
+      component.store.setRange({ from: '2026-07-01', to: '2026-07-31' });
       const p = component.payoutsLinkParams();
 
       expect(p['status']).toBe('Paid');
@@ -679,26 +605,31 @@ describe('DashboardComponent helpers', () => {
     });
 
     it('never links by compensation period, which would not match the card total', () => {
-      for (const period of ['this-month', 'last-month', 'this-quarter', 'last-quarter', 'ytd', 'last-year']) {
-        component.store.setPeriod(period);
+      for (const range of [
+        { from: '2026-08-01', to: '2026-08-31' },
+        { from: '2026-07-01', to: '2026-07-31' },
+        { from: '2026-02-01', to: '2026-04-15' },
+        { from: '2026-01-01', to: '2026-12-31' },
+      ]) {
+        component.store.setRange(range);
         const p = component.payoutsLinkParams();
-        expect(p['pFrom']).withContext(period).toBeUndefined();
-        expect(p['pTo']).withContext(period).toBeUndefined();
-        expect(p['status']).withContext(period).toBe('Paid');
+        const ctx = `${range.from}..${range.to}`;
+        expect(p['pFrom']).withContext(ctx).toBeUndefined();
+        expect(p['pTo']).withContext(ctx).toBeUndefined();
+        expect(p['status']).withContext(ctx).toBe('Paid');
       }
     });
 
-    it('the payment window matches the period the card is showing', () => {
-      component.store.setPeriod('last-month');
-      const { from, to } = component._periodDates('last-month');
+    it('the payment window matches the range the card is showing', () => {
+      component.store.setRange({ from: '2026-07-01', to: '2026-07-31' });
       const p = component.payoutsLinkParams();
 
-      expect(p['payFrom']).toBe(from!);
-      expect(p['payTo']).toBe(to!);
+      expect(p['payFrom']).toBe(component.store.range().from);
+      expect(p['payTo']).toBe(component.store.range().to);
     });
 
     it('restricts the destination list to Paid payouts', () => {
-      component.store.setPeriod('last-month');
+      component.store.setRange({ from: '2026-07-01', to: '2026-07-31' });
       expect(component.payoutsLinkParams()['status']).toBe('Paid');
     });
   });
@@ -710,8 +641,6 @@ describe('DashboardComponent helpers', () => {
     let navigateSpy: jasmine.Spy;
 
     const bandWith = (over: Partial<DashboardTrendBand> = {}): DashboardTrendBand => ({
-      currentPeriodLabel: 'August 2026',
-      priorPeriodLabel: 'July 2026',
       commissionTrend: [],
       isPacing: true,
       currentFrom: '2026-08-01',
@@ -765,39 +694,50 @@ describe('DashboardComponent helpers', () => {
       expect(navigateSpy).not.toHaveBeenCalled();
     });
 
-    it('does not navigate on an unbounded window', () => {
-      // Opening the whole table is not a drill-down.
-      setBand(bandWith({ priorFrom: null, priorTo: null }));
+    it('does not navigate on an empty window', () => {
+      // Opening the whole table is not a drill-down. The window can no longer be NULL — a free range
+      // always has a predecessor, unlike the retired "all-time" — so what is guarded now is a
+      // malformed payload rather than a period that legitimately had no bounds.
+      setBand(bandWith({ priorFrom: '', priorTo: '' }));
       component.onTrendBarClick({ label: 'x', value: 1, currency: 'EUR' });
       expect(navigateSpy).not.toHaveBeenCalled();
     });
   });
 
   describe('transactionsLinkParams', () => {
-    it('retired all-time key: returns empty object (no dates)', () => {
-      component.store.setPeriod('all-time');
+    it('carries the selected range as the transaction window', () => {
+      component.store.setRange({ from: '2026-02-01', to: '2026-04-15' });
       const p = component.transactionsLinkParams();
-      expect(Object.keys(p).length).toBe(0);
-    });
-
-    it('this-month: txFrom is first of month', () => {
-      component.store.setPeriod('this-month');
-      const today = new Date();
-      const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      expect(component.transactionsLinkParams()['txFrom']).toBe(`${yyyy}-${mm}-01`);
+      expect(p.txFrom).toBe('2026-02-01');
+      expect(p.txTo).toBe('2026-04-15');
     });
   });
 
   describe('creditsLinkParams', () => {
-    it('retired all-time key: returns empty object', () => {
-      component.store.setPeriod('all-time');
-      expect(Object.keys(component.creditsLinkParams()).length).toBe(0);
+    it('carries the selected range as the allocation window', () => {
+      component.store.setRange({ from: '2026-02-01', to: '2026-04-15' });
+      const p = component.creditsLinkParams();
+      expect(p.allocFrom).toBe('2026-02-01');
+      expect(p.allocTo).toBe('2026-04-15');
     });
 
-    it('ytd: allocFrom is Jan 1', () => {
-      component.store.setPeriod('ytd');
-      expect(component.creditsLinkParams()['allocFrom']).toBe(`${new Date().getFullYear()}-01-01`);
+    // The commission cards sum credits by ALLOCATION date, so their deep link must filter on the same
+    // field and the same window, or the list will not add up to the figure that was clicked.
+    it('the commission cards link on the same window and the same date field', () => {
+      component.store.setRange({ from: '2026-02-01', to: '2026-04-15' });
+
+      for (const card of component.commissionCards) {
+        const p = component.commissionsLinkParams(card.settlement);
+        expect(p['allocFrom']).withContext(card.key).toBe('2026-02-01');
+        expect(p['allocTo']).withContext(card.key).toBe('2026-04-15');
+      }
+    });
+
+    it('each card carries the settlement filter the credits screen applies', () => {
+      // It used to send `paid=true|false`, which nothing on the destination read.
+      expect(component.commissionsLinkParams('Payable')['settlement']).toBe('Payable');
+      expect(component.commissionsLinkParams('Paid')['settlement']).toBe('Paid');
+      expect(component.commissionsLinkParams('Unpaid')['settlement']).toBe('Unpaid');
     });
   });
 });
@@ -971,13 +911,20 @@ describe('DashboardStore', () => {
     store = TestBed.inject(DashboardStore);
   });
 
-  it('has default period "this-month"', () => {
-    expect(store.period()).toBe('this-month');
+  it('defaults to the whole current month', () => {
+    const today = new Date();
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    expect(store.range()).toEqual({
+      from: iso(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: iso(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    });
   });
 
-  it('updates period via setPeriod', () => {
-    store.setPeriod('ytd');
-    expect(store.period()).toBe('ytd');
+  it('updates the range via setRange', () => {
+    store.setRange({ from: '2026-02-01', to: '2026-04-15' });
+    expect(store.range()).toEqual({ from: '2026-02-01', to: '2026-04-15' });
   });
 
   it('hasPendingActions is false with no summary', () => {
@@ -1009,7 +956,14 @@ function buildMockSummary(
   actionOverride: Partial<DashboardSummary['actionBand']> = {}
 ): DashboardSummary {
   return {
-    periodLabel: 'June 2026',
+    from: '2026-06-01',
+    to: '2026-06-30',
+    commissionsBand: {
+      totalByCurrency: [],
+      paidByCurrency: [],
+      unpaidByCurrency: [],
+      closedTotalByCurrency: [], unreachableTotalByCurrency: [],
+    },
     actionBand: {
       draftPayRunsCount: 0,
       payoutsPendingApprovalCount: 0,

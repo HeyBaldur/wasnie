@@ -54,12 +54,26 @@ public sealed class CalculatePayoutsForPeriodHandler(
                      && a.EffectivePeriod.End >= request.PeriodStart)
             .ToList();
 
+        // Commission this period owes that the run will never see, because there is no ACTIVE assignment
+        // linking the payee to the plan.
+        //
+        // ★★ IT IS COMPUTED BEFORE THE EARLY EXIT ON PURPOSE. The incident that produced this code is
+        // EXACTLY the "nothing to consider" case: every assignment was deactivated, so `overlapping` was
+        // empty, the engine returned in three lines, and €385,731.02 that three screens called Unpaid
+        // went unmentioned. Reporting it only on the long path would leave the loudest silence intact.
+        var unreachablePayeePlans = await CountUnreachablePayeePlansAsync(
+            tenantId, request.PeriodStart, request.PeriodEnd, request.PayeeIdFilter, cancellationToken);
+
         // Nothing to consider. Reported as its own answer rather than folded into "0 payouts": a run
         // that had no assignments to process is a different fact from one that processed some and
         // discarded them, and the screen must be able to say which happened.
         if (overlapping.Count == 0)
             return Result<CalculatePayoutsResult>.Success(
-                new CalculatePayoutsResult(0, [], [], PayoutRunDiagnostics.NothingToConsider));
+                new CalculatePayoutsResult(0, [], [],
+                    new PayoutRunDiagnostics(0, 0, 0,
+                        unreachablePayeePlans > 0
+                            ? [new PayoutSkipCount(PayoutSkipReason.UnreachableCommission, unreachablePayeePlans)]
+                            : [])));
 
         // ── The counters ──────────────────────────────────────────────────────────────────────────────
         // ★ REPORTING ONLY. Every discard below already happened exactly like this; what is new is that
@@ -70,6 +84,9 @@ public sealed class CalculatePayoutsForPeriodHandler(
         var skippedTerminated = 0;
         var skippedPlanNotPayable = 0;
         var skippedExistingPayout = 0;
+        // Payee+plan+periods that were already paid but still had unpaid credits, so a supplemental
+        // payout was created for them. Reported, never silent (§B1).
+        var supplementalForNewCredits = 0;
         var assignmentsReachingCreditLookup = 0;
         var creditsExamined = 0;
 
@@ -183,15 +200,44 @@ public sealed class CalculatePayoutsForPeriodHandler(
 
             if (blocking is not null)
             {
-                skippedExistingPayout++;
-                conflicts.Add(new PayoutConflict(
-                    payeeId, assignment.PayeeSnapshot.FullName,
-                    planId, intersectionStart, intersectionEnd,
-                    blocking.Status.ToString()));
+                // ★★ ALREADY PAID IS NOT THE SAME AS NOTHING LEFT TO PAY (KAN-66).
+                //
+                // This gate used to end the assignment outright, on the period alone. That stranded
+                // money: commission allocated AFTER the period was paid — a late CRM sync, a
+                // transaction ingested days later — fell inside a window that was now closed, and no
+                // run would ever pick it up again. The screen kept calling it "unpaid" and nothing
+                // could pay it.
+                //
+                // ★ THE ALREADY-PAID MONEY IS NOT AT RISK, and not because this gate protects it: the
+                // credit query below excludes every credit with ConsumedAt set, so a supplemental can
+                // only ever carry commission that was never paid. That guard is the real anti-double-
+                // pay, and it is per CREDIT, which is the granularity the money actually has.
+                //
+                // So the question here is not "was this period paid?" but "is there anything left?".
+                var hasUnpaidCredits = await HasUnconsumedCreditsAsync(
+                    tenantId, payeeId, planId, planCurrency,
+                    intersectionStart, intersectionEnd, cancellationToken);
+
+                if (!hasUnpaidCredits)
+                {
+                    skippedExistingPayout++;
+                    conflicts.Add(new PayoutConflict(
+                        payeeId, assignment.PayeeSnapshot.FullName,
+                        planId, intersectionStart, intersectionEnd,
+                        blocking.Status.ToString()));
+                    logger.LogInformation(
+                        "CalculatePayouts: conflict for payee={PayeeId}, plan={PlanId} — status={Status}, nothing left to pay, skipping.",
+                        payeeId, planId, blocking.Status);
+                    continue;
+                }
+
+                // Something IS left. Fall through and build a supplemental payout for exactly those
+                // credits, and say so in the diagnostics — a new payout on a period the reader knows
+                // was already paid has to explain itself.
+                supplementalForNewCredits++;
                 logger.LogInformation(
-                    "CalculatePayouts: conflict for payee={PayeeId}, plan={PlanId} — status={Status}, skipping.",
+                    "CalculatePayouts: payee={PayeeId}, plan={PlanId} — period already {Status}, but unpaid credits remain; creating a supplemental payout.",
                     payeeId, planId, blocking.Status);
-                continue;
             }
 
             // Calculated payout for same period: remove to recreate (re-run).
@@ -328,6 +374,10 @@ public sealed class CalculatePayoutsForPeriodHandler(
                 skipped.Add(new PayoutSkipCount(PayoutSkipReason.PlanNotPayable, skippedPlanNotPayable));
             if (skippedExistingPayout > 0)
                 skipped.Add(new PayoutSkipCount(PayoutSkipReason.ExistingPayout, skippedExistingPayout));
+            if (supplementalForNewCredits > 0)
+                skipped.Add(new PayoutSkipCount(PayoutSkipReason.SupplementalForNewCredits, supplementalForNewCredits));
+            if (unreachablePayeePlans > 0)
+                skipped.Add(new PayoutSkipCount(PayoutSkipReason.UnreachableCommission, unreachablePayeePlans));
 
             return new PayoutRunDiagnostics(
                 assignmentsConsidered,
@@ -336,4 +386,109 @@ public sealed class CalculatePayoutsForPeriodHandler(
                 skipped);
         }
     }
+    /// <summary>
+    /// How many payee+plan pairs owe unpaid commission in this period that NO pay run can reach.
+    ///
+    /// ★★ IT MIRRORS THE ENGINE'S OWN GATE, from the other side. The run starts from assignments that
+    /// are <c>Active</c> and overlap the period; a credit whose plan has no such assignment is never
+    /// considered, however long it waits. If this drifted from that gate the run would either report
+    /// money it is about to pay, or stay silent about money it will not.
+    ///
+    /// ★ IT REPORTS ONLY. Not one eligibility rule changes here — the same payouts are created as
+    /// before, and the run merely stops being silent about what it left behind (§B1).
+    ///
+    /// ★ ONE PAIR, ONE UNIT. Counting credits would put a five-figure number on a screen that means
+    /// "rows", and counting assignments is impossible: having none is the condition being reported.
+    /// </summary>
+    private async Task<int> CountUnreachablePayeePlansAsync(
+        Guid tenantId,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        Guid? payeeIdFilter,
+        CancellationToken cancellationToken)
+    {
+        // Transactions of the period, so the answer is about the period the reader asked for. The
+        // "what is stuck overall" question is a different screen and deliberately has no window.
+        var txQuery = db.CompensationTransactions
+            .IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId
+                     && t.TransactionDate >= periodStart
+                     && t.TransactionDate <= periodEnd);
+
+        if (payeeIdFilter.HasValue)
+            txQuery = txQuery.Where(t => t.PayeeId == payeeIdFilter.Value);
+
+        var txIds = txQuery.Select(t => t.Id);
+
+        var owedPairs = await db.Credits
+            .IgnoreQueryFilters()
+            .Where(c => c.TenantId == tenantId
+                     && c.SupersededAt == null
+                     && c.ConsumedAt == null
+                     && c.ClosedAt == null
+                     && txIds.Contains(c.TransactionId))
+            .Select(c => new { c.PayeeId, c.PlanId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (owedPairs.Count == 0) return 0;
+
+        var payeeIds = owedPairs.Select(p => p.PayeeId).Distinct().ToList();
+        var planIds = owedPairs.Select(p => p.PlanId).Distinct().ToList();
+
+        // Active assignments overlapping the period. Filtered in memory on the dates for the same reason
+        // the main path does (Decision #40: DateOnly comparisons do not translate).
+        var reachable = (await db.PlanAssignments
+                .IgnoreQueryFilters()
+                .Where(a => a.TenantId == tenantId
+                         && a.Status == AssignmentStatus.Active
+                         && payeeIds.Contains(a.PayeeId)
+                         && planIds.Contains(a.PlanId))
+                .Select(a => new { a.PayeeId, a.PlanId, Start = a.EffectivePeriod!.Start, End = a.EffectivePeriod.End })
+                .ToListAsync(cancellationToken))
+            .Where(a => a.Start <= periodEnd && a.End >= periodStart)
+            .Select(a => (a.PayeeId, a.PlanId))
+            .ToHashSet();
+
+        return owedPairs.Count(p => !reachable.Contains((p.PayeeId, p.PlanId)));
+    }
+
+    /// <summary>
+    /// Is there any commission left to pay for this payee, plan and window?
+    ///
+    /// ★ THE SAME PREDICATE AS THE REAL CREDIT QUERY, deliberately: transactions of the window in the
+    /// plan's currency, then credits of that plan that are not superseded, not consumed and not closed.
+    /// If this answered a different question from the query that follows, the engine would either
+    /// create an empty supplemental payout or refuse one it should have made.
+    /// </summary>
+    private async Task<bool> HasUnconsumedCreditsAsync(
+        Guid tenantId,
+        Guid payeeId,
+        Guid planId,
+        string planCurrency,
+        DateOnly intersectionStart,
+        DateOnly intersectionEnd,
+        CancellationToken cancellationToken)
+    {
+        var txIds = db.CompensationTransactions
+            .IgnoreQueryFilters()
+            .Where(t => t.TenantId == tenantId
+                     && t.PayeeId == payeeId
+                     && t.TransactionDate >= intersectionStart
+                     && t.TransactionDate <= intersectionEnd
+                     && t.Amount.Currency == planCurrency)
+            .Select(t => t.Id);
+
+        return await db.Credits
+            .IgnoreQueryFilters()
+            .AnyAsync(c => c.TenantId == tenantId
+                        && c.PayeeId == payeeId
+                        && c.PlanId == planId
+                        && c.SupersededAt == null
+                        && c.ConsumedAt == null
+                        && c.ClosedAt == null
+                        && txIds.Contains(c.TransactionId),
+                cancellationToken);
+    }
+
 }

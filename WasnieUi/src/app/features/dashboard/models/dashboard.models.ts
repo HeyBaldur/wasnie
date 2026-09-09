@@ -133,19 +133,50 @@ export interface DashboardTrendPoint {
 }
 
 export interface DashboardTrendBand {
-  currentPeriodLabel: string;
-  priorPeriodLabel: string;
   commissionTrend: DashboardTrendPoint[];
-  /** True when the selected period is still running: show pacing progress, never a change percentage. */
+  /** True when the selected range is still running: show pacing progress, never a change percentage. */
   isPacing: boolean;
   /**
-   * The exact windows the two bars cover, so a click on either can drill down to the payouts behind it.
-   * Supplied by the backend — PeriodHelper is the single source of truth for what a period covers.
+   * The exact windows the two bars cover, so a click on either can drill down to the payouts behind it
+   * and the screen can label both in the reader's own locale.
+   *
+   * The PRIOR window is supplied by the backend and never re-derived here: "the same length,
+   * immediately before — except a whole calendar month, which compares against the whole previous
+   * month" is one rule, and a second implementation of it in the browser would drift.
+   *
+   * The period LABELS used to arrive from the server as English prose. They are gone: a free range has
+   * no name to translate, and these four dates say everything the labels did (§C1).
    */
-  currentFrom: string | null;
-  currentTo: string | null;
-  priorFrom: string | null;
-  priorTo: string | null;
+  currentFrom: string;
+  currentTo: string;
+  priorFrom: string;
+  priorTo: string;
+}
+
+/**
+ * Total / Paid / Unpaid commission for the selected range, per currency.
+ *
+ * MONEY RULE: total = paid + unpaid, to the cent. All three come from ONE server-side query over the
+ * same set of credits, so they cannot drift apart.
+ *
+ * `closedTotalByCurrency` is the remainder that is in NONE of the three: commissions written off or
+ * settled outside Wasnie. Neither paid nor still owed — reported separately so the omission is visible
+ * rather than money quietly vanishing from the screen.
+ */
+export interface DashboardCommissionsBand {
+  totalByCurrency: CurrencyTotal[];
+  paidByCurrency: CurrencyTotal[];
+  unpaidByCurrency: CurrencyTotal[];
+  closedTotalByCurrency: CurrencyTotal[];
+  /**
+   * The part of `unpaidByCurrency` that NO pay run can reach: the payee has no active assignment to
+   * that plan, so the engine never considers those credits.
+   *
+   * ★ A SUBSET OF UNPAID, NOT A FOURTH BUCKET — it is deliberately not subtracted. The money IS owed
+   * and belongs in the debt figure; this only says how much of that debt the system can act on. One
+   * payee showed €391,736 owed of which €6,005 could actually leave through a pay run.
+   */
+  unreachableTotalByCurrency: CurrencyTotal[];
 }
 
 export interface DashboardActivityItem {
@@ -162,9 +193,12 @@ export interface DashboardActivityItem {
 }
 
 export interface DashboardSummary {
-  periodLabel: string;
+  /** The range the server actually applied, echoed back. ISO yyyy-MM-dd. */
+  from: string;
+  to: string;
   actionBand: DashboardActionBand;
   periodBand: DashboardPeriodBand;
+  commissionsBand: DashboardCommissionsBand;
   trendBand: DashboardTrendBand | null;
   activityFeed: DashboardActivityItem[];
 }

@@ -409,6 +409,29 @@ Slots: `[slot=actions]` · `[slot=kpis]`
 
 ---
 
+## Icons — file formats are brand marks
+
+Excel and PDF have **raster** icons (`public/icons/excel.png`, `pdf.png`), exposed through the same
+component as everything else:
+
+```html
+<app-icon name="file-excel" [size]="16" />
+<app-icon name="file-pdf"   [size]="16" />
+```
+
+Their colour is part of their meaning, so they cannot be a `stroke="currentColor"` path like the rest
+of the set. **Any button that produces one of those files uses these** — never `download`, `file` or
+`file-text`. The generic `download` glyph belongs on the Export *trigger*, not on a format.
+
+Every other icon is a stroked SVG inheriting the current text colour. The full list is in
+`icon.component.ts`; the live sample is on `/__design-system` under **Icons**.
+
+### Offering more than one format
+
+When a screen exports the same document in several formats they go in a `ws-popover` behind a single
+**Export** button, not side by side. Two adjacent buttons make one document read as two different
+actions. See **Export menu** on `/__design-system`.
+
 ## Icon alignment with text
 
 Icons rendered inline with text (in buttons, links, nav items, badges, etc.) must be vertically centered using the following rules:

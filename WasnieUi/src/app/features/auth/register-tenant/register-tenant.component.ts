@@ -7,6 +7,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
+import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
 
 function passwordStrength(ctrl: AbstractControl): ValidationErrors | null {
@@ -20,7 +21,8 @@ function passwordStrength(ctrl: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-register-tenant',
   standalone: true,
-  imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent, WsInputComponent, WsButtonComponent],
+  imports: [ReactiveFormsModule, TranslatePipe, RouterLink, ThemeToggleComponent,
+    LanguageToggleComponent, WsInputComponent, WsButtonComponent],
   templateUrl: './register-tenant.component.html',
   styleUrl: './register-tenant.component.scss',
 })

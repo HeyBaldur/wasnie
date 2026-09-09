@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -35,6 +35,18 @@ public sealed class ResendEmailService(
         CancellationToken cancellationToken = default)
     {
         var (subject, html) = EmailTemplates.PasswordReset(firstName, resetUrl, language);
+        return SendAsync(to, subject, html, cancellationToken);
+    }
+
+    public Task SendAccountLockedAsync(
+        string to,
+        string firstName,
+        string forgotPasswordUrl,
+        int minutes,
+        string language,
+        CancellationToken cancellationToken = default)
+    {
+        var (subject, html) = EmailTemplates.AccountLocked(firstName, forgotPasswordUrl, minutes, language);
         return SendAsync(to, subject, html, cancellationToken);
     }
 

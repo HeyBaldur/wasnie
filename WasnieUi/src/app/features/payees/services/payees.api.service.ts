@@ -61,14 +61,21 @@ export class PayeesApiService {
       `${this.base}/${payeeId}/attainment`);
   }
 
-  getPayeeDashboard(payeeId: string, period = 'active'): Observable<import('../models/payee-dashboard.model').PayeeDashboard> {
+  /** `from`/`to` are ISO yyyy-MM-dd. Omitting both lets the server apply the whole current month. */
+  getPayeeDashboard(payeeId: string, from: string, to: string): Observable<import('../models/payee-dashboard.model').PayeeDashboard> {
     return this.http.get<import('../models/payee-dashboard.model').PayeeDashboard>(
-      `${this.base}/${payeeId}/dashboard`, { params: { period } });
+      `${this.base}/${payeeId}/dashboard`, { params: { from, to } });
   }
 
-  getPayeeCredits(payeeId: string, page: number, period = 'active'): Observable<import('../../../shared/models/pagination.models').PagedResult<import('../../credits/models/credit.model').CreditListItem>> {
+  /** Owed commission with no route to a payout. Deliberately unscoped by date. */
+  getPayeeUnreachableCommission(payeeId: string): Observable<import('../models/payee-dashboard.model').PayeeUnreachableCommission> {
+    return this.http.get<import('../models/payee-dashboard.model').PayeeUnreachableCommission>(
+      `${this.base}/${payeeId}/unreachable-commission`);
+  }
+
+  getPayeeCredits(payeeId: string, page: number, from: string, to: string): Observable<import('../../../shared/models/pagination.models').PagedResult<import('../../credits/models/credit.model').CreditListItem>> {
     return this.http.get<import('../../../shared/models/pagination.models').PagedResult<import('../../credits/models/credit.model').CreditListItem>>(
       `${this.base}/${payeeId}/credits`,
-      { params: { page: String(page), pageSize: '10', period } });
+      { params: { page: String(page), pageSize: '10', from, to } });
   }
 }

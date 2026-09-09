@@ -258,37 +258,55 @@
         </p>
       </div>
 
-      <!-- What the engine actually did. Only rendered when it created nothing: on a successful run the
-           conflicts and warnings sections below already carry the detail that matters. -->
-      @if (result.payoutsCreated === 0 && skipCounts(result).length > 0) {
+      <!-- What the engine actually did. Normally only when it created nothing: on a successful run the
+           conflicts and warnings sections below already carry the detail that matters.
+           ★ THE EXCEPTION IS UNREACHABLE COMMISSION. A run that pays five payees and silently strands a
+             sixth is the shape of the incident this exists to end, and hiding the notice behind "the
+             run produced nothing" would keep it hidden in exactly that case. -->
+      @if (skipCounts(result).length > 0
+           && (result.payoutsCreated === 0 || hasUnreachableCommission(result))) {
         <div class="pay-runs-list__result-section pay-runs-list__result-section--info">
           <p class="pay-runs-list__result-section-title">
             <app-icon name="info" [size]="14" />
             {{ 'PAY_RUNS.SKIPPED_TITLE' | translate }}
           </p>
-          <ul class="pay-runs-list__result-list">
+          <!-- One row per reason, and the "what now" for that reason INSIDE its own row. The hints
+               used to float underneath as loose paragraphs, which left the reader working out which
+               line each one referred to. -->
+          <ul class="ws-list-group">
             @for (skip of skipCounts(result); track skip.code) {
-              <li>{{ skipLabelKey(skip.code) | translate: { count: skip.count } }}</li>
+              <li class="ws-list-group__item">
+                <app-icon class="ws-list-group__marker" name="chevron-right" [size]="12" />
+                <span class="ws-list-group__body">
+                  <span class="ws-list-group__text">
+                    {{ skipLabelKey(skip.code) | translate: { count: skip.count } }}
+                  </span>
+                  @if (skipHint(skip.code); as hint) {
+                    <span class="ws-list-group__hint">
+                      {{ hint.textKey | translate }}
+                      <a [routerLink]="hint.route" [queryParams]="hint.queryParams"
+                         (click)="closeCalculateModal()">
+                        {{ hint.linkKey | translate }}
+                      </a>
+                    </span>
+                  }
+                </span>
+              </li>
+            }
+
+            @if (neverLookedAtCredits(result)) {
+              <!-- The single fact that made the old message impossible to defend. It is about the run
+                   itself, not about any one reason, so it gets its own row. -->
+              <li class="ws-list-group__item">
+                <app-icon class="ws-list-group__marker" name="chevron-right" [size]="12" />
+                <span class="ws-list-group__body">
+                  <span class="ws-list-group__text">
+                    {{ 'PAY_RUNS.NEVER_REACHED_CREDITS' | translate }}
+                  </span>
+                </span>
+              </li>
             }
           </ul>
-
-          @if (neverLookedAtCredits(result)) {
-            <!-- The single fact that made the old message impossible to defend. -->
-            <p class="pay-runs-list__result-section-desc">
-              {{ 'PAY_RUNS.NEVER_REACHED_CREDITS' | translate }}
-            </p>
-          }
-
-          @if (terminatedSkipCount(result) > 0) {
-            <!-- Closes the loop with WI 1: a departed payee's unpaid commission is not lost, it is on
-                 the orphan-accounts queue, and that is the screen where a person can act on it. -->
-            <p class="pay-runs-list__result-section-desc">
-              {{ 'PAY_RUNS.SKIPPED_TERMINATED_HINT' | translate }}
-              <a routerLink="/terminated-accounts" (click)="closeCalculateModal()">
-                {{ 'PAY_RUNS.SKIPPED_TERMINATED_LINK' | translate }}
-              </a>
-            </p>
-          }
         </div>
       }
 

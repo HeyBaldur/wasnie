@@ -7,10 +7,21 @@ import { LatestRequestGuard } from '../../../shared/state/latest-request-guard';
 
 export type CreditStatus = 'Active' | 'Superseded' | 'All';
 
+/**
+ * The SETTLEMENT filter. Separate from CreditStatus, which is the supersession axis — one field
+ * meaning both would make every row's badge answer two unrelated questions at once (§B3).
+ *
+ * 'Payable' is Paid + Unpaid: everything still inside the payable cycle, which is exactly what the
+ * dashboard's "Total Commissions" card sums. It exists so clicking that card opens the rows that add
+ * up to it.
+ */
+export type CreditSettlementFilter = 'All' | 'Payable' | 'Paid' | 'Unpaid' | 'Closed';
+
 export interface CreditFilter {
   payeeIds: string[];
   planIds: string[];
   status: CreditStatus;
+  settlement: CreditSettlementFilter;
   allocatedFrom: string | null;
   allocatedTo: string | null;
   amountMin: number | null;
@@ -24,6 +35,7 @@ export const EMPTY_CREDIT_FILTER: CreditFilter = {
   payeeIds: [],
   planIds: [],
   status: 'Active',
+  settlement: 'All',
   allocatedFrom: null,
   allocatedTo: null,
   amountMin: null,
@@ -63,6 +75,7 @@ export class CreditsStore {
     if (f.payeeIds.length > 0) n++;
     if (f.planIds.length > 0) n++;
     if (f.status !== 'Active') n++;
+    if (f.settlement !== 'All') n++;
     if (f.allocatedFrom || f.allocatedTo) n++;
     if (f.amountMin !== null || f.amountMax !== null) n++;
     if (f.currencies.length > 0) n++;
@@ -93,6 +106,7 @@ export class CreditsStore {
     if (f.payeeIds.length > 0) p['payeeIds'] = f.payeeIds.join(',');
     if (f.planIds.length > 0) p['planIds'] = f.planIds.join(',');
     p['status'] = f.status;
+    if (f.settlement !== 'All') p['settlement'] = f.settlement;
     if (f.allocatedFrom) p['allocatedFrom'] = f.allocatedFrom;
     if (f.allocatedTo) p['allocatedTo'] = f.allocatedTo;
     if (f.amountMin !== null) p['amountMin'] = String(f.amountMin);
@@ -193,6 +207,7 @@ export class CreditsStore {
     if (f.payeeIds.length > 0) p['payeeIds'] = f.payeeIds.join(',');
     if (f.planIds.length > 0) p['planIds'] = f.planIds.join(',');
     if (f.status !== 'Active') p['status'] = f.status;
+    if (f.settlement !== 'All') p['settlement'] = f.settlement;
     if (f.allocatedFrom) p['allocFrom'] = f.allocatedFrom;
     if (f.allocatedTo) p['allocTo'] = f.allocatedTo;
     if (f.amountMin !== null) p['amtMin'] = String(f.amountMin);
@@ -208,6 +223,11 @@ export class CreditsStore {
     if (params['payeeIds']) f.payeeIds = params['payeeIds'].split(',').filter(Boolean);
     if (params['planIds']) f.planIds = params['planIds'].split(',').filter(Boolean);
     if (params['status'] === 'Superseded' || params['status'] === 'All') f.status = params['status'];
+    // Whitelisted, never cast: an unknown value from a stale bookmark must degrade to "no settlement
+    // filter" rather than reach the API as a filter nobody can see on screen.
+    if (['Payable', 'Paid', 'Unpaid', 'Closed'].includes(params['settlement'])) {
+      f.settlement = params['settlement'] as CreditSettlementFilter;
+    }
     if (params['allocFrom']) f.allocatedFrom = params['allocFrom'];
     if (params['allocTo']) f.allocatedTo = params['allocTo'];
     if (params['amtMin']) f.amountMin = Number(params['amtMin']) || null;

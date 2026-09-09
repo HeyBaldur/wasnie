@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Wasnie.Application.Common.Models;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Domain.Common.Results;
@@ -15,6 +15,13 @@ public sealed record CreditFilterQuery
     public string? PayeeIds { get; init; }       // comma-separated GUIDs
     public string? PlanIds { get; init; }         // comma-separated GUIDs
     public string? Status { get; init; }          // "Active"|"Superseded"|"All" — default Active
+
+    /// <summary>
+    /// The SETTLEMENT axis: "Paid" | "Unpaid" | "Closed" | "Payable" | "All" (default All).
+    /// Separate from <see cref="Status"/>, which is about supersession — see
+    /// <see cref="Wasnie.Application.Compensation.Common.CreditSettlement"/>.
+    /// </summary>
+    public string? Settlement { get; init; }
     public DateOnly? AllocatedFrom { get; init; }
     public DateOnly? AllocatedTo { get; init; }
     public decimal? AmountMin { get; init; }

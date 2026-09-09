@@ -16,6 +16,7 @@ import {
   type SelectOption,
 } from '../../shared/ui';
 import { WsSelectComponent } from '../../shared/ui/ws-select/ws-select.component';
+import { WsPopoverComponent } from '../../shared/ui/ws-popover/ws-popover.component';
 import { WsDatePickerComponent } from '../../shared/ui/ws-date-picker/ws-date-picker.component';
 import { WsDateRangePickerComponent } from '../../shared/ui/ws-date-range-picker/ws-date-range-picker.component';
 
@@ -36,6 +37,7 @@ import { WsDateRangePickerComponent } from '../../shared/ui/ws-date-range-picker
     WsTableComponent,
     WsTablePaginationComponent,
     WsSelectComponent,
+    WsPopoverComponent,
     WsDatePickerComponent,
     WsDateRangePickerComponent,
   ],
@@ -43,6 +45,18 @@ import { WsDateRangePickerComponent } from '../../shared/ui/ws-date-range-picker
   styleUrl: './design-system.component.scss',
 })
 export class DesignSystemComponent {
+  /**
+   * A sample of the stroked set — not the whole thing, which would turn this page into a catalogue
+   * nobody scrolls. The point of the section above it is the two RASTER icons; these are here so the
+   * difference between the two kinds is visible side by side.
+   */
+  readonly sampleIcons = [
+    'plus', 'edit', 'trash', 'search', 'check-circle', 'x-circle', 'alert-triangle',
+    'info', 'chevron-down', 'chevron-right', 'more-vertical', 'download', 'ban', 'arrow-left',
+  ];
+
+  readonly exportMenuOpen = signal(false);
+
   readonly segValue = signal('a');
   readonly modalOpen = signal(false);
 

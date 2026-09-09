@@ -7,7 +7,8 @@ import { DashboardSummary } from '../models/dashboard.models';
 export class DashboardService {
   private readonly http = inject(HttpClient);
 
-  getSummary(period = 'this-month'): Observable<DashboardSummary> {
-    return this.http.get<DashboardSummary>('/api/dashboard', { params: { period } });
+  /** `from`/`to` are ISO yyyy-MM-dd. Omitting both lets the server apply the whole current month. */
+  getSummary(from: string, to: string): Observable<DashboardSummary> {
+    return this.http.get<DashboardSummary>('/api/dashboard', { params: { from, to } });
   }
 }

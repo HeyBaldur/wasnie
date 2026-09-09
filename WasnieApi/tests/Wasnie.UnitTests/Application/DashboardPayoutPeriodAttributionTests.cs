@@ -1,9 +1,10 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Compensation.Handlers.Dashboard;
+using Wasnie.Application.Common.Helpers;
 using Wasnie.Application.Compensation.Queries.Dashboard;
 using Wasnie.Domain.Compensation.Enums;
 using Wasnie.Domain.Compensation.Payouts;
@@ -109,12 +110,33 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
         _db.SaveChanges();
     }
 
+    // The dashboard's range is now a WHOLE month by default, not "the 1st to today". Named here so the
+    // trend tests below read as "the running month" and "the closed month" — which is what they always
+    // meant. Not one expectation changed when they were converted: a whole-month range compares against
+    // the whole previous calendar month, exactly as the preset did (DashboardRangeHelper.PriorRange).
+    private static readonly (DateOnly From, DateOnly To) AugustFull =
+        (new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31));
+
+    private static readonly (DateOnly From, DateOnly To) JulyFull =
+        (new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31));
+
     private static DateTimeOffset On(int year, int month, int day, int hour = 12) =>
         new(new DateTime(year, month, day, hour, 0, 0, DateTimeKind.Utc), TimeSpan.Zero);
 
+    // The dashboard takes a date RANGE now, but every assertion in this file is about how a payout is
+    // attributed by PaidAt — not about preset names. The preset is therefore translated to the range it
+    // has always meant, through the same PeriodHelper the dashboard used to call, so the expectations
+    // below keep testing exactly what they were written to test (§A6).
+    // "all-time" has no range, so it becomes an explicit window wide enough to hold every seeded date.
     private async Task<decimal> PayoutTotalAsync(string period)
     {
-        var result = await _handler.Handle(new GetDashboardSummaryQuery(period), CancellationToken.None);
+        var today = DateOnly.FromDateTime(Today);
+        var (from, to) = PeriodHelper.ComputeDateRange(period, today);
+        from ??= new DateOnly(2000, 1, 1);
+        to ??= new DateOnly(2099, 12, 31);
+
+        var result = await _handler.Handle(
+            new GetDashboardSummaryQuery(from, to), CancellationToken.None);
         result.IsSuccess.Should().BeTrue();
 
         var eur = result.Value!.PeriodBand.PayoutsTotalByCurrency
@@ -291,7 +313,7 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
         SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 9, 30), 1_000m, On(2026, 8, 3));
 
         var result = await _handler.Handle(
-            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+            new GetDashboardSummaryQuery(AugustFull.From, AugustFull.To), CancellationToken.None);
 
         var band = result.Value!.TrendBand!;
         var point = band.CommissionTrend.Single(p => p.Currency == "EUR");
@@ -311,7 +333,7 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
         SeedPaidPayout(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31), 1_000m, On(2026, 8, 3));
 
         var result = await _handler.Handle(
-            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+            new GetDashboardSummaryQuery(AugustFull.From, AugustFull.To), CancellationToken.None);
 
         var point = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
 
@@ -327,7 +349,7 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
         SeedPaidPayout(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31), 1_500m, On(2026, 8, 3));
 
         var result = await _handler.Handle(
-            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+            new GetDashboardSummaryQuery(AugustFull.From, AugustFull.To), CancellationToken.None);
 
         var point = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
 
@@ -343,7 +365,7 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
         SeedPaidPayout(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31), 500m, On(2026, 8, 3));
 
         var result = await _handler.Handle(
-            new GetDashboardSummaryQuery("this-month"), CancellationToken.None);
+            new GetDashboardSummaryQuery(AugustFull.From, AugustFull.To), CancellationToken.None);
 
         var point = result.Value!.TrendBand!.CommissionTrend.Single(p => p.Currency == "EUR");
 
@@ -360,7 +382,7 @@ public sealed class DashboardPayoutPeriodAttributionTests : IDisposable
         SeedPaidPayout(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), 400m, On(2026, 7, 15));
 
         var result = await _handler.Handle(
-            new GetDashboardSummaryQuery("last-month"), CancellationToken.None);
+            new GetDashboardSummaryQuery(JulyFull.From, JulyFull.To), CancellationToken.None);
 
         var band = result.Value!.TrendBand!;
         var point = band.CommissionTrend.Single(p => p.Currency == "EUR");

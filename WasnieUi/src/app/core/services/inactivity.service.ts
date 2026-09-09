@@ -113,7 +113,10 @@ export class InactivityService {
    */
   private _applyRemoteLogout(showExpiredToast: boolean): void {
     this.stop();
-    this.authService.clearSessionSilent();
+    // ★ `showExpiredToast` is true for 'session-expired' and false for a deliberate 'logout', so it is
+    //   also the right answer to "did this user choose to end the session?" — and therefore to whether
+    //   their unsent drafts survive.
+    this.authService.clearSessionSilent(showExpiredToast);
     if (showExpiredToast) {
       this.toast.show('SESSION.EXPIRED_TOAST', 'error');
     }

@@ -17,6 +17,26 @@
   color: var(--color-text-secondary);
 }
 
+// Label BESIDE the control instead of above it, for a filter that lives in a page header.
+//
+// The trigger also stops stretching here: `:host` is a block, so in a header it grew to the full width
+// of the row and read as one enormous input. Its content is two dates — it should be as wide as that.
+.ws-drp--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+
+  .ws-drp__label {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .ws-drp__trigger {
+    min-width: 220px;
+  }
+}
+
 .ws-drp__trigger {
   @apply flex items-center;
   gap: var(--space-2);
@@ -78,12 +98,22 @@
   top: calc(100% + var(--space-1));
   left: 0;
   z-index: 500;
+  // The panel is two months wide. Anchored left from a trigger near the right edge of the page it
+  // overflows the viewport and the document grows a horizontal scrollbar — see the `align` input.
+  max-width: calc(100vw - var(--space-8));
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-popover);
   padding: var(--space-4);
   animation: ws-drp-in var(--transition-base) ease;
+}
+
+// Hangs from the RIGHT edge of the trigger instead, so it opens inwards. For a control sitting in the
+// right-hand side of a header this is the only direction with room.
+.ws-drp__popover--end {
+  left: auto;
+  right: 0;
 }
 
 .ws-drp__months {

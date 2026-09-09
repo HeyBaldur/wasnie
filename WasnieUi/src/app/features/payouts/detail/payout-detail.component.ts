@@ -3,7 +3,7 @@ import {
   formatAmountTier, formatAttainmentTier, formatRate, isPerUnitRate,
 } from '../../../shared/utils/rate-format';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AppShellComponent } from '../../../shared/components/app-shell/app-shell.component';
 import { IconComponent } from '../../../shared/components/icon/icon.component';
@@ -81,6 +81,10 @@ export class PayoutDetailComponent implements OnInit {
   readonly approving = signal(false);
   readonly markingPaid = signal(false);
   readonly exporting = signal(false);
+
+  /** The Export menu. Closed the moment a format is chosen: leaving it hanging over the download
+      makes it look like nothing happened. */
+  readonly exportMenuOpen = signal(false);
   readonly actionError = signal<string | null>(null);
   readonly doublePayConflicts = signal<OverlapRow[]>([]);
 
@@ -372,14 +376,31 @@ export class PayoutDetailComponent implements OnInit {
     return rt.type;
   }
 
-  async onExportPdf(): Promise<void> {
+  onExportPdf(): Promise<void> {
+    this.exportMenuOpen.set(false);
+    return this.download(this.api.exportPdf(this.payoutId), 'pdf');
+  }
+
+  onExportExcel(): Promise<void> {
+    this.exportMenuOpen.set(false);
+    return this.download(this.api.exportSingleExcel(this.payoutId), 'xlsx');
+  }
+
+  /**
+   * The download half of both exports, which used to exist once and was about to exist twice.
+   *
+   * The two differ in exactly one character — the extension — and every other line (the guard, the
+   * object URL, the anchor, the revoke, the error key) is identical. A second copy would be a second
+   * place to forget `URL.revokeObjectURL`.
+   */
+  private async download(source: Observable<Blob>, extension: 'pdf' | 'xlsx'): Promise<void> {
     if (this.exporting()) return;
     this.exporting.set(true);
     this.actionError.set(null);
     try {
-      const blob = await firstValueFrom(this.api.exportPdf(this.payoutId));
+      const blob = await firstValueFrom(source);
       const p = this.payout()!;
-      const fileName = `payout-${p.payeeCode}-${p.periodStart}.pdf`;
+      const fileName = `payout-${p.payeeCode}-${p.periodStart}.${extension}`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

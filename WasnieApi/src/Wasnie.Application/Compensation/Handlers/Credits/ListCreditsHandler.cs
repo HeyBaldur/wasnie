@@ -1,8 +1,9 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Wasnie.Application.Common.Extensions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Models;
+using Wasnie.Application.Compensation.Common;
 using Wasnie.Application.Compensation.DTOs;
 using Wasnie.Application.Compensation.Queries.Credits;
 using Wasnie.Domain.Authorization;
@@ -60,6 +61,10 @@ public sealed class ListCreditsHandler(
         else if (status == "superseded")
             query = query.Where(c => c.SupersededAt != null);
         // "all" — no filter
+
+        // The settlement axis (paid / still owed / closed). Applied here, so the list, the export, the
+        // counters and the by-payee view all honour it — they share this query builder.
+        query = CreditSettlement.Apply(query, f.Settlement);
 
         if (!string.IsNullOrWhiteSpace(f.PayeeIds))
         {
@@ -164,7 +169,9 @@ public sealed class ListCreditsHandler(
                 CreditedAmount: c.CreditedAmount.Amount,
                 CreditedCurrency: c.CreditedAmount.Currency,
                 AllocatedAt: c.AllocatedAt,
-                IsSuperseded: c.SupersededAt.HasValue);
+                IsSuperseded: c.SupersededAt.HasValue,
+                Settlement: CreditSettlement.Of(c),
+                ClosureReason: c.ClosureReason?.ToString());
         }).ToList();
     }
 

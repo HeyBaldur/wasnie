@@ -6,12 +6,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
 import { CurrentUserService } from '../../../core/auth/current-user.service';
 import { ThemeToggleComponent } from '../../../shared/components/theme-toggle/theme-toggle.component';
+import { LanguageToggleComponent } from '../../../shared/components/language-toggle/language-toggle.component';
 import { WsInputComponent, WsButtonComponent } from '../../../shared/ui';
 
 @Component({
   selector: 'app-verify-two-factor',
   standalone: true,
-  imports: [ReactiveFormsModule, TranslatePipe, ThemeToggleComponent, WsInputComponent, WsButtonComponent],
+  imports: [ReactiveFormsModule, TranslatePipe, ThemeToggleComponent,
+    LanguageToggleComponent, WsInputComponent, WsButtonComponent],
   templateUrl: './verify-two-factor.component.html',
   styleUrl: './verify-two-factor.component.scss',
 })

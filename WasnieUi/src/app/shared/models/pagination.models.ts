@@ -19,4 +19,11 @@ export interface PaginationParams {
   filters?: Record<string, string>;
   /** Dashboard period selector value — passed to backend PaginationQuery.Period. */
   period?: string;
+  /**
+   * An explicit [from, to] window, ISO yyyy-MM-dd. Takes precedence over `period` on the server
+   * (see ListAssignmentsByPayeeHandler.ResolveExplicitRange), which is what lets a screen that has
+   * moved to a free date range keep using these list endpoints.
+   */
+  dateFrom?: string;
+  dateTo?: string;
 }

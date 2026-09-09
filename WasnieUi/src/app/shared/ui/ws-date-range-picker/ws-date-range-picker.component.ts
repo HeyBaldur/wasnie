@@ -50,6 +50,28 @@ export class WsDateRangePickerComponent implements ControlValueAccessor {
   readonly label = input('');
   readonly error = input('');
 
+  /**
+   * Which edge of the trigger the calendar hangs from.
+   *
+   * ★ IT EXISTS BECAUSE THE PANEL IS ~580px WIDE (two months side by side). Anchored to the left edge
+   * of a trigger that sits at the RIGHT of a page header, it extends past the viewport and the whole
+   * page grows a horizontal scrollbar — which is what happened on the dashboard.
+   *
+   * Defaults to 'start', so every caller that existed before this input keeps the exact position it
+   * had. Only a control placed near the right edge needs to say 'end'.
+   */
+  readonly align = input<'start' | 'end'>('start');
+
+  /**
+   * Where the label sits.
+   *
+   * 'top' is the form convention and stays the default, so the four form callers (plans, quotas,
+   * assignments, design system) keep the layout they have. 'inline' puts it beside the control, which
+   * is what a filter in a page header needs: a stacked label there adds a second row to a toolbar and
+   * makes the control read like a form field on a page that has no form.
+   */
+  readonly labelPosition = input<'top' | 'inline'>('top');
+
   readonly isOpen = signal(false);
   readonly isDisabled = signal(false);
 

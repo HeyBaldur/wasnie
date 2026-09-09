@@ -23,7 +23,11 @@ public sealed class PayRunExcelExportService : IPayRunExcelExportService
         "PaidAt",
     ];
 
-    public byte[] GenerateExcel(IReadOnlyList<PayRunExportRow> rows, string tenantSlug)
+    public byte[] GenerateExcel(
+        IReadOnlyList<PayRunExportRow> rows,
+        IReadOnlyList<PayoutExportRow> payees,
+        IReadOnlyList<PayoutDetailExportRow> detail,
+        string tenantSlug)
     {
         // Two-pass: collect distinct currencies for dynamic columns (Pattern B — no cross-currency sum).
         var currencies = rows
@@ -33,7 +37,9 @@ public sealed class PayRunExcelExportService : IPayRunExcelExportService
             .ToList();
 
         using var wb = new XLWorkbook();
-        var ws = wb.AddWorksheet("Pay Runs");
+        // "Runs", not "Pay Runs": three sheets now, and the set has to read as one document with the
+        // same vocabulary as the payouts workbook.
+        var ws = wb.AddWorksheet("Runs");
 
         // Write headers.
         var allHeaders = FixedHeaders.Concat(currencies.Select(c => $"Amount_{c}")).ToArray();
@@ -79,6 +85,12 @@ public sealed class PayRunExcelExportService : IPayRunExcelExportService
         }
 
         ws.Columns().AdjustToContents();
+
+        // ★ THE SAME WRITER AS THE PAYOUTS WORKBOOK, not a copy of it. Two files that both go to
+        //   accounting must not lay the same data out differently — and a second copy is a second
+        //   place to forget the bold on the commission column.
+        PayoutExcelExportService.WritePayeeSummarySheet(wb, payees);
+        PayoutExcelExportService.WriteDetailSheet(wb, detail);
 
         using var ms = new MemoryStream();
         wb.SaveAs(ms);

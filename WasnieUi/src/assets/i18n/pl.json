@@ -34,6 +34,8 @@
     "REGISTER_HERO_TITLE": "Buduj zaufanie do wynagrodzeń sprzedażowych.",
     "REGISTER_HERO_SUBTITLE": "Jesteśmy firmą działającą w modelu bootstrap (samofinansującą się). Nie polegamy na funduszach inwestycyjnych ani zewnętrznych naciskach, co pozwala nam skupić się wyłącznie na rentowności naszych klientów i długoterminowej stabilności naszej infrastruktury. Nasz zespół techniczny działa w 100% zdalnie w Europie.",
     "FOOTER_RIGHTS": "© 2025 Incentra. Wszelkie prawa zastrzeżone.",
+    "ACCOUNT_LOCKED": "Zbyt wiele nieudanych prób logowania. Dostęp jest tymczasowo zablokowany — spróbuj ponownie za {{minutes}} minut.",
+    "ACCOUNT_LOCKED_GENERIC": "Zbyt wiele nieudanych prób logowania. Dostęp jest tymczasowo zablokowany — spróbuj ponownie za kilka minut.",
     "EMAIL_NOT_CONFIRMED": "Potwierdź swój adres e-mail przed zalogowaniem.",
     "RESEND_CONFIRMATION": "Wyślij ponownie e-mail potwierdzający",
     "ALREADY_CONFIRMED": "Twoje konto jest już potwierdzone. Zaloguj się poniżej.",
@@ -231,8 +233,6 @@
     "TITLE": "Podręcznik użytkownika",
     "SHORTCUTS_TITLE": "Przejdź od razu do",
     "SHORTCUTS_BODY": "Podręcznik jest gęsty i techniczny. To są sekcje silnika obliczeniowego, których ludzie najczęściej szukają.",
-    "ASK_ASSISTANT": "Zapytaj asystenta",
-    "OPEN_PDF": "Otwórz PDF do druku",
     "VIEW_FLOW": "Zobacz przepływ systemu",
     "EMPTY_TITLE": "Podręcznik nie jest jeszcze dostępny",
     "EMPTY_DESC": "Ta instalacja nie ma jeszcze opublikowanego podręcznika użytkownika. Gdy zostanie dodany, pojawi się tutaj.",
@@ -825,7 +825,24 @@
     "ASSIGNMENTS_TAB_HINT": "Brak przypisań. Przypisz tego beneficjenta do planu wynagrodzeniowego, aby zacząć śledzić zarobki.",
     "QUOTAS_TAB_HINT": "Brak zdefiniowanych kwot dla tego beneficjenta. Dodaj kwotę, aby ustawić cele wydajnościowe.",
     "ATTAINMENT_TAB_EMPTY": "Brak aktywnych kwot dla tego beneficjenta. Utwórz kwotę w zakładce Kwoty, aby zacząć śledzić realizację.",
-    "ACTION_IMPORT": "Importuj"
+    "ACTION_IMPORT": "Importuj",
+    "UNREACHABLE": {
+      "TAB": "Niewypłacone · bez ścieżki",
+      "TITLE": "Należne, ale żaden pay run tego nie obejmie",
+      "SUBTITLE": "Ta prowizja jest faktycznie należna. Żaden pay run jej nie obejmie, dopóki przyczyna poniżej nie zostanie usunięta.",
+      "EMPTY": "Cała niewypłacona prowizja tego odbiorcy jest osiągalna przez pay run.",
+      "CREDIT_COUNT": "Prowizje: {{count}}",
+      "REASON_ASSIGNMENT_DEACTIVATED": "Przypisanie dezaktywowane",
+      "REASON_NO_ASSIGNMENT": "Brak przypisania",
+      "REASON_PLAN_ARCHIVED": "Plan zarchiwizowany",
+      "REASON_UNKNOWN": "Niemożliwe do wypłaty",
+      "FIX_REACTIVATE": "Aktywuj ponownie to przypisanie, a następnie uruchom pay run obejmujący",
+      "FIX_ASSIGN": "Przypisz odbiorcę do planu na okres obejmujący",
+      "FIX_PLAN_ARCHIVED": "Plan jest zarchiwizowany; trzeba go przywrócić, zanim cokolwiek w jego ramach zostanie wypłacone —",
+      "FIX_UNKNOWN": "Obejmuje",
+      "RUN_PERIOD": "{{from}} – {{to}}.",
+      "GO_TO_ASSIGNMENT": "Otwórz przypisania"
+    }
   },
   "ATTAINMENT": {
     "TARGET": "Cel",
@@ -851,18 +868,6 @@
     "VIEW_ALL": "Zobacz wszystkie",
     "END_OF_LIST": "Koniec listy",
     "LOAD_MORE": "Załaduj więcej",
-    "PERIOD_LABEL": "Okres",
-    "PERIOD_THIS_MONTH": "Ten Miesiąc",
-    "PERIOD_LAST_MONTH": "Poprzedni Miesiąc",
-    "PERIOD_THIS_QUARTER": "Ten Kwartał",
-    "PERIOD_LAST_QUARTER": "Poprzedni Kwartał",
-    "PERIOD_YTD": "Od Początku Roku",
-    "PERIOD_LAST_YEAR": "Poprzedni Rok",
-    "PERIOD_ALL_TIME": "Cały Okres",
-    "COUNTER_THIS_MONTH": "w tym miesiącu",
-    "COUNTER_LAST_MONTH": "w poprzednim miesiącu",
-    "COUNTER_YTD": "od początku roku",
-    "COUNTER_ALL_TIME": "łącznie",
     "CHIP_IN_PROGRESS": "W toku",
     "CHIP_UPCOMING": "Nadchodzący",
     "CHIP_CLOSED": "Zakończony",
@@ -884,12 +889,12 @@
     "REQUIRES_ACTION": "wymaga działania",
     "VIEW_FILTERED": "Zobacz przefiltrowane",
     "TRANSACTIONS_PERIOD": "Transakcje",
-    "TRANSACTIONS_PERIOD_DESC": "Zarejestrowane sprzedaże",
+    "TRANSACTIONS_PERIOD_DESC": "Zaksięgowana sprzedaż, według daty transakcji",
     "PAYOUTS_PERIOD": "Wypłaty",
-    "PAYOUTS_PERIOD_DESC": "Wypłacone w tym okresie",
+    "PAYOUTS_PERIOD_DESC": "Przelane pieniądze, według daty płatności",
     "PAYOUTS_PERIOD_HINT": "Pieniądze faktycznie przelane w tym okresie, według daty płatności. Nie obejmuje prowizji obliczonej lub zatwierdzonej, ale jeszcze niewypłaconej.",
     "CREDITS_PERIOD": "Kredyty",
-    "CREDITS_PERIOD_DESC": "Zastosowane kredyty",
+    "CREDITS_PERIOD_DESC": "Naliczone prowizje, według daty naliczenia",
     "ACTIVE_PLANS_DESC": "Plany wynagrodzeń",
     "ACTIVE_QUOTAS_DESC": "Cele wydajnościowe",
     "ACTIVE_QUOTAS_INLINE": "aktywne kwoty",
@@ -903,11 +908,9 @@
     "BAND_PACING": "Postęp",
     "PACING_CHIP": "punkt odniesienia: suma {{period}}",
     "PACING_PILL": "{{percent}}% punktu odniesienia",
-    "PACING_BASELINE": "Suma {{period}}",
     "PACING_METRIC": "Wypłacono dotychczas",
     "TREND_VS": "vs",
     "TREND_METRIC": "Łączne wypłaty prowizji",
-    "TREND_PRIOR": "Poprzedni: {{period}}",
     "TREND_NO_BASE": "Nowy",
     "ACTIVITY_FEED": "Ostatnia aktywność",
     "ACTIVITY_SYSTEM_ACTOR": "System",
@@ -952,7 +955,22 @@
     "DEAL_LOST_CONFIRM_MSG": "Transakcja {{ref}} została utracona w CRM. Spowoduje to zastąpienie jej kredytu ({{amount}}) i anulowanie transakcji, usuwając ją z przyszłych wypłat. Nie można tego cofnąć jednym kliknięciem.",
     "DEAL_LOST_REVERTED": "Prowizja cofnięta.",
     "ACTIVITY_VIEW_ALL": "Zobacz wszystko",
-    "ATTENTION_RECONCILE": "Uzgodnij"
+    "ATTENTION_RECONCILE": "Uzgodnij",
+    "RANGE_LABEL": "Zakres dat",
+    "COMMISSIONS_TOTAL": "Prowizje łącznie",
+    "COMMISSIONS_TOTAL_DESC": "Prowizja naliczona w tym zakresie, według daty naliczenia — wypłacona lub nie",
+    "COMMISSIONS_PAID": "Prowizje wypłacone",
+    "COMMISSIONS_PAID_DESC": "Z tej prowizji część już wypłacona",
+    "COMMISSIONS_UNPAID": "Prowizje niewypłacone",
+    "COMMISSIONS_UNPAID_DESC": "Z tej prowizji część nadal należna",
+    "COMMISSIONS_CLOSED_NOTE": "Nieuwzględnione powyżej — umorzone lub rozliczone poza Incentrą:",
+    "RANGE_INVALID": "Data końcowa nie może być wcześniejsza niż początkowa.",
+    "TREND_NOTE_PACING": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Punkt odniesienia: {{amount}} w {{period}}.",
+    "TREND_NOTE_CLOSED": "Pieniądze, które faktycznie wypłacono w tym zakresie, według daty płatności — obejmują prowizje naliczone w poprzednich miesiącach i rozliczone teraz, więc nie zgodzą się z kartami prowizji powyżej. Poprzednie okno ({{period}}): {{amount}}.",
+    "COUNTER_IN_RANGE": "w tym zakresie",
+    "COMMISSIONS_UNREACHABLE_NOTE": "Z kwoty niewypłaconej żaden pay run nie może objąć:",
+    "COMMISSIONS_UNREACHABLE_LINK": "Zobacz, co jest zablokowane i dlaczego",
+    "COMMISSIONS_UNREACHABLE_ASSIGNMENTS_LINK": "Przejrzyj dezaktywowane przypisania"
   },
   "QUOTAS": {
     "TITLE": "Kwoty",
@@ -1260,7 +1278,13 @@
       "CURRENCY_PLACEHOLDER": "Dodaj walutę…",
       "RULE": "Reguła",
       "RULE_PLACEHOLDER": "Wybierz regułę…",
-      "RULE_NO_RULES": "Brak aktywnych reguł w wybranym planie lub planach."
+      "RULE_NO_RULES": "Brak aktywnych reguł w wybranym planie lub planach.",
+      "SETTLEMENT": "Płatność",
+      "SETTLEMENT_ALL": "Wszystkie",
+      "SETTLEMENT_PAYABLE": "Wypłacone lub oczekujące",
+      "SETTLEMENT_PAID": "Wypłacone",
+      "SETTLEMENT_UNPAID": "Niewypłacone",
+      "SETTLEMENT_CLOSED": "Zamknięte bez wypłaty"
     },
     "EXPORT": {
       "BUTTON": "Eksportuj do Excela",
@@ -1301,7 +1325,15 @@
       "TRIGGER_CONDITIONS": "Warunki:",
       "VIEW_SNAPSHOT": "Zobacz pełny snapshot",
       "HIDE_SNAPSHOT": "Ukryj snapshot"
-    }
+    },
+    "COL_SETTLEMENT": "Płatność",
+    "SETTLEMENT_PAID": "Wypłacona",
+    "SETTLEMENT_UNPAID": "Niewypłacona",
+    "SETTLEMENT_CLOSED": "Zamknięta",
+    "SETTLEMENT_UNKNOWN": "Nieznany",
+    "CLOSURE_WRITTEN_OFF": "umorzona",
+    "CLOSURE_EXTERNAL_SETTLEMENT": "rozliczona poza Incentrą",
+    "CLOSURE_UNKNOWN": ""
   },
   "ASSIGNMENTS": {
     "TITLE": "Przypisania",
@@ -1360,7 +1392,10 @@
     "DELETE_BLOCKED_WARNING": "{{count}} przypisanie/przypisań jest zablokowanych, ponieważ zostały już użyte w obliczeniach lub płatnościach. Żadne nie zostało usunięte. Odznacz je, aby usunąć pozostałe.",
     "DELETE_BLOCKED_REASON": "Użyte w wypłatach",
     "DELETE_BLOCKED_COL_ASSIGNMENT": "Beneficjent → Plan",
-    "ERROR_LOAD": "Nie udało się załadować przypisania."
+    "ERROR_LOAD": "Nie udało się załadować przypisania.",
+    "STRAND_TITLE": "To sprawi, że nieopłacona prowizja stanie się nieosiągalna",
+    "STRAND_BODY": "Ta prowizja została już naliczona i nadal nie została wypłacona. Po dezaktywacji przypisania żaden przebieg wypłat jej nie obejmie — ponowna aktywacja przypisania przywraca możliwość wypłaty.",
+    "STRAND_MORE": "i {{count}} więcej"
   },
   "IMPORTS": {
     "STEPS": {
@@ -1702,7 +1737,9 @@
     "STATUS_DISCARDED": "Odrzucony",
     "ACTION_DISCARD": "Odrzuć wypłatę",
     "SELECT_ALL": "Zaznacz wszystkie wypłaty, na których można działać",
-    "SELECT_ROW": "Zaznacz tę wypłatę"
+    "SELECT_ROW": "Zaznacz tę wypłatę",
+    "ACTION_EXPORT_EXCEL": "Eksportuj Excel",
+    "ACTION_EXPORT": "Eksportuj"
   },
   "PAY_RUNS": {
     "TITLE": "Cykle wypłat",
@@ -1843,12 +1880,18 @@
       "EXPORT": {
         "ACTION": "Eksportuj do Excela",
         "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
-      }
+      },
+      "EMPTY_ALL_ZERO": "Wszystkie {{count}} wypłaty w tym uruchomieniu mają zerową wartość i są ukryte przez „Hiding $0 payouts”."
     },
     "EXPORT": {
       "ACTION": "Eksportuj do Excela",
       "ERROR": "Eksport nie powiódł się. Spróbuj ponownie."
-    }
+    },
+    "CALCULATE_UNREACHABLE": "Nie utworzono żadnych wypłat, ale ten okres ma nieopłaconą prowizję. Dotyczy ona {{count}} kombinacji beneficjent/plan bez aktywnego przypisania, więc żaden przebieg wypłat jej nie obejmie. Należy ponownie aktywować przypisanie i uruchomić okres jeszcze raz.",
+    "SKIP_UnreachableCommission": "{{count}} kombinacji beneficjent/plan ma w tym okresie nieopłaconą prowizję bez aktywnego przypisania. Żaden przebieg wypłat nie obejmie tych środków, dopóki przypisanie nie zostanie ponownie aktywowane.",
+    "SKIP_SupplementalForNewCredits": "{{count}} wypłat miało charakter uzupełniający: okres był już opłacony, ale prowizja naliczona później pozostawała nieopłacona i to ją obejmują te wypłaty.",
+    "SKIPPED_UNREACHABLE_HINT": "Ta prowizja nadal jest należna; po prostu nie ma żadnej drogi do wypłaty.",
+    "SKIPPED_UNREACHABLE_LINK": "Przejrzyj dezaktywowane przypisania"
   },
   "SETTINGS": {
     "APPEARANCE_TITLE": "Wygląd",
@@ -2488,5 +2531,11 @@
       "TWO_FACTOR_LOGIN_SUCCESS": "Logowanie dwuskładnikowe",
       "UNKNOWN": "Nierozpoznane działanie"
     }
+  },
+  "LANGUAGE": {
+    "LABEL": "Język",
+    "EN": "English",
+    "ES": "Español",
+    "PL": "Polski"
   }
 }

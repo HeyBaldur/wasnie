@@ -354,6 +354,41 @@ export class PayRunDetailComponent implements OnInit {
     }
   }
 
+  /**
+   * Which "nothing here" message the payouts table shows.
+   *
+   * ★★ IT MUST NOT BLAME A FILTER FOR AN EMPTY RUN. `excludeZero` is ON by default ("Hiding $0
+   * payouts"), so the old condition treated every run as filtered and answered a genuinely empty run
+   * with "No payouts match the current filters" — a cause the screen had not established and which
+   * sent a reader hunting through filters for rows that do not exist. It cost a full investigation.
+   *
+   * A filter can only hide a payout that EXISTS, so the run's own counts decide: both are run-level
+   * and neither moves with the filter. When the run holds nothing at all, the honest sentence is that
+   * the run is empty — and the reason it is empty lives with the calculation (see KAN-65).
+   */
+  readonly emptyMessageKey = computed(() => {
+    const run = this.store.run();
+    const zeros = run?.zeroPayoutCount ?? 0;
+    const runHoldsNothing = (run?.payeeCount ?? 0) === 0 && zeros === 0;
+    if (runHoldsNothing) return 'PAY_RUNS.DETAIL.EMPTY_TITLE';
+
+    // ★ NAME THE ACTUAL CAUSE. A run whose payouts are ALL zero, hidden by a toggle that is on by
+    //   default, is the commonest way this table comes up empty — and "no payouts match the current
+    //   filters" sends the reader hunting through filters instead of telling them the one fact that
+    //   explains it: every payout in this run is worth nothing. The header saying "15 total" over an
+    //   empty table is exactly the contradiction this removes.
+    if (this.store.excludeZero() && zeros > 0 && this.store.activeFilterCount() === 0) {
+      return 'PAY_RUNS.DETAIL.EMPTY_ALL_ZERO';
+    }
+
+    return this.store.activeFilterCount() > 0 || this.store.excludeZero()
+      ? 'PAY_RUNS.DETAIL.EMPTY_FILTER'
+      : 'PAY_RUNS.DETAIL.EMPTY_TITLE';
+  });
+
+  /** How many payouts of this run are worth nothing — the number the message above quotes. */
+  readonly zeroPayoutCount = computed(() => this.store.run()?.zeroPayoutCount ?? 0);
+
   async onRecalculate(): Promise<void> {
     if (this.recalculating()) return;
     const run = this.store.run();

@@ -24,23 +24,31 @@ public sealed class GetDashboardSummaryHandler(
 {
     private const int ActivityFeedLimit = 10;
 
+    /// <summary>Coded, not prose (§C1): the screen owns the wording and its three translations.</summary>
+    public const string InvalidRangeCode = "DASHBOARD_RANGE_INVALID";
+
     public async Task<Result<DashboardSummaryDto>> Handle(
         GetDashboardSummaryQuery request, CancellationToken cancellationToken)
     {
         await authorizationService.RequireAsync(Permission.ReportsViewAll, cancellationToken);
 
         var today = DateOnly.FromDateTime(clock.UtcNow);
-        var period = request.Period;
 
-        var (from, to) = PeriodHelper.ComputeDateRange(period, today);
-        var (priorFrom, priorTo) = PeriodHelper.ComputePriorPeriodRange(period, today);
-        var periodLabel = PeriodHelper.GetPeriodLabel(period, today);
-        // The band always compares against the WHOLE previous period now, so the plain period names are
-        // exact for both sides — no range labels needed, and "July 2026 = €4,939.41" agrees with what the
-        // Last Month screen reports for July.
-        var priorLabel = PeriodHelper.GetPriorPeriodLabel(period, today);
+        var (defaultFrom, defaultTo) = DashboardRangeHelper.DefaultRange(today);
+        var from = request.From ?? defaultFrom;
+        var to = request.To ?? defaultTo;
+
+        // A backwards range is refused rather than silently swapped. Swapping would answer a question
+        // the user did not ask and hand back figures for a window they never chose; the screen prevents
+        // this case anyway, so reaching here means a hand-built URL.
+        if (to < from)
+        {
+            return Result<DashboardSummaryDto>.Failure(InvalidRangeCode);
+        }
+
+        var (priorFrom, priorTo) = DashboardRangeHelper.PriorRange(from, to);
         // Presentation switch only: running → pacing bar, closed → change percentage.
-        var isPacing = PeriodHelper.IsRunningPeriod(period, today);
+        var isPacing = DashboardRangeHelper.IsRunningRange(to, today);
 
         var actionBand = await BuildActionBandAsync(cancellationToken);
         var pendingByPlan = await BuildPendingByPlanAsync(cancellationToken);
@@ -57,15 +65,18 @@ public sealed class GetDashboardSummaryHandler(
             AmbiguousAttributionPayees = ambiguousAttribution,
         };
         var periodBand = await BuildPeriodBandAsync(from, to, cancellationToken);
-        var trendBand = BuildTrendBandEnabled(priorFrom, priorTo)
-            ? await BuildTrendBandAsync(from, to, priorFrom!.Value, priorTo!.Value, periodLabel, priorLabel, isPacing, cancellationToken)
-            : null;
+        // Built by the shared spec, so this band and the payee page's cannot answer differently
+        // about the same money. `payeeId: null` = the whole tenant.
+        var commissionsBand = await CommissionsBandSpec.BuildAsync(db, from, to, payeeId: null, cancellationToken);
+        var trendBand = await BuildTrendBandAsync(from, to, priorFrom, priorTo, isPacing, cancellationToken);
         var activityFeed = await BuildActivityFeedAsync(cancellationToken);
 
         return Result<DashboardSummaryDto>.Success(new DashboardSummaryDto(
-            PeriodLabel: periodLabel,
+            From: from,
+            To: to,
             ActionBand: actionBand,
             PeriodBand: periodBand,
+            CommissionsBand: commissionsBand,
             TrendBand: trendBand,
             ActivityFeed: activityFeed));
     }
@@ -580,13 +591,11 @@ public sealed class GetDashboardSummaryHandler(
 
     // ── Banda 3 — trend (current vs prior) ───────────────────────────────────
 
-    private static bool BuildTrendBandEnabled(DateOnly? priorFrom, DateOnly? priorTo) =>
-        priorFrom.HasValue && priorTo.HasValue;
-
+    // The band is always built now: a free range always HAS a preceding window of the same length,
+    // unlike "all-time", which had no predecessor and is no longer offered here.
     private async Task<DashboardTrendBandDto> BuildTrendBandAsync(
-        DateOnly? from, DateOnly? to,
+        DateOnly from, DateOnly to,
         DateOnly priorFrom, DateOnly priorTo,
-        string currentLabel, string priorLabel,
         bool isPacing,
         CancellationToken ct)
     {
@@ -634,8 +643,10 @@ public sealed class GetDashboardSummaryHandler(
         }).ToList();
 
         return new DashboardTrendBandDto(
-            currentLabel, priorLabel, trendPoints, isPacing,
-            CurrentFrom: from, CurrentTo: to, PriorFrom: priorFrom, PriorTo: priorTo);
+            CommissionTrend: trendPoints,
+            CurrentFrom: from, CurrentTo: to,
+            PriorFrom: priorFrom, PriorTo: priorTo,
+            IsPacing: isPacing);
     }
 
     // Shared helper: load payout amounts by currency attributed to a date range.

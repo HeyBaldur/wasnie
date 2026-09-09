@@ -10,13 +10,15 @@ namespace Wasnie.Api.Controllers;
 [Authorize]
 public sealed class DashboardController(IMediator mediator) : ControllerBase
 {
-    // GET /api/dashboard?period=this-month
+    // GET /api/dashboard?from=2026-02-01&to=2026-04-15
+    // Both omitted → the whole current month (the handler decides; see GetDashboardSummaryQuery).
     [HttpGet]
     public async Task<IActionResult> GetSummary(
-        [FromQuery] string period = "this-month",
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await mediator.Send(new GetDashboardSummaryQuery(period), cancellationToken);
+        var result = await mediator.Send(new GetDashboardSummaryQuery(from, to), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
     }
 }
