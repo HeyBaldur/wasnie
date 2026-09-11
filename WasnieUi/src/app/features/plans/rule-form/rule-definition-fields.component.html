@@ -1,0 +1,430 @@
+<div class="rule-fields" [formGroup]="d.form">
+
+  <div class="form-card">
+    <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_BASIC' | translate }}</h2>
+    <div class="form-row-2">
+      <ws-input
+        formControlName="name"
+        [label]="'PLANS.FIELD_RULE_NAME' | translate"
+        [error]="d.form.get('name')?.touched && d.form.get('name')?.hasError('required') ? 'VALIDATION.REQUIRED' : ''"
+        [placeholder]="'PLANS.FIELD_RULE_NAME_PLACEHOLDER' | translate"
+      />
+      <div class="field-with-help">
+        <div class="field-help-label">
+          <span class="form-field-label">{{ 'PLANS.FIELD_SORT_ORDER' | translate }}</span>
+          <app-icon name="info" [size]="13" class="help-icon"
+            [wsTooltip]="'PLANS.TOOLTIP_SORT_ORDER' | translate" />
+        </div>
+        <ws-input formControlName="sortOrder" type="number" />
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card" formGroupName="measurement">
+    <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_MEASUREMENT' | translate }}</h2>
+    <div class="form-row-2">
+      <div class="field-with-help">
+        <div class="field-help-label">
+          <span class="form-field-label">{{ 'PLANS.FIELD_MEASUREMENT_TYPE' | translate }}</span>
+          <app-icon name="info" [size]="13" class="help-icon"
+            [wsTooltip]="'PLANS.TOOLTIP_MEASUREMENT_TYPE' | translate" />
+        </div>
+        <ws-select formControlName="type" [options]="d.measurementTypeOptions" />
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <h2 class="form-card__title">{{ 'PLANS.RULE_SECTION_RATE_TABLE' | translate }}</h2>
+    <div formGroupName="rateTable">
+      <div class="form-field-group">
+        <div class="field-help-label">
+          <span class="form-field-label">{{ 'PLANS.FIELD_RATE_TABLE_TYPE' | translate }}</span>
+        </div>
+        <div class="type-selector">
+          @for (t of d.rateTableTypes; track t.value) {
+            <button type="button" class="type-btn"
+              [class.type-btn--active]="d.rateTableType() == t.value"
+              [disabled]="d.readOnly() || (d.isUnitsMode() && t.value !== d.RateTableType.Flat)"
+              (click)="!d.readOnly() && !d.isUnitsMode() && d.form.get('rateTable.type')?.setValue(t.value)">
+              {{ t.label | translate }}
+            </button>
+          }
+        </div>
+        <!-- Always-visible help for the SELECTED type (replaces the old hover tooltip, which
+             ambiguously described Tiered). Changes with the selection. -->
+        <p class="form-hint mt-2">{{ d.rateTableHintKey() | translate }}</p>
+        @if (d.isUnitsMode()) {
+          <p class="form-hint mt-1">{{ 'PLANS.UNITS_RATE_TABLE_NOTE' | translate }}</p>
+        }
+      </div>
+
+      @if (d.rateTableType() == d.RateTableType.Flat) {
+        <div class="form-field-group mt-4">
+          <div class="field-help-label">
+            <span class="form-field-label">
+              {{ (d.isUnitsMode() ? 'PLANS.FIELD_FLAT_RATE_PER_UNIT' : 'PLANS.FIELD_FLAT_RATE') | translate }}
+            </span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="(d.isUnitsMode() ? 'PLANS.TOOLTIP_FLAT_RATE_UNITS' : 'PLANS.TOOLTIP_FLAT_RATE') | translate" />
+          </div>
+          <div class="input-with-suffix">
+            <ws-input
+              formControlName="flatRate"
+              type="number"
+            />
+            @if (!d.isUnitsMode()) {
+              <!--
+                ★ WHAT THIS VALUE MEANS, NOT HOW TO CONVERT IT. The suffix used to read "%×100",
+                which asks the reader to do the arithmetic and can be misread as an instruction to
+                multiply. This states the answer for the number actually typed, so 0.05 reads back
+                "5%" and 100 reads back "10,000%" — visible before saving, not after a pay run.
+              -->
+              <span
+                class="input-suffix"
+                [class.input-suffix--warning]="d.flatRateLooksMistaken()"
+                data-testid="flat-rate-percent"
+              >
+                @if (d.flatRatePercent() !== null) {
+                  = {{ d.flatRatePercent() | number: '1.0-4' }}%
+                } @else {
+                  %
+                }
+              </span>
+            }
+          </div>
+          <span class="form-hint">
+            {{ (d.isUnitsMode() ? 'PLANS.HINT_RATE_UNITS' : 'PLANS.HINT_RATE') | translate }}
+          </span>
+
+          <!--
+            ★ A WARNING, NEVER A BLOCK. Paying out the whole transaction is unusual, not
+            impossible, and a form that refuses a legitimate configuration sends the user to
+            support. It names the number they typed and the number they probably meant, because
+            "check your input" is advice nobody can act on.
+          -->
+          @if (d.flatRateLooksMistaken()) {
+            <p class="form-warning" role="alert" data-testid="flat-rate-warning">
+              {{ 'PLANS.WARN_RATE_OVER_100' | translate: { percent: (d.flatRatePercent() | number: '1.0-4') } }}
+            </p>
+          }
+        </div>
+      }
+
+      @if (d.rateTableType() == d.RateTableType.Tiered) {
+        <!--
+          THE UNIT IS PART OF THE FIELD, NOT TRIVIA. Two active rules in production have their
+          Tiered bounds typed as ratios (0.8, 1.25) in a ladder the engine walks over AMOUNTS,
+          which pays 14,92 EUR on a 10.000 EUR sale. The mirror mistake filled the attainment
+          ladders with currency. Neither field said what it wanted.
+        -->
+        <p class="tier-table__unit mt-4">{{ 'PLANS.TIER_UNIT_HINT' | translate: { currency: d.planCurrency() } }}</p>
+        <div class="tier-table mt-2">
+          <div class="tier-table__head">
+            <span>{{ 'PLANS.TIER_FROM' | translate }}</span>
+            <span>{{ 'PLANS.TIER_TO' | translate }}</span>
+            <span>{{ 'PLANS.TIER_RATE' | translate }}</span>
+            <span></span>
+          </div>
+          @for (tier of d.tiersArray.controls; track $index; let i = $index) {
+            <div class="tier-table__row" [formGroup]="d.asFormGroup(tier)">
+              <input class="form-input form-input--sm" type="number" formControlName="from" [readonly]="d.readOnly()" />
+              <input class="form-input form-input--sm" type="number" formControlName="to"
+                [placeholder]="'PLANS.TIER_TO_OPEN' | translate" [readonly]="d.readOnly()" />
+              <input class="form-input form-input--sm" type="number" step="0.001" formControlName="rate" [readonly]="d.readOnly()" />
+              @if (!d.readOnly()) {
+                <button type="button" class="tier-remove" (click)="d.removeTier(i)">
+                  <app-icon name="x" [size]="14" />
+                </button>
+              } @else {
+                <span></span>
+              }
+            </div>
+          }
+          @if (!d.readOnly()) {
+            <ws-button type="button" variant="ghost" size="sm" (click)="d.addTier()">
+              <app-icon name="plus" [size]="14" />
+              {{ 'PLANS.ADD_TIER' | translate }}
+            </ws-button>
+          }
+        </div>
+      }
+
+      @if (d.rateTableType() == d.RateTableType.AttainmentBased) {
+        <p class="tier-table__unit mt-4">{{ 'PLANS.ATT_UNIT_HINT' | translate }}</p>
+        <div class="tier-table mt-2">
+          <div class="tier-table__head">
+            <span>{{ 'PLANS.ATT_FROM' | translate }}</span>
+            <span>{{ 'PLANS.ATT_TO' | translate }}</span>
+            <span>{{ 'PLANS.TIER_RATE' | translate }}</span>
+            <span></span>
+          </div>
+          @for (tier of d.attainmentTiersArray.controls; track $index; let i = $index) {
+            <div class="tier-table__row" [formGroup]="d.asFormGroup(tier)">
+              <input class="form-input form-input--sm" type="number" formControlName="attainmentFrom" [readonly]="d.readOnly()" />
+              <input class="form-input form-input--sm" type="number" formControlName="attainmentTo"
+                [placeholder]="'PLANS.TIER_TO_OPEN' | translate" [readonly]="d.readOnly()" />
+              <input class="form-input form-input--sm" type="number" step="0.001" formControlName="rate" [readonly]="d.readOnly()" />
+              @if (!d.readOnly()) {
+                <button type="button" class="tier-remove" (click)="d.removeAttainmentTier(i)">
+                  <app-icon name="x" [size]="14" />
+                </button>
+              } @else {
+                <span></span>
+              }
+            </div>
+          }
+          @if (!d.readOnly()) {
+            <ws-button type="button" variant="ghost" size="sm" (click)="d.addAttainmentTier()">
+              <app-icon name="plus" [size]="14" />
+              {{ 'PLANS.ADD_TIER' | translate }}
+            </ws-button>
+          }
+        </div>
+        <div class="collapsible-header mt-4"
+          [class.collapsible-header--readonly]="d.readOnly()"
+          (click)="!d.readOnly() && d.form.get('rateTable.splitAtQuota')?.setValue(!d.form.get('rateTable.splitAtQuota')?.value)">
+          <div class="section-title-with-help">
+            <span class="form-field-label">{{ 'PLANS.FIELD_SPLIT_AT_QUOTA' | translate }}</span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="'PLANS.TOOLTIP_SPLIT_AT_QUOTA' | translate"
+              (click)="$event.stopPropagation()" />
+          </div>
+          <div class="toggle-switch" [class.toggle-switch--on]="d.form.get('rateTable.splitAtQuota')?.value"></div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="collapsible-header"
+      [class.collapsible-header--readonly]="d.readOnly()"
+      (click)="!d.readOnly() && d.form.get('hasTrigger')?.setValue(!d.form.get('hasTrigger')?.value)">
+      <div class="section-title-with-help">
+        <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_TRIGGER' | translate }}</h2>
+        <app-icon name="info" [size]="13" class="help-icon"
+          [wsTooltip]="'PLANS.TOOLTIP_TRIGGER' | translate"
+          (click)="$event.stopPropagation()" />
+      </div>
+      <div class="toggle-switch" [class.toggle-switch--on]="d.hasTrigger()"></div>
+    </div>
+    @if (d.hasTrigger()) {
+      <div class="mt-4" formGroupName="trigger">
+        <div class="form-field-group">
+          <div class="field-help-label">
+            <span class="form-field-label">{{ 'PLANS.FIELD_LOGICAL_OP' | translate }}</span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="'PLANS.TOOLTIP_LOGICAL_OP' | translate" />
+          </div>
+          <div class="type-selector">
+            <button type="button" class="type-btn"
+              [class.type-btn--active]="d.form.get('trigger.logicalOperator')?.value == d.LogicalOperator.And"
+              [disabled]="d.readOnly()"
+              (click)="!d.readOnly() && d.form.get('trigger.logicalOperator')?.setValue(d.LogicalOperator.And)">
+              {{ 'PLANS.LOGIC_AND' | translate }}
+            </button>
+            <button type="button" class="type-btn"
+              [class.type-btn--active]="d.form.get('trigger.logicalOperator')?.value == d.LogicalOperator.Or"
+              [disabled]="d.readOnly()"
+              (click)="!d.readOnly() && d.form.get('trigger.logicalOperator')?.setValue(d.LogicalOperator.Or)">
+              {{ 'PLANS.LOGIC_OR' | translate }}
+            </button>
+          </div>
+        </div>
+        <div class="conditions-list mt-3" formArrayName="conditions">
+          @for (cond of d.conditionsArray.controls; track $index; let i = $index) {
+            <div class="condition-row" [formGroupName]="i">
+              <!-- Field is a picker fed by the engine's own catalog: a name typed by hand used
+                   to save fine and then never match. -->
+              <ws-select
+                formControlName="field"
+                [options]="d.fieldOptions()"
+              />
+              <ws-select
+                formControlName="operator"
+                [options]="d.operatorOptionsFor(i)"
+              />
+              <!-- Category value is CHOSEN from a dropdown fed by the tenant's real categories (a
+                   multi-select for In/NotIn) so a typo can't save a rule that silently never fires.
+                   It scales to any number of categories. Every other field keeps its input. -->
+              @if (d.isCategoryField(i) && !d.usesSet(i)) {
+                <!-- Single-value (Equal/NotEqual) category: the shared picker owns the list, the
+                     free-text escape hatch and the empty-list fallback. Shared with the manual
+                     transaction form so the behaviour lives in one place. -->
+                <ws-category-picker
+                  formControlName="valueRaw"
+                  [options]="d.categoryValues()"
+                  [placeholder]="'PLANS.COND_CATEGORY_PLACEHOLDER'"
+                  [customPlaceholder]="'PLANS.COND_VALUE_PLACEHOLDER'"
+                />
+              } @else if (d.useCategoryPicker(i) && d.usesSet(i)) {
+                <ws-select
+                  formControlName="valueSet"
+                  [multiple]="true"
+                  [searchable]="true"
+                  [options]="d.categoryOptions()"
+                  [placeholder]="'PLANS.COND_CATEGORY_MULTI_PLACEHOLDER' | translate"
+                />
+              } @else if (d.usesSet(i)) {
+                <input class="condition-value-input" type="text" formControlName="valueSet"
+                  [placeholder]="'PLANS.COND_SET_PLACEHOLDER' | translate" [readonly]="d.readOnly()" />
+              } @else {
+                <input class="condition-value-input" type="text" formControlName="valueRaw"
+                  [placeholder]="'PLANS.COND_VALUE_PLACEHOLDER' | translate" [readonly]="d.readOnly()" />
+              }
+              @if (!d.readOnly()) {
+                <button type="button" class="tier-remove" (click)="d.removeCondition(i)">
+                  <app-icon name="x" [size]="14" />
+                </button>
+              } @else {
+                <span></span>
+              }
+            </div>
+            <!-- Category extras live UNDER the value column (grid-column 3), left-aligned: the escape
+                 hatch (B), the empty-list fallback (D), and the unknown-value warning (C). -->
+            @if (d.isCategoryField(i) && (!d.readOnly() || d.categoryValueUnknown(i))) {
+              <div class="condition-extras">
+                <div class="condition-extras__value">
+                  <!-- Single-value category conditions carry their own toggle/empty-fallback inside
+                       ws-category-picker; here we only drive the In/NotIn (set) case. -->
+                  @if (!d.readOnly() && d.usesSet(i)) {
+                    @if (d.categoryListEmpty(i)) {
+                      <p class="condition-hint">{{ 'PLANS.COND_NO_CATEGORIES_YET' | translate }}</p>
+                    } @else if (d.categoryValues().length > 0) {
+                      <button type="button" class="condition-value-toggle" (click)="d.toggleCustomValue(i)">
+                        {{ (d.customValueAt(i)
+                          ? 'PLANS.COND_USE_CATEGORY_LIST'
+                          : 'PLANS.COND_USE_CUSTOM_VALUE') | translate }}
+                      </button>
+                    }
+                  }
+                  <!-- The typo made visible (C): a value matching no category can never fire. Shown,
+                       never rewritten or removed. -->
+                  @if (d.categoryValueUnknown(i)) {
+                    <p class="condition-warning">{{ 'PLANS.COND_UNKNOWN_CATEGORY' | translate }}</p>
+                  }
+                </div>
+              </div>
+            }
+            <!-- A condition saved before this field existed in the catalog. Left exactly as it
+                 is — never rewritten silently — but called out, because it cannot ever match. -->
+            @if (d.isUnknownField(i)) {
+              <p class="condition-warning">
+                {{ 'PLANS.COND_UNKNOWN_FIELD' | translate: { field: d.fieldValueAt(i) } }}
+              </p>
+            }
+          }
+        </div>
+        @if (!d.readOnly()) {
+          <div class="add-action">
+            <ws-button type="button" variant="ghost" size="sm" (click)="d.addCondition()">
+              <app-icon name="plus" [size]="14" />
+              {{ 'PLANS.ADD_CONDITION' | translate }}
+            </ws-button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="form-card">
+    <div class="collapsible-header"
+      [class.collapsible-header--readonly]="d.readOnly()"
+      (click)="!d.readOnly() && d.form.get('hasModifier')?.setValue(!d.form.get('hasModifier')?.value)">
+      <div class="section-title-with-help">
+        <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_MODIFIER' | translate }}</h2>
+        <app-icon name="info" [size]="13" class="help-icon"
+          [wsTooltip]="'PLANS.TOOLTIP_MODIFIER' | translate"
+          (click)="$event.stopPropagation()" />
+      </div>
+      <div class="toggle-switch" [class.toggle-switch--on]="d.hasModifier()"></div>
+    </div>
+    @if (d.hasModifier()) {
+      <div class="form-row-3 modifier-row mt-4" formGroupName="modifier">
+        <ws-input
+          formControlName="name"
+          [label]="'PLANS.FIELD_MODIFIER_NAME' | translate"
+        />
+        <ws-select
+          formControlName="type"
+          [label]="'PLANS.FIELD_MODIFIER_TYPE' | translate"
+          [options]="d.modifierTypeOptions"
+          />
+        <div class="field-with-help">
+          <div class="field-help-label">
+            <span class="form-field-label">{{ 'PLANS.FIELD_MODIFIER_FACTOR' | translate }}</span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="'PLANS.TOOLTIP_MODIFIER_FACTOR' | translate" />
+          </div>
+          <ws-input formControlName="factor" type="number" />
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="form-card">
+    <div class="collapsible-header"
+      [class.collapsible-header--readonly]="d.readOnly()"
+      (click)="!d.readOnly() && d.form.get('hasCap')?.setValue(!d.form.get('hasCap')?.value)">
+      <div class="section-title-with-help">
+        <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_CAP' | translate }}</h2>
+        <app-icon name="info" [size]="13" class="help-icon"
+          [wsTooltip]="'PLANS.TOOLTIP_CAP_AMOUNT' | translate"
+          (click)="$event.stopPropagation()" />
+      </div>
+      <div class="toggle-switch" [class.toggle-switch--on]="d.hasCap()"></div>
+    </div>
+    @if (d.hasCap()) {
+      <div class="form-row-2 mt-4" formGroupName="cap">
+        <div class="field-with-help">
+          <div class="field-help-label">
+            <span class="form-field-label">{{ 'PLANS.FIELD_CAP_AMOUNT' | translate }}</span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="'PLANS.TOOLTIP_CAP_AMOUNT' | translate" />
+          </div>
+          <ws-input formControlName="amount" type="number" />
+        </div>
+        <div class="field-with-help">
+          <div class="field-help-label">
+            <span class="form-field-label">{{ 'PLANS.FIELD_CAP_SCOPE' | translate }}</span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="'PLANS.TOOLTIP_CAP_SCOPE' | translate" />
+          </div>
+          <ws-select formControlName="scope" [options]="d.capScopeOptions" />
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="form-card">
+    <div class="collapsible-header"
+      [class.collapsible-header--readonly]="d.readOnly()"
+      (click)="!d.readOnly() && d.form.get('hasFloor')?.setValue(!d.form.get('hasFloor')?.value)">
+      <div class="section-title-with-help">
+        <h2 class="form-card__title mb-0">{{ 'PLANS.RULE_SECTION_FLOOR' | translate }}</h2>
+        <app-icon name="info" [size]="13" class="help-icon"
+          [wsTooltip]="'PLANS.TOOLTIP_FLOOR_AMOUNT' | translate"
+          (click)="$event.stopPropagation()" />
+      </div>
+      <div class="toggle-switch" [class.toggle-switch--on]="d.hasFloor()"></div>
+    </div>
+    @if (d.hasFloor()) {
+      <div class="form-row-2 mt-4" formGroupName="floor">
+        <div class="field-with-help">
+          <div class="field-help-label">
+            <span class="form-field-label">{{ 'PLANS.FIELD_FLOOR_AMOUNT' | translate }}</span>
+            <app-icon name="info" [size]="13" class="help-icon"
+              [wsTooltip]="'PLANS.TOOLTIP_FLOOR_AMOUNT' | translate" />
+          </div>
+          <ws-input formControlName="amount" type="number" />
+        </div>
+      </div>
+      <!-- The floor runs AFTER the cap, so a floor above it lifts the commission back over the
+           ceiling and the cap stops changing any outcome. Shown, never blocked: the domain
+           accepts the combination and the screen must not invent a rule the backend lacks. -->
+      @if (d.floorExceedsCap()) {
+        <p class="condition-warning">{{ 'PLANS.WARN_FLOOR_ABOVE_CAP' | translate }}</p>
+      }
+    }
+  </div>
+</div>

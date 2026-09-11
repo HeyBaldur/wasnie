@@ -1,0 +1,121 @@
+@reference "../../../../styles.scss";
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.ws-gs {
+  @apply flex flex-col;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ws-gs__step {
+  @apply flex;
+  gap: var(--space-4);
+}
+
+/* La columna del carril: el círculo arriba y la línea ocupando lo que quede de alto. Es lo que
+   mantiene la línea pegada al texto por largo que sea el paso. */
+.ws-gs__rail {
+  @apply flex flex-col items-center shrink-0;
+}
+
+.ws-gs__circle {
+  @apply flex items-center justify-center shrink-0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  transition: background var(--transition-normal), color var(--transition-normal),
+    box-shadow var(--transition-normal);
+
+  /* ★ LOS MISMOS TOKENS DE ESTADO QUE EL WIZARD HORIZONTAL. Los dos componentes son distintos en
+     estructura y propósito; lo que no pueden ser es de dos productos distintos. Si alguna vez cambia
+     el verde de «hecho», cambia en los dos a la vez porque sale del mismo sitio. */
+  .ws-gs__step--available & {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-tertiary);
+    border: 1px solid var(--color-border-default);
+  }
+
+  .ws-gs__step--current & {
+    background: var(--color-brand);
+    color: var(--color-brand-contrast);
+    box-shadow: 0 0 0 4px var(--color-brand-subtle);
+  }
+
+  .ws-gs__step--done & {
+    background: var(--color-success);
+    color: var(--color-text-inverse);
+  }
+
+  /* Bloqueado se dice apagando, no con rojo: no es un error del usuario, es un paso que aún no toca. */
+  .ws-gs__step--blocked & {
+    background: transparent;
+    color: var(--color-text-tertiary);
+    border: 1px dashed var(--color-border-default);
+  }
+}
+
+.ws-gs__line {
+  width: 1px;
+  flex: 1;
+  margin-top: var(--space-2);
+  background: var(--color-border-default);
+
+  .ws-gs__step--done & {
+    background: var(--color-success);
+  }
+
+  /* El último paso no conecta con nada: su línea colgaría en el vacío. */
+  .ws-gs__step--last & {
+    display: none;
+  }
+}
+
+.ws-gs__body {
+  @apply flex flex-col items-start text-left w-full;
+  gap: var(--space-1);
+  padding: 0 0 var(--space-6);
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+
+  .ws-gs__step--last & {
+    padding-bottom: 0;
+  }
+}
+
+.ws-gs__title {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+
+  .ws-gs__step--current &,
+  .ws-gs__step--done & {
+    color: var(--color-text-primary);
+  }
+}
+
+.ws-gs__description {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+}
+
+.ws-gs__blocked {
+  @apply inline-flex items-center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  font-size: var(--font-size-11);
+  color: var(--color-warning);
+  line-height: 1.4;
+}

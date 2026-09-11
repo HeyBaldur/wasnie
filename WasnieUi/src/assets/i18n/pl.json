@@ -225,7 +225,8 @@
     "MANUAL": "Podręcznik użytkownika",
     "PROFILE": "Profil",
     "RECONCILIATION": "Uzgodnienia",
-    "AUDIT_LOGS": "Dziennik audytu"
+    "AUDIT_LOGS": "Dziennik audytu",
+    "GUIDED_TOUR": "Przewodnik"
   },
   "WELCOME": {
     "TITLE": "Witamy w Incentrze",
@@ -240,7 +241,8 @@
     "CAP_DATA_DESC": "Zaimportuj transakcje z arkusza lub synchronizuj wygrane transakcje prosto z CRM.",
     "CAP_ASSISTANT_TITLE": "Asystent, który tłumaczy wyliczenia",
     "CAP_ASSISTANT_DESC": "Incentra potrafi krok po kroku wyjaśnić, jak powstała każda kwota prowizji.",
-    "START": "Zaczynajmy"
+    "START": "Zaczynajmy",
+    "START_TOUR": "Przejdź przewodnik"
   },
   "MANUAL": {
     "TITLE": "Podręcznik użytkownika",
@@ -2550,5 +2552,159 @@
     "EN": "English",
     "ES": "Español",
     "PL": "Polski"
+  },
+  "GUIDED": {
+    "PROMOTE": {
+      "TITLE": "Przenieś do produkcji",
+      "LEAD": "Masz już konfigurację, której szukałeś? Utwórz ją naprawdę. Plan i jego reguły zostaną skopiowane do Twoich prawdziwych danych dokładnie tak, jak je tutaj ustawiłeś.",
+      "SCOPE": "Przenoszona jest wyłącznie konfiguracja. Ćwiczebny odbiorca, cel, testowa sprzedaż i wyliczone prowizje zostają w piaskownicy, podobnie jak sam eksperyment — promowanie kopiuje, nie przenosi.",
+      "ACTION": "Promuj do prawdziwego planu",
+      "CONFIRM_TITLE": "Utworzyć ten plan naprawdę?",
+      "CONFIRM_MSG": "Zostanie utworzony prawdziwy plan z tymi regułami. Powstaje jako wersja robocza i nikomu nie płaci, dopóki ktoś nie aktywuje go na ekranie Planów. Żadne dane ćwiczebne nie są przenoszone.",
+      "DONE": "Utworzono prawdziwy plan: {{name}}, z regułami: {{rules}}. Jest w wersji roboczej — aktywuj go w Planach, gdy będziesz gotowy.",
+      "RENAMED": "Miałeś już plan o nazwie „{{original}}”, więc ten otrzymał nową nazwę.",
+      "OPEN_PLAN": "Otwórz prawdziwy plan"
+    },
+    "TITLE": "Przewodnik krok po kroku",
+    "SUBTITLE": "Przejdź pełny cykl prowizyjny od początku do końca — plan, reguła, odbiorca, sprzedaż, obliczenie, pay run, płatność — na danych ćwiczeniowych, które nigdy nie dotykają Twoich prawdziwych liczb.",
+    "RESET": "Zacznij od nowa",
+    "PROGRESS": "Ukończono {{done}} z {{total}}",
+    "STEP_DONE": "Gotowe",
+    "FINISHED": "To jest pełny cykl. Wszystko, co tu utworzyłeś, żyje osobno od prawdziwych danych — zaczynaj od nowa, ile razy chcesz.",
+    "BLOCKED": {
+      "NEEDS_PLAN": "Najpierw utwórz plan: reguła należy do planu.",
+      "NEEDS_PAYEE": "Najpierw utwórz odbiorcę: sprzedaż jest komuś przypisywana.",
+      "NEEDS_PLAN_AND_PAYEE": "Najpierw potrzebny jest plan i odbiorca.",
+      "NEEDS_RULE_AND_ASSIGNMENT": "Plan potrzebuje reguły, a odbiorca musi być do niego przypisany.",
+      "NEEDS_TRANSACTION": "Najpierw zarejestruj sprzedaż: nie ma jeszcze czego liczyć.",
+      "NEEDS_CREDITS": "Najpierw oblicz sprzedaż: pay run wypłaca prowizję, która już istnieje.",
+      "NEEDS_PAYRUN": "Najpierw uruchom pay run.",
+      "NEEDS_APPROVAL": "Zatwierdź pay run przed oznaczeniem go jako opłacony."
+    },
+    "FIELD": {
+      "PLAN_NAME": "Nazwa planu",
+      "CURRENCY": "Waluta",
+      "PAYEE_NAME": "Imię i nazwisko",
+      "EMPLOYEE_CODE": "Kod pracownika",
+      "QUOTA": "Kwota celu",
+      "REFERENCE": "Numer sprzedaży",
+      "AMOUNT": "Kwota sprzedaży",
+      "DESCRIPTION": "Opis",
+      "PERIOD_START": "Początek okresu",
+      "PERIOD_END": "Koniec okresu",
+      "EMAIL": "E-mail",
+      "ROLE": "Stanowisko",
+      "MEASUREMENT": "Mierzone na",
+      "DATE": "Data sprzedaży"
+    },
+    "STEP": {
+      "PLAN": {
+        "TITLE": "Utwórz plan",
+        "SHORT": "Pojemnik na reguły, które decydują, ile płaci sprzedaż.",
+        "LONG": "Plan to umowa: kogo obejmuje, w jakim okresie i w jakiej walucie. Sam nie liczy — robią to reguły w środku. Wszystko dalsze wisi na nim, dlatego jest pierwszy.",
+        "EFFECT": "Zatwierdzenie tworzy plan na ten rok. W produkcie to ekran Plany.",
+        "ACTION": "Utwórz plan",
+        "DESCRIPTION_VALUE": "Utworzone w przewodniku."
+      },
+      "RULE": {
+        "TITLE": "Dodaj regułę",
+        "SHORT": "Tabela stawek: ile prowizji generuje sprzedaż.",
+        "LONG": "W regule decydują się pieniądze, a to jest ten sam formularz reguł co na ekranie Plany — są tu wszystkie opcje: tabela stała, progowa lub od realizacji celu, wyzwalacz decydujący, których sprzedaży dotyczy, modyfikator, limit i minimum. Użyj symulatora, aby zobaczyć, ile zapłaciłaby sprzedaż, zanim dodasz regułę.",
+        "EFFECT": "Zatwierdzenie dodaje regułę do planu ćwiczebnego. Od tej pory każda sprzedaż objęta planem jest liczona dokładnie według tej konfiguracji.",
+        "ACTION": "Dodaj regułę",
+        "NAME_VALUE": "Prowizja stała"
+      },
+      "PAYEE": {
+        "TITLE": "Utwórz odbiorcę",
+        "SHORT": "Osoba, która zarabia prowizję.",
+        "LONG": "Odbiorca to ten, kto dostaje wypłatę: handlowiec, menedżer, partner. Kod pracownika pozwala rozpoznać go później w importach i w Twojej liście płac.",
+        "EFFECT": "Zatwierdzenie tworzy osobę. Sama z siebie nic nie zarabia: musi jeszcze zostać przypisana do planu.",
+        "ACTION": "Utwórz odbiorcę"
+      },
+      "QUOTA": {
+        "TITLE": "Ustaw cel",
+        "SHORT": "Cel, względem którego mierzy się tę osobę.",
+        "LONG": "Cel to wartość na okres. Reguły płacące od realizacji go potrzebują: bez celu nie ma procentu realizacji do policzenia. Reguły stałe go ignorują, a i tak warto go mieć dla raportów.",
+        "EFFECT": "Zatwierdzenie ustala cel tej osoby w tym planie na cały rok.",
+        "ACTION": "Ustaw cel"
+      },
+      "ASSIGNMENT": {
+        "TITLE": "Przypisz plan",
+        "SHORT": "Powiązanie, dzięki któremu plan dotyczy tej osoby.",
+        "LONG": "Przypisanie łączy odbiorcę z planem na dany okres. Tego powiązania szuka silnik: sprzedaż osoby bez aktywnego przypisania nie generuje nic — to najczęstsza przyczyna znikającej prowizji.",
+        "EFFECT": "Zatwierdzenie łączy oboje na rok. Od tej chwili sprzedaż tej osoby może generować prowizję.",
+        "ACTION": "Przypisz plan"
+      },
+      "TRANSACTION": {
+        "TITLE": "Zarejestruj sprzedaż",
+        "SHORT": "Fakt, który generuje prowizję.",
+        "LONG": "Transakcja to sprzedaż, która się wydarzyła. W produkcie zwykle przychodzą z importu albo z CRM; tutaj wpisujesz ją ręcznie. Zwróć uwagę: rejestracja i obliczenie to dwa osobne kroki — sprzedaż jest faktem, prowizja decyzją o tym fakcie.",
+        "EFFECT": "Zatwierdzenie zapisuje sprzedaż jako oczekującą. Nic jeszcze nie jest liczone: to następny krok.",
+        "ACTION": "Zarejestruj sprzedaż"
+      },
+      "CALCULATE": {
+        "TITLE": "Oblicz",
+        "SHORT": "Zamień sprzedaż w prowizję.",
+        "LONG": "Obliczenie przepuszcza silnik przez oczekujące sprzedaże: znajduje właściwą regułę, wylicza kwotę i zapisuje kredyt. Kredyt to prowizja należna komuś i jeszcze niewypłacona.",
+        "EFFECT": "Zatwierdzenie oblicza sprzedaż i tworzy kredyt. Jeśli nic się nie pojawi, silnik powie dlaczego — brak reguły, brak przypisania, stawka nieobejmująca kwoty.",
+        "ACTION": "Oblicz"
+      },
+      "PAYRUN": {
+        "TITLE": "Uruchom pay run",
+        "SHORT": "Zamyka okres dla wszystkich naraz.",
+        "LONG": "Pay run zbiera kredyty z okresu w wypłaty, po jednej na odbiorcę i plan. Obejmuje całą firmę: w prawdziwym produkcie zamyka okres wszystkim jednocześnie.",
+        "EFFECT": "Zatwierdzenie tworzy roboczy pay run z wypłatą tej osoby. Nic jeszcze nie zostało wypłacone.",
+        "ACTION": "Uruchom pay run"
+      },
+      "APPROVE": {
+        "TITLE": "Zatwierdź wypłatę",
+        "SHORT": "Ktoś ją akceptuje, zanim ruszą pieniądze.",
+        "LONG": "Zatwierdzenie to ludzka kontrola. Do tego momentu liczby można przeliczyć ponownie; potem wypłata jest zobowiązaniem czekającym na płatność.",
+        "EFFECT": "Zatwierdzenie akceptuje run i jego wypłaty. Od teraz liczą się jako pieniądze, które firma jest winna.",
+        "ACTION": "Zatwierdź"
+      },
+      "PAY": {
+        "TITLE": "Oznacz jako opłacone",
+        "SHORT": "Pieniądze wyszły z firmy.",
+        "LONG": "Oznaczenie jako opłacone zapisuje, że płatność faktycznie wyszła. Zużywa kredyty, więc ta sama prowizja nie może zostać wypłacona dwa razy, i blokuje okres. W prawdziwym produkcie ten krok jest nieodwracalny.",
+        "EFFECT": "Zatwierdzenie zamyka cykl: kredyty są zużyte, a okres zablokowany.",
+        "ACTION": "Oznacz jako opłacone"
+      }
+    },
+    "MEASUREMENT": {
+      "REVENUE": "Przychód",
+      "UNITS": "Sztuki"
+    },
+    "RESULT": {
+      "TITLE": "Co już istnieje",
+      "EMPTY": "Jeszcze nic. Wykonaj pierwszy krok, a to, co powstanie, pojawi się tutaj.",
+      "PLAN": "Plan",
+      "RULE": "Reguła",
+      "PAYEE": "Odbiorca",
+      "QUOTA": "Cel",
+      "ASSIGNMENT": "Przypisanie",
+      "TRANSACTION": "Sprzedaż",
+      "CREDITS": "Obliczona prowizja",
+      "PAYRUN": "Pay run i wypłaty",
+      "RULE_TIERS": "progi: {{count}}",
+      "RULE_CONDITIONS": "warunki wyzwalacza: {{count}}",
+      "RULE_MODIFIER": "modyfikator × {{factor}}",
+      "RULE_CAP": "limit {{amount}}",
+      "RULE_FLOOR": "minimum {{amount}}",
+      "RULE_TYPE_UNKNOWN": "Tabela stawek",
+      "PER_UNIT": "za sztukę"
+    },
+    "EXPERIMENTS": {
+      "TITLE": "Twoje eksperymenty",
+      "SAVE": "Zapisz eksperyment",
+      "EMPTY": "Nie ma jeszcze zapisanych eksperymentów. Przejdź cykl i zapisz go, aby później porównać konfiguracje.",
+      "RENAME": "Zmień nazwę",
+      "DELETE": "Usuń",
+      "BACK": "Zamknij",
+      "REVIEWING": "Przeglądasz: {{name}}",
+      "NAME_PROMPT": "Nazwa eksperymentu",
+      "DEFAULT_NAME": "Mój eksperyment",
+      "RENAME_TITLE": "Zmień nazwę eksperymentu"
+    }
   }
 }

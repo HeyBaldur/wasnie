@@ -65,6 +65,13 @@
       is not part of the Free plan — a "Open the assistant" button would 403 for exactly the users most
       likely to be seeing this screen for the first time.
     -->
+    <!--
+      ★ EL RECORRIDO GUIADO SE OFRECE AQUÍ, y por eso son dos botones y no uno. Un vídeo cuenta el
+      producto; el recorrido lo hace recorrer. Quien prefiera mirar y empezar solo cierra, como antes.
+    -->
+    <ws-button variant="ghost" (click)="startTour()">
+      {{ 'WELCOME.START_TOUR' | translate }}
+    </ws-button>
     <ws-button variant="primary" (click)="welcome.close()">
       {{ 'WELCOME.START' | translate }}
     </ws-button>

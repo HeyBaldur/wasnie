@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
@@ -7,15 +8,30 @@ using Wasnie.Domain.Authorization;
 
 namespace Wasnie.Infrastructure.Identity;
 
+/// <remarks>
+/// ★★ LOS LÍMITES DEL PLAN CONTRATADO NO ALCANZAN AL SANDBOX, y hubo que descubrirlo en pantalla: un
+/// tenant del plan gratuito no podía ni empezar el recorrido guiado — «Plan Limit Reached: 1/1» —
+/// porque el plan de PRÁCTICA contaba contra su cupo de planes reales.
+///
+/// Los cupos existen para acotar lo que la empresa opera de verdad; los datos del recorrido viven en
+/// otro esquema, se borran de un botón y no generan un solo pago. Cobrarle al usuario su cupo por
+/// aprender es exactamente al revés de para qué existe el recorrido.
+///
+/// ★ SE PREGUNTA POR EL ÁMBITO, NO POR LA TABLA. El contador seguiría contando bien aunque mirara el
+/// esquema equivocado; lo que decide es si esta petición es de práctica, y eso sólo lo sabe el ámbito.
+/// </remarks>
 public sealed class TierLimitChecker(
     IApplicationDbContext db,
     ITenantContext tenantContext,
     ICurrentUserService currentUser,
-    IAuditService auditService)
+    IAuditService auditService,
+    ISandboxScope sandboxScope)
     : ITierLimitChecker
 {
     public async Task EnsurePayeeLimitAsync(CancellationToken cancellationToken = default)
     {
+        if (sandboxScope.IsSandbox) return;
+
         var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
 
@@ -44,6 +60,8 @@ public sealed class TierLimitChecker(
 
     public async Task EnsurePlanLimitAsync(CancellationToken cancellationToken = default)
     {
+        if (sandboxScope.IsSandbox) return;
+
         var tenant = await db.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantContext.TenantId, cancellationToken);
 

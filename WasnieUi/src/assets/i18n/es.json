@@ -225,7 +225,8 @@
     "MANUAL": "Manual de usuario",
     "PROFILE": "Perfil",
     "RECONCILIATION": "Reconciliación",
-    "AUDIT_LOGS": "Registros de auditoría"
+    "AUDIT_LOGS": "Registros de auditoría",
+    "GUIDED_TOUR": "Recorrido guiado"
   },
   "WELCOME": {
     "TITLE": "Bienvenido a Incentra",
@@ -240,7 +241,8 @@
     "CAP_DATA_DESC": "Importá negocios desde una planilla o sincronizá los ganados directamente desde tu CRM.",
     "CAP_ASSISTANT_TITLE": "Un asistente que explica los cálculos",
     "CAP_ASSISTANT_DESC": "Incentra puede recorrer paso a paso cómo se llegó a cualquier monto de comisión.",
-    "START": "Empezar"
+    "START": "Empezar",
+    "START_TOUR": "Hacer el recorrido guiado"
   },
   "MANUAL": {
     "TITLE": "Manual de usuario",
@@ -2550,5 +2552,159 @@
     "EN": "English",
     "ES": "Español",
     "PL": "Polski"
+  },
+  "GUIDED": {
+    "PROMOTE": {
+      "TITLE": "Llevalo a producción",
+      "LEAD": "¿Diste con la configuración que buscabas? Creála de verdad. El plan y sus reglas se copian a tus datos reales tal como los ajustaste acá.",
+      "SCOPE": "Sólo cruza la configuración. El beneficiario de práctica, la cuota, la venta de prueba y las comisiones que generó se quedan en el sandbox, y este experimento también — promover copia, no mueve.",
+      "ACTION": "Promover a plan real",
+      "CONFIRM_TITLE": "¿Crear este plan de verdad?",
+      "CONFIRM_MSG": "Se va a crear un plan real con estas reglas. Nace como borrador y no le paga a nadie hasta que alguien lo active desde la pantalla de Planes. Nada de tus datos de práctica cruza.",
+      "DONE": "Plan real creado: {{name}}, con {{rules}} regla(s). Está en borrador — activalo desde Planes cuando quieras.",
+      "RENAMED": "Ya tenías un plan llamado «{{original}}», así que a éste se le puso un nombre nuevo.",
+      "OPEN_PLAN": "Abrir el plan real"
+    },
+    "TITLE": "Recorrido guiado",
+    "SUBTITLE": "Recordé el ciclo completo de comisiones de principio a fin — plan, regla, beneficiario, venta, cálculo, pay run, pago — sobre datos de práctica que nunca tocan tus cifras reales.",
+    "RESET": "Empezar de cero",
+    "PROGRESS": "{{done}} de {{total}} completados",
+    "STEP_DONE": "Hecho",
+    "FINISHED": "Ese es el ciclo completo. Todo lo que creaste acá vive aparte de tus datos reales — podés empezar de cero las veces que quieras.",
+    "BLOCKED": {
+      "NEEDS_PLAN": "Creá primero el plan: una regla pertenece a un plan.",
+      "NEEDS_PAYEE": "Creá primero el beneficiario: una venta se le acredita a alguien.",
+      "NEEDS_PLAN_AND_PAYEE": "Hacen falta antes el plan y el beneficiario.",
+      "NEEDS_RULE_AND_ASSIGNMENT": "El plan necesita una regla, y el beneficiario tiene que estar asignado a él.",
+      "NEEDS_TRANSACTION": "Registrá antes una venta: todavía no hay nada que calcular.",
+      "NEEDS_CREDITS": "Calculá antes la venta: un pay run paga comisión que ya existe.",
+      "NEEDS_PAYRUN": "Corré antes el pay run.",
+      "NEEDS_APPROVAL": "Aprobá el pay run antes de marcarlo como pagado."
+    },
+    "FIELD": {
+      "PLAN_NAME": "Nombre del plan",
+      "CURRENCY": "Moneda",
+      "PAYEE_NAME": "Nombre completo",
+      "EMPLOYEE_CODE": "Código de empleado",
+      "QUOTA": "Importe de la cuota",
+      "REFERENCE": "Referencia de la venta",
+      "AMOUNT": "Importe de la venta",
+      "DESCRIPTION": "Descripción",
+      "PERIOD_START": "Inicio del período",
+      "PERIOD_END": "Fin del período",
+      "EMAIL": "Correo",
+      "ROLE": "Puesto",
+      "MEASUREMENT": "Se mide sobre",
+      "DATE": "Fecha de la venta"
+    },
+    "STEP": {
+      "PLAN": {
+        "TITLE": "Crear un plan",
+        "SHORT": "El contenedor de las reglas que deciden cuánto paga una venta.",
+        "LONG": "Un plan es el acuerdo: a quién cubre, en qué período y en qué moneda. No hace cuentas por sí mismo — eso lo hacen las reglas que lleva dentro. Todo lo que sigue cuelga de él, y por eso va primero.",
+        "EFFECT": "Al confirmar se crea un plan para este año. En el producto, esto es la pantalla de Planes.",
+        "ACTION": "Crear plan",
+        "DESCRIPTION_VALUE": "Creado en el recorrido guiado."
+      },
+      "RULE": {
+        "TITLE": "Añadir una regla",
+        "SHORT": "La tabla de tasas: cuánta comisión genera una venta.",
+        "LONG": "La regla es donde se decide el dinero, y éste es el mismo formulario de reglas de la pantalla de Planes: están todas las opciones — tabla plana, por tramos o por cumplimiento, un disparador que decide a qué ventas se aplica, un modificador, un tope y un mínimo. Usá el simulador para ver cuánto pagaría una venta antes de añadirla.",
+        "EFFECT": "Al confirmar se añade la regla al plan de práctica. Desde ahí, cualquier venta que el plan alcance se calcula exactamente con esta configuración.",
+        "ACTION": "Añadir regla",
+        "NAME_VALUE": "Comisión plana"
+      },
+      "PAYEE": {
+        "TITLE": "Crear un beneficiario",
+        "SHORT": "La persona que gana la comisión.",
+        "LONG": "Un beneficiario es quien cobra: un comercial, un responsable, un socio. El código de empleado es lo que permite reconocerlo después en las importaciones y en tu nómina.",
+        "EFFECT": "Al confirmar se crea la persona. Por sí sola no cobra nada: todavía tiene que estar asignada a un plan.",
+        "ACTION": "Crear beneficiario"
+      },
+      "QUOTA": {
+        "TITLE": "Poner una cuota",
+        "SHORT": "El objetivo contra el que se mide a esta persona.",
+        "LONG": "Una cuota es el objetivo de un período. Las reglas que pagan por cumplimiento la necesitan: sin cuota no hay porcentaje de objetivo que calcular. Las reglas planas la ignoran, y aun así conviene tenerla para los informes.",
+        "EFFECT": "Al confirmar se fija el objetivo de esta persona en este plan, para el año.",
+        "ACTION": "Poner cuota"
+      },
+      "ASSIGNMENT": {
+        "TITLE": "Asignar el plan",
+        "SHORT": "El vínculo que hace que el plan se aplique a la persona.",
+        "LONG": "Una asignación conecta un beneficiario con un plan durante un período. Es el vínculo que busca el motor: una venta de alguien sin asignación activa no genera nada, y ésa es la causa más frecuente de comisión que desaparece.",
+        "EFFECT": "Al confirmar quedan vinculados para el año. A partir de aquí, las ventas de esa persona pueden generar comisión.",
+        "ACTION": "Asignar plan"
+      },
+      "TRANSACTION": {
+        "TITLE": "Registrar una venta",
+        "SHORT": "El hecho que genera la comisión.",
+        "LONG": "Una transacción es una venta que ocurrió. En el producto suelen llegar por importación o desde tu CRM; acá la escribís vos. Fijate que registrarla y calcularla son dos pasos distintos: la venta es un hecho, la comisión es una decisión sobre ese hecho.",
+        "EFFECT": "Al confirmar se registra la venta como pendiente. Todavía no se calcula nada: eso es el paso siguiente.",
+        "ACTION": "Registrar venta"
+      },
+      "CALCULATE": {
+        "TITLE": "Calcular",
+        "SHORT": "Convertir la venta en comisión.",
+        "LONG": "Calcular pasa el motor por las ventas pendientes: busca la regla que aplica, resuelve el importe y escribe un crédito. Un crédito es comisión que se le debe a alguien y todavía no se pagó.",
+        "EFFECT": "Al confirmar se calcula la venta y se crea el crédito. Si no aparece nada, el motor dice por qué — falta una regla, falta la asignación, la tasa no cubre ese importe.",
+        "ACTION": "Calcular"
+      },
+      "PAYRUN": {
+        "TITLE": "Correr un pay run",
+        "SHORT": "Cierra el período para todos a la vez.",
+        "LONG": "Un pay run junta los créditos de un período en payouts, uno por beneficiario y plan. Es de toda la empresa: en el producto real cierra el período de todas las personas al mismo tiempo.",
+        "EFFECT": "Al confirmar se crea un pay run en borrador con el payout de esta persona. Todavía no se pagó nada.",
+        "ACTION": "Correr pay run"
+      },
+      "APPROVE": {
+        "TITLE": "Aprobar el payout",
+        "SHORT": "Alguien lo firma antes de que se mueva el dinero.",
+        "LONG": "La aprobación es el control humano. Hasta que ocurre, las cifras se pueden recalcular; después, el payout queda comprometido y a la espera de pago.",
+        "EFFECT": "Al confirmar se aprueba el run y sus payouts. Pasan a contar como dinero que la empresa debe.",
+        "ACTION": "Aprobar"
+      },
+      "PAY": {
+        "TITLE": "Marcar como pagado",
+        "SHORT": "El dinero salió de la empresa.",
+        "LONG": "Marcar como pagado registra que el pago salió de verdad. Consume los créditos, así que la misma comisión no se puede pagar dos veces, y bloquea el período. En el producto real este paso es irreversible.",
+        "EFFECT": "Al confirmar se cierra el ciclo: los créditos quedan consumidos y el período bloqueado.",
+        "ACTION": "Marcar como pagado"
+      }
+    },
+    "MEASUREMENT": {
+      "REVENUE": "Ingresos",
+      "UNITS": "Unidades"
+    },
+    "RESULT": {
+      "TITLE": "Lo que existe ahora",
+      "EMPTY": "Todavía nada. Ejecutá el primer paso y acá aparece lo que se cree.",
+      "PLAN": "Plan",
+      "RULE": "Regla",
+      "PAYEE": "Beneficiario",
+      "QUOTA": "Cuota",
+      "ASSIGNMENT": "Asignación",
+      "TRANSACTION": "Venta",
+      "CREDITS": "Comisión calculada",
+      "PAYRUN": "Pay run y payouts",
+      "RULE_TIERS": "{{count}} tramo(s)",
+      "RULE_CONDITIONS": "{{count}} condición(es) de disparo",
+      "RULE_MODIFIER": "modificador × {{factor}}",
+      "RULE_CAP": "tope {{amount}}",
+      "RULE_FLOOR": "mínimo {{amount}}",
+      "RULE_TYPE_UNKNOWN": "Tabla de tasas",
+      "PER_UNIT": "por unidad"
+    },
+    "EXPERIMENTS": {
+      "TITLE": "Tus experimentos",
+      "SAVE": "Guardar experimento",
+      "EMPTY": "Aún no hay experimentos guardados. Recordé un ciclo y guardalo para poder comparar configuraciones después.",
+      "RENAME": "Renombrar",
+      "DELETE": "Borrar",
+      "BACK": "Cerrar",
+      "REVIEWING": "Revisando: {{name}}",
+      "NAME_PROMPT": "Nombre del experimento",
+      "DEFAULT_NAME": "Mi experimento",
+      "RENAME_TITLE": "Renombrar experimento"
+    }
   }
 }

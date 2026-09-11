@@ -225,7 +225,8 @@
     "MANUAL": "User manual",
     "PROFILE": "Profile",
     "RECONCILIATION": "Reconciliation",
-    "AUDIT_LOGS": "Audit logs"
+    "AUDIT_LOGS": "Audit logs",
+    "GUIDED_TOUR": "Guided tour"
   },
   "WELCOME": {
     "TITLE": "Welcome to Incentra",
@@ -240,7 +241,8 @@
     "CAP_DATA_DESC": "Import deals from a spreadsheet, or sync closed-won deals straight from your CRM.",
     "CAP_ASSISTANT_TITLE": "An assistant that explains the maths",
     "CAP_ASSISTANT_DESC": "Incentra can walk through how any commission figure was reached, step by step.",
-    "START": "Get started"
+    "START": "Get started",
+    "START_TOUR": "Take the guided tour"
   },
   "MANUAL": {
     "TITLE": "User manual",
@@ -2550,5 +2552,159 @@
     "EN": "English",
     "ES": "Español",
     "PL": "Polski"
+  },
+  "GUIDED": {
+    "PROMOTE": {
+      "TITLE": "Take it to production",
+      "LEAD": "Found the configuration you want? Create it for real. The plan and its rules are copied to your live data exactly as you tuned them here.",
+      "SCOPE": "Only the configuration crosses over. The practice payee, the quota, the test sale and the commissions it produced stay in the sandbox, and this experiment stays here too — promoting copies, it does not move.",
+      "ACTION": "Promote to a real plan",
+      "CONFIRM_TITLE": "Create this plan for real?",
+      "CONFIRM_MSG": "A real plan will be created with these rules. It starts as a draft and pays nobody until someone activates it from the Plans screen. None of your practice data crosses over.",
+      "DONE": "Real plan created: {{name}}, with {{rules}} rule(s). It is a draft — activate it from Plans when you are ready.",
+      "RENAMED": "You already had a plan called “{{original}}”, so this one was given a new name.",
+      "OPEN_PLAN": "Open the real plan"
+    },
+    "TITLE": "Guided tour",
+    "SUBTITLE": "Run the whole commission cycle end to end — plan, rule, payee, sale, calculation, pay run, payment — on practice data that never touches your real figures.",
+    "RESET": "Start over",
+    "PROGRESS": "{{done}} of {{total}} completed",
+    "STEP_DONE": "Done",
+    "FINISHED": "That is the full cycle. Everything you created here lives apart from your real data — start over as often as you like.",
+    "BLOCKED": {
+      "NEEDS_PLAN": "Create the plan first: a rule belongs to a plan.",
+      "NEEDS_PAYEE": "Create the payee first: a sale is credited to someone.",
+      "NEEDS_PLAN_AND_PAYEE": "You need the plan and the payee first.",
+      "NEEDS_RULE_AND_ASSIGNMENT": "The plan needs a rule, and the payee needs to be assigned to it.",
+      "NEEDS_TRANSACTION": "Record a sale first: there is nothing to calculate yet.",
+      "NEEDS_CREDITS": "Calculate the sale first: a pay run pays commission that already exists.",
+      "NEEDS_PAYRUN": "Run the pay run first.",
+      "NEEDS_APPROVAL": "Approve the pay run before marking it paid."
+    },
+    "FIELD": {
+      "PLAN_NAME": "Plan name",
+      "CURRENCY": "Currency",
+      "PAYEE_NAME": "Full name",
+      "EMPLOYEE_CODE": "Employee code",
+      "QUOTA": "Quota amount",
+      "REFERENCE": "Sale reference",
+      "AMOUNT": "Sale amount",
+      "DESCRIPTION": "Description",
+      "PERIOD_START": "Period start",
+      "PERIOD_END": "Period end",
+      "EMAIL": "Email",
+      "ROLE": "Role",
+      "MEASUREMENT": "Measured on",
+      "DATE": "Sale date"
+    },
+    "STEP": {
+      "PLAN": {
+        "TITLE": "Create a plan",
+        "SHORT": "The container for the rules that decide what a sale pays.",
+        "LONG": "A plan is the agreement: who it covers, for what period, and in which currency. It holds no maths of its own — the rules inside it do. Everything that follows hangs from this one, which is why it comes first.",
+        "EFFECT": "Confirming creates a plan for this calendar year. In the product this is the Plans screen.",
+        "ACTION": "Create plan",
+        "DESCRIPTION_VALUE": "Created in the guided tour."
+      },
+      "RULE": {
+        "TITLE": "Add a rule",
+        "SHORT": "The rate table: how much commission a sale generates.",
+        "LONG": "The rule is where the money is decided, and this is the same rule form the Plans screen uses — every option is here: a flat, tiered or attainment rate table, a trigger that decides which sales it applies to, a modifier, a cap and a floor. Use the simulator to see what a sale would pay before you add it.",
+        "EFFECT": "Confirming adds the rule to the practice plan. From now on, any sale the plan reaches is calculated with exactly this configuration.",
+        "ACTION": "Add rule",
+        "NAME_VALUE": "Flat commission"
+      },
+      "PAYEE": {
+        "TITLE": "Create a payee",
+        "SHORT": "The person who earns the commission.",
+        "LONG": "A payee is whoever gets paid: a sales rep, a manager, a partner. The employee code is how imports and your payroll recognise them later.",
+        "EFFECT": "Confirming creates the person. On its own this pays nothing — they still have to be assigned to a plan.",
+        "ACTION": "Create payee"
+      },
+      "QUOTA": {
+        "TITLE": "Set a quota",
+        "SHORT": "The target this person is measured against.",
+        "LONG": "A quota is the target for a period. Rules that pay by attainment need it: without a quota there is no percentage of target to compute. Flat rules ignore it, and it is still worth having for reporting.",
+        "EFFECT": "Confirming sets the target for this person on this plan, for the year.",
+        "ACTION": "Set quota"
+      },
+      "ASSIGNMENT": {
+        "TITLE": "Assign the plan",
+        "SHORT": "The link that makes the plan apply to the person.",
+        "LONG": "An assignment connects a payee to a plan for a period. This is the link the engine looks for: a sale by someone with no active assignment generates nothing, and that is the single most common reason commission goes missing.",
+        "EFFECT": "Confirming links the two for the year. From here the person's sales can generate commission.",
+        "ACTION": "Assign plan"
+      },
+      "TRANSACTION": {
+        "TITLE": "Record a sale",
+        "SHORT": "The fact that generates commission.",
+        "LONG": "A transaction is a sale that happened. In the product they usually arrive by import or from your CRM; here you type one. Note that recording it and calculating it are two separate steps — the sale is a fact, the commission is a decision about it.",
+        "EFFECT": "Confirming records the sale as pending. Nothing is calculated yet: that is the next step.",
+        "ACTION": "Record sale"
+      },
+      "CALCULATE": {
+        "TITLE": "Calculate",
+        "SHORT": "Turn the sale into commission.",
+        "LONG": "Calculating runs the engine over the pending sales: it finds the rule that applies, works out the amount, and writes a credit. A credit is commission owed to someone and not yet paid.",
+        "EFFECT": "Confirming calculates the sale and creates the credit. If nothing appears, the engine says why — a missing rule, a missing assignment, a rate that does not cover the amount.",
+        "ACTION": "Calculate"
+      },
+      "PAYRUN": {
+        "TITLE": "Run a pay run",
+        "SHORT": "Closes the period for everyone at once.",
+        "LONG": "A pay run gathers the credits of a period into payouts, one per payee and plan. It is tenant-wide: in the real product it closes the period for every person at the same time.",
+        "EFFECT": "Confirming creates a draft pay run with the payout for this person. Nothing has been paid yet.",
+        "ACTION": "Run pay run"
+      },
+      "APPROVE": {
+        "TITLE": "Approve the payout",
+        "SHORT": "Someone signs it off before money moves.",
+        "LONG": "Approval is the human checkpoint. Until it happens the figures can be recalculated; after it, the payout is committed and waiting to be paid.",
+        "EFFECT": "Confirming approves the run and its payouts. They now count as money the company owes.",
+        "ACTION": "Approve"
+      },
+      "PAY": {
+        "TITLE": "Mark as paid",
+        "SHORT": "The money left the company.",
+        "LONG": "Marking as paid records that the payment actually went out. It consumes the credits, so the same commission can never be paid twice, and it locks the period. In the real product this step is irreversible.",
+        "EFFECT": "Confirming closes the cycle: the credits are consumed and the period is locked.",
+        "ACTION": "Mark as paid"
+      }
+    },
+    "MEASUREMENT": {
+      "REVENUE": "Revenue",
+      "UNITS": "Units"
+    },
+    "RESULT": {
+      "TITLE": "What exists now",
+      "EMPTY": "Nothing yet. Run the first step and what it creates will appear here.",
+      "PLAN": "Plan",
+      "RULE": "Rule",
+      "PAYEE": "Payee",
+      "QUOTA": "Quota",
+      "ASSIGNMENT": "Assignment",
+      "TRANSACTION": "Sale",
+      "CREDITS": "Commission calculated",
+      "PAYRUN": "Pay run and payouts",
+      "RULE_TIERS": "{{count}} tier(s)",
+      "RULE_CONDITIONS": "{{count}} trigger condition(s)",
+      "RULE_MODIFIER": "modifier × {{factor}}",
+      "RULE_CAP": "cap {{amount}}",
+      "RULE_FLOOR": "floor {{amount}}",
+      "RULE_TYPE_UNKNOWN": "Rate table",
+      "PER_UNIT": "per unit"
+    },
+    "EXPERIMENTS": {
+      "TITLE": "Your experiments",
+      "SAVE": "Save experiment",
+      "EMPTY": "No saved experiments yet. Run a cycle and save it to compare configurations later.",
+      "RENAME": "Rename",
+      "DELETE": "Delete",
+      "BACK": "Close",
+      "REVIEWING": "Reviewing: {{name}}",
+      "NAME_PROMPT": "Name this experiment",
+      "DEFAULT_NAME": "My experiment",
+      "RENAME_TITLE": "Rename experiment"
+    }
   }
 }

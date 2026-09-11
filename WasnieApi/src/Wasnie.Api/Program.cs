@@ -62,6 +62,11 @@ try
         });
 
     builder.Services.AddAuthorization();
+
+    // El filtro que marca como «práctica» todo lo que cuelga de `api/sandbox`. Se registra para poder
+    // pedirlo con `[ServiceFilter]`, que es lo que le permite recibir el «scope» por inyección.
+    builder.Services.AddScoped<Wasnie.Api.Controllers.EnterSandboxFilter>();
+
     builder.Services.AddControllers()
         .AddJsonOptions(opts =>
         {

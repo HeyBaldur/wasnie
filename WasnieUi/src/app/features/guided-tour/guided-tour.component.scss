@@ -1,0 +1,301 @@
+@reference "../../../styles.scss";
+
+/* El ancho y el centrado los pone `ws-page-layout`, como en el resto de pantallas: aquí sólo se
+   reparte el espacio entre la guía y la zona de trabajo. */
+.tour__layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--space-8);
+  align-items: start;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tour__right {
+  @apply flex flex-col;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.tour__progress {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.tour__step-title {
+  margin: 0;
+  font-size: var(--font-size-18);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.tour__step-long {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+/* Lo que va a pasar al confirmar: se separa del resto porque es lo que hay que leer ANTES de pulsar. */
+.tour__step-effect {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--color-brand);
+  background: var(--color-bg-surface-sunken);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.tour__form {
+  @apply flex flex-col;
+  gap: var(--space-5);
+  margin-top: var(--space-8);
+}
+
+/* La rejilla canónica del design system, dentro de un panel con la MISMA superficie que el
+   `.form-card` de Payees (`payee-create.component.scss`).
+   ★ SIN ESTE PANEL LOS CAMPOS NO SE VEÍAN. `ws-input` pinta su caja con `--color-bg-surface`, que es
+   exactamente el color del `ws-card` que envuelve la zona de acción: inputs del color de la tarjeta.
+   Payees los apoya sobre `--color-bg-surface-raised`, un escalón más arriba, y ahí sí contrastan. No se
+   toca la primitiva: su fondo es el de todo el producto y cambiarlo es decisión del design system. */
+.ws-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+
+  &:empty { display: none; }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tour__full-row {
+  grid-column: 1 / -1;
+}
+
+/* ── La regla ──
+   El formulario de la pantalla de Planes, con su vista previa y el simulador. En pantallas anchas la
+   vista previa va al lado, como en Planes; si no cabe, debajo — nunca apretando las secciones. */
+
+.tour__rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+
+  @media (min-width: 1440px) {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+
+.tour__rule-preview {
+  display: block;
+  min-width: 0;
+}
+
+.tour__modal-actions {
+  @apply flex items-center justify-end;
+  gap: var(--space-3);
+}
+
+/* ── Resultado ── */
+
+.tour__result-title {
+  margin: 0;
+  font-size: var(--font-size-15);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.tour__facts {
+  @apply flex flex-col;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.tour__fact {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: var(--space-3);
+  font-size: var(--font-size-13);
+
+  dt {
+    color: var(--color-text-tertiary);
+  }
+
+  dd {
+    margin: 0;
+    color: var(--color-text-primary);
+  }
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}
+
+.tour__block {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.tour__block-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-11);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+/* La cuenta en una línea y su contexto debajo: el importe es lo que se busca de un vistazo. */
+.tour__credit {
+  @apply flex flex-col;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+}
+
+.tour__credit-maths {
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+
+  strong {
+    color: var(--color-success);
+  }
+}
+
+.tour__credit-meta {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.tour__empty {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+/* El banner de aviso del sistema: mismos tokens semánticos que el resto del producto usa para avisar
+   en línea. Nada de amarillo a ojo. */
+.tour__notice {
+  @apply flex items-center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-warning);
+}
+
+.tour__error {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 25%, transparent);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
+
+.tour__actions {
+  @apply flex items-center justify-end;
+  gap: var(--space-4);
+}
+
+.tour__done {
+  font-size: var(--font-size-12);
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.tour__finished {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-13);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+}
+
+/* ── Historial de experimentos ── */
+
+.tour__result-head {
+  @apply flex items-center justify-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.tour__experiments {
+  @apply flex flex-col;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Una fila por experimento: el nombre pesa, la fecha acompaña, las acciones no compiten. */
+.tour__experiment {
+  @apply flex items-center justify-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-sunken);
+
+  &--open {
+    border-color: var(--color-brand);
+  }
+}
+
+.tour__experiment-open {
+  @apply flex flex-col items-start text-left;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.tour__experiment-name {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tour__experiment-date {
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.tour__experiment-actions {
+  @apply flex items-center shrink-0;
+  gap: var(--space-1);
+}
+
+/* La variante de éxito del mismo banner: mismos tokens semánticos, otro estado. Nada de un verde
+   inventado ni de un bloque nuevo — es el mismo aviso diciendo que algo salió bien. */
+.tour__notice--success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}

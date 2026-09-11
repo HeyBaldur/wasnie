@@ -1,0 +1,352 @@
+@reference "../../../../styles.scss";
+
+/* Moved verbatim from rule-form.component.scss when the sections became a shared component: Angular
+   encapsulates styles per component, so the page's sheet no longer reaches these elements. */
+
+.rule-fields {
+  @apply flex flex-col gap-5;
+}
+
+.collapsible-header--readonly {
+  cursor: default;
+}
+
+.form-card {
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+
+  &__title {
+    font-size: var(--font-size-14);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 var(--space-4);
+  }
+}
+
+.collapsible-header {
+  @apply flex items-center justify-between cursor-pointer;
+}
+
+.toggle-switch {
+  width: 36px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-hover);
+  border: 1px solid var(--color-border-default);
+  position: relative;
+  transition: background var(--transition-normal), border-color var(--transition-normal);
+
+  &::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: var(--radius-full);
+    background: var(--color-text-tertiary);
+    top: 2px;
+    left: 2px;
+    transition: transform var(--transition-normal), background var(--transition-normal);
+  }
+
+  &--on {
+    background: var(--color-brand);
+    border-color: var(--color-brand);
+
+    &::after {
+      background: var(--color-text-inverse);
+      transform: translateX(16px);
+    }
+  }
+}
+
+/* ★ `minmax(0, 1fr)`, NO `1fr`. Una pista `1fr` no baja del ancho mínimo de su contenido, y los
+   inputs tienen uno: en una columna estrecha (el recorrido guiado, con la vista previa al lado) la fila
+   del modificador empujaba el tercer campo fuera de la tarjeta. Con mínimo cero las tres columnas
+   reparten el ancho que HAY, y los controles se encogen dentro. */
+.form-row-2 {
+  @apply grid gap-4;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-row-3 {
+  @apply grid gap-4;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-row-2 > *,
+.form-row-3 > * {
+  min-width: 0;
+}
+
+/* ★ LA ÚNICA FILA QUE MEZCLA DOS ESTILOS DE ETIQUETA. Nombre y tipo llevan la etiqueta propia de
+   ws-input / ws-select; el factor lleva la de este formulario, porque necesita el icono de ayuda. Ésta
+   tiene color primario y 4px de margen abajo que se suman al hueco del contenedor, así que su caja
+   quedaba más baja que las otras dos. Aquí se iguala a la de las primitivas (mismo color, sin márgenes,
+   mismo hueco) y los tres controles comparten línea. */
+.modifier-row .form-field-label {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.form-field-group {
+  @apply flex flex-col gap-1;
+}
+
+.form-field-label {
+  @apply leading-none;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  color: var(--color-text-primary);
+
+  // ★ 4px, NOT THE 5px THIS WAS EYEBALLED AT IN THE BROWSER. The spacing scale runs
+  // 0 / 4 / 8 / 12 / 16…, so 5 is not a token and inventing one for a one-pixel difference nobody
+  // can see is exactly the literal the design system forbids (DESIGN_SYSTEM §5.5).
+  //
+  // ★ THE BOTTOM MARGIN STACKS, and that is worth knowing before tuning it further: 9 of the 10
+  // labels sit inside `.field-help-label` within `.field-with-help`, which already puts
+  // `gap: var(--space-1)` between the label row and the control. The gap the eye sees is therefore
+  // 4 + 4 = 8px. If 8px is the target, raising that container's gap to `--space-2` gets there with
+  // one value and no stacking — this rule is here because the request pointed at the label.
+  margin-left: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.form-hint {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+}
+
+.type-selector {
+  @apply flex items-center gap-1;
+  padding: var(--space-1);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+}
+
+.type-btn {
+  font-size: var(--font-size-13);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  color: var(--color-text-secondary);
+
+  &--active {
+    background: var(--color-bg-surface-raised);
+    color: var(--color-text-primary);
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+.input-with-suffix {
+  @apply flex items-center gap-2;
+}
+
+.input-suffix {
+  font-size: var(--font-size-13);
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+
+  // The echo turns amber at the moment the value stops being a plausible commission rate, so the
+  // change is visible in the field itself before the reader gets as far as the sentence below.
+  &--warning {
+    color: var(--color-warning);
+    font-weight: 600;
+  }
+}
+
+// Warning, not danger: the value is unusual, not rejected. Red would say the form refuses it, and it
+// does not.
+.form-warning {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+
+.form-input {
+  font-size: var(--font-size-14);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-primary);
+
+  &:focus { border-color: var(--color-brand); box-shadow: var(--focus-ring); }
+  &--sm { padding: var(--space-1) var(--space-2); font-size: var(--font-size-13); }
+}
+
+/* A condition's free-text value must match the field/operator selects exactly (same height, padding,
+   radius and focus) — the value column reads as one row of identical controls, not a shrunken input. */
+.condition-value-input {
+  width: 100%;
+  height: var(--height-control-md);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-14);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+
+  &::placeholder { color: var(--color-text-placeholder); }
+  &:focus { border-color: var(--color-border-focus); box-shadow: var(--shadow-focus); }
+  &:read-only { opacity: 0.55; }
+}
+
+.tier-table {
+  @apply flex flex-col gap-2;
+
+  // The unit caption sits ABOVE the ladder rather than inside a column header: it has to be read
+  // once, before the first number is typed, and a header cell is exactly where the eye skips.
+  &__unit {
+    font-size: var(--font-size-12);
+    color: var(--color-text-secondary);
+  }
+
+  &__head {
+    @apply grid;
+    grid-template-columns: 1fr 1fr 1fr 28px;
+    gap: var(--space-2);
+    font-size: var(--font-size-12);
+    font-weight: 600;
+    color: var(--color-text-tertiary);
+    padding: 0 var(--space-1);
+  }
+
+  &__row {
+    @apply grid items-center;
+    grid-template-columns: 1fr 1fr 1fr 28px;
+    gap: var(--space-2);
+  }
+}
+
+.tier-remove {
+  @apply flex items-center justify-center rounded;
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-tertiary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  &:hover { background: var(--color-bg-surface-hover); color: var(--color-danger); }
+}
+
+.conditions-list {
+  @apply flex flex-col gap-2;
+}
+
+.add-action {
+  margin-top: var(--space-4);
+}
+
+.condition-row {
+  // Top-align: every field is a single control of the same height EXCEPT the single-value category
+  // cell, which is ws-category-picker (select + its "use another value" toggle stacked). Centering
+  // would drop the field/operator to the middle of that taller cell and float the category select
+  // above them; top-alignment keeps all three controls on the same line, toggle hanging below.
+  @apply grid items-start gap-2;
+  grid-template-columns: 1fr 1fr 1fr 28px;
+
+  // Keep the remove button vertically centered against the row (unchanged from the previous
+  // items-center behaviour) rather than pinned to the top by items-start.
+  .tier-remove { align-self: center; }
+}
+
+.field-with-help {
+  @apply flex flex-col;
+  gap: var(--space-1);
+}
+
+.field-help-label {
+  @apply flex items-center;
+  gap: var(--space-1);
+}
+
+.section-title-with-help {
+  @apply flex items-center;
+  gap: var(--space-1);
+
+  .form-card__title {
+    @apply leading-none m-0;
+  }
+}
+
+.help-icon {
+  @apply flex items-center flex-shrink-0 cursor-help;
+  color: var(--color-text-tertiary);
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--color-text-secondary);
+  }
+}
+
+/* A stored condition whose field the engine cannot read — left untouched, but never silently. */
+.condition-warning {
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-warning);
+  line-height: 1.4;
+}
+
+/* Category extras (escape-hatch toggle, empty-list hint, unknown-value warning) align UNDER the value
+   column of the condition grid, left-aligned — not centered across the row. */
+.condition-extras {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 28px;
+  gap: var(--space-2);
+  margin-top: calc(var(--space-1) * -1);
+  margin-bottom: var(--space-1);
+}
+
+.condition-extras__value {
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  // Sit the toggle/warning just inside the value control's box edge so they line up with the field's
+  // content, not poking out to the left of it.
+  padding-left: var(--space-2);
+}
+
+/* Escape-hatch toggle between the category list and free text. */
+.condition-value-toggle {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--font-size-12);
+  color: var(--color-brand);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover { color: var(--color-brand-hover); }
+}
+
+/* Shown when the tenant has no categories yet — the admin still writes the rule via free text. */
+.condition-hint {
+  margin: 0;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  line-height: 1.4;
+}
+
+/* When inside the value column, the field-value warning drops its negative offset. */
+.condition-extras__value .condition-warning {
+  margin: 0;
+}

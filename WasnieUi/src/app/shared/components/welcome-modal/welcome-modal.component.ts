@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { WsModalComponent, WsButtonComponent, WsVideoComponent } from '../../ui';
 import { IconComponent } from '../icon/icon.component';
@@ -23,6 +24,13 @@ import { WelcomeService } from '../../../core/services/welcome.service';
 })
 export class WelcomeModalComponent {
   readonly welcome = inject(WelcomeService);
+  private readonly router = inject(Router);
+
+  /** Cierra el modal y lleva al recorrido guiado: la bienvenida termina donde empieza la práctica. */
+  startTour(): void {
+    this.welcome.close();
+    void this.router.navigateByUrl('/guided-tour');
+  }
 
   /**
    * Four capabilities, in the order someone actually meets them: build the plan, set the targets,
