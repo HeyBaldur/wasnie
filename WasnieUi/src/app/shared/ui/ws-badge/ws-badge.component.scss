@@ -52,6 +52,13 @@
   color: var(--color-info);
 }
 
+/* El entorno de práctica. Tokens propios (alias de warning) para que el tono del sandbox se pueda
+   cambiar sin tocar los avisos del producto. Ver DESIGN_SYSTEM.md → `--color-sandbox-accent`. */
+.ws-badge--sandbox {
+  background: var(--color-sandbox-accent-bg);
+  color: var(--color-sandbox-accent);
+}
+
 .ws-badge__dot {
   width: 6px;
   height: 6px;

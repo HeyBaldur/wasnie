@@ -131,6 +131,18 @@
   --color-warning: #9a6500;
   --color-warning-bg: #fbf3e0;
   --color-warning-border: rgba(154, 101, 0, 0.2);
+  /* El marco de la zona activa del sandbox (recorrido guiado). Un ALIAS, no un color nuevo: el dorado
+     es el de warning, pero con nombre propio, para poder cambiar el tono del sandbox sin tocar los
+     avisos del producto. Ver DESIGN_SYSTEM.md → Semantic. */
+  --color-sandbox-accent: var(--color-warning);
+  --color-sandbox-accent-bg: var(--color-warning-bg);
+  --color-sandbox-accent-border: var(--color-warning-border);
+  /* El par violeta/azul de los momentos de marca (el botón «Upgrade», la bienvenida y su confeti).
+     Igual en los tres temas. Ver DESIGN_SYSTEM.md → Accent pair. */
+  --color-accent-violet: #7c3aed;
+  --color-accent-blue: #3b82f6;
+  --color-accent-violet-soft: #a78bfa;
+  --color-accent-blue-soft: #93c5fd;
   --color-danger: #a02323;
   --color-danger-bg: #fceaea;
   --color-danger-border: rgba(160, 35, 35, 0.2);
@@ -234,6 +246,13 @@
   --color-warning: #a86417;
   --color-warning-bg: #f7e7c8;
   --color-warning-border: rgba(168, 100, 23, 0.2);
+  --color-sandbox-accent: var(--color-warning);
+  --color-sandbox-accent-bg: var(--color-warning-bg);
+  --color-sandbox-accent-border: var(--color-warning-border);
+  --color-accent-violet: #7c3aed;
+  --color-accent-blue: #3b82f6;
+  --color-accent-violet-soft: #a78bfa;
+  --color-accent-blue-soft: #93c5fd;
   --color-danger: #94322e;
   --color-danger-bg: #f5dcd8;
   --color-danger-border: rgba(148, 50, 46, 0.2);
@@ -299,6 +318,13 @@
   --color-warning: #ef9f27;
   --color-warning-bg: rgba(186, 117, 23, 0.18);
   --color-warning-border: rgba(239, 159, 39, 0.25);
+  --color-sandbox-accent: var(--color-warning);
+  --color-sandbox-accent-bg: var(--color-warning-bg);
+  --color-sandbox-accent-border: var(--color-warning-border);
+  --color-accent-violet: #7c3aed;
+  --color-accent-blue: #3b82f6;
+  --color-accent-violet-soft: #a78bfa;
+  --color-accent-blue-soft: #93c5fd;
   --color-danger: #f09595;
   --color-danger-bg: rgba(163, 45, 45, 0.2);
   --color-danger-border: rgba(240, 149, 149, 0.25);

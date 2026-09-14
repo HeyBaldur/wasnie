@@ -226,23 +226,14 @@
     "PROFILE": "Profil",
     "RECONCILIATION": "Uzgodnienia",
     "AUDIT_LOGS": "Dziennik audytu",
-    "GUIDED_TOUR": "Przewodnik"
+    "GUIDED_TOUR": "Piaskownica"
   },
   "WELCOME": {
-    "TITLE": "Witamy w Incentrze",
-    "SUBTITLE": "Dwuminutowy przegląd tego, jak działają tu prowizje.",
-    "VIDEO_LABEL": "Wprowadzenie do Incentry",
-    "LEAD": "Incentra zamienia Twoje zasady wynagradzania w wyliczone i audytowalne wypłaty — nikt nie musi już uzgadniać arkusza na koniec miesiąca.",
-    "CAP_PLANS_TITLE": "Plany z prawdziwymi zasadami",
-    "CAP_PLANS_DESC": "Twórz prowizje stałe, progowe i oparte na realizacji celu, z akceleratorami i limitami.",
-    "CAP_QUOTAS_TITLE": "Kwoty i cele",
-    "CAP_QUOTAS_DESC": "Ustal każdemu handlowcowi cel na okres i śledź jego realizację w miarę zamykania transakcji.",
-    "CAP_DATA_TITLE": "Twoje dane na miejscu",
-    "CAP_DATA_DESC": "Zaimportuj transakcje z arkusza lub synchronizuj wygrane transakcje prosto z CRM.",
-    "CAP_ASSISTANT_TITLE": "Asystent, który tłumaczy wyliczenia",
-    "CAP_ASSISTANT_DESC": "Incentra potrafi krok po kroku wyjaśnić, jak powstała każda kwota prowizji.",
+    "EYEBROW": "Twoja przestrzeń jest gotowa",
+    "TITLE": "Witamy w Incentrze!",
+    "LEAD": "Wszystko jest skonfigurowane. Zacznij od prowadzonego onboardingu — pełny cykl prowizji na danych ćwiczebnych, bez dotykania prawdziwych danych — albo od razu utwórz swój pierwszy plan.",
     "START": "Zaczynajmy",
-    "START_TOUR": "Przejdź przewodnik"
+    "START_TOUR": "Przejdź do onboardingu"
   },
   "MANUAL": {
     "TITLE": "Podręcznik użytkownika",
@@ -514,8 +505,13 @@
     "PAGINATION_INFO": "{{from}}–{{to}} z {{total}}",
     "CREATE_TITLE": "Utwórz Plan",
     "CREATE_SUBTITLE": "Zdefiniuj strukturę i okres nowego planu wynagrodzeniowego.",
-    "IMMUTABILITY_TITLE": "Planów nie można modyfikować po ich utworzeniu",
-    "IMMUTABILITY_BODY": "Gdy plan zostanie powiązany z obliczeniem wypłaty, jest zablokowany na zawsze. To celowe działanie: gdyby reguły mogły zmieniać się wstecz, każda wypłacona już prowizja oparta na tym planie byłaby nieprawidłowa. To, co tu zdefiniujesz, jest podstawą wynagrodzenia beneficjentów — na stałe.",
+    "LOCK_INTRO": {
+      "EYEBROW": "Zanim go utworzysz",
+      "TITLE": "Gdy plan wypłaci, zostaje zablokowany na zawsze",
+      "POINT_LOCKED": "Gdy tylko zostanie obliczona wypłata w ramach tego planu, nie można go już modyfikować — to, co tu zdefiniujesz, jest podstawą wynagrodzenia beneficjentów.",
+      "POINT_WHY": "To celowe: gdyby reguły mogły zmienić się później, każda prowizja wypłacona już w ramach planu byłaby nieprawidłowa.",
+      "POINT_CLONE": "Potrzebujesz zmiany później? Sklonuj plan jako nową wersję — oryginał pozostaje dokładnie taki, jak został wypłacony."
+    },
     "SECTION_DETAILS": "Szczegóły Planu",
     "SECTION_PERIOD": "Okres Obowiązywania",
     "FIELD_NAME": "Nazwa",
@@ -1003,11 +999,16 @@
     "COL_STATUS": "Status",
     "EMPTY_TITLE": "Brak kwot",
     "EMPTY_DESCRIPTION": "Ustaw cele wydajnościowe dla zespołu, tworząc kwoty.",
-    "EMPTY_PREREQ_BEFORE": "Aby utworzyć pierwszą kwotę, potrzebujesz najpierw",
-    "EMPTY_PREREQ_PLAN": "planu wynagrodzeń",
-    "EMPTY_PREREQ_BETWEEN": "a następnie",
-    "EMPTY_PREREQ_PAYEE": "odbiorcy",
-    "EMPTY_PREREQ_AFTER": ", któremu ją przypiszesz.",
+    "PREREQ_INTRO": {
+      "EYEBROW": "Przed pierwszą kwotą",
+      "TITLE": "Kwota wymaga odbiorcy i planu",
+      "STEP_PAYEE_TITLE": "Utwórz odbiorcę",
+      "STEP_PAYEE_DESC": "Osoba, której wyniki mierzy kwota.",
+      "STEP_PLAN_TITLE": "Utwórz plan i przypisz do niego odbiorcę",
+      "STEP_PLAN_DESC": "Kwota należy do planu. Bez tego przypisania nie mierzy realizacji.",
+      "STEP_QUOTA_TITLE": "Ustal kwotę",
+      "STEP_QUOTA_DESC": "Wybierz odbiorcę i plan, a następnie określ cel na dany okres."
+    },
     "EMPTY_ACTION": "Utwórz pierwszą kwotę",
     "EMPTY_FILTER_TITLE": "Żadna kwota nie pasuje do filtrów.",
     "CREATE_TITLE": "Utwórz Kwotę",
@@ -1366,11 +1367,17 @@
     "COL_STATUS": "Status",
     "EMPTY_TITLE": "Brak przypisań",
     "EMPTY_DESCRIPTION": "Przypisz członków zespołu do planów wynagrodzeniowych, aby śledzić ich wyniki.",
-    "EMPTY_PREREQ_BEFORE": "Przypisanie łączy",
-    "EMPTY_PREREQ_PAYEE": "odbiorcę",
-    "EMPTY_PREREQ_BETWEEN": "z",
-    "EMPTY_PREREQ_PLAN": "planem wynagrodzeń",
-    "EMPTY_PREREQ_AFTER": ", więc najpierw potrzebujesz co najmniej jednego z każdego.",
+    "PREREQ_INTRO": {
+      "EYEBROW": "Przed pierwszym przypisaniem",
+      "TITLE": "Przypisanie łączy odbiorcę z planem",
+      "LEAD": "Określa, które reguły planu obowiązują danego odbiorcę i w jakim okresie. Bez niego odbiorca nic nie zarabia w ramach planu.",
+      "STEP_PAYEE_TITLE": "Utwórz odbiorcę",
+      "STEP_PAYEE_DESC": "Osoba, która będzie zarabiać w ramach planu.",
+      "STEP_PLAN_TITLE": "Utwórz plan",
+      "STEP_PLAN_DESC": "Jego reguły określają sposób obliczania prowizji.",
+      "STEP_LINK_TITLE": "Przypisz odbiorcę do planu",
+      "STEP_LINK_DESC": "Przypisanie przejmuje okres planu. Od tej chwili kredyty odbiorcy są obliczane według jego reguł."
+    },
     "EMPTY_ACTION": "Utwórz pierwsze przypisanie",
     "EMPTY_FILTER_TITLE": "Żadne przypisanie nie pasuje do filtrów.",
     "CREATE_TITLE": "Utwórz Przypisanie",
@@ -2554,6 +2561,40 @@
     "PL": "Polski"
   },
   "GUIDED": {
+    "ENV": {
+      "BANNER_TITLE": "Tryb ćwiczebny",
+      "BANNER_BODY": "Nic tutaj nie wpływa na Twoje prawdziwe dane. Plany, odbiorcy, sprzedaż i wypłaty w tym przewodniku znajdują się w osobnej piaskownicy.",
+      "PRACTICE": "Ćwiczenie",
+      "LIVE": "Produkcja"
+    },
+    "ERRORS": {
+      "REJECTED": "Dane zostały odrzucone. Co trzeba poprawić:"
+    },
+    "PAYEE_RULES": {
+      "NOTICE": "Ustawienia Twojej firmy wymagają niektórych pól odbiorcy (wymagane pola). Piaskownica stosuje te same reguły co prawdziwy produkt, więc tutaj też są wymagane."
+    },
+    "INTRO": {
+      "EYEBROW": "Tryb ćwiczebny · nic tutaj nie jest prawdziwe",
+      "TITLE": "Twoja piaskownica do testowania prowizji",
+      "LEAD": "Ta sekcja służy do eksperymentów. Twórz plany i reguły, dodaj odbiorcę i sprzedaż, oblicz i wypłać — cały cykl działa na prawdziwym silniku, ale na danych ćwiczebnych, które nigdy nie dotykają liczb Twojej firmy.",
+      "POINT_TRY": "Wypróbuj dowolny plan lub regułę — stałą, progową, opartą na realizacji, wyzwalacze, limity — i zobacz dokładnie, ile by wypłaciła.",
+      "POINT_SAFE": "Nic stąd nie trafia do produkcji: żadnych prawdziwych odbiorców, sprzedaży ani wypłat. Zacznij od nowa, kiedy chcesz.",
+      "POINT_PROMOTE": "Zapisuj każdy test jako eksperyment, porównuj je i promuj ten, który działa, do prawdziwego planu.",
+      "HELP": "Potrzebujesz pomocy? Podręcznik wyjaśnia każdy krok, a Zeke, asystent, pomoże Ci tworzyć plany i reguły.",
+      "HELP_NO_ZEKE": "Potrzebujesz pomocy? Podręcznik wyjaśnia każdy krok.",
+      "START": "Zacznij eksperymentować",
+      "MANUAL": "Otwórz podręcznik",
+      "ASK_ZEKE": "Zapytaj Zeke",
+      "CLOSE": "Zamknij to wprowadzenie"
+    },
+    "EDIT": {
+      "HINT": "Edytujesz „{{name}}”. Przejdź do dowolnego kroku, zmień, co trzeba, i naciśnij Zaktualizuj eksperyment — wszystkie kroki uruchomią się ponownie same, prawdziwymi poleceniami.",
+      "AUTO_STEP": "Tu nie ma nic do wypełnienia: ten krok uruchomi się sam przy aktualizacji eksperymentu.",
+      "UPDATE": "Zaktualizuj eksperyment",
+      "CANCEL": "Anuluj edycję",
+      "INVALID": "Brakuje pól lub wartości są nieprawidłowe. Sprawdź zaznaczone pola.",
+      "STOPPED": "Aktualizacja zatrzymała się na kroku „{{step}}”. Ten krok jest otwarty z przyczyną; nic nie zapisano."
+    },
     "PROMOTE": {
       "TITLE": "Przenieś do produkcji",
       "LEAD": "Masz już konfigurację, której szukałeś? Utwórz ją naprawdę. Plan i jego reguły zostaną skopiowane do Twoich prawdziwych danych dokładnie tak, jak je tutaj ustawiłeś.",
@@ -2563,13 +2604,34 @@
       "CONFIRM_MSG": "Zostanie utworzony prawdziwy plan z tymi regułami. Powstaje jako wersja robocza i nikomu nie płaci, dopóki ktoś nie aktywuje go na ekranie Planów. Żadne dane ćwiczebne nie są przenoszone.",
       "DONE": "Utworzono prawdziwy plan: {{name}}, z regułami: {{rules}}. Jest w wersji roboczej — aktywuj go w Planach, gdy będziesz gotowy.",
       "RENAMED": "Miałeś już plan o nazwie „{{original}}”, więc ten otrzymał nową nazwę.",
-      "OPEN_PLAN": "Otwórz prawdziwy plan"
+      "SAVED_AS": "Ten test zapisano w Twoich eksperymentach jako „{{name}}”, a piaskownica została wyczyszczona.",
+      "VIEW_PLAN": "Zobacz w Planach →",
+      "TOAST_DONE": "„{{name}}” jest teraz prawdziwym planem (wersja robocza). Test zapisano w Twoich eksperymentach.",
+      "ALREADY": "Ta sama konfiguracja jest już w produkcji jako „{{name}}”. Nic się nie zmieniło od promowania, więc nie utworzono nowego planu — zmień plan lub regułę, aby promować ją ponownie."
     },
-    "TITLE": "Przewodnik krok po kroku",
-    "SUBTITLE": "Przejdź pełny cykl prowizyjny od początku do końca — plan, reguła, odbiorca, sprzedaż, obliczenie, pay run, płatność — na danych ćwiczeniowych, które nigdy nie dotykają Twoich prawdziwych liczb.",
+    "TITLE": "Piaskownica",
+    "SUBTITLE": "Bezpieczna piaskownica do nauki i testowania konfiguracji prowizji. Przejdź cały cykl — plan, reguła, odbiorca, sprzedaż, obliczenie, pay run i płatność — na danych ćwiczebnych, wypróbuj różne reguły i promuj tę, która działa, do prawdziwego planu, gdy będziesz gotowy.",
     "RESET": "Zacznij od nowa",
     "PROGRESS": "Ukończono {{done}} z {{total}}",
+    "TABS": {
+      "STEPS": "Kroki",
+      "EXPERIMENTS": "Eksperymenty"
+    },
     "STEP_DONE": "Gotowe",
+    "LOCKED": {
+      "APPROVED": "Pay run jest już zatwierdzony. Dalej: oznacz go jako opłacony.",
+      "PAID": "Pay run jest opłacony, a okres zablokowany — cykl zakończony. Zacznij od nowa, aby przejść go ponownie."
+    },
+    "UNCREDITED": {
+      "TITLE": "Obliczono, ale nie powstała żadna prowizja:",
+      "NO_PAYEE": "{{reference}}: sprzedaż nie ma odbiorcy, więc nikt nie może otrzymać od niej prowizji.",
+      "NO_ASSIGNMENT": "{{reference}}: odbiorca nie ma aktywnego przypisania obejmującego datę sprzedaży. Sprawdź okres przypisania (krok 5).",
+      "CURRENCY": "{{reference}}: waluta sprzedaży różni się od waluty planu. Zarejestruj sprzedaż w walucie planu (krok 6).",
+      "NO_RULES": "{{reference}}: plan nie ma żadnej reguły obowiązującej w dniu sprzedaży. Dodaj regułę (krok 2).",
+      "TRIGGER": "{{reference}}: sprzedaż nie spełnia wyzwalacza reguły {{rules}}, więc reguła jej nie dotyczy. Dodaj regułę bez tego warunku (krok 2) lub zarejestruj sprzedaż, która go spełnia (krok 6).",
+      "UNKNOWN": "{{reference}}: silnik nie wygenerował prowizji dla tej sprzedaży.",
+      "NONE_EXPLAINED": "Obliczenie zostało wykonane, ale żadna sprzedaż nie wygenerowała prowizji. Sprawdź wyzwalacz reguły (czy sprzedaż go spełnia?), daty przypisania i walutę sprzedaży."
+    },
     "FINISHED": "To jest pełny cykl. Wszystko, co tu utworzyłeś, żyje osobno od prawdziwych danych — zaczynaj od nowa, ile razy chcesz.",
     "BLOCKED": {
       "NEEDS_PLAN": "Najpierw utwórz plan: reguła należy do planu.",
@@ -2579,7 +2641,8 @@
       "NEEDS_TRANSACTION": "Najpierw zarejestruj sprzedaż: nie ma jeszcze czego liczyć.",
       "NEEDS_CREDITS": "Najpierw oblicz sprzedaż: pay run wypłaca prowizję, która już istnieje.",
       "NEEDS_PAYRUN": "Najpierw uruchom pay run.",
-      "NEEDS_APPROVAL": "Zatwierdź pay run przed oznaczeniem go jako opłacony."
+      "NEEDS_APPROVAL": "Zatwierdź pay run przed oznaczeniem go jako opłacony.",
+      "NEEDS_MANAGER_SETTING": "Ustawienia Twojej firmy wymagają przełożonego dla każdego odbiorcy, a w piaskownicy nie ma jeszcze kogo wybrać. Ustaw przełożonego jako opcjonalnego w ustawieniach firmy (wymagane pola), aby kontynuować przewodnik."
     },
     "FIELD": {
       "PLAN_NAME": "Nazwa planu",
@@ -2604,7 +2667,7 @@
         "LONG": "Plan to umowa: kogo obejmuje, w jakim okresie i w jakiej walucie. Sam nie liczy — robią to reguły w środku. Wszystko dalsze wisi na nim, dlatego jest pierwszy.",
         "EFFECT": "Zatwierdzenie tworzy plan na ten rok. W produkcie to ekran Plany.",
         "ACTION": "Utwórz plan",
-        "DESCRIPTION_VALUE": "Utworzone w przewodniku."
+        "DESCRIPTION_VALUE": "Utworzone w piaskownicy."
       },
       "RULE": {
         "TITLE": "Dodaj regułę",
@@ -2692,7 +2755,9 @@
       "RULE_CAP": "limit {{amount}}",
       "RULE_FLOOR": "minimum {{amount}}",
       "RULE_TYPE_UNKNOWN": "Tabela stawek",
-      "PER_UNIT": "za sztukę"
+      "PER_UNIT": "za sztukę",
+      "UNCREDITED": "Sprzedaż bez prowizji",
+      "REFUSED": "Nie wyceniono — {{reason}}. Tabela stawek reguły odrzuciła tę sprzedaż, więc nic nie płaci, dopóki tabela jej nie obejmie."
     },
     "EXPERIMENTS": {
       "TITLE": "Twoje eksperymenty",
@@ -2704,7 +2769,28 @@
       "REVIEWING": "Przeglądasz: {{name}}",
       "NAME_PROMPT": "Nazwa eksperymentu",
       "DEFAULT_NAME": "Mój eksperyment",
-      "RENAME_TITLE": "Zmień nazwę eksperymentu"
+      "RENAME_TITLE": "Zmień nazwę eksperymentu",
+      "EMPTY_TITLE": "Brak eksperymentów",
+      "COMMISSION": "Prowizja",
+      "NO_RESULT": "Nieobliczona",
+      "DELETE_TITLE": "Usunąć ten eksperyment?",
+      "DELETE_MSG": "„{{name}}” zostanie trwale usunięty. Usuwany jest tylko zapisany zrzut — bieżąca piaskownica i prawdziwe plany pozostają bez zmian.",
+      "LOAD": "Edytuj",
+      "IN_PRODUCTION": "W produkcji jako „{{name}}”.",
+      "TOAST_SAVED": "Zapisano eksperyment „{{name}}”.",
+      "TOAST_UPDATED": "Zaktualizowano eksperyment „{{name}}”.",
+      "TOAST_RENAMED": "Zmieniono nazwę eksperymentu na „{{name}}”.",
+      "LOAD_TITLE": "Wczytać ten eksperyment do piaskownicy?",
+      "LOAD_MSG": "Bieżące ćwiczenie zostanie wyczyszczone, a wszystkie formularze wypełnione danymi „{{name}}”, łącznie z regułami, abyś mógł zmienić, co chcesz, i uruchomić je ponownie. Najpierw zapisz bieżące ćwiczenie, jeśli chcesz je zachować.",
+      "LOAD_CONFIRM": "Wczytaj eksperyment",
+      "PROMOTE": "Promuj",
+      "PROMOTE_LOAD_TITLE": "Promować „{{name}}”?",
+      "PROMOTE_LOAD_MSG": "Najpierw jego plan i reguły zostaną ponownie utworzone w piaskownicy prawdziwymi poleceniami (bieżące ćwiczenie zostanie wyczyszczone). Potem potwierdzasz promocję — wcześniej nic prawdziwego nie powstaje.",
+      "PROMOTE_LOAD_CONFIRM": "Odtwórz i kontynuuj",
+      "NO_CONFIG": "Zapisano, zanim zaczęto zapisywać konfiguracje: można go przejrzeć, ale nie wczytać ani promować.",
+      "LOADED": "Edytujesz „{{name}}”. Zapisanie zaktualizuje ten eksperyment.",
+      "UPDATE": "Zaktualizuj eksperyment",
+      "SAVE_AS_NEW": "Zapisz jako nowy"
     }
   }
 }

@@ -1,113 +1,213 @@
 @reference "../../../../styles.scss";
 
-// Header sits in the modal's [slot=header], so it owns its own spacing rather than inheriting the
-// title/description block ws-modal draws when you pass `title`.
-.welcome__header {
+// ── Ilustración ─────────────────────────────────────────────────────────────────────
+// Un degradado suave del violeta de marca hacia la superficie del modal: la ilustración «sale» del
+// color de la marca y se funde con el texto, sin una línea que corte.
+.welcome__hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4) var(--space-2);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-accent-violet) 18%, var(--color-bg-surface)) 0%,
+    color-mix(in srgb, var(--color-accent-blue) 8%, var(--color-bg-surface)) 60%,
+    var(--color-bg-surface) 100%
+  );
+}
+
+.welcome__art {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  overflow: visible;
+}
+
+// Colores del SVG: todos tokens.
+.art-stop-violet { stop-color: var(--color-accent-violet); }
+.art-stop-blue { stop-color: var(--color-accent-blue); }
+
+.art-surface {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border-default);
+  stroke-width: 1;
+  filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--color-accent-violet) 16%, transparent));
+}
+
+.art-line { fill: var(--color-border-default); }
+.art-line--strong { fill: var(--color-text-tertiary); opacity: 0.55; }
+.art-avatar { fill: var(--color-accent-blue-soft); }
+.art-pill-success { fill: var(--color-success-bg); }
+
+.art-check-success {
+  stroke: var(--color-success);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art-on-brand { fill: var(--color-bg-surface); opacity: 0.95; }
+.art-on-brand-soft { fill: var(--color-bg-surface); opacity: 0.35; }
+
+.art-on-brand-check {
+  stroke: var(--color-bg-surface);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art-cta { fill: var(--color-bg-surface); }
+
+.art-bar { fill: var(--color-accent-violet-soft); }
+.art-bar--4 { fill: var(--color-accent-violet); }
+
+.art-trend {
+  stroke: var(--color-accent-blue);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art-trend-dot { fill: var(--color-accent-blue); }
+.art-sparkle { fill: var(--color-accent-violet-soft); }
+.art-dot--1 { fill: var(--color-accent-blue-soft); }
+.art-dot--2 { fill: var(--color-accent-violet-soft); }
+
+// ── Animación ───────────────────────────────────────────────────────────────────────
+// Las tarjetas entran escalonadas y después flotan, cada una a su ritmo; las barras crecen desde la
+// base; la línea de tendencia se dibuja; los destellos titilan.
+.art-card {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation:
+    welcome-card-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards,
+    welcome-float 5s ease-in-out infinite;
+}
+
+.art-card--back { animation-delay: 120ms, 800ms; }
+.art-card--main { animation-delay: 0ms, 700ms; animation-duration: 600ms, 6s; }
+.art-card--front { animation-delay: 240ms, 900ms; animation-duration: 600ms, 5.5s; }
+
+.art-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: welcome-bar 700ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.art-bar--1 { animation-delay: 500ms; }
+.art-bar--2 { animation-delay: 580ms; }
+.art-bar--3 { animation-delay: 660ms; }
+.art-bar--4 { animation-delay: 740ms; }
+
+.art-trend {
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: welcome-draw 900ms ease-out 850ms forwards;
+}
+
+.art-trend-dot {
+  opacity: 0;
+  animation: welcome-pop 300ms ease-out 1.6s forwards;
+}
+
+.art-sparkle,
+.art-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: welcome-twinkle 2.4s ease-in-out infinite;
+}
+
+.art-sparkle--2 { animation-delay: 0.6s; }
+.art-sparkle--3 { animation-delay: 1.2s; }
+.art-dot--1 { animation-delay: 0.9s; }
+.art-dot--2 { animation-delay: 1.5s; }
+
+@keyframes welcome-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes welcome-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -5px; }
+}
+
+@keyframes welcome-bar {
+  to { transform: scaleY(1); }
+}
+
+@keyframes welcome-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes welcome-pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes welcome-twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50%      { opacity: 1; transform: scale(1.1); }
+}
+
+// Quien pidió menos movimiento ve la ilustración ya compuesta, quieta.
+@media (prefers-reduced-motion: reduce) {
+  .art-card,
+  .art-bar,
+  .art-trend,
+  .art-trend-dot,
+  .art-sparkle,
+  .art-dot {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+// ── Texto ───────────────────────────────────────────────────────────────────────────
+.welcome__content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  text-align: center;
+}
+
+.welcome__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 12%, var(--color-bg-surface));
+  color: var(--color-accent-violet);
+  font-size: var(--font-size-12);
+  font-weight: 600;
 }
 
 .welcome__title {
-  margin: 0;
-  font-size: var(--font-size-20);
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-24);
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--color-text-primary);
 }
 
-.welcome__subtitle {
-  margin: 0;
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
-}
-
-// The video is the point of the modal, so it gets the full body width and a dark bed: an unstarted
-// <video> paints its own black letterbox, and a light surface behind it would show as a bright halo.
-.welcome__video {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  margin-bottom: var(--space-5);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  // Token, not #000: the clip is 16/9 and so is this frame, so there is no letterbox to hide — and a
-  // hardcoded black would be the one non-token colour in the modal.
-  background: var(--color-bg-surface-sunken);
-}
-
-// Only the HOST is reachable from here — the <video> inside ws-video carries that component's
-// encapsulation attribute, so how it fills the frame is ws-video's `fit` input, not a rule written
-// here that would silently match nothing.
-.welcome__video ws-video {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
 .welcome__lead {
-  margin: 0 0 var(--space-4);
+  margin: 0;
   font-size: var(--font-size-14);
   line-height: 1.6;
   color: var(--color-text-secondary);
 }
 
-.welcome__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+// ── Botones ─────────────────────────────────────────────────────────────────────────
+.welcome__footer {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.welcome__item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-surface-sunken);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-}
-
-.welcome__item-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--color-brand-subtle);
-  color: var(--color-brand);
-}
-
-.welcome__item-body {
-  min-width: 0;
-}
-
-.welcome__item-title {
-  margin: 0;
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.welcome__item-desc {
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-size-12);
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-}
-
-.welcome__footer {
-  display: flex;
-  justify-content: flex-end;
   width: 100%;
 }

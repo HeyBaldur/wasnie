@@ -511,6 +511,22 @@ export class RuleDefinitionForm {
     return 0;
   }
 
+  /**
+   * Replaces whatever is on the form with a stored rule.
+   *
+   * ★ `patchFromRule` APPENDS tiers and conditions — right for a fresh form, wrong for one already in
+   * use. Loading a second rule on top of the first (the sandbox reloading an experiment) would otherwise
+   * keep the first rule's tiers under the second rule's name, and save a ladder nobody wrote.
+   */
+  loadRule(rule: Rule): void {
+    this.tiersArray.clear();
+    this.attainmentTiersArray.clear();
+    this.conditionsArray.clear();
+    this.form.reset();
+    this.modifierId = null;
+    this.patchFromRule(rule);
+  }
+
   /** Puts a stored rule on the form, exactly as the server sent it. */
   patchFromRule(rule: Rule): void {
     const rateTableTypeNum = this._enumToNumber(RateTableType, rule.rateTable.type);

@@ -112,6 +112,94 @@ Each semantic color has three variants: base, `-bg`, `-border`.
 | Danger | `--color-danger` |
 | Info | `--color-info` |
 
+#### Accent pair — `--color-accent-violet` / `--color-accent-blue`
+
+The violet→blue pair of the brand moments: the topbar "Upgrade" pill (which still writes the same two
+hexes inline — migrate it to these tokens when that file is next touched), the welcome modal's
+illustration and its confetti. Soft variants: `--color-accent-violet-soft`, `--color-accent-blue-soft`.
+Identical in all three themes. **Only for celebration and upsell moments** — never for status, data or
+form states; those have their semantic colours.
+
+- **`ws-modal variant="hero"`** — no bordered header: the content (an illustration full-bleed, a centred
+  title) reaches the top edge and the close button floats over it. Body padding 0; footer without its
+  top border or fill. For welcome moments, not for forms. With `[closable]="false"` +
+  `[closeOnBackdrop]="false"` the modal cannot be dodged — no X, no backdrop click, **and no Escape**
+  (`ws-modal` now ignores Escape whenever `closable` is false): the user leaves through its own buttons.
+- **`launchConfetti()`** (`shared/ui/ws-confetti/confetti.ts`) — full-screen canvas confetti in the accent
+  pair + `--color-brand`, read from the tokens at launch. No dependency. `pointer-events: none`,
+  `aria-hidden`, removes itself after ~3.4 s, and **does nothing under `prefers-reduced-motion`**. Used
+  once: the first automatic welcome after registering (not when re-opened from /manual).
+
+#### Pattern — celebration / welcome modal
+
+The recipe behind the post-registration welcome (`app-welcome-modal`), approved as the reference for
+any future "you did it" moment (first plan activated, first payout paid, plan upgraded…). Copy its
+structure; change the illustration and the words.
+
+| Zone | How | Why |
+|---|---|---|
+| Frame | `<ws-modal size="sm" variant="hero">` | Compact and centred; no bordered header, so the illustration reaches the top edge |
+| Illustration | Inline SVG, `aria-hidden`, ~320×176 viewBox, on a soft gradient `color-mix(accent-violet 18% → accent-blue 8% → --color-bg-surface)` that fades into the text | Product-shaped cards (a payout, a chart, the brand card) say *what* the product does; the fade avoids a hard line between art and copy |
+| Eyebrow | Pill above the title: `--radius-full`, `color-mix(accent-violet 12%, surface)` fill, `--color-accent-violet` text, 12px/600 | Names the state ("Your workspace is ready") before the headline sells it |
+| Title + lead | Centred; title 24px/700, `letter-spacing -0.02em`; lead 14px/1.6 secondary | One headline, one sentence that explains the two choices — nothing else competes |
+| Actions | Footer slot, 2-column grid, `ws-button [fullWidth]`: secondary = the guided path, primary = "Get started" | Equal width = two honest options; primary stays the default |
+| Confetti | `launchConfetti({ durationMs: 6500, particleCount: 340 })` from an `effect` on open, stopped on destroy | Only for a genuine first-time event — see below |
+
+**SVG illustration rules**
+- **Colours are tokens only**, applied through classes (`fill`/`stroke`/`stop-color: var(--…)`), never hex in
+  the markup — so the art follows the theme.
+- **No text inside the SVG** (it would not translate, and fonts inside SVG drift). Text-like content is
+  rounded bars.
+- **Motion tells a story, once, then idles:** cards enter staggered (`translateY + scale`, ~600 ms,
+  `cubic-bezier(0.2, 0.8, 0.2, 1)`), bars grow from their base (`transform-box: fill-box;
+  transform-origin: bottom`), a trend line draws itself (`stroke-dashoffset`), then cards float gently
+  (`translate` ±5 px, 5–6 s) and sparkles twinkle.
+- **`prefers-reduced-motion`: the illustration is shown already composed and still.** Always.
+
+**Confetti rules** — only from the two bottom corners (never from the top), in the accent pair +
+`--color-brand`; a second volley at 1.4 s and short side bursts keep a long run alive; fades out over the
+last 1.5 s. Once per real event (the welcome fires it on the automatic first showing, **not** when the
+modal is re-opened from /manual). Nothing under `prefers-reduced-motion`.
+
+**Dismissal** — a celebration that asks the user to choose a path is left **through its buttons**:
+`[closable]="false"` + `[closeOnBackdrop]="false"` (no X, no backdrop click, no Escape). A celebration
+that only informs can keep the default close.
+
+**Card form — first-visit page introduction** (`app-sandbox-intro`, top of /guided-tour): the same
+recipe as a dismissible card when it explains the page it sits on (a modal would hide what it
+presents). Illustration panel on the left (135° gradient), copy on the right, stacked under 900px; three
+short points with icon chips; a help line; actions = primary "start" (dismisses) + secondary link to
+/manual + ghost "Ask Zeke" **only when `AssistantStore.entitled() === true`** (hidden, never disabled).
+Its X dismisses it for good (`localStorage` key `wasnie:sandbox-intro-dismissed`). No confetti — it
+introduces, it doesn't celebrate.
+
+**Don't:** put a video in it (4.6 MB and it demands attention in the user's first second), list features
+(that's the manual's job), use more than two actions, or reuse the accent pair for status or data.
+
+#### `--color-sandbox-accent` — the practice environment
+
+The frame around the active zone of the guided tour's sandbox (`.tour__active`), so a user sees at a
+glance that they are somewhere safe to experiment, not in the live product. Visual reference: the
+accent frame around the active stage in the Quality Events mock (KAN-68).
+
+The family is `--color-sandbox-accent` (frame, text, icon), `--color-sandbox-accent-bg` (soft fill)
+and `--color-sandbox-accent-border`. The complete practice-environment treatment built on it (KAN-68,
+the environment-banner pattern of Baselayer / Stripe test mode):
+
+| Piece | How |
+|---|---|
+| Environment banner | `.tour__env-banner`: sticky at the top of `.shell__content` (the scroll container), icon + "Practice mode" + one sentence. Its fill is `-bg` **painted over `--color-base`** (what `.shell__content` paints behind every page) — in dark the `-bg` token is translucent and content would show through while scrolling. Not `--color-bg-page`: it is documented above but defined in no theme, and an undefined `var()` silently drops the whole declaration |
+| Title badge | `ws-page-layout` `[slot=title-badge]` → `<ws-badge variant="sandbox">` |
+| Practice data | `<ws-badge variant="sandbox" size="sm">` on every card or block showing sandbox data |
+| Active zone | `.tour__active`: 2px `outline` in `--color-sandbox-accent` |
+| The crossing | Promotion card: `sandbox` badge → `success` badge, the one action that leaves the sandbox |
+
+They are **aliases**, defined in all three themes as `var(--color-warning*)` — no new colour. It has its
+own name because the meaning is different: warning says "look out", this says "you are practising".
+Sharing the token would tie the sandbox's tone to every warning in the product; the alias lets one
+change without the other. Use it only for the sandbox; anywhere else, pick the semantic colour that
+matches what is being said.
+
 ### Gradients / Special
 `--gradient-brand` · `--gradient-cta` · `--gradient-surface-soft` · `--focus-ring`
 
@@ -282,7 +370,9 @@ Inputs: `variant` (default | flat | interactive) · `padding` (none | sm | md | 
 ```
 
 ### WsBadge `<ws-badge>`
-Inputs: `variant` (neutral | brand | success | warning | danger | info) · `size` (sm | md) · `dot`
+Inputs: `variant` (neutral | brand | success | warning | danger | info | sandbox) · `size` (sm | md) · `dot`
+
+`sandbox` marks practice data and the practice environment only — see `--color-sandbox-accent`.
 
 ```html
 <ws-badge variant="success" [dot]="true">Active</ws-badge>
@@ -369,6 +459,35 @@ Inputs: `placement` (bottom | top | bottom-end | top-end) · `gap`
 ### WsSegmentedControl `<ws-segmented-control>`
 Two-way: `[(value)]`. Options type: `SegOption { value: string; label: string }`.  
 Inputs: `options` · `translateLabels` (default true)
+
+### WsTabs `<ws-tabs>`
+Two-way: `[(value)]`. Tabs type: `WsTab { value: string; label: string; icon?: string }`.
+Inputs: `tabs` · `translateLabels` (default true) · `variant` (group | header, default group)
+
+**`variant="header"` — the tabs are the card's header** (card = header + body, no footer). Put the
+card on `padding="none"`, `ws-tabs` as its first child, and the content in a padded body element. The
+tabs are flush with the card's edges and use its border and clipped corners; a divider separates them;
+the open tab takes `--color-bg-surface` (the body's) and covers the header rule, so it opens onto the
+content. Inactive tabs are `--color-bg-surface-sunken`. Focus ring is drawn inset.
+
+```html
+<ws-card padding="none">
+  <ws-tabs variant="header" [tabs]="tabs" [(value)]="tab" />
+  <div class="card-body">…</div>
+</ws-card>
+```
+
+`variant="group"` (default): a joined, **full-width** button group: each tab takes an equal share, neighbours share one border,
+only the outer corners are rounded (`--radius-md`). Tab: `--color-bg-surface-raised`, hover
+`--color-bg-surface-hover`, open tab `--color-bg-surface-sunken` + primary text; focus
+`--shadow-focus`; ← → move between tabs. Use it to switch between views **of the same card** (the
+guided tour's Steps / Experiments) — it reads as part of the card. For an inline filter toggle, use
+`WsSegmentedControl`. No native `<select>` fallback on narrow screens: with few tabs the group fits;
+with many, use `WsSelect`.
+
+```html
+<ws-tabs [tabs]="[{ value: 'steps', label: 'GUIDED.TABS.STEPS', icon: 'list' }, …]" [(value)]="tab" />
+```
 
 ### WsTooltip `[wsTooltip]`
 Directive. 300ms delay, appends to `document.body`.  

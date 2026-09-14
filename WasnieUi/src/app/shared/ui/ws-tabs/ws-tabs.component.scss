@@ -1,0 +1,124 @@
+:host {
+  display: block;
+}
+
+/* One row, full width: every tab takes an equal share of the card. */
+.ws-tabs {
+  display: flex;
+  width: 100%;
+}
+
+.ws-tabs__item {
+  flex: 1 1 0;
+  min-width: 0;
+
+  /* Joined buttons: each one overlaps its neighbour's border by 1px, so a single line separates them. */
+  & + & {
+    margin-left: -1px;
+  }
+
+  /* The focused tab's ring must sit above the neighbour that overlaps it. */
+  &:focus-within {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+.ws-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--height-control-lg);
+  padding: 0 var(--space-4);
+  font-family: inherit;
+  font-size: var(--font-size-14);
+  font-weight: 600; // interactive text is semibold (DESIGN_SYSTEM → Interactive text weight)
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 0;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--color-bg-surface-hover);
+    color: var(--color-text-primary);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+/* Only the outer corners are rounded — the group reads as one control. */
+.ws-tabs__item:first-child .ws-tabs__tab {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.ws-tabs__item:last-child .ws-tabs__tab {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.ws-tabs__item:only-child .ws-tabs__tab {
+  border-radius: var(--radius-md);
+}
+
+/* The open tab looks pressed: sunken, primary text. Distinct from hover, which lifts. */
+.ws-tabs__tab--active,
+.ws-tabs__tab--active:hover {
+  background: var(--color-bg-surface-sunken);
+  color: var(--color-text-primary);
+}
+
+/* ── Variant `header`: the tabs are the card's header ────────────────────────────────────────
+   Flush with the card: the card's own border and clipped corners frame it, so the tabs draw no outer
+   border or radius. A divider separates the tabs; each tab carries the header's bottom rule, and the
+   open tab paints that rule in the body's surface colour (overlapping it by 1px) so it opens onto the
+   content below instead of sitting above a line. */
+.ws-tabs--header {
+  .ws-tabs__item {
+    margin-bottom: -1px;
+  }
+
+  .ws-tabs__item + .ws-tabs__item {
+    margin-left: 0;
+  }
+
+  .ws-tabs__item .ws-tabs__tab {
+    height: auto;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-bg-surface-sunken);
+    border: none;
+    border-bottom: 1px solid var(--color-border-default);
+    border-radius: 0;
+  }
+
+  .ws-tabs__item + .ws-tabs__item .ws-tabs__tab {
+    border-left: 1px solid var(--color-border-default);
+  }
+
+  .ws-tabs__item .ws-tabs__tab:hover {
+    background: var(--color-bg-surface-hover);
+  }
+
+  .ws-tabs__item .ws-tabs__tab--active,
+  .ws-tabs__item .ws-tabs__tab--active:hover {
+    background: var(--color-bg-surface);
+    border-bottom-color: var(--color-bg-surface);
+    color: var(--color-text-primary);
+  }
+
+  /* The ring is drawn inside: at the card's edge an outer ring would be clipped. */
+  .ws-tabs__item .ws-tabs__tab:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--color-border-focus);
+  }
+}
+
+.ws-tabs__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

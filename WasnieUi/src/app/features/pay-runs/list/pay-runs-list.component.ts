@@ -18,6 +18,11 @@ import { PayRunsApiService } from '../services/pay-runs.api.service';
 import { PayRunsStore, PayRunFilter } from '../state/pay-runs.store';
 import { bindFiltersToUrl } from '../../../shared/state/bind-filters-to-url';
 import { PayRunListItem, PayRunStatus, CalculatePayRunResult, PayoutSkipCount } from '../models/pay-run.model';
+import {
+  hasUnreachableCommission as runHasUnreachableCommission,
+  noPayoutsHeadlineKey as runNoPayoutsHeadlineKey,
+  payRunSkipLabelKey,
+} from '../models/pay-run-diagnostics';
 import { WsDatePickerComponent as DatePickerRef } from '../../../shared/ui/ws-date-picker/ws-date-picker.component';
 import {
   WsButtonComponent, WsBadgeComponent, WsCardComponent, WsSelectComponent,
@@ -294,27 +299,11 @@ export class PayRunsListComponent implements OnInit {
   // support. When the engine cannot explain a zero, neither does this screen.
 
   /**
-   * The reason codes this version knows how to phrase.
-   *
-   * ★ A WHITELIST, NOT A STRING CONCATENATION. Building `PAY_RUNS.SKIP_${code}` blindly would print the
-   * raw key — an internal identifier — the first time the backend adds a code the front end has not
-   * shipped a translation for. An unknown code degrades to a neutral line instead: it still reports
-   * that something was skipped, and it does NOT guess why.
+   * The phrase for a skip reason code. The whitelist lives in `pay-run-diagnostics.ts`, shared with
+   * the guided tour's sandbox, which runs the same command and must explain it the same way.
    */
-  private static readonly KnownSkipCodes: readonly string[] = [
-    'TerminatedPayee',
-    'PlanNotPayable',
-    'ExistingPayout',
-    // Not skips — the run explaining itself. They share this list because they travel in the same
-    // field, and leaving them out would print the neutral fallback over a sentence the engine had.
-    'SupplementalForNewCredits',
-    'UnreachableCommission',
-  ];
-
   skipLabelKey(code: string): string {
-    return PayRunsListComponent.KnownSkipCodes.includes(code)
-      ? `PAY_RUNS.SKIP_${code}`
-      : 'PAY_RUNS.SKIP_UNKNOWN';
+    return payRunSkipLabelKey(code);
   }
 
   /**
@@ -356,8 +345,7 @@ export class PayRunsListComponent implements OnInit {
    * inferred from a zero — a zero has several causes and this is only one of them.
    */
   hasUnreachableCommission(result: CalculatePayRunResult): boolean {
-    return (result.diagnostics?.skipped ?? [])
-      .some(s => s.code === 'UnreachableCommission' && s.count > 0);
+    return runHasUnreachableCommission(result);
   }
 
   unreachableCommissionCount(result: CalculatePayRunResult): number {
@@ -365,16 +353,11 @@ export class PayRunsListComponent implements OnInit {
       .find(s => s.code === 'UnreachableCommission')?.count ?? 0;
   }
 
+  // ★ THE ONE ANSWER THE RUN COULD NEVER GIVE — "nothing to consider" while the period owes money — is
+  //   why "unreachable" is checked first. The order lives in `pay-run-diagnostics.ts`, shared with the
+  //   sandbox.
   noPayoutsHeadlineKey(result: CalculatePayRunResult): string {
-    const d = result.diagnostics;
-    if (!d) return 'PAY_RUNS.CALCULATE_NO_PAYOUTS_NEUTRAL';
-    // ★ THE ONE ANSWER THE RUN COULD NEVER GIVE. "Nothing to consider" is true and useless when the
-    //   period does owe money: an administrator read it while three other screens said €385,731.02 was
-    //   Unpaid, and spent a day finding out that six deactivated assignments were the whole story.
-    if (this.hasUnreachableCommission(result)) return 'PAY_RUNS.CALCULATE_UNREACHABLE';
-    if (d.assignmentsConsidered === 0) return 'PAY_RUNS.CALCULATE_NOTHING_TO_CONSIDER';
-    if (d.skipped.length > 0) return 'PAY_RUNS.CALCULATE_ALL_SKIPPED';
-    return 'PAY_RUNS.CALCULATE_NO_PAYOUTS_NEUTRAL';
+    return runNoPayoutsHeadlineKey(result);
   }
 
   skipCounts(result: CalculatePayRunResult): PayoutSkipCount[] {

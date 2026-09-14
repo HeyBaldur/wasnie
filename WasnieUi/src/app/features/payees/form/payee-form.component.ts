@@ -16,6 +16,17 @@ import {
   type SelectOption,
 } from '../../../shared/ui';
 
+/**
+ * The employment types the backend accepts (`EmploymentType`). Exported because the guided tour's
+ * payee step offers the same choice — one list, so the two screens cannot drift apart.
+ */
+export const EMPLOYMENT_TYPE_OPTIONS: SelectOption[] = [
+  { value: 'FullTime',   label: 'PAYEES.EMPLOYMENT_TYPE_FULLTIME' },
+  { value: 'PartTime',   label: 'PAYEES.EMPLOYMENT_TYPE_PARTTIME' },
+  { value: 'Temporary',  label: 'PAYEES.EMPLOYMENT_TYPE_TEMPORARY' },
+  { value: 'Contractor', label: 'PAYEES.EMPLOYMENT_TYPE_CONTRACTOR' },
+];
+
 @Component({
   selector: 'app-payee-form',
   standalone: true,
@@ -65,12 +76,7 @@ export class PayeeFormComponent implements OnInit {
     this.fieldRequirements().find(r => r.fieldName === 'Location')?.isRequired ?? false
   );
 
-  readonly employmentTypeOptions: SelectOption[] = [
-    { value: 'FullTime',   label: 'PAYEES.EMPLOYMENT_TYPE_FULLTIME' },
-    { value: 'PartTime',   label: 'PAYEES.EMPLOYMENT_TYPE_PARTTIME' },
-    { value: 'Temporary',  label: 'PAYEES.EMPLOYMENT_TYPE_TEMPORARY' },
-    { value: 'Contractor', label: 'PAYEES.EMPLOYMENT_TYPE_CONTRACTOR' },
-  ];
+  readonly employmentTypeOptions = EMPLOYMENT_TYPE_OPTIONS;
 
   readonly managerSearchFn = (q: string): Observable<SelectOption[]> =>
     this.payeesApi.getPayees({ page: 1, pageSize: 20, search: q }).pipe(

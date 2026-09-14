@@ -254,17 +254,54 @@
   margin-top: var(--space-4);
 }
 
+/* ★ LA LISTA ES UN CONTENEDOR DE CONSULTA. La fila se reparte según el ancho que TIENE, no el de la
+   ventana: el mismo formulario vive en la pantalla de Planes (ancha) y en el sandbox (una columna
+   estrecha junto a la vista previa), y ahí tres controles en fila dejaban el valor en ~30px — el campo
+   donde se escribe el número era prácticamente invisible. */
+.conditions-list {
+  container-type: inline-size;
+}
+
 .condition-row {
   // Top-align: every field is a single control of the same height EXCEPT the single-value category
   // cell, which is ws-category-picker (select + its "use another value" toggle stacked). Centering
   // would drop the field/operator to the middle of that taller cell and float the category select
   // above them; top-alignment keeps all three controls on the same line, toggle hanging below.
   @apply grid items-start gap-2;
-  grid-template-columns: 1fr 1fr 1fr 28px;
+  // `minmax(0, 1fr)`, not `1fr`: a `1fr` track never shrinks below its content, so two selects with
+  // long labels squeezed the value column to nothing instead of sharing the width.
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 28px;
+
+  > * { min-width: 0; }
 
   // Keep the remove button vertically centered against the row (unchanged from the previous
   // items-center behaviour) rather than pinned to the top by items-start.
   .tier-remove { align-self: center; }
+}
+
+/* Estrecho: campo y operador arriba (con quitar a la derecha), el valor debajo a todo el ancho. */
+@container (max-width: 480px) {
+  .condition-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 28px;
+
+    > :nth-child(3) {
+      grid-column: 1 / span 2;
+      grid-row: 2;
+    }
+
+    > :nth-child(4) {
+      grid-column: 3;
+      grid-row: 1;
+    }
+  }
+
+  .condition-extras {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 28px;
+  }
+
+  .condition-extras__value {
+    grid-column: 1 / span 2;
+  }
 }
 
 .field-with-help {

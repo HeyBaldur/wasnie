@@ -1,6 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 
-export type BadgeVariant = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info';
+/** `sandbox` marks practice data and the practice environment (guided tour) — never a real status. */
+export type BadgeVariant = 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'sandbox';
 export type BadgeSize = 'sm' | 'md';
 
 @Component({

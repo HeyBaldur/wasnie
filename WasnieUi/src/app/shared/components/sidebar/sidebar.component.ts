@@ -255,7 +255,7 @@ export class SidebarComponent implements OnInit {
         { path: '/dashboard', labelKey: 'NAV.DASHBOARD', icon: 'dashboard', permission: 'Payees.Read' },
         // ★ ENTRADA PERMANENTE, NO SÓLO LA PRIMERA VEZ. El recorrido guiado es también el sitio donde
         // probar cosas sin miedo: se vuelve a él cuando hace falta, no cuando el producto lo ofrece.
-        { path: '/guided-tour', labelKey: 'NAV.GUIDED_TOUR', icon: 'play', permission: 'Payees.Read' },
+        { path: '/guided-tour', labelKey: 'NAV.GUIDED_TOUR', icon: 'bowl-chopsticks', permission: 'Payees.Read' },
       ],
     },
     {

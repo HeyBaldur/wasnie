@@ -51,6 +51,27 @@ describe('GuidedTourStore · errores de un paso', () => {
     expect(store.errorParams()).toBeNull();
   });
 
+  it('guarda los motivos concretos de un rechazo de validación, no sólo «Validation failed»', async () => {
+    await failWith(new HttpErrorResponse({
+      status: 400,
+      error: { status: 400, message: 'Validation failed.', details: ['Email is required.', 'Role is required.'] },
+    }));
+
+    expect(store.error()).toBe('Validation failed.');
+    expect(store.errorDetails()).toEqual(['Email is required.', 'Role is required.']);
+  });
+
+  it('empieza cada paso sin los motivos del anterior', async () => {
+    await failWith(new HttpErrorResponse({
+      status: 400,
+      error: { message: 'Validation failed.', details: ['Email is required.'] },
+    }));
+
+    await store.run(() => Promise.reject(new HttpErrorResponse({ status: 500, error: null })), 'payee');
+
+    expect(store.errorDetails()).toEqual([]);
+  });
+
   it('sin mensaje ni código, una clave genérica', async () => {
     await failWith(new HttpErrorResponse({ status: 500, error: null }));
 

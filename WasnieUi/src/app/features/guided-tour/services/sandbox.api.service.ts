@@ -1,8 +1,10 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { PromotedPlan, SandboxExperiment, SandboxStatus } from '../models/guided-tour.model';
+import { PromotedPlan, SandboxCalculation, SandboxExperiment, SandboxStatus } from '../models/guided-tour.model';
 import { AddRuleRequest, RuleSimulation, SimulateRuleRequest } from '../../plans/models/rule.model';
+import { CalculatePayRunResult } from '../../pay-runs/models/pay-run.model';
+import { Plan } from '../../plans/models/plan.model';
 
 /**
  * El ciclo completo, contra el sandbox.
@@ -45,6 +47,11 @@ export class SandboxApiService {
     return this.http.post(`${this.base}/plans/rules`, body);
   }
 
+  /** El plan de práctica con sus reglas completas (la misma consulta que Planes), para guardarlo en un experimento. */
+  getPlan(planId: string): Observable<Plan> {
+    return this.http.get<Plan>(`${this.base}/plans/${planId}`);
+  }
+
   /** El simulador de la pantalla real de reglas, contra el plan de práctica. */
   simulateRule(planId: string, request: SimulateRuleRequest): Observable<RuleSimulation> {
     return this.http.post<RuleSimulation>(`${this.base}/plans/${planId}/rules/simulate`, request);
@@ -56,6 +63,10 @@ export class SandboxApiService {
     email: string | null;
     hireDate: string | null;
     role: string | null;
+    // Los campos que la empresa puede exigir (Settings → field requirements). El sandbox aplica esas
+    // mismas reglas: no mandarlos cuando son obligatorios es un 400 de validación.
+    employmentType?: string | null;
+    location?: string | null;
   }): Observable<unknown> {
     return this.http.post(`${this.base}/payees`, body);
   }
@@ -101,12 +112,13 @@ export class SandboxApiService {
    * al mismo motor de asignación de forma síncrona sobre lo que hay pendiente en su propio juego de
    * tablas. Ver el comando en el backend.
    */
-  process(): Observable<unknown> {
-    return this.http.post(`${this.base}/transactions/process`, {});
+  process(): Observable<SandboxCalculation> {
+    return this.http.post<SandboxCalculation>(`${this.base}/transactions/process`, {});
   }
 
-  calculatePayRun(body: { periodStart: string; periodEnd: string }): Observable<unknown> {
-    return this.http.post(`${this.base}/pay-runs`, body);
+  /** El pay run real, con su diagnóstico: qué consideró el motor y por qué descartó lo que descartó. */
+  calculatePayRun(body: { periodStart: string; periodEnd: string }): Observable<CalculatePayRunResult> {
+    return this.http.post<CalculatePayRunResult>(`${this.base}/pay-runs`, body);
   }
 
   approvePayRun(body: { payRunId: string }): Observable<unknown> {

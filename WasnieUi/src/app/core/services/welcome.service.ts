@@ -24,6 +24,12 @@ export class WelcomeService {
   /** Whether the modal is on screen. */
   readonly isOpen = signal(false);
 
+  /**
+   * True when the modal on screen is the automatic first-visit showing — the moment right after
+   * registering, which is the one that gets the confetti. Re-watching from /manual is not a celebration.
+   */
+  readonly celebrate = signal(false);
+
   /** True while the open one is the automatic first-visit showing, so closing it records the flag. */
   private markSeenOnClose = false;
 
@@ -42,12 +48,14 @@ export class WelcomeService {
   openIfFirstVisit(): void {
     if (this.hasSeen() || this.isOpen()) return;
     this.markSeenOnClose = true;
+    this.celebrate.set(true);
     this.isOpen.set(true);
   }
 
   /** The /manual "watch it again" button. Never writes the flag — see the class note. */
   openManually(): void {
     this.markSeenOnClose = false;
+    this.celebrate.set(false);
     this.isOpen.set(true);
   }
 
@@ -61,6 +69,7 @@ export class WelcomeService {
       }
       this.markSeenOnClose = false;
     }
+    this.celebrate.set(false);
     this.isOpen.set(false);
   }
 }

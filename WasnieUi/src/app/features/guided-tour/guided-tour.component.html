@@ -5,20 +5,63 @@
   que fija el ancho máximo; el recorrido no tiene por qué tener opinión sobre eso.
 -->
 <app-shell>
+  <!--
+    ★★ EL BANNER DE ENTORNO: el patrón de los productos que manejan dinero (Baselayer, Stripe en modo
+    test). El usuario tiene que saber EN TODO MOMENTO que está practicando, no deducirlo de un borde.
+    Primer hijo de la página, así que vive dentro de `.shell__content` —el contenedor que hace scroll— y
+    `sticky` lo deja arriba mientras el resto se desplaza. Mismo token de entorno que el marco de la zona
+    activa y los badges: se lee como UN entorno, no como adornos sueltos.
+  -->
+  <div class="tour__env-banner" role="status">
+    <div class="tour__env-banner-inner">
+      <app-icon name="shield-check" [size]="16" />
+      <strong class="tour__env-banner-title">{{ 'GUIDED.ENV.BANNER_TITLE' | translate }}</strong>
+      <span class="tour__env-banner-body">{{ 'GUIDED.ENV.BANNER_BODY' | translate }}</span>
+    </div>
+  </div>
+
   <ws-page-layout
-    icon="play"
+    icon="bowl-chopsticks"
     [title]="'GUIDED.TITLE' | translate"
     [subtitle]="'GUIDED.SUBTITLE' | translate"
   >
+    <!-- El título ya dice «Sandbox»: el badge marca el modo, «Practice», en vez de repetir el nombre. -->
+    <ws-badge slot="title-badge" variant="sandbox" [dot]="true">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
     <!-- ★ GHOST, NO SECUNDARIO. En el resto del producto la esquina superior derecha es donde vive la
          acción principal de la pantalla («New Payee»). Aquí la acción principal es el paso, dentro de la
          tarjeta; «empezar de cero» es lo contrario de principal y no debe competir con él. -->
-    <ws-button slot="actions" variant="secondary" (click)="saveExperiment()">
-      {{ 'GUIDED.EXPERIMENTS.SAVE' | translate }}
-    </ws-button>
     <ws-button slot="actions" variant="ghost" [loading]="resetting()" (click)="reset()">
       {{ 'GUIDED.RESET' | translate }}
     </ws-button>
+
+    <!-- La presentación del sandbox, la primera vez: qué es esta sección y dónde pedir ayuda. Se cierra
+         para siempre con su X. -->
+    <app-sandbox-intro />
+
+    <!--
+      ★★ EL AVISO DE LA PROMOCIÓN VA ARRIBA, NO EN LA TARJETA. Promover limpia el sandbox, así que la
+      tarjeta desaparece; y cuando existía, el aviso quedaba debajo del pliegue y nadie lo veía — un
+      usuario creó diez copias del mismo plan. Dice qué se creó, dónde quedó guardada la prueba y
+      enlaza al plan real dentro del mismo texto.
+    -->
+    @if (store.promoted(); as promoted) {
+      <div class="tour__notice tour__notice--success tour__notice--top tour__promoted" role="status">
+        <app-icon name="check" [size]="16" />
+        <span>
+          {{ 'GUIDED.PROMOTE.DONE' | translate : { name: promoted.name, rules: promoted.ruleCount } }}
+          <!-- Si el nombre estaba ocupado, el plan quedó con sufijo: decirlo, o lo buscará y no lo encontrará. -->
+          @if (promoted.name !== promoted.originalName) {
+            {{ 'GUIDED.PROMOTE.RENAMED' | translate : { original: promoted.originalName } }}
+          }
+          @if (promotedSavedAs(); as savedAs) {
+            {{ 'GUIDED.PROMOTE.SAVED_AS' | translate : { name: savedAs } }}
+          }
+          <a class="tour__notice-link" [routerLink]="['/plans', promoted.planId]">
+            {{ 'GUIDED.PROMOTE.VIEW_PLAN' | translate }}
+          </a>
+        </span>
+      </div>
+    }
 
     <!--
       ★★ DOS ZONAS: HACER Y ENTENDER. A la izquierda, el recorrido completo y el estado de cada paso.
@@ -28,18 +71,33 @@
     -->
     <div class="tour__layout">
 
-      <ws-card padding="lg" class="tour__guide">
-        <p class="tour__progress">
-          {{ 'GUIDED.PROGRESS' | translate : { done: store.completed(), total: steps().length } }}
-        </p>
+      <!-- ★ DOS PESTAÑAS EN EL LATERAL: el recorrido y el historial. Antes el historial era una tarjeta al
+           final de la página, fuera de la vista. -->
+      <!-- ★ HEADER Y BODY. Las pestañas SON el header de la tarjeta (pegadas a sus bordes, sin padding
+           alrededor) y el body muestra la vista elegida. Por eso la tarjeta va sin padding y el body
+           lleva el suyo. -->
+      <ws-card padding="none" class="tour__guide">
+        <ws-tabs variant="header" [tabs]="asideTabs" [(value)]="asideTab" />
 
-        <ws-guide-stepper [steps]="steps()" (stepSelect)="select($event)" />
+        <div class="tour__guide-body">
+          @if (asideTab() === 'steps') {
+            <p class="tour__progress">
+              {{ 'GUIDED.PROGRESS' | translate : { done: store.completed(), total: steps().length } }}
+            </p>
+
+            <ws-guide-stepper [steps]="steps()" (stepSelect)="select($event)" />
+          } @else {
+            <ng-container [ngTemplateOutlet]="experimentsTpl" />
+          }
+        </div>
       </ws-card>
 
       <div class="tour__right">
-        <!-- ★ ACENTO DE MARCA, EL MISMO QUE USA EL DASHBOARD EN SUS TARJETAS DE ACCIÓN. Da jerarquía sin
-             inventar un color: de las dos tarjetas de la derecha, ésta es donde se actúa. -->
-        <ws-card padding="lg" accent="brand">
+        <!-- ★★ EL MARCO DEL SANDBOX. Sin él, el recorrido era idéntico al producto real y nadie percibía
+             que aquí se puede probar sin miedo. La zona donde se actúa va rodeada por el acento del
+             sandbox (`--color-sandbox-accent`), como la etapa activa del mock de Quality Events. Sustituye
+             a la barra izquierda de marca: azul a un lado y dorado alrededor dirían dos cosas a la vez. -->
+        <ws-card padding="lg" class="tour__active" #actionCard>
           <h2 class="tour__step-title">{{ 'GUIDED.STEP.' + currentStep().toUpperCase() + '.TITLE' | translate }}</h2>
 
           <p class="tour__step-long">{{ 'GUIDED.STEP.' + currentStep().toUpperCase() + '.LONG' | translate }}</p>
@@ -47,7 +105,17 @@
           <!-- Lo que va a ocurrir al confirmar, dicho antes de confirmar. -->
           <p class="tour__step-effect">{{ 'GUIDED.STEP.' + currentStep().toUpperCase() + '.EFFECT' | translate }}</p>
 
-          <form [formGroup]="form" class="tour__form" (ngSubmit)="execute()">
+          <!-- Qué experimento se está editando, y cómo: se salta al paso y se actualiza al final. -->
+          @if (loadedExperiment(); as loaded) {
+            <div class="tour__notice tour__notice--info tour__loaded" role="status">
+              <app-icon name="edit" [size]="16" />
+              <span>
+                {{ (editMode() ? 'GUIDED.EDIT.HINT' : 'GUIDED.EXPERIMENTS.LOADED') | translate : { name: loaded.name } }}
+              </span>
+            </div>
+          }
+
+          <form [formGroup]="form" class="tour__form" (ngSubmit)="submit()">
             <div class="ws-form-grid">
               @if (shows('planName')) {
                 <ws-input formControlName="planName" [label]="'GUIDED.FIELD.PLAN_NAME' | translate" />
@@ -74,6 +142,17 @@
               configuración antes de comprometerla con dinero real. Mismas secciones, mismos avisos y el
               mismo simulador, contra el plan de práctica. Ver `ruleDef` en el componente.
             -->
+            <!-- Editando un experimento con varias reglas: cuál se está cambiando. -->
+            @if (currentStep() === 'rule' && editMode() && editRules().length > 1) {
+              <ws-tabs
+                class="tour__rule-picker"
+                [tabs]="editRuleTabs()"
+                [translateLabels]="false"
+                [value]="'' + editRuleIndex()"
+                (valueChange)="selectEditRule($event)"
+              />
+            }
+
             @if (currentStep() === 'rule') {
               <div class="tour__rule">
                 <app-rule-definition-fields [model]="ruleDef" />
@@ -88,11 +167,39 @@
               @if (shows('employeeCode')) {
                 <ws-input formControlName="employeeCode" [label]="'GUIDED.FIELD.EMPLOYEE_CODE' | translate" />
               }
+              <!-- Obligatorio u opcional según la configuración de la empresa, con las mismas etiquetas
+                   que el formulario real de Payees. -->
               @if (shows('payeeEmail')) {
-                <ws-input formControlName="payeeEmail" type="email" [label]="'GUIDED.FIELD.EMAIL' | translate" />
+                <ws-input
+                  formControlName="payeeEmail"
+                  type="email"
+                  [label]="(payeeRules().email ? 'PAYEES.FIELD_EMAIL' : 'PAYEES.FIELD_EMAIL_OPTIONAL') | translate"
+                  [error]="form.controls.payeeEmail.touched && form.controls.payeeEmail.hasError('required') ? 'VALIDATION.REQUIRED'
+                           : form.controls.payeeEmail.hasError('email') ? 'VALIDATION.EMAIL' : ''"
+                />
               }
               @if (shows('payeeRole')) {
-                <ws-input formControlName="payeeRole" [label]="'GUIDED.FIELD.ROLE' | translate" />
+                <ws-input
+                  formControlName="payeeRole"
+                  [label]="(payeeRules().role ? 'PAYEES.FIELD_ROLE' : 'PAYEES.FIELD_ROLE_OPTIONAL') | translate"
+                  [error]="form.controls.payeeRole.touched && form.controls.payeeRole.hasError('required') ? 'VALIDATION.REQUIRED' : ''"
+                />
+              }
+              @if (shows('payeeEmploymentType')) {
+                <ws-select
+                  formControlName="payeeEmploymentType"
+                  [label]="'PAYEES.FIELD_EMPLOYMENT_TYPE' | translate"
+                  [options]="employmentTypeOptions"
+                  [placeholder]="'PAYEES.FIELD_EMPLOYMENT_TYPE_PLACEHOLDER' | translate"
+                  [error]="form.controls.payeeEmploymentType.touched && form.controls.payeeEmploymentType.hasError('required') ? 'VALIDATION.REQUIRED' : ''"
+                />
+              }
+              @if (shows('payeeLocation')) {
+                <ws-input
+                  formControlName="payeeLocation"
+                  [label]="'PAYEES.FIELD_LOCATION' | translate"
+                  [error]="form.controls.payeeLocation.touched && form.controls.payeeLocation.hasError('required') ? 'VALIDATION.REQUIRED' : ''"
+                />
               }
               @if (shows('quotaAmount')) {
                 <ws-input formControlName="quotaAmount" type="number" [label]="'GUIDED.FIELD.QUOTA' | translate" />
@@ -126,6 +233,14 @@
               ★ Y ES EL BANNER DEL SISTEMA, con sus tokens semánticos — el mismo patrón que usa el detalle
               de un crédito para avisar de una sustitución — no un párrafo pintado de amarillo.
             -->
+            <!-- Editando: los pasos sin nada que rellenar se ejecutan solos al actualizar. -->
+            @if (editMode() && (currentStep() === 'calculate' || currentStep() === 'approve' || currentStep() === 'pay')) {
+              <div class="tour__notice tour__notice--info" role="note">
+                <app-icon name="info" [size]="16" />
+                <span>{{ 'GUIDED.EDIT.AUTO_STEP' | translate }}</span>
+              </div>
+            }
+
             @if (blockedReason(); as reason) {
               <div class="tour__notice" role="status">
                 <app-icon name="alert-triangle" [size]="16" />
@@ -133,23 +248,90 @@
               </div>
             }
 
+            <!-- ★ DE DÓNDE SALE LA REGLA. Si la empresa exige campos del payee, se dice aquí antes de
+                 pulsar: el sandbox aplica la misma configuración que el producto real. -->
+            @if (currentStep() === 'payee' && payeeHasCompanyRules()) {
+              <div class="tour__notice tour__notice--info" role="note">
+                <app-icon name="info" [size]="16" />
+                <span>{{ 'GUIDED.PAYEE_RULES.NOTICE' | translate }}</span>
+              </div>
+            }
+
+            <!--
+              ★★ CALCULAR SIN COMISIÓN NO ES SILENCIO. Si el motor no generó crédito para alguna venta, se
+              dice cuál y por qué — con el motivo que da el propio motor (sin asignación, sin reglas, un
+              disparador que la venta no cumple…) y qué hacer.
+            -->
+            <!-- ★ NUNCA MUDO: si ya se calculó y el paso sigue abierto, se dice algo SIEMPRE — el motivo por
+                 venta cuando el servidor lo da, y si no, una explicación general con qué revisar. -->
+            @if (currentStep() === 'calculate' && store.lastCalculation(); as calc) {
+              <div class="tour__notice tour__notice--top" role="status">
+                <app-icon name="alert-triangle" [size]="16" />
+                <div>
+                  <p class="tour__error-lead">{{ 'GUIDED.UNCREDITED.TITLE' | translate }}</p>
+                  @if (calc.uncredited.length > 0) {
+                    <ul class="tour__error-details">
+                      @for (sale of calc.uncredited; track sale.referenceNumber) {
+                        <li>{{ uncreditedKey(sale.reason) | translate : uncreditedParams(sale) }}</li>
+                      }
+                    </ul>
+                  } @else {
+                    <p class="tour__error-lead">{{ 'GUIDED.UNCREDITED.NONE_EXPLAINED' | translate }}</p>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- ★ UN PASO IRREVERSIBLE YA HECHO: el botón se apaga y aquí se dice por qué, junto a él. -->
+            @if (lockedReason(); as locked) {
+              <div class="tour__notice tour__notice--success" role="status">
+                <app-icon name="check" [size]="16" />
+                <span>{{ locked | translate }}</span>
+              </div>
+            }
+
             @if (store.error(); as error) {
-              <!-- Con sus parámetros: un rechazo de la escalera dice qué tramo y qué número. -->
-              <p class="tour__error">{{ error | translate : (store.errorParams() ?? {}) }}</p>
+              <!--
+                ★★ LOS MOTIVOS, NO SÓLO «Validation failed». Cuando el servidor manda la lista de lo que
+                falló, se enseña la lista: es lo único que dice qué corregir. Si no la manda, la frase
+                (con sus parámetros: un rechazo de la escalera dice qué tramo y qué número).
+              -->
+              <div class="tour__error" role="alert">
+                @if (store.errorDetails().length > 0) {
+                  <p class="tour__error-lead">{{ 'GUIDED.ERRORS.REJECTED' | translate }}</p>
+                  <ul class="tour__error-details">
+                    @for (detail of store.errorDetails(); track $index) {
+                      <li>{{ detail }}</li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="tour__error-lead">{{ error | translate : (store.errorParams() ?? {}) }}</p>
+                }
+              </div>
             }
 
             <div class="tour__actions">
-              @if (isDone()) {
-                <span class="tour__done">{{ 'GUIDED.STEP_DONE' | translate }}</span>
+              <!-- ★ EDITANDO, UN SOLO BOTÓN AL FINAL: actualizar. No se ejecuta paso a paso. -->
+              @if (editMode()) {
+                <ws-button variant="ghost" [disabled]="updating()" (click)="cancelEdit()">
+                  {{ 'GUIDED.EDIT.CANCEL' | translate }}
+                </ws-button>
+                <ws-button type="submit" variant="primary" [loading]="updating()">
+                  {{ 'GUIDED.EDIT.UPDATE' | translate }}
+                </ws-button>
+              } @else {
+                @if (isDone()) {
+                  <span class="tour__done">{{ 'GUIDED.STEP_DONE' | translate }}</span>
+                }
+                <ws-button
+                  type="submit"
+                  variant="primary"
+                  [disabled]="blockedReason() !== null || lockedReason() !== null"
+                  [loading]="store.busy()"
+                >
+                  {{ 'GUIDED.STEP.' + currentStep().toUpperCase() + '.ACTION' | translate }}
+                </ws-button>
               }
-              <ws-button
-                type="submit"
-                variant="primary"
-                [disabled]="blockedReason() !== null || stepInvalid()"
-                [loading]="store.busy()"
-              >
-                {{ 'GUIDED.STEP.' + currentStep().toUpperCase() + '.ACTION' | translate }}
-              </ws-button>
             </div>
           </form>
         </ws-card>
@@ -164,7 +346,12 @@
           el código de la moneda detrás no es cómo se escribe dinero en ninguna otra pantalla.
         -->
         <ws-card padding="lg" class="tour__result">
-          <h3 class="tour__result-title">{{ 'GUIDED.RESULT.TITLE' | translate }}</h3>
+          <!-- ★ EL BADGE DE PRÁCTICA VA EN CADA SITIO QUE ENSEÑA DATOS. Un plan o un crédito de prueba se
+               ve idéntico a uno real; la marca es lo que impide confundirlos, sobre todo en una captura. -->
+          <div class="tour__result-head">
+            <h3 class="tour__result-title">{{ 'GUIDED.RESULT.TITLE' | translate }}</h3>
+            <ws-badge variant="sandbox" size="sm">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
+          </div>
 
           @if (store.status(); as s) {
             <dl class="tour__facts">
@@ -224,7 +411,10 @@
             <!-- La cuenta, escrita: de la venta a la comisión. Es lo que el usuario vino a ver. -->
             @if (s.credits.length > 0) {
               <div class="tour__block">
-                <p class="tour__block-title">{{ 'GUIDED.RESULT.CREDITS' | translate }}</p>
+                <div class="tour__block-head">
+                  <p class="tour__block-title">{{ 'GUIDED.RESULT.CREDITS' | translate }}</p>
+                  <ws-badge variant="sandbox" size="sm">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
+                </div>
                 @for (credit of s.credits; track credit.id) {
                   <p class="tour__credit">
                     <span class="tour__credit-maths">
@@ -234,14 +424,45 @@
                     <span class="tour__credit-meta">
                       {{ credit.payeeName }} · {{ credit.ruleName }}
                     </span>
+                    <!-- ★ UN CRÉDITO RECHAZADO NO ES UNA COMISIÓN NORMAL. La tabla de tasas se negó a tasar
+                         la venta (sin cuota, fuera de la escalera…): se dice, con el motivo del motor y las
+                         palabras del Centro de Reconciliación. -->
+                    @if (credit.rateRefusal) {
+                      <span class="tour__credit-refusal">
+                        <app-icon name="alert-triangle" [size]="12" />
+                        {{ 'GUIDED.RESULT.REFUSED' | translate : { reason: (refusalKey(credit.rateRefusal) | translate) } }}
+                      </span>
+                    }
                   </p>
                 }
               </div>
             }
 
+            <!--
+              ★★ LAS VENTAS SIN COMISIÓN SIGUEN A LA VISTA. Si en un mismo cálculo unas ventas generaron
+              comisión y otras no, el paso avanza — y el aviso del paso «calcular» se iría con él. Aquí
+              quedan, con su motivo, hasta el próximo cálculo o hasta empezar de cero.
+            -->
+            @if (currentStep() !== 'calculate' && (store.lastCalculation()?.uncredited?.length ?? 0) > 0) {
+              <div class="tour__block">
+                <div class="tour__block-head">
+                  <p class="tour__block-title">{{ 'GUIDED.RESULT.UNCREDITED' | translate }}</p>
+                  <ws-badge variant="sandbox" size="sm">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
+                </div>
+                <ul class="tour__error-details tour__warning-list">
+                  @for (sale of store.lastCalculation()!.uncredited; track sale.referenceNumber) {
+                    <li>{{ uncreditedKey(sale.reason) | translate : uncreditedParams(sale) }}</li>
+                  }
+                </ul>
+              </div>
+            }
+
             @if (s.payRun) {
               <div class="tour__block">
-                <p class="tour__block-title">{{ 'GUIDED.RESULT.PAYRUN' | translate }}</p>
+                <div class="tour__block-head">
+                  <p class="tour__block-title">{{ 'GUIDED.RESULT.PAYRUN' | translate }}</p>
+                  <ws-badge variant="sandbox" size="sm">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
+                </div>
                 <p class="tour__credit">
                   <span class="tour__credit-maths">
                     {{ s.payRun.periodStart }} → {{ s.payRun.periodEnd }} · <strong>{{ s.payRun.status }}</strong>
@@ -254,6 +475,24 @@
                     </span>
                     <span class="tour__credit-meta">{{ payout.status }}</span>
                   </p>
+                }
+
+                <!-- ★ EL PAY RUN SE EXPLICA COMO EN LA LISTA REAL: si no creó payouts, el titular con la
+                     causa; si descartó asignaciones, cuántas y por qué. Mismas claves, mismo orden. -->
+                @if (store.lastPayRun(); as run) {
+                  @if (run.payoutsCreated === 0) {
+                    <p class="tour__credit-refusal">
+                      <app-icon name="alert-triangle" [size]="12" />
+                      {{ payRunHeadlineKey(run) | translate : payRunHeadlineParams(run) }}
+                    </p>
+                  }
+                  @if ((run.diagnostics?.skipped?.length ?? 0) > 0) {
+                    <ul class="tour__error-details tour__warning-list">
+                      @for (skip of run.diagnostics.skipped; track skip.code) {
+                        <li>{{ payRunSkipKey(skip.code) | translate : { count: skip.count } }}</li>
+                      }
+                    </ul>
+                  }
                 }
               </div>
             }
@@ -278,41 +517,48 @@
              una salida que el backend le va a negar: el permiso que decide es el mismo que pide la
              pantalla real de planes, porque promover ES crear un plan. -->
         @if (store.canPromote() && ('Plans.Create' | hasPermission)) {
-          <ws-card padding="lg" accent="brand">
+          <ws-card padding="lg" accent="brand" class="tour__promote">
             <h3 class="tour__result-title">{{ 'GUIDED.PROMOTE.TITLE' | translate }}</h3>
+
+            <!-- ★ EL CRUCE, DICHO CON EL MISMO LENGUAJE DE COLOR. Del badge de práctica al de real: es la
+                 única acción del recorrido que sale del sandbox, y se ve antes de leer una palabra. -->
+            <div class="tour__crossing">
+              <ws-badge variant="sandbox" size="sm" [dot]="true">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
+              <app-icon name="arrow-right" [size]="14" />
+              <ws-badge variant="success" size="sm" [dot]="true">{{ 'GUIDED.ENV.LIVE' | translate }}</ws-badge>
+            </div>
 
             <p class="tour__step-long">{{ 'GUIDED.PROMOTE.LEAD' | translate }}</p>
             <p class="tour__step-effect">{{ 'GUIDED.PROMOTE.SCOPE' | translate }}</p>
-
-            @if (store.promoted(); as promoted) {
-              <div class="tour__notice tour__notice--success" role="status">
-                <app-icon name="check" [size]="16" />
-                <span>
-                  {{ 'GUIDED.PROMOTE.DONE' | translate : { name: promoted.name, rules: promoted.ruleCount } }}
-                  <!-- Si el nombre estaba ocupado, el plan quedó con sufijo: decirlo, o lo buscará y no
-                       lo encontrará. -->
-                  @if (promoted.name !== promoted.originalName) {
-                    {{ 'GUIDED.PROMOTE.RENAMED' | translate : { original: promoted.originalName } }}
-                  }
-                </span>
-              </div>
-
-              <div class="tour__actions">
-                <ws-button variant="secondary" [routerLink]="['/plans', promoted.planId]">
-                  {{ 'GUIDED.PROMOTE.OPEN_PLAN' | translate }}
-                </ws-button>
-              </div>
-            }
 
             @if (store.promoteError(); as error) {
               <p class="tour__error">{{ error | translate }}</p>
             }
 
+            <!-- Guardar la prueba sin llevarla a producción: secundario, al lado de la acción principal. -->
+            <!-- La misma configuración ya está en producción: se enseña el plan en vez de crear otro. -->
+            @if (duplicatePromotion(); as dup) {
+              @if (dup.where === 'card') {
+                <div class="tour__notice tour__notice--top tour__notice--compact" role="alert">
+                  <app-icon name="alert-triangle" [size]="14" />
+                  <span>
+                    {{ 'GUIDED.PROMOTE.ALREADY' | translate : { name: dup.record.planName } }}
+                    <a class="tour__notice-link" [routerLink]="['/plans', dup.record.planId]">
+                      {{ 'GUIDED.PROMOTE.VIEW_PLAN' | translate }}
+                    </a>
+                  </span>
+                </div>
+              }
+            }
+
             <div class="tour__actions">
+              <ws-button variant="secondary" (click)="saveExperiment()">
+                {{ 'GUIDED.EXPERIMENTS.SAVE' | translate }}
+              </ws-button>
               <ws-button
                 variant="primary"
-                [loading]="store.promoting()"
-                (click)="promoteOpen.set(true)"
+                [loading]="store.promoting() || checkingPromotion()"
+                (click)="requestPromote()"
               >
                 {{ 'GUIDED.PROMOTE.ACTION' | translate }}
               </ws-button>
@@ -325,33 +571,48 @@
           puede comparar dos configuraciones — que es justo lo que vino a hacer: «con esta regla pagaba
           500, con la otra 700». Cada entrada guarda su foto, así que sobrevive a un reseteo.
         -->
-        <ws-card padding="lg">
-          <div class="tour__result-head">
-            <h3 class="tour__result-title">{{ 'GUIDED.EXPERIMENTS.TITLE' | translate }}</h3>
-            @if (store.openExperiment()) {
-              <ws-button variant="ghost" size="sm" (click)="store.review(null)">
-                {{ 'GUIDED.EXPERIMENTS.BACK' | translate }}
-              </ws-button>
-            }
-          </div>
-
+        <!-- Se pinta dentro de la pestaña «Your experiments» del lateral; el título es la propia pestaña. -->
+        <ng-template #experimentsTpl>
           @if (store.experiments().length === 0) {
-            <p class="tour__empty">{{ 'GUIDED.EXPERIMENTS.EMPTY' | translate }}</p>
+            <!-- Vacío: qué es un experimento y cómo se guarda, no sólo «no hay». -->
+            <div class="tour__exp-empty">
+              <span class="tour__exp-icon"><app-icon name="inbox" [size]="16" /></span>
+              <p class="tour__exp-empty-title">{{ 'GUIDED.EXPERIMENTS.EMPTY_TITLE' | translate }}</p>
+              <p class="tour__exp-empty-body">{{ 'GUIDED.EXPERIMENTS.EMPTY' | translate }}</p>
+            </div>
           } @else {
-            <ul class="tour__experiments">
+            <!--
+              ★★ UNA LISTA, NO UNA PILA DE CAJAS. Filas separadas por una línea: icono, nombre, fecha y el
+              resultado — lo que se viene a comparar. Las acciones son iconos que aparecen al pasar por la
+              fila (y siempre en la abierta), para no competir con el nombre en 256px.
+            -->
+            <ul class="tour__exp-list">
               @for (experiment of store.experiments(); track experiment.id) {
-                <li class="tour__experiment" [class.tour__experiment--open]="store.openExperiment()?.id === experiment.id">
-                  <button type="button" class="tour__experiment-open" (click)="store.review(experiment)">
-                    <span class="tour__experiment-name">{{ experiment.name }}</span>
-                    <span class="tour__experiment-date">{{ experiment.updatedAt | date : 'medium' }}</span>
+                <li class="tour__exp-row" [class.tour__exp-row--open]="store.openExperiment()?.id === experiment.id">
+                  <button type="button" class="tour__exp-open" (click)="store.review(experiment)"
+                          [attr.aria-pressed]="store.openExperiment()?.id === experiment.id">
+                    <span class="tour__exp-icon"><app-icon name="file-text" [size]="14" /></span>
+                    <span class="tour__exp-text">
+                      <span class="tour__exp-name">{{ experiment.name }}</span>
+                      <span class="tour__exp-meta">
+                        {{ experiment.updatedAt | date : 'MMM d, HH:mm' }}
+                        @if (experimentResults().get(experiment.id); as result) {
+                          · <span class="tour__exp-value">{{ result.amount | currencyFormat : result.currency }}</span>
+                        }
+                      </span>
+                    </span>
                   </button>
-                  <div class="tour__experiment-actions">
-                    <ws-button variant="ghost" size="sm" (click)="renameExperiment(experiment)">
-                      {{ 'GUIDED.EXPERIMENTS.RENAME' | translate }}
-                    </ws-button>
-                    <ws-button variant="ghost" size="sm" (click)="deleteExperiment(experiment)">
-                      {{ 'GUIDED.EXPERIMENTS.DELETE' | translate }}
-                    </ws-button>
+                  <div class="tour__exp-actions">
+                    <button type="button" class="tour__icon-btn" (click)="renameExperiment(experiment)"
+                            [wsTooltip]="'GUIDED.EXPERIMENTS.RENAME' | translate"
+                            [attr.aria-label]="'GUIDED.EXPERIMENTS.RENAME' | translate">
+                      <app-icon name="pencil" [size]="14" />
+                    </button>
+                    <button type="button" class="tour__icon-btn tour__icon-btn--danger" (click)="askDelete(experiment)"
+                            [wsTooltip]="'GUIDED.EXPERIMENTS.DELETE' | translate"
+                            [attr.aria-label]="'GUIDED.EXPERIMENTS.DELETE' | translate">
+                      <app-icon name="trash" [size]="14" />
+                    </button>
                   </div>
                 </li>
               }
@@ -360,43 +621,93 @@
 
           <!-- Al abrir uno, se pinta su foto con el MISMO panel: lo guardado se lee igual que lo vivo. -->
           @if (reviewed(); as snapshot) {
-            <div class="tour__block">
-              <p class="tour__block-title">{{ 'GUIDED.EXPERIMENTS.REVIEWING' | translate : { name: store.openExperiment()?.name } }}</p>
-              <dl class="tour__facts">
+            <!-- El experimento abierto, compacto: etiqueta a la izquierda, valor a la derecha, y la comisión
+                 destacada al final — es la respuesta a «¿cuánto pagaba esta configuración?». -->
+            <section class="tour__exp-review" [attr.aria-label]="store.openExperiment()?.name">
+              <header class="tour__exp-review-head">
+                <span class="tour__exp-review-title">{{ store.openExperiment()?.name }}</span>
+                <ws-badge variant="sandbox" size="sm">{{ 'GUIDED.ENV.PRACTICE' | translate }}</ws-badge>
+                <button type="button" class="tour__icon-btn" (click)="store.review(null)"
+                        [wsTooltip]="'GUIDED.EXPERIMENTS.BACK' | translate"
+                        [attr.aria-label]="'GUIDED.EXPERIMENTS.BACK' | translate">
+                  <app-icon name="x" [size]="14" />
+                </button>
+              </header>
+
+              <dl class="tour__exp-facts">
                 @if (snapshot.plan) {
-                  <div class="tour__fact">
-                    <dt>{{ 'GUIDED.RESULT.PLAN' | translate }}</dt>
-                    <dd>{{ snapshot.plan.name }} · {{ snapshot.plan.currency }}</dd>
-                  </div>
+                  <dt>{{ 'GUIDED.RESULT.PLAN' | translate }}</dt>
+                  <dd>{{ snapshot.plan.name }} · {{ snapshot.plan.currency }}</dd>
                 }
                 @if (snapshot.rule) {
-                  <div class="tour__fact">
-                    <dt>{{ 'GUIDED.RESULT.RULE' | translate }}</dt>
-                    <dd>
-                      {{ snapshot.rule.name }} · {{ tableTypeKey(snapshot.rule.tableType) | translate }}
-                      @if (ruleRate(snapshot.rule, snapshot.plan?.currency ?? 'EUR'); as rate) { · {{ rate }} }
-                    </dd>
-                  </div>
+                  <dt>{{ 'GUIDED.RESULT.RULE' | translate }}</dt>
+                  <dd>
+                    {{ tableTypeKey(snapshot.rule.tableType) | translate }}
+                    @if (ruleRate(snapshot.rule, snapshot.plan?.currency ?? 'EUR'); as rate) { · {{ rate }} }
+                  </dd>
                 }
                 @if (snapshot.transaction) {
-                  <div class="tour__fact">
-                    <dt>{{ 'GUIDED.RESULT.TRANSACTION' | translate }}</dt>
-                    <dd>{{ snapshot.transaction.referenceNumber }} · {{ snapshot.transaction.amount | currencyFormat : snapshot.transaction.currency }}</dd>
-                  </div>
+                  <dt>{{ 'GUIDED.RESULT.TRANSACTION' | translate }}</dt>
+                  <dd>{{ snapshot.transaction.amount | currencyFormat : snapshot.transaction.currency }}</dd>
+                }
+                @for (credit of snapshot.credits; track credit.id) {
+                  <dt>{{ 'GUIDED.EXPERIMENTS.COMMISSION' | translate }}</dt>
+                  <dd class="tour__exp-facts-value">{{ credit.creditedAmount | currencyFormat : credit.currency }}</dd>
+                } @empty {
+                  <dt>{{ 'GUIDED.EXPERIMENTS.COMMISSION' | translate }}</dt>
+                  <dd class="tour__exp-facts-muted">{{ 'GUIDED.EXPERIMENTS.NO_RESULT' | translate }}</dd>
                 }
               </dl>
-              @for (credit of snapshot.credits; track credit.id) {
-                <p class="tour__credit">
-                  <span class="tour__credit-maths">
-                    {{ credit.baseAmount | currencyFormat : credit.currency }} →
-                    <strong>{{ credit.creditedAmount | currencyFormat : credit.currency }}</strong>
-                  </span>
-                  <span class="tour__credit-meta">{{ credit.payeeName }} · {{ credit.ruleName }}</span>
-                </p>
+
+              <!--
+                ★★ UN EXPERIMENTO SE PUEDE EDITAR Y LLEVAR A PRODUCCIÓN. «Editar» llena todos los formularios
+                con su configuración —la regla completa incluida— para cambiarla y volver a correrla.
+                «Promover» vuelve a crear su plan y sus reglas en el sandbox y abre la confirmación de
+                promoción de siempre. Se esconde (no se deshabilita, §5.8) sin permiso de crear planes.
+              -->
+              @if (reviewedConfig(); as config) {
+                <!-- Ya se llevó a producción: se dice como qué plan, con el enlace. -->
+                @if (reviewedPromotion(); as promotion) {
+                  <p class="tour__exp-review-note">
+                    {{ 'GUIDED.EXPERIMENTS.IN_PRODUCTION' | translate : { name: promotion.planName } }}
+                    <a class="tour__notice-link" [routerLink]="['/plans', promotion.planId]">
+                      {{ 'GUIDED.PROMOTE.VIEW_PLAN' | translate }}
+                    </a>
+                  </p>
+                }
+
+                @if (duplicatePromotion(); as dup) {
+                  @if (dup.where === 'experiment') {
+                    <div class="tour__notice tour__notice--top tour__notice--compact tour__exp-review-dup" role="alert">
+                      <app-icon name="alert-triangle" [size]="14" />
+                      <span>{{ 'GUIDED.PROMOTE.ALREADY' | translate : { name: dup.record.planName } }}</span>
+                    </div>
+                  }
+                }
+
+                <!-- Una fila, dos botones del mismo ancho: el lateral es estrecho, así que las etiquetas
+                     son cortas y el modal de cada uno explica lo demás. -->
+                <div class="tour__exp-review-actions">
+                  <ws-button variant="secondary" size="sm" [fullWidth]="true" (click)="loadTarget.set(store.openExperiment())">
+                    {{ 'GUIDED.EXPERIMENTS.LOAD' | translate }}
+                  </ws-button>
+                  @if (config.rules.length > 0 && ('Plans.Create' | hasPermission)) {
+                    <ws-button
+                      variant="primary"
+                      size="sm"
+                      [fullWidth]="true"
+                      (click)="duplicatePromotion.set(null); promoteExperimentTarget.set(store.openExperiment())"
+                    >
+                      {{ 'GUIDED.EXPERIMENTS.PROMOTE' | translate }}
+                    </ws-button>
+                  }
+                </div>
+              } @else {
+                <p class="tour__exp-review-note">{{ 'GUIDED.EXPERIMENTS.NO_CONFIG' | translate }}</p>
               }
-            </div>
+            </section>
           }
-        </ws-card>
+        </ng-template>
       </div>
     </div>
   </ws-page-layout>
@@ -418,10 +729,55 @@
   (cancelled)="promoteOpen.set(false)"
 />
 
+<!--
+  ★★ BORRAR PREGUNTA ANTES. Antes un clic lo eliminaba al instante y sin deshacer. La confirmación del
+  sistema, en rojo, nombra el experimento y dice qué NO se toca: el sandbox actual y los planes reales.
+-->
+<ws-confirmation-modal
+  [isOpen]="deleteTarget() !== null"
+  (isOpenChange)="!$event && deleteTarget.set(null)"
+  [title]="'GUIDED.EXPERIMENTS.DELETE_TITLE' | translate"
+  [message]="'GUIDED.EXPERIMENTS.DELETE_MSG' | translate : { name: deleteTarget()?.name }"
+  [confirmLabel]="'GUIDED.EXPERIMENTS.DELETE' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="danger"
+  [loading]="deleting()"
+  (confirmed)="confirmDelete()"
+  (cancelled)="deleteTarget.set(null)"
+/>
+
 <!-- El nombre del experimento: el modal del sistema, no el `prompt` del navegador (§5.4). -->
+<!-- Cargar un experimento vacía la práctica actual: se dice antes, con el nombre. -->
+<ws-confirmation-modal
+  [isOpen]="loadTarget() !== null"
+  (isOpenChange)="!$event && loadTarget.set(null)"
+  [title]="'GUIDED.EXPERIMENTS.LOAD_TITLE' | translate"
+  [message]="'GUIDED.EXPERIMENTS.LOAD_MSG' | translate : { name: loadTarget()?.name }"
+  [confirmLabel]="'GUIDED.EXPERIMENTS.LOAD_CONFIRM' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="default"
+  [loading]="loadingExperiment()"
+  (confirmed)="confirmLoad()"
+  (cancelled)="loadTarget.set(null)"
+/>
+
+<!-- Promover desde un experimento: primero se recrea en el sandbox; lo real se confirma después. -->
+<ws-confirmation-modal
+  [isOpen]="promoteExperimentTarget() !== null"
+  (isOpenChange)="!$event && promoteExperimentTarget.set(null)"
+  [title]="'GUIDED.EXPERIMENTS.PROMOTE_LOAD_TITLE' | translate : { name: promoteExperimentTarget()?.name }"
+  [message]="'GUIDED.EXPERIMENTS.PROMOTE_LOAD_MSG' | translate"
+  [confirmLabel]="'GUIDED.EXPERIMENTS.PROMOTE_LOAD_CONFIRM' | translate"
+  [cancelLabel]="'COMMON.CANCEL' | translate"
+  variant="default"
+  [loading]="loadingExperiment()"
+  (confirmed)="confirmPromoteExperiment()"
+  (cancelled)="promoteExperimentTarget.set(null)"
+/>
+
 <ws-modal
   [(isOpen)]="nameModalOpen"
-  [title]="(renamingId() ? 'GUIDED.EXPERIMENTS.RENAME_TITLE' : 'GUIDED.EXPERIMENTS.SAVE') | translate"
+  [title]="(nameMode() === 'rename' ? 'GUIDED.EXPERIMENTS.RENAME_TITLE' : 'GUIDED.EXPERIMENTS.SAVE') | translate"
   size="sm"
 >
   <form (ngSubmit)="confirmName()">
@@ -433,8 +789,14 @@
   </form>
   <div slot="footer" class="tour__modal-actions">
     <ws-button variant="ghost" (click)="nameModalOpen.set(false)">{{ 'COMMON.CANCEL' | translate }}</ws-button>
+    <!-- Con un experimento cargado, guardar lo actualiza; «guardar como nuevo» deja el original intacto. -->
+    @if (nameMode() === 'save' && loadedExperiment()) {
+      <ws-button variant="secondary" [loading]="savingName()" (click)="confirmName(true)">
+        {{ 'GUIDED.EXPERIMENTS.SAVE_AS_NEW' | translate }}
+      </ws-button>
+    }
     <ws-button variant="primary" [loading]="savingName()" (click)="confirmName()">
-      {{ 'COMMON.SAVE' | translate }}
+      {{ (nameMode() === 'save' && loadedExperiment() ? 'GUIDED.EXPERIMENTS.UPDATE' : 'COMMON.SAVE') | translate }}
     </ws-button>
   </div>
 </ws-modal>

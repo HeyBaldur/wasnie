@@ -12,7 +12,12 @@
         <app-icon [name]="icon()" [size]="24" />
       </span>
       <div class="ws-pl__title-text">
-        <h1 class="ws-pl__title" [ngClass]="'ws-pl__title--' + titleSize()">{{ title() }}</h1>
+        <!-- The title row takes an optional badge right after the heading — an environment marker
+             ("Sandbox") belongs to the title, not to the actions. Empty slot renders nothing. -->
+        <div class="ws-pl__title-row">
+          <h1 class="ws-pl__title" [ngClass]="'ws-pl__title--' + titleSize()">{{ title() }}</h1>
+          <ng-content select="[slot=title-badge]" />
+        </div>
         @if (subtitle()) {
           <p class="ws-pl__subtitle">{{ subtitle() }}</p>
         }

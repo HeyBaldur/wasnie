@@ -14,6 +14,7 @@ export { WsModalComponent } from './ws-modal/ws-modal.component';
 export { WsConfirmationModalComponent } from './ws-confirmation-modal/ws-confirmation-modal.component';
 export { WsPopoverComponent } from './ws-popover/ws-popover.component';
 export { WsSegmentedControlComponent, type SegOption } from './ws-segmented-control/ws-segmented-control.component';
+export { WsTabsComponent, type WsTab } from './ws-tabs/ws-tabs.component';
 export { WsBadgeComponent, type BadgeVariant, type BadgeSize } from './ws-badge/ws-badge.component';
 export { WsCopyButtonComponent, CopiedFeedbackMs } from './ws-copy-button/ws-copy-button.component';
 export { WsTooltipDirective } from './ws-tooltip/ws-tooltip.directive';

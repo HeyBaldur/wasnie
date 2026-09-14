@@ -134,6 +134,28 @@ describe('RuleDefinitionForm — the definition the server receives', () => {
     expect(def.buildDefinition().modifier?.id).toBe('mod-1');
   });
 
+  it('★ loading a rule REPLACES the form — the previous rule\'s tiers and conditions do not survive', () => {
+    // The sandbox reloads experiments one rule after another. `patchFromRule` appends; without clearing,
+    // the second rule would be saved with the first rule's ladder under its own name.
+    const def = make();
+    def.form.patchValue({ name: 'first', rateTable: { type: RateTableType.Tiered } });
+    def.addTier();
+    def.addTier();
+    def.addCondition();
+
+    def.loadRule({
+      id: 'rule-2', name: 'second', sortOrder: 2, isActive: true, trigger: null, modifier: null, cap: null, floor: null,
+      stoppedAt: null, stoppedBy: null, stopReason: null,
+      measurement: { _schema: 1, type: MeasurementType.Revenue, sourceField: 'amount', aggregation: MeasurementAggregation.Sum },
+      rateTable: { _schema: 1, type: RateTableType.Flat, flatRate: 0.07, tiers: null, attainmentTiers: null, splitAtQuota: false },
+    } as Rule);
+
+    expect(def.form.getRawValue().name).toBe('second');
+    expect(def.tiersArray.length).toBe(0);
+    expect(def.conditionsArray.length).toBe(0);
+    expect(def.buildDefinition().rateTable).toEqual(jasmine.objectContaining({ type: RateTableType.Flat, flatRate: 0.07 }));
+  });
+
   it('★ simulates through the host, so the sandbox asks about the sandbox plan', fakeAsync(() => {
     const def = make();
     def.form.patchValue({ name: 'r', rateTable: { flatRate: 0.05 } });

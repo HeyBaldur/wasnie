@@ -226,23 +226,14 @@
     "PROFILE": "Perfil",
     "RECONCILIATION": "Reconciliación",
     "AUDIT_LOGS": "Registros de auditoría",
-    "GUIDED_TOUR": "Recorrido guiado"
+    "GUIDED_TOUR": "Sandbox"
   },
   "WELCOME": {
-    "TITLE": "Bienvenido a Incentra",
-    "SUBTITLE": "Un recorrido de dos minutos por cómo funcionan acá las comisiones.",
-    "VIDEO_LABEL": "Introducción a Incentra",
-    "LEAD": "Incentra convierte tus reglas de compensación en pagos calculados y auditables, para que nadie tenga que cuadrar una planilla a fin de mes.",
-    "CAP_PLANS_TITLE": "Planes con reglas de verdad",
-    "CAP_PLANS_DESC": "Armá comisiones fijas, por tramos y por cumplimiento, con aceleradores y topes.",
-    "CAP_QUOTAS_TITLE": "Cuotas y objetivos",
-    "CAP_QUOTAS_DESC": "Definí un objetivo por período para cada comercial y seguí su cumplimiento a medida que entran los negocios.",
-    "CAP_DATA_TITLE": "Tus datos, adentro",
-    "CAP_DATA_DESC": "Importá negocios desde una planilla o sincronizá los ganados directamente desde tu CRM.",
-    "CAP_ASSISTANT_TITLE": "Un asistente que explica los cálculos",
-    "CAP_ASSISTANT_DESC": "Incentra puede recorrer paso a paso cómo se llegó a cualquier monto de comisión.",
+    "EYEBROW": "Tu espacio está listo",
+    "TITLE": "¡Bienvenido a Incentra!",
+    "LEAD": "Ya está todo configurado. Empezá con el onboarding guiado —un ciclo completo de comisiones con datos de práctica, sin tocar nada real— o entrá directo y armá tu primer plan.",
     "START": "Empezar",
-    "START_TOUR": "Hacer el recorrido guiado"
+    "START_TOUR": "Ir al onboarding"
   },
   "MANUAL": {
     "TITLE": "Manual de usuario",
@@ -514,8 +505,13 @@
     "PAGINATION_INFO": "{{from}}–{{to}} de {{total}}",
     "CREATE_TITLE": "Crear Plan",
     "CREATE_SUBTITLE": "Define la estructura y el período de tu nuevo plan de compensación.",
-    "IMMUTABILITY_TITLE": "Los planes no pueden modificarse tras su creación",
-    "IMMUTABILITY_BODY": "Una vez que un plan está vinculado a un cálculo de pago, queda bloqueado para siempre. Es intencional: si las reglas pudieran cambiar retroactivamente, cada comisión ya pagada bajo ese plan sería incorrecta. Lo que definas aquí es lo que se pagará a los beneficiarios — de forma permanente.",
+    "LOCK_INTRO": {
+      "EYEBROW": "Antes de crearlo",
+      "TITLE": "Cuando paga, un plan queda bloqueado para siempre",
+      "POINT_LOCKED": "En cuanto se calcula un pago bajo este plan, ya no puede modificarse: lo que definas acá es sobre lo que cobran los beneficiarios.",
+      "POINT_WHY": "Es intencional: si las reglas pudieran cambiar después, cada comisión ya pagada bajo el plan sería incorrecta.",
+      "POINT_CLONE": "¿Necesitás un cambio más adelante? Cloná el plan como una versión nueva: el original queda exactamente como se pagó."
+    },
     "SECTION_DETAILS": "Detalles del Plan",
     "SECTION_PERIOD": "Período Efectivo",
     "FIELD_NAME": "Nombre",
@@ -1003,11 +999,16 @@
     "COL_STATUS": "Estado",
     "EMPTY_TITLE": "Sin cuotas aún",
     "EMPTY_DESCRIPTION": "Establece objetivos de rendimiento para tu equipo creando cuotas.",
-    "EMPTY_PREREQ_BEFORE": "Para crear tu primera cuota necesitás primero un",
-    "EMPTY_PREREQ_PLAN": "plan de compensación",
-    "EMPTY_PREREQ_BETWEEN": "y después un",
-    "EMPTY_PREREQ_PAYEE": "beneficiario",
-    "EMPTY_PREREQ_AFTER": "al que asignársela.",
+    "PREREQ_INTRO": {
+      "EYEBROW": "Antes de tu primera cuota",
+      "TITLE": "Una cuota necesita un beneficiario y un plan",
+      "STEP_PAYEE_TITLE": "Crea un beneficiario",
+      "STEP_PAYEE_DESC": "La persona cuyo rendimiento mide la cuota.",
+      "STEP_PLAN_TITLE": "Crea un plan y asígnale el beneficiario",
+      "STEP_PLAN_DESC": "La cuota pertenece a un plan. Sin esa asignación no mide el cumplimiento.",
+      "STEP_QUOTA_TITLE": "Define la cuota",
+      "STEP_QUOTA_DESC": "Elige el beneficiario y el plan, y fija el objetivo del período."
+    },
     "EMPTY_ACTION": "Crear la primera cuota",
     "EMPTY_FILTER_TITLE": "Ninguna cuota coincide con los filtros.",
     "CREATE_TITLE": "Crear Cuota",
@@ -1366,11 +1367,17 @@
     "COL_STATUS": "Estado",
     "EMPTY_TITLE": "Sin asignaciones aún",
     "EMPTY_DESCRIPTION": "Asigna miembros del equipo a planes de compensación para comenzar a hacer seguimiento.",
-    "EMPTY_PREREQ_BEFORE": "Una asignación vincula un",
-    "EMPTY_PREREQ_PAYEE": "beneficiario",
-    "EMPTY_PREREQ_BETWEEN": "con un",
-    "EMPTY_PREREQ_PLAN": "plan de compensación",
-    "EMPTY_PREREQ_AFTER": ", así que necesitás al menos uno de cada uno antes de crearla.",
+    "PREREQ_INTRO": {
+      "EYEBROW": "Antes de tu primera asignación",
+      "TITLE": "Una asignación conecta un beneficiario con un plan",
+      "LEAD": "Decide qué reglas de plan se aplican a cada beneficiario y durante qué período. Sin ella, el beneficiario no gana nada con el plan.",
+      "STEP_PAYEE_TITLE": "Crea un beneficiario",
+      "STEP_PAYEE_DESC": "La persona que va a ganar con el plan.",
+      "STEP_PLAN_TITLE": "Crea un plan",
+      "STEP_PLAN_DESC": "Sus reglas deciden cómo se calcula la comisión.",
+      "STEP_LINK_TITLE": "Asigna el beneficiario al plan",
+      "STEP_LINK_DESC": "La asignación toma el período del plan. Desde entonces, los créditos del beneficiario se calculan con sus reglas."
+    },
     "EMPTY_ACTION": "Crear la primera asignación",
     "EMPTY_FILTER_TITLE": "Ninguna asignación coincide con los filtros.",
     "CREATE_TITLE": "Crear Asignación",
@@ -2554,6 +2561,40 @@
     "PL": "Polski"
   },
   "GUIDED": {
+    "ENV": {
+      "BANNER_TITLE": "Modo práctica",
+      "BANNER_BODY": "Nada de lo que hagas acá afecta a tus datos reales. Los planes, beneficiarios, ventas y payouts de este recorrido viven en un sandbox aparte.",
+      "PRACTICE": "Práctica",
+      "LIVE": "Real"
+    },
+    "ERRORS": {
+      "REJECTED": "Se rechazaron los datos. Qué hay que corregir:"
+    },
+    "PAYEE_RULES": {
+      "NOTICE": "La configuración de tu empresa hace obligatorios algunos campos del beneficiario (campos obligatorios). El sandbox aplica las mismas reglas que el producto real, así que acá también lo son."
+    },
+    "INTRO": {
+      "EYEBROW": "Modo práctica · nada de esto es real",
+      "TITLE": "Tu sandbox para probar comisiones",
+      "LEAD": "Esta sección es para experimentar. Armá planes y reglas, agregá un beneficiario y una venta, calculá y pagá: todo el ciclo corre sobre el motor real, pero con datos de práctica que nunca tocan los números de tu empresa.",
+      "POINT_TRY": "Probá cualquier plan o regla —fija, por tramos, por cumplimiento, disparadores, topes— y mirá exactamente cuánto pagaría.",
+      "POINT_SAFE": "Nada de lo que hagas acá llega a producción: ni beneficiarios, ni ventas, ni pagos reales. Empezá de cero cuando quieras.",
+      "POINT_PROMOTE": "Guardá cada prueba como experimento, comparalas y promové a plan real la que funcione.",
+      "HELP": "¿Necesitás ayuda? El manual explica cada paso, y Zeke, el asistente, te puede ayudar a armar planes y reglas.",
+      "HELP_NO_ZEKE": "¿Necesitás ayuda? El manual explica cada paso.",
+      "START": "Empezar a probar",
+      "MANUAL": "Abrir el manual",
+      "ASK_ZEKE": "Preguntarle a Zeke",
+      "CLOSE": "Cerrar esta presentación"
+    },
+    "EDIT": {
+      "HINT": "Editando «{{name}}». Saltá al paso que quieras, cambiá lo que necesites y pulsá Actualizar experimento: todos los pasos se vuelven a ejecutar solos, con los comandos reales.",
+      "AUTO_STEP": "Aquí no hay nada que rellenar: este paso se ejecuta solo al actualizar el experimento.",
+      "UPDATE": "Actualizar experimento",
+      "CANCEL": "Cancelar edición",
+      "INVALID": "Faltan campos o hay valores inválidos. Revisá los campos marcados.",
+      "STOPPED": "La actualización se detuvo en «{{step}}». Ese paso quedó abierto con el motivo; no se guardó nada."
+    },
     "PROMOTE": {
       "TITLE": "Llevalo a producción",
       "LEAD": "¿Diste con la configuración que buscabas? Creála de verdad. El plan y sus reglas se copian a tus datos reales tal como los ajustaste acá.",
@@ -2563,13 +2604,34 @@
       "CONFIRM_MSG": "Se va a crear un plan real con estas reglas. Nace como borrador y no le paga a nadie hasta que alguien lo active desde la pantalla de Planes. Nada de tus datos de práctica cruza.",
       "DONE": "Plan real creado: {{name}}, con {{rules}} regla(s). Está en borrador — activalo desde Planes cuando quieras.",
       "RENAMED": "Ya tenías un plan llamado «{{original}}», así que a éste se le puso un nombre nuevo.",
-      "OPEN_PLAN": "Abrir el plan real"
+      "SAVED_AS": "La prueba quedó guardada en tus experimentos como «{{name}}» y el sandbox se limpió.",
+      "VIEW_PLAN": "Verlo en Planes →",
+      "TOAST_DONE": "«{{name}}» ya es un plan real (borrador). La prueba quedó guardada en tus experimentos.",
+      "ALREADY": "Esta misma configuración ya está en producción como «{{name}}». No cambió nada desde que se promovió, así que no se creó otro plan: cambiá el plan o una regla para volver a promoverla."
     },
-    "TITLE": "Recorrido guiado",
-    "SUBTITLE": "Recordé el ciclo completo de comisiones de principio a fin — plan, regla, beneficiario, venta, cálculo, pay run, pago — sobre datos de práctica que nunca tocan tus cifras reales.",
+    "TITLE": "Sandbox",
+    "SUBTITLE": "Un sandbox seguro para aprender y probar tu configuración de comisiones. Recorré el ciclo completo — plan, regla, beneficiario, venta, cálculo, pay run y pago — con datos de práctica, probá distintas reglas y, cuando des con la que funciona, promovela a un plan real.",
     "RESET": "Empezar de cero",
     "PROGRESS": "{{done}} de {{total}} completados",
+    "TABS": {
+      "STEPS": "Pasos",
+      "EXPERIMENTS": "Experimentos"
+    },
     "STEP_DONE": "Hecho",
+    "LOCKED": {
+      "APPROVED": "El pay run ya está aprobado. Siguiente: marcarlo como pagado.",
+      "PAID": "El pay run está pagado y el período bloqueado: el ciclo terminó. Empezá de cero para recorrerlo otra vez."
+    },
+    "UNCREDITED": {
+      "TITLE": "Se calculó, pero no se generó comisión:",
+      "NO_PAYEE": "{{reference}}: la venta no tiene beneficiario, así que nadie puede cobrar comisión por ella.",
+      "NO_ASSIGNMENT": "{{reference}}: el beneficiario no tiene una asignación activa que cubra la fecha de la venta. Revisá el período de la asignación (paso 5).",
+      "CURRENCY": "{{reference}}: la moneda de la venta no coincide con la del plan. Registrá la venta en la moneda del plan (paso 6).",
+      "NO_RULES": "{{reference}}: el plan no tiene ninguna regla vigente en la fecha de la venta. Añadí una regla (paso 2).",
+      "TRIGGER": "{{reference}}: la venta no cumple el disparador de {{rules}}, así que la regla no se le aplica. Añadí una regla sin esa condición (paso 2) o registrá una venta que la cumpla (paso 6).",
+      "UNKNOWN": "{{reference}}: el motor no generó comisión para esta venta.",
+      "NONE_EXPLAINED": "El cálculo se ejecutó, pero ninguna venta generó comisión. Revisá el disparador de la regla (¿la venta lo cumple?), las fechas de la asignación y la moneda de la venta."
+    },
     "FINISHED": "Ese es el ciclo completo. Todo lo que creaste acá vive aparte de tus datos reales — podés empezar de cero las veces que quieras.",
     "BLOCKED": {
       "NEEDS_PLAN": "Creá primero el plan: una regla pertenece a un plan.",
@@ -2579,7 +2641,8 @@
       "NEEDS_TRANSACTION": "Registrá antes una venta: todavía no hay nada que calcular.",
       "NEEDS_CREDITS": "Calculá antes la venta: un pay run paga comisión que ya existe.",
       "NEEDS_PAYRUN": "Corré antes el pay run.",
-      "NEEDS_APPROVAL": "Aprobá el pay run antes de marcarlo como pagado."
+      "NEEDS_APPROVAL": "Aprobá el pay run antes de marcarlo como pagado.",
+      "NEEDS_MANAGER_SETTING": "La configuración de tu empresa exige un responsable (manager) para cada beneficiario, y el sandbox todavía no tiene a quién elegir. Marcá el manager como opcional en la configuración de la empresa (campos obligatorios) para seguir con el recorrido."
     },
     "FIELD": {
       "PLAN_NAME": "Nombre del plan",
@@ -2604,7 +2667,7 @@
         "LONG": "Un plan es el acuerdo: a quién cubre, en qué período y en qué moneda. No hace cuentas por sí mismo — eso lo hacen las reglas que lleva dentro. Todo lo que sigue cuelga de él, y por eso va primero.",
         "EFFECT": "Al confirmar se crea un plan para este año. En el producto, esto es la pantalla de Planes.",
         "ACTION": "Crear plan",
-        "DESCRIPTION_VALUE": "Creado en el recorrido guiado."
+        "DESCRIPTION_VALUE": "Creado en el sandbox."
       },
       "RULE": {
         "TITLE": "Añadir una regla",
@@ -2692,7 +2755,9 @@
       "RULE_CAP": "tope {{amount}}",
       "RULE_FLOOR": "mínimo {{amount}}",
       "RULE_TYPE_UNKNOWN": "Tabla de tasas",
-      "PER_UNIT": "por unidad"
+      "PER_UNIT": "por unidad",
+      "UNCREDITED": "Ventas sin comisión",
+      "REFUSED": "Sin tasar — {{reason}}. La tabla de tasas de la regla rechazó esta venta, así que no paga nada hasta que la tabla la cubra."
     },
     "EXPERIMENTS": {
       "TITLE": "Tus experimentos",
@@ -2704,7 +2769,28 @@
       "REVIEWING": "Revisando: {{name}}",
       "NAME_PROMPT": "Nombre del experimento",
       "DEFAULT_NAME": "Mi experimento",
-      "RENAME_TITLE": "Renombrar experimento"
+      "RENAME_TITLE": "Renombrar experimento",
+      "EMPTY_TITLE": "Todavía no hay experimentos",
+      "COMMISSION": "Comisión",
+      "NO_RESULT": "Sin calcular",
+      "DELETE_TITLE": "¿Borrar este experimento?",
+      "DELETE_MSG": "«{{name}}» se borrará para siempre. Sólo se elimina la foto guardada: tu sandbox actual y tus planes reales no se tocan.",
+      "LOAD": "Editar",
+      "IN_PRODUCTION": "En producción como «{{name}}».",
+      "TOAST_SAVED": "Experimento «{{name}}» guardado.",
+      "TOAST_UPDATED": "Experimento «{{name}}» actualizado.",
+      "TOAST_RENAMED": "Experimento renombrado a «{{name}}».",
+      "LOAD_TITLE": "¿Cargar este experimento en el sandbox?",
+      "LOAD_MSG": "Se vacía la práctica actual y se llenan todos los formularios con «{{name}}», reglas incluidas, para que cambies lo que quieras y lo vuelvas a correr. Guardá antes la ejecución actual si querés conservarla.",
+      "LOAD_CONFIRM": "Cargar experimento",
+      "PROMOTE": "Promover",
+      "PROMOTE_LOAD_TITLE": "¿Promover «{{name}}»?",
+      "PROMOTE_LOAD_MSG": "Primero se vuelven a crear su plan y sus reglas en el sandbox con los comandos reales (se vacía la práctica actual). Después confirmás la promoción: antes de eso no se crea nada real.",
+      "PROMOTE_LOAD_CONFIRM": "Recrear y seguir",
+      "NO_CONFIG": "Guardado antes de que se guardaran las configuraciones: se puede revisar, pero no cargar ni promover.",
+      "LOADED": "Editando «{{name}}». Al guardar se actualiza este experimento.",
+      "UPDATE": "Actualizar experimento",
+      "SAVE_AS_NEW": "Guardar como nuevo"
     }
   }
 }

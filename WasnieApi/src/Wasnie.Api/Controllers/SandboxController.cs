@@ -53,6 +53,18 @@ public sealed class SandboxController(
     public Task<IActionResult> AddRule(AddRuleToPlanCommand command, CancellationToken ct) => Send(command, ct);
 
     /// <summary>
+    /// El plan de práctica con sus reglas completas: la misma consulta que la pantalla de Planes
+    /// (<see cref="GetPlanByIdQuery"/>), sobre el esquema del sandbox. De aquí salen las reglas que se
+    /// guardan en un experimento, para poder volver a cargarlas en el formulario y editarlas.
+    /// </summary>
+    [HttpGet("plans/{planId:guid}")]
+    public async Task<IActionResult> GetPlan(Guid planId, CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetPlanByIdQuery(planId), ct);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { message = result.Error });
+    }
+
+    /// <summary>
     /// Lo que pagaría la regla que está en pantalla, paso a paso: el simulador de la pantalla real de
     /// reglas, sobre el plan de práctica.
     ///
@@ -90,11 +102,28 @@ public sealed class SandboxController(
     /// normal encola un trabajo en segundo plano que corre con el contexto REAL, así que aquí se llama
     /// al mismo motor de asignación en el acto.
     /// </summary>
+    /// <remarks>
+    /// Devuelve el resultado tal cual (créditos creados y ventas sin comisión con su motivo), no el
+    /// `Result` envuelto de <see cref="Send{TResponse}"/>: la pantalla lo pinta.
+    /// </remarks>
     [HttpPost("transactions/process")]
-    public Task<IActionResult> Process(CancellationToken ct) => Send(new CalculateSandboxPendingCommand(), ct);
+    public async Task<IActionResult> Process(CancellationToken ct)
+    {
+        var result = await mediator.Send(new CalculateSandboxPendingCommand(), ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
 
+    /// <remarks>
+    /// Devuelve el resultado tal cual, con su diagnóstico (qué asignaciones consideró el motor y por qué
+    /// descartó las que descartó), no el `Result` envuelto de <see cref="Send{TResponse}"/>: la pantalla
+    /// lo explica igual que la lista real de pay runs.
+    /// </remarks>
     [HttpPost("pay-runs")]
-    public Task<IActionResult> CalculatePayRun(CalculatePayRunCommand command, CancellationToken ct) => Send(command, ct);
+    public async Task<IActionResult> CalculatePayRun(CalculatePayRunCommand command, CancellationToken ct)
+    {
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { message = result.Error });
+    }
 
     [HttpPost("pay-runs/approve")]
     public Task<IActionResult> ApprovePayRun(ApprovePayRunCommand command, CancellationToken ct) => Send(command, ct);

@@ -2,9 +2,11 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { WsGuideStep, WsGuideStepState } from '../../../shared/ui';
 import {
-  EMPTY_SANDBOX_STATUS, GuidedStepId, PromotedPlan, SandboxExperiment, SandboxStatus,
+  EMPTY_SANDBOX_STATUS, GuidedStepId, parseExperiment, PromotedPlan, SandboxCalculation, SandboxExperiment,
+  SandboxExperimentConfig, SandboxPromotionRecord, SandboxStatus, serializeExperiment,
 } from '../models/guided-tour.model';
 import { SandboxApiService } from '../services/sandbox.api.service';
+import { CalculatePayRunResult } from '../../pay-runs/models/pay-run.model';
 import { extractApiErrorCode } from '../../../shared/utils/api-error';
 import {
   isKnownRateTableError, rateTableErrorKey, rateTableErrorParams,
@@ -28,6 +30,30 @@ export class GuidedTourStore {
   /** Los valores que interpola la frase del error, cuando es un rechazo codificado de la escalera. */
   readonly errorParams = signal<Record<string, unknown> | null>(null);
 
+  /**
+   * Los motivos concretos de un rechazo, cuando el servidor los manda.
+   *
+   * ★★ SIN ESTO EL USUARIO VEÍA «Validation failed.» Y NADA MÁS. El middleware responde a una validación
+   * con esa frase genérica y, en `details`, la lista de lo que falló («Email is required.»). Lo que el
+   * usuario necesita es la lista; la frase sola no le dice qué corregir.
+   */
+  readonly errorDetails = signal<string[]>([]);
+
+  /**
+   * El resultado del último «calcular»: créditos creados y ventas sin comisión con su motivo.
+   *
+   * ★ SIN ESTO, CALCULAR UNA VENTA QUE NO GENERA COMISIÓN NO DECÍA NADA. El paso no se completaba y la
+   * pantalla se quedaba igual; el usuario que había puesto un disparador que la venta no cumplía no
+   * tenía forma de saberlo.
+   */
+  readonly lastCalculation = signal<SandboxCalculation | null>(null);
+
+  /**
+   * El resultado del último pay run, con el diagnóstico del motor: cuántos payouts creó y, si descartó
+   * asignaciones, por qué. Es lo mismo que enseña la lista real de pay runs.
+   */
+  readonly lastPayRun = signal<CalculatePayRunResult | null>(null);
+
   /** Lo último que hizo el usuario, para que la zona de guía pueda contarlo. */
   readonly lastDone = signal<GuidedStepId | null>(null);
 
@@ -40,8 +66,7 @@ export class GuidedTourStore {
    * Una bandera de progreso se desincroniza en cuanto el usuario resetea o crea algo por otro camino,
    * y entonces el recorrido bloquea un paso que ya tiene sus piezas, o promete uno que no.
    */
-  isDone(id: GuidedStepId): boolean {
-    const s = this.status();
+  isDone(id: GuidedStepId, s: SandboxStatus = this.status()): boolean {
     switch (id) {
       case 'plan': return s.plan !== null;
       case 'rule': return (s.plan?.ruleCount ?? 0) > 0;
@@ -152,6 +177,7 @@ export class GuidedTourStore {
     this.busy.set(true);
     this.error.set(null);
     this.errorParams.set(null);
+    this.errorDetails.set([]);
     try {
       await action();
       await this.refresh();
@@ -182,10 +208,38 @@ export class GuidedTourStore {
    * se guarda exactamente lo que el usuario está viendo, que es lo que va a querer reconocer cuando lo
    * abra dentro de un mes.
    */
-  async saveExperiment(name: string, id: string | null = null): Promise<void> {
-    const snapshot = JSON.stringify(this.status());
-    await firstValueFrom(this.api.saveExperiment({ id, name, snapshot }));
+  async saveExperiment(
+    name: string,
+    id: string | null = null,
+    config: SandboxExperimentConfig | null = null,
+    promotion: SandboxPromotionRecord | null = null,
+  ): Promise<SandboxExperiment> {
+    // ★ LA FOTO Y LA CONFIGURACIÓN QUE LA PRODUJO. Con sólo la foto se podía mirar, no volver a editar.
+    const snapshot = serializeExperiment(this.status(), config, promotion);
+    const saved = await firstValueFrom(this.api.saveExperiment({ id, name, snapshot }));
     await this.loadExperiments();
+    return saved;
+  }
+
+  /**
+   * Cambia el nombre de un experimento y NADA MÁS.
+   *
+   * ★★ ANTES RENOMBRAR BORRABA EL EXPERIMENTO. Pasaba por `saveExperiment`, que guarda el estado ACTUAL
+   * del sandbox: renombrar una prueba vieja la sobreescribía con lo que hubiera en pantalla. Aquí viaja
+   * la foto que ya tenía, intacta.
+   */
+  async renameExperiment(experiment: SandboxExperiment, name: string): Promise<void> {
+    // ★ EL NOMBRE DEL PLAN VA CON EL DEL EXPERIMENTO. Renombrar y luego «Editar» cargaba el plan con el
+    // nombre viejo, y el usuario veía que su cambio no se había guardado. Si el experimento tiene
+    // configuración, su plan pasa a llamarse igual; la foto de resultados y la promoción quedan intactas.
+    const { status, config, promotion } = parseExperiment(experiment.snapshot);
+    const snapshot = config
+      ? serializeExperiment(status, { ...config, plan: { ...config.plan, name } }, promotion)
+      : experiment.snapshot;
+    const saved = await firstValueFrom(
+      this.api.saveExperiment({ id: experiment.id, name, snapshot }));
+    await this.loadExperiments();
+    if (this.openExperiment()?.id === experiment.id) this.openExperiment.set(saved);
   }
 
   async deleteExperiment(id: string): Promise<void> {
@@ -202,13 +256,7 @@ export class GuidedTourStore {
   /** El estado guardado de un experimento, listo para pintar con el mismo panel de resultados. */
   reviewedStatus(): SandboxStatus | null {
     const open = this.openExperiment();
-    if (!open) return null;
-    try {
-      return JSON.parse(open.snapshot) as SandboxStatus;
-    } catch {
-      // Una foto ilegible no puede tumbar la pantalla: se comporta como un experimento vacío.
-      return EMPTY_SANDBOX_STATUS;
-    }
+    return open ? parseExperiment(open.snapshot).status : null;
   }
 
   // ── Promoción a plan real ───────────────────────────────────────────────────────────
@@ -234,9 +282,8 @@ export class GuidedTourStore {
   /**
    * Crea el plan REAL con la configuración del recorrido.
    *
-   * ★★ NO TOCA EL RECORRIDO, NI SIQUIERA AL SALIR BIEN. Promover es copiar: el experimento sigue
-   * donde estaba y el usuario puede seguir probando, resetear o volver a promover. Recargar o limpiar
-   * el sandbox aquí sería quitarle lo que acaba de descubrir.
+   * ★ AQUÍ SÓLO SE PROMUEVE. Qué pasa después —guardar la prueba en los experimentos y limpiar la
+   * pantalla para que no se promueva dos veces— lo decide el componente, que tiene los formularios.
    */
   async promote(): Promise<void> {
     if (this.promoting()) return;
@@ -258,6 +305,8 @@ export class GuidedTourStore {
     // recorrido que ya no está. Dejarlo en pantalla sugeriría que lo de abajo salió de lo de arriba.
     this.promoted.set(null);
     this.promoteError.set(null);
+    this.lastCalculation.set(null);
+    this.lastPayRun.set(null);
     this.followProgress();
   }
 
@@ -271,6 +320,8 @@ export class GuidedTourStore {
    * versión no conoce cae al mensaje plano, nunca a un identificador interno en pantalla.
    */
   private setError(err: unknown): void {
+    this.errorDetails.set(this.detailsOf(err));
+
     const coded = extractApiErrorCode(err);
 
     if (coded && isKnownRateTableError(coded)) {
@@ -281,6 +332,14 @@ export class GuidedTourStore {
 
     this.error.set(this.messageOf(err));
     this.errorParams.set(null);
+  }
+
+  /** La lista `details` del error del servidor, sólo con textos no vacíos. Vacía si no vino ninguna. */
+  private detailsOf(err: unknown): string[] {
+    const details = (err as { error?: { details?: unknown } } | null)?.error?.details;
+    return Array.isArray(details)
+      ? details.filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
+      : [];
   }
 
   /** El mensaje del backend si lo hay; si no, una clave genérica. Nunca un objeto crudo en pantalla. */

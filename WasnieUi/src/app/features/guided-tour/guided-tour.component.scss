@@ -19,6 +19,369 @@
   min-width: 0;
 }
 
+/* ★★ EL BANNER DE ENTORNO. `sticky` dentro de `.shell__content`, que es el contenedor con scroll.
+   ★ EL FONDO VA PINTADO SOBRE EL DE LA PÁGINA: en tema oscuro `--color-sandbox-accent-bg` es
+   translúcido, y sin la capa de debajo el contenido se vería pasar por detrás al hacer scroll.
+   ★ Y ESA CAPA ES `--color-base`, NO `--color-bg-page`. El DESIGN_SYSTEM documenta `--color-bg-page`,
+   pero no está definido en ningún tema: una `var()` indefinida invalida la declaración ENTERA en
+   tiempo de cálculo y el banner quedaba transparente, sin error. `--color-base` es lo que pinta
+   `.shell__content` detrás de toda página. */
+.tour__env-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background:
+    linear-gradient(var(--color-sandbox-accent-bg), var(--color-sandbox-accent-bg)),
+    var(--color-base);
+  border-bottom: 1px solid var(--color-sandbox-accent-border);
+  color: var(--color-sandbox-accent);
+}
+
+/* El mismo ancho y los mismos márgenes laterales que `ws-page-layout`, para que el texto arranque
+   alineado con el título de la página. */
+.tour__env-banner-inner {
+  @apply flex items-center flex-wrap;
+  gap: var(--space-2);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--font-size-13);
+}
+
+.tour__env-banner-title {
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tour__env-banner-body {
+  color: var(--color-text-secondary);
+}
+
+.tour__block-head {
+  @apply flex items-center justify-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+
+  .tour__block-title {
+    margin: 0;
+  }
+}
+
+/* La tarjeta de promoción apila texto, aviso, error y botones sin un formulario que les ponga `gap`:
+   sin este aire, «Promote to a real plan» quedaba pegado al aviso de arriba. */
+.tour__promote {
+  .tour__notice,
+  .tour__error,
+  .tour__actions {
+    margin-top: var(--space-4);
+  }
+}
+
+.tour__crossing {
+  @apply flex items-center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--color-text-tertiary);
+}
+
+/* ★★ EL MARCO DE LA ZONA ACTIVA: la identidad visual del sandbox.
+   `outline`, no `box-shadow`: es un borde, y el design system no admite sombras fuera de su set. Va en
+   el host de ws-card con el MISMO radio que la tarjeta, así el marco sigue sus esquinas; el desfase de
+   -1px lo pone encima del borde neutro de 1px de la tarjeta en vez de dibujar un segundo borde fuera. */
+.tour__active {
+  display: block;
+  border-radius: var(--radius-xl);
+  outline: 2px solid var(--color-sandbox-accent);
+  outline-offset: -1px;
+  /* Al volver a esta tarjeta tras un paso, que no quede debajo del banner fijo de «Practice mode». */
+  scroll-margin-top: var(--space-16);
+}
+
+/* ── Las pestañas del lateral ── */
+
+/* El body de la tarjeta del lateral: el mismo padding que `ws-card padding="lg"`, que la tarjeta ya no
+   lleva porque el header (las pestañas) va pegado a sus bordes. */
+.tour__guide-body {
+  padding: var(--space-6) var(--space-8);
+}
+
+/* ── Historial de experimentos: lista compacta (stacked list) ──
+   Filas separadas por una línea, sin caja propia; la fila abierta se marca con fondo y una barra de
+   acento. Acciones como iconos que aparecen al pasar (en táctil, siempre). */
+
+.tour__exp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.tour__exp-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border-subtle);
+  transition: background var(--transition-fast);
+
+  &:hover,
+  &:focus-within {
+    background: var(--color-bg-surface-hover);
+  }
+
+  &--open {
+    background: var(--color-bg-surface-hover);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 2px;
+      background: var(--color-brand);
+    }
+  }
+}
+
+.tour__exp-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--color-border-focus);
+    border-radius: var(--radius-sm);
+  }
+}
+
+/* El icono del experimento lleva el color del entorno: es un dato de práctica. */
+.tour__exp-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--color-sandbox-accent-bg);
+  color: var(--color-sandbox-accent);
+}
+
+.tour__exp-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  line-height: 1.35;
+}
+
+.tour__exp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tour__exp-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.tour__exp-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-success);
+}
+
+.tour__exp-actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  padding-right: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.tour__exp-row:hover .tour__exp-actions,
+.tour__exp-row:focus-within .tour__exp-actions,
+.tour__exp-row--open .tour__exp-actions {
+  opacity: 1;
+}
+
+/* Sin ratón no hay hover: las acciones se ven siempre. */
+@media (hover: none) {
+  .tour__exp-actions {
+    opacity: 1;
+  }
+}
+
+/* Botón de icono de la lista: cuadrado, discreto, con su color al pasar. */
+.tour__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--height-control-sm);
+  height: var(--height-control-sm);
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--color-bg-surface-sunken);
+    color: var(--color-text-primary);
+  }
+
+  &--danger:hover {
+    color: var(--color-danger);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+/* Vacío: icono, título y la explicación de cómo se guarda uno. */
+.tour__exp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-2);
+  text-align: center;
+}
+
+.tour__exp-empty-title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tour__exp-empty-body {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+}
+
+/* El experimento abierto: cabecera con nombre, badge y cerrar; datos en filas etiqueta/valor. */
+.tour__exp-review {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-bg-surface-sunken);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.tour__exp-review-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.tour__exp-review-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tour__exp-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-12);
+
+  dt {
+    color: var(--color-text-tertiary);
+  }
+
+  dd {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Las acciones del experimento abierto: editarlo en el sandbox o llevarlo a producción. */
+.tour__exp-review-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+
+  /* Mitad y mitad, en una sola fila. */
+  > ws-button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+.tour__exp-review-dup {
+  margin-top: var(--space-3);
+}
+
+.tour__exp-review-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+}
+
+/* El selector de regla al editar un experimento con varias: separado del formulario que sigue. */
+.tour__rule-picker {
+  display: block;
+  margin-bottom: var(--space-4);
+}
+
+/* El aviso de «editando tal experimento», separado de la explicación del paso. */
+.tour__loaded {
+  margin-top: var(--space-4);
+}
+
+.tour__exp-facts-value {
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.tour__exp-facts-muted {
+  color: var(--color-text-tertiary);
+}
+
 .tour__progress {
   margin: 0 0 var(--space-4);
   font-size: var(--font-size-11);
@@ -54,10 +417,12 @@
   line-height: 1.6;
 }
 
+/* ★ UN SOLO RITMO VERTICAL: el formulario se separa de lo de arriba lo mismo que sus bloques entre sí
+   (`--space-5`). Con `--space-8` quedaba un hueco del doble bajo los avisos. */
 .tour__form {
   @apply flex flex-col;
   gap: var(--space-5);
-  margin-top: var(--space-8);
+  margin-top: var(--space-5);
 }
 
 /* La rejilla canónica del design system, dentro de un panel con la MISMA superficie que el
@@ -76,7 +441,10 @@
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-lg);
 
-  &:empty { display: none; }
+  /* ★ `:empty` NO BASTA: los `@if` de Angular dejan nodos dentro y la rejilla nunca contaba como
+     vacía — en los pasos sin campos se pintaba un panel vacío que sumaba su padding y el hueco del
+     formulario. Se esconde cuando no tiene ni un elemento hijo. */
+  &:not(:has(> *)) { display: none; }
 
   @media (max-width: 640px) {
     grid-template-columns: 1fr;
@@ -180,6 +548,28 @@
   }
 }
 
+/* Un crédito rechazado, un pay run sin payouts: el motor explicándose, con el tono de aviso. */
+.tour__credit-refusal {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--color-warning);
+
+  app-icon {
+    margin-top: 2px;
+    flex: none;
+  }
+}
+
+/* Listas de motivos dentro del panel de resultado: en tono de aviso, no de error. */
+.tour__warning-list {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
 .tour__credit-meta {
   font-size: var(--font-size-12);
   color: var(--color-text-tertiary);
@@ -215,6 +605,35 @@
   padding: var(--space-3) var(--space-4);
 }
 
+.tour__error-lead {
+  margin: 0;
+}
+
+/* La lista de motivos del servidor: lo que hay que corregir, uno por línea. */
+.tour__error-details {
+  @apply flex flex-col;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  list-style: disc;
+}
+
+/* Un aviso con varias líneas: el icono se queda arriba, junto a la primera. */
+.tour__notice--top {
+  align-items: flex-start;
+
+  app-icon {
+    margin-top: 2px;
+  }
+}
+
+/* El mismo banner, en su variante informativa: explica una regla, no avisa de un bloqueo. */
+.tour__notice--info {
+  background: var(--color-info-bg);
+  border-color: var(--color-info-border);
+  color: var(--color-info);
+}
+
 .tour__actions {
   @apply flex items-center justify-end;
   gap: var(--space-4);
@@ -244,53 +663,6 @@
   margin-bottom: var(--space-4);
 }
 
-.tour__experiments {
-  @apply flex flex-col;
-  gap: var(--space-2);
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-/* Una fila por experimento: el nombre pesa, la fecha acompaña, las acciones no compiten. */
-.tour__experiment {
-  @apply flex items-center justify-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface-sunken);
-
-  &--open {
-    border-color: var(--color-brand);
-  }
-}
-
-.tour__experiment-open {
-  @apply flex flex-col items-start text-left;
-  gap: var(--space-1);
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.tour__experiment-name {
-  font-size: var(--font-size-13);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.tour__experiment-date {
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-}
-
-.tour__experiment-actions {
-  @apply flex items-center shrink-0;
-  gap: var(--space-1);
-}
 
 /* La variante de éxito del mismo banner: mismos tokens semánticos, otro estado. Nada de un verde
    inventado ni de un bloque nuevo — es el mismo aviso diciendo que algo salió bien. */
@@ -298,4 +670,28 @@
   background: var(--color-success-bg);
   border-color: var(--color-success-border);
   color: var(--color-success);
+}
+
+/* Aviso secundario (p. ej. «ya está en producción»): el mismo banner, en letra xs y más apretado. */
+.tour__notice--compact {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* El aviso de la promoción, arriba de la página: separado del contenido que sigue. */
+.tour__promoted {
+  margin-bottom: var(--space-4);
+}
+
+/* El enlace dentro de un aviso: el color del aviso, subrayado para que se lea como enlace. */
+.tour__notice-link {
+  margin-left: var(--space-1);
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
 }

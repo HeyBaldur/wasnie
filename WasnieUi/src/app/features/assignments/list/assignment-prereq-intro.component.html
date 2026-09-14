@@ -1,0 +1,116 @@
+<section class="link" aria-labelledby="assignment-prereq-intro-title">
+  <!--
+    ★ LA ILUSTRACIÓN CUENTA EL VÍNCULO. El payee entra por la izquierda, el plan por la derecha, dos
+    eslabones se encajan en el centro y el período del plan se extiende bajo los dos. Sin texto dentro,
+    colores por tokens, quieta con `prefers-reduced-motion`.
+  -->
+  <div class="link__stage" aria-hidden="true">
+    <svg class="link__svg" viewBox="0 0 560 172" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="assign-grad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" class="art-stop-blue" />
+          <stop offset="1" class="art-stop-success" />
+        </linearGradient>
+        <linearGradient id="assign-avatar" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" class="art-stop-blue" />
+          <stop offset="1" class="art-stop-violet" />
+        </linearGradient>
+      </defs>
+
+      <path class="art-sparkle art-sparkle--1" d="M280 8l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" />
+      <path class="art-sparkle art-sparkle--2" d="M22 30l2 4.5 4.5 2-4.5 2-2 4.5-2-4.5-4.5-2 4.5-2z" />
+      <circle class="art-dot art-dot--1" cx="540" cy="24" r="3" />
+      <circle class="art-dot art-dot--2" cx="210" cy="150" r="2.5" />
+
+      <!-- Los hilos que unen cada tarjeta con el eslabón -->
+      <path class="art-wire art-wire--left" d="M190 78 H240" />
+      <path class="art-wire art-wire--right" d="M370 78 H320" />
+
+      <!-- El payee -->
+      <g class="art-slide art-slide--left">
+        <g class="art-float">
+          <rect class="art-surface" x="40" y="40" width="150" height="76" rx="14" />
+          <circle cx="78" cy="78" r="19" fill="url(#assign-avatar)" />
+          <circle class="art-person" cx="78" cy="73" r="6" />
+          <path class="art-person" d="M67 90a11 9 0 0 1 22 0z" />
+          <rect class="art-line art-line--strong" x="108" y="66" width="62" height="7" rx="3.5" />
+          <rect class="art-line" x="108" y="80" width="40" height="5" rx="2.5" />
+          <rect class="art-chip-blue" x="108" y="92" width="30" height="9" rx="4.5" />
+        </g>
+      </g>
+
+      <!-- El plan -->
+      <g class="art-slide art-slide--right">
+        <g class="art-float art-float--late">
+          <rect class="art-surface" x="370" y="40" width="150" height="76" rx="14" />
+          <rect class="art-doc" x="386" y="58" width="30" height="40" rx="6" />
+          <rect class="art-doc-line" x="392" y="66" width="18" height="4" rx="2" />
+          <rect class="art-doc-line" x="392" y="75" width="12" height="4" rx="2" />
+          <rect class="art-doc-line" x="392" y="84" width="16" height="4" rx="2" />
+          <rect class="art-line art-line--strong" x="428" y="62" width="70" height="7" rx="3.5" />
+          <rect class="art-bar art-bar--1" x="428" y="78" width="60" height="7" rx="3.5" />
+          <rect class="art-bar art-bar--2" x="428" y="91" width="44" height="7" rx="3.5" />
+        </g>
+      </g>
+
+      <!-- El pulso que late una vez encajados -->
+      <circle class="art-pulse" cx="280" cy="78" r="22" />
+
+      <!-- Los dos eslabones que se encajan -->
+      <rect class="art-chain art-chain--left" x="236" y="64" width="54" height="28" rx="14" />
+      <rect class="art-chain art-chain--right" x="270" y="64" width="54" height="28" rx="14" />
+      <!-- El tramo del eslabón azul que pasa POR ENCIMA del verde: así se entrelazan en vez de apilarse -->
+      <path class="art-chain art-chain--left art-chain--over" d="M290 78 a14 14 0 0 1 -14 14" />
+
+      <!-- Confirmación sobre el vínculo -->
+      <g class="art-badge">
+        <circle class="art-badge-bg" cx="280" cy="40" r="12" />
+        <path class="art-badge-check" d="M274.5 40l3.5 3.5 7-7" />
+      </g>
+
+      <!-- El período del plan, que cubre a los dos -->
+      <rect class="art-track" x="40" y="140" width="480" height="8" rx="4" />
+      <rect class="art-period" x="40" y="140" width="480" height="8" rx="4" fill="url(#assign-grad)" />
+      <circle class="art-cap art-cap--start" cx="40" cy="144" r="6" />
+      <circle class="art-cap art-cap--end" cx="520" cy="144" r="6" />
+    </svg>
+  </div>
+
+  <div class="link__body">
+    <div class="link__head">
+      <span class="link__eyebrow">
+        <app-icon name="arrow-right-left" [size]="12" />
+        {{ 'ASSIGNMENTS.PREREQ_INTRO.EYEBROW' | translate }}
+      </span>
+      <h2 id="assignment-prereq-intro-title" class="link__title">{{ 'ASSIGNMENTS.PREREQ_INTRO.TITLE' | translate }}</h2>
+      <p class="link__lead">{{ 'ASSIGNMENTS.PREREQ_INTRO.LEAD' | translate }}</p>
+    </div>
+
+    <ol class="link__steps">
+      @for (step of steps; track step.title; let i = $index) {
+        <li class="link__step">
+          <span class="link__step-marker" aria-hidden="true">
+            <app-icon [name]="step.icon" [size]="16" />
+            <span class="link__step-num">{{ i + 1 }}</span>
+          </span>
+          @if (step.route) {
+            <a class="link__step-title link__step-title--link" [routerLink]="step.route">
+              {{ step.title | translate }}
+              <app-icon name="arrow-right" [size]="12" />
+            </a>
+          } @else {
+            <span class="link__step-title">{{ step.title | translate }}</span>
+          }
+          <span class="link__step-desc">{{ step.desc | translate }}</span>
+        </li>
+      }
+    </ol>
+
+    <div class="link__actions" [hidden]="!('Assignments.Create' | hasPermission)">
+      <ws-button variant="primary" routerLink="/assignments/new">
+        <app-icon name="plus" [size]="16" />
+        {{ 'ASSIGNMENTS.EMPTY_ACTION' | translate }}
+      </ws-button>
+    </div>
+  </div>
+</section>

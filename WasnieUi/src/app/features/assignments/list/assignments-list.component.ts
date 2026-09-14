@@ -13,6 +13,7 @@ import { AssignmentsStore } from '../state/assignments.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { AssignmentStatus, BlockedAssignmentDto, DeactivationImpact } from '../models/assignment.model';
+import { AssignmentPrereqIntroComponent } from './assignment-prereq-intro.component';
 import { AssignmentsApiService } from '../services/assignments.api.service';
 import { firstValueFrom } from 'rxjs';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
@@ -25,8 +26,7 @@ import {
   WsSegmentedControlComponent,
   WsPageLayoutComponent,
   WsTableComponent,
-  WsTableEmptyComponent,
-  WsEmptyStateComponent,
+  WsTableEmptyComponent,
   WsConfirmationModalComponent,
   WsPaginationComponent,
   type SegOption,
@@ -54,7 +54,7 @@ import {
     WsPageLayoutComponent,
     WsTableComponent,
     WsTableEmptyComponent,
-    WsEmptyStateComponent,
+    AssignmentPrereqIntroComponent,
     WsConfirmationModalComponent,
     WsPaginationComponent,
   ],

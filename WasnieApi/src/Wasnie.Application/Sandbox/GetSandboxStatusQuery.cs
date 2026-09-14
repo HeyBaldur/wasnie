@@ -44,6 +44,12 @@ public sealed record SandboxRuleDto(
 
 /// <param name="BaseAmount">El importe de la venta sobre el que se calculó: la mitad izquierda de la cuenta.</param>
 /// <param name="CreditedAmount">La comisión resultante: la mitad derecha.</param>
+/// <param name="RateRefusal">
+/// Por qué la tabla de tasas se negó a poner precio a esta venta (<c>NoQuotaInEffect</c>,
+/// <c>NoMatchingBracket</c>, <c>AmountOutsideTable</c>), o null si la tasó. Es la misma columna que lee el
+/// Centro de Reconciliación: el sandbox tiene que decir lo mismo que el producto, no enseñar un crédito
+/// rechazado como si fuera una comisión normal.
+/// </param>
 public sealed record SandboxCreditDto(
     Guid Id,
     string PayeeName,
@@ -51,7 +57,8 @@ public sealed record SandboxCreditDto(
     decimal BaseAmount,
     decimal CreditedAmount,
     string Currency,
-    bool Consumed);
+    bool Consumed,
+    string? RateRefusal);
 
 public sealed record SandboxPayoutDto(
     Guid Id,
@@ -166,7 +173,7 @@ public sealed class GetSandboxStatusHandler(IApplicationDbContext db)
             .Take(10)
             .Select(c => new
             {
-                c.Id, c.PayeeId, c.OriginalAmount, c.CreditedAmount, c.ConsumedAt,
+                c.Id, c.PayeeId, c.OriginalAmount, c.CreditedAmount, c.ConsumedAt, c.RateRefusal,
                 RuleName = c.RuleSnapshot.RuleName,
             })
             .ToListAsync(cancellationToken);
@@ -219,7 +226,7 @@ public sealed class GetSandboxStatusHandler(IApplicationDbContext db)
             Credits: creditRows.Select(c => new SandboxCreditDto(
                 c.Id, NameOf(c.PayeeId), c.RuleName,
                 c.OriginalAmount.Amount, c.CreditedAmount.Amount, c.CreditedAmount.Currency,
-                c.ConsumedAt is not null)).ToList(),
+                c.ConsumedAt is not null, c.RateRefusal)).ToList(),
             PayRun: payRun is null ? null : new SandboxPayRunDto(
                 payRun.Id, payRun.PeriodStart, payRun.PeriodEnd, payRun.Status.ToString(), payoutRows.Count),
             Payouts: payoutRows.Select(p => new SandboxPayoutDto(
