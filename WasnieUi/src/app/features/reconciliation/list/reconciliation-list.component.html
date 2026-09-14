@@ -36,32 +36,6 @@
       }
     </div>
 
-    <!-- The sale value at stake is NOT a commission owed, and the screen says so
-         rather than letting a reader assume it. When the engine refuses, the
-         commission is precisely the figure nobody knows. -->
-    @if (store.hasMoney()) {
-      <p class="recon__note">
-        <app-icon name="info-circle" [size]="14" />
-        {{ 'RECONCILIATION.AFFECTED_BASE_NOTE' | translate }}
-      </p>
-    }
-
-    <!-- ── Count by reason ────────────────────────────────────────────────────── -->
-    @if (store.summary().byReason.length > 0) {
-      <ws-card variant="flat" padding="sm" class="recon__reasons">
-        <p class="recon__reasons-title">{{ 'RECONCILIATION.BY_REASON' | translate }}</p>
-        <div class="recon__reasons-list">
-          @for (r of store.summary().byReason; track r.reason) {
-            <span class="recon__reason-chip">
-              <!-- Whitelisted key, never the raw code -->
-              {{ reasonKeyFor(r.reason) | translate }}
-              <ws-badge variant="warning" size="sm">{{ r.count }}</ws-badge>
-            </span>
-          }
-        </div>
-      </ws-card>
-    }
-
     <!-- ── Filters ────────────────────────────────────────────────────────────── -->
     <ws-card variant="raised" padding="sm" class="recon__filter">
       <div class="recon__filter-header" (click)="filterOpen.set(!filterOpen())">

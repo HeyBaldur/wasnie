@@ -2363,8 +2363,6 @@
     "CARD_ENTRIES": "Entradas",
     "CARD_AFFECTED_BASE": "Ventas afectadas ({{currency}})",
     "CARD_CLAWBACK": "Recuperación",
-    "AFFECTED_BASE_NOTE": "Son importes de venta, no comisión adeudada: donde el motor se negó a calcular, la comisión es justamente la cifra que nadie conoce. La recuperación se muestra aparte y nunca se suma.",
-    "BY_REASON": "Por motivo",
     "EXPORT": "Exportar a Excel",
     "EXPORT_ERROR": "No se pudo generar la exportación. Inténtalo de nuevo.",
     "LOAD_ERROR": "No se pudo cargar la cola de reconciliación.",

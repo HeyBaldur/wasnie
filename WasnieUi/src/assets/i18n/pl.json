@@ -2363,8 +2363,6 @@
     "CARD_ENTRIES": "Pozycje",
     "CARD_AFFECTED_BASE": "Sprzedaż objęta ({{currency}})",
     "CARD_CLAWBACK": "Zwrot prowizji",
-    "AFFECTED_BASE_NOTE": "To kwoty sprzedaży, a nie należna prowizja: tam, gdzie silnik odmówił wyliczenia, prowizja jest właśnie tą liczbą, której nikt nie zna. Zwrot prowizji pokazywany jest osobno i nigdy nie jest dodawany.",
-    "BY_REASON": "Według przyczyny",
     "EXPORT": "Eksportuj do Excela",
     "EXPORT_ERROR": "Nie udało się wygenerować eksportu. Spróbuj ponownie.",
     "LOAD_ERROR": "Nie udało się wczytać kolejki uzgodnień.",

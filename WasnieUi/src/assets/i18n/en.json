@@ -2363,8 +2363,6 @@
     "CARD_ENTRIES": "Entries",
     "CARD_AFFECTED_BASE": "Sales at stake ({{currency}})",
     "CARD_CLAWBACK": "Clawback",
-    "AFFECTED_BASE_NOTE": "These are sale amounts, not commission owed: where the engine refused to calculate, the commission is precisely the figure nobody knows. Clawback is shown separately and is never added to it.",
-    "BY_REASON": "By reason",
     "EXPORT": "Export to Excel",
     "EXPORT_ERROR": "The export could not be generated. Try again.",
     "LOAD_ERROR": "The reconciliation queue could not be loaded.",

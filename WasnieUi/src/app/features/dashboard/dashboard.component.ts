@@ -66,7 +66,7 @@ import {
     WsConfirmationModalComponent,
   ],
   templateUrl: './dashboard.component.html',
-  styleUrl: './dashboard.component.scss',
+  styleUrls: ['./dashboard.component.scss', './dashboard-visual.scss'],
 })
 export class DashboardComponent {
   readonly store = inject(DashboardStore);
