@@ -1,0 +1,314 @@
+// ── The import steps' visual layer (mapping + review) ─────────────────────────────
+//
+// Imported at the end of every mapping and preview step stylesheet (payees, transactions, transaction update),
+// which share the same class vocabulary. Encapsulation compiles it into each step on its own. NOTHING here
+// changes behaviour. Tokens throughout; still with reduced motion.
+//
+// ★ NO LEFTOVER TRANSFORM ON ANYTHING THAT CONTAINS A SELECT. Entrance animations here use fill-mode backwards:
+// a transform left on a row would become the containing block of the ws-select's fixed dropdown.
+
+// ── Section titles: a pill with a live dot ──
+.mapping-section__title,
+.preview-section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet) 25%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 8%, var(--color-bg-surface));
+  color: var(--color-accent-violet);
+  // Written as the translation writes it ("Required fields"), not shouted in capitals.
+  text-transform: none;
+  letter-spacing: normal;
+  // These are <h3>, so the global title rule would set them in the display serif; the badges use the UI face,
+  // like the dashboard band labels.
+  font-family: var(--font-sans);
+
+  &::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: currentColor;
+  }
+}
+
+// ── Mapping: one compact card, required | optional ──
+// ★ THE UX IS "SEE IT ALL AT ONCE". Required fields on the left, optional on the right, in one card with a
+// hairline between the columns; each field is a tight label-over-select pair. No per-row cards, no motion —
+// only a quiet highlight on the field being edited. One column on narrow screens.
+.mapping-step {
+  gap: var(--space-4);
+}
+
+.mapping-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+
+  > .mapping-section {
+    min-width: 0;
+    padding: var(--space-4);
+  }
+
+  > .mapping-section + .mapping-section {
+    border-left: 1px solid var(--color-border-subtle);
+  }
+
+  @media (max-width: 860px) {
+    grid-template-columns: minmax(0, 1fr);
+
+    > .mapping-section + .mapping-section {
+      border-left: none;
+      border-top: 1px solid var(--color-border-subtle);
+    }
+  }
+}
+
+.mapping-section__title {
+  margin-bottom: var(--space-3);
+}
+
+.mapping-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+// Label and select side by side, tight. The label column is narrower than before so the select keeps room
+// inside half a card.
+.mapping-row {
+  grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  margin: 0 calc(var(--space-2) * -1);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-base);
+
+  &:hover,
+  &:focus-within {
+    background: color-mix(in srgb, var(--color-accent-violet) 5%, transparent);
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
+
+.mapping-row__label {
+  overflow: hidden;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// ── Sample / preview tables ──
+.preview-table-wrap {
+  border-color: var(--color-border-subtle);
+  box-shadow: var(--shadow-sm);
+  background: var(--color-bg-surface);
+}
+
+.preview-table th,
+.preview-table__th {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-accent-violet) 6%, transparent), transparent),
+    var(--color-bg-surface-raised);
+}
+
+.preview-table tbody tr,
+.preview-table__row {
+  animation: imp-fade 320ms ease-out backwards;
+  transition: background var(--transition-base);
+
+  &:hover td {
+    background: color-mix(in srgb, var(--color-accent-violet) 5%, transparent);
+  }
+}
+
+@for $i from 1 through 15 {
+  .preview-table tbody tr:nth-child(#{$i}) {
+    animation-delay: #{($i - 1) * 25}ms;
+  }
+}
+
+// ── Review: the row filter becomes a segmented control ──
+.row-filter {
+  align-self: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface-sunken);
+
+  &__btn {
+    margin-bottom: 0;
+    padding: var(--space-1) var(--space-4);
+    border-bottom: none;
+    border-radius: var(--radius-full);
+    transition: background var(--transition-base), color var(--transition-base), box-shadow var(--transition-base);
+
+    &--active {
+      background: var(--color-bg-surface);
+      color: var(--color-accent-violet);
+      box-shadow: var(--shadow-sm);
+    }
+  }
+}
+
+// ── Review: option cards ──
+// Icon in a tinted chip on the left, the words in the middle, a switch on the right. The switch IS the native
+// checkbox (appearance: none): same element, same keyboard and screen-reader behaviour, same ngModel — only
+// drawn as a track with a knob. Checked, the whole card takes the violet tone.
+.opt-card {
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-xl);
+  border-color: var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-base), background var(--transition-base), box-shadow var(--transition-base);
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--color-accent-violet) 35%, var(--color-border-default));
+    box-shadow: var(--shadow-md);
+  }
+
+  &--checked {
+    border-color: color-mix(in srgb, var(--color-accent-violet) 55%, var(--color-border-default));
+    background:
+      radial-gradient(90% 180% at 0% 0%, color-mix(in srgb, var(--color-accent-violet) 11%, transparent), transparent 70%),
+      var(--color-bg-surface);
+    box-shadow: 0 12px 28px -20px color-mix(in srgb, var(--color-accent-violet) 75%, transparent);
+  }
+
+  // Icon | title / description
+  &__body {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    column-gap: var(--space-4);
+    row-gap: 2px;
+    align-items: center;
+    flex: 1;
+  }
+
+  &__icon {
+    grid-row: span 2;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, color-mix(in srgb, currentColor 16%, var(--color-bg-surface)), color-mix(in srgb, currentColor 6%, var(--color-bg-surface)));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 20%, transparent);
+    color: var(--color-accent-violet);
+    transition: transform var(--transition-base);
+
+    &[name="alert-triangle"] { color: var(--color-warning); }
+    &[name="shield-check"] { color: var(--color-success); }
+  }
+
+  &:hover &__icon {
+    transform: rotate(-6deg) scale(1.05);
+  }
+
+  &__title {
+    font-size: var(--font-size-14);
+    line-height: 1.45;
+  }
+
+  &__desc {
+    font-size: var(--font-size-12);
+    line-height: 1.5;
+    color: var(--color-text-tertiary);
+  }
+
+  // A title with no description sits centred beside its icon.
+  &__body:not(:has(.opt-card__desc)) .opt-card__icon {
+    grid-row: auto;
+  }
+
+  // ── The switch ──
+  &__check {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 42px;
+    height: 24px;
+    margin: 0;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-full);
+    background:
+      radial-gradient(circle at 11px 50%, var(--color-bg-surface) 8px, transparent 8.5px),
+      var(--color-bg-surface-sunken);
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+    cursor: pointer;
+    transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+
+    &:checked {
+      border-color: transparent;
+      background:
+        radial-gradient(circle at calc(100% - 11px) 50%, var(--color-bg-surface) 8px, transparent 8.5px),
+        linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-violet));
+      box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--color-accent-violet) 60%, transparent);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-accent-violet);
+      outline-offset: 2px;
+    }
+  }
+}
+
+.mapping-error,
+.preview-error {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  animation: imp-shake 420ms ease-in-out;
+}
+
+@keyframes imp-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes imp-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes imp-flow {
+  to { background-position: -16px 0; }
+}
+
+@keyframes imp-shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-4px); }
+  75%      { transform: translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-table tbody tr,
+  .preview-table__row,
+  .mapping-error,
+  .preview-error {
+    animation: none;
+  }
+
+  .opt-card:hover .opt-card__icon {
+    transform: none;
+  }
+}

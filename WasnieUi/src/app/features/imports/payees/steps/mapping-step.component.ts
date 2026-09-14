@@ -15,11 +15,12 @@ import { extractApiError } from '../../../../shared/utils/api-error';
 import { SettingsApiService, FieldRequirement } from '../../../admin/services/settings.api.service';
 import { detectFullNameColumns, detectOtherField, OTHER_FIELD_PATTERNS } from '../helpers/column-auto-detect';
 import { composeFullName } from '../helpers/fullname-composer';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
 
 @Component({
   selector: 'app-mapping-step',
   standalone: true,
-  imports: [TranslateModule, ReactiveFormsModule, FormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, ReactiveFormsModule, FormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
   templateUrl: './mapping-step.component.html',
   styleUrl: './mapping-step.component.scss',
 })

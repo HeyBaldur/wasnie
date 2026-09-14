@@ -1,12 +1,5 @@
 <div class="preview-step">
-
-  <!-- Summary cards — 4 cards matching IMPORT layout -->
-  <div class="preview-step__stats">
-    <ws-stat-card [value]="validateResponse().totalRows"      [label]="'IMPORTS.UPDATE.SUMMARY_TOTAL' | translate"      icon="list"           variant="default"  />
-    <ws-stat-card [value]="validateResponse().willUpdateCount" [label]="'IMPORTS.UPDATE.WILL_UPDATE' | translate"        icon="check-circle"   variant="success"  />
-    <ws-stat-card [value]="validateResponse().errorCount"     [label]="'IMPORTS.UPDATE.ERRORS' | translate"             icon="x-circle"       variant="danger"   />
-    <ws-stat-card [value]="validateResponse().noChangesCount" [label]="'IMPORTS.UPDATE.NO_CHANGES' | translate"         icon="minus-circle"   variant="default"  />
-  </div>
+  <app-import-step-hero kind="review" titleKey="IMPORTS.SHARED.HERO_REVIEW_TITLE" descKey="IMPORTS.SHARED.HERO_REVIEW_DESC" />
 
   <!-- Row filter tabs — functional, matching IMPORT pattern -->
   <div class="row-filter">

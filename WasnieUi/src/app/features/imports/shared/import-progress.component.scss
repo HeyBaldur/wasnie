@@ -32,8 +32,9 @@
   &__bar {
     width: 100%;
     max-width: 480px;
-    height: var(--space-2);
+    height: 10px;
     background: var(--color-bg-surface-sunken);
+    box-shadow: inset 0 0 0 1px var(--color-border-subtle);
     border-radius: var(--radius-full);
     overflow: hidden;
 
@@ -44,8 +45,20 @@
   }
 
   &__fill {
+    position: relative;
+    overflow: hidden;
     height: 100%;
-    background: var(--color-brand);
+    background: linear-gradient(90deg, var(--color-accent-blue), var(--color-accent-violet));
+
+    // A light passes along the filled part: the work is moving even between progress updates.
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-bg-surface) 45%, transparent), transparent);
+      transform: translateX(-100%);
+      animation: import-progress-shine 1.6s ease-in-out infinite;
+    }
     border-radius: var(--radius-full);
     transition: width 400ms ease;
   }
@@ -71,7 +84,87 @@
     }
   }
 
-  &__failure-icon { color: var(--color-danger); }
+  &__failure-icon {
+    display: flex;
+    padding: var(--space-3);
+    border-radius: var(--radius-full);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-danger) 8%, transparent);
+    animation: import-progress-shake 480ms ease-in-out both;
+  }
+
+  // ── Orb ──
+  &__orb {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+
+    > * { grid-area: 1 / 1; }
+  }
+
+  &__orb-ring {
+    width: 100%;
+    height: 100%;
+    padding: 3px;
+    border-radius: var(--radius-full);
+    background: conic-gradient(from 0deg, var(--color-accent-violet), var(--color-accent-blue), transparent 70%, var(--color-accent-violet));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+    animation: import-progress-spin 1.2s linear infinite;
+  }
+
+  &__orb-core {
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-accent-violet) 10%, var(--color-bg-surface));
+    box-shadow: var(--shadow-md);
+
+    svg { width: 28px; height: 28px; }
+  }
+
+  &__row {
+    fill: var(--color-accent-violet);
+    animation: import-progress-row 1.5s ease-in-out infinite;
+
+    &--2 { fill: var(--color-accent-blue); animation-delay: 0.2s; }
+    &--3 { fill: var(--color-success); animation-delay: 0.4s; }
+  }
+}
+
+@keyframes import-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes import-progress-row {
+  0%   { transform: translateX(-6px); opacity: 0.2; }
+  50%  { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(6px); opacity: 0.2; }
+}
+
+@keyframes import-progress-shine {
+  0%, 30% { transform: translateX(-100%); }
+  100%    { transform: translateX(100%); }
+}
+
+@keyframes import-progress-shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-5px); }
+  75%      { transform: translateX(5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .import-progress__orb-ring,
+  .import-progress__row,
+  .import-progress__fill::after,
+  .import-progress__failure-icon,
+  .import-progress__bar--indeterminate .import-progress__fill {
+    animation: none;
+  }
 }
 
 @keyframes import-progress-sweep {

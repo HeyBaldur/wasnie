@@ -27,6 +27,14 @@ export class WsWizardComponent {
     }));
   });
 
+  /** How far along the track is filled: 0 at the first step, 1 at the last. */
+  readonly progressRatio = computed(() => {
+    const steps = this.stepDefs();
+    if (steps.length < 2) return 0;
+    const idx = steps.findIndex(s => s.name() === this.currentStep());
+    return Math.max(idx, 0) / (steps.length - 1);
+  });
+
   readonly showIndicator = computed(() => {
     const hide = this.hideOnComplete();
     if (!hide) return true;

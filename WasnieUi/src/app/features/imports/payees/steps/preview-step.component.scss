@@ -7,12 +7,6 @@
   gap: var(--space-4);
 }
 
-.preview-step__stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-}
-
 // ── Row filter tabs ──────────────────────────────────────────────────────────
 
 .row-filter {
@@ -308,3 +302,6 @@
     gap: var(--space-2);
   }
 }
+
+// The shared visual layer of the import steps (mapping + review).
+@import '../../shared/import-steps-visual';

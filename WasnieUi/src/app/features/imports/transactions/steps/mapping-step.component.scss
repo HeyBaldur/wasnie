@@ -127,3 +127,6 @@
     gap: var(--space-2);
   }
 }
+
+// The shared visual layer of the import steps (mapping + review).
+@import '../../shared/import-steps-visual';

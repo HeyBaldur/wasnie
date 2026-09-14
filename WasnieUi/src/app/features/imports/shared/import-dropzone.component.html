@@ -17,10 +17,35 @@
       (change)="onFileInput($event)"
     />
 
-    <!-- The framed icon: a bordered tile, not a bare glyph. It is what gives the zone a focal
-         point now that the zone itself is quiet. -->
-    <span class="dz__featured-icon" aria-hidden="true">
-      <app-icon name="upload-cloud" [size]="20" />
+    <!-- ★ THE ZONE'S FOCAL POINT, ANIMATED. A cloud with an arrow rising into it, and two spreadsheet pages
+         floating beside it — what this zone takes. Decorative (aria-hidden): the call to action below says it
+         in words. Still with reduced motion. -->
+    <span class="dz__art" aria-hidden="true">
+      <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="dz__sheet dz__sheet--left">
+          <rect x="8" y="30" width="26" height="32" rx="4" class="dz__sheet-paper" />
+          <rect x="13" y="37" width="16" height="3" rx="1.5" class="dz__sheet-line" />
+          <rect x="13" y="43" width="11" height="3" rx="1.5" class="dz__sheet-line" />
+          <rect x="13" y="49" width="14" height="3" rx="1.5" class="dz__sheet-line" />
+          <rect x="8" y="30" width="26" height="6" rx="3" class="dz__sheet-band dz__sheet-band--green" />
+        </g>
+        <g class="dz__sheet dz__sheet--right">
+          <rect x="86" y="26" width="26" height="32" rx="4" class="dz__sheet-paper" />
+          <rect x="91" y="33" width="16" height="3" rx="1.5" class="dz__sheet-line" />
+          <rect x="91" y="39" width="12" height="3" rx="1.5" class="dz__sheet-line" />
+          <rect x="91" y="45" width="15" height="3" rx="1.5" class="dz__sheet-line" />
+          <rect x="86" y="26" width="26" height="6" rx="3" class="dz__sheet-band dz__sheet-band--blue" />
+        </g>
+        <g class="dz__cloud">
+          <path d="M40 56h40a14 14 0 0 0 1-28a19 19 0 0 0-36-4a13 13 0 0 0-5 32z" class="dz__cloud-body" />
+          <g class="dz__arrow">
+            <path d="M60 50V33" class="dz__arrow-stem" />
+            <path d="M53 40l7-7l7 7" class="dz__arrow-stem" />
+          </g>
+        </g>
+        <circle cx="22" cy="18" r="2.5" class="dz__spark" />
+        <circle cx="100" cy="12" r="2" class="dz__spark dz__spark--late" />
+      </svg>
     </span>
 
     <p class="dz__prompt">

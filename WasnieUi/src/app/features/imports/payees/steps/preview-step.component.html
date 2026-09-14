@@ -1,12 +1,5 @@
 <div class="preview-step">
-
-  <!-- Summary cards -->
-  <div class="preview-step__stats">
-    <ws-stat-card [value]="validateResponse().totalRows"   [label]="'IMPORTS.PAYEES.SUMMARY_TOTAL' | translate"       icon="list"           variant="default"  />
-    <ws-stat-card [value]="willImportCount"                [label]="'IMPORTS.PAYEES.SUMMARY_WILL_IMPORT' | translate" icon="check-circle"   variant="success"  />
-    <ws-stat-card [value]="validateResponse().errorCount"  [label]="'IMPORTS.PAYEES.SUMMARY_ERRORS' | translate"      icon="x-circle"       variant="danger"   />
-    <ws-stat-card [value]="validateResponse().warningCount"[label]="'IMPORTS.PAYEES.SUMMARY_WARNINGS' | translate"    icon="alert-triangle" variant="warning"  />
-  </div>
+  <app-import-step-hero kind="review" titleKey="IMPORTS.SHARED.HERO_REVIEW_TITLE" descKey="IMPORTS.SHARED.HERO_REVIEW_DESC" />
 
   <!-- Row filter tabs -->
   <div class="row-filter">

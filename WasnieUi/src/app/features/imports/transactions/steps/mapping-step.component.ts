@@ -14,11 +14,12 @@ import {
 import { extractApiError } from '../../../../shared/utils/api-error';
 import { detectField, TRANSACTION_FIELD_PATTERNS } from '../helpers/column-auto-detect';
 import { SettingsApiService, FieldRequirement } from '../../../admin/services/settings.api.service';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
 
 @Component({
   selector: 'app-tx-mapping-step',
   standalone: true,
-  imports: [TranslateModule, ReactiveFormsModule, FormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, ReactiveFormsModule, FormsModule, IconComponent, WsButtonComponent, WsSelectComponent],
   templateUrl: './mapping-step.component.html',
   styleUrl: './mapping-step.component.scss',
 })

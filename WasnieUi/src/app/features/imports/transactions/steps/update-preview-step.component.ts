@@ -3,7 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { TranslateModule } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../../shared/components/icon/icon.component';
-import { WsButtonComponent, WsBadgeComponent, WsStatCardComponent, BadgeVariant } from '../../../../shared/ui';
+import { WsButtonComponent, WsBadgeComponent, BadgeVariant } from '../../../../shared/ui';
 import { TransactionUpdateService } from '../services/transaction-update.service';
 import {
   TransactionUpdateColumnMapping,
@@ -11,13 +11,14 @@ import {
   TransactionUpdateRowPreviewResult,
 } from '../models/transaction-update.models';
 import { extractApiError } from '../../../../shared/utils/api-error';
+import { ImportStepHeroComponent } from '../../shared/import-step-hero.component';
 
 type UpdateRowFilter = 'all' | 'willUpdate' | 'noChanges' | 'errors';
 
 @Component({
   selector: 'app-tx-update-preview-step',
   standalone: true,
-  imports: [TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent, WsStatCardComponent],
+  imports: [ImportStepHeroComponent, TranslateModule, FormsModule, IconComponent, WsButtonComponent, WsBadgeComponent],
   templateUrl: './update-preview-step.component.html',
   styleUrl: './update-preview-step.component.scss',
 })
