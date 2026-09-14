@@ -180,7 +180,7 @@
               <!-- The upgrade CTA takes the primary slot the Connect button would have had: on Free
                    that IS the next step, and it is the only action on this card that can succeed. -->
               @if (requiresUpgrade()) {
-                <ws-button variant="primary" routerLink="/subscription">
+                <ws-button variant="primary" routerLink="/pricing">
                   {{ 'INTEGRATIONS.VIEW_PLANS' | translate }}
                 </ws-button>
               }
@@ -244,90 +244,168 @@
             the load-bearing facts so the drift shows up as a red test.
         -->
         <ws-card class="int-tutorial">
-          <h2 class="int-tutorial__title">{{ 'INTEGRATIONS.TUTORIAL.TITLE' | translate }}</h2>
-          <p class="int-tutorial__intro">{{ 'INTEGRATIONS.TUTORIAL.INTRO' | translate }}</p>
+          <div class="int-tutorial__body">
 
-          <!--
-            The prerequisite is a callout rather than step zero because it is the one thing that makes
-            the whole flow fail, and it fails LATE — on HubSpot's screen, after the user has already
-            left Incentra. Told beforehand it costs a sentence; found out afterwards it reads as the
-            connector being broken.
-          -->
-          <!--
-            THREE ways this fails, and TWO of them are on Incentra's side — which is why they are listed
-            before the steps rather than left to be discovered. A Free workspace and a user without
-            Integrations.Manage are both refused before the browser ever reaches HubSpot; the third is
-            HubSpot's own install requirement.
-          -->
-          <div class="int-tutorial__prereq">
-            <app-icon name="alert-triangle" [size]="16" />
-            <div>
-              <p class="int-tutorial__prereq-title">
+            <!-- ── Header ── -->
+            <header class="int-tutorial__head">
+              <span class="int-tutorial__eyebrow">
+                <app-icon name="zap" [size]="12" />
+                {{ 'INTEGRATIONS.TUTORIAL.EYEBROW' | translate: { count: tutorialSteps.length } }}
+              </span>
+              <h2 class="int-tutorial__title">{{ 'INTEGRATIONS.TUTORIAL.TITLE' | translate }}</h2>
+              <p class="int-tutorial__intro">{{ 'INTEGRATIONS.TUTORIAL.INTRO' | translate }}</p>
+            </header>
+
+            <!--
+              ★ THE HANDSHAKE, DRAWN. Incentra on the left, HubSpot on the right, a secure link travelling
+              between them and the four read-only permissions arriving. Decoration only (aria-hidden): every
+              fact it shows is also written in the steps below. Still with prefers-reduced-motion.
+            -->
+            <div class="int-flow" aria-hidden="true">
+              <div class="int-flow__node">
+                <span class="int-flow__logo"><img src="wasnie_logo.png" alt="" /></span>
+                <span class="int-flow__name">Incentra</span>
+              </div>
+
+              <div class="int-flow__link">
+                <span class="int-flow__track"></span>
+                <span class="int-flow__packet int-flow__packet--out"></span>
+                <span class="int-flow__packet int-flow__packet--back"></span>
+                <span class="int-flow__lock"><app-icon name="lock" [size]="14" /></span>
+                <span class="int-flow__caption">{{ 'INTEGRATIONS.TUTORIAL.FLOW_CAPTION' | translate }}</span>
+              </div>
+
+              <div class="int-flow__node">
+                <span class="int-flow__logo int-flow__logo--hubspot"><img src="hubspot.png" alt="" /></span>
+                <span class="int-flow__name">HubSpot</span>
+                <span class="int-flow__check"><app-icon name="check" [size]="12" /></span>
+              </div>
+            </div>
+
+            <!--
+              THREE ways this fails, and TWO of them are on Incentra's side — which is why they are listed
+              before the steps rather than left to be discovered. A Free workspace and a user without
+              Integrations.Manage are both refused before the browser ever reaches HubSpot; the third is
+              HubSpot's own install requirement.
+            -->
+            <section class="int-prereq">
+              <p class="int-prereq__title">
+                <app-icon name="alert-triangle" [size]="14" />
                 {{ 'INTEGRATIONS.TUTORIAL.PREREQ_TITLE' | translate }}
               </p>
-              <ul class="int-tutorial__prereq-list">
-                <li>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_PLAN' | translate }}</li>
-                <li>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_PERMISSION' | translate }}</li>
-                <li>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_HUBSPOT' | translate }}</li>
+              <ul class="int-prereq__grid">
+                <li class="int-prereq__item" [style.--i]="0">
+                  <span class="int-prereq__icon"><app-icon name="receipt" [size]="16" /></span>
+                  <span>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_PLAN' | translate }}</span>
+                </li>
+                <li class="int-prereq__item" [style.--i]="1">
+                  <span class="int-prereq__icon"><app-icon name="shield-check" [size]="16" /></span>
+                  <span>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_PERMISSION' | translate }}</span>
+                </li>
+                <li class="int-prereq__item" [style.--i]="2">
+                  <span class="int-prereq__icon"><app-icon name="user-check" [size]="16" /></span>
+                  <span>{{ 'INTEGRATIONS.TUTORIAL.PREREQ_HUBSPOT' | translate }}</span>
+                </li>
               </ul>
-            </div>
-          </div>
+            </section>
 
-          <ol class="int-tutorial__steps">
-            @for (step of tutorialSteps; track step.key) {
-              <li class="int-tutorial__step">
-                <span class="int-tutorial__step-num" aria-hidden="true">{{ $index + 1 }}</span>
-                <div class="int-tutorial__step-text">
-                  <p class="int-tutorial__step-title">
-                    {{ 'INTEGRATIONS.TUTORIAL.STEP_' + step.key + '_TITLE' | translate }}
-                  </p>
-                  <p>{{ 'INTEGRATIONS.TUTORIAL.STEP_' + step.key + '_BODY' | translate }}</p>
-
-                  <!-- The OAuth link's 10-minute life. It expires silently, on HubSpot's side. -->
-                  @if (step.warning) {
-                    <p class="int-tutorial__step-warning">
-                      <app-icon name="clock" [size]="14" />
-                      {{ 'INTEGRATIONS.TUTORIAL.STEP_2_WARNING' | translate }}
-                    </p>
-                  }
-
-                  <!-- The four permissions HubSpot will ask to grant. All read. -->
-                  @if (step.scopes) {
-                    <ul class="int-tutorial__scopes">
-                      @for (scope of tutorialScopes; track scope) {
-                        <li>
-                          <app-icon name="eye" [size]="13" />
-                          {{ 'INTEGRATIONS.TUTORIAL.SCOPE_' + scope | translate }}
-                        </li>
+            <!--
+              ★ A TIMELINE THAT WALKS ITSELF. The highlight moves from step to step on its own (CSS only) and
+              stops while the pointer is over the list, so a reader can stay on the step they are reading.
+              Hovering or focusing a step lifts it. Still no controls: connecting is the one button in the card.
+            -->
+            <ol class="int-tutorial__steps" [style.--steps]="tutorialSteps.length">
+              @for (step of tutorialSteps; track step.key) {
+                <li class="int-tutorial__step" [style.--i]="$index" tabindex="0">
+                  <span class="int-tutorial__step-rail" aria-hidden="true">
+                    <span class="int-tutorial__step-num">
+                      @if ($last) {
+                        <app-icon name="check" [size]="14" />
+                      } @else {
+                        {{ $index + 1 }}
                       }
-                    </ul>
-                    <p class="int-tutorial__readonly">
-                      {{ 'INTEGRATIONS.TUTORIAL.READ_ONLY_NOTE' | translate }}
+                    </span>
+                  </span>
+
+                  <div class="int-tutorial__step-card">
+                    <span class="int-tutorial__step-label">
+                      {{ 'INTEGRATIONS.TUTORIAL.STEP_LABEL' | translate: { n: $index + 1 } }}
+                    </span>
+                    <p class="int-tutorial__step-title">
+                      {{ 'INTEGRATIONS.TUTORIAL.STEP_' + step.key + '_TITLE' | translate }}
                     </p>
-                  }
-                </div>
-              </li>
-            }
-          </ol>
+                    <p class="int-tutorial__step-body">{{ 'INTEGRATIONS.TUTORIAL.STEP_' + step.key + '_BODY' | translate }}</p>
 
-          <h3 class="int-tutorial__subtitle">{{ 'INTEGRATIONS.TUTORIAL.AFTER_TITLE' | translate }}</h3>
+                    <!-- The OAuth link's 10-minute life. It expires silently, on HubSpot's side. -->
+                    @if (step.warning) {
+                      <p class="int-tutorial__step-warning">
+                        <span class="int-timer" aria-hidden="true">
+                          <svg viewBox="0 0 20 20">
+                            <circle class="int-timer__track" cx="10" cy="10" r="8" />
+                            <circle class="int-timer__value" cx="10" cy="10" r="8" />
+                          </svg>
+                          <app-icon name="clock" [size]="10" />
+                        </span>
+                        {{ 'INTEGRATIONS.TUTORIAL.STEP_2_WARNING' | translate }}
+                      </p>
+                    }
 
-          <p class="int-tutorial__after-title">
-            {{ 'INTEGRATIONS.TUTORIAL.AFTER_SYNC_TITLE' | translate }}
-          </p>
-          <p>{{ 'INTEGRATIONS.TUTORIAL.AFTER_SYNC_BODY' | translate }}</p>
+                    <!-- The four permissions HubSpot will ask to grant. All read. -->
+                    @if (step.scopes) {
+                      <ul class="int-tutorial__scopes">
+                        @for (scope of tutorialScopes; track scope) {
+                          <li [style.--i]="$index">
+                            <app-icon name="eye" [size]="13" />
+                            {{ 'INTEGRATIONS.TUTORIAL.SCOPE_' + scope | translate }}
+                          </li>
+                        }
+                      </ul>
+                      <p class="int-tutorial__readonly">
+                        <app-icon name="shield-check" [size]="14" />
+                        {{ 'INTEGRATIONS.TUTORIAL.READ_ONLY_NOTE' | translate }}
+                      </p>
+                    }
+                  </div>
+                </li>
+              }
+            </ol>
 
-          <p class="int-tutorial__after-title">
-            {{ 'INTEGRATIONS.TUTORIAL.AFTER_OWNERS_TITLE' | translate }}
-          </p>
-          <p>{{ 'INTEGRATIONS.TUTORIAL.AFTER_OWNERS_BODY' | translate }}</p>
+            <!-- ── After connecting: three facts, each one opens on demand ── -->
+            <h3 class="int-tutorial__subtitle">{{ 'INTEGRATIONS.TUTORIAL.AFTER_TITLE' | translate }}</h3>
+            <div class="int-after">
+              <details class="int-after__item" open>
+                <summary class="int-after__summary">
+                  <span class="int-after__icon"><app-icon name="refresh" [size]="16" /></span>
+                  <span class="int-after__title">{{ 'INTEGRATIONS.TUTORIAL.AFTER_SYNC_TITLE' | translate }}</span>
+                  <app-icon class="int-after__chevron" name="chevron-down" [size]="16" />
+                </summary>
+                <p class="int-after__body">{{ 'INTEGRATIONS.TUTORIAL.AFTER_SYNC_BODY' | translate }}</p>
+              </details>
 
-          <p class="int-tutorial__after-title">
-            {{ 'INTEGRATIONS.TUTORIAL.AFTER_CATEGORY_TITLE' | translate }}
-          </p>
-          <p>{{ 'INTEGRATIONS.TUTORIAL.AFTER_CATEGORY_BODY' | translate }}</p>
+              <details class="int-after__item">
+                <summary class="int-after__summary">
+                  <span class="int-after__icon"><app-icon name="users" [size]="16" /></span>
+                  <span class="int-after__title">{{ 'INTEGRATIONS.TUTORIAL.AFTER_OWNERS_TITLE' | translate }}</span>
+                  <app-icon class="int-after__chevron" name="chevron-down" [size]="16" />
+                </summary>
+                <p class="int-after__body">{{ 'INTEGRATIONS.TUTORIAL.AFTER_OWNERS_BODY' | translate }}</p>
+              </details>
 
-          <p class="int-tutorial__note">{{ 'INTEGRATIONS.TUTORIAL.REVOKE_NOTE' | translate }}</p>
+              <details class="int-after__item">
+                <summary class="int-after__summary">
+                  <span class="int-after__icon"><app-icon name="tag" [size]="16" /></span>
+                  <span class="int-after__title">{{ 'INTEGRATIONS.TUTORIAL.AFTER_CATEGORY_TITLE' | translate }}</span>
+                  <app-icon class="int-after__chevron" name="chevron-down" [size]="16" />
+                </summary>
+                <p class="int-after__body">{{ 'INTEGRATIONS.TUTORIAL.AFTER_CATEGORY_BODY' | translate }}</p>
+              </details>
+            </div>
+
+            <p class="int-tutorial__note">
+              <app-icon name="info-circle" [size]="14" />
+              {{ 'INTEGRATIONS.TUTORIAL.REVOKE_NOTE' | translate }}
+            </p>
+          </div>
         </ws-card>
 
       </div>

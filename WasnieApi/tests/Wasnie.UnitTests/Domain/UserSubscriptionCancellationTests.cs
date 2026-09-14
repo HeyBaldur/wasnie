@@ -11,9 +11,9 @@ public sealed class UserSubscriptionCancellationTests
 
     private static UserSubscription MakeActivePaidSub()
     {
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), Guid.NewGuid(), "test@example.com", Now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), Guid.NewGuid(), "test@example.com", Now);
         sub.UpdateFromStripe(
-            tier: Tier.Scale,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_test",
             stripeCustomerId: "cus_test",
@@ -31,7 +31,7 @@ public sealed class UserSubscriptionCancellationTests
         var newPeriodStart = CancelAt.AddDays(1);
         var newPeriodEnd = newPeriodStart.AddMonths(1);
         sub.UpdateFromStripe(
-            tier: Tier.Scale,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_reactivated",
             stripeCustomerId: "cus_test",

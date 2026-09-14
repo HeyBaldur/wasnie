@@ -25,6 +25,7 @@ public sealed class HubSpotSyncOrchestrator(
     IApplicationDbContext db,
     IBackgroundJobClient jobClient,
     IOptions<HubSpotSyncOptions> options,
+    IAccountAccessReader accessReader,
     ILogger<HubSpotSyncOrchestrator> logger)
 {
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -42,21 +43,20 @@ public sealed class HubSpotSyncOrchestrator(
             .Select(c => c.TenantId)
             .ToListAsync(cancellationToken);
 
-        // ★ Free tenants are dropped HERE, before any job is scheduled — not inside the per-tenant job.
-        // This is the loop that actually spends: a downgraded tenant left in this list would keep
-        // pulling HubSpot every hour forever, whether or not anyone ever logs in again. Their
-        // connection row survives untouched (frozen, not deleted) and rejoins the fan-out the moment
-        // they upgrade.
-        var paidTenantIds = await db.Tenants
-            .IgnoreQueryFilters()
-            .Where(t => connectedTenantIds.Contains(t.Id) && t.Tier != Tier.Free)
-            .Select(t => t.Id)
-            .ToListAsync(cancellationToken);
+        // ★ Locked accounts are dropped HERE, before any job is scheduled — not inside the per-tenant job.
+        // This is the loop that actually spends: a tenant whose trial ended or who canceled, left in this list,
+        // would keep pulling HubSpot every hour forever, whether or not anyone ever logs in again. Their
+        // connection row survives untouched (frozen, not deleted) and rejoins the fan-out the moment they pay.
+        // KAN-77: access (trial or paying), from the same rule as the paywall — not "tier != Free".
+        var access = await accessReader.GetManyAsync(connectedTenantIds, cancellationToken);
+        var paidTenantIds = connectedTenantIds
+            .Where(id => access.TryGetValue(id, out var a) && a.HasAccess)
+            .ToList();
 
         var skipped = connectedTenantIds.Count - paidTenantIds.Count;
         if (skipped > 0)
             logger.LogInformation(
-                "HubSpot auto-sync: skipped {Skipped} connected tenant(s) on the Free plan.", skipped);
+                "HubSpot auto-sync: skipped {Skipped} connected tenant(s) whose account is locked.", skipped);
 
         var tenantIds = paidTenantIds;
 

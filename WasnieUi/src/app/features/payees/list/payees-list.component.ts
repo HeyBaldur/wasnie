@@ -12,9 +12,6 @@ import { PayeesStore } from '../state/payees.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { extractApiError } from '../../../shared/utils/api-error';
 import { PayeeStatus } from '../models/payee.model';
-import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
-import { TierLimitModalService } from '../../../shared/components/tier-limit-modal/tier-limit-modal.service';
-import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -65,31 +62,12 @@ export class PayeesListComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
-  private readonly subState = inject(SubscriptionStateService);
-  private readonly tierLimitModal = inject(TierLimitModalService);
 
-  readonly atPayeesLimit = computed(() => {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    const max = TIER_LIMITS[tier]?.maxPayees ?? -1;
-    return max !== -1 && this.store.unfilteredTotal() >= max;
-  });
-
-  get payeesTierLimit(): number {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    return TIER_LIMITS[tier]?.maxPayees ?? -1;
-  }
-
+  // KAN-77: no client-side plan limit. This used to pre-check a hard-coded tier table (Free: 1 plan / 5 payees)
+  // and — reading "Free" whenever the tenant had no subscription — would have blocked every TRIAL at its second
+  // plan. The server enforces the plan's real limit and answers 403 TierLimitExceeded, which
+  // forbiddenResponseInterceptor turns into the same limit modal.
   onCreatePayee(): void {
-    if (this.atPayeesLimit()) {
-      const tier = this.subState.subscription()?.tier ?? 'Free';
-      this.tierLimitModal.show({
-        tier,
-        currentCount: this.store.unfilteredTotal(),
-        limit: this.payeesTierLimit,
-        entityKey: 'payees',
-      });
-      return;
-    }
     void this.router.navigate(['new'], { relativeTo: this.route });
   }
 

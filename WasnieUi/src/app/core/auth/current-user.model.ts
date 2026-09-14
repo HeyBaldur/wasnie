@@ -1,12 +1,11 @@
-export type Tier = 'Free' | 'Starter' | 'Growth' | 'Scale' | 'Enterprise';
-
 export interface CurrentUser {
   userId: string;
   email: string;
   role: string;
   tenantId: string;
   tenantSlug: string;
-  tier: Tier;
+  /** KAN-77: the subscribed plan code (e.g. "pro"); null while in trial or never subscribed. */
+  planCode: string | null;
   hasSelectedPlan: boolean;
   emailConfirmed: boolean;
   isQualified: boolean;

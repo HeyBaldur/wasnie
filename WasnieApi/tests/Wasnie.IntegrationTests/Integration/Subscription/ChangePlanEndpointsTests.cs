@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Features.Subscription.DTOs;
-using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
@@ -39,9 +38,9 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
             $"DELETE FROM UserSubscriptions WHERE TenantId = {tid}");
 
         var now = DateTimeOffset.UtcNow;
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), tid, "test@wasnie.io", now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), tid, "test@wasnie.io", now);
         sub.UpdateFromStripe(
-            tier: Tier.Growth,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_test_change",
             stripeCustomerId: "cus_test_change",
@@ -70,7 +69,7 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
     public async Task ChangePlan_WithoutToken_Returns401()
     {
         var anon = _fixture.Factory.CreateClient();
-        var response = await anon.PostAsJsonAsync("/api/subscription/change-plan", new { targetTier = "Scale" });
+        var response = await anon.PostAsJsonAsync("/api/subscription/change-plan", new { targetPlanCode = "scale" });
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -95,11 +94,12 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
             builder.ConfigureServices(services =>
             {
                 services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddSingleton<Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog>(TestPlans.ThreePlanCatalog());
                 services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagement());
             }));
 
         var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
-        var response = await client.PostAsJsonAsync("/api/subscription/change-plan", new { targetTier = tier });
+        var response = await client.PostAsJsonAsync("/api/subscription/change-plan", new { targetPlanCode = tier });
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -134,12 +134,13 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
                 builder.ConfigureServices(services =>
                 {
                     services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                    services.AddSingleton<Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog>(TestPlans.ThreePlanCatalog());
                     services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagement());
                 }));
 
             var client = factory.CreateClient().WithAuth(tid);
             var response = await client.PostAsJsonAsync("/api/subscription/change-plan",
-                new { targetTier = "Starter" });
+                new { targetPlanCode = "starter" });
 
             response.StatusCode.Should().Be(HttpStatusCode.Conflict);
             var body = await response.Content.ReadFromJsonAsync<ChangePlanResultDto>(JsonOptions);
@@ -148,7 +149,7 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
             body.BlockedReason.Should().Be("payees");
             body.Current.Should().Be(26);
             body.Limit.Should().Be(25);
-            body.TargetTier.Should().Be("Starter");
+            body.TargetPlanCode.Should().Be("starter");
         }
         finally
         {
@@ -166,12 +167,13 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
             builder.ConfigureServices(services =>
             {
                 services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddSingleton<Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog>(TestPlans.ThreePlanCatalog());
                 services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagement());
             }));
 
         var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
         var response = await client.PostAsJsonAsync("/api/subscription/change-plan",
-            new { targetTier = "Scale" });
+            new { targetPlanCode = "scale" });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ChangePlanResultDto>(JsonOptions);
@@ -187,12 +189,13 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
             builder.ConfigureServices(services =>
             {
                 services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddSingleton<Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog>(TestPlans.ThreePlanCatalog());
                 services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagement());
             }));
 
         var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
         var response = await client.PostAsJsonAsync("/api/subscription/change-plan",
-            new { targetTier = "Starter" });
+            new { targetPlanCode = "starter" });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ChangePlanResultDto>(JsonOptions);
@@ -208,12 +211,13 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
             builder.ConfigureServices(services =>
             {
                 services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddSingleton<Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog>(TestPlans.ThreePlanCatalog());
                 services.AddScoped<IStripeSubscriptionManagementService>(_ => new StubStripeManagementUpgradeFails());
             }));
 
         var client = factory.CreateClient().WithAuth(TestConstants.TenantA);
         var response = await client.PostAsJsonAsync("/api/subscription/change-plan",
-            new { targetTier = "Scale" });
+            new { targetPlanCode = "scale" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadAsStringAsync();
@@ -230,19 +234,19 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
     private sealed class StubPlanService : ISubscriptionPlanService
     {
         public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(
-            Tier currentTier, CancellationToken cancellationToken = default)
+            string? currentPlanCode, CancellationToken cancellationToken = default)
         {
             IReadOnlyList<SubscriptionPlanDto> plans =
             [
                 new(PriceId: "price_starter", ProductId: "prod_starter", Name: "Starter",
-                    Price: 29m, Currency: "EUR", Interval: "month", Tier: "Starter",
-                    MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: currentTier == Tier.Starter),
+                    Price: 29m, Currency: "EUR", Interval: "month", PlanCode: "starter",
+                    MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: currentPlanCode == "starter"),
                 new(PriceId: "price_growth", ProductId: "prod_growth", Name: "Growth",
-                    Price: 79m, Currency: "EUR", Interval: "month", Tier: "Growth",
-                    MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: currentTier == Tier.Growth),
+                    Price: 79m, Currency: "EUR", Interval: "month", PlanCode: "growth",
+                    MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: currentPlanCode == "growth"),
                 new(PriceId: "price_scale", ProductId: "prod_scale", Name: "Scale",
-                    Price: 199m, Currency: "EUR", Interval: "month", Tier: "Scale",
-                    MaxPayees: 150, MaxPlans: int.MaxValue, IsCurrentPlan: currentTier == Tier.Scale),
+                    Price: 199m, Currency: "EUR", Interval: "month", PlanCode: "scale",
+                    MaxPayees: 150, MaxPlans: -1, IsCurrentPlan: currentPlanCode == "scale"),
             ];
             return Task.FromResult(plans);
         }
@@ -250,10 +254,10 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
 
     private sealed class StubStripeManagement : IStripeSubscriptionManagementService
     {
-        // Returns Growth — matches the tier seeded in InitializeAsync.
-        public Task<Tier?> GetCurrentTierFromStripeAsync(string subscriptionId,
+        // Stripe says the subscription is on "growth" (the DB row is seeded as "pro" and gets synced).
+        public Task<string?> GetCurrentPlanCodeFromStripeAsync(string subscriptionId,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<Tier?>(Tier.Growth);
+            => Task.FromResult<string?>("growth");
 
         public Task UpgradeSubscriptionAsync(string subscriptionId, string newPriceId,
             CancellationToken cancellationToken = default)
@@ -274,9 +278,9 @@ public sealed class ChangePlanEndpointsTests : IAsyncLifetime
 
     private sealed class StubStripeManagementUpgradeFails : IStripeSubscriptionManagementService
     {
-        public Task<Tier?> GetCurrentTierFromStripeAsync(string subscriptionId,
+        public Task<string?> GetCurrentPlanCodeFromStripeAsync(string subscriptionId,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<Tier?>(Tier.Growth);
+            => Task.FromResult<string?>("growth");
 
         public Task UpgradeSubscriptionAsync(string subscriptionId, string newPriceId,
             CancellationToken cancellationToken = default)

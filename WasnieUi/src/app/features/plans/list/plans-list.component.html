@@ -8,7 +8,6 @@
       slot="actions"
       variant="primary"
       [hidden]="!('Plans.Create' | hasPermission)"
-      [class.at-limit]="atPlansLimit()"
       (click)="onCreatePlan()"
     >
       <app-icon name="plus" [size]="16" />

@@ -53,6 +53,9 @@ public sealed class TestDatabaseFixture : IAsyncLifetime
                 var now = DateTimeOffset.UtcNow;
                 var tenant = Tenant.Create($"Test Tenant {id}", id.ToString("N")[..20], id, now);
                 tenant.SetTier(Tier.Enterprise);
+                // KAN-77: the paywall locks a tenant with neither a live subscription nor an open trial. The shared
+                // test tenants carry a long trial so regular tests exercise their subject, not the paywall.
+                tenant.StartTrial(now.AddYears(10));
                 // Mirror what the real onboarding does (CompleteQualificationCommandHandler):
                 // mark the seeded tenant qualified so ActivationEnforcementMiddleware Gate 2
                 // does not 403 every authenticated request with "qualification_required".

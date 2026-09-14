@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Features.Subscription.DTOs;
-using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
 using Wasnie.IntegrationTests.Infrastructure;
@@ -28,9 +27,9 @@ public sealed class SubscriptionEnforcementTests : IAsyncLifetime
             $"DELETE FROM UserSubscriptions WHERE TenantId = {TestConstants.TenantA}");
 
         var now = DateTimeOffset.UtcNow;
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), TestConstants.TenantA, "test@wasnie.io", now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantA, "test@wasnie.io", now);
         sub.UpdateFromStripe(
-            tier: Tier.Growth,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_enforce_test",
             stripeCustomerId: "cus_enforce_test",
@@ -82,7 +81,8 @@ public sealed class SubscriptionEnforcementTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.PaymentRequired);
 
         var body = await response.Content.ReadFromJsonAsync<ErrorBody>();
-        body!.Code.Should().Be("subscription_canceled");
+        body!.Code.Should().Be("account_locked");
+        body.Reason.Should().Be("SubscriptionEnded");
     }
 
     // ── Exempt endpoints accessible ───────────────────────────────────────────────
@@ -143,21 +143,21 @@ public sealed class SubscriptionEnforcementTests : IAsyncLifetime
         response.StatusCode.Should().NotBe(HttpStatusCode.PaymentRequired);
     }
 
-    private sealed record ErrorBody(string Code, string Message);
+    private sealed record ErrorBody(string Code, string? Reason);
 
     private sealed class StubPlanService : ISubscriptionPlanService
     {
         public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(
-            Tier currentTier, CancellationToken cancellationToken = default)
+            string? currentPlanCode, CancellationToken cancellationToken = default)
         {
             IReadOnlyList<SubscriptionPlanDto> plans =
             [
                 new(PriceId: "price_starter", ProductId: "prod_starter", Name: "Starter",
-                    Price: 29m, Currency: "EUR", Interval: "month", Tier: "Starter",
-                    MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: currentTier == Tier.Starter),
+                    Price: 29m, Currency: "EUR", Interval: "month", PlanCode: "starter",
+                    MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: currentPlanCode == "starter"),
                 new(PriceId: "price_growth", ProductId: "prod_growth", Name: "Growth",
-                    Price: 79m, Currency: "EUR", Interval: "month", Tier: "Growth",
-                    MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: currentTier == Tier.Growth),
+                    Price: 79m, Currency: "EUR", Interval: "month", PlanCode: "growth",
+                    MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: currentPlanCode == "growth"),
             ];
             return Task.FromResult(plans);
         }

@@ -1,3 +1,4 @@
+using Wasnie.UnitTests.TestDoubles;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
@@ -52,7 +53,6 @@ public sealed class StripeWebhookServiceTests : IDisposable
             PublishableKey = "pk_test_fake",
             WebhookSecret = TestSecret,
             FrontendBaseUrl = "http://localhost:4200",
-            ProductTierMap = new Dictionary<string, string> { ["prod_starter"] = "Starter" },
         });
     }
 
@@ -150,6 +150,99 @@ public sealed class StripeWebhookServiceTests : IDisposable
         await _audit.DidNotReceive().LogAsync(Arg.Any<AuditEntry>(), Arg.Any<CancellationToken>());
     }
 
+    // ── KAN-77: one customer, an old cancelled subscription and a new paid one ─────────
+
+    [Fact]
+    public async Task SubscriptionDeleted_ForTheOldSubscription_DoesNotCancelTheRowFollowingTheNewOne()
+    {
+        var tenantId = await SeedTenantAsync();
+        await SeedSubscriptionAsync(tenantId, "sub_new", "cus_shared");
+
+        var (json, sig) = Sign(BuildSubscriptionDeletedJson("evt_del_old", "sub_old", "cus_shared"));
+        (await Create().ProcessAsync(json, sig)).IsSuccess.Should().BeTrue();
+
+        var row = await _db.UserSubscriptions.IgnoreQueryFilters().SingleAsync();
+        row.Status.Should().Be(SubscriptionStatus.Active, "the customer paid for sub_new; sub_old ending changes nothing");
+        row.StripeSubscriptionId.Should().Be("sub_new");
+    }
+
+    [Fact]
+    public async Task SubscriptionDeleted_ForTheHeldSubscription_CancelsWithStripesEndDate()
+    {
+        var tenantId = await SeedTenantAsync();
+        await SeedSubscriptionAsync(tenantId, "sub_new", "cus_shared");
+
+        var (json, sig) = Sign(BuildSubscriptionDeletedJson("evt_del_new", "sub_new", "cus_shared", endedAt: 1789000000));
+        await Create().ProcessAsync(json, sig);
+
+        var row = await _db.UserSubscriptions.IgnoreQueryFilters().SingleAsync();
+        row.Status.Should().Be(SubscriptionStatus.Canceled);
+        row.CanceledAt.Should().Be(DateTimeOffset.FromUnixTimeSeconds(1789000000));
+    }
+
+    [Fact]
+    public async Task InvoicePaymentFailed_ForAnotherSubscriptionOfTheCustomer_DoesNotMarkPastDue()
+    {
+        var tenantId = await SeedTenantAsync();
+        await SeedSubscriptionAsync(tenantId, "sub_new", "cus_shared");
+
+        var (json, sig) = Sign(BuildInvoiceJson("evt_inv_old", "invoice.payment_failed", "cus_shared", "sub_old"));
+        await Create().ProcessAsync(json, sig);
+
+        (await _db.UserSubscriptions.IgnoreQueryFilters().SingleAsync()).Status.Should().Be(SubscriptionStatus.Active);
+    }
+
+    [Fact]
+    public async Task InvoicePaymentFailed_ForTheHeldSubscription_MarksPastDue()
+    {
+        var tenantId = await SeedTenantAsync();
+        await SeedSubscriptionAsync(tenantId, "sub_new", "cus_shared");
+
+        var (json, sig) = Sign(BuildInvoiceJson("evt_inv_new", "invoice.payment_failed", "cus_shared", "sub_new"));
+        await Create().ProcessAsync(json, sig);
+
+        (await _db.UserSubscriptions.IgnoreQueryFilters().SingleAsync()).Status.Should().Be(SubscriptionStatus.PastDue);
+    }
+
+    [Fact]
+    public async Task InvoicePaymentFailed_WithoutSubscriptionOnThePayload_FallsBackToTheCustomer()
+    {
+        var tenantId = await SeedTenantAsync();
+        await SeedSubscriptionAsync(tenantId, "sub_new", "cus_shared");
+
+        var (json, sig) = Sign(BuildInvoiceJson("evt_inv_legacy", "invoice.payment_failed", "cus_shared", subscriptionId: null));
+        await Create().ProcessAsync(json, sig);
+
+        (await _db.UserSubscriptions.IgnoreQueryFilters().SingleAsync()).Status.Should().Be(SubscriptionStatus.PastDue);
+    }
+
+    private async Task SeedSubscriptionAsync(Guid tenantId, string subscriptionId, string customerId)
+    {
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), tenantId, "t@t.io", FixedNow);
+        sub.UpdateFromStripe("pro", SubscriptionStatus.Active, subscriptionId, customerId, "price_pro", "prod_pro",
+            FixedNow, FixedNow.AddMonths(1), FixedNow.AddMonths(1), FixedNow);
+        _db.UserSubscriptions.Add(sub);
+        await _db.SaveChangesAsync();
+    }
+
+    private static string BuildSubscriptionDeletedJson(string eventId, string subscriptionId, string customerId, long? endedAt = null)
+    {
+        var ended = endedAt.HasValue ? ", \"ended_at\": " + endedAt.Value : "";
+        return "{ \"id\": \"" + eventId + "\", \"object\": \"event\", \"type\": \"customer.subscription.deleted\", "
+             + "\"api_version\": \"2025-03-31.basil\", \"data\": { \"object\": { \"id\": \"" + subscriptionId
+             + "\", \"object\": \"subscription\", \"customer\": \"" + customerId + "\", \"status\": \"canceled\"" + ended + " } } }";
+    }
+
+    private static string BuildInvoiceJson(string eventId, string type, string customerId, string? subscriptionId)
+    {
+        var parent = subscriptionId is null
+            ? ""
+            : ", \"parent\": { \"type\": \"subscription_details\", \"subscription_details\": { \"subscription\": \"" + subscriptionId + "\" } }";
+        return "{ \"id\": \"" + eventId + "\", \"object\": \"event\", \"type\": \"" + type + "\", "
+             + "\"api_version\": \"2025-03-31.basil\", \"data\": { \"object\": { \"id\": \"in_" + eventId
+             + "\", \"object\": \"invoice\", \"customer\": \"" + customerId + "\"" + parent + " } } }";
+    }
+
     // ── Tenant seeding helpers ─────────────────────────────────────────────
 
     private async Task<Guid> SeedTenantAsync()
@@ -163,7 +256,7 @@ public sealed class StripeWebhookServiceTests : IDisposable
 
     // ── Builders and helpers ───────────────────────────────────────────────
 
-    private StripeWebhookService Create() => new(_db, _options, _audit, _clock, _logger);
+    private StripeWebhookService Create() => new(_db, _options, _audit, _clock, TestPlanCatalog.Create(), _logger);
 
     private static string BuildUnknownEventJson(string eventId) => $$"""
         {

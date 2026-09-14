@@ -8,6 +8,7 @@ import { WsToastContainerComponent } from '../../ui/ws-toast/ws-toast-container.
 import { WsConfirmationModalComponent } from '../../ui';
 import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
 import { PastDueBannerComponent } from '../../../features/subscription/past-due-banner/past-due-banner.component';
+import { TrialBannerComponent } from '../../../features/subscription/trial-banner/trial-banner.component';
 import { TwoFaReminderComponent } from '../two-fa-reminder/two-fa-reminder.component';
 import { AssistantPanelComponent } from '../../../features/assistant/panel/assistant-panel.component';
 import { WelcomeModalComponent } from '../welcome-modal/welcome-modal.component';
@@ -22,6 +23,7 @@ import { WelcomeService } from '../../../core/services/welcome.service';
     WsToastContainerComponent,
     WsConfirmationModalComponent,
     PastDueBannerComponent,
+    TrialBannerComponent,
     TwoFaReminderComponent,
     AssistantPanelComponent,
     WelcomeModalComponent,

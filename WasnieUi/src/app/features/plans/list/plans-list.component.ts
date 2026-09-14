@@ -14,9 +14,6 @@ import { PlansStore } from '../state/plans.store';
 import { ToastService } from '../../../shared/services/toast.service';
 import { DateFormatPipe } from '../../../shared/pipes/date-format.pipe';
 import { PlanStatus } from '../models/plan.model';
-import { SubscriptionStateService } from '../../subscription/services/subscription-state.service';
-import { TierLimitModalService } from '../../../shared/components/tier-limit-modal/tier-limit-modal.service';
-import { TIER_LIMITS } from '../../../shared/services/tier-limits';
 import {
   WsButtonComponent,
   WsInputComponent,
@@ -65,31 +62,12 @@ export class PlansListComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
-  private readonly subState = inject(SubscriptionStateService);
-  private readonly tierLimitModal = inject(TierLimitModalService);
 
-  readonly atPlansLimit = computed(() => {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    const max = TIER_LIMITS[tier]?.maxPlans ?? -1;
-    return max !== -1 && this.store.unfilteredTotal() >= max;
-  });
-
-  get plansTierLimit(): number {
-    const tier = this.subState.subscription()?.tier ?? 'Free';
-    return TIER_LIMITS[tier]?.maxPlans ?? -1;
-  }
-
+  // KAN-77: no client-side plan limit. This used to pre-check a hard-coded tier table (Free: 1 plan / 5 payees)
+  // and — reading "Free" whenever the tenant had no subscription — would have blocked every TRIAL at its second
+  // plan. The server enforces the plan's real limit and answers 403 TierLimitExceeded, which
+  // forbiddenResponseInterceptor turns into the same limit modal.
   onCreatePlan(): void {
-    if (this.atPlansLimit()) {
-      const tier = this.subState.subscription()?.tier ?? 'Free';
-      this.tierLimitModal.show({
-        tier,
-        currentCount: this.store.unfilteredTotal(),
-        limit: this.plansTierLimit,
-        entityKey: 'plans',
-      });
-      return;
-    }
     void this.router.navigate(['new'], { relativeTo: this.route });
   }
 
@@ -211,16 +189,6 @@ export class PlansListComponent implements OnInit {
 
   async onClone(planId: string): Promise<void> {
     this.closeMenu();
-    if (this.atPlansLimit()) {
-      const tier = this.subState.subscription()?.tier ?? 'Free';
-      this.tierLimitModal.show({
-        tier,
-        currentCount: this.store.unfilteredTotal(),
-        limit: this.plansTierLimit,
-        entityKey: 'plans',
-      });
-      return;
-    }
     try {
       await this.store.clonePlan(planId);
       this.toast.show('PLANS.TOAST_CLONED', 'success');

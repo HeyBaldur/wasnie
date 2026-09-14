@@ -21,7 +21,7 @@ export class TierLimitModalComponent {
 
   upgrade(): void {
     this.modal.close();
-    void this.router.navigateByUrl('/subscription');
+    void this.router.navigateByUrl('/pricing');
   }
 
   usagePercent(info: TierLimitInfo): number {

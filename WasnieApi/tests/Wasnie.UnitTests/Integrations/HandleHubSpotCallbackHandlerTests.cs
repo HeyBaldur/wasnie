@@ -1,3 +1,4 @@
+using Wasnie.Infrastructure.Identity;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -60,6 +61,7 @@ public sealed class HandleHubSpotCallbackHandlerTests : IDisposable
 
         _handler = new HandleHubSpotCallbackHandler(
             _db, _client, _enc, audit, clock, guid, options,
+            new AccountAccessReader(_db, clock),
             NullLogger<HandleHubSpotCallbackHandler>.Instance);
     }
 
@@ -67,13 +69,13 @@ public sealed class HandleHubSpotCallbackHandlerTests : IDisposable
 
     // The callback re-checks the plan from the STATE's tenant (it is anonymous — there is no ambient
     // tenant), so the handshake only completes for a tenant whose row says it is paid.
-    private void SeedTenant(Tier tier = Tier.Growth)
+    private void SeedTenant()
     {
         if (_db.Tenants.IgnoreQueryFilters().Any(t => t.Id == TenantId))
             return;
 
         var tenant = Tenant.Create("Acme", $"acme-{TenantId:N}", TenantId, Now);
-        tenant.SetTier(tier);
+        tenant.StartTrial(Now.AddYears(10)); // KAN-77: an account WITH access (open trial).
         _db.Tenants.Add(tenant);
         _db.SaveChanges();
     }

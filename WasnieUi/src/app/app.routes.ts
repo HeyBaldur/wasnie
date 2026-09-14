@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { planGuard } from './core/guards/plan.guard';
 import { hasPermissionGuard } from './core/auth/guards/has-permission.guard';
 import { subscriptionGuard } from './core/guards/subscription.guard';
+import { authGuard } from './core/guards/auth.guard';
 import { environment } from '../environments/environment';
 
 export const routes: Routes = [
@@ -134,13 +135,35 @@ export const routes: Routes = [
     loadChildren: () =>
       import('./features/category-mappings/category-mappings.routes').then((m) => m.categoryMappingsRoutes),
   },
+  // ── KAN-77: Billing and Pricing are two places now ─────────────────────────────────────────────
+  // Pricing: what the plan costs, for the trial that decides to pay. Visible to every signed-in user; only
+  // Subscription.Manage sees the button (hidden, not disabled).
   {
-    path: 'subscription',
-    title: 'NAV.SUBSCRIPTION',
-    canActivate: [planGuard, hasPermissionGuard('Subscription.Manage')],
-    loadChildren: () =>
-      import('./features/subscription/subscription.routes').then((m) => m.manageSubscriptionRoutes),
+    path: 'pricing',
+    title: 'NAV.PRICING',
+    canActivate: [planGuard, subscriptionGuard],
+    loadComponent: () =>
+      import('./features/subscription/pricing/pricing.component').then((m) => m.PricingComponent),
   },
+  // The paywall: authentication only. planGuard/subscriptionGuard would send a locked account right back here.
+  {
+    path: 'billing/paywall',
+    title: 'PAYWALL.PAGE_TITLE',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/subscription/paywall/paywall.component').then((m) => m.PaywallComponent),
+  },
+  // Manage billing, in Settings: the customer who already pays.
+  {
+    path: 'billing',
+    title: 'NAV.MANAGE_BILLING',
+    canActivate: [planGuard, subscriptionGuard, hasPermissionGuard('Subscription.Manage')],
+    loadComponent: () =>
+      import('./features/subscription/billing/manage-billing.component').then((m) => m.ManageBillingComponent),
+  },
+  // Old addresses keep working: Stripe portal sessions, bookmarks and e-mails still point at them.
+  { path: 'subscription/reactivate', redirectTo: 'billing/paywall', pathMatch: 'full' },
+  { path: 'subscription', redirectTo: 'billing', pathMatch: 'full' },
   {
     path: 'profile',
     title: 'NAV.PROFILE',

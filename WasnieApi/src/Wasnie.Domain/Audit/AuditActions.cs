@@ -108,6 +108,8 @@ public static class AuditActions
     public const string SubscriptionCancelScheduled = "SUBSCRIPTION_CANCEL_SCHEDULED";
     public const string SubscriptionCancelReverted = "SUBSCRIPTION_CANCEL_REVERTED";
     public const string SubscriptionTierSyncedFromStripe = "SUBSCRIPTION_TIER_SYNCED_FROM_STRIPE";
+    /// <summary>KAN-77: the stored subscription was corrected from Stripe because a webhook never arrived.</summary>
+    public const string SubscriptionSyncedFromStripe = "SUBSCRIPTION_SYNCED_FROM_STRIPE";
 
     // Profile self-service
     public const string ProfileNameUpdated = "PROFILE_NAME_UPDATED";

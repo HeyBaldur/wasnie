@@ -24,7 +24,7 @@ public sealed class GetSubscriptionPlansHandler(
             return Result<IReadOnlyList<SubscriptionPlanDto>>.Failure("Tenant not found.");
 
         // StripeUnavailableException propagates to the middleware → 503.
-        var plans = await planService.GetPlansAsync(tenant.Tier, cancellationToken);
+        var plans = await planService.GetPlansAsync(tenant.PlanCode, cancellationToken);
         return Result<IReadOnlyList<SubscriptionPlanDto>>.Success(plans);
     }
 }

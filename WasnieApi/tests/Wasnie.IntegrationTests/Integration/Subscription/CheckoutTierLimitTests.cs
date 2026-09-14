@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Features.Subscription.DTOs;
-using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
@@ -34,9 +33,9 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
         await db.Database.ExecuteSqlAsync($"DELETE FROM UserSubscriptions WHERE TenantId = {tid}");
 
         var now = DateTimeOffset.UtcNow;
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), tid, "test@wasnie.io", now);
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), tid, "test@wasnie.io", now);
         sub.UpdateFromStripe(
-            tier: Tier.Scale,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: "sub_test_chk_limit",
             stripeCustomerId: "cus_test_chk_limit",
@@ -81,7 +80,7 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
         body.BlockedReason.Should().Be("payees");
         body.Current.Should().Be(26);
         body.Limit.Should().Be(25);
-        body.TargetTier.Should().Be("Starter");
+        body.TargetPlanCode.Should().Be("starter");
     }
 
     [Fact]
@@ -99,7 +98,7 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
         body.BlockedReason.Should().Be("payees");
         body.Current.Should().Be(76);
         body.Limit.Should().Be(75);
-        body.TargetTier.Should().Be("Growth");
+        body.TargetPlanCode.Should().Be("growth");
     }
 
     // ── Allowed: usage fits target tier ──────────────────────────────────────────
@@ -152,6 +151,7 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
             builder.ConfigureServices(services =>
             {
                 services.AddScoped<ISubscriptionPlanService>(_ => new StubPlanService());
+                services.AddSingleton<Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog>(TestPlans.ThreePlanCatalog());
                 services.AddScoped<IStripeCheckoutService>(_ => new StubCheckoutService());
             }));
 
@@ -180,19 +180,19 @@ public sealed class CheckoutTierLimitTests : IAsyncLifetime
     private sealed class StubPlanService : ISubscriptionPlanService
     {
         public Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(
-            Tier currentTier, CancellationToken cancellationToken = default)
+            string? currentPlanCode, CancellationToken cancellationToken = default)
         {
             IReadOnlyList<SubscriptionPlanDto> plans =
             [
                 new(PriceId: "price_starter", ProductId: "prod_starter", Name: "Starter",
-                    Price: 29m, Currency: "EUR", Interval: "month", Tier: "Starter",
+                    Price: 29m, Currency: "EUR", Interval: "month", PlanCode: "starter",
                     MaxPayees: 25, MaxPlans: 5, IsCurrentPlan: false),
                 new(PriceId: "price_growth", ProductId: "prod_growth", Name: "Growth",
-                    Price: 79m, Currency: "EUR", Interval: "month", Tier: "Growth",
+                    Price: 79m, Currency: "EUR", Interval: "month", PlanCode: "growth",
                     MaxPayees: 75, MaxPlans: 15, IsCurrentPlan: false),
                 new(PriceId: "price_scale", ProductId: "prod_scale", Name: "Scale",
-                    Price: 199m, Currency: "EUR", Interval: "month", Tier: "Scale",
-                    MaxPayees: 150, MaxPlans: int.MaxValue, IsCurrentPlan: false),
+                    Price: 199m, Currency: "EUR", Interval: "month", PlanCode: "scale",
+                    MaxPayees: 150, MaxPlans: -1, IsCurrentPlan: false),
             ];
             return Task.FromResult(plans);
         }

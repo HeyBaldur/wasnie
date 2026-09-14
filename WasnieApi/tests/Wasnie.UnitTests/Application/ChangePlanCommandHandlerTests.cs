@@ -9,15 +9,26 @@ using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Features.Subscription.Commands;
 using Wasnie.Application.Features.Subscription.DTOs;
 using Wasnie.Application.Features.Subscription.Handlers;
-using Wasnie.Domain.Authorization;
+using Wasnie.Application.Common.Options;
 using Wasnie.Domain.Compensation.Payees;
 using Wasnie.Domain.Subscription;
 using Wasnie.Infrastructure.Persistence;
+using Wasnie.UnitTests.TestDoubles;
 
 namespace Wasnie.UnitTests.Application;
 
+/// <summary>
+/// KAN-77: plans are codes from the catalog, not the Starter/Growth/Scale enum. The shipped catalog has one plan,
+/// so these tests run against a THREE-plan catalog — the future the multi-plan infrastructure exists for — to keep
+/// the money semantics pinned: upgrade charges now, downgrade prorates, a stale DB never picks the wrong branch.
+/// </summary>
 public sealed class ChangePlanCommandHandlerTests : IDisposable
 {
+    private static readonly Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog Catalog = TestPlanCatalog.Create(
+        new SubscriptionPlanDefinition { Code = "starter", MaxPayees = 25, MaxPlans = 5 },
+        new SubscriptionPlanDefinition { Code = "growth", MaxPayees = 75, MaxPlans = 15 },
+        new SubscriptionPlanDefinition { Code = "scale", MaxPayees = 150, MaxPlans = null });
+
     private static readonly DateTimeOffset Now = new(2026, 6, 12, 10, 0, 0, TimeSpan.Zero);
     private static readonly Guid TenantId = Guid.NewGuid();
 
@@ -80,8 +91,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_SameTier_ReturnsSuccessNotPending()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
 
         var result = await Create().Handle(new ChangePlanCommand("Growth"), default);
 
@@ -95,8 +106,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_Upgrade_CallsUpgradeSubscriptionAsync()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
         SetupPlans();
 
         await Create().Handle(new ChangePlanCommand("Scale"), default);
@@ -108,8 +119,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_Upgrade_ReturnsPending()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
         SetupPlans();
 
         var result = await Create().Handle(new ChangePlanCommand("Scale"), default);
@@ -122,8 +133,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_Upgrade_PaymentDeclined_ReturnsFailureWithUpgradeCode()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
         SetupPlans();
         _stripe.UpgradeSubscriptionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeException("Your card was declined."));
@@ -137,8 +148,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_Upgrade_PaymentDeclined_DoesNotCallDowngrade()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
         SetupPlans();
         _stripe.UpgradeSubscriptionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeException("Your card was declined."));
@@ -153,8 +164,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_Downgrade_CallsUpdateSubscriptionAsync()
     {
-        await SeedSubscriptionAsync(Tier.Scale);
-        SetupStripeTierReturns(Tier.Scale);
+        await SeedSubscriptionAsync("scale");
+        SetupStripeTierReturns("scale");
         SetupPlans();
 
         await Create().Handle(new ChangePlanCommand("Growth"), default);
@@ -166,8 +177,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_Downgrade_ReturnsPending()
     {
-        await SeedSubscriptionAsync(Tier.Scale);
-        SetupStripeTierReturns(Tier.Scale);
+        await SeedSubscriptionAsync("scale");
+        SetupStripeTierReturns("scale");
         SetupPlans();
 
         var result = await Create().Handle(new ChangePlanCommand("Growth"), default);
@@ -179,8 +190,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_DowngradeBlockedByPayees_ReturnsBlockedResult()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
         SetupPlans();
         // Starter allows 25 payees. Seed 26.
         var payees = Enumerable.Range(0, 26).Select(i => Payee.Create(
@@ -202,8 +213,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_DowngradeBlockedByPayees_DoesNotCallStripe()
     {
-        await SeedSubscriptionAsync(Tier.Growth);
-        SetupStripeTierReturns(Tier.Growth);
+        await SeedSubscriptionAsync("growth");
+        SetupStripeTierReturns("growth");
         SetupPlans();
         var payees = Enumerable.Range(0, 26).Select(i => Payee.Create(
             tenantId: TenantId, fullName: $"P {i}", employeeCode: $"E{i:D3}",
@@ -226,8 +237,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
         // DB says Scale (stale from a previous test), but Stripe says Starter.
         // Target is Growth. Without the fix this would be Growth(2) < Scale(3) → downgrade path.
         // With the fix it must be Growth(2) > Starter(1) → upgrade path → charges immediately.
-        await SeedSubscriptionAsync(Tier.Scale);
-        SetupStripeTierReturns(Tier.Starter);  // authoritative Stripe tier
+        await SeedSubscriptionAsync("scale");
+        SetupStripeTierReturns("starter");  // authoritative Stripe tier
         SetupPlans();
 
         await Create().Handle(new ChangePlanCommand("Growth"), default);
@@ -240,14 +251,14 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     public async Task Handle_UpgradeWithStaleDbTier_SyncsDbTierBeforeDeciding()
     {
         // DB=Scale, Stripe=Starter → DB must be corrected to Starter before upgrade call.
-        await SeedSubscriptionAsync(Tier.Scale);
-        SetupStripeTierReturns(Tier.Starter);
+        await SeedSubscriptionAsync("scale");
+        SetupStripeTierReturns("starter");
         SetupPlans();
 
         await Create().Handle(new ChangePlanCommand("Growth"), default);
 
         var sub = await _db.UserSubscriptions.FirstAsync(s => s.TenantId == TenantId);
-        sub.Tier.Should().Be(Tier.Starter);
+        sub.PlanCode.Should().Be("starter");
     }
 
     [Fact]
@@ -256,8 +267,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
         // Simulates two rapid upgrades where the webhook from the first has not arrived yet.
         // First: DB=Starter, Stripe=Starter → Starter→Growth. Upgrade path. ✓
         // Second: DB still Starter (stale), Stripe=Growth (updated by Stripe) → Growth→Scale. Still upgrade. ✓
-        await SeedSubscriptionAsync(Tier.Starter);
-        SetupStripeTierReturns(Tier.Starter);
+        await SeedSubscriptionAsync("starter");
+        SetupStripeTierReturns("starter");
         SetupPlans();
 
         var result1 = await Create().Handle(new ChangePlanCommand("Growth"), default);
@@ -267,7 +278,7 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
         await _stripe.Received(1).UpgradeSubscriptionAsync("sub_test", "price_growth", Arg.Any<CancellationToken>());
 
         // Simulate Stripe now showing Growth (the subscription was updated) but DB still Starter.
-        SetupStripeTierReturns(Tier.Growth);
+        SetupStripeTierReturns("growth");
 
         var result2 = await Create().Handle(new ChangePlanCommand("Scale"), default);
 
@@ -282,8 +293,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_StripeReadThrows_ReturnsFailureWithPlanChangeUnavailable()
     {
-        await SeedSubscriptionAsync(Tier.Starter);
-        _stripe.GetCurrentTierFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        await SeedSubscriptionAsync("starter");
+        _stripe.GetCurrentPlanCodeFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeException("Connection timeout"));
 
         var result = await Create().Handle(new ChangePlanCommand("Growth"), default);
@@ -295,9 +306,9 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_StripeReadReturnsNull_ReturnsFailureWithPlanChangeUnavailable()
     {
-        await SeedSubscriptionAsync(Tier.Starter);
-        _stripe.GetCurrentTierFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((Tier?)null);
+        await SeedSubscriptionAsync("starter");
+        _stripe.GetCurrentPlanCodeFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
 
         var result = await Create().Handle(new ChangePlanCommand("Growth"), default);
 
@@ -308,8 +319,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     [Fact]
     public async Task Handle_StripeReadFails_DoesNotCallStripeUpdate()
     {
-        await SeedSubscriptionAsync(Tier.Starter);
-        _stripe.GetCurrentTierFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        await SeedSubscriptionAsync("starter");
+        _stripe.GetCurrentPlanCodeFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeException("API unavailable"));
 
         await Create().Handle(new ChangePlanCommand("Growth"), default);
@@ -325,8 +336,8 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     {
         // Subscription seeded for a DIFFERENT tenant — current tenant has none.
         var otherTenantId = Guid.NewGuid();
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), otherTenantId, "other@t.io", Now);
-        sub.UpdateFromStripe(Tier.Growth, SubscriptionStatus.Active, "sub_other", "cus_other",
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), otherTenantId, "other@t.io", Now);
+        sub.UpdateFromStripe("growth", SubscriptionStatus.Active, "sub_other", "cus_other",
             "price_growth", "prod_growth", Now, Now.AddMonths(1), Now.AddMonths(1), Now);
         _db.UserSubscriptions.Add(sub);
         await _db.SaveChangesAsync();
@@ -339,36 +350,36 @@ public sealed class ChangePlanCommandHandlerTests : IDisposable
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private ChangePlanCommandHandler Create() =>
-        new(_db, _tenantCtx, _planService, _stripe, _logger, _clock, _audit);
+        new(_db, _tenantCtx, _planService, Catalog, _stripe, _logger, _clock, _audit);
 
-    private async Task SeedSubscriptionAsync(Tier tier)
+    private async Task SeedSubscriptionAsync(string plan)
     {
-        var sub = UserSubscription.CreateFree(Guid.NewGuid(), TenantId, "test@t.io", Now);
-        sub.UpdateFromStripe(tier, SubscriptionStatus.Active, "sub_test", "cus_test",
-            $"price_{tier.ToString().ToLower()}", $"prod_{tier.ToString().ToLower()}",
+        var sub = UserSubscription.CreatePending(Guid.NewGuid(), TenantId, "test@t.io", Now);
+        sub.UpdateFromStripe(plan, SubscriptionStatus.Active, "sub_test", "cus_test",
+            $"price_{plan}", $"prod_{plan}",
             Now, Now.AddMonths(1), Now.AddMonths(1), Now);
         _db.UserSubscriptions.Add(sub);
         await _db.SaveChangesAsync();
     }
 
-    private void SetupStripeTierReturns(Tier tier)
+    private void SetupStripeTierReturns(string plan)
     {
-        _stripe.GetCurrentTierFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((Tier?)tier);
+        _stripe.GetCurrentPlanCodeFromStripeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((string?)plan);
     }
 
     private void SetupPlans()
     {
         IReadOnlyList<SubscriptionPlanDto> plans =
         [
-            new("price_starter", "prod_starter", "Starter", 300m, "EUR", "month", "Starter",
+            new("price_starter", "prod_starter", "Starter", 300m, "EUR", "month", "starter",
                 25, 5, false),
-            new("price_growth", "prod_growth", "Growth", 800m, "EUR", "month", "Growth",
+            new("price_growth", "prod_growth", "Growth", 800m, "EUR", "month", "growth",
                 75, 15, false),
-            new("price_scale", "prod_scale", "Scale", 1800m, "EUR", "month", "Scale",
-                150, int.MaxValue, false),
+            new("price_scale", "prod_scale", "Scale", 1800m, "EUR", "month", "scale",
+                150, -1, false),
         ];
-        _planService.GetPlansAsync(Arg.Any<Tier>(), Arg.Any<CancellationToken>())
+        _planService.GetPlansAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(plans);
     }
 

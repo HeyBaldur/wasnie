@@ -341,7 +341,8 @@ describe('AssistantTriggerComponent — hide, do not disable', () => {
 
     const link: HTMLAnchorElement = fixture.nativeElement.querySelector('a');
     expect(link).toBeTruthy('the locked entry point is rendered');
-    expect(link.getAttribute('href')).toBe('/subscription', 'clicking it goes where the plan is bought');
+    // KAN-77: the plan is bought on the Pricing page (Manage billing is for someone already paying).
+    expect(link.getAttribute('href')).toBe('/pricing', 'clicking it goes where the plan is bought');
   });
 
   it('shows nothing at all when there is no seat, whatever the plan says', async () => {
@@ -1993,12 +1994,16 @@ describe('AssistantConversationComponent — the welcome', () => {
     // `align-items: stretch` widened the image box to the full column and `object-fit` centred the
     // mark inside it — left-aligned CSS, centred result. Comparing the logo's left edge to the
     // greeting's is what actually notices that.
+    //
+    // ★ The mark now sits inside Zeke's animated emblem (ring + halo), so the box that must share the
+    // greeting's left edge is the EMBLEM; the logo is centred inside it on purpose.
     const welcome = openEmpty();
     const logo = welcome.querySelector('.assistant-welcome__logo') as HTMLElement;
+    const emblem = welcome.querySelector('.assistant-welcome__emblem') as HTMLElement;
     const greeting = welcome.querySelector('.assistant-welcome__greeting') as HTMLElement;
 
     expect(logo).toBeTruthy();
-    expect(Math.round(logo.getBoundingClientRect().left))
+    expect(Math.round(emblem.getBoundingClientRect().left))
       .withContext('the mark lines up with the greeting under it')
       .toBe(Math.round(greeting.getBoundingClientRect().left));
   });

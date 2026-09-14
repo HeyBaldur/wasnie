@@ -73,9 +73,9 @@ public sealed class PaymentFailedCycleTests : IAsyncLifetime
             $"DELETE FROM ProcessedStripeEvents WHERE EventId LIKE '{EventIdPrefix}%'");
 
         // Seed TenantA — Active Growth subscription.
-        var subA = UserSubscription.CreateFree(Guid.NewGuid(), TestConstants.TenantA, "a@wasnie.io", now);
+        var subA = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantA, "a@wasnie.io", now);
         subA.UpdateFromStripe(
-            tier: Tier.Growth,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: SubscriptionIdA,
             stripeCustomerId: CustomerIdA,
@@ -88,9 +88,9 @@ public sealed class PaymentFailedCycleTests : IAsyncLifetime
         db.UserSubscriptions.Add(subA);
 
         // Seed TenantB — Active Growth subscription with a different customer ID.
-        var subB = UserSubscription.CreateFree(Guid.NewGuid(), TestConstants.TenantB, "b@wasnie.io", now);
+        var subB = UserSubscription.CreatePending(Guid.NewGuid(), TestConstants.TenantB, "b@wasnie.io", now);
         subB.UpdateFromStripe(
-            tier: Tier.Growth,
+            planCode: "pro",
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: SubscriptionIdB,
             stripeCustomerId: CustomerIdB,
@@ -127,7 +127,7 @@ public sealed class PaymentFailedCycleTests : IAsyncLifetime
 
         var sub = await ReadSubscription(TestConstants.TenantA);
         sub!.Status.Should().Be(SubscriptionStatus.PastDue, "payment_failed marks subscription PastDue");
-        sub.Tier.Should().Be(Tier.Growth, "payment failure must not alter the tier");
+        sub.PlanCode.Should().Be("pro", "payment failure must not alter the plan");
 
         var auditEntry = await ReadAuditByResourceId(invoiceId, AuditActions.SubscriptionPastDue);
         auditEntry.Should().NotBeNull("SUBSCRIPTION_PAST_DUE must be written to the audit log");
@@ -176,7 +176,7 @@ public sealed class PaymentFailedCycleTests : IAsyncLifetime
 
         var sub = await ReadSubscription(TestConstants.TenantA);
         sub!.Status.Should().Be(SubscriptionStatus.Active, "payment_succeeded must recover a PastDue subscription");
-        sub.Tier.Should().Be(Tier.Growth, "tier must be preserved across recovery");
+        sub.PlanCode.Should().Be("pro", "the plan must be preserved across recovery");
 
         var auditEntry = await ReadAuditByResourceId(succeedInvoiceId, AuditActions.SubscriptionRecovered);
         auditEntry.Should().NotBeNull("SUBSCRIPTION_RECOVERED must be written to the audit log");
@@ -258,7 +258,7 @@ public sealed class PaymentFailedCycleTests : IAsyncLifetime
         var subB = await ReadSubscription(TestConstants.TenantB);
         subB!.Status.Should().Be(SubscriptionStatus.Active,
             "TenantB must be unaffected — webhook lookup is by StripeCustomerId, not tenantId");
-        subB.Tier.Should().Be(Tier.Growth, "TenantB tier must be unchanged");
+        subB.PlanCode.Should().Be("pro", "TenantB plan must be unchanged");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

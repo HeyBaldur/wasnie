@@ -97,6 +97,7 @@ public static class DependencyInjection
         // entitlement (per user, headed for per-seat billing), not a role permission.
         services.AddScoped<IAssistantEntitlement, AssistantEntitlement>();
         services.AddScoped<IPaidPlanGate, PaidPlanGate>();
+        services.AddScoped<IAccountAccessReader, AccountAccessReader>();
         services.AddScoped<ITierLimitChecker, TierLimitChecker>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -113,6 +114,20 @@ public static class DependencyInjection
                 o => o.PayeeMaxRows is > 0 and <= 100_000,
                 "Imports:PayeeMaxRows must be between 1 and 100,000.")
             .ValidateOnStart();
+
+        // KAN-77: trial length and the assistant's trial allowance. Fails at start-up on a nonsense value —
+        // a 0-day trial would lock every new account the moment it registers.
+        services.AddOptions<BillingOptions>()
+            .Bind(configuration.GetSection(BillingOptions.SectionName))
+            .Validate(o => o.TrialDays is > 0 and <= 365, "Billing:TrialDays must be between 1 and 365.")
+            .Validate(o => o.TrialAssistantMessageLimit > 0, "Billing:TrialAssistantMessageLimit must be greater than 0.")
+            .Validate(
+                o => !Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog.Validate(o).Any(),
+                "Billing:Plans is invalid (at least one plan, unique codes, DefaultPlanCode must be one of them, positive limits).")
+            .ValidateOnStart();
+        services.AddSingleton<
+            Wasnie.Application.Features.Subscription.ISubscriptionPlanCatalog,
+            Wasnie.Application.Features.Subscription.SubscriptionPlanCatalog>();
 
         services.AddOptions<StripeOptions>()
             .Bind(configuration.GetSection(StripeOptions.SectionName))
@@ -134,6 +149,8 @@ public static class DependencyInjection
         services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
         services.AddScoped<IStripeWebhookService, StripeWebhookService>();
         services.AddScoped<IStripeSubscriptionManagementService, StripeSubscriptionManagementService>();
+        services.AddScoped<IStripeBillingDetailsReader, StripeBillingDetailsReader>();
+        services.AddScoped<IStripeSubscriptionReconciler, StripeSubscriptionReconciler>();
 
         // HubSpot OAuth integration (Phase 1). Options are bound WITHOUT ValidateOnStart so the app still
         // starts before the owner configures HubSpot; the endpoints fail gracefully until configured.

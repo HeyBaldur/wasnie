@@ -1,10 +1,9 @@
-import { Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, HostListener, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { IconComponent } from '../icon/icon.component';
 import { AssistantTriggerComponent } from '../../../features/assistant/trigger/assistant-trigger.component';
 import { Router } from '@angular/router';
-import { SubscriptionService } from '../../../features/subscription/services/subscription.service';
 import { RouterLink } from '@angular/router';
 import { HasPermissionPipe } from '../../pipes/has-permission.pipe';
 
@@ -15,20 +14,11 @@ import { HasPermissionPipe } from '../../pipes/has-permission.pipe';
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })
-export class TopbarComponent implements OnInit {
+export class TopbarComponent {
   private readonly router = inject(Router);
   readonly authService = inject(AuthService);
-  private readonly subscriptionService = inject(SubscriptionService);
 
   readonly dropdownOpen = signal(false);
-  private readonly _tier = signal<string | null>(null);
-
-  readonly isFreeTier = computed(() => this._tier() === 'Free');
-  readonly isPaidTier = computed(() => {
-    const t = this._tier();
-    return t === 'Starter' || t === 'Growth' || t === 'Scale';
-  });
-  readonly tierName = computed(() => this._tier());
 
   readonly userInitial = computed(() => {
     const email = this.authService.currentUser()?.email ?? '';
@@ -39,13 +29,6 @@ export class TopbarComponent implements OnInit {
     const slug = this.authService.currentUser()?.tenantSlug ?? '';
     return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   });
-
-  ngOnInit(): void {
-    this.subscriptionService.getCurrent().subscribe({
-      next: (sub) => this._tier.set(sub.tier),
-      error: () => {},
-    });
-  }
 
   goToProfile(): void {
     this.dropdownOpen.set(false);
@@ -66,14 +49,6 @@ export class TopbarComponent implements OnInit {
   goToAuditLogs(): void {
     this.dropdownOpen.set(false);
     void this.router.navigateByUrl('/audit-logs');
-  }
-
-  goToUpgrade(): void {
-    void this.router.navigateByUrl('/subscription');
-  }
-
-  goToSubscription(): void {
-    void this.router.navigateByUrl('/subscription');
   }
 
   toggleDropdown(event: MouseEvent): void {

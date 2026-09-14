@@ -1,0 +1,170 @@
+<app-shell>
+  <!-- No page header on purpose: the hero below is the heading of this page. Same width and gutters as ws-page-layout. -->
+  <div class="pricing-page">
+    <div class="pricing">
+
+      <!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+      <section class="pricing-hero" aria-labelledby="pricing-hero-title">
+        <div class="pricing-hero__text">
+          <span class="pricing-hero__eyebrow">
+            <app-icon name="zap" [size]="12" />
+            {{ 'PRICING.HERO_EYEBROW' | translate }}
+          </span>
+          <h1 id="pricing-hero-title" class="pricing-hero__title">{{ 'PRICING.HERO_TITLE' | translate }}</h1>
+          <p class="pricing-hero__subtitle">{{ 'PRICING.HERO_SUBTITLE' | translate }}</p>
+
+          @if (access()?.state === 'Trial') {
+            <p class="pricing-hero__status">
+              <span class="pricing-hero__status-dot" aria-hidden="true"></span>
+              {{ 'PRICING.TRIAL_STATUS' | translate: { days: access()!.trialDaysRemaining, date: (access()!.trialEndsAt | date: 'mediumDate') } }}
+            </p>
+          }
+          @if (isPaying()) {
+            <p class="pricing-hero__status pricing-hero__status--paying">
+              <span class="pricing-hero__status-dot" aria-hidden="true"></span>
+              {{ 'PRICING.ALREADY_SUBSCRIBED' | translate }}
+              @if ('Subscription.Manage' | hasPermission) {
+                <a class="pricing-hero__link" routerLink="/billing">{{ 'PRICING.GO_TO_BILLING' | translate }}</a>
+              }
+            </p>
+          }
+        </div>
+
+        <!--
+          ★ LA ILUSTRACIÓN CUENTA EL VALOR. Las ventas entran, la comisión se calcula sola (las barras crecen y la
+          línea de tendencia se traza), el pago sale confirmado (la moneda con su check) y el equipo entero entra
+          sin límite (los avatares). Sin texto dentro, colores por tokens, quieta con `prefers-reduced-motion`.
+        -->
+        <div class="pricing-hero__art" aria-hidden="true">
+          <svg class="pricing-hero__svg" viewBox="0 0 420 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="pricing-bar" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0" class="art-stop-blue" />
+                <stop offset="1" class="art-stop-violet" />
+              </linearGradient>
+              <linearGradient id="pricing-coin" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" class="art-stop-violet" />
+                <stop offset="1" class="art-stop-blue" />
+              </linearGradient>
+            </defs>
+
+            <circle class="art-halo" cx="220" cy="150" r="128" />
+            <path class="art-sparkle art-sparkle--1" d="M52 54l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" />
+            <path class="art-sparkle art-sparkle--2" d="M384 212l2.5 5.5 5.5 2.5-5.5 2.5-2.5 5.5-2.5-5.5-5.5-2.5 5.5-2.5z" />
+            <circle class="art-dot art-dot--1" cx="392" cy="70" r="3.5" />
+            <circle class="art-dot art-dot--2" cx="40" cy="236" r="3" />
+
+            <!-- The dashboard card: commission growing -->
+            <g class="art-float">
+              <rect class="art-surface" x="70" y="62" width="250" height="176" rx="18" />
+              <rect class="art-line art-line--strong" x="94" y="86" width="86" height="8" rx="4" />
+              <rect class="art-line" x="94" y="102" width="54" height="6" rx="3" />
+              <rect class="art-pill" x="244" y="84" width="54" height="20" rx="10" />
+              <path class="art-trend-arrow" d="M258 98l8-8 6 6 12-12m0 0h-8m8 0v8" />
+
+              <rect class="art-bar art-bar--1" x="100" y="186" width="24" height="32" rx="6" fill="url(#pricing-bar)" />
+              <rect class="art-bar art-bar--2" x="138" y="166" width="24" height="52" rx="6" fill="url(#pricing-bar)" />
+              <rect class="art-bar art-bar--3" x="176" y="150" width="24" height="68" rx="6" fill="url(#pricing-bar)" />
+              <rect class="art-bar art-bar--4" x="214" y="130" width="24" height="88" rx="6" fill="url(#pricing-bar)" />
+              <rect class="art-bar art-bar--5" x="252" y="112" width="24" height="106" rx="6" fill="url(#pricing-bar)" />
+              <path class="art-trend" d="M112 176 C 140 160, 160 156, 188 140 S 236 120, 264 100" />
+              <circle class="art-trend-end" cx="264" cy="100" r="5" />
+            </g>
+
+            <!-- The payout, confirmed -->
+            <g class="art-coin">
+              <circle cx="330" cy="92" r="30" fill="url(#pricing-coin)" />
+              <circle class="art-coin-ring" cx="330" cy="92" r="22" />
+              <path class="art-coin-euro" d="M338 80a13 13 0 1 0 0 24M316 88h16M316 96h16" />
+              <circle class="art-coin-badge" cx="352" cy="70" r="10" />
+              <path class="art-coin-check" d="M347.5 70l3 3 6-6" />
+            </g>
+
+            <!-- The whole team, unlimited -->
+            <g class="art-team">
+              <rect class="art-surface" x="118" y="222" width="176" height="52" rx="26" />
+              <circle class="art-avatar art-avatar--1" cx="150" cy="248" r="15" />
+              <circle class="art-avatar art-avatar--2" cx="174" cy="248" r="15" />
+              <circle class="art-avatar art-avatar--3" cx="198" cy="248" r="15" />
+              <circle class="art-avatar-plus" cx="222" cy="248" r="15" />
+              <path class="art-avatar-plus-sign" d="M222 241v14M215 248h14" />
+              <rect class="art-line art-line--strong" x="246" y="240" width="32" height="6" rx="3" />
+              <rect class="art-line" x="246" y="252" width="22" height="5" rx="2.5" />
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- ── The plan ─────────────────────────────────────────────────────────── -->
+      @if (loading()) {
+        <div class="pricing__skeleton" aria-hidden="true"></div>
+      } @else if (loadError()) {
+        <ws-card class="pricing__error">
+          <p class="pricing__muted">{{ 'PRICING.LOAD_ERROR' | translate }}</p>
+          <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+        </ws-card>
+      } @else if (plans().length === 0) {
+        <ws-card class="pricing__error">
+          <p class="pricing__muted">{{ 'PRICING.NO_PLANS' | translate }}</p>
+        </ws-card>
+      } @else {
+        <div class="pricing__offers">
+          @for (plan of plans(); track plan.priceId) {
+            <app-plan-offer
+              [plan]="plan"
+              [current]="isPaying() && plan.isCurrentPlan"
+              [canSubscribe]="'Subscription.Manage' | hasPermission"
+              [busy]="subscribing() === plan.planCode"
+              (subscribe)="subscribe($event)"
+            />
+          }
+        </div>
+        @if (!('Subscription.Manage' | hasPermission)) {
+          <p class="pricing__admin-note">{{ 'PRICING.ASK_ADMIN' | translate }}</p>
+        }
+      }
+
+      <!-- ── Guarantees ───────────────────────────────────────────────────────── -->
+      <ul class="pricing-trust">
+        @for (item of guarantees; track item.key) {
+          <li class="pricing-trust__item">
+            <span class="pricing-trust__icon" aria-hidden="true"><app-icon [name]="item.icon" [size]="16" /></span>
+            {{ item.key | translate }}
+          </li>
+        }
+      </ul>
+
+      <!-- ── Benefits ─────────────────────────────────────────────────────────── -->
+      <section class="pricing-section" aria-labelledby="pricing-benefits-title">
+        <div class="pricing-section__head">
+          <h2 id="pricing-benefits-title" class="pricing-section__title">{{ 'PRICING.BENEFITS_TITLE' | translate }}</h2>
+          <p class="pricing-section__subtitle">{{ 'PRICING.BENEFITS_SUBTITLE' | translate }}</p>
+        </div>
+        <div class="pricing-benefits">
+          @for (b of benefits; track b.title; let i = $index) {
+            <ws-card class="pricing-benefit" [style.--i]="i">
+              <span class="pricing-benefit__icon" aria-hidden="true"><app-icon [name]="b.icon" [size]="20" /></span>
+              <h3 class="pricing-benefit__title">{{ b.title | translate }}</h3>
+              <p class="pricing-benefit__desc">{{ b.desc | translate }}</p>
+            </ws-card>
+          }
+        </div>
+      </section>
+
+      <!-- ── FAQ ──────────────────────────────────────────────────────────────── -->
+      <section class="pricing-section" aria-labelledby="pricing-faq-title">
+        <div class="pricing-section__head">
+          <h2 id="pricing-faq-title" class="pricing-section__title">{{ 'PRICING.FAQ_TITLE' | translate }}</h2>
+        </div>
+        <div class="pricing-faq">
+          @for (f of faqs; track f.q) {
+            <ws-card class="pricing-faq__item">
+              <h3 class="pricing-faq__q">{{ f.q | translate }}</h3>
+              <p class="pricing-faq__a">{{ f.a | translate }}</p>
+            </ws-card>
+          }
+        </div>
+      </section>
+    </div>
+  </div>
+</app-shell>

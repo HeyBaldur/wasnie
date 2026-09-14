@@ -223,6 +223,12 @@ public sealed class AssistantChatHandlerTests
 
     // ── 3. The entitlement, tested through its own seam ───────────────────────
 
+    // The seat and the plan are the subject here; the trial allowance (KAN-77) is tested on its own, so the
+    // account is simply a paying one.
+    private static AssistantEntitlement NewEntitlement(IClaimsService claims, IPaidPlanGate gate) =>
+        new(claims, gate, new FakeAccountAccessReader(), Substitute.For<IApplicationDbContext>(),
+            Substitute.For<ITenantContext>(), Options.Create(new BillingOptions()));
+
     [Fact]
     public async Task Only_an_entitled_user_reaches_the_chat_and_today_that_means_the_tenant_admin()
     {
@@ -230,7 +236,7 @@ public sealed class AssistantChatHandlerTests
         // CompManager this test is EXTENDED with a new case rather than rewritten: the question
         // ("is this principal entitled?") does not change, only the answer for a given principal.
         var claims = Substitute.For<IClaimsService>();
-        var entitlement = new AssistantEntitlement(claims, new FakePaidPlanGate());
+        var entitlement = NewEntitlement(claims, new FakePaidPlanGate());
 
         claims.GetRole().Returns("TenantAdmin");
         (await entitlement.IsEnabledAsync()).Should().BeTrue("today the admin holds the only seat");
@@ -250,7 +256,7 @@ public sealed class AssistantChatHandlerTests
         // Two gates, two different refusals — the whole reason the UI can lock one and hide the other.
         var claims = Substitute.For<IClaimsService>();
 
-        var adminOnFree = new AssistantEntitlement(claims, new FakePaidPlanGate(onPaidPlan: false));
+        var adminOnFree = NewEntitlement(claims, new FakePaidPlanGate(onPaidPlan: false));
         claims.GetRole().Returns("TenantAdmin");
 
         (await adminOnFree.IsEnabledAsync()).Should().BeFalse("Free does not include the assistant");
@@ -263,7 +269,7 @@ public sealed class AssistantChatHandlerTests
         // buying a bigger plan would not give THEM the assistant, so offering it would be a lie.
         foreach (var gate in new[] { new FakePaidPlanGate(true), new FakePaidPlanGate(false) })
         {
-            var seatless = new AssistantEntitlement(claims, gate);
+            var seatless = NewEntitlement(claims, gate);
             claims.GetRole().Returns("Rep");
 
             (await seatless.IsEnabledAsync()).Should().BeFalse();

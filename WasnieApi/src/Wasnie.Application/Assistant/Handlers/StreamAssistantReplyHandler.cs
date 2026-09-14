@@ -51,6 +51,14 @@ public sealed class StreamAssistantReplyHandler(
     {
         await entitlement.RequireAsync(cancellationToken);
 
+        // KAN-77: a trial account that used up its assistant allowance gets no NEW turn — nothing is stored,
+        // the model is not called. A retry re-answers a question already counted, so it is not refused here.
+        if (!request.IsRetry && await entitlement.IsTrialAllowanceExhaustedAsync(cancellationToken))
+        {
+            yield return AssistantStreamEvent.OfError(IAssistantEntitlement.TrialAllowanceExhaustedKey);
+            yield break;
+        }
+
         var conversation = await OwnedConversations.FindMineAsync(
             db, currentUser, request.ConversationId, cancellationToken);
 

@@ -4,39 +4,34 @@ using Stripe;
 using Wasnie.Application.Common.Exceptions;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Features.Subscription;
 using Wasnie.Application.Features.Subscription.DTOs;
-using Wasnie.Domain.Authorization;
 
 namespace Wasnie.Infrastructure.Services;
 
+/// <summary>
+/// The plans a tenant can buy, read live from Stripe and matched against the plan catalog (KAN-77).
+///
+/// ★ NO SYNTHETIC FREE PLAN. The free plan is gone; the list holds only what can be paid for.
+///
+/// ★★ A PRICE IS OFFERED ONLY IF BOTH THE PRICE AND ITS PRODUCT ARE ACTIVE. Archiving a product in Stripe does
+/// NOT archive its prices: on 2026-09-14 Growth and Scale had their products archived and their prices still
+/// active, and this service — which only asked Stripe for active prices — kept offering both. A checkout
+/// against an archived product is not something to find out at the payment step.
+/// </summary>
 public sealed class StripeSubscriptionPlanService(
     IOptions<StripeOptions> options,
+    ISubscriptionPlanCatalog catalog,
     ILogger<StripeSubscriptionPlanService> logger)
     : ISubscriptionPlanService
 {
-    // Stripe metadata key that maps a product to a Wasnie tier.
-    private const string TierMetadataKey = "tier";
-
-    // Free plan is synthetic — it has no Stripe product.
-    private static readonly SubscriptionPlanDto FreePlan = new(
-        PriceId:      null,
-        ProductId:    null,
-        Name:         "Free",
-        Price:        0m,
-        Currency:     "eur",
-        Interval:     "free",
-        Tier:         nameof(Domain.Authorization.Tier.Free),
-        MaxPayees:    TierLimits.Limits[Domain.Authorization.Tier.Free].MaxPayees,
-        MaxPlans:     TierLimits.Limits[Domain.Authorization.Tier.Free].MaxPlans,
-        IsCurrentPlan: false);
-
     public async Task<IReadOnlyList<SubscriptionPlanDto>> GetPlansAsync(
-        Tier currentTier, CancellationToken cancellationToken = default)
+        string? currentPlanCode, CancellationToken cancellationToken = default)
     {
         StripeClient client = new(options.Value.SecretKey);
         PriceService priceService = new(client);
 
-        logger.LogInformation("Fetching active Stripe prices for subscription wizard");
+        logger.LogInformation("Fetching active Stripe prices for the plan list");
 
         IEnumerable<Price> prices;
         try
@@ -58,84 +53,43 @@ public sealed class StripeSubscriptionPlanService(
                 "The subscription plan service is temporarily unavailable. Please try again shortly.", ex);
         }
 
-        var paid = prices
-            .Select(p => TryMapPrice(p, currentTier))
+        var plans = prices
+            .Select(p => TryMapPrice(p, currentPlanCode))
             .OfType<SubscriptionPlanDto>()
             .OrderBy(p => p.Price)
             .ToList();
 
-        var result = new List<SubscriptionPlanDto>(paid.Count + 1)
-        {
-            FreePlan with { IsCurrentPlan = currentTier == Domain.Authorization.Tier.Free },
-        };
-        result.AddRange(paid);
-
-        logger.LogInformation("Returning {Count} subscription plans ({Paid} from Stripe)", result.Count, paid.Count);
-        return result;
+        logger.LogInformation("Returning {Count} subscription plan(s) from Stripe", plans.Count);
+        return plans;
     }
 
-    private SubscriptionPlanDto? TryMapPrice(Price price, Tier currentTier)
+    private SubscriptionPlanDto? TryMapPrice(Price price, string? currentPlanCode)
     {
         if (price.Product is not Product product)
             return null;
 
-        var tierSlug = ResolveTier(product.Id, product.Metadata, options.Value.ProductTierMap, logger);
-        if (tierSlug is null)
-            return null;
-
-        if (!Enum.TryParse<Tier>(tierSlug, ignoreCase: true, out var tier))
+        if (!product.Active)
         {
-            logger.LogWarning(
-                "Stripe product {ProductId} '{ProductName}' has unrecognized tier value '{TierSlug}' — discarded",
-                product.Id, product.Name, tierSlug);
+            logger.LogInformation(
+                "Stripe price {PriceId} belongs to archived product {ProductId} '{ProductName}' — not offered",
+                price.Id, product.Id, product.Name);
             return null;
         }
 
-        if (!TierLimits.Limits.TryGetValue(tier, out var limits))
+        var plan = catalog.ResolveStripeProduct(product.Id, product.Metadata);
+        if (plan is null)
             return null;
 
-        var unitAmount = price.UnitAmount ?? 0;
-        var priceAmount = unitAmount / 100m;
-        var currency = price.Currency?.ToUpperInvariant() ?? "EUR";
-        var interval = price.Recurring?.Interval ?? "month";
-
         return new SubscriptionPlanDto(
-            PriceId:      price.Id,
-            ProductId:    product.Id,
-            Name:         product.Name,
-            Price:        priceAmount,
-            Currency:     currency,
-            Interval:     interval,
-            Tier:         tier.ToString(),
-            MaxPayees:    limits.MaxPayees == int.MaxValue ? -1 : limits.MaxPayees,
-            MaxPlans:     limits.MaxPlans  == int.MaxValue ? -1 : limits.MaxPlans,
-            IsCurrentPlan: tier == currentTier);
-    }
-
-    // Resolves the Wasnie tier slug for a Stripe product.
-    // Precedence: product.Metadata["tier"] → ProductTierMap[productId] → null + WARNING.
-    // Exposed as internal so unit tests can exercise the mapping logic without calling Stripe.
-    internal static string? ResolveTier(
-        string productId,
-        IDictionary<string, string> productMetadata,
-        IDictionary<string, string> productTierMap,
-        ILogger logger)
-    {
-        // 1. Metadata — takes precedence; forward-compatible if user adds "tier" key to Stripe later.
-        if (productMetadata.TryGetValue(TierMetadataKey, out var metadataTier)
-            && !string.IsNullOrWhiteSpace(metadataTier))
-            return metadataTier;
-
-        // 2. Config map — primary path for products whose Stripe metadata is empty.
-        if (productTierMap.TryGetValue(productId, out var configTier)
-            && !string.IsNullOrWhiteSpace(configTier))
-            return configTier;
-
-        // 3. Neither source has a mapping — log clearly so the operator knows what to fix.
-        logger.LogWarning(
-            "Stripe product {ProductId} has no tier in product metadata and is not in Stripe:ProductTierMap — discarded. " +
-            "Add its ProductId to Stripe:ProductTierMap in appsettings to include it in the plans list.",
-            productId);
-        return null;
+            PriceId:       price.Id,
+            ProductId:     product.Id,
+            Name:          product.Name,
+            Price:         (price.UnitAmount ?? 0) / 100m,
+            Currency:      price.Currency?.ToUpperInvariant() ?? "EUR",
+            Interval:      price.Recurring?.Interval ?? "month",
+            PlanCode:      plan.Code,
+            MaxPayees:     plan.MaxPayees ?? -1,
+            MaxPlans:      plan.MaxPlans ?? -1,
+            IsCurrentPlan: string.Equals(plan.Code, currentPlanCode, StringComparison.OrdinalIgnoreCase));
     }
 }

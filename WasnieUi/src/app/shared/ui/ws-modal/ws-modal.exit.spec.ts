@@ -37,12 +37,17 @@ describe('WsModalComponent — zoom in / zoom out', () => {
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   beforeEach(async () => {
+    // Any other suite that tore down an open modal in the last 400 ms may still have its exit copy in <body>.
+    ghosts().forEach(g => g.remove());
     await TestBed.configureTestingModule({ imports: [HostComponent] }).compileComponents();
     fixture = TestBed.createComponent(HostComponent);
     fixture.detectChanges();
   });
 
   afterEach(() => {
+    // Destroy FIRST: tearing down a fixture whose modal is still open is itself a "destroyed while open", and
+    // leaves an exit copy behind — removed here instead of leaking into the next test's count.
+    fixture.destroy();
     ghosts().forEach(g => g.remove());
     document.body.style.overflow = '';
   });

@@ -1,0 +1,205 @@
+@reference "../../../../styles.scss";
+
+:host {
+  display: block;
+}
+
+// ── The featured card ───────────────────────────────────────────────────────────────
+// An INVERTED surface: `--color-text-primary` as the ground and `--color-text-inverse` as the ink. On the light
+// theme that is a deep, near-black card; on the dark theme it flips to a light card with dark text — the same
+// "one flagship offer" emphasis in both, with no literal colour. A brand/violet wash gives it depth.
+.plan-offer {
+  --offer-ink: var(--color-text-inverse);
+  --offer-ink-muted: color-mix(in srgb, var(--color-text-inverse) 68%, transparent);
+  --offer-line: color-mix(in srgb, var(--color-text-inverse) 14%, transparent);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) auto minmax(0, 7fr);
+  gap: var(--space-8);
+  padding: var(--space-10);
+  border-radius: var(--radius-xl, var(--radius-lg));
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--color-accent-violet) 38%, transparent) 0%, transparent 55%),
+    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--color-brand) 55%, transparent) 0%, transparent 60%),
+    var(--color-text-primary);
+  color: var(--offer-ink);
+  box-shadow: var(--shadow-xl);
+
+  &--current {
+    outline: 2px solid var(--color-success);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+    padding: var(--space-6);
+  }
+}
+
+// A faint grid over the wash, fading toward the features side.
+.plan-offer__glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(var(--offer-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--offer-line) 1px, transparent 1px);
+  background-size: var(--space-8) var(--space-8);
+  mask-image: radial-gradient(70% 90% at 15% 20%, rgba(0, 0, 0, 0.55), transparent 70%);
+  pointer-events: none;
+}
+
+.plan-offer__main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.plan-offer__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.plan-offer__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--offer-line);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-text-inverse) 8%, transparent);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--offer-ink);
+}
+
+.plan-offer__name {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-32);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--offer-ink);
+}
+
+.plan-offer__price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.plan-offer__amount {
+  font-size: calc(var(--font-size-32) * 1.6);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--offer-ink);
+}
+
+.plan-offer__interval {
+  font-size: var(--font-size-16);
+  color: var(--offer-ink-muted);
+}
+
+.plan-offer__tagline {
+  margin: 0;
+  font-size: var(--font-size-14);
+  line-height: 1.6;
+  color: var(--offer-ink-muted);
+}
+
+.plan-offer__cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+
+  // The inverted card needs an inverted button: the ink colour as the ground, the card colour as the text.
+  // Scoped to this card only; the button keeps its own sizes, radius, focus ring and loading state.
+  ::ng-deep .ws-btn--primary {
+    padding: 0 var(--space-6);
+    background: var(--offer-ink);
+    color: var(--color-text-primary);
+
+    &:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--offer-ink) 88%, var(--color-accent-violet));
+    }
+  }
+}
+
+.plan-offer__cta-note {
+  font-size: var(--font-size-12);
+  color: var(--offer-ink-muted);
+}
+
+.plan-offer__divider {
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--offer-line) 15%, var(--offer-line) 85%, transparent);
+
+  @media (max-width: 900px) {
+    width: 100%;
+    height: 1px;
+    background: var(--offer-line);
+  }
+}
+
+.plan-offer__features {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-self: center;
+}
+
+.plan-offer__features-title {
+  margin: 0;
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--offer-ink-muted);
+}
+
+.plan-offer__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: 560px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.plan-offer__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-14);
+  line-height: 1.45;
+  color: var(--offer-ink);
+}
+
+.plan-offer__check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-success) 80%, var(--color-text-inverse));
+  color: var(--color-text-primary);
+}

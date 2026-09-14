@@ -1,0 +1,66 @@
+<article class="plan-offer" [class.plan-offer--current]="current()" aria-labelledby="plan-offer-name">
+  <!-- Decorative glow and grid: the card's own depth, no meaning. -->
+  <span class="plan-offer__glow" aria-hidden="true"></span>
+
+  <div class="plan-offer__main">
+    <div class="plan-offer__head">
+      <span class="plan-offer__eyebrow">
+        <app-icon name="zap" [size]="12" />
+        {{ 'PRICING.CARD_EYEBROW' | translate }}
+      </span>
+      @if (current()) {
+        <ws-badge variant="success" size="sm">{{ 'PRICING.CURRENT_PLAN' | translate }}</ws-badge>
+      }
+    </div>
+
+    <h2 id="plan-offer-name" class="plan-offer__name">{{ plan().name }}</h2>
+
+    <p class="plan-offer__price">
+      <span class="plan-offer__amount">{{ plan().price | currencyFormat: plan().currency }}</span>
+      <span class="plan-offer__interval">
+        {{ (plan().interval === 'year' ? 'PRICING.PER_YEAR' : 'PRICING.PER_MONTH') | translate }}
+      </span>
+    </p>
+    <p class="plan-offer__tagline">{{ 'PRICING.TAGLINE' | translate }}</p>
+
+    @if (!current() && canSubscribe()) {
+      <div class="plan-offer__cta">
+        <ws-button variant="primary" size="lg" [loading]="busy()" (click)="subscribe.emit(plan())">
+          {{ 'PRICING.SUBSCRIBE' | translate }}
+          <app-icon name="arrow-right" [size]="16" />
+        </ws-button>
+        <span class="plan-offer__cta-note">{{ 'PRICING.CTA_NOTE' | translate }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="plan-offer__divider" aria-hidden="true"></div>
+
+  <div class="plan-offer__features">
+    <p class="plan-offer__features-title">{{ 'PRICING.WHAT_INCLUDED' | translate }}</p>
+    <ul class="plan-offer__list">
+      <li class="plan-offer__item">
+        <span class="plan-offer__check" aria-hidden="true"><app-icon name="check" [size]="12" /></span>
+        @if (plan().maxPayees === -1) {
+          {{ 'PRICING.INCLUDED_PAYEES_UNLIMITED' | translate }}
+        } @else {
+          {{ 'PRICING.INCLUDED_PAYEES_LIMITED' | translate: { count: plan().maxPayees } }}
+        }
+      </li>
+      <li class="plan-offer__item">
+        <span class="plan-offer__check" aria-hidden="true"><app-icon name="check" [size]="12" /></span>
+        @if (plan().maxPlans === -1) {
+          {{ 'PRICING.INCLUDED_PLANS_UNLIMITED' | translate }}
+        } @else {
+          {{ 'PRICING.INCLUDED_PLANS_LIMITED' | translate: { count: plan().maxPlans } }}
+        }
+      </li>
+      @for (key of included; track key) {
+        <li class="plan-offer__item">
+          <span class="plan-offer__check" aria-hidden="true"><app-icon name="check" [size]="12" /></span>
+          {{ key | translate }}
+        </li>
+      }
+    </ul>
+  </div>
+</article>

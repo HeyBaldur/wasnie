@@ -7,8 +7,8 @@ using Wasnie.Application.Common.Abstractions;
 using Wasnie.Application.Common.DTOs;
 using Wasnie.Application.Common.Interfaces;
 using Wasnie.Application.Common.Options;
+using Wasnie.Application.Features.Subscription;
 using Wasnie.Domain.Audit;
-using Wasnie.Domain.Authorization;
 using Wasnie.Domain.Common.Results;
 using Wasnie.Domain.Subscription;
 
@@ -19,6 +19,7 @@ public sealed class StripeWebhookService(
     IOptions<StripeOptions> options,
     IAuditService auditService,
     IClock clock,
+    ISubscriptionPlanCatalog catalog,
     ILogger<StripeWebhookService> logger)
     : IStripeWebhookService
 {
@@ -122,7 +123,20 @@ public sealed class StripeWebhookService(
 
         // 4. Mark the event as processed — saved atomically with any subscription changes above
         db.ProcessedStripeEvents.Add(ProcessedStripeEvent.Create(stripeEvent.Id, clock.UtcNowOffset));
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            if (!await db.ProcessedStripeEvents.AsNoTracking().AnyAsync(e => e.EventId == stripeEvent.Id, CancellationToken.None))
+                throw;
+
+            // ★ Two deliveries of the same event raced past the check above; the other one already saved it (the
+            // event id is the key). Nothing of ours was applied twice — this save was rolled back whole.
+            logger.LogInformation("Stripe webhook {EventId} was processed concurrently — skipping", stripeEvent.Id);
+            return Result<bool>.Success(true);
+        }
 
         // 5. Audit log after the main save (separate transaction — not critical to be atomic)
         if (auditEntry is not null)
@@ -166,7 +180,7 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        // Resolve the Wasnie tier from the product
+        // Resolve the plan from the product (KAN-77: the plan catalog, not the old tier enum)
         var item = stripeSubscription.Items?.Data?.FirstOrDefault();
         if (item?.Price?.Product is not Product product)
         {
@@ -176,13 +190,11 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var tierSlug = StripeSubscriptionPlanService.ResolveTier(
-            product.Id, product.Metadata, options.Value.ProductTierMap, logger);
-
-        if (tierSlug is null || !Enum.TryParse<Tier>(tierSlug, ignoreCase: true, out var tier) || tier == Tier.Free)
+        var plan = catalog.ResolveStripeProduct(product.Id, product.Metadata);
+        if (plan is null)
         {
             logger.LogError(
-                "Could not resolve a valid paid tier for product {ProductId} in session {SessionId}",
+                "Could not resolve a plan for product {ProductId} in session {SessionId}",
                 product.Id, session.Id);
             return null;
         }
@@ -210,7 +222,7 @@ public sealed class StripeWebhookService(
 
         if (subscription is null)
         {
-            subscription = UserSubscription.CreateFree(
+            subscription = UserSubscription.CreatePending(
                 id: Guid.NewGuid(),
                 tenantId: tenantId,
                 billingEmail: session.CustomerEmail ?? string.Empty,
@@ -219,7 +231,7 @@ public sealed class StripeWebhookService(
         }
 
         subscription.UpdateFromStripe(
-            tier: tier,
+            planCode: plan.Code,
             status: SubscriptionStatus.Active,
             stripeSubscriptionId: stripeSubscription.Id,
             stripeCustomerId: stripeSubscription.CustomerId,
@@ -231,11 +243,11 @@ public sealed class StripeWebhookService(
             now: now);
 
 
-        tenant.SelectPlan(tier);
+        tenant.SelectPlan(plan.Code);
 
         logger.LogInformation(
-            "Tenant {TenantId} subscription activated: tier={Tier} subscription={SubscriptionId}",
-            tenantId, tier, stripeSubscription.Id);
+            "Tenant {TenantId} subscription activated: plan={Plan} subscription={SubscriptionId}",
+            tenantId, plan.Code, stripeSubscription.Id);
 
         return new AuditEntry(
             TenantId: tenantId,
@@ -244,7 +256,7 @@ public sealed class StripeWebhookService(
             ResourceId: stripeSubscription.Id,
             ActorUserId: "stripe-webhook",
             ActorEmail: "webhook@stripe.com",
-            DisplayName: $"Subscription activated: {tier} via Stripe session {session.Id}");
+            DisplayName: $"Subscription activated: {plan.Code} via Stripe session {session.Id}");
     }
 
     private async Task<AuditEntry?> HandleSubscriptionUpdatedAsync(
@@ -279,13 +291,11 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var tierSlug = StripeSubscriptionPlanService.ResolveTier(
-            product.Id, product.Metadata, options.Value.ProductTierMap, logger);
-
-        if (tierSlug is null || !Enum.TryParse<Tier>(tierSlug, ignoreCase: true, out var newTier) || newTier == Tier.Free)
+        var newPlan = catalog.ResolveStripeProduct(product.Id, product.Metadata);
+        if (newPlan is null)
         {
             logger.LogError(
-                "subscription.updated: could not resolve a valid paid tier for product {ProductId}",
+                "subscription.updated: could not resolve a plan for product {ProductId}",
                 product.Id);
             return null;
         }
@@ -314,119 +324,33 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var now = clock.UtcNowOffset;
-        var periodStart = new DateTimeOffset(item.CurrentPeriodStart, TimeSpan.Zero);
-        var periodEnd = new DateTimeOffset(item.CurrentPeriodEnd, TimeSpan.Zero);
-        var previousTier = subscription.Tier;
-        var wasCancelScheduled = subscription.CancelAtPeriodEnd;
-
-        var mappedStatus = fullSubscription.Status switch
-        {
-            "active"             => SubscriptionStatus.Active,
-            "past_due"           => SubscriptionStatus.PastDue,
-            "canceled"           => SubscriptionStatus.Canceled,
-            "incomplete"         => SubscriptionStatus.Incomplete,
-            "incomplete_expired" => SubscriptionStatus.Incomplete,
-            "trialing"           => SubscriptionStatus.Trialing,
-            _                    => SubscriptionStatus.Active,
-        };
-
-        subscription.UpdateFromStripe(
-            tier: newTier,
-            status: mappedStatus,
-            stripeSubscriptionId: fullSubscription.Id,
-            stripeCustomerId: fullSubscription.CustomerId,
-            stripePriceId: item.Price.Id,
-            stripeProductId: product.Id,
-            periodStart: periodStart,
-            periodEnd: periodEnd,
-            nextBillingDate: periodEnd,
-            now: now);
-
-        tenant.SelectPlan(newTier);
-
-        // Log cancellation signal values for diagnosis (flexible billing uses cancel_at, not cancel_at_period_end).
-        logger.LogInformation(
-            "subscription.updated: CancelAtPeriodEnd={CancelAtPeriodEnd} CancelAt={CancelAt} for {SubscriptionId}",
-            stripeSubscription.CancelAtPeriodEnd, stripeSubscription.CancelAt, stripeSubscription.Id);
-
-        // Classic mode: cancel_at_period_end=true. Flexible (billing_mode=flexible / dahlia): cancel_at != null, cancel_at_period_end stays false.
-        var isCancelScheduled = stripeSubscription.CancelAtPeriodEnd || stripeSubscription.CancelAt.HasValue;
-        if (isCancelScheduled)
-        {
-            var cancelAt = stripeSubscription.CancelAt.HasValue
-                ? new DateTimeOffset(stripeSubscription.CancelAt.Value, TimeSpan.Zero)
-                : periodEnd;
-
-            subscription.ScheduleCancellation(cancelAt, now);
-
-            logger.LogInformation(
-                "Tenant {TenantId} subscription scheduled for cancellation at {CancelAt}",
-                subscription.TenantId, cancelAt);
-
-            return new AuditEntry(
-                TenantId: subscription.TenantId,
-                Action: AuditActions.SubscriptionCancelScheduled,
-                ResourceType: ResourceTypes.Subscription,
-                ResourceId: fullSubscription.Id,
-                ActorUserId: "stripe-webhook",
-                ActorEmail: "webhook@stripe.com",
-                DisplayName: $"Subscription cancel scheduled at {cancelAt:O}: {fullSubscription.Id}");
-        }
-
-        if (wasCancelScheduled)
-        {
-            subscription.ClearCancellationSchedule(now);
-
-            logger.LogInformation(
-                "Tenant {TenantId} subscription cancellation reverted",
-                subscription.TenantId);
-
-            return new AuditEntry(
-                TenantId: subscription.TenantId,
-                Action: AuditActions.SubscriptionCancelReverted,
-                ResourceType: ResourceTypes.Subscription,
-                ResourceId: fullSubscription.Id,
-                ActorUserId: "stripe-webhook",
-                ActorEmail: "webhook@stripe.com",
-                DisplayName: $"Subscription cancellation reverted: {fullSubscription.Id}");
-        }
-
-        var action = newTier > previousTier
-            ? AuditActions.SubscriptionUpgraded
-            : AuditActions.SubscriptionDowngraded;
-
-        logger.LogInformation(
-            "Tenant {TenantId} subscription updated: {Previous} → {New}",
-            subscription.TenantId, previousTier, newTier);
-
-        return new AuditEntry(
-            TenantId: subscription.TenantId,
-            Action: action,
-            ResourceType: ResourceTypes.Subscription,
-            ResourceId: fullSubscription.Id,
-            ActorUserId: "stripe-webhook",
-            ActorEmail: "webhook@stripe.com",
-            DisplayName: $"Subscription {(newTier > previousTier ? "upgraded" : "downgraded")}: {previousTier} → {newTier}");
+        return StripeSubscriptionApplier.ApplyUpdate(
+            subscription, tenant, fullSubscription, stripeSubscription, item, product, newPlan, catalog,
+            clock.UtcNowOffset, StripeChangeActor.Webhook, logger);
     }
 
     private async Task<AuditEntry?> HandleSubscriptionDeletedAsync(
         Subscription stripeSubscription,
         CancellationToken cancellationToken)
     {
+        // ★★ BY SUBSCRIPTION ID, NOT BY CUSTOMER (KAN-77, runtime). One customer can own an old cancelled
+        // subscription and a new paid one. Matched by customer, the old one's deletion — delivered late, retried or
+        // resent — cancelled the row that already follows the NEW subscription, and locked out a customer who had
+        // just paid. A deletion only ends the subscription the row actually holds.
         var subscription = await db.UserSubscriptions
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.StripeCustomerId == stripeSubscription.CustomerId, cancellationToken);
+            .FirstOrDefaultAsync(s => s.StripeSubscriptionId == stripeSubscription.Id, cancellationToken);
 
         if (subscription is null)
         {
             logger.LogWarning(
-                "subscription.deleted: no UserSubscription found for StripeCustomerId {CustomerId}",
-                stripeSubscription.CustomerId);
+                "subscription.deleted: no UserSubscription holds {SubscriptionId} (customer {CustomerId}); ignored",
+                stripeSubscription.Id, stripeSubscription.CustomerId);
             return null;
         }
 
-        subscription.Cancel(clock.UtcNowOffset);
+        var endedAt = stripeSubscription.EndedAt ?? stripeSubscription.CanceledAt;
+        subscription.Cancel(clock.UtcNowOffset, endedAt.HasValue ? new DateTimeOffset(endedAt.Value, TimeSpan.Zero) : null);
 
         logger.LogInformation(
             "Tenant {TenantId} subscription canceled via webhook",
@@ -452,14 +376,12 @@ public sealed class StripeWebhookService(
             return null;
         }
 
-        var subscription = await db.UserSubscriptions
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, cancellationToken);
+        var subscription = await FindInvoiceSubscriptionAsync(invoice, cancellationToken);
 
         if (subscription is null)
         {
             logger.LogWarning(
-                "invoice.payment_failed: no UserSubscription found for StripeCustomerId {CustomerId}",
+                "invoice.payment_failed: no UserSubscription holds the invoice's subscription (customer {CustomerId})",
                 invoice.CustomerId);
             return null;
         }
@@ -487,9 +409,7 @@ public sealed class StripeWebhookService(
         if (string.IsNullOrEmpty(invoice.CustomerId))
             return null;
 
-        var subscription = await db.UserSubscriptions
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, cancellationToken);
+        var subscription = await FindInvoiceSubscriptionAsync(invoice, cancellationToken);
 
         if (subscription is null)
             return null;
@@ -512,5 +432,23 @@ public sealed class StripeWebhookService(
             ActorUserId: "stripe-webhook",
             ActorEmail: "webhook@stripe.com",
             DisplayName: $"Payment succeeded for invoice {invoice.Id} — subscription recovered");
+    }
+
+    /// <summary>
+    /// The row an invoice belongs to. ★ When the invoice names its subscription, the row must hold THAT subscription:
+    /// a failed invoice of a customer's old subscription must not mark their new one PastDue. Invoices that do not name
+    /// one (older payload shapes) fall back to the customer, as before.
+    /// </summary>
+    private async Task<UserSubscription?> FindInvoiceSubscriptionAsync(Invoice invoice, CancellationToken cancellationToken)
+    {
+        var subscriptionId = invoice.Parent?.SubscriptionDetails?.SubscriptionId;
+
+        return string.IsNullOrEmpty(subscriptionId)
+            ? await db.UserSubscriptions
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.StripeCustomerId == invoice.CustomerId, cancellationToken)
+            : await db.UserSubscriptions
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.StripeSubscriptionId == subscriptionId, cancellationToken);
     }
 }

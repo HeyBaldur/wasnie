@@ -16,6 +16,7 @@ import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { correlationIdInterceptor } from './core/interceptors/correlation-id.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { forbiddenResponseInterceptor } from './core/interceptors/forbidden-response.interceptor';
+import { paymentRequiredInterceptor } from './core/interceptors/payment-required.interceptor';
 import { ConsoleErrorTrackingService } from './core/observability/console-error-tracking.service';
 import { ErrorTrackingService } from './core/observability/error-tracking.service';
 import { GlobalErrorHandler } from './core/observability/global-error-handler';
@@ -32,7 +33,7 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     { provide: TitleStrategy, useClass: TranslatedTitleStrategy },
-    provideHttpClient(withInterceptors([correlationIdInterceptor, authInterceptor, errorInterceptor, forbiddenResponseInterceptor])),
+    provideHttpClient(withInterceptors([correlationIdInterceptor, authInterceptor, errorInterceptor, forbiddenResponseInterceptor, paymentRequiredInterceptor])),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
     { provide: ErrorTrackingService, useClass: ConsoleErrorTrackingService },
     provideTranslateService({ defaultLanguage: 'en' }),

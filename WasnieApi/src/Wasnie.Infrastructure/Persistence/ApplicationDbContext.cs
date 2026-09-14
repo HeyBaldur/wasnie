@@ -113,6 +113,7 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
     public Microsoft.EntityFrameworkCore.DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
 
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantConversation> AssistantConversations => Set<Wasnie.Domain.Assistant.AssistantConversation>();
+    public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Settings.UserUiPreference> UserUiPreferences => Set<Wasnie.Domain.Settings.UserUiPreference>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantMessage> AssistantMessages => Set<Wasnie.Domain.Assistant.AssistantMessage>();
     public Microsoft.EntityFrameworkCore.DbSet<Wasnie.Domain.Assistant.AssistantConversationState> AssistantConversationStates => Set<Wasnie.Domain.Assistant.AssistantConversationState>();
 
@@ -158,6 +159,7 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
         builder.ApplyConfiguration(new UserSubscriptionConfiguration());
         builder.ApplyConfiguration(new ProcessedStripeEventConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantConversationConfiguration());
+        builder.ApplyConfiguration(new Configurations.UserUiPreferenceConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantMessageConfiguration());
         builder.ApplyConfiguration(new Configurations.Assistant.AssistantConversationStateConfiguration());
         builder.ApplyConfiguration(new HubSpotConnectionConfiguration());
@@ -192,6 +194,7 @@ public class ApplicationDbContext : IdentityDbContext<IdentityUser>, IApplicatio
         // cannot express the user half — ITenantContext knows the tenant, not the principal — so the
         // handlers carry it, and the isolation test is what keeps them honest.
         builder.Entity<Wasnie.Domain.Assistant.AssistantConversation>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
+        builder.Entity<Wasnie.Domain.Settings.UserUiPreference>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         builder.Entity<Wasnie.Domain.Assistant.AssistantMessage>().HasQueryFilter(e => e.TenantId == CurrentTenantId);
         // Same floor, same reason: a standing belongs to one USER, and the handlers add that half.
         builder.Entity<Wasnie.Domain.Assistant.AssistantConversationState>().HasQueryFilter(e => e.TenantId == CurrentTenantId);

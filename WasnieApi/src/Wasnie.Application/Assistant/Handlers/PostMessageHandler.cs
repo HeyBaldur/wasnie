@@ -50,6 +50,10 @@ public sealed class PostMessageHandler(
     {
         await entitlement.RequireAsync(cancellationToken);
 
+        // KAN-77: out of trial assistant messages → nothing stored, the model is not called.
+        if (await entitlement.IsTrialAllowanceExhaustedAsync(cancellationToken))
+            return Result<AssistantExchangeDto>.Failure(IAssistantEntitlement.TrialAllowanceExhaustedKey);
+
         var conversation = await OwnedConversations.FindMineAsync(
             db, currentUser, request.ConversationId, cancellationToken);
 

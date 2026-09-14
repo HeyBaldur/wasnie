@@ -30,43 +30,64 @@
     -->
     <div class="assistant-welcome" data-testid="assistant-welcome">
       <!--
-        The product's own mark, the same asset the sidebar and the sign-in pages use. Decorative
-        here — the greeting beside it already says which product this is — so it carries an empty
-        alt rather than making a screen reader announce "Incentra" twice.
+        ★ ZEKE'S MARK, ALIVE. The product's own logo (the same asset the sidebar uses) inside a slowly
+        turning gradient ring, with a soft halo and two orbiting sparks. Decorative: the greeting beside it
+        already says which product this is, so the whole emblem is hidden from screen readers. Still with
+        prefers-reduced-motion.
       -->
-      <img
-        src="wasnie_logo.png"
-        alt=""
-        aria-hidden="true"
-        class="assistant-welcome__logo"
-      />
+      <div class="assistant-welcome__emblem" aria-hidden="true">
+        <span class="assistant-welcome__halo"></span>
+        <span class="assistant-welcome__ring"></span>
+        <span class="assistant-welcome__orbit"><span class="assistant-welcome__spark"></span></span>
+        <span class="assistant-welcome__orbit assistant-welcome__orbit--slow"><span class="assistant-welcome__spark assistant-welcome__spark--alt"></span></span>
+        <span class="assistant-welcome__core">
+          <img src="wasnie_logo.png" alt="" class="assistant-welcome__logo" />
+        </span>
+      </div>
+
+      <span class="assistant-welcome__eyebrow">
+        <span class="assistant-welcome__live" aria-hidden="true"></span>
+        {{ 'ASSISTANT.WELCOME_EYEBROW' | translate }}
+      </span>
 
       <h2 class="assistant-welcome__greeting">{{ 'ASSISTANT.WELCOME_GREETING' | translate }}</h2>
 
       <p class="assistant-welcome__subtitle">{{ 'ASSISTANT.WELCOME_SUBTITLE' | translate }}</p>
 
+      <!--
+        ★ THE READ-ONLY NOTE IS NOT SMALL PRINT. It is the guarantee that makes the assistant safe to hand a
+        finance team: semibold, the subtitle's colour and the subtitle's left edge (a test pins all three).
+        The shield is the only decoration it gets.
+      -->
       <p class="assistant-welcome__readonly" data-testid="assistant-welcome-readonly">
-        {{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}
+        <app-icon name="shield-check" [size]="14" class="assistant-welcome__readonly-icon" />
+        <span>{{ 'ASSISTANT.WELCOME_READ_ONLY' | translate }}</span>
       </p>
 
       <!--
-        ★ FOUR EXAMPLES, ONE PER TOOL THE SERVER ACTUALLY REGISTERS. The rule above did not get
-        relaxed to allow these; they were written to satisfy it. See starter-prompts.ts — the tool
+        ★ FOUR EXAMPLES, ONE PER TOOL THE SERVER ACTUALLY REGISTERS. See starter-prompts.ts — the tool
         each one reaches is declared there and a test checks the list against the real four.
 
-        ★ THEY FILL THE COMPOSER, THEY DO NOT SEND IT. Each sentence has a hole in it, and asking
-        about a payee called "[payee name]" would find nobody. The click drops the text in the box
-        with the placeholder selected; the user types the real name over it and sends.
+        ★ THEY FILL THE COMPOSER, THEY DO NOT SEND IT. Each card shows the question it will drop in, with
+        the placeholder the user replaces before sending.
       -->
+      <p class="assistant-welcome__starters-title">{{ 'ASSISTANT.WELCOME_TRY_ASKING' | translate }}</p>
       <div class="assistant-welcome__starters" data-testid="assistant-starters">
-        @for (starter of starters; track starter.promptKey) {
+        @for (starter of starters; track starter.promptKey; let i = $index) {
           <ws-button
             variant="secondary"
             size="sm"
+            class="assistant-starter"
+            [style.--i]="i"
             (click)="useStarter(starter)"
             [attr.data-testid]="starter.testId"
           >
-            {{ starter.labelKey | translate }}
+            <span class="assistant-starter__icon" aria-hidden="true"><app-icon [name]="starter.icon" [size]="16" /></span>
+            <span class="assistant-starter__text">
+              <span class="assistant-starter__label">{{ starter.labelKey | translate }}</span>
+              <span class="assistant-starter__prompt">{{ starter.promptKey | translate }}</span>
+            </span>
+            <app-icon name="arrow-right" [size]="14" class="assistant-starter__arrow" />
           </ws-button>
         }
       </div>

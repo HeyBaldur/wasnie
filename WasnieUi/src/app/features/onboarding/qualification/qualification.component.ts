@@ -301,7 +301,7 @@ export class QualificationComponent {
     }).subscribe({
       next: () => {
         this.currentUser.refresh().subscribe(() => {
-          void this.router.navigateByUrl('/onboarding/plan');
+          void this.router.navigateByUrl('/dashboard');
         });
       },
       error: (err) => {

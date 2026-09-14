@@ -1,0 +1,10 @@
+@if (subState.isTrial()) {
+  <div class="trial-banner" [class.trial-banner--ending]="endingSoon()" role="status">
+    <span class="trial-banner__msg">{{ messageKey() | translate: { days: days() } }}</span>
+    @if ('Subscription.Manage' | hasPermission) {
+      <ws-button [variant]="endingSoon() ? 'primary' : 'secondary'" size="sm" routerLink="/pricing">
+        {{ 'TRIAL_BANNER.CTA' | translate }}
+      </ws-button>
+    }
+  </div>
+}

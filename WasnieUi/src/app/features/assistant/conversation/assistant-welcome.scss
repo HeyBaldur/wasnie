@@ -1,0 +1,282 @@
+// ── The welcome ─────────────────────────────────────────────────────────────
+//
+// Three levels, and the hierarchy is the message: what you can ask, then what to ask, then what this will
+// never do. Dressed as a celebration-lite hero — an animated emblem, an eyebrow, starter cards — without
+// changing any of the three.
+.assistant-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  // Sits in the upper part of the empty panel rather than dead centre: the eye starts at the top and
+  // the composer is what it travels to next.
+  padding: var(--space-6) var(--space-2) var(--space-4);
+  animation: assistant-welcome-rise 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+// ── Emblem ──
+.assistant-welcome__emblem {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-2);
+
+  > * {
+    grid-area: 1 / 1;
+  }
+}
+
+.assistant-welcome__halo {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-accent-violet) 35%, transparent), transparent 70%);
+  animation: assistant-welcome-breathe 3.2s ease-in-out infinite;
+}
+
+.assistant-welcome__ring {
+  width: 60px;
+  height: 60px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: conic-gradient(from 0deg, var(--color-accent-violet), var(--color-accent-blue), var(--color-success), var(--color-accent-violet));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: assistant-welcome-spin 6s linear infinite;
+}
+
+.assistant-welcome__core {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.assistant-welcome__logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.assistant-welcome__orbit {
+  width: 72px;
+  height: 72px;
+  animation: assistant-welcome-spin 4.5s linear infinite;
+
+  &--slow {
+    width: 64px;
+    height: 64px;
+    animation-duration: 7s;
+    animation-direction: reverse;
+  }
+}
+
+.assistant-welcome__spark {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 0 auto;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-violet);
+  box-shadow: 0 0 8px var(--color-accent-violet);
+
+  &--alt {
+    width: 5px;
+    height: 5px;
+    background: var(--color-accent-blue);
+    box-shadow: 0 0 8px var(--color-accent-blue);
+  }
+}
+
+// ── Text ──
+.assistant-welcome__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent-violet) 30%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-accent-violet) 10%, var(--color-bg-surface));
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--color-accent-violet);
+}
+
+.assistant-welcome__live {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-success);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 50%, transparent);
+  animation: assistant-welcome-live 2s ease-out infinite;
+}
+
+.assistant-welcome__greeting {
+  margin: 0;
+  // ★ SCALES WITH THE PANEL, WHICH IS min(420px, 100vw): the clamp lands on its ceiling in the desktop
+  // drawer and comes down with the viewport on a phone, where the Spanish greeting would break first.
+  font-size: clamp(var(--font-size-24), 7.5vw, var(--font-size-32));
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  // ★ PLAIN TEXT, AND A TOKEN — never a literal white: it resolves per theme and stays legible on the
+  // light ones.
+  color: var(--color-text-primary);
+  text-wrap: balance;
+}
+
+.assistant-welcome__subtitle {
+  margin: 0;
+  font-size: var(--font-size-15);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+// ★ THE GUARANTEE: semibold, the subtitle's colour, the subtitle's left edge (no padding of its own).
+.assistant-welcome__readonly {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.assistant-welcome__readonly-icon {
+  flex: none;
+  display: flex;
+  margin-top: 2px;
+  color: var(--color-success);
+}
+
+// ── Starters ──
+.assistant-welcome__starters-title {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-11);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+// Cards, two per row where there is room and one per row in the narrow drawer — they WRAP, never scroll:
+// a row that scrolls sideways hides the last suggestion exactly where a suggestion is most wanted.
+.assistant-welcome__starters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.assistant-starter {
+  display: block;
+  animation: assistant-welcome-rise 450ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(150ms + var(--i, 0) * 70ms);
+
+  // The primitive keeps its focus ring, loading and disabled states; only its box becomes a card.
+  ::ng-deep .ws-btn {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+    text-align: left;
+    white-space: normal;
+    transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      border-color: color-mix(in srgb, var(--color-accent-violet) 45%, var(--color-border-default));
+      box-shadow: var(--shadow-md);
+    }
+  }
+}
+
+.assistant-starter__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent-violet) 16%, var(--color-bg-surface)),
+    color-mix(in srgb, var(--color-accent-blue) 14%, var(--color-bg-surface))
+  );
+  color: var(--color-accent-violet);
+}
+
+.assistant-starter__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.assistant-starter__label {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.assistant-starter__prompt {
+  overflow: hidden;
+  font-size: var(--font-size-12);
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-starter__arrow {
+  display: flex;
+  color: var(--color-text-tertiary);
+  transition: transform var(--transition-base), color var(--transition-base);
+
+  .assistant-starter:hover & {
+    transform: translateX(3px);
+    color: var(--color-accent-violet);
+  }
+}
+
+@keyframes assistant-welcome-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes assistant-welcome-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes assistant-welcome-breathe {
+  0%, 100% { transform: scale(0.9); opacity: 0.7; }
+  50%      { transform: scale(1.08); opacity: 1; }
+}
+
+@keyframes assistant-welcome-live {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 50%, transparent); }
+  100% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-success) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-welcome,
+  .assistant-welcome__halo,
+  .assistant-welcome__ring,
+  .assistant-welcome__orbit,
+  .assistant-welcome__live,
+  .assistant-starter {
+    animation: none;
+  }
+}
+

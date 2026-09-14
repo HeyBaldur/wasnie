@@ -6,4 +6,4 @@ public sealed record CheckoutResultDto(
     string? BlockedReason,
     int? Current,
     int? Limit,
-    string? TargetTier);
+    string? TargetPlanCode);

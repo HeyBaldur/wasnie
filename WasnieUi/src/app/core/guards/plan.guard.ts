@@ -22,9 +22,8 @@ export const planGuard: CanActivateFn = () => {
     return router.createUrlTree(['/onboarding/qualify']);
   }
 
-  if (user && !user.hasSelectedPlan) {
-    return router.createUrlTree(['/onboarding/plan']);
-  }
+  // KAN-77: no plan to choose before entering — every new account starts in a free trial. Whether the
+  // account may use the product (trial / paying / locked) is subscriptionGuard's question, not this one.
 
   return true;
 };

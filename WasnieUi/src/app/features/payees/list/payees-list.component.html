@@ -12,7 +12,6 @@
       slot="actions"
       variant="primary"
       [hidden]="!('Payees.Create' | hasPermission)"
-      [class.at-limit]="atPayeesLimit()"
       (click)="onCreatePayee()"
     >
       <app-icon name="plus" [size]="16" />

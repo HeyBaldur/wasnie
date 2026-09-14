@@ -1,0 +1,50 @@
+<div class="paywall-shell">
+  <header class="paywall-header">
+    <div class="paywall-header__brand">
+      <div class="paywall-header__monogram">
+        <img src="wasnie_logo.png" alt="Incentra" />
+      </div>
+      <span class="paywall-header__name">{{ 'APP.NAME' | translate }}</span>
+    </div>
+    <ws-button variant="ghost" size="sm" (click)="signOut()">{{ 'AUTH.LOGOUT' | translate }}</ws-button>
+  </header>
+
+  <main class="paywall-body">
+    @if (loading()) {
+      <div class="paywall-loading" role="status" aria-live="polite">{{ 'COMMON.LOADING' | translate }}</div>
+    } @else if (loadError()) {
+      <ws-card class="paywall-card paywall-card--error">
+        <p class="paywall-muted">{{ 'PAYWALL.LOAD_ERROR' | translate }}</p>
+        <ws-button variant="secondary" (click)="load()">{{ 'COMMON.RETRY' | translate }}</ws-button>
+      </ws-card>
+    } @else {
+      <div class="paywall-content">
+        <ws-card class="paywall-card">
+          <div class="paywall-card__icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <h1 class="paywall-card__title">{{ titleKey() | translate }}</h1>
+          <p class="paywall-card__desc">{{ 'PAYWALL.DESC' | translate }}</p>
+          <p class="paywall-card__data">{{ 'PAYWALL.DATA_KEPT' | translate }}</p>
+          @if (!('Subscription.Manage' | hasPermission)) {
+            <p class="paywall-card__admin">{{ 'PAYWALL.ASK_ADMIN' | translate }}</p>
+          }
+        </ws-card>
+
+        <div class="paywall-offers" [class.paywall-offers--single]="plans().length === 1">
+          @for (plan of plans(); track plan.priceId) {
+            <app-plan-offer
+              [plan]="plan"
+              [canSubscribe]="'Subscription.Manage' | hasPermission"
+              [busy]="subscribing() === plan.planCode"
+              (subscribe)="subscribe($event)"
+            />
+          }
+        </div>
+      </div>
+    }
+  </main>
+</div>

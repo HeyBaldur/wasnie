@@ -22,7 +22,7 @@ public sealed class GetCurrentSubscriptionHandler(
             return Result<UserSubscriptionDto>.Failure("No subscription found for this tenant.");
 
         return Result<UserSubscriptionDto>.Success(new UserSubscriptionDto(
-            Tier: sub.Tier.ToString(),
+            PlanCode: sub.PlanCode,
             Status: sub.Status.ToString(),
             BillingEmail: sub.BillingEmail,
             StripeSubscriptionId: sub.StripeSubscriptionId,

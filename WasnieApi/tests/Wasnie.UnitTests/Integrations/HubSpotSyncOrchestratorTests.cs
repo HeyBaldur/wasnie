@@ -1,3 +1,4 @@
+using Wasnie.UnitTests.TestDoubles;
 using FluentAssertions;
 using Hangfire;
 using Hangfire.Common;
@@ -37,18 +38,20 @@ public sealed class HubSpotSyncOrchestratorTests
 
     // The orchestrator now joins connections against the tenant's TIER, so a connection with no tenant
     // row behind it is (correctly) skipped. Every seeded tenant is paid unless a test says otherwise.
-    private static void SeedTenant(ApplicationDbContext db, Guid tenantId, Tier tier = Tier.Growth)
+    private static void SeedTenant(ApplicationDbContext db, Guid tenantId, bool locked = false)
     {
+        // KAN-77: the gate is ACCESS, not tier. An open trial stands for "has access"; an ended one for a
+        // locked account (trial over, never paid) — the case that must not spend on HubSpot.
         var tenant = Tenant.Create($"T{tenantId:N}", $"t-{tenantId:N}", tenantId, ConnectedAt);
-        tenant.SetTier(tier);
+        tenant.StartTrial(locked ? ConnectedAt.AddDays(-1) : ConnectedAt.AddYears(10));
         db.Tenants.Add(tenant);
         db.SaveChanges();
     }
 
     private static void SeedConnection(
-        ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status, Tier tier = Tier.Growth)
+        ApplicationDbContext db, Guid tenantId, HubSpotConnectionStatus status, bool locked = false)
     {
-        SeedTenant(db, tenantId, tier);
+        SeedTenant(db, tenantId, locked);
         var c = HubSpotConnection.Create(
             Guid.NewGuid(), tenantId, 1, "a", "r", ConnectedAt.AddHours(1), "owner", ConnectedAt);
         if (status == HubSpotConnectionStatus.NeedsReconnect)
@@ -61,22 +64,24 @@ public sealed class HubSpotSyncOrchestratorTests
 
     private static HubSpotSyncOrchestrator NewOrchestrator(
         ApplicationDbContext db, IBackgroundJobClient client, HubSpotSyncOptions opts) =>
-        new(db, client, Options.Create(opts), NullLogger<HubSpotSyncOrchestrator>.Instance);
+        new(db, client, Options.Create(opts),
+            new AccountAccessReader(db, new FakeClock(ConnectedAt.UtcDateTime.AddDays(1))),
+            NullLogger<HubSpotSyncOrchestrator>.Instance);
 
     private static List<ICall> CreateCalls(IBackgroundJobClient client) =>
         client.ReceivedCalls().Where(c => c.GetMethodInfo().Name == nameof(IBackgroundJobClient.Create)).ToList();
 
     [Fact]
-    public async Task A_connected_tenant_on_Free_is_never_scheduled_and_keeps_its_connection()
+    public async Task A_connected_tenant_whose_account_is_locked_is_never_scheduled_and_keeps_its_connection()
     {
         // ★ The loop that spends money. A tenant that connected HubSpot while paying and then
         // downgraded must stop costing us outbound calls every hour — without anyone logging in, and
         // without their stored connection being destroyed (they get it back by upgrading).
-        var db = NewDb(nameof(A_connected_tenant_on_Free_is_never_scheduled_and_keeps_its_connection));
+        var db = NewDb(nameof(A_connected_tenant_whose_account_is_locked_is_never_scheduled_and_keeps_its_connection));
         var paid = Guid.NewGuid();
         var downgraded = Guid.NewGuid();
         SeedConnection(db, paid, HubSpotConnectionStatus.Connected);
-        SeedConnection(db, downgraded, HubSpotConnectionStatus.Connected, Tier.Free);
+        SeedConnection(db, downgraded, HubSpotConnectionStatus.Connected, locked: true);
 
         var client = Substitute.For<IBackgroundJobClient>();
         await NewOrchestrator(db, client, new HubSpotSyncOptions { Enabled = true, TenantStaggerSeconds = 5 })
@@ -87,7 +92,7 @@ public sealed class HubSpotSyncOrchestratorTests
             .ToList();
 
         scheduled.Should().ContainSingle().Which.Should().Be(paid);
-        scheduled.Should().NotContain(downgraded, "Free tenants are dropped before a job is even created");
+        scheduled.Should().NotContain(downgraded, "locked accounts are dropped before a job is even created");
 
         db.HubSpotConnections.IgnoreQueryFilters()
             .Should().Contain(c => c.TenantId == downgraded && c.Status == HubSpotConnectionStatus.Connected,

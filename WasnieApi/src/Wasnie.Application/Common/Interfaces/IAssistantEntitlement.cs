@@ -33,4 +33,14 @@ public interface IAssistantEntitlement
     /// entitled. Every assistant command and query calls this first.
     /// </summary>
     Task RequireAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when the account is in its free trial and has used up the trial's assistant allowance (KAN-77).
+    /// Always false for paying accounts. Asked only by the handlers that make the model run, AFTER
+    /// <see cref="RequireAsync"/> — being out of trial messages is not the same as not being entitled.
+    /// </summary>
+    Task<bool> IsTrialAllowanceExhaustedAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Translation key the client shows when <see cref="IsTrialAllowanceExhaustedAsync"/> refuses a turn.</summary>
+    public const string TrialAllowanceExhaustedKey = "ASSISTANT.ERROR_TRIAL_LIMIT_REACHED";
 }

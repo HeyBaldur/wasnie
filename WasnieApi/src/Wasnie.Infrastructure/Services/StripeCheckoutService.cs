@@ -43,8 +43,15 @@ public sealed class StripeCheckoutService(
             {
                 ["tenantId"] = tenantId.ToString(),
             },
+            // ★ KAN-77: the SUBSCRIPTION carries the tenant too. A first checkout creates a customer our row has never
+            // seen; if its webhook is lost, this tag is how the reconciler still finds the subscription in Stripe.
+            SubscriptionData = new SessionSubscriptionDataOptions
+            {
+                Metadata = new Dictionary<string, string> { ["tenantId"] = tenantId.ToString() },
+            },
             SuccessUrl = $"{options.Value.FrontendBaseUrl}/onboarding/success?session_id={{CHECKOUT_SESSION_ID}}",
-            CancelUrl = $"{options.Value.FrontendBaseUrl}/onboarding/plan",
+            // KAN-77: the plan wizard is gone; a canceled checkout returns to the pricing page.
+            CancelUrl = $"{options.Value.FrontendBaseUrl}/pricing",
         };
 
         if (!string.IsNullOrWhiteSpace(existingSubscription?.StripeCustomerId))

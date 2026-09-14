@@ -1,0 +1,131 @@
+@reference "../../../../styles.scss";
+
+// Full-screen shell of its own, like the reactivation page it replaces: the app shell's requests would all
+// answer 402 for a locked account.
+.paywall-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-base);
+}
+
+.paywall-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 var(--space-8);
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface);
+  flex-shrink: 0;
+}
+
+.paywall-header__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.paywall-header__monogram {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.paywall-header__name {
+  font-size: var(--font-size-20);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+.paywall-body {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-12) var(--space-6);
+}
+
+.paywall-loading {
+  color: var(--color-text-secondary);
+}
+
+.paywall-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 880px;
+}
+
+.paywall-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+
+  &--error {
+    align-self: center;
+    max-width: 440px;
+  }
+}
+
+.paywall-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.paywall-card__title {
+  margin: 0;
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.paywall-card__desc,
+.paywall-muted {
+  margin: 0;
+  max-width: 560px;
+  font-size: var(--font-size-14);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.paywall-card__data {
+  margin: 0;
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.paywall-card__admin {
+  margin: 0;
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.paywall-offers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-5);
+
+  // One plan: the featured card spans the column (it lays itself out in two columns inside).
+  &--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

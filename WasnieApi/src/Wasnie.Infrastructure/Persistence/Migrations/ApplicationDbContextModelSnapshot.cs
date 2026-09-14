@@ -1654,6 +1654,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("PlanCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<DateTimeOffset?>("QualifiedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -1668,6 +1672,9 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Tier")
                         .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("TrialEndsAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
 
@@ -2215,6 +2222,42 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
                     b.ToTable("FieldRequirementSettings", (string)null);
                 });
 
+            modelBuilder.Entity("Wasnie.Domain.Settings.UserUiPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "UserId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("UX_UserUiPreferences_TenantId_UserId_Key");
+
+                    b.ToTable("UserUiPreferences", (string)null);
+                });
+
             modelBuilder.Entity("Wasnie.Domain.Subscription.ProcessedStripeEvent", b =>
                 {
                     b.Property<string>("EventId")
@@ -2262,6 +2305,10 @@ namespace Wasnie.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("NextBillingDate")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PlanCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");

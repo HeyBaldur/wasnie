@@ -7,7 +7,8 @@ public sealed record SubscriptionPlanDto(
     decimal  Price,
     string   Currency,
     string   Interval,
-    string   Tier,
+    // The plan code from Billing:Plans (e.g. "pro"). Limits: -1 = unlimited.
+    string   PlanCode,
     int      MaxPayees,
     int      MaxPlans,
     bool     IsCurrentPlan);

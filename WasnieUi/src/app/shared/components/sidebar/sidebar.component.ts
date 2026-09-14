@@ -10,7 +10,6 @@ import { SidebarBadgesStore } from '../../../core/navigation/sidebar-badges.stor
 import { SessionExitService } from '../../../core/services/session-exit.service';
 import { IconComponent } from '../icon/icon.component';
 import { HasPermissionDirective } from '../../directives/has-permission.directive';
-import { SubscriptionStateService } from '../../../features/subscription/services/subscription-state.service';
 import { HubSpotSyncBannerComponent } from '../../../features/integrations/components/hubspot-sync-banner/hubspot-sync-banner.component';
 import { AssistantStore } from '../../../features/assistant/state/assistant.store';
 
@@ -65,7 +64,6 @@ export class SidebarComponent implements OnInit {
   private readonly currentUser = inject(CurrentUserService);
   private readonly router = inject(Router);
   readonly sidebarState = inject(SidebarStateService);
-  private readonly subscriptionState = inject(SubscriptionStateService);
   private readonly badgesStore = inject(SidebarBadgesStore);
   private readonly sessionExit = inject(SessionExitService);
 
@@ -121,10 +119,6 @@ export class SidebarComponent implements OnInit {
   groupBadgeFor(key: string): number | null {
     return key === 'pay-financials' ? this.badgesStore.financialsTotal() : null;
   }
-
-  // Reads from the same root-singleton already loaded by AppShellComponent.
-  // To revert logo gradient: remove the @if overlay blocks in the template.
-  readonly tierName = computed(() => this.subscriptionState.subscription()?.tier ?? null);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -292,7 +286,8 @@ export class SidebarComponent implements OnInit {
 
   // The manual is NOT in this menu. It moved to the topbar, beside the user: it is help, not a place in
   // the product's navigation, and it sat oddly among Subscription / Integrations / Settings.
-  readonly subscriptionItem: NavItem ={ path: '/subscription', labelKey: 'NAV.SUBSCRIPTION', icon: 'brand-stripe', permission: 'Subscription.Manage' };
+  // KAN-77: "Manage billing" — the customer's subscription, in Settings. Pricing is reached from the trial banner.
+  readonly subscriptionItem: NavItem = { path: '/billing', labelKey: 'NAV.MANAGE_BILLING', icon: 'brand-stripe', permission: 'Subscription.Manage' };
   readonly integrationsItem: NavItem = { path: '/integrations', labelKey: 'NAV.INTEGRATIONS', icon: 'link-2', permission: 'Integrations.Manage' };
   readonly settingsItem: NavItem = { path: '/admin', labelKey: 'NAV.ADMIN', icon: 'settings', permission: 'Subscription.Manage' };
 
